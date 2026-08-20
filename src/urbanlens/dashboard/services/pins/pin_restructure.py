@@ -262,12 +262,61 @@ def plan_for(pin: Pin) -> RestructurePlan:
     return RestructurePlan(buildings=missing_buildings(pin), nestable=nestable_root_pins(pin))
 
 
+def already_pinned_points(pin: Pin, buildings: list[dict[str, Any]]) -> set[tuple[Any, Any]]:
+    """Which of ``buildings``' centroids this profile already has a pin on.
+
+    Mirrors the rule ``pin_creation.resolve_child_pin_location`` enforces: a
+    profile may not hold two pins at one exact point, counting *every* pin it
+    owns rather than only this parcel's children. Compared at the precision
+    ``Location`` stores, via the same quantizer the exact-match lookup uses, so
+    this agrees with what the create path will actually find.
+
+    Args:
+        pin: The parent pin, for whose profile the check runs.
+        buildings: Building records to test.
+
+    Returns:
+        The quantized ``(latitude, longitude)`` pairs that are already taken.
+    """
+    from urbanlens.dashboard.models.location.queryset import quantize_coordinate
+
+    wanted: set[tuple[Any, Any]] = set()
+    for building in buildings:
+        latitude, longitude = building.get("latitude"), building.get("longitude")
+        if latitude is None or longitude is None:
+            continue
+        wanted.add((quantize_coordinate(latitude, "latitude"), quantize_coordinate(longitude, "longitude")))
+    if not wanted:
+        return set()
+
+    # Two `__in`s form a cross-product - one pin's latitude can pair with a
+    # different building's longitude - so the pairs are re-checked against
+    # `wanted` rather than trusted from the query.
+    taken = Pin.objects.filter(
+        profile_id=pin.profile_id,
+        location__latitude__in=[latitude for latitude, _ in wanted],
+        location__longitude__in=[longitude for _, longitude in wanted],
+    ).values_list("location__latitude", "location__longitude")
+    return {pair for pair in taken if pair in wanted}
+
+
 def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
-    """Buildings on this pin's parcel that no child pin covers yet.
+    """Buildings on this pin's parcel that no pin of the owner's covers yet.
 
     Returns nothing for a single-building place: one structure on its own lot
     *is* the pin, and offering to nest a lone child under it would be noise.
     See ``site_scope.MULTI_BUILDING_THRESHOLD``.
+
+    Buildings standing on a point the owner has *already* pinned are excluded
+    even when that pin is not one of this parcel's children. Only children were
+    consulted before, so a top-level pin sitting on a building - exactly the
+    kind ``nestable_root_pins`` exists to re-home - left that building counted
+    as unpinned forever: the dialog offered it, ``create_building_pins`` asked
+    for its point, ``resolve_child_pin_location`` refused (a profile may not
+    hold two pins at one point), the building was skipped, and the count came
+    back unchanged. Excluding it here is what makes the offer describe work the
+    import can actually do; the nesting half of the suggestion is what resolves
+    such a pin, by adopting it rather than duplicating it.
 
     Args:
         pin: The parent pin.
@@ -275,6 +324,7 @@ def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
     Returns:
         Uncovered building records, or ``[]``.
     """
+    from urbanlens.dashboard.models.location.queryset import quantize_coordinate
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property, countable_buildings
 
     # The panel filters the same way; an unfiltered dialog would offer to
@@ -285,7 +335,16 @@ def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
     if len(countable_buildings(cached)) < site_scope.MULTI_BUILDING_THRESHOLD:
         return []
     buildings = buildings_on_property(cached)
-    return unmatched_buildings(buildings, list(pin.detail_pins.select_related("location")))
+    missing = unmatched_buildings(buildings, list(pin.detail_pins.select_related("location")))
+
+    blocked = already_pinned_points(pin, missing)
+    if not blocked:
+        return missing
+    return [
+        building
+        for building in missing
+        if (quantize_coordinate(building["latitude"], "latitude"), quantize_coordinate(building["longitude"], "longitude")) not in blocked
+    ]
 
 
 def should_offer(pin: Pin) -> bool:

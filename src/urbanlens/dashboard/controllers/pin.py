@@ -1810,7 +1810,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_rows
         from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
         from urbanlens.dashboard.services.pins.external_data import get_panel_source
-        from urbanlens.dashboard.services.pins.pin_restructure import property_polygon
+        from urbanlens.dashboard.services.pins.pin_restructure import missing_buildings, property_polygon
 
         try:
             pin = Pin.objects.select_related("location", "profile").get(slug=pin_slug, profile__user=request.user)
@@ -1845,7 +1845,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "title": panel.title,
                 "pin": pin,
                 "rows": rows,
-                "unpinned_count": sum(1 for row in rows if not row["child_name"]),
+                # From the import's own view of the parcel, not from the rows:
+                # the button must promise exactly what pressing it will do.
+                # Counting rows with no child pin answered a different question
+                # - a building carrying the owner's *top-level* pin has no
+                # child and counted here, but `missing_buildings` (which the
+                # dialog uses) excludes it, so the button offered a count the
+                # dialog then 204'd on, doing nothing at all.
+                "unpinned_count": len(missing_buildings(pin)),
                 "debug": self._debug_entry(request, PARCEL_BUILDINGS_CACHE_SOURCE, cached.query_key, from_cache=True, count=len(rows)),
             },
         )

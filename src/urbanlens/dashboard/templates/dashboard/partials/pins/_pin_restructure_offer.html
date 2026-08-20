@@ -19,8 +19,20 @@ Context:
     building_count / sample_names: buildings here with no pin yet.
     nestable_count / nestable: the owner's top-level pins inside this property
         (nestable is capped for display; nestable_count is the real total).
+
+This re-fetches itself whenever the pin's children change, because the parcel
+panel's own import button targets nothing here - without it, adding the last
+buildings from there leaves this card describing work that is already done.
+`data-ext-panel-204` hands the empty case to the page's shared 204 handler:
+having nothing left to suggest answers 204, and the card flies away rather
+than sitting there stale.
 {% endcomment %}
-<section class="page-onboarding-card" id="pin-restructure-offer">
+<section class="page-onboarding-card" id="pin-restructure-offer"
+         data-ext-panel-204
+         hx-get="{% url 'pin.restructure.offer' pin.slug %}"
+         hx-trigger="pinDetailPinsChanged from:body"
+         hx-swap="outerHTML"
+         hx-timeout="25000">
     <div class="page-onboarding-card__icon"><i class="material-icons">account_tree</i></div>
     <div class="page-onboarding-card__body">
         <div class="page-onboarding-card__eyebrow">Organize this property</div>

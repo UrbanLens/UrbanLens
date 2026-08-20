@@ -196,8 +196,18 @@ class RestructureOfferGatingTests(TestCase):
         self.assertContains(response, "Tool Shed")
 
     def test_offered_even_when_only_one_building_is_unpinned(self) -> None:
-        """Any building this would create and the user doesn't have is worth offering."""
-        for building in _BUILDINGS[1:]:
+        """Any building this would create and the user doesn't have is worth offering.
+
+        Pins the *outer* two, leaving "Main Hall" - deliberately not
+        ``_BUILDINGS[1:]``, which would leave Main Hall unpinned while parking a
+        pin on its exact centroid (it sits inside the Tool Shed footprint, so
+        that pin footprint-matches the shed and leaves the hall unmatched).
+        ``resolve_child_pin_location`` refuses a second pin at one point, so
+        that arrangement is one where the offered building genuinely cannot be
+        created - covered by ``BuildingUnderExistingRootPinTests`` - and is the
+        wrong fixture for asserting that a creatable building is still offered.
+        """
+        for building in (_BUILDINGS[0], _BUILDINGS[2]):
             baker.make(
                 Pin,
                 profile=self.user.profile,
@@ -539,3 +549,101 @@ class BuildingImportPanelActionTests(TestCase):
         self.client.post(self.url)
         response = self.client.post(self.url)
         self.assertIn("already has a pin", response["HX-Trigger"])
+
+
+class BuildingUnderExistingRootPinTests(TestCase):
+    """A building whose centroid already carries one of the owner's *top-level* pins.
+
+    The reported bug. ``missing_buildings`` consulted only the parcel pin's own
+    children, so such a building counted as unpinned and was offered forever;
+    ``create_building_pins`` then asked ``resolve_child_pin_location`` for its
+    point, which refuses anywhere the profile already has a pin - top-level ones
+    included - and the building was silently skipped. Every attempt left the
+    count unchanged, so the panel button and the suggestion both stayed on the
+    page describing work that could never complete.
+
+    The pin standing on it is exactly what ``nestable_root_pins`` exists to
+    re-home, which is how the property still gets organized: by adopting that
+    pin, not by duplicating it.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.location = _make_location()
+        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="collide")
+        official_geometry(self.location, _parcel_polygon())
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+        self.occupied = _BUILDINGS[1]
+        # The owner's own top-level pin, standing exactly on "Main Hall".
+        self.stray = baker.make(
+            Pin,
+            profile=self.user.profile,
+            location=baker.make(Location, latitude=self.occupied["latitude"], longitude=self.occupied["longitude"], google_place=None),
+            name="Main Hall",
+        )
+        self.url = reverse("pin.buildings.import", kwargs={"pin_slug": self.pin.slug})
+
+    def _offered_names(self) -> set[str]:
+        return {building.get("name") or "" for building in pin_restructure.missing_buildings(self.pin)}
+
+    def test_a_building_under_an_existing_pin_is_not_offered(self) -> None:
+        """It cannot be pinned, so offering it is offering work that will fail."""
+        self.assertNotIn("Main Hall", self._offered_names())
+
+    def test_the_other_buildings_are_still_offered(self) -> None:
+        """Only the blocked one drops out - this must not silence the whole panel."""
+        self.assertEqual(self._offered_names(), {"Tool Shed", ""})
+
+    def test_importing_leaves_nothing_outstanding(self) -> None:
+        """After the import the button and suggestion have nothing left to describe."""
+        self.client.post(self.url)
+
+        self.assertEqual(pin_restructure.missing_buildings(self.pin), [])
+
+    def test_every_offered_building_is_actually_created(self) -> None:
+        """The count the button promises is the count the import delivers."""
+        offered = len(pin_restructure.missing_buildings(self.pin))
+
+        self.client.post(self.url)
+
+        self.assertEqual(self.pin.detail_pins.filter(pin_type=PinType.BUILDING).count(), offered)
+
+    def test_the_pin_standing_on_it_is_still_offered_for_nesting(self) -> None:
+        """Excluding the building must not also hide the action that resolves it."""
+        self.assertIn(self.stray, pin_restructure.nestable_root_pins(self.pin))
+
+
+class EmptyImportIsNotReportedAsSuccessTests(TestCase):
+    """An import that created nothing must not claim it did.
+
+    ``create_building_pins`` skips a building whose point is already pinned, so
+    a selection made entirely of those returned 0 - and the response still said
+    "Added 0 building pins." over a *success* toast, which is what made the
+    failure read as silent.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.location = _make_location()
+        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="empty-import")
+        official_geometry(self.location, _parcel_polygon())
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+        self.url = reverse("pin.buildings.import", kwargs={"pin_slug": self.pin.slug})
+
+    def test_a_zero_result_import_does_not_claim_success(self) -> None:
+        with patch.object(pin_restructure, "create_building_pins", return_value=0):
+            response = self.client.post(self.url)
+
+        self.assertNotIn("Added 0 building pins", response["HX-Trigger"])
+        self.assertNotIn('"level": "success"', response["HX-Trigger"])
+
+    def test_a_zero_result_import_still_refreshes_the_page(self) -> None:
+        """The panel and suggestion must re-derive their counts either way."""
+        with patch.object(pin_restructure, "create_building_pins", return_value=0):
+            response = self.client.post(self.url)
+
+        self.assertIn("pinDetailPinsChanged", response["HX-Trigger"])

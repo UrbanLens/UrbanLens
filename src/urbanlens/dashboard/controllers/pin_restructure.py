@@ -244,5 +244,12 @@ class PinBuildingImportView(LoginRequiredMixin, View):
         created = pin_restructure.create_building_pins(pin, buildings)
         _queue_wiki_mirror(pin, buildings)
 
+        if not created:
+            # Every selected building was skipped - each one's point already
+            # carries a pin of this profile's. Saying "Added 0 building pins"
+            # over a success toast is how this read as a silent failure; still
+            # refresh, so the panel and the suggestion re-derive their counts.
+            return _toast(HttpResponse("", status=200), "info", "Those buildings already have your pins on them - nothing new to add.", refresh=True)
+
         message = f"Added {created} building pin{'s' if created != 1 else ''}."
         return _toast(HttpResponse("", status=200), "success", message, refresh=True)
