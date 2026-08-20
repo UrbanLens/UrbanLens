@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.base import StreetViewProvider, StreetViewSlide
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import REASON_ALL_PROVIDERS_UNAVAILABLE, LocationContextUnavailableError, RedataLocationContextGateway
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -66,8 +66,12 @@ class RedataMediaGateway(RedataLocationContextGateway):
                 are fixed at 100m on REData's own side regardless of this value;
                 harmless to pass for the other registered media providers.
             limit: Bounded positive integer (REData caps at 200).
-            is_aerial: Only drone/aerial footage, recognised by REData from
-                each item's own title and description.
+            is_aerial: Keep only drone/aerial footage, which REData flags on
+                each item from the publisher's own title and description.
+                Applied here rather than sent as a query parameter: ``is_aerial``
+                is a ``filterset_fields`` entry on REData's ``/media/`` viewset,
+                not something ``/media/lookup/`` reads, so passing it did
+                nothing and the whole nearby set came back as "aerial".
             force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
@@ -81,8 +85,6 @@ class RedataMediaGateway(RedataLocationContextGateway):
         extra_params: dict[str, Any] = {}
         if kind is not None:
             extra_params["kind"] = kind
-        if is_aerial:
-            extra_params["is_aerial"] = "true"
         envelope = self.near_point(
             _MEDIA_LOOKUP_PATH,
             latitude,
@@ -93,6 +95,12 @@ class RedataMediaGateway(RedataLocationContextGateway):
             limit=limit,
             extra_params=extra_params,
         )
+        if not envelope.complete and not envelope.results:
+            # An outage rather than an answer, and callers cache what they get -
+            # see services.pins.redata_panel for the same rule stated in full.
+            raise LocationContextUnavailableError(REASON_ALL_PROVIDERS_UNAVAILABLE, "Every media source covering this point failed to answer.")
+        if is_aerial:
+            return [item for item in envelope.results if item.get("is_aerial")]
         return envelope.results
 
 

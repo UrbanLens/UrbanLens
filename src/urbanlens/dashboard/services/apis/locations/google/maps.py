@@ -23,7 +23,7 @@ from shapely.errors import ShapelyError
 from shapely.geometry import shape as shapely_shape
 
 from urbanlens.core.cache_keys import make_cache_key
-from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
@@ -1175,7 +1175,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         # in defaults, the get half matches any kind, so a
                         # same-named *tag* was returned and used as the list's
                         # category (see PROBLEMS.md, label lookups by name alone).
-                        kind="category",
+                        kind=KIND_CATEGORY,
                         defaults={"name": stem},
                     )
 

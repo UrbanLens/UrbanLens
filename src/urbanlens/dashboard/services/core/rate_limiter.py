@@ -152,6 +152,23 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         notes="Current conditions/forecast/sun times via GET /weather/ - every registered provider (Open-Meteo, OpenWeatherMap) in one call. See services.apis.locations.weather_resolution.",
     ),
+    "redata_capabilities": ServiceDefaults(
+        display_name="REData Capability Index",
+        # Costs REData no external call - it is a bounds test over its own
+        # registries - so this budget bounds our own round trips, not a source's.
+        # Read on the pin-detail path now (services.apis.locations.
+        # redata_points_of_interest_gateway.applicable_provider_tags caches it for
+        # an hour per coarse coordinate), not just by the site-admin page.
+        calls_per_minute=60,
+        calls_per_day=None,
+        notes="Which REData domains and providers cover a point, via GET /capabilities/. Answers from REData's own registries with no upstream call; cached for an hour per coarse coordinate.",
+    ),
+    "redata_weather_history": ServiceDefaults(
+        display_name="REData Historical Weather",
+        calls_per_minute=20,
+        calls_per_day=None,
+        notes="What the weather actually was, per day, via GET /weather/history/ (Open-Meteo ERA5 reanalysis, back to 1940). Separate from redata_weather because a past day is an immutable record, not a forecast. See services.locations.visit_weather.",
+    ),
     "redata_routing": ServiceDefaults(
         display_name="REData Routing",
         calls_per_minute=20,
@@ -331,15 +348,22 @@ def service_is_permitted(service: str) -> bool:
     return service_is_enabled(service) and check_rate_limit(service)
 
 
-def service_is_enabled(service: str) -> bool:
+def service_is_enabled(service: str, config: Any = None) -> bool:
     """Check if the service is enabled.
 
     Args:
         service: The service key.
+        config: An already-loaded ``ApiRateLimit`` row for ``service``, when the
+            caller has one. Every outbound call goes through ``_reserve_call``,
+            which holds this row under ``SELECT ... FOR UPDATE``; re-reading it
+            here (and again in :func:`check_rate_limit`) meant four reads of one
+            identical row per API call.
 
     Returns:
         ``True`` if the service is enabled, ``False`` otherwise.
     """
+    if config is not None:
+        return bool(config.enabled)
     try:
         config = get_limit_config(service)
     except DatabaseError:
@@ -352,7 +376,7 @@ def service_is_enabled(service: str) -> bool:
     return config.enabled
 
 
-def check_rate_limit(service: str) -> bool:
+def check_rate_limit(service: str, config: Any = None) -> bool:
     """Return ``True`` if a call to ``service`` is currently permitted.
 
     Queries the ``ApiCallLog`` table using a rolling window to enforce the
@@ -360,23 +384,29 @@ def check_rate_limit(service: str) -> bool:
     ``ApiRateLimit``.  A ``False`` result means the call should be skipped; a
     ``_RateLimitedSession`` will log the blocked attempt automatically.
 
+    Only the windows that are actually configured are counted - a service with
+    no ``calls_per_30_days`` never pays for that ``COUNT(*)``.
+
     Args:
         service: The service key.
+        config: An already-loaded ``ApiRateLimit`` row, when the caller has one
+            (see :func:`service_is_enabled` for why).
 
     Returns:
         ``True`` if the call is allowed, ``False`` if rate limited.
     """
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
-    try:
-        config = get_limit_config(service)
-    except DatabaseError:
-        # Allow the call rather than break a feature when the database is the thing
-        # that failed. Deliberately *not* a bare except: this limiter caps spend on
-        # paid third-party APIs, so a bug here silently uncapping it - a broken plugin
-        # rate-limit declaration, say - must surface rather than read as "allowed".
-        logger.exception("Failed to read rate limit config for %s - allowing call", service)
-        return True
+    if config is None:
+        try:
+            config = get_limit_config(service)
+        except DatabaseError:
+            # Allow the call rather than break a feature when the database is the thing
+            # that failed. Deliberately *not* a bare except: this limiter caps spend on
+            # paid third-party APIs, so a bug here silently uncapping it - a broken plugin
+            # rate-limit declaration, say - must surface rather than read as "allowed".
+            logger.exception("Failed to read rate limit config for %s - allowing call", service)
+            return True
 
     try:
         if config.calls_per_minute is not None:
@@ -515,7 +545,9 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
 
     # Ensure the row exists (auto-created from defaults) before locking it -
     # get_or_create is safe to call outside the lock since it already handles
-    # its own creation race.
+    # its own creation race. Its result is deliberately discarded: the row must
+    # be re-read under the lock below, and that locked instance is then threaded
+    # into check_rate_limit/service_is_enabled rather than each re-reading it.
     get_limit_config(service)
 
     to_raise: RequestCancelledError | None = None
@@ -536,11 +568,11 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
                 ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=False, was_rate_limited=True)
                 to_raise = RateLimitExceededError(service)
 
-        if to_raise is None and not check_rate_limit(service):
+        if to_raise is None and not check_rate_limit(service, config):
             ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=False, was_rate_limited=True)
             to_raise = RateLimitExceededError(service)
 
-        if to_raise is None and not service_is_enabled(service):
+        if to_raise is None and not service_is_enabled(service, config):
             ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=False, was_service_disabled=True)
             to_raise = ServiceDisabledError(service)
 

@@ -38,10 +38,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: REData imagery providers requested here, and their carousel display name.
-#: Deliberately excludes ``esri_world_imagery``/``esri_wayback``/``usgs_imagery``
-#: (covered more richly by the direct ``EsriGateway`` above) and ``usgs_topo``
-#: (belongs to the separate USGS Historical Topo Maps panel, not this carousel).
+#: Carousel display names for REData imagery providers. **Not** the list of
+#: providers requested - that comes from REData's own capability index (see
+#: :func:`_wanted_providers`), so a source REData registers appears here without
+#: an UrbanLens release rather than being silently dropped. A provider with no
+#: entry falls back to a title-cased tag, which is serviceable while somebody
+#: picks a better name.
 _REDATA_PROVIDER_NAMES: dict[str, str] = {
     "open_aerial_map": "OpenAerialMap",
     "nasa_gibs": "NASA GIBS",
@@ -49,7 +51,63 @@ _REDATA_PROVIDER_NAMES: dict[str, str] = {
     "mapbox": "Mapbox",
     "bing_maps": "Bing Maps",
     "azure_maps": "Azure Maps",
+    # Global annual cloud-free Sentinel-2 mosaics, one frame per year since
+    # 2016. Excluded until 2026-08-20 for no recorded reason, and it is the
+    # single most useful source in this carousel for this app's subject: a
+    # yearly sequence is how you see a roof come off or a building disappear.
+    # The timeline was already fetching these and the carousel dropped them.
+    "s2cloudless": "Sentinel-2 cloudless",
 }
+
+#: Providers REData offers that this carousel does not request, each because
+#: some *other* surface of this app shows it better. A fact about UrbanLens's
+#: own UI, which is what makes it safe to write down - unlike the provider list
+#: itself, which is REData's and is discovered.
+_SHOWN_ELSEWHERE: frozenset[str] = frozenset(
+    {
+        "esri_world_imagery",  # EsriPlugin's direct gateway, with more detail
+        "esri_wayback",  # likewise - its own dated series
+        "usgs_imagery",  # likewise
+        "usgs_topo",  # the USGS Historical Topo Maps panel
+        "map_warper",  # the historical-map picker: scanned maps, not imagery
+    },
+)
+
+#: Scanned historical map collections, which arrive as one provider tag per
+#: loc.gov collection and are generated on REData's side. Matched by prefix
+#: because the set grows there, and none of them belong in a satellite
+#: carousel - they are the historical-map picker's material.
+_HISTORICAL_MAP_PREFIX = "loc_"
+
+
+def _wanted_providers(latitude: float, longitude: float) -> list[str]:
+    """Which imagery providers to ask for at a point.
+
+    Asks REData's capability index which of its imagery providers cover the
+    point, then drops the ones another surface of this app already shows.
+    Unlike the points-of-interest registry, a failed lookup here falls back to
+    the names this module knows rather than to nothing: ``/imagery/`` takes an
+    explicit provider list either way, so the fallback is a bounded, curated
+    request rather than a fan-out, and the carousel keeps working through a
+    capability-endpoint outage.
+
+    Args:
+        latitude: WGS-84 latitude.
+        longitude: WGS-84 longitude.
+
+    Returns:
+        Provider tags to request, in REData's own order. Empty means REData
+        answered and nothing it offers here belongs in this carousel - the
+        caller must then make **no** request, because ``/imagery/`` reads an
+        empty provider list as "every provider", which would fan out across the
+        scanned-map collections this deliberately leaves out.
+    """
+    from urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway import applicable_providers
+
+    discovered = applicable_providers("imagery", latitude, longitude)
+    if not discovered:
+        return list(_REDATA_PROVIDER_NAMES)
+    return [tag for tag in discovered if tag not in _SHOWN_ELSEWHERE and not tag.startswith(_HISTORICAL_MAP_PREFIX)]
 
 #: These three need a vendor credential REData holds - their ``url`` is
 #: REData's own authenticated download proxy, not a publicly fetchable image
@@ -143,12 +201,16 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         if not redata_configured():
             return
 
+        wanted = _wanted_providers(latitude, longitude)
+        if not wanted:
+            return
+
         gateway = RedataImageryGateway()
         # Deliberately not swallowed: SatelliteViewProvider.get_satellite_slides
         # distinguishes "this place has no imagery" from "we could not ask", and
         # caches only the first. Catching here would hide the difference and
         # cache an outage as a permanent absence.
-        results = gateway.get_imagery(latitude, longitude, providers=list(_REDATA_PROVIDER_NAMES))
+        results = gateway.get_imagery(latitude, longitude, providers=wanted)
 
         seen_urls: set[str] = set()
         for result in results:
@@ -219,12 +281,27 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         provider = result.get("provider")
         if not isinstance(provider, str):
             return None
-        name = _REDATA_PROVIDER_NAMES.get(provider)
         url = result.get("url")
-        if name is None or not url:
+        if not url or provider in _SHOWN_ELSEWHERE or provider.startswith(_HISTORICAL_MAP_PREFIX):
+            return None
+        # Named if we know it, title-cased from the tag if we do not. Gating on
+        # a known name instead is what made a newly-registered REData provider
+        # invisible even once it was requested - including through the
+        # historical-capture path, which reaches this with rows the carousel
+        # never asked for directly.
+        name = _REDATA_PROVIDER_NAMES.get(provider) or provider.replace("_", " ").title()
+
+        delivery = result.get("delivery")
+        if delivery == "time_series":
+            # Not a picture: `url` is a template carrying a literal `{time}`
+            # and the row describes a date *range*, one date of which has to be
+            # materialised first (`POST /imagery/capture/`). Putting it in an
+            # <img src> guarantees a broken slide - which is what every pin got
+            # for each registered NASA GIBS layer, captioned with the range.
+            # `_historical_slides` already skips these for the same reason.
             return None
 
-        if result.get("delivery") == "tile_template":
+        if delivery == "tile_template":
             img_src = _resolve_tile_template(url, latitude, longitude, result.get("attributes") or {})
         elif provider in _KEYED_PROVIDERS:
             try:
@@ -241,11 +318,16 @@ class RedataSatelliteProvider(SatelliteViewProvider):
 
 
 class RedataImageryPlugin(UrbanLensPlugin):
-    """REData-backed satellite imagery: NASA GIBS, Mapbox, Bing Maps, OpenAerialMap, OpenTopoMap."""
+    """REData-backed satellite imagery: Sentinel-2 cloudless, NASA GIBS, Mapbox, Bing Maps, OpenAerialMap, OpenTopoMap."""
 
     name: ClassVar[str] = "redata_imagery"
     verbose_name: ClassVar[str] = "REData Imagery"
-    description: ClassVar[str] = "Additional satellite/aerial/topographic imagery providers (NASA GIBS, Mapbox, Bing Maps, OpenAerialMap, OpenTopoMap) in the pin detail satellite carousel, via REData. Requires REData to be configured."
+    description: ClassVar[str] = (
+        "Additional satellite/aerial/topographic imagery in the pin detail carousel, via REData - including "
+        "Sentinel-2 cloudless annual mosaics, which give one frame per year since 2016. Which sources are asked "
+        "is discovered from REData's capability index rather than listed here, minus the ones another panel "
+        "already shows better. Requires REData to be configured."
+    )
     author: ClassVar[str] = "UrbanLens"
     order: ClassVar[int] = 70
 

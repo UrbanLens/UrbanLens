@@ -13,11 +13,19 @@ still cache the answer (it changes on REData deploys, not per request).
 
 from __future__ import annotations
 
+import logging
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
 
+logger = logging.getLogger(__name__)
+
 _CAPABILITIES_PATH = "/api/v1/capabilities/"
+
+#: How long a point's provider list is cached. It changes on REData deploys,
+#: not per request, and reading it costs REData no external call - but it does
+#: cost a round trip, and a panel fetch should not pay for one per pin.
+_CAPABILITIES_TTL_SECONDS = 60 * 60
 
 
 class RedataCapabilitiesGateway(RedataLocationContextGateway):
@@ -49,3 +57,51 @@ class RedataCapabilitiesGateway(RedataLocationContextGateway):
         if latitude is not None and longitude is not None:
             params = {"lat": latitude, "lng": longitude}
         return self.get_json(_CAPABILITIES_PATH, params)
+
+
+def applicable_providers(domain_tag: str, latitude: float, longitude: float) -> list[str]:
+    """Which of a domain's providers cover a coordinate, per REData.
+
+    Answered from ``GET /capabilities/?lat=&lng=``, whose
+    ``applicable_providers`` is the same cheap bounds test the registries
+    themselves apply - no external call on REData's side, and no provider list
+    hardcoded on this one. A client that names its own list stops growing the
+    day REData registers a source, silently, which is the failure this exists
+    to prevent.
+
+    Args:
+        domain_tag: REData's own tag for the domain, e.g. ``"imagery"`` or
+            ``"points_of_interest"``.
+        latitude: WGS-84 latitude.
+        longitude: WGS-84 longitude.
+
+    Returns:
+        The applicable provider tags, or an empty list when REData is
+        unreachable or reports no coverage. **Empty is ambiguous on purpose**
+        and each caller has to decide what it means for them: for a registry
+        where a provider-less request fans out across everything, empty must
+        mean "ask nothing"; for one where the client already had a curated
+        list, empty means "keep using it".
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+
+    key = f"redata_providers:{domain_tag}:{latitude:.2f},{longitude:.2f}"
+    cached = cache.get(key)
+    if cached is not None:
+        return list(cached)
+
+    try:
+        index = RedataCapabilitiesGateway().get_capabilities(latitude=latitude, longitude=longitude)
+    except LocationContextUnavailableError:
+        logger.info("REData capability index unavailable for %s at %.4f,%.4f", domain_tag, latitude, longitude, exc_info=True)
+        return []
+
+    tags: list[str] = []
+    for domain in index.get("domains") or []:
+        if isinstance(domain, dict) and domain.get("tag") == domain_tag:
+            tags = [tag for tag in (domain.get("applicable_providers") or []) if isinstance(tag, str)]
+            break
+    cache.set(key, tags, _CAPABILITIES_TTL_SECONDS)
+    return tags
