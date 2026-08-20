@@ -13,10 +13,20 @@ dialog body.
 <ul class="map-overlay-historical-list">
     {% for map in maps %}
     <li class="map-overlay-historical-row">
+        {% if map.thumbnail_url %}
+        <img class="map-overlay-historical-thumb" src="{{ map.thumbnail_url }}" alt="" loading="lazy"
+             onerror="this.style.display='none'">
+        {% endif %}
         <div class="map-overlay-historical-info">
-            <span class="map-overlay-historical-title">{{ map.title }}</span>
+            <span class="map-overlay-historical-title">
+                {% if map.landing_page_url %}
+                <a href="{{ map.landing_page_url }}" target="_blank" rel="noopener noreferrer">{{ map.title }}</a>
+                {% else %}
+                {{ map.title }}
+                {% endif %}
+            </span>
             <span class="map-overlay-historical-meta">
-                {{ map.kind }}{% if map.date_text %} - {{ map.date_text }}{% endif %}{% if map.attribution %} - {{ map.attribution }}{% endif %}{% if not map.contains_point %} - nearby{% endif %}
+                {{ map.kind }}{% if map.date_text %} - {{ map.date_text }}{% endif %}{% if map.attribution %} - {{ map.attribution }}{% endif %}{% if not map.contains_point %} - nearby{% endif %}{% if map.accuracy %} - placed to {{ map.accuracy }}{% endif %}
             </span>
         </div>
         <button type="button" class="btn btn--icon" title="Add as overlay"

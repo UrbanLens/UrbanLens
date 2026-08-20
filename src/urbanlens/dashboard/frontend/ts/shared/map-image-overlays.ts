@@ -233,14 +233,28 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
                 item.entry.corners[index] = [latLng.lat, latLng.lng];
                 redraw(item);
             };
+            // `pointercancel`/`lostpointercapture` as well as `pointerup`: a touch
+            // drag interrupted by the browser (an incoming call, a scroll gesture
+            // the OS claims, the pointer capture being lost) fires no `pointerup`
+            // at all. With only that listener the map stayed `dragging.disable()`d
+            // and the whole map was unpannable until the page was reloaded.
+            // `up` is written to be safe to run more than once, since a cancel is
+            // sometimes followed by a capture-loss event for the same gesture.
+            let released = false;
             const up = () => {
+                if (released) return;
+                released = true;
                 handle.removeEventListener("pointermove", move);
                 handle.removeEventListener("pointerup", up);
+                handle.removeEventListener("pointercancel", up);
+                handle.removeEventListener("lostpointercapture", up);
                 map.dragging.enable();
                 void saveCorners(item);
             };
             handle.addEventListener("pointermove", move);
             handle.addEventListener("pointerup", up);
+            handle.addEventListener("pointercancel", up);
+            handle.addEventListener("lostpointercapture", up);
         });
         return handle;
     }

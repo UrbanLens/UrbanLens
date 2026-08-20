@@ -175,10 +175,24 @@
   justify-content: space-between;
 }
 
+// Fixed box so a row's height does not depend on whichever institution's
+// thumbnail proportions it happens to carry - the list scrolls inside a 14rem
+// window, and a tall scan would push the rest of the sheets out of view.
+.map-overlay-historical-thumb {
+  border: 1px solid var(--ul-border-color, rgba(0, 0, 0, .12));
+  border-radius: 3px;
+  flex: 0 0 auto;
+  height: 2.5rem;
+  object-fit: cover;
+  width: 2.5rem;
+}
+
 .map-overlay-historical-info {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  // Takes the slack so the title still ellipsises once a thumbnail is beside it.
+  flex: 1 1 auto;
 }
 
 .map-overlay-historical-title {
@@ -186,6 +200,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  a {
+    color: inherit;
+    text-decoration: none;
+
+    &:hover {
+      color: var(--ul-primary-color);
+      text-decoration: underline;
+    }
+  }
 }
 
 .map-overlay-historical-meta {

@@ -32,6 +32,48 @@ def _match(georeference_uuid: str, *, title: str = "Sanborn Fire Insurance Map",
     }
 
 
+class GeoreferenceAccuracyTests(TestCase):
+    """How well a sheet is placed - reported only where the number means something.
+
+    `rmse_meters` is the fit's own residual, and REData's model docstring warns
+    that a thin-plate spline interpolates its control points *by construction*,
+    so its residual is ~0 whatever the placement is actually like. Printing
+    "±0 m" for one would advertise a perfect fit for what may be the worst sheet
+    in the list, which is worse than printing nothing.
+    """
+
+    def test_a_loose_polynomial_fit_reports_its_error(self) -> None:
+        from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
+
+        note = georeference_accuracy({"transformation": "polynomial", "rmse_meters": 41.6, "gcp_count": 6})
+
+        self.assertEqual(note, "±42 m (6 control points)")
+
+    def test_a_thin_plate_spline_reports_nothing(self) -> None:
+        """Its residual is ~0 by construction, not because the placement is good."""
+        from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
+
+        self.assertEqual(georeference_accuracy({"transformation": "thinPlateSpline", "rmse_meters": 0.0, "gcp_count": 30}), "")
+
+    def test_a_tight_fit_is_not_worth_the_pixels(self) -> None:
+        """A few metres on a scanned historical map is noise, not information."""
+        from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
+
+        self.assertEqual(georeference_accuracy({"transformation": "polynomial", "rmse_meters": 3.0, "gcp_count": 8}), "")
+
+    def test_a_missing_or_malformed_figure_reports_nothing(self) -> None:
+        from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
+
+        self.assertEqual(georeference_accuracy({}), "")
+        self.assertEqual(georeference_accuracy({"transformation": "polynomial", "rmse_meters": None}), "")
+        self.assertEqual(georeference_accuracy({"transformation": "polynomial", "rmse_meters": "40"}), "")
+
+    def test_an_unknown_control_point_count_is_simply_omitted(self) -> None:
+        from urbanlens.dashboard.controllers.map_overlays import georeference_accuracy
+
+        self.assertEqual(georeference_accuracy({"transformation": "helmert", "rmse_meters": 88.0}), "±88 m")
+
+
 class HistoricalMapTileProxyTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -104,6 +146,54 @@ class HistoricalMapBrowseTests(TestCase):
         body = response.content.decode()
         self.assertIn("Sanborn Fire Insurance Map", body)
         self.assertIn(self.georeference_uuid, body)
+
+    def test_the_sheet_thumbnail_and_catalogue_link_are_offered(self) -> None:
+        """Choosing between a dozen scans of one neighbourhood is a visual task.
+
+        REData caches the institution's own thumbnail and catalogue page, and
+        the picker showed neither - eleven rows reading "Sanborn Map of ..." is
+        not a way to pick one. Both are the *institution's* public URLs, not
+        REData-authenticated ones, so unlike the tile template they need no
+        proxy.
+        """
+        match = _match(self.georeference_uuid)
+        match["sheet"]["thumbnail_url"] = "https://tile.loc.gov/thumb/sanborn-1893.jpg"
+        match["sheet"]["landing_page_url"] = "https://www.loc.gov/item/sanborn01234_001/"
+
+        with (
+            mock.patch(_CONFIGURED_PATH, return_value=True),
+            mock.patch(_GATEWAY_PATH) as gateway_cls,
+        ):
+            gateway_cls.return_value.get_maps_covering.return_value = [match]
+            body = self.client.get(self.url).content.decode()
+
+        self.assertIn("https://tile.loc.gov/thumb/sanborn-1893.jpg", body)
+        self.assertIn("https://www.loc.gov/item/sanborn01234_001/", body)
+
+    def test_a_sheet_without_a_thumbnail_still_lists(self) -> None:
+        """Most providers publish one; a sheet that does not must not vanish."""
+        with (
+            mock.patch(_CONFIGURED_PATH, return_value=True),
+            mock.patch(_GATEWAY_PATH) as gateway_cls,
+        ):
+            gateway_cls.return_value.get_maps_covering.return_value = [_match(self.georeference_uuid)]
+            body = self.client.get(self.url).content.decode()
+
+        self.assertIn("Sanborn Fire Insurance Map", body)
+        self.assertNotIn("map-overlay-historical-thumb", body)
+
+    def test_a_loose_placement_is_disclosed_in_the_list(self) -> None:
+        match = _match(self.georeference_uuid)
+        match["georeference"].update({"transformation": "polynomial", "rmse_meters": 60.0, "gcp_count": 4})
+
+        with (
+            mock.patch(_CONFIGURED_PATH, return_value=True),
+            mock.patch(_GATEWAY_PATH) as gateway_cls,
+        ):
+            gateway_cls.return_value.get_maps_covering.return_value = [match]
+            body = self.client.get(self.url).content.decode()
+
+        self.assertIn("placed to ±60 m", body)
 
     def test_post_creates_a_locked_tile_overlay_pointing_at_the_proxy(self) -> None:
         with (

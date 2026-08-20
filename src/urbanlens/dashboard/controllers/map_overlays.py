@@ -388,6 +388,79 @@ class MapOverlayDeleteView(LoginRequiredMixin, View):
         return _render_overlay_list(request, owner, qs)
 
 
+
+#: Georeference transformations whose ``rmse_meters`` is not an accuracy figure.
+#: A thin-plate spline interpolates its control points by construction, so its
+#: residual is ~0 whatever the fit is actually like - reporting that as "±0 m"
+#: would advertise a perfect placement for what may be the worst one in the
+#: list. REData's own model docstring says so; this is the consumer honouring it.
+_UNINFORMATIVE_RMSE_TRANSFORMS = frozenset({"thinPlateSpline"})
+
+#: Above this, a georeference is placing the sheet by metres rather than
+#: centimetres and the user should know before drawing a building on it. Below
+#: it, the number is noise on a scanned historical map.
+_NOTABLE_RMSE_METERS = 25.0
+
+
+def georeference_accuracy(georeference: dict) -> str:
+    """A short honest note about how well a sheet is placed, or ``""``.
+
+    Args:
+        georeference: REData's ``georeference`` block - ``transformation``,
+            ``rmse_meters``, ``gcp_count``.
+
+    Returns:
+        Something like ``"±40 m (6 control points)"``, or ``""`` when the
+        figure would be absent, meaningless, or too small to be worth the
+        pixels.
+    """
+    if str(georeference.get("transformation") or "") in _UNINFORMATIVE_RMSE_TRANSFORMS:
+        return ""
+    rmse = georeference.get("rmse_meters")
+    if not isinstance(rmse, (int, float)) or rmse < _NOTABLE_RMSE_METERS:
+        return ""
+    points = georeference.get("gcp_count")
+    suffix = f" ({points} control points)" if isinstance(points, int) and points else ""
+    return f"±{rmse:,.0f} m{suffix}"
+
+
+def historical_map_row(match: dict) -> dict | None:
+    """One picker row from a REData historical-map match, or None to skip it.
+
+    Split out of the view because the POST path re-queries the same endpoint
+    and has to agree with the list the user picked from.
+
+    Reads three fields the picker previously cached and ignored. The thumbnail
+    matters most: choosing between a dozen scanned sheets of one neighbourhood
+    is a visual task, and a list of titles ("Sanborn Map of ...", eleven times)
+    is not a way to do it. ``thumbnail_url`` and ``landing_page_url`` are the
+    *institution's* own public URLs, not REData-authenticated ones, so they can
+    be linked directly - unlike the tile template, which is proxied precisely
+    because REData's key must not reach the browser.
+
+    Args:
+        match: One entry from ``RedataHistoricalMapsGateway.get_maps_covering``.
+
+    Returns:
+        A template-ready row, or None when the match cannot be drawn.
+    """
+    sheet = match.get("sheet") or {}
+    georeference = match.get("georeference") or {}
+    if not georeference.get("uuid") or not georeference.get("bounds"):
+        return None
+    return {
+        "georeference_uuid": georeference["uuid"],
+        "title": sheet.get("title") or "Untitled map",
+        "date_text": sheet.get("date_text") or "",
+        "kind": (sheet.get("kind") or "other").replace("_", " "),
+        "attribution": sheet.get("attribution") or "",
+        "contains_point": bool(match.get("contains_point")),
+        "thumbnail_url": sheet.get("thumbnail_url") or "",
+        "landing_page_url": sheet.get("landing_page_url") or "",
+        "accuracy": georeference_accuracy(georeference),
+    }
+
+
 class HistoricalMapBrowseView(LoginRequiredMixin, View):
     """Browse REData's georeferenced historical maps covering this pin/wiki, and add one as an overlay.
 
@@ -424,21 +497,7 @@ class HistoricalMapBrowseView(LoginRequiredMixin, View):
             context["error"] = "Historical map search is temporarily unavailable."
             return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
 
-        for match in matches:
-            sheet = match.get("sheet") or {}
-            georeference = match.get("georeference") or {}
-            if not georeference.get("uuid") or not georeference.get("bounds"):
-                continue
-            context["maps"].append(
-                {
-                    "georeference_uuid": georeference["uuid"],
-                    "title": sheet.get("title") or "Untitled map",
-                    "date_text": sheet.get("date_text") or "",
-                    "kind": (sheet.get("kind") or "other").replace("_", " "),
-                    "attribution": sheet.get("attribution") or "",
-                    "contains_point": bool(match.get("contains_point")),
-                },
-            )
+        context["maps"] = [row for row in (historical_map_row(match) for match in matches) if row is not None]
         return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
 
     def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
