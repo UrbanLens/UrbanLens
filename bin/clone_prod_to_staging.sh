@@ -154,8 +154,24 @@ wait_for_healthy "$STAGING_DB_CONTAINER"
 
 echo "==> Restoring into staging..."
 docker cp "./$DUMP_FILE" "$STAGING_DB_CONTAINER:/tmp/clone.dump"
+# Drop and recreate the schema first, rather than passing --clean to pg_restore.
+# --clean asks pg_restore to compute a per-object DROP order from the dump's
+# contents, but staging's *current* schema is what actually needs dropping -
+# and a prior staging deploy routinely has FK constraints (added by migrations
+# newer than whatever prod last shipped) that the dump knows nothing about.
+# Two tables restored with -j4 (parallel workers, order not coordinated across
+# them) then race: a worker dropping one table's primary-key index can hit a
+# constraint on some other, not-yet-processed table that still references it,
+# and pg_restore has no CASCADE to fall back on - "cannot drop constraint ...
+# because other objects depend on it", leaving a half-dropped schema and a
+# database that satisfies neither the old migration state nor the new one.
+# `DROP SCHEMA ... CASCADE` removes everything in one statement with no
+# ordering to get wrong, so the restore below loads into a genuinely empty
+# schema and --clean is no longer needed.
 docker exec -e PGPASSWORD="$STAGING_DB_PASS" "$STAGING_DB_CONTAINER" \
-    pg_restore -U "$STAGING_DB_USER" -d "$STAGING_DB_NAME" --no-owner --clean --if-exists -j4 /tmp/clone.dump
+    psql -U "$STAGING_DB_USER" -d "$STAGING_DB_NAME" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+docker exec -e PGPASSWORD="$STAGING_DB_PASS" "$STAGING_DB_CONTAINER" \
+    pg_restore -U "$STAGING_DB_USER" -d "$STAGING_DB_NAME" --no-owner -j4 /tmp/clone.dump
 docker exec "$STAGING_DB_CONTAINER" rm -f /tmp/clone.dump
 
 if ! $KEEP_DUMP; then
