@@ -111,3 +111,66 @@ class HeicGpsStripTests(TestCase):
         upload = SimpleUploadedFile("IMG_0001.heic", _heic_with_gps(), content_type="image/heic")
 
         self.assertIsNone(image_upload_error(upload, MediaKind.PHOTO))
+
+
+class HeicIsStoredInARenderableFormatTests(TestCase):
+    """Accepting the upload is only half of "HEIC just works".
+
+    Commit 550b2cb8 removed the 415 that told the user to convert to JPEG
+    first. But the WebP conversion is gated on the downscale policy, and HEIF is
+    deliberately not a format the downscaler re-encodes - so a subscriber with
+    downscaling off (the default) had their .heic stored verbatim and served
+    through a plain `<img src>`, which every browser but Safari renders as a
+    broken image. That is a worse outcome than the refusal it replaced: the
+    refusal was actionable.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.profile = baker.make(User).profile
+
+    def _stored_heic(self) -> Image:
+        image = baker.make(Image, profile=self.profile)
+        image.image.save("IMG_0001.heic", SimpleUploadedFile("IMG_0001.heic", _heic_with_gps(), content_type="image/heic"), save=True)
+        return image
+
+    def _stored_format(self, image: Image) -> str:
+        with image.image.open("rb") as stored:
+            return PILImage.open(stored).format or ""
+
+    def test_a_heic_is_transcoded_even_with_every_policy_switch_off(self) -> None:
+        image = self._stored_heic()
+
+        downscale_stored_image(image, None, convert_webp=False, strip_gps=False)
+        image.save()
+
+        self.assertEqual(self._stored_format(image), "JPEG")
+        self.assertTrue(image.image.name.endswith(".jpg"), image.image.name)
+
+    def test_webp_still_wins_when_the_policy_asks_for_it(self) -> None:
+        """The transcode is a floor, not an override of the uploader's policy."""
+        image = self._stored_heic()
+
+        downscale_stored_image(image, None, convert_webp=True, strip_gps=False)
+        image.save()
+
+        self.assertEqual(self._stored_format(image), "WEBP")
+
+    def test_the_transcode_pass_is_entered_at_all(self) -> None:
+        """The gate in tasks.py skipped the whole pass when no policy switch was on."""
+        from urbanlens.dashboard.services.media.images import stored_file_needs_transcode
+
+        self.assertTrue(stored_file_needs_transcode("IMG_0001.heic"))
+        self.assertTrue(stored_file_needs_transcode("IMG_0001.HEIF"))
+        self.assertFalse(stored_file_needs_transcode("IMG_0001.jpg"))
+        self.assertFalse(stored_file_needs_transcode(""))
+
+    def test_a_jpeg_is_not_re_encoded_for_no_reason(self) -> None:
+        """Only formats browsers cannot render are forced through the encoder."""
+        image = baker.make(Image, profile=self.profile)
+        buffer = io.BytesIO()
+        PILImage.new("RGB", (48, 48), (10, 20, 30)).save(buffer, format="JPEG")
+        image.image.save("plain.jpg", SimpleUploadedFile("plain.jpg", buffer.getvalue(), content_type="image/jpeg"), save=True)
+
+        self.assertIsNone(downscale_stored_image(image, None, convert_webp=False, strip_gps=False))

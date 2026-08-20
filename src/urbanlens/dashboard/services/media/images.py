@@ -47,6 +47,19 @@ _FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".
 # change what this pipeline sees.
 _EXIF_REWRITABLE_FORMATS = _PROCESSABLE_FORMATS | {"AVIF", "HEIF"}
 
+# Formats that must be re-encoded whatever the downscale policy says, because no
+# mainstream browser outside Safari renders them and stored photos are served
+# through a plain <img src>. Accepting the upload and keeping the bytes verbatim
+# swaps an explicit "convert it to JPEG first" refusal for a broken image, which
+# is strictly worse. `_MUST_TRANSCODE_TARGET` is the format they land in when the
+# uploader's policy does not already pick one (a subscriber with downscaling off
+# and no WebP conversion, which is the default).
+#
+# AVIF is deliberately not here: browser support for it is broad, so re-encoding
+# one would cost quality for nothing.
+_MUST_TRANSCODE_FORMATS = {"HEIF"}
+_MUST_TRANSCODE_TARGET = "JPEG"
+
 # EXIF tag 34853 - the GPSInfo IFD pointer.
 _GPS_IFD_TAG = 0x8825
 
@@ -447,6 +460,29 @@ def extract_exif_data(image_file: IO[bytes]) -> dict[str, Any] | None:
             image_file.seek(0)
 
 
+#: Extensions that reach `_MUST_TRANSCODE_FORMATS`. Used only to decide whether
+#: the downscale pass is worth entering at all - the authoritative check is
+#: Pillow's reported format once the file is open, so a mislabelled file costs
+#: one wasted open and nothing else.
+_MUST_TRANSCODE_EXTENSIONS = {".heic", ".heif"}
+
+
+def stored_file_needs_transcode(name: str) -> bool:
+    """Whether a stored upload must be re-encoded regardless of downscale policy.
+
+    A subscriber with downscaling off, WebP conversion off and location
+    stripping off never entered the downscale pass, so their HEIC was served
+    verbatim to browsers that cannot render it.
+
+    Args:
+        name: The stored file's name.
+
+    Returns:
+        True when the file's extension is one that must be transcoded.
+    """
+    return posixpath.splitext(name or "")[1].lower() in _MUST_TRANSCODE_EXTENSIONS
+
+
 def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool, strip_gps: bool = False) -> int | None:
     """Downscale and/or re-encode an Image's stored file in place.
 
@@ -487,8 +523,13 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
         # the alternative is leaving coordinates in a file the user asked us to
         # scrub. AVIF is the case that matters - phones produce it, it carries a
         # GPS IFD, and it is not a format this pipeline would otherwise touch.
-        needs_resize = processable and max_dimension is not None and max(img.size) > max_dimension
-        needs_convert = processable and convert_webp and source_format != "WEBP"
+        must_transcode = source_format in _MUST_TRANSCODE_FORMATS
+        # A format being re-encoded anyway can be resized in the same pass, so
+        # the resize gate follows "will this file be rewritten", not the narrower
+        # "would the downscaler normally touch this format".
+        rewriting = processable or must_transcode
+        needs_resize = rewriting and max_dimension is not None and max(img.size) > max_dimension
+        needs_convert = (processable and convert_webp and source_format != "WEBP") or must_transcode
         exif_bytes = img.info.get("exif")
         has_gps = False
         if strip_gps:
@@ -509,7 +550,7 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
     if needs_resize and max_dimension is not None:
         img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
 
-    target_format = "WEBP" if convert_webp else source_format
+    target_format = "WEBP" if convert_webp else (_MUST_TRANSCODE_TARGET if must_transcode else source_format)
     save_kwargs: dict[str, Any] = {}
     if target_format == "WEBP":
         if img.mode not in ("RGB", "RGBA"):

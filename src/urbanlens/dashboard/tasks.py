@@ -657,6 +657,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         extract_source_url,
         extract_taken_at,
         is_camera_generated_filename,
+        stored_file_needs_transcode,
     )
     from urbanlens.dashboard.services.media.storage import get_downscale_policy
 
@@ -715,7 +716,11 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
     new_stored_size: int | None = None
     if image.profile is not None:
         max_dimension, convert_webp = get_downscale_policy(image.profile)
-        if max_dimension is not None or convert_webp or strip_location:
+        # `stored_file_needs_transcode`: a HEIC has to be re-encoded even when the
+        # uploader's policy asks for no resize, no WebP and no GPS strip, because
+        # the stored bytes are what a plain <img src> gets and most browsers
+        # cannot render them.
+        if max_dimension is not None or convert_webp or strip_location or stored_file_needs_transcode(image.image.name or ""):
             try:
                 new_size = downscale_stored_image(image, max_dimension, convert_webp, strip_gps=strip_location)
             except (OSError, ValueError, PILDecompressionBombError) as exc:
