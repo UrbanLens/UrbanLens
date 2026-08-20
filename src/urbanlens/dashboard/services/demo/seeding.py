@@ -33,7 +33,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.services.demo import DEMO_USERNAME_PREFIX
-from urbanlens.dashboard.services.demo.places import DEMO_PLACES, PERSONA_EXTRA_PLACES
+from urbanlens.dashboard.services.demo.locations import pool_locations
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -132,28 +132,27 @@ def _prepare_profile(user: User, *, bio: str, expires_at: Any) -> Profile:
     return profile
 
 
-def _seed_places(profile: Profile, places: list[dict[str, Any]]) -> list[Pin]:
-    """Create a Location + Wiki + Pin for each place description.
+def _pin_pool(profile: Profile, locations: list) -> list[Pin]:
+    """Give ``profile`` a pin on each pooled location.
+
+    Pinning is what grants wiki access - visibility is earned by holding a pin
+    on the location - so this is also how a demo account comes to see each
+    place's wiki, aliases and cached photos.
+
+    The pin carries no name of its own: ``Pin.name`` is a personal override, and
+    leaving it unset lets the pin display the location's real name, which is the
+    one the import brought across.
 
     Args:
         profile: Owner of the created pins.
-        places: Entries from :mod:`.places`.
+        locations: Locations from :func:`.locations.pool_locations`.
 
     Returns:
-        The created pins, in the order given.
+        The created pins.
     """
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
-    pins: list[Pin] = []
-    for entry in places:
-        location, _created = Location.objects.get_exact_or_create(
-            entry["latitude"],
-            entry["longitude"],
-            defaults={"official_name": entry["name"]},
-        )
-        pins.append(Pin.objects.create(profile=profile, location=location, name=entry["name"]))
-    return pins
+    return [Pin.objects.create(profile=profile, location=location) for location in locations]
 
 
 @transaction.atomic
@@ -188,14 +187,18 @@ def seed_demo_account(*, ttl_hours: int = 24) -> User:
             persona_user = _make_user(seed, index, name)
             personas.append(_prepare_profile(persona_user, bio=bio, expires_at=expires_at))
 
-        owner_pins = _seed_places(owner, DEMO_PLACES)
+        pool = pool_locations()
+        owner_pins = _pin_pool(owner, pool)
         for offset, persona in enumerate(personas):
             # Overlapping subsets, so friends' maps differ from the owner's and
             # from each other while still sharing enough places that "pins in
             # common" style surfaces have something to show.
-            share = DEMO_PLACES[offset :: len(personas)] + PERSONA_EXTRA_PLACES[offset % len(PERSONA_EXTRA_PLACES) :][:1]
-            _seed_places(persona, share)
+            _pin_pool(persona, pool[offset :: len(personas)])
 
         logger.info("demo: seeded account %s with %d pins and %d personas", owner_user.username, len(owner_pins), len(personas))
+        if not owner_pins:
+            # Expected until public locations have been imported. Logged rather
+            # than raised: a demo instance must still come up and sign people in.
+            logger.warning("demo: the location pool is empty - seeded %s with no pins", owner_user.username)
 
     return owner_user

@@ -200,6 +200,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "on an instance holding real user data would expose it: see docs/DEMO.md."
         ),
     )
+    demo_locations_file: str = Field(
+        default="",
+        description=(
+            "Path to the JSON manifest of locations a demo instance pins into every new demo "
+            "account (written by `manage.py import_public_locations`). Empty means no manifest, and "
+            "a demo account is seeded with no pins - which is the correct outcome when nothing has "
+            "been imported yet, rather than a reason to invent coordinates."
+        ),
+    )
     demo_url: str = Field(
         default="",
         description=(

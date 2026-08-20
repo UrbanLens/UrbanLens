@@ -20,14 +20,22 @@ class DemoSeedSmokeTests(TestCase):
         self.assertFalse(profile.external_apis_enabled)
         self.assertTrue(profile.profile_setup_complete)
 
-    def test_it_seeds_pins_for_the_owner_and_personas(self) -> None:
-        user = seed_demo_account()
-
-        owner_pins = Pin.objects.filter(profile=user.profile)
-        self.assertGreaterEqual(owner_pins.count(), 10)
+    def test_it_creates_the_login_account_and_its_personas(self) -> None:
+        seed_demo_account()
 
         demo_users = User.objects.filter(username__startswith=DEMO_USERNAME_PREFIX)
         self.assertEqual(demo_users.count(), 5, "one login account plus four personas")
+
+    def test_an_empty_pool_seeds_no_pins_rather_than_inventing_any(self) -> None:
+        """No manifest is the state of a demo instance before anything is imported.
+
+        A pin at an invented coordinate has no real place behind it, so its
+        detail page resolves no boundary, no parcel and no wiki - the product
+        looking broken. Seeding nothing is the honest outcome.
+        """
+        user = seed_demo_account()
+
+        self.assertEqual(Pin.objects.filter(profile=user.profile).count(), 0)
 
     def test_two_sessions_do_not_collide(self) -> None:
         first = seed_demo_account()

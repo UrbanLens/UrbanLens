@@ -65,6 +65,22 @@ class Command(BaseCommand):
         created, updated = self._import(entries)
         self.stdout.write(f"Imported {len(entries)} public location(s): {created} created, {updated} updated.")
 
+        # The manifest is what seeding reads to decide which places every new
+        # demo account gets pinned. Written after the import rather than before,
+        # so it can only ever name locations that exist here - a manifest entry
+        # with no Location behind it would seed a pin whose detail page has
+        # nothing to show, which is the failure this whole path avoids.
+        from urbanlens.dashboard.services.demo.locations import write_manifest
+
+        written = write_manifest(entries)
+        if written is None:
+            self.stdout.write(
+                "UL_DEMO_LOCATIONS_FILE is not set, so no manifest was written and demo accounts will be seeded "
+                "with no pins. Set it to persist this import for seeding.",
+            )
+        else:
+            self.stdout.write(f"Wrote the seeding manifest to {written}")
+
     @transaction.atomic
     def _import(self, entries: list[dict[str, Any]]) -> tuple[int, int]:
         """Create or refresh each exported location and its wiki.
