@@ -331,9 +331,12 @@ def _record_two_factor_failure(user_id: int) -> int:
     if max_attempts <= 0:
         return 0
 
+    # `_bump_counter`, like the two login counters above: read-then-write loses
+    # increments exactly when it matters, and this is the only brake on TOTP
+    # guessing for an attacker who already has the password. It was left on the
+    # old pattern when the other two were converted.
     key = _two_factor_attempts_key(user_id)
-    attempts: int = (cache.get(key) or 0) + 1
-    cache.set(key, attempts, timeout=lockout_seconds)
+    attempts = _bump_counter(key, lockout_seconds)
 
     if attempts >= max_attempts:
         cache.set(_two_factor_lockout_key(user_id), 1, timeout=lockout_seconds)
