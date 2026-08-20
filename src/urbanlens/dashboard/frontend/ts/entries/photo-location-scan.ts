@@ -186,13 +186,31 @@ class PhotoLocationScanApp {
     }
 
     private async scanDirectoryHandle(dirHandle: FileSystemDirectoryHandle): Promise<void> {
-        this.abortController = new AbortController();
+        this.beginScanState();
         // Scanning starts on the very first file the walk yields instead of
         // waiting for the whole tree to be enumerated first - a folder with a
         // lot of photos or nested subfolders used to sit on "Finding photos
         // and videos..." for as long as the full recursive walk took, with no
         // results appearing until every last file had been listed.
-        await this.runScan(null, walkDirectoryHandle(dirHandle, this.abortController.signal));
+        await this.runScan(null, walkDirectoryHandle(dirHandle, this.abortController!.signal), { alreadyBegun: true });
+    }
+
+    /**
+     * Reset everything a scan accumulates, and hand it a fresh AbortController.
+     *
+     * Both matter, and both used to be missed on the `<input webkitdirectory>`
+     * fallback path (Firefox/Safari): `runScan` only created a controller when
+     * there was none, and nothing ever cleared an aborted one - so after a
+     * single Stop, every later scan on that path aborted on its first file.
+     * Hits and clusters were likewise only cleared after a *successful upload*,
+     * so re-scanning the same folder double-counted every photo into its
+     * clusters.
+     */
+    private beginScanState(): void {
+        this.abortController = new AbortController();
+        this.allHits = [];
+        this.clusters = [];
+        this.selectedFiles.clear();
     }
 
     /**
@@ -204,13 +222,17 @@ class PhotoLocationScanApp {
      *   files one at a time) - the progress bar shows a running count instead
      *   of a percentage in that case.
      */
-    private async runScan(total: number | null, files: AsyncGenerator<File>): Promise<void> {
-        if (!this.abortController) this.abortController = new AbortController();
+    private async runScan(total: number | null, files: AsyncGenerator<File>, { alreadyBegun = false } = {}): Promise<void> {
+        // `scanDirectoryHandle` calls `beginScanState` itself, because it has to
+        // hand the walk that scan's signal *before* getting here. Resetting again
+        // would swap in a controller the walk is not listening to, and Stop would
+        // silently do nothing.
+        if (!alreadyBegun) this.beginScanState();
         this.setScanning(true);
         let scanned = 0;
         try {
             for await (const file of files) {
-                if (this.abortController.signal.aborted) break;
+                if (this.abortController?.signal.aborted) break;
                 scanned += 1;
                 this.setProgress(total != null ? `Scanning ${file.name}...` : `Scanning... (${scanned} file(s) checked so far)`, scanned, total ?? 0);
                 const hit = await extractHit(file);
