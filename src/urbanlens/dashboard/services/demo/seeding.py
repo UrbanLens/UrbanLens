@@ -155,15 +155,33 @@ def _pin_pool(profile: Profile, locations: list) -> list[Pin]:
     return [Pin.objects.create(profile=profile, location=location) for location in locations]
 
 
-@transaction.atomic
 def seed_demo_account(*, ttl_hours: int = 24) -> User:
     """Create one demo login account, its personas, and their content.
 
-    Celery dispatch is patched for the duration: ``safely_enqueue_task`` is the
-    single choke point every producer goes through, and it only swallows a *dead
-    broker* - against a live worker (the normal deployed stack) an unpatched
-    seed fans out into real place-enrichment API calls, and under
-    ``UL_CELERY_TASK_ALWAYS_EAGER`` it runs them inline.
+    Celery dispatch is patched for the *whole* call, and the patch has to stay
+    entered until after the transaction actually commits - not just until the
+    last row is written. Pin, Friendship, Comment and several others fire
+    ``achievements.signals`` on ``post_save``, which defers to
+    ``transaction.on_commit`` rather than calling ``safely_enqueue_task``
+    immediately; that deferred call runs whatever the *current* function is at
+    commit time, not whatever it was when it was registered. An
+    ``@transaction.atomic``-decorated function commits after its body -
+    including a ``with mock.patch(...):`` block nested inside it - has already
+    exited, so that nesting order patches nothing the commit actually needs:
+    every on_commit callback fires against the real, unpatched function. This
+    is exactly backwards from what it needs to be, which is why the patch
+    wraps the atomic block here rather than sitting inside it.
+
+    Django's ``TestCase`` cannot catch this class of bug on its own - it wraps
+    every test in a transaction that is rolled back, not committed, so
+    ``on_commit`` never runs and the ordering never gets exercised. Even
+    ``captureOnCommitCallbacks`` does not help: it defers every captured
+    callback to when the *test's* ``with`` block exits, by which point this
+    function has already returned regardless of the order below - it cannot
+    tell "patch outlived the real commit" from "patch outlived the function
+    call". See ``SeedingCommitOrderingTests`` (a genuine
+    ``TransactionTestCase``, for a real commit) for the test that actually
+    exercises this and that regressing this ordering fails.
 
     Args:
         ttl_hours: How long before the account may be purged.
@@ -174,7 +192,7 @@ def seed_demo_account(*, ttl_hours: int = 24) -> User:
     seed = secrets.token_hex(4)
     expires_at = timezone.now() + timedelta(hours=ttl_hours)
 
-    with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
+    with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"), transaction.atomic():
         owner_user = _make_user(seed, 0, "Alex Rivera")
         owner = _prepare_profile(
             owner_user,
