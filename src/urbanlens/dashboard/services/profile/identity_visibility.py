@@ -76,6 +76,40 @@ def resolve_visible_identity(
     }
 
 
+def resolve_identity_for_viewers(subject: Profile, viewers: Sequence[Profile], *, placeholder: str = DEFAULT_MASKED_PLACEHOLDER) -> dict[int, dict[str, Any]]:
+    """One person's identity, as each of many viewers would see it.
+
+    The mirror of :func:`resolve_visible_identities`, which shows many people to
+    one viewer. This is the shape a group message needs: the payload carries the
+    sender's name, and that name has to pass each recipient's own visibility -
+    which cost a query per recipient, twice per send, because the notification
+    step and the live broadcast each resolved it separately.
+
+    Every masked viewer sees the same placeholder, unlike
+    :func:`resolve_visible_identities`: there is only one person here, so there
+    is nobody to be confused with.
+
+    Args:
+        subject: The profile being displayed.
+        viewers: The profiles it is being displayed to.
+        placeholder: Display name used when masked.
+
+    Returns:
+        Mapping of ``viewer.pk`` to the shape :func:`resolve_visible_identity`
+        returns.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+
+    allowed = ProfileModel.viewers_who_can_see(subject, viewers)
+    # `visible_pks` is the existing way to hand this function an
+    # already-decided answer; with a single subject the two possible sets are
+    # "just them" and "nobody", so both outcomes are built once here rather
+    # than per viewer.
+    unmasked = resolve_visible_identity(None, subject, visible_pks={subject.pk})
+    masked = resolve_visible_identity(None, subject, visible_pks=set(), placeholder=placeholder)
+    return {viewer.pk: (unmasked if viewer.pk in allowed else masked) for viewer in viewers}
+
+
 def resolve_visible_identities(viewer: Profile | None, subjects: Sequence[Profile]) -> dict[int, dict[str, Any]]:
     """Resolve display identity for several people shown together in one list.
 

@@ -726,13 +726,17 @@ class GroupMembersView(ExternalApiView):
             return Response({"error": "No such group."}, status=404)
         profile, group = resolved
 
+        memberships = list(group.active_memberships().select_related("profile", "profile__user"))
+        # One visibility resolution for the whole roster: resolving per member
+        # rebuilds the caller's own friend/pin/trip sets on every row.
+        visible_pks = Profile.visible_profile_pks(profile, [membership.profile for membership in memberships])
         members = []
-        for membership in group.active_memberships().select_related("profile", "profile__user"):
+        for membership in memberships:
             member = membership.profile
             if member.pk == profile.pk:
                 identity = {"display_name": member.username, "is_masked": False}
             else:
-                identity = resolve_visible_identity(profile, member)
+                identity = resolve_visible_identity(profile, member, visible_pks=visible_pks)
             members.append(
                 {
                     # Blanked when masked: handing back the real slug would let

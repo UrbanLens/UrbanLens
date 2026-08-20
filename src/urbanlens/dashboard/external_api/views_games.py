@@ -303,10 +303,14 @@ class SpotGuessrOverviewView(ExternalApiView):
             masked friend carries no slug at all: the slug is a stable handle
             that would identify them across requests and defeat the masking.
         """
+        entries = list(visible_friend_ratings(profile))
+        # Resolved for the whole list at once - the per-friend call rebuilds
+        # the caller's own friend/pin/trip sets on every row.
+        visible_pks = Profile.visible_profile_pks(profile, [entry["profile"] for entry in entries])
         rows = []
-        for entry in visible_friend_ratings(profile):
+        for entry in entries:
             friend: Profile = entry["profile"]
-            identity = resolve_visible_identity(profile, friend)
+            identity = resolve_visible_identity(profile, friend, visible_pks=visible_pks)
             rows.append(
                 {
                     "profile_slug": None if identity["is_masked"] else friend.slug,

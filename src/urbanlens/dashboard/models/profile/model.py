@@ -1321,6 +1321,107 @@ class Profile(abstract.PublicDashboardModel):
             visible |= DirectMessageTemporaryAccess.granted_profile_pks({subject.pk for subject in remaining}, viewer.pk)
         return visible
 
+    @staticmethod
+    def viewers_who_can_see(subject: Profile, viewers: Sequence[Profile]) -> set[int]:
+        """Batch equivalent of :meth:`can_view_profile` over many *viewers* of one subject.
+
+        The mirror of :meth:`visible_profile_pks`, and a genuinely different
+        question: that one renders a list of people to one viewer, this one
+        shows one person's name to a roomful. A group message carries its
+        sender's name, so the name has to be resolved through every recipient's
+        own visibility - once per recipient, which is a query each, twice per
+        send (the notification and the live payload are built separately).
+
+        Simpler than the other direction despite the symmetry, because there is
+        exactly one subject: ``profile_visibility`` is a single value, so the
+        per-subject branch tree collapses to one case rather than being
+        evaluated per row.
+
+        Semantics must match ``can_view_profile`` exactly - a divergence here
+        shows a real name to someone the single-viewer path would have masked
+        it from. ``test_identity_visibility_batch`` asserts the two agree across
+        every ``VisibilityChoice`` and relationship combination rather than
+        trusting this reimplementation.
+
+        Args:
+            subject: The profile whose identity is being displayed.
+            viewers: The profiles it would be displayed to. Anonymous viewers
+                are not expressible here; the call sites that need this all
+                hold real profiles, and ``can_view_profile(None)`` is a single
+                cheap check on the subject alone.
+
+        Returns:
+            The pks of the viewers who may see ``subject``'s identity.
+        """
+        from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        viewer_pks = {viewer.pk for viewer in viewers}
+        if not viewer_pks:
+            return set()
+        if subject.profile_visibility == VisibilityChoice.ANYONE:
+            return set(viewer_pks)
+
+        # Checked before the visibility setting, exactly as can_view_profile
+        # does - a NO_ONE subject can still see themselves.
+        visible = {subject.pk} & viewer_pks
+        pending = viewer_pks - visible
+
+        # NO_ONE skips the gates but must still reach the temporary-access
+        # fallback below, which is where an early return would go wrong.
+        if pending and subject.profile_visibility != VisibilityChoice.NO_ONE:
+            accepted = FriendshipStatus.ACCEPTED
+            connected = set(
+                Friendship.objects.filter(from_profile=subject, to_profile__in=pending, status=accepted).values_list("to_profile_id", flat=True),
+            ) | set(
+                Friendship.objects.filter(to_profile=subject, from_profile__in=pending, status=accepted).values_list("from_profile_id", flat=True),
+            )
+            # Directional, matching has_pending_request_to(subject, viewer): a
+            # request the subject sent opens their own gates to its recipient,
+            # one way. The other direction is not the same courtesy.
+            connected |= set(
+                Friendship.objects.filter(
+                    from_profile=subject,
+                    to_profile__in=pending,
+                    status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING),
+                ).values_list("to_profile_id", flat=True),
+            )
+            visible |= connected
+
+            undecided = pending - connected
+            visibility = subject.profile_visibility
+            wants_pin = undecided and visibility in (VisibilityChoice.COMMON_PIN, VisibilityChoice.ANYTHING_IN_COMMON)
+            wants_friend = undecided and visibility in (VisibilityChoice.COMMON_FRIEND, VisibilityChoice.ANYTHING_IN_COMMON)
+            wants_trip = undecided and visibility in (VisibilityChoice.COMMON_TRIP, VisibilityChoice.ANYTHING_IN_COMMON)
+
+            if wants_pin:
+                subject_locations = set(Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True))
+                if subject_locations:
+                    visible |= set(Pin.objects.filter(profile_id__in=undecided, location_id__in=subject_locations).values_list("profile_id", flat=True))
+            if wants_friend:
+                subject_friends = set(
+                    Friendship.objects.filter(from_profile=subject, status=accepted).values_list("to_profile_id", flat=True),
+                ) | set(
+                    Friendship.objects.filter(to_profile=subject, status=accepted).values_list("from_profile_id", flat=True),
+                )
+                if subject_friends:
+                    visible |= set(
+                        Friendship.objects.filter(from_profile_id__in=undecided, to_profile_id__in=subject_friends, status=accepted).values_list("from_profile_id", flat=True),
+                    ) | set(
+                        Friendship.objects.filter(to_profile_id__in=undecided, from_profile_id__in=subject_friends, status=accepted).values_list("to_profile_id", flat=True),
+                    )
+            if wants_trip:
+                subject_trips = set(TripMembership.objects.trip_ids_for(subject))
+                if subject_trips:
+                    visible |= set(TripMembership.objects.filter(profile_id__in=undecided, trip_id__in=subject_trips).values_list("profile_id", flat=True))
+
+        remaining = viewer_pks - visible
+        if remaining:
+            visible |= DirectMessageTemporaryAccess.granting_viewer_pks(subject.pk, remaining)
+        return visible
+
     def can_view_profile(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's identity (name, etc).
 

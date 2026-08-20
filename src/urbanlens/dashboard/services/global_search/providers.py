@@ -677,7 +677,10 @@ class DirectMessageSearchProvider(SearchProvider):
         # what the inbox and the conversation header already call them. Two different
         # words for the same person across two views is its own small bug.
         partners = {(message.recipient if message.sender_id == profile.pk else message.sender).pk: (message.recipient if message.sender_id == profile.pk else message.sender) for message in messages}
-        names = {pk: (display_identity_for(profile, partner)["display_name"] or partner.username) for pk, partner in partners.items()}
+        from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+
+        visible_pks = ProfileModel.visible_profile_pks(profile, list(partners.values()))
+        names = {pk: (display_identity_for(profile, partner, visible_pks=visible_pks)["display_name"] or partner.username) for pk, partner in partners.items()}
 
         results = []
         for message in messages:
