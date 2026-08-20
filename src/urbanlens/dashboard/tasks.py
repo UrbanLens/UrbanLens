@@ -3587,3 +3587,29 @@ def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
     if not days:
         return 0
     return len(recorded_days(location, days))
+
+
+@shared_task
+def run_scheduled_demo_account_purge() -> bool:
+    """Delete expired demo accounts. A no-op on any instance that is not the demo.
+
+    Unconditionally scheduled (see ``CELERY_BEAT_SCHEDULE``) rather than
+    registered only when ``UL_DEMO_MODE`` is on, matching every other entry
+    there - the schedule is fixed at process start, and the individual task
+    deciding whether it is due is the existing pattern (see
+    ``run_scheduled_database_backup``). Harmless to fire on the real site: it
+    checks the flag and returns immediately.
+
+    Returns:
+        True when this ran (this is the demo instance), False otherwise. The
+        command itself logs how many accounts it purged.
+    """
+    from django.core.management import call_command
+
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    if not app_settings.demo_mode:
+        return False
+
+    call_command("purge_demo_accounts", execute=True)
+    return True

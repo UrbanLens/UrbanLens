@@ -78,3 +78,31 @@ class PurgeDemoAccountsTests(TestCase):
         self._run(ttl_hours=24, execute=True)
 
         self.assertTrue(User.objects.filter(pk=real.pk).exists())
+
+
+class ScheduledPurgeTaskTests(TestCase):
+    """The Celery task wrapper the beat schedule fires unconditionally."""
+
+    def test_it_is_a_noop_off_a_demo_instance(self) -> None:
+        from urbanlens.dashboard.tasks import run_scheduled_demo_account_purge
+
+        with mock.patch("urbanlens.UrbanLens.settings.app.settings.demo_mode", False):
+            result = run_scheduled_demo_account_purge()
+
+        self.assertFalse(result)
+
+    def test_it_purges_on_a_demo_instance(self) -> None:
+        from urbanlens.dashboard.tasks import run_scheduled_demo_account_purge
+
+        user = self._demo_user(age_hours=48)
+
+        with mock.patch("urbanlens.UrbanLens.settings.app.settings.demo_mode", True):
+            result = run_scheduled_demo_account_purge()
+
+        self.assertTrue(result)
+        self.assertFalse(User.objects.filter(pk=user.pk).exists())
+
+    def _demo_user(self, *, age_hours: int) -> User:
+        user = baker.make(User, username=f"{DEMO_USERNAME_PREFIX}bbbb2222-0", email="")
+        User.objects.filter(pk=user.pk).update(date_joined=timezone.now() - timedelta(hours=age_hours))
+        return user

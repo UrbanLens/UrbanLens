@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import os
-
-from celery.schedules import crontab
 from pathlib import Path
 import sys
 
+from celery.schedules import crontab
 from django.core.management.utils import get_random_secret_key
 from dotenv import find_dotenv, load_dotenv
 
@@ -329,6 +328,12 @@ CELERY_BEAT_SCHEDULE = {
     "scheduled-trivia-wiki-incorporation": {
         "task": "urbanlens.dashboard.tasks.run_scheduled_trivia_wiki_incorporation",
         "schedule": crontab(minute=22),
+    },
+    # Unconditional, like every entry above: the task itself checks UL_DEMO_MODE
+    # and returns immediately everywhere else. See docs/DEMO.md.
+    "scheduled-demo-account-purge": {
+        "task": "urbanlens.dashboard.tasks.run_scheduled_demo_account_purge",
+        "schedule": crontab(minute=27),
     },
     "spotguessr-stall-sweep": {
         "task": "urbanlens.dashboard.tasks.sweep_stalled_spotguessr_sessions",
