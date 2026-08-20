@@ -34,6 +34,7 @@ from urbanlens.dashboard.controllers.health import HealthController
 from urbanlens.dashboard.controllers.index import IndexController
 from urbanlens.dashboard.controllers.media import MediaGateView
 from urbanlens.dashboard.urls import urlpatterns as dashboard_urls
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -116,6 +117,18 @@ urlpatterns = [
     # streams the file (dev) or X-Accel-Redirects to nginx (production).
     # Must stay ahead of the 404 catch-all below.
     path("media/<path:path>", MediaGateView.as_view(), name="media"),
+]
+
+# The demo login exists only on a demo instance. Registered conditionally rather
+# than guarded inside the view, so an instance holding real data has no such URL
+# to reach at all - a guard is a line somebody can move, an absent route is not.
+# It must be appended before the catch-all below, which swallows everything.
+if app_settings.demo_mode:
+    from urbanlens.dashboard.controllers.demo import DemoLoginView
+
+    urlpatterns += [path("demo/start/", DemoLoginView.as_view(), name="demo.start")]
+
+urlpatterns += [
     # 404 catch-all - must be last. Anything not explicitly routed above (including
     # Django/library default URLs we haven't deliberately wired up) lands here.
     re_path(".*", _render_404_page, name="404"),

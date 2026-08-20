@@ -348,6 +348,28 @@ def service_is_permitted(service: str) -> bool:
     return service_is_enabled(service) and check_rate_limit(service)
 
 
+def service_is_permitted_on_demo(service: str) -> bool:
+    """Whether a demo instance may call ``service`` at all.
+
+    The demo runs on somebody else's budget: every visitor is anonymous, the
+    accounts are throwaway, and a keyed provider bills per call whether or not
+    the caller was a real prospect. REData is exempt because it is this
+    project's own service - the demo is the thing it exists to show off, and
+    calling it costs nothing but our own capacity.
+
+    Args:
+        service: The service key.
+
+    Returns:
+        True when the call is allowed. Always True off a demo instance.
+    """
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    if not app_settings.demo_mode:
+        return True
+    return service.startswith("redata")
+
+
 def service_is_enabled(service: str, config: Any = None) -> bool:
     """Check if the service is enabled.
 
@@ -362,6 +384,12 @@ def service_is_enabled(service: str, config: Any = None) -> bool:
     Returns:
         ``True`` if the service is enabled, ``False`` otherwise.
     """
+    # Checked before the config, and before the cached-config fast path, so it
+    # cannot be skipped by a caller that already holds a row. This is the one
+    # place every outbound call passes through (``_reserve_call``), which is why
+    # the demo's spend guard lives here rather than in each gateway.
+    if not service_is_permitted_on_demo(service):
+        return False
     if config is not None:
         return bool(config.enabled)
     try:

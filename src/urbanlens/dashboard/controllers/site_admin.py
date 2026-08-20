@@ -908,6 +908,10 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "internet_archive": "Reference & Archives",
     "wayback_machine": "Reference & Archives",
     "redata_reference_documents": "Reference & Archives",
+    # The state/city historic inventories behind the historic-registers panel.
+    # Archival rather than regulatory: these are survey records, the same kind
+    # of material as the other entries here.
+    "redata_cultural_resources": "Reference & Archives",
     # Parks & Regulatory
     "nps": "Parks & Regulatory",
     "epa_echo": "Parks & Regulatory",

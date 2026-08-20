@@ -1,0 +1,112 @@
+"""Load a public-location export into a demo instance.
+
+Run on the **demo** instance, against the JSON ``export_public_locations``
+produced on the real site. Refuses to run anywhere else: the export is a set of
+real coordinates, and importing it into a database that also holds real user
+pins would silently merge the two - ``get_exact_or_create`` matches on stored
+coordinates, so an imported row would attach itself to whatever real Location
+already sits at that point.
+
+Idempotent: re-running updates names and tops up aliases rather than duplicating
+anything, so a demo instance can be refreshed from a newer export on a schedule.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
+
+
+class Command(BaseCommand):
+    """Import public locations and their cached wiki data."""
+
+    help = "Import public locations exported from the real site. Demo instances only."
+
+    def add_arguments(self, parser) -> None:
+        """Register CLI arguments."""
+        parser.add_argument("path", help="Path to the JSON export.")
+        parser.add_argument(
+            "--allow-non-demo",
+            action="store_true",
+            help="Import even though UL_DEMO_MODE is off. Only for a scratch database you are certain holds no real data.",
+        )
+
+    def handle(self, *args, **options) -> None:
+        """Load the export.
+
+        Raises:
+            CommandError: Not a demo instance, or the file is missing/invalid.
+        """
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+        if not app_settings.demo_mode and not options["allow_non_demo"]:
+            raise CommandError(
+                "UL_DEMO_MODE is off. This import writes real coordinates, which would merge with any real "
+                "Location at the same point. Pass --allow-non-demo only for a database you know holds no real data.",
+            )
+
+        source = Path(options["path"])
+        try:
+            raw = json.loads(source.read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise CommandError(f"Could not read {source}: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise CommandError(f"{source} is not valid JSON: {exc}") from exc
+
+        entries = raw.get("locations") or []
+        if not entries:
+            self.stdout.write("The export contains no public locations - nothing to import.")
+            return
+
+        created, updated = self._import(entries)
+        self.stdout.write(f"Imported {len(entries)} public location(s): {created} created, {updated} updated.")
+
+    @transaction.atomic
+    def _import(self, entries: list[dict[str, Any]]) -> tuple[int, int]:
+        """Create or refresh each exported location and its wiki.
+
+        Args:
+            entries: Decoded export entries.
+
+        Returns:
+            ``(created, updated)`` location counts.
+        """
+        from urbanlens.dashboard.models.aliases.model import WikiAlias
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        created = updated = 0
+        for entry in entries:
+            location, was_created = Location.objects.get_exact_or_create(
+                entry["latitude"],
+                entry["longitude"],
+                defaults={"official_name": entry.get("official_name") or ""},
+            )
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+                if entry.get("official_name") and not location.official_name:
+                    location.official_name = entry["official_name"]
+                    location.save(update_fields=["official_name"])
+
+            wiki_data = entry.get("wiki")
+            if not wiki_data:
+                continue
+
+            wiki, _ = Wiki.objects.get_or_create(
+                location=location,
+                defaults={"name": wiki_data.get("name") or entry.get("official_name") or "", "officially_created": True},
+            )
+            # Top up rather than replace: an alias a demo visitor added during
+            # their session is theirs, and a refresh should not delete it.
+            existing = set(wiki.aliases.values_list("name", flat=True))
+            for alias in wiki_data.get("aliases") or []:
+                if alias and alias not in existing:
+                    WikiAlias.objects.create(wiki=wiki, name=alias)
+
+        return created, updated

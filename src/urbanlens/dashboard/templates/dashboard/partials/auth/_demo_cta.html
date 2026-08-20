@@ -1,15 +1,32 @@
 {% comment %}
 "Try the demo" entry point, shared by the login and registration pages.
 
-Renders only when UL_DEMO_URL names a provisioned demo instance, so the button
-can never advertise a destination that does not exist. The demo is a separate
-deployment with its own database - see docs/DEMO.md for why isolation is the
-deployment boundary rather than a filter in this codebase.
+Two shapes, because the two instances need different things:
 
-Opens in a new tab: someone part-way through signing up should not lose the
-form they were filling in to go and look at the demo.
+- On the **real** site, this is a link to the demo instance, and renders only
+  when UL_DEMO_URL names one - so the button can never advertise a destination
+  nobody provisioned. It opens in a new tab: someone part-way through signing up
+  should not lose the form they were filling in.
+- On the **demo instance** itself it is a POST, because starting a session
+  writes a few hundred rows. A GET would be fired by every crawler, link
+  preview and prefetch that ever saw it.
+
+See docs/DEMO.md for why isolation is the deployment boundary rather than a
+filter in this codebase.
 {% endcomment %}
-{% if demo_url and not demo_mode %}
+{% if demo_mode %}
+<div class="auth-demo-cta">
+    <span class="auth-demo-cta__rule"><span>or</span></span>
+    <form method="post" action="{% url 'demo.start' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--primary auth-demo-cta__btn">
+            <i class="material-symbols-outlined">explore</i>
+            Start exploring &mdash; no account needed
+        </button>
+    </form>
+    <p class="auth-demo-cta__note">Sample data, yours for a day. Nothing here touches the real site.</p>
+</div>
+{% elif demo_url %}
 <div class="auth-demo-cta">
     <span class="auth-demo-cta__rule"><span>or</span></span>
     <a class="btn btn--ghost auth-demo-cta__btn" href="{{ demo_url }}" target="_blank" rel="noopener">
