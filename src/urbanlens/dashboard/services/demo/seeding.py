@@ -32,7 +32,7 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
 
-from urbanlens.dashboard.services.demo import DEMO_USERNAME_PREFIX
+from urbanlens.dashboard.services.demo import DEMO_USERNAME_PREFIX, social
 from urbanlens.dashboard.services.demo.locations import pool_locations
 
 if TYPE_CHECKING:
@@ -207,11 +207,25 @@ def seed_demo_account(*, ttl_hours: int = 24) -> User:
 
         pool = pool_locations()
         owner_pins = _pin_pool(owner, pool)
+        pins_by_profile = {owner: owner_pins}
         for offset, persona in enumerate(personas):
             # Overlapping subsets, so friends' maps differ from the owner's and
             # from each other while still sharing enough places that "pins in
             # common" style surfaces have something to show.
-            _pin_pool(persona, pool[offset :: len(personas)])
+            pins_by_profile[persona] = _pin_pool(persona, pool[offset :: len(personas)])
+
+        # Everything below is fabricated content, not a claim about the world -
+        # see services.demo.social for why that distinction is what lets it be
+        # invented at all, unlike the pins above.
+        social.seed_friendships(owner, personas)
+        social.seed_wiki_comments(pins_by_profile)
+        social.seed_direct_messages(owner, personas)
+        social.seed_group_chat(owner, personas)
+        for profile, pins in pins_by_profile.items():
+            social.seed_visits(profile, pins)
+        social.seed_trip(owner, personas, pool)
+        social.seed_pin_lists(owner, owner_pins)
+        social.seed_achievements_and_activity([owner, *personas])
 
         logger.info("demo: seeded account %s with %d pins and %d personas", owner_user.username, len(owner_pins), len(personas))
         if not owner_pins:
