@@ -45,6 +45,29 @@ commit landed at 00:29. They were only noticed because a broad run happened to i
 behaviour flag that changes what an existing helper means is worth grepping for callers of that
 helper; `is_ready` had two, and only one wanted the new meaning.
 
+## OPEN 2026-08-20: a fix to `bin/opslib/staging.py`'s Python logic is not exercised by the run that checks it out
+
+`bin/staging_deploy.py` imports `opslib.staging` once at process start, then `run_staging_pipeline`'s
+own `checkout` step later does `git reset --hard origin/<branch>` on the very same checkout - updating
+`bin/opslib/staging.py` on disk mid-run. But the process already has the *old* module's functions
+loaded; Python does not re-import a module because its source file changed underneath it. So a fix to
+this file's Python logic (as opposed to `bin/clone_prod_to_staging.sh`, a bash script `subprocess.run`
+re-reads fresh from disk on every invocation) only takes effect on the run *after* the one that
+checks it out - the run that pulls the fix still executes with the pipeline logic that existed on
+disk before it started.
+
+Found chasing three bugs fixed in one sitting (2026-08-20): a run deployed at `b40ae4a9`, which fixed
+the `127.0.0.1` vs `localhost` health-check host and the missing-pytest hard-failure, still hit both
+bugs - because the process that ran had started before its own checkout step pulled that commit, so
+it was still executing `b7b39667`'s pipeline code. The site was actually fine both times (verified
+directly with `curl` and `docker logs`); the tool's own report was one run behind reality.
+
+Not fixed: the straightforward options (re-exec the process after `checkout`, or `git pull` the repo
+before importing `opslib.staging`) both add complexity to a tool whose whole design principle is
+"stdlib only, must run without the venv" for a problem that, once known, just means: expect one
+Python-logic fix to `opslib/staging.py` to show stale results on the run that introduces it, and
+trust the run after that instead.
+
 ## OPEN 2026-08-19: performance and ops defects found but not fixed
 
 Found during the 2026-08-19 sweep, verified by reading both the query definition and every call
