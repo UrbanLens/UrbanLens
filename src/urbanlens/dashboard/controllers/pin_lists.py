@@ -86,9 +86,22 @@ def _list_items_with_labels(pin_list: PinList) -> list[PinListItem]:
     Matches the same prefetch shape the main map's bulk pin endpoints use
     (see maps.py) so ``Pin.effective_icon``/``effective_color`` and the tag
     chip list resolve without N+1 queries.
+
+    ``pin__location__wiki`` and ``pin__reviews`` are part of that shape, and were
+    missing while this docstring already claimed there were no N+1s:
+    ``_pin_map_marker_data`` reads ``Pin.effective_name`` (which falls through to
+    ``Location.display_name``, and that reads the linked ``Wiki``) and
+    ``Pin.rating`` (which reads ``reviews``). Both model properties document the
+    prefetch they need in their own docstrings. The page has no pagination, so
+    the cost was two queries per pin over a list of unbounded length.
     """
     return list(
-        pin_list.items.select_related("pin", "pin__location").prefetch_related(Prefetch("pin__labels", queryset=Label.objects.exclude(kind=KIND_USER).order_by("-order", "name"))).order_by("order"),
+        pin_list.items.select_related("pin", "pin__location", "pin__location__wiki")
+        .prefetch_related(
+            Prefetch("pin__labels", queryset=Label.objects.exclude(kind=KIND_USER).order_by("-order", "name")),
+            "pin__reviews",
+        )
+        .order_by("order"),
     )
 
 

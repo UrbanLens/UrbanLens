@@ -694,11 +694,21 @@ def _export_pins_google_takeout(profile: Any, temp_dir: str, *, base_url: str = 
 
 def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     """Export all labels visible to the user, with pin assignments."""
+    from django.db.models import Prefetch
+
     from urbanlens.dashboard.models.labels.model import Label
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    # Only this profile's own pins are exportable, and prefetching the whole
+    # `pins` relation would pull every other profile's pins for a global label.
+    # Narrowing it in the Prefetch (rather than filtering the cached relation
+    # per row, which bypasses the cache and costs a query per label) is what
+    # keeps this flat in the number of labels.
+    own_pins = Prefetch("pins", queryset=Pin.objects.filter(profile=profile), to_attr="own_pins")
 
     # Export user-owned labels plus global labels that are assigned to the user's pins.
-    user_labels = Label.objects.filter(profile=profile).prefetch_related("parents", "pins")
-    global_assigned = Label.objects.filter(profile__isnull=True, pins__profile=profile).distinct().prefetch_related("parents", "pins")
+    user_labels = Label.objects.filter(profile=profile).prefetch_related("parents", own_pins)
+    global_assigned = Label.objects.filter(profile__isnull=True, pins__profile=profile).distinct().prefetch_related("parents", own_pins)
 
     seen: set[int] = set()
     rows = []
@@ -720,7 +730,7 @@ def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "is_user_label": label.profile_id is not None,
                 "is_protected": label.is_protected,
                 "parent_uuids": [str(p.uuid) for p in label.parents.all()],
-                "pin_uuids": [str(p.uuid) for p in label.pins.filter(profile=profile)],
+                "pin_uuids": [str(p.uuid) for p in label.own_pins],
             },
         )
 
@@ -806,10 +816,15 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
     change). Tombstoned/expired message bodies are also masked per the
     viewer's own tombstone rules, for the same reason.
     """
+    from django.db.models import Count
+
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
     from urbanlens.dashboard.services.messaging.direct_messages import display_identity_for
 
-    messages = DirectMessage.objects.involving(profile).select_related("sender", "recipient").prefetch_related("images").order_by("created")
+    # Counted in the query rather than prefetched: the loop needs the number,
+    # not the rows, and `message.images.count()` on a prefetched relation issues
+    # a query per message anyway - paying for the fetch and then ignoring it.
+    messages = DirectMessage.objects.involving(profile).select_related("sender", "recipient").annotate(exported_image_count=Count("images")).order_by("created")
 
     identity_cache: dict[int, dict[str, Any]] = {}
 
@@ -834,7 +849,7 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
             # them just as surely as their name.
             "partner_uuid": None if identity["is_anonymized"] else str(partner.uuid),
             "is_tombstoned": bool(tombstone),
-            "image_count": message.images.count() if not tombstone else 0,
+            "image_count": 0 if tombstone else message.exported_image_count,
             "has_map": bool(message.markup_map_id) and not tombstone,
             "created": str(message.created),
             "read": message.read_at is not None,

@@ -14,6 +14,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Count
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -46,9 +47,26 @@ def pending_merge_suggestions(profile: Profile) -> QuerySet[PinMergeSuggestion]:
 
     Returns:
         Newest-first queryset of pending rows, with both pins (and their
-        locations) selected in one query.
+        locations) selected in one query, and each pin's visit/photo counts
+        annotated.
+
+    The counts are annotated because the card shows four of them and the
+    template resolved each `{{ ... .count }}` independently - eight queries per
+    card, twelve cards to a page. `distinct=True` on each: the four joins
+    multiply each other's rows, so plain counts would report visits x photos.
     """
-    return PinMergeSuggestion.objects.for_profile(profile).pending().select_related("pin_a", "pin_a__location", "pin_b", "pin_b__location", "suggested_survivor").order_by("-created")
+    return (
+        PinMergeSuggestion.objects.for_profile(profile)
+        .pending()
+        .select_related("pin_a", "pin_a__location", "pin_b", "pin_b__location", "suggested_survivor")
+        .annotate(
+            pin_a_visit_count=Count("pin_a__visit_history", distinct=True),
+            pin_a_photo_count=Count("pin_a__images", distinct=True),
+            pin_b_visit_count=Count("pin_b__visit_history", distinct=True),
+            pin_b_photo_count=Count("pin_b__images", distinct=True),
+        )
+        .order_by("-created")
+    )
 
 
 def merge_suggestion_cards(suggestions: Iterable[PinMergeSuggestion]) -> list[dict[str, Any]]:

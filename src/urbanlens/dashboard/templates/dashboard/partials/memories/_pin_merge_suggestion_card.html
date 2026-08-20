@@ -25,8 +25,8 @@ Context:
                 <span class="pin-merge-suggestion-choice-body">
                     <strong>{{ suggestion.pin_a.effective_name }}</strong>
                     <span class="pin-merge-suggestion-choice-meta">
-                        {{ suggestion.pin_a.visit_history.count }} visit{{ suggestion.pin_a.visit_history.count|pluralize }}
-                        · {{ suggestion.pin_a.images.count }} photo{{ suggestion.pin_a.images.count|pluralize }}
+                        {{ suggestion.pin_a_visit_count }} visit{{ suggestion.pin_a_visit_count|pluralize }}
+                        · {{ suggestion.pin_a_photo_count }} photo{{ suggestion.pin_a_photo_count|pluralize }}
                     </span>
                     {% if suggestion.suggested_survivor_id == suggestion.pin_a_id %}
                     <span class="ul-badge ul-badge--neutral">Recommended</span>
@@ -40,8 +40,8 @@ Context:
                 <span class="pin-merge-suggestion-choice-body">
                     <strong>{{ suggestion.pin_b.effective_name }}</strong>
                     <span class="pin-merge-suggestion-choice-meta">
-                        {{ suggestion.pin_b.visit_history.count }} visit{{ suggestion.pin_b.visit_history.count|pluralize }}
-                        · {{ suggestion.pin_b.images.count }} photo{{ suggestion.pin_b.images.count|pluralize }}
+                        {{ suggestion.pin_b_visit_count }} visit{{ suggestion.pin_b_visit_count|pluralize }}
+                        · {{ suggestion.pin_b_photo_count }} photo{{ suggestion.pin_b_photo_count|pluralize }}
                     </span>
                     {% if suggestion.suggested_survivor_id == suggestion.pin_b_id %}
                     <span class="ul-badge ul-badge--neutral">Recommended</span>
