@@ -843,6 +843,14 @@ def _parse_duration_months(raw: str | None) -> int | None:
 #: limits/usa_only/notes) - this is a manually curated, best-effort mapping
 #: rather than an exhaustive one; anything absent falls into "Other" so a new
 #: service is never hidden, just uncategorized until someone adds it here.
+#:
+#: That fallback stops being graceful once most of a family lands in it. As
+#: REData grew a domain per panel, 18 of its 32 service keys were sitting in
+#: "Other" - more than half the surface in the catch-all tab. Add the key here
+#: when you add the gateway; ``test_api_limit_categories`` fails if you don't.
+#: ``redata_capabilities`` is included: it started as the endpoint this very page
+#: reads, but the site-features panel now uses it per pin to discover which
+#: providers cover a coordinate, so it has a budget worth seeing.
 _API_LIMIT_CATEGORIES: dict[str, str] = {
     # Geocoding & Places
     "google_geocoding": "Geocoding & Places",
@@ -850,6 +858,8 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "nominatim": "Geocoding & Places",
     "photon": "Geocoding & Places",
     "redata_geocode": "Geocoding & Places",
+    "redata_places": "Geocoding & Places",
+    "redata_cid_lookup": "Geocoding & Places",
     # Search & News
     "gdelt": "Search & News",
     "marginalia_search": "Search & News",
@@ -871,15 +881,24 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "redata_imagery": "Imagery & Maps",
     "redata_routing": "Imagery & Maps",
     "redata_media": "Imagery & Maps",
+    "redata_street_view": "Imagery & Maps",
+    "redata_historical_maps": "Imagery & Maps",
+    "redata_basemap_tiles": "Imagery & Maps",
     # Weather
     "openweathermap": "Weather",
     "open_meteo": "Weather",
     "redata_weather": "Weather",
+    "redata_weather_history": "Weather",
     # Boundaries & GIS
     "overpass": "Boundaries & GIS",
     "census_tigerweb": "Boundaries & GIS",
     "open_elevation": "Boundaries & GIS",
     "redata_elevation": "Boundaries & GIS",
+    "redata_boundary": "Boundaries & GIS",
+    "redata_land_cover": "Boundaries & GIS",
+    "redata_soil": "Boundaries & GIS",
+    "redata_hydrology": "Boundaries & GIS",
+    "redata_underground": "Boundaries & GIS",
     # Reference & Archives
     "wikipedia": "Reference & Archives",
     "wikimedia": "Reference & Archives",
@@ -898,10 +917,16 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "redata_hazards": "Parks & Regulatory",
     "redata_nature_observations": "Parks & Regulatory",
     "redata_national_parks": "Parks & Regulatory",
+    "redata_air_quality": "Parks & Regulatory",
+    "redata_incidents": "Parks & Regulatory",
+    "redata_permits": "Parks & Regulatory",
+    "redata_walkability": "Parks & Regulatory",
     # Business & Places Data
     "yelp": "Business & Places Data",
     "loopnet": "Business & Places Data",
     "redata_points_of_interest": "Business & Places Data",
+    "redata_capabilities": "Business & Places Data",
+    "redata_api": "Business & Places Data",
     # Notifications
     "sms": "Notifications",
     "whatsapp": "Notifications",
@@ -913,6 +938,8 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "google_calendar": "Personal Media & Accounts",
     # AI
     "ollama": "AI",
+    "redata_photos": "AI",
+    "redata_labels": "AI",
 }
 
 
