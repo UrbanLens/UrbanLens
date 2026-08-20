@@ -514,6 +514,38 @@ def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
     return None
 
 
+def _validated_custom_icon(request: HttpRequest) -> tuple[Any, str | None]:
+    """The submitted icon, checked and resized, or the reason it was refused.
+
+    **Every path that stores a label icon must go through this.** The edit view
+    validated its upload and the create view did not, so the same file that was
+    refused with a 400 on one URL was written to disk from the other - a
+    scripted SVG among them, since ``_resize_custom_icon`` deliberately returns
+    the file untouched when PIL cannot open it, and ``label_icons/`` is served
+    to any authenticated user with a Content-Type nginx derives from the
+    extension.
+
+    Args:
+        request: The submitted request.
+
+    Returns:
+        ``(icon, None)`` when there is a usable icon (or ``(None, None)`` when
+        none was submitted), or ``(None, message)`` when the upload failed a
+        size/content-type/malware check.
+    """
+    custom_icon = _uploaded_custom_icon(request)
+    if not custom_icon:
+        return None, None
+
+    from urbanlens.dashboard.models.images.model import MediaKind
+    from urbanlens.dashboard.services.media.images import image_upload_error
+
+    upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
+    if upload_error:
+        return None, upload_error[0]
+    return _resize_custom_icon(custom_icon), None
+
+
 def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> str | None:
     """Update label custom_icon from POST (upload or clear).
 
@@ -522,15 +554,11 @@ def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> str | No
         size/content-type/malware check (the icon is left unchanged), or
         None on success.
     """
-    custom_icon = _uploaded_custom_icon(request)
+    custom_icon, error = _validated_custom_icon(request)
+    if error:
+        return error
     if custom_icon:
-        from urbanlens.dashboard.models.images.model import MediaKind
-        from urbanlens.dashboard.services.media.images import image_upload_error
-
-        upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
-        if upload_error:
-            return upload_error[0]
-        label.custom_icon = _resize_custom_icon(custom_icon)
+        label.custom_icon = custom_icon
     elif request.POST.get("clear_custom_icon"):
         # See achievements' equivalent: clearing the field does not remove the
         # stored file, so an explicitly-removed icon stayed fetchable.
@@ -633,9 +661,9 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
         if conflict is not None:
             return HttpResponse(label_conflict_message(conflict, singular_title=cfg.singular_title), status=400)
 
-        custom_icon = _uploaded_custom_icon(request)
-        if custom_icon:
-            custom_icon = _resize_custom_icon(custom_icon)
+        custom_icon, icon_error = _validated_custom_icon(request)
+        if icon_error:
+            return HttpResponse(icon_error, status=400)
 
         label = Label.objects.create(
             kind=self.kind,
