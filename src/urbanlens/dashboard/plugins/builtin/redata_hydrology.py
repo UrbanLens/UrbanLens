@@ -10,19 +10,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.geo.geo_boundary import USA
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 _MAX_ROWS = 7
 
 
-class HydrologyPanelSource(CoordinateGatedInfoPanelSource):
+class HydrologyPanelSource(RedataInfoPanelSource):
     """Streams, waterbodies and wetlands within 1 km, plus the containing watershed."""
 
     key = "redata_hydrology"
@@ -32,19 +32,13 @@ class HydrologyPanelSource(CoordinateGatedInfoPanelSource):
     title = "Water & Hydrology"
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
-    def gate(self, pin: Pin) -> bool:
-        """Requires US coordinates (USGS/USFWS sources) and REData to be configured."""
-        return super().gate(pin) and redata_configured()
+    payload_key: ClassVar[str] = "features"
 
-    def fetch(self, pin: Pin) -> None:
-        """Search REData's hydrology registry near the pin and cache the results."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
+        """Streams, waterbodies and wetlands near the pin."""
         from urbanlens.dashboard.services.apis.locations.redata_hydrology_gateway import RedataHydrologyGateway
 
-        lat = float(pin.effective_latitude or 0)
-        lng = float(pin.effective_longitude or 0)
-        envelope = RedataHydrologyGateway().get_hydrology(lat, lng, limit=30)
-        LocationCache.set(pin.location, self.cache_source, {"features": envelope.results}, query_key=f"{lat:.5f},{lng:.5f}")
+        return RedataHydrologyGateway().get_hydrology(latitude, longitude, limit=30)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Watershed as the heading; nearest features as the grid."""
@@ -94,10 +88,6 @@ class HydrologyPanelSource(CoordinateGatedInfoPanelSource):
 
         context["meta"] = meta
         return context
-
-    def debug_count(self, data: dict) -> int:
-        """Number of hydrology features found."""
-        return len((data or {}).get("features") or [])
 
 
 class HydrologyPlugin(UrbanLensPlugin):

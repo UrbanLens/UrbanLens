@@ -136,7 +136,7 @@ class HazardHistoryPanelTests(TestCase):
     def test_render_names_programs_and_sizes(self) -> None:
         data = {
             "events": [
-                {"provider": "nifc_wildfires", "event_type": "wildfire", "occurred_at": "1988-01-01", "place": "Canyon Fire", "magnitude": 12500.0, "magnitude_scale": "acres_burned"},
+                {"provider": "nifc_wildfires", "event_type": "wildfire", "occurred_at": "1988-01-01", "title": "Canyon Fire", "magnitude": 12500.0, "magnitude_scale": "acres_burned"},
                 {
                     "provider": "fema_disasters",
                     "event_type": "flood",

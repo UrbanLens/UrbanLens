@@ -12,12 +12,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.geo.geo_boundary import USA
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
@@ -25,7 +25,7 @@ _MAX_ROWS = 8
 _YEARS = 10
 
 
-class BuildingPermitsPanelSource(CoordinateGatedInfoPanelSource):
+class BuildingPermitsPanelSource(RedataInfoPanelSource):
     """Permit, violation and site-plan filings within 150 m of the pin."""
 
     key = "redata_permits"
@@ -35,19 +35,13 @@ class BuildingPermitsPanelSource(CoordinateGatedInfoPanelSource):
     title = "Permits & Violations"
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
-    def gate(self, pin: Pin) -> bool:
-        """Requires US coordinates (providers are US cities) and REData to be configured."""
-        return super().gate(pin) and redata_configured()
+    payload_key: ClassVar[str] = "filings"
 
-    def fetch(self, pin: Pin) -> None:
-        """Search the covering city's permit/violation portal via REData and cache the results."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
+        """Permit/violation filings for the pin's site."""
         from urbanlens.dashboard.services.apis.locations.redata_permits_gateway import RedataPermitsGateway
 
-        lat = float(pin.effective_latitude or 0)
-        lng = float(pin.effective_longitude or 0)
-        envelope = RedataPermitsGateway().get_permits(lat, lng, years=_YEARS, limit=25)
-        LocationCache.set(pin.location, self.cache_source, {"filings": envelope.results}, query_key=f"{lat:.5f},{lng:.5f}")
+        return RedataPermitsGateway().get_permits(latitude, longitude, years=_YEARS, limit=25)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the filing chronology (already ordered by issued/cited date)."""
@@ -86,10 +80,6 @@ class BuildingPermitsPanelSource(CoordinateGatedInfoPanelSource):
             )
 
         return {"chips": chips, "meta": meta}
-
-    def debug_count(self, data: dict) -> int:
-        """Number of filings found."""
-        return len((data or {}).get("filings") or [])
 
 
 class BuildingPermitsPlugin(UrbanLensPlugin):

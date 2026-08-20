@@ -889,9 +889,13 @@ def collect_satellite_slides(lat: float, lng: float) -> tuple[list[SatelliteSlid
     for gateway in _satellite_gateways():
         service = gateway.service_key or type(gateway).__name__
         try:
-            gateway_slides, from_cache = gateway.get_satellite_slides(lat, lng)
-            slides.extend(gateway_slides)
-            results.append(ProviderFetchResult(service, from_cache=from_cache, count=len(gateway_slides)))
+            fetched = gateway.get_satellite_slides(lat, lng)
+            slides.extend(fetched.slides)
+            # ok=not degraded: a provider that failed part-way contributed a
+            # floor, not a total, and SlidesPanelSource.fetch reads this to
+            # decide whether an empty carousel is worth trusting for 12 hours
+            # or re-warming in 5 minutes.
+            results.append(ProviderFetchResult(service, from_cache=fetched.from_cache, count=len(fetched.slides), ok=not fetched.degraded))
         except RateLimitExceededError as rle:
             # Recorded as a failed provider, not skipped silently: it contributed
             # nothing *and* may well succeed shortly, which is the difference
@@ -927,9 +931,9 @@ def collect_street_view_slides(lat: float, lng: float) -> tuple[list[StreetViewS
     for provider in _street_view_gateways():
         service = provider.service_key or type(provider).__name__
         try:
-            provider_slides, from_cache = provider.get_street_view_slides(lat, lng)
-            slides.extend(provider_slides)
-            results.append(ProviderFetchResult(service, from_cache=from_cache, count=len(provider_slides)))
+            fetched = provider.get_street_view_slides(lat, lng)
+            slides.extend(fetched.slides)
+            results.append(ProviderFetchResult(service, from_cache=fetched.from_cache, count=len(fetched.slides), ok=not fetched.degraded))
         except RateLimitExceededError as rle:
             # Recorded as a failed provider, not skipped silently: it contributed
             # nothing *and* may well succeed shortly, which is the difference

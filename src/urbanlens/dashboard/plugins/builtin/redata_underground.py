@@ -11,18 +11,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 #: Show at most this many structures in the panel's meta grid.
 _MAX_ROWS = 8
 
 
-class UndergroundPanelSource(CoordinateGatedInfoPanelSource):
+class UndergroundPanelSource(RedataInfoPanelSource):
     """Mapped subsurface structures within 250 m of the pin."""
 
     key = "redata_underground"
@@ -31,23 +31,22 @@ class UndergroundPanelSource(CoordinateGatedInfoPanelSource):
     icon = "subway"
     title = "Underground Structures"
 
-    def gate(self, pin: Pin) -> bool:
-        """Also requires REData to be configured - this panel has no other data source."""
-        return super().gate(pin) and redata_configured()
+    payload_key: ClassVar[str] = "structures"
 
-    def fetch(self, pin: Pin) -> None:
-        """Search REData's subsurface registry near the pin and cache the results."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
+        """Tunnels, culverts, shafts and buried utility runs near the pin."""
         from urbanlens.dashboard.services.apis.locations.redata_underground_gateway import RedataUndergroundGateway
 
-        lat = float(pin.effective_latitude or 0)
-        lng = float(pin.effective_longitude or 0)
-        envelope = RedataUndergroundGateway().get_underground_structures(lat, lng, limit=25)
-        # The panel renders names/kinds/flags only; a LineString per tunnel
-        # segment would bloat the cache row for nothing. A future map-overlay
-        # consumer should fetch its own geometry rather than reading this cache.
-        structures = [{key: value for key, value in structure.items() if key != "geometry"} for structure in envelope.results]
-        LocationCache.set(pin.location, self.cache_source, {"structures": structures}, query_key=f"{lat:.5f},{lng:.5f}")
+        return RedataUndergroundGateway().get_underground_structures(latitude, longitude, limit=25)
+
+    def transform_rows(self, rows: list[dict]) -> list[dict]:
+        """Drop each structure's geometry before caching.
+
+        The panel renders names/kinds/flags only; a LineString per tunnel
+        segment would bloat the cache row for nothing. A future map-overlay
+        consumer should fetch its own geometry rather than reading this cache.
+        """
+        return [{key: value for key, value in structure.items() if key != "geometry"} for structure in rows]
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the structure list, enterable features first."""
@@ -77,10 +76,6 @@ class UndergroundPanelSource(CoordinateGatedInfoPanelSource):
             meta.append({"label": label, "value": ", ".join(part for part in details if part) or label})
 
         return {"chips": chips, "meta": meta}
-
-    def debug_count(self, data: dict) -> int:
-        """Number of subsurface structures found."""
-        return len((data or {}).get("structures") or [])
 
 
 class UndergroundPlugin(UrbanLensPlugin):

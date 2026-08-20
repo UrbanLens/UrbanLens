@@ -108,7 +108,9 @@ class BuildingPermitsPanelTests(TestCase):
 
     def test_gate_requires_us_coordinates(self) -> None:
         abroad = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=baker.make("dashboard.Location", latitude=48.86, longitude=2.35))
-        with mock.patch("urbanlens.dashboard.plugins.builtin.redata_permits.redata_configured", return_value=True):
+        # Patched at its definition site: the REData half of these gates now
+        # lives on RedataInfoPanelSource, which imports it inside gate().
+        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True):
             self.assertFalse(self.source.gate(abroad))
             self.assertTrue(self.source.gate(self.pin))
 

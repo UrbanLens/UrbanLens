@@ -12,15 +12,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 
-class AirQualityPanelSource(CoordinateGatedInfoPanelSource):
+class AirQualityPanelSource(RedataInfoPanelSource):
     """Current air-quality readings for the pin's location."""
 
     key = "redata_air_quality"
@@ -29,19 +29,13 @@ class AirQualityPanelSource(CoordinateGatedInfoPanelSource):
     icon = "air"
     title = "Air Quality"
 
-    def gate(self, pin: Pin) -> bool:
-        """Also requires REData to be configured - this panel has no other data source."""
-        return super().gate(pin) and redata_configured()
+    payload_key: ClassVar[str] = "readings"
 
-    def fetch(self, pin: Pin) -> None:
-        """Fetch current readings via REData and cache them."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
+        """Current modelled readings plus nearby community sensors."""
         from urbanlens.dashboard.services.apis.locations.redata_air_quality_gateway import RedataAirQualityGateway
 
-        lat = float(pin.effective_latitude or 0)
-        lng = float(pin.effective_longitude or 0)
-        envelope = RedataAirQualityGateway().get_air_quality(lat, lng, limit=20)
-        LocationCache.set(pin.location, self.cache_source, {"readings": envelope.results}, query_key=f"{lat:.5f},{lng:.5f}")
+        return RedataAirQualityGateway().get_air_quality(latitude, longitude, limit=20)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Modelled reading as facts; nearby sensors as a count, never averaged in."""
@@ -76,10 +70,6 @@ class AirQualityPanelSource(CoordinateGatedInfoPanelSource):
         if not facts and not sensors:
             return None
         return {"facts": facts, "chips": chips}
-
-    def debug_count(self, data: dict) -> int:
-        """Number of readings found across both source kinds."""
-        return len((data or {}).get("readings") or [])
 
 
 class AirQualityPlugin(UrbanLensPlugin):

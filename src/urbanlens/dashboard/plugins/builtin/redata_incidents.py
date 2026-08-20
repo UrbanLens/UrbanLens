@@ -13,12 +13,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.geo.geo_boundary import USA
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
@@ -26,7 +26,7 @@ _MAX_ROWS = 6
 _YEARS = 3
 
 
-class PoliceIncidentsPanelSource(CoordinateGatedInfoPanelSource):
+class PoliceIncidentsPanelSource(RedataInfoPanelSource):
     """Reported police incidents within the pin's block (500 m, publisher-pinned)."""
 
     key = "redata_incidents"
@@ -36,19 +36,13 @@ class PoliceIncidentsPanelSource(CoordinateGatedInfoPanelSource):
     title = "Reported Incidents"
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
-    def gate(self, pin: Pin) -> bool:
-        """Requires US coordinates (providers are US cities) and REData to be configured."""
-        return super().gate(pin) and redata_configured()
+    payload_key: ClassVar[str] = "incidents"
 
-    def fetch(self, pin: Pin) -> None:
-        """Search the covering city's incident feed via REData and cache the results."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
+        """Block-scale police incident reports near the pin."""
         from urbanlens.dashboard.services.apis.locations.redata_incidents_gateway import RedataIncidentsGateway
 
-        lat = float(pin.effective_latitude or 0)
-        lng = float(pin.effective_longitude or 0)
-        envelope = RedataIncidentsGateway().get_incidents(lat, lng, years=_YEARS, limit=50)
-        LocationCache.set(pin.location, self.cache_source, {"incidents": envelope.results}, query_key=f"{lat:.5f},{lng:.5f}")
+        return RedataIncidentsGateway().get_incidents(latitude, longitude, years=_YEARS, limit=50)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Summarize by category, then list the most recent incidents."""
@@ -82,10 +76,6 @@ class PoliceIncidentsPanelSource(CoordinateGatedInfoPanelSource):
         meta.append({"label": "Precision", "value": "Locations are approximate (block scale, as published)"})
 
         return {"chips": chips, "meta": meta}
-
-    def debug_count(self, data: dict) -> int:
-        """Number of incidents found (before the traffic filter)."""
-        return len((data or {}).get("incidents") or [])
 
 
 class PoliceIncidentsPlugin(UrbanLensPlugin):
