@@ -523,7 +523,10 @@ original notes surface, replace this section with them.
   `services/messaging/group_chats.py`): a live incoming message is serialized once *per viewer*,
   resolving sender identity through the viewer's own masking (and, for DMs, image-consent) rules -
   never one shared payload for all recipients, which had leaked names the server-rendered thread
-  would mask.
+  would mask. The per-viewer *payload* is the guarantee; the per-viewer *query* was not, and cost a
+  `Friendship` lookup per member (twice per group send). `Profile.viewers_who_can_see` resolves the
+  same question for a whole room in a fixed number of queries - the mirror of
+  `visible_profile_pks`, and held to `can_view_profile` by the same agreement test.
 - **Opaque identifiers** (`services/security/e2ee.py`): the E2EE group key-rotation API keys its
   payload by a deterministic per-(group, member) HMAC token rather than profile slugs, which had
   handed every member the real slug of masked members (the PR #111 finding). Group-scoped so tokens

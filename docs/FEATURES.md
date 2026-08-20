@@ -265,6 +265,23 @@ Nominatim's own OSM extratags, Azure Maps' geocode+POI panel, USGS Historical To
 direct-only because REData's contract can't reproduce what they show:
 
 - **Wikipedia** — best-matching article
+- **Historical map picker** — georeferenced sheets covering a pin (Sanborn fire-insurance plans,
+  cadastral atlases, panoramic views) added as map overlays; each row shows the institution's own
+  thumbnail and links its catalogue page, and discloses a loose georeference ("placed to ±60 m")
+  where that figure is meaningful (`controllers.map_overlays`)
+- **National Park Service** — the nearest NPS unit, with what it costs to get in and when it is
+  open (day-grouped from NPS's published hours), its directions page, designation and activities
+  (`plugins.builtin.nps`)
+- **Recorded weather on a visit** — each row in a pin's Visit History says what the weather actually
+  was that day (ERA5 reanalysis via REData, worldwide, back to 1940), grouped by location and
+  clustered by date so a page of visits costs one request per place rather than one per visit
+  (`services.locations.visit_weather.recorded_days`)
+- **Historic Registers** — what the historic inventories say about the pin: the nationwide National
+  Register plus 24 state SHPO and city/county registers, from REData's cultural-resources registry.
+  Renders only REData's standardized fields (name, type, status, year built, style, use), so a
+  register REData adds appears without a release; which registers cover the point comes from
+  `GET /capabilities/`. New York's CRIS is excluded here — it has its own richer panel below
+  (`plugins.builtin.redata_historic_registers`)
 - **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider)
 - **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
 - **Historic Newspapers (Chronicling America)** — dated newspaper pages (1794-1963) about the
@@ -309,6 +326,15 @@ direct-only because REData's contract can't reproduce what they show:
   Also shown on the wiki page
 - **News** — recent news coverage scoped to the location (appears for notable locations), via
   REData's GDELT-backed search
+- **Cameras & Structures** — mapped surveillance cameras (individual agency registers plus
+  OpenStreetMap's worldwide contributed set, which outside Chicago and Austin is the only camera
+  source there is), FCC-registered antenna structures, FAA facilities, EPA contamination programmes
+  and storage tanks near the pin, grouped by REData's own category label
+  (`plugins.builtin.redata_site_features`). **Which sources are asked is discovered at request time
+  from REData's `/capabilities/` index, not listed in UrbanLens** — most of these providers are
+  generated on REData's side from dataset tables, so a register REData adds appears here with no
+  UrbanLens release. Providers that already have their own panel (Yelp, EPA ECHO, NPS places) are
+  excluded so nothing is shown twice
 - **Underground Structures** — OSM-mapped tunnels, culverts, station levels, shafts and buried
   utility runs within 250 m, enterable features first, via REData (`plugins.builtin.redata_underground`)
 - **Permits & Violations** (US cities) — the site's building-permit/code-violation/site-plan filing
@@ -334,6 +360,13 @@ direct-only because REData's contract can't reproduce what they show:
   address/PIN before attribution, with non-arms-length transfers excluded (see
   `docs/designs/redata-integration.md`)
 - **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Via REData when configured, falling back to a direct OpenWeatherMap/Open-Meteo call
+- **What the weather was** — a finished trip's weather panel used to be empty, because the forecast
+  can say nothing about a day that has passed. Past activities now show the *recorded* conditions for
+  their day (high/low, rainfall, snowfall, peak wind and gust) from REData's `/weather/history/`
+  (Open-Meteo ERA5 reanalysis, worldwide, back to 1940). One request covers a whole date range, so a
+  week-long trip costs one lookup per location; a recorded day never changes, so it is cached
+  permanently rather than under the external-data freshness window. Days inside ERA5's ~6-day
+  publication lag are not requested at all, so they are never cached as blank
 - **Sunrise/sunset & golden hour** — via REData when configured, falling back to direct Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
 - Satellite imagery carousel: Google Maps and Esri (incl. up to 5 historical Wayback releases) are
   direct; additional providers (NASA GIBS, Mapbox, Bing Maps, OpenAerialMap, OpenTopoMap) via REData
@@ -380,6 +413,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   clusters the rest into suggested new pins, reviewed on a multi-select map with bulk accept,
   pagination, and opt-in photo import
 - Storage quota accounting per user (role-based), automatic downscaling/WebP conversion on upload
+- **HEIC/HEIF uploads are accepted and re-encoded to a format browsers render** (JPEG, or WebP when
+  the uploader's policy asks for it). The transcode is not part of the downscale policy: it runs even
+  for a user with downscaling and WebP conversion both off, because the stored bytes are what a plain
+  `<img src>` gets and only Safari renders HEIC. GPS is still stripped or kept per the user's own
+  setting, independently
 
 ## Trips
 
@@ -427,6 +465,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 ## Social Layer
 
 - Friendships: request/accept/reject/ignore/remove/block/mute, invite by email
+- **Mute is per-person and actually silences** — one column per side of the shared relationship
+  row, so muting someone does not mute you to them. It suppresses the in-app notification and
+  everything that hangs off it (live toast, WhatsApp/SMS, native push) for every notification type
+  except the safety check-in family, which is exempt on purpose. Applied in one place
+  (`NotificationLog.objects.notify`) and enforced by `bin/check_notification_choke_point.py`
 - Configurable friend-request visibility ("anyone", "friends of friends", "anything in common", etc.)
 - Public/friends-scoped profile pages with visibility controls per field (9 controls, each with 7 granularity levels from "Anyone" to "No one"), "view my profile as..." preview mode
 - **Identity masking in shared spaces** — a trip or group chat member whose `profile_visibility`

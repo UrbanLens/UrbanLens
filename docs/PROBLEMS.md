@@ -6,8 +6,9 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > references reading `see docs/PROBLEMS.md`, and this document is over 7,000 lines - a bare pointer
 > costs the reader a full-text search and, in practice, they do not do it. Prefer
 > `see "the documented docker cp resync breaks the app container" in docs/PROBLEMS.md`. Cite **every**
-> relevant entry, not the nearest one - `Friendship.muted` has two (wrong shape, and never read), and
-> a pointer to one implies it is the whole story where a bare pointer at least led to both. Headings
+> relevant entry, not the nearest one - `Friendship.muted` had two (wrong shape, and never read; both
+> now in the archive), and a pointer to one implies it is the whole story where a bare pointer at
+> least led to both. Headings
 > are stable here; line numbers are not. **A date works nearly as well as a heading** - `external_api/
 > serializers.py` cites "docs/PROBLEMS.md, 2026-07-28" and that alone locates the entry unambiguously,
 > because entry headings carry their date. A **distinctive identifier** in the surrounding prose works
@@ -20,6 +21,635 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
+
+## RESOLVED 2026-08-19: `inspects_content` stopped the two tabs it was written to hide
+
+`ed8b3b28` ("a panel tab appears only when it has something to show") gave `photon` and
+`open_elevation` an `inspects_content` flag, so a fresh cache row holding a legitimately empty answer
+no longer counts as ready. Correct for the tab strip, which is what the commit was about.
+
+But `PinController.location_data_overview` used `is_ready` to mean *"has this source been fetched
+yet"*, and those are different questions. After the commit the two panels looked unfetched forever:
+rescheduled on every render, and - because `empty_keys` is only appended inside the `is_ready`
+branch - never reported to the client. `empty_keys` drives the `pinLocationDataEmpty` HX-Trigger,
+which is exactly what `_pin_location_data_tabs.html` uses to hide a dead tab. So the fix that
+introduced `inspects_content` prevented the two tabs it targeted from ever being hidden, and made the
+Overview poll for them indefinitely.
+
+The endpoint now reads a fresh `LocationCache` row directly and treats its presence as "asked";
+`is_ready` keeps its narrower meaning for the tab strip.
+
+**How it stayed hidden for a day:** two tests in `test_location_data_overview.py` (written 2026-07-22)
+did catch it - they assert the 204 and the full `empty_keys` set - and had been failing since the
+commit landed at 00:29. They were only noticed because a broad run happened to include that file. A
+behaviour flag that changes what an existing helper means is worth grepping for callers of that
+helper; `is_ready` had two, and only one wanted the new meaning.
+
+## OPEN 2026-08-19: performance and ops defects found but not fixed
+
+Found during the 2026-08-19 sweep, verified by reading both the query definition and every call
+site. The three worst (`group_conversations_for` materialising every message in every group,
+`_notify_group_message` loading a group's whole history on every send, and the rate limiter reading
+one row four times per outbound call) were fixed in the same pass; these were not.
+
+~~**The navbar messages dropdown builds the entire inbox to render at most 8 rows.**~~ Fixed
+2026-08-19. `conversations_for` takes `only_unread`, which becomes a HAVING on the aggregate it
+already computes, so the partner/last-message/identity lookups are sized by what will be shown.
+`unread_conversations_for` merges that with the group half (bounded by memberships, filtered in
+Python). The empty-state flag no longer needs the inbox either: `has_any_conversation` is two
+`exists()` calls, where it used to test the length of the list the view had just built.
+
+~~**The homepage runs ~12 aggregate/list queries for widgets the user may have disabled.**~~ Fixed
+2026-08-19. Worth stating precisely, because most of that context was never the problem: nearly every
+entry is an unevaluated queryset, so a disabled widget costs nothing already. Exactly two were eager
+- the ten counts behind `home_stats`, and `home_recent_comments`, forced by the `sorted()` that
+merges pin and trip comments. Both are now built only when their widget is enabled, guarded by a test
+that compares actual query counts with the widgets on and off.
+
+~~**The pin-list detail page costs two extra queries per pin (rating and wiki), unpaginated.**~~
+Fixed 2026-08-19. `_list_items_with_labels` now selects `pin__location__wiki` and prefetches
+`pin__reviews`. Worth noting how it hid: the function's docstring already claimed it "matches the
+same prefetch shape the main map's bulk pin endpoints use ... without N+1 queries", and both model
+properties involved (`Pin.rating`, `Location.display_name`) document in their own docstrings exactly
+which prefetch they need. Three accurate comments, and the code between them still missed two
+relations. The page remains unpaginated.
+
+~~**Pin merge suggestion cards issue 8 `COUNT` queries each.**~~ Fixed 2026-08-19 by annotating the
+four counts on `pending_merge_suggestions`, with `distinct=True` on each - the four joins multiply
+one another, so plain counts would report visits x photos.
+
+**Verified end to end 2026-08-19.** `bin/dev_env.py create` produced a working
+`https://e2e-check.dev.urbanlens.org` (HTTP 200 direct and through the router), 17 healthy
+containers and its own checkouts on disk; `list` reported both environments running; `destroy`
+removed containers, files, registry entry and route completely. `--no-redata` skipped the REData
+steps cleanly.
+
+**Still open: a dev environment costs a full second REData stack.** A default `create` starts *two*
+stacks - nine UrbanLens containers and eight REData ones (app, celery-worker with
+Playwright/Chromium, celery-beat, flaresolverr, tor, searxng, valkey, db). On a cold image cache the
+REData half alone took roughly eight minutes, with no output between the `start-redata` step and its
+containers appearing, and that stack is idle for any agent not working on REData integrations.
+`--no-redata` exists but is opt-*out*. The host already runs a shared REData a dev environment could
+point `UL_REDATA_API_URL` at, so sharing it by default and making a private one opt-in is probably
+the cheaper shape - an ops call rather than a defect, hence recorded rather than changed.
+
+**The cold-boot fix is unexercised.** `docker compose up -d` exits non-zero when a dependent service
+gives up on the app's healthcheck, and the app legitimately takes minutes on a first boot (migrate,
+collectstatic, frontend build); the run then *skipped* the fifteen-minute health wait that would have
+seen it succeed. That is fixed - the wait now runs whenever the app container exists - but the
+verification run had warm images and `up` succeeded outright, so the new branch never fired. The
+evidence for the bug is the previous run's own log ("dependency failed to start: container
+ul_afb299e_app is unhealthy") followed by a healthy stack.
+
+**`UL_CONTAINER_NAME=agent_<slug>` names nothing.** The isolation override pins every
+`container_name` and `_compose` passes `-p ul-<slug>`, so both things that variable would have set
+are overridden; it is a collision guard only. The comment above the start step asserted the opposite
+("No -p: UL_CONTAINER_NAME ... already sets both"), and that stale comment is what `list_envs` was
+written against. Both now say what is true.
+
+**RESOLVED 2026-08-19: four ops-tooling paths that reported failure as success.**
+
+- `dev_env.py destroy` set `containers: True` unconditionally and deleted the registry entry whatever
+  `docker compose down` returned, so a failed teardown left containers running with nothing recording
+  that they existed. It now reports from the exit codes, keeps the entry marked `orphaned` when the
+  teardown failed, and `bin/dev_env.py` exits 1 with the compose output.
+- `dev_env.py list` looked for `agent_<slug>`, a prefix nothing creates - so every environment read as
+  not running. All three sites that need this name now share `devenv.container_name`.
+- `dev_env.py create` wrote its registry entry before cloning and `run_step` records failures rather
+  than raising, so a failed clone crashed the next step on a missing directory *after* claiming the
+  environment existed. It now marks the entry failed and stops.
+- The staging **data-preservation check passed vacuously**, in two independent ways: `_VERIFIED_TABLES`
+  named `dashboard_pins`, which no model owns (`Pin.Meta.db_table` is `dashboard_user_pins`), and both
+  database containers were addressed as `urbanlens_<UL_ENVIRONMENT>_db` while compose names them
+  `urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_db`. Either makes a count come back
+  `-1`, and the comparison skipped `-1` silently while reporting "5 tables match". An uncountable
+  table is now a failure in its own right, the summary counts what was actually compared, and both
+  container names come from one helper.
+
+**And a fifth, found by the tests written for those four:** `bin/run_tests.sh` synced `src/` but not
+`bin/`, while `tests/hypothesis/test_ops_tooling.py` imports `bin/opslib` directly. Every ops-tooling
+test was running against whatever was baked into the image - the exact failure the script's own header
+describes for `src/`, unnoticed here because the imports kept working while the code behind them
+aged. The sync and both halves of the parity check now cover `bin/` too.
+
+~~**Still open:** every dev environment is configured with a REData URL its own app container cannot
+reach.~~ Fixed 2026-08-20, and it had **two** halves - the second only found by testing the first
+against the live `e2e-check` environment rather than reasoning about it.
+
+1. The URL was `http://127.0.0.1:<redata_port>`, which inside the app container is the app
+   container; REData publishes on a *host* port. Confirmed live: `URLError [Errno 111] Connection
+   refused` from inside `ul_e2e-check_app`. The isolation override now gives the five application
+   services (`app`, `app-ws`, and the three celery services)
+   `extra_hosts: host.docker.internal:host-gateway`, and the env file points at that alias.
+2. Routing to it is not enough. REData's seed `.env` sets
+   `RD_ALLOWED_HOSTS=localhost,127.0.0.1,redata.urbanlens.org`, so a request arriving with any other
+   `Host` gets **400 DisallowedHost**. Measured: over the gateway the container got 400 where the
+   host got 401, and 401 once the `Host` header was forced to `localhost`. `create` now writes
+   `RD_ALLOWED_HOSTS` including the alias, and `redata_api_url`/`redata_allowed_hosts` are held to
+   each other by a test.
+
+3. And with routing and hosts both fixed, every call still came back **401**. `UL_REDATA_API_KEY` is
+   seeded from the host's `.env` along with the other secrets - but it is not that kind of secret.
+   It names a *row in a database*, and a private REData starts with an empty one, so the inherited
+   key authenticates against nothing. `create` now mints a key in the new instance
+   (`_provision_redata_key`, via `manage.py shell -c` - REData has no key-issuing command, the key
+   is normally created through the admin) and writes it into the UrbanLens `.env` before that stack
+   starts. Best-effort: a failure there leaves the environment usable for everything that is not
+   REData, and says so in the step log.
+
+Each failure is close to invisible on its own, and they get worse in order: connection-refused is
+obviously wrong; a 400 from a service that is plainly up reads as a bad request; a 401 reads as a
+credentials problem with the *host's* REData rather than as "this instance has never heard of you".
+
+**Verified live 2026-08-20** by repairing the running `e2e-check` environment in place rather than
+trusting the reasoning: from inside `ul_e2e-check_app`, `GET /capabilities/?lat=&lng=` now returns
+21 domains through the authenticated gateway. That answer also validated the satellite work below -
+this instance reports `mapbox`/`bing_maps`/`azure_maps` as *not* applicable (no vendor keys), so the
+hardcoded list had been asking three providers it could never serve.
+
+**One more thing that repair surfaced: recreating the `app` container 502s the stack until nginx is
+restarted.** nginx resolves its upstream once, at config load, so a recreated app comes back on a new
+container IP and nginx keeps dialling the old one - `connect() failed (111: Connection refused) ...
+upstream: "http://172.25.0.5:8000/"` while the app itself answers 200 on `127.0.0.1:8000` and *every
+container reports healthy*. `create` never hits this because it brings the whole stack up together;
+any in-place repair of a running environment does, and the symptom points at the app rather than at
+nginx. A `resolver`-based upstream in the nginx config would fix it properly; `docker restart
+<slug>_nginx` is the one-line workaround, and is what the live environment needed.
+
+**RESOLVED 2026-08-20: sending a group message cost a `Friendship` lookup per member, twice.**
+Measured first: an 8-member send ran 18 queries, 8 of them `Friendship.between(member, sender)`. The
+per-member cost was a *recorded decision* (2026-07-23) rather than an oversight - the payload carries
+the sender's name, so it has to pass each recipient's own visibility, and the alternative leaks a
+masked name over the live channel. What was missing was a way to ask the question in bulk.
+
+`Profile.visible_profile_pks` batches many subjects for one viewer. A group message is the mirror:
+one subject, many viewers - which that function cannot express, so both halves of a send
+(`_notify_group_message` for the bell title, `broadcast_group_message` for the live payload)
+resolved it a row at a time. `Profile.viewers_who_can_see(subject, viewers)` is the mirror, with
+`DirectMessageTemporaryAccess.granting_viewer_pks` under it and
+`identity_visibility.resolve_identity_for_viewers` on top; group create and add-members use it too.
+Both directions are now held to `can_view_profile` by `test_identity_visibility_batch` across every
+`VisibilityChoice` and relationship - the same treatment the original batch got, and for a sharper
+reason: this one decides whether a *whole room* sees a name.
+
+`_notify_group_message`'s docstring had promised a fixed query count since the unread check and the
+preference lookup were batched. It was true of two of the three per-member things it did. There is
+now a test holding it, and it counts reads only - one INSERT per notified member is the work itself.
+
+**Same class, four more sites, fixed in the same pass:** the external API's group-member roster and
+friend-ratings list, the group sidebar's last-sender previews, and global search's DM results all
+resolved identity one row at a time when `visible_profile_pks` already existed for exactly that. The
+sidebar one is worth naming: it *had* a query-scaling test, and the test passed, because every group
+in its fixture had the **same** last sender and the function's own dedup cache hid the cost. The
+test now uses distinct senders.
+
+~~**The Building Attributes card picks the nearest building without excluding envelope parents,
+ambiguous overlaps, or off-property records.**~~ Fixed 2026-08-19. `_nearest_building` now applies
+`buildings_on_property`/`countable_buildings`/`confident_buildings` before ranking. Each is a
+*preference*, not a hard filter: when nothing survives, the next-weakest set is ranked instead, so a
+parcel whose only record is ambiguous still shows what is known rather than going blank.
+
+~~**`ensure_building_places` ignores `parent_ref`.**~~ Fixed 2026-08-19 - nesting is resolved
+topologically, with a cycle break, and a parent outside the list falls back to the parcel rather
+than losing the building. The same pass found a second defect the fix exposed: `find_matching_place`
+applied its mutual-centroid-containment fallback to records that *do* carry a stable provider id, so
+an L-shaped block and a wing tucked into its corner could merge back into one place - undoing
+exactly the reconciliation REData did to keep them apart. **Still open:** the reconciled `ref` is
+persisted as a permanent identity (`Place.provider_key`, floorplan `building_ref`) and REData does
+not guarantee it is stable across responses.
+
+~~**`flatten_timeline` reads `capture_date_resolved` one nesting level too high.**~~ Not a defect on
+the current tree - re-verified 2026-08-19. `_resolved_flag` reads the `attributes` blob first and
+falls back to the top level, and has since commit `8bf86daf`; the finding described the code before
+that.
+
+## RESOLVED 2026-08-20: a visit suggestion named its sender even when that sender is masked everywhere else
+
+Found by `bin/report_defect_history.py`'s incomplete-fix query, which lists fixes whose own message
+implies more instances exist. Commit `1634837e` - "the calendar importer's trip invite masks identity
+**like its sibling does**" - is exactly that phrase. `services/visits/visits.py` was another
+instance: both branches of the visit-suggestion notification interpolated `suggested_by.username`
+raw.
+
+Same reasoning as the sibling, and it is worth restating because "they're connected, so it's fine"
+is the intuition that produces this bug every time. Being connected is not sufficient permission:
+`VisibilityChoice`'s own docstring notes accepted friends qualify for every level *except* `NO_ONE`.
+And the message is stored as plain text, then picked up by push delivery and by
+`notification_text_alerts`, which builds an SMS body from the stored text - so a name masked at
+render time has already left the app.
+
+Now routed through `_suggester_name`, with four tests. Two of them fail against the previous code
+(verified by reverting), one is the anti-vacuity case, and one covers the merge-wording branch -
+the two message branches are written separately, which is how they would drift again.
+
+**Checked and deliberately left alone: the two other raw usernames near a notification write.**
+
+- `services/social/friendship.py`'s friend-request body. Naming the requester is the *point* -
+  `visibility_permits` has an `allow_pending_request` rule specifically so "asking someone to
+  connect deliberately lets them see who is asking". Routing it through the resolver would be
+  harmless for every visibility except `NO_ONE`, where it would produce "Member wants to be your
+  friend" - an anonymous request nobody can act on. That is a product decision about whether a
+  `NO_ONE` profile may send requests at all, not a masking bug.
+- `services/visits/safety.py`'s community-wiki escalation. The owner opted into notifying strangers
+  precisely so those strangers can look for them; masking the name would defeat the feature. It is
+  in `MUTE_EXEMPT_TYPES` for the same reason.
+
+## RESOLVED 2026-08-20: every `Friendship` status transition wrote the whole row, and could un-mute somebody
+
+Found by `bin/report_model_writers.py`, which ranks models by how many modules write them and lists
+the bare `save()` calls against each - `Friendship` came back with three. That report exists because
+a bare `save()` writes *every* column from a possibly-stale in-memory instance, which is harmless on
+a single-writer row and a lost update on a contested one.
+
+`Friendship` had just become contested. The mute columns added earlier the same day are written by a
+targeted `UPDATE` that deliberately leaves the instance alone (so it cannot clobber a concurrent
+accept/decline, and does not move `updated`, which the profile page renders as the friendship's
+"since" date). The status transitions did the opposite - `accept`/`decline`/`ignore`/`remove`/`block`
+and `request` all did a bare `self.save()`. So: open someone's profile page, have them mute you in
+another tab, click Remove - and their mute is gone, with nothing reporting it.
+
+**`update_fields`, not `queryset.update()`.** The latter avoids the lost update outright and also
+skips `post_save` - which the achievements system subscribes to for this model, `created_only=False`,
+specifically to see a friendship *reach* `ACCEPTED` (`models.achievements.signals`). Silencing that
+to fix a lost update trades one silent bug for another. There is a test asserting the signal still
+fires with `status` among its `update_fields`.
+
+**A second, worse instance in the same area.** `block_profile` re-points the row so the blocker owns
+`from_profile` (deliberately - direction is the only record of who blocked whom). The mute columns
+are named for the row's two *ends*, so swapping the ends without swapping them hands each person the
+other's preference: A's mute of B silently becomes B's mute of A, and neither of them did it. Now
+read before the swap and written with it, in one statement.
+
+Six tests, all verified to fail against the previous code by reverting both fixes and re-running -
+one of them (`test_a_request_does_not_clobber_a_mute`) passed either way and says so in its own
+docstring, because `request` loads the row itself and is never stale.
+
+**The report itself was sharpened in the same pass.** It listed every bare `save()`, including ones
+on an instance the same function had just *constructed* - which is an INSERT, with no earlier load
+to be stale relative to. Those buried the real findings: the `Comment` entry that looked most
+alarming (8 writers) was exactly that shape, and dismissing each costs a reader the same minute.
+`report_model_writers.py` now skips a `save()` on a name whose every assignment in that function is
+a direct `Model(...)` call - conservatively, so one `obj = Model.objects.get(...)` anywhere in the
+function and it is reported as before. That took the list from 14 flagged models to 6, and turned
+`Profile`, `Comment`, `MarkupMap` and `SafetyCheckin` from false positives into clean rows.
+
+**Also fixed, from the sharpened list:** `PinVisit`'s two visit-edit paths (pin detail and the
+Memories dialog) wrote the whole row for three fields. The contending writer is `pin_merge`, which
+re-points `pin` wholesale; the window is small (the POST re-fetches the visit scoped to its pin, so a
+merged-away visit 404s rather than being clobbered) but `update_fields` is strictly better and costs
+nothing.
+
+**Still open:** `Label` (3), `PinList` (2), `Trip`, `TripActivity` and `SavedFilter` (1 each). Each
+needs the same judgement - which columns does *another* writer touch without going through this
+instance - and that judgement is per model, not mechanical. `Friendship` was worth doing first
+because a second writer had just been added to it.
+
+## 2026-08-20: bug hunt over the highest fix-density modules - 9 confirmed, 4 fixed, 5 open
+
+`bin/report_defect_history.py` ranks files by the share of their commits that are fixes, on the
+premise that where bugs have been found is where bugs are. Five parallel readers took the top of
+that list (`controllers/account.py` 53%, `controllers/labels.py` 45%, `pin_restructure.py` 43%,
+`saved_filters.py` 43%, `trip_activities.py` 60%), each capped at its two strongest findings, and
+every finding was then handed to an adversarial verifier told to refute it and to default to
+refuted when uncertain. 10 findings, 9 survived. **Each of the four fixed below was re-verified by
+hand before being believed** - two of them turned out to differ from the report.
+
+### Fixed
+
+**Editing any trip activity that has a location returned a 500.** `resolve_activity_place` handed
+its `location_uuid` value straight to a `UUIDField` filter, which raises `ValidationError` from the
+ORM - and a plain view does not turn that into a 400. Confirmed by running the filter: `['"x" is
+not a valid UUID.']`. The pin branch six lines above already converts with `try/except` for exactly
+this reason; the location branch did not.
+
+The report blamed the edit dialog, and it is worse than that: `location_slug` - the documented
+field, named for what it holds - hit the same path, because the lookup tried `uuid=` *first* with
+whatever it was given. So every caller was affected, not just the dialog. The root cause is a
+naming lie: the itinerary row's attribute was `data-act-location-uuid` and had always carried the
+location's **slug**. Renamed to `data-act-location-ref` on both sides, and the lookup now tries the
+slug first and the uuid form only once it parses.
+
+**The label create view stored an uploaded icon with none of the validation the edit view applies.**
+No size check, no content-type check, no malware scan - while the same file posted to the edit URL
+is refused with a 400. That matters more than "unvalidated upload" usually does here:
+`_resize_custom_icon` deliberately returns the file untouched when PIL cannot open it (an SVG, say),
+`label_icons/` is served to any authenticated user, and `MediaGateView` deletes the Content-Type so
+nginx derives it from the extension. Both paths now go through one `_validated_custom_icon`, and a
+test pins the call-site count so a third path cannot skip it.
+
+**The 2FA lockout counter was read-then-write** (`attempts = (cache.get(key) or 0) + 1`), while the
+two login counters directly above it use the atomic `_bump_counter` - it was left behind when they
+were converted. It is the only brake on TOTP guessing for someone who already has the password.
+The verifier's correction is worth keeping: the reporter claimed the lockout "never fires", which is
+arithmetically wrong - a batch advances the counter by one, so the limit is still reached, just
+after N x concurrency guesses instead of N. Medium, not high.
+
+**A hidden trip activity leaked its location into the DOM.** The visible label was correctly swapped
+for "Secret Location", and the real name and slug went out in the row's own data attributes and the
+RSVP `aria-label`, where view-source and a screen reader both find them. Two further details found
+while fixing: `effective_title` *falls back to the location's name*, so the title is itself the leak
+for any activity whose author typed none; and `data-act-location-hidden` emitted the raw
+`location_hidden`, so a viewer hidden by the owner's visibility *setting* was told the location was
+not hidden. `build_activity_rows` now puts already-masked `display_title`/`display_location_name`/
+`display_location_ref` on the row, and a test forbids the panel from mentioning `act.location.` or
+`act.effective_title` at all - the leak was a template reaching past the guard, so the guard has to
+be somewhere a template cannot reach past.
+
+### Confirmed, not yet fixed
+
+- **`merge_pins` cannot complete when the survivor is the loser's direct child** (`pin_merge.py`
+  :230): `_reparent_children` skips the survivor rather than detaching it, so the survivor keeps
+  `parent_pin = loser` and the loser's delete CASCADEs it away - a 500, every time, unfixable from
+  the UI. Reachable through `repair_legacy_pin_coordinates`, whose `existing_pin` lookup is not
+  restricted to root pins. The fix is to re-point the survivor at the loser's own parent, raising
+  `PinMergeCollisionError` on a unique-constraint collision exactly as the cycle branch beside it
+  already does.
+- **Building-place provisioning passes REData's *unfiltered* parcel cache** (`pin_restructure.py`
+  :385 and :503): the dialog filters to `buildings_on_property`, the POST does not, so off-property
+  records - up to ~2,500 for a parcel inside a broad survey zone - become Places inside this
+  parcel's wiki access domain. Needs a re-read of the wiki-domain consequence before fixing; the
+  provisioning side was rewritten on 2026-08-19 and this entry has not been re-checked against it.
+- **Smart lists evaluate a saved filter's criteria without `root_pins()`** (`pin_list_membership.py`
+  :222), so a list derived from a filter includes detail pins the filter's own preview excludes -
+  the same filter reports different counts in two places.
+- **`prime_total_pin_counts` fetches the whole site's label-hierarchy edge table** with no filter
+  (`models/labels/model.py:171`), three times per Organize page load.
+- **Undoing a deleted saved filter drops its colour and opacity** - `_RESTORABLE_FIELDS` omits them,
+  so the filter returns untinted. Low, but its own round-trip sweep cannot see it, because
+  model_bakery leaves fields with defaults unset and the sweep therefore compares default to
+  default.
+
+### Refuted, and worth recording
+
+One finding claimed the resend-verification page defeats its own anti-enumeration guarantee by
+echoing the account's email back. The verifier established that both facts it allegedly discloses
+are already disclosed to anonymous requesters deliberately, so there is nothing to leak. Recorded
+so the next reader of that endpoint does not re-derive it.
+
+## OPEN 2026-08-20: reciprocal `Friendship` rows are permitted, and "one row per pair" is only a convention
+
+`Friendship.Meta.unique_together` is `("from_profile", "to_profile")`, which stops a duplicate in
+*one* direction and permits `A->B` **and** `B->A` to both exist. Every reader assumes they cannot:
+the model docstring says "there is exactly one `Friendship` row per pair", `QuerySet.between()`
+matched either direction and called `.get()`, and the mute columns are per-side *of one row*.
+
+Two ways a reciprocal pair gets created today:
+
+- `services/import_export/import_data.py:875` creates rows directly while restoring a profile
+  export; an export holding both directions restores both.
+- Two simultaneous requests in opposite directions. `Friendship.request` reuses an existing row via
+  `between()`, but neither caller sees the other's row before inserting, and the unique constraint
+  does not cover the reversed key.
+
+`test_calendar_sync.CalendarInviteIdentityMaskingTests` builds one deliberately, which is how this
+surfaced: with mute wired into notification delivery, `between().get()` raised
+`MultipleObjectsReturned` on every notification between such a pair. Before that it was quieter but
+not harmless - the same raise sat behind the profile page, the friends API and
+`NotificationLog.is_friend_request_pending`.
+
+**Done 2026-08-20 (containment, not the fix):** `between()` now returns the **oldest** matching row
+deterministically and logs a warning, rather than raising - a second row is data to repair, not a
+reason to refuse to answer, and picking arbitrarily would make the answer depend on query planning.
+`notifications_muted` does not go through `between()` at all: it asks the same predicate
+`profiles_muting` does, so both mute paths read *either* row and cannot disagree.
+
+**Not done: the constraint itself.** The real fix is a normalised pair key - a
+`UniqueConstraint` on `Least(from_profile_id, to_profile_id), Greatest(...)`, or a
+`CheckConstraint` forcing `from_profile_id < to_profile_id` with the direction moved to its own
+column. Either needs a data migration that merges existing reciprocal pairs, and merging is not
+mechanical: the two rows can hold different `status` values (one `Accepted`, one `Removed`), and
+which one is right depends on history nothing records. Worth doing with a real look at production
+data rather than a guess. Until then, a reciprocal pair is a warning in the logs, not an exception.
+
+## OPEN 2026-08-19: REData consumption gaps left after this session's sweep
+
+A full cross-repo sweep of UrbanLens's REData integration on 2026-08-19 (both repos read end to end:
+REData's `api/urls.py`, every serializer, `docs/api-reference.md`, `docs/fields-available.md` and the
+whole `CHANGELOG.md` `[Unreleased]` section, against all ~32 `redata_*` gateways and 8 panels).
+Everything that was *wrong* was fixed in the same pass - four panels reading keys REData has never
+emitted, the places gateway parsing a `{count, results}` envelope as a bare array, `?is_aerial=true`
+being a parameter of a different endpoint, CRIS selecting resources that were not CRIS's, Florida's
+whole sale-record provider being dropped on attribution. What follows is what was found and
+deliberately **not** done, so the next pass starts from here rather than re-deriving it.
+
+**`?limit=` is inert on every REData near-point endpoint.** `NearPointQuery`
+(`REData/src/redata/api/coordinates.py`) parses `lat`/`lng`/`radius_meters`/`provider`/
+`force_refresh` and nothing else; the `limit` parsing at :411 belongs to the *text*-query parser. So
+every panel that passes `limit=20`/`25`/`30`/`50` caches up to REData's own server-side cap instead.
+Not fixed here on purpose: trimming client-side would change the user-visible counts panels report
+("N mapped within 250 m") from REData's floor to our own arbitrary bound, which is less accurate,
+not more. The fix belongs in REData - have `parse_near_point_query` accept `limit` - after which the
+UrbanLens side needs no change at all.
+
+**45 of REData's 106 routes have no UrbanLens caller.** 15 are judged worth wiring up, in rough
+value order: the `/street-view/` base endpoint and its two mirrored-bytes download routes (the
+carousel currently hot-links provider URLs that rot), `GET /places/cid/{cid}/` plus its media
+download (UrbanLens already holds the CID and throws the deep-scraped place data away),
+`/parcels/{uuid}/coverage/` (the Property Records panel fires four supplementary calls per parcel
+blind), four `/parks/{code}/` routes including live closure/hazard alerts, `POST /imagery/capture/`,
+`/reference-documents/` near-point (Wikidata's structured heritage claims reach UrbanLens from
+nowhere else), and the `land-use-areas`/`demographics`/`national-parks` parcel trio. 23 are
+irrelevant by design (nested write CRUD, the readback ViewSets, IIIF).
+
+**`GET /weather/history/` is consumed on trips and on visit history; the bulk Memories lists are
+deliberately left out.** (Visit history added 2026-08-20.)
+
+Each visit row on a pin's Visit History tab now says what the weather actually was that day -
+`68° / 50°F · 1.00 in rain · gusts 31 mph` - which is the fact that makes a photograph of a flooded
+basement mean something. Three things about how, since the obvious implementation is wrong in each:
+
+- **The panel never makes the call.** The first version did, on the reasoning that the panel is
+  already loaded by `hx-trigger="load"` behind a spinner. That reasoning was wrong twice over: a
+  spinner does not make it acceptable for a slow REData to hold up an entire visit list for a
+  decorative line of text, and it put an outbound call inside a page render, which is a thing no
+  other external-data surface in this app does. Two *unrelated* tests found it, by tripping the
+  suite's localhost-only network guard the moment the panel started fetching. It now reads the cache
+  (`recorded_days(..., allow_fetch=False)`) and queues the gap
+  (`tasks.fetch_recorded_weather`) - the same fetch-behind/render-from-cache split every pin-detail
+  panel uses. Weather appears on the second view, which for this is the right trade. Days inside
+  ERA5's publication lag are never queued: they are not missing, they are unanswerable until
+  published, and queueing them would retry forever.
+- **Sparse days are not a range.** `recorded_range` fetches `min..max` in one request - right for a
+  trip's activities, wrong here: a page of visits to the same ruin can span decades, and the range
+  form would fetch *and cache* every day in between to display ten. `recorded_days` clusters instead,
+  merging days within a month and splitting beyond it.
+- **Grouped by `Location`, not by pin.** `?children=1` lists a whole subtree, and those are different
+  places; one request per location, not per visit.
+
+**Not done, and not an oversight: the Memories timeline and Visits subpage.** Both are bulk lists
+spanning a whole account - hundreds of visits across hundreds of locations - so a fetch per location
+is not something a list render may do. The cache-only alternative (`allow_fetch=False`) would show
+weather on whichever rows a user had happened to open the pin page for and nothing on the rest,
+which reads as broken data rather than as a partial feature. Doing it properly needs a background
+enrichment source that fills the cache per Location, which is a different piece of work.
+
+The original entry, kept for the trip half: A finished
+trip's weather panel was empty - the view filtered to activities scheduled today or later, so a
+forecast-only panel had nothing to say about a trip that had happened. Past activities now show what
+the weather actually was (`controllers.trip._build_activity_history`), fetched as one range per
+location rather than one call per day, and converted to the units every other weather surface uses.
+Days inside ERA5's ~6-day publication lag are never requested, so they cannot be cached as blank.
+What remains is the surface the design doc named first: the shared visit dialog and Memories.
+`visit_weather.recorded_weather(location, day)` is the single-day entry point for it.
+
+**Fields fetched, cached, and never shown.** ~~`special_land_use_areas` (military installation /
+correctional facility / national park / campus), `flood_zone_code`, `deed_document_links`~~ - shown
+on the Property Records card as of 2026-08-20. The land-use categories are chipped rather than
+listed, and ahead of "Delinquent taxes"/"Boundary available": two of the four describe ground where
+being present is a different statute rather than a trespass question, which is a fact about the
+*visit* and not another attribute of the property. A category present but unnamed still renders -
+TIGERweb rows are confirmed to omit fields per category, and dropping the row would turn "inside a
+correctional facility" into silence.
+
+Still unread: `raw_attributes` on the parcel record (per-jurisdiction keys, no display shape that
+generalises - a deliberate skip rather than an oversight).
+
+~~The sheet thumbnail, library landing page and georeference accuracy on the historical-map
+picker~~ - shown as of 2026-08-20. The thumbnail is the one that mattered: choosing between a dozen
+scanned sheets of one neighbourhood is a *visual* task, and the picker offered eleven rows all
+reading "Sanborn Fire Insurance Map of ...". Both the thumbnail and the catalogue page are the
+**institution's** own public URLs, not REData-authenticated ones, so unlike the tile template they
+need no proxy - that distinction is why they were safe to link directly and worth stating, since the
+tile template two lines away must never reach the browser.
+
+Accuracy needed a judgement rather than a field read. `rmse_meters` is the fit's own residual, and
+REData's model docstring warns that a thin-plate spline interpolates its control points *by
+construction*, so its residual is ~0 whatever the placement is actually like. Printing "±0 m" for one
+would advertise a perfect fit for possibly the worst sheet in the list, so splines report nothing;
+so does anything under 25 m, which on a scanned historical map is noise. What survives is the case
+worth disclosing before somebody traces a building off the overlay: "placed to ±60 m (4 control
+points)".
+
+**Also fixed in passing: the picker's rows had no thumbnail slot at all**, so this needed the row
+layout as well as the data - a fixed 2.5rem box, because the list scrolls inside a 14rem window and
+one tall scan would otherwise push every other sheet out of view.
+
+~~Entrance fees, real operating hours, directions and weather guidance on the national-park
+panel~~ - shown as of 2026-08-20, via `plugins.builtin.nps.park_facts`, which the web panel and the
+API payload now share (they rendered different hand-built subsets of the same payload before).
+
+The hours case was the sharpest instance of this whole category: the template rendered "Standard
+hours vary - check NPS.gov" **whenever `standardHours` was present** - that is, precisely when it
+did not have to say that. Consecutive days with identical hours are now grouped
+("Mon-Fri: 9:00AM - 5:00PM; Sat-Sun: Closed"), and a week NPS has only partially published renders
+nothing rather than collapsing an unknown day into a range, which would read as "closed that day".
+
+Fees needed the same care in the other direction: `cost` is a *string* in NPS's API and is sometimes
+free text ("varies"), so an unparseable fee is skipped rather than guessed, and **absent fees are
+not reported as free** - "Free" has to mean free. `weather_info` is deliberately still unread: it is
+a paragraph of seasonal prose and the pin already has a weather panel showing the actual forecast.
+
+**Found while doing it: the NPS panel had no stylesheet at all.** Every `nps-*` class in
+`pin_nps.html` matched nothing - the card rendered with only the generic `.card` chrome. That is one
+concrete instance of the "46 BEM modifiers applied in templates with no CSS rule" entry further down
+this file, and it now has one. The fact grid mirrors `.simple-info-panel`'s `.simple-info-meta`
+values rather than sharing the selector: hoisting that rule out of its parent changes its
+specificity for every panel that uses it, which is a bigger change than this panel is worth.
+
+**Correction 2026-08-20 to this entry's own last item.** It named "`residual_geometry` and each
+source's `attributes` (the assessor's sqft/stories/condition) on the reconciled building record" as
+an UrbanLens gap. Checked against REData: `BuildingRecord` promotes `name`, `address`,
+`building_number` and `year_built` and nothing else - sqft, stories and condition are **not**
+standardized per building, they sit in each source's raw `attributes` under whatever that county's
+GIS layer calls them. Consuming them from here would mean guessing column names per jurisdiction,
+which is the exact trap `cris_buildings` is stuck in. The parcel-level equivalents *are*
+standardized (`BuildingCharacteristics`) and the Property Records card already shows them. So this
+is a REData-side gap - promote the per-building CAMA fields there - not an unread field here.
+
+`residual_geometry` (a parent envelope's footprint minus its polygon-bearing children) is genuinely
+unread, and on inspection has no consumer worth building: it does *not* fix Place-tree overlap,
+because a parent Place containing its children is correct hierarchy rather than the sibling overlap
+that was the actual bug. What it would support is a map annotation for "building mass no mapped wing
+accounts for", which is a real but narrow thing to want.
+
+**Hardcoded maps that filter out new REData providers.** ~~`satellite_imagery`'s
+`_REDATA_PROVIDER_NAMES` both restricts the request and gates rendering, so REData's `s2cloudless`
+provider is invisible~~ - fixed 2026-08-20. ~~`cris_buildings` reads one inventory's raw column names
+and so cannot show the other cultural-resource providers at all~~ - addressed 2026-08-20, and the
+count was low: REData registers **25** historic inventories and UrbanLens read one.
+
+`cris_buildings` was not the place to fix it. It renders CRIS's own raw ArcGIS columns (`USNName`,
+`USNNum`, `EligibilityDesc`), so it *has* to name its provider - handing it an NRHP row blanks the
+card, which is a bug that already happened once and is why the request was restricted in the first
+place. Widening it would have meant either re-introducing that bug or rewriting a working NY-only
+panel, its media gallery and its enrichment source.
+
+`plugins.builtin.redata_historic_registers` is the other half instead: one card over the whole
+registry, rendering only the fields REData standardizes (`name`, `resource_type`, `scope`, `status`,
+`year_built`, `architectural_style`, `use_type`) and never a provider's `attributes`. It discovers
+its providers from `/capabilities/` and excludes only `ny_cris`, which has the richer panel. New
+`RedataCulturalResourcesGateway` keeps the `{count, complete, results, providers}` envelope that
+`property_records.RedataGateway.lookup_cultural_resources` flattens away, so `RedataInfoPanelSource`'s
+outage rule applies - one inventory being down must not be cached as "this place is on no register".
+
+Two details worth keeping:
+
+- The register **name map is not a gate**. A provider missing from it renders under a title-cased
+  tag. Reading a display-name map as a permission list is precisely what hid `s2cloudless`, and the
+  test says so.
+- Only the kept fields are cached. `attributes`, `detail_payload` and `geometry` are per-provider,
+  large, or both, and cached payloads are read on every pin-detail render.
+
+**Still unread:** attachments outside CRIS. `nps_nrhp` can fetch a nomination *document*, and other
+providers declare their own `detail_fetchable_types`; this panel is search-tier only, so those
+never reach the Media gallery the way CRIS's survey photographs and inventory forms do. That is the
+natural next step and a bigger one - it needs a per-provider detail fetch and a proxy route per
+provider, not another panel.
+
+The satellite half, since the fix is not simply "call capabilities":
+
+- `s2cloudless` is **one global cloud-free Sentinel-2 mosaic per year since 2016**, delivered as a
+  tile template with a `captured_on` per year. For this app's subject that is the single most useful
+  source in the carousel - a yearly sequence is how you see a roof come off or a building
+  disappear - and the timeline endpoint was already fetching the captures, which the carousel then
+  dropped for having no entry in a dict in this repo. It was excluded with no recorded reason.
+- The provider list now comes from `GET /capabilities/`; what stays written down is
+  `_SHOWN_ELSEWHERE`, the handful another *UrbanLens* panel covers better (Esri's direct gateway,
+  the USGS topo panel, the historical-map picker) plus the `loc_` prefix for loc.gov's scanned-map
+  collections, which are generated on REData's side. A display name is looked up if we have one and
+  title-cased from the tag if we do not, so a new source appears rather than being dropped.
+- A capability outage falls back to the curated list rather than to nothing, unlike the
+  points-of-interest panel: `/imagery/` takes an explicit provider list either way, so the fallback
+  is a bounded request rather than a fan-out. **But an empty list means "all providers" at REData's
+  end**, so "everything applicable belongs to another panel" has to mean *no request at all* - there
+  is a test for that, because the two empty cases read identically at the call site.
+
+**Open, found while doing it: a `tile_template` slide is one 256px tile, and the pin can be at its
+edge.** `_resolve_tile_template` resolves the single tile *containing* the coordinate at zoom 15
+(~1.2 km across), so a site near a tile boundary is shown in the corner of its own photograph, or
+half out of frame. Tolerable for OpenTopoMap, where the slide is terrain context; wrong for
+`s2cloudless` and any future tiled imagery, where the slide is supposed to be a picture of the
+place. The fix is compositing a 2x2 or 3x3 block centred on the point, which is a real piece of
+work (fetch, stitch, encode) rather than a parameter change.
+
+**RESOLVED 2026-08-19: the points-of-interest registry is consumed.** It was the largest
+unconsumed surface and the one most relevant to this app - agency surveillance-camera registers,
+`osm_surveillance` (worldwide, and outside Chicago and Austin the only camera source there is),
+`fcc_asr` antenna structures, FAA facility groups, EPA contamination programmes, storage tanks,
+school layers - reachable only one provider at a time, with only `yelp` and `epa_echo` called.
+
+`plugins.builtin.redata_site_features` now surfaces them as one "Cameras & Structures" panel. Three
+things about *how*, since the obvious implementation would have been wrong:
+
+- **No provider list is hardcoded.** Most of these providers are generated on REData's side from
+  dataset tables, so their tags are not knowable to a client and a list here would silently stop
+  growing. The panel asks `GET /capabilities/?lat=&lng=` which providers cover the point - a bounds
+  test, no upstream call - and requests exactly those. That also answers the "capabilities is fetched
+  only to render one admin card" finding: it is now on the pin-detail path, cached an hour per coarse
+  coordinate, with its own rate-limit budget.
+- **Failed discovery asks nothing, not everything.** A request with no `provider` fans out across the
+  whole registry, which is the one outcome the capability lookup exists to prevent, so the failure
+  direction had to be the safe one.
+- **The two exclusion sets are kept apart.** `_SHOWN_ELSEWHERE` (providers with their own UrbanLens
+  panel) is a fact about this app's UI, so a test holds every entry to a registered panel key.
+  `_TOO_GENERIC` is one judgement about REData's taxonomy - `osm`'s generic point set, which would
+  make the panel about nothing in particular - and is the only entry a REData change could
+  invalidate. Writing them as one set hid that difference, and the test caught it.
+
+An earlier draft of this entry said `yelp` is billable, as a reason to curate. It is not:
+`billable=True` appears 11 times in REData and none are in this registry. The real cost is upstream
+queries and quota, not money.
+
 
 ## OPEN 2026-08-19: `main` cannot start from an empty database - conflicting migrations
 
@@ -77,6 +707,27 @@ to pick up without re-discovering the problem from scratch.
 Full-tree audit of `dashboard/frontend/ts/` (every file read, eight passes). The four
 security/safety items were fixed in the same pass; everything below was found but **not** fixed.
 Line numbers are as of 2026-08-15 and will drift.
+
+**Fixed 2026-08-19** (strike these when reading the list below):
+
+- The one-shot `AbortController` in `entries/photo-location-scan.ts`. Every scan now begins with a
+  fresh controller and cleared hits/clusters/selection (`beginScanState`), so the Firefox/Safari
+  `webkitdirectory` path survives a Stop and a re-scan no longer double-counts photos into
+  clusters. The directory-walk path passes `alreadyBegun` so the walk and Stop stay on *one*
+  controller - resetting twice would have made Stop silently do nothing.
+- The missing `pointercancel` in `shared/map-image-overlays.ts`. An interrupted touch drag on an
+  overlay corner left `map.dragging` disabled until reload; `pointercancel` and
+  `lostpointercapture` now run the same release handler, which is idempotent.
+- The dead people-label Merge button (`_organize_label_card.html`, `peopleMergeSingle`). Note the
+  fix is **not** the one the entry implies: wiring it to `label.merge` would 404, because
+  `KIND_USER` and `KIND_MEDIA` both set `enable_single_merge=False`. The control was for a
+  capability the server refuses, so it is gone. Guarded by
+  `tests/hypothesis/test_label_card_merge_affordance.py`.
+
+Also **not** a defect, checked 2026-08-19: `flatten_timeline`'s `capture_date_resolved` read. A
+later report claimed it looked at the wrong nesting level; `_resolved_flag`
+(`services/locations/imagery_timeline.py`) already checks `attributes` first and the top level
+second, and has since commit `8bf86daf`.
 
 **Highest-value single change:** ~40 raw `fetch()` call sites bypass `shared/fetch-json.ts`
 (`fetchJson`/`sendJson`), several with no `response.ok` check at all, so a non-2xx dies in a
@@ -239,134 +890,6 @@ This is deliberate and documented in `preference_field_names()`'s docstring ("Ca
 exactly these and must not invent defaults for the types that are missing"), and some of them -
 the safety escalation chain in particular - are arguably *right* to be non-silenceable. Recorded
 only so the gap is visible when someone asks why a given notification has no setting.
-
-## 2026-07-28: `Friendship.muted` is shared by both profiles, not per-viewer
-
-There is exactly one `Friendship` row per pair - `QuerySet.between()` matches either direction
-and `Friendship.request()` reuses whatever row already exists - so the `muted` boolean added in
-migration `0020_friendship_muted_flag` is a property of the *relationship*, not of one side of
-it. If A mutes B, B's own view of that relationship also reads `muted=True`.
-
-This is inherited unchanged from the `status='Muted'` encoding it replaces (a status column is
-just as shared), so nothing regressed - but the new flag makes it much easier to surface the
-value in a UI or API as "people I have muted", which would be wrong. The correctly shaped
-precedent is `DirectMessageMute`, keyed on `(viewer, sender)`.
-
-Fix is either two columns (`from_profile_muted` / `to_profile_muted`, set according to which
-side of the row the actor is on) or a small `FriendshipMute(viewer, target)` model alongside
-`DirectMessageMute`. Two columns is the cheaper change and keeps the single-row invariant that
-`between()`/`request()`/`unique_together` all depend on. Deliberately not done in the schema
-pass that introduced the flag: the brief was one boolean plus the data repair, and widening it
-to a directional pair would have changed the shape the API batch was told to expect.
-
-## 2026-07-28: `Friendship.muted` is stored but nothing reads it - muting a friend silences nothing
-
-Noted while splitting mute off `Friendship.status` (migration
-`0020_friendship_muted_flag`). The bug that split fixed was that muting **un-friended** people;
-what it did *not* fix is that friendship-mute has never actually suppressed anything. Grep for
-`muted` across `services/notifications/notifications.py`, `services/notifications/notification_delivery.py`,
-`services/notifications/notification_text_alerts.py` and `services/notifications/notification_center.py`: no hit. The two
-mute features that do work are unrelated models - `DirectMessageMute` (per-sender DM mute) and
-`GroupChatMembership.muted` (per-group mute) - and neither consults `Friendship`.
-
-So the profile page's Mute button, and the external API's `POST /friends/{uuid}/mute/`, both
-record a preference that no delivery path honours: the muter still receives friend-request,
-friend-accepted, pin-share, trip-invite and safety notifications from that profile. Repro: mute
-an accepted friend from their profile page, have them share a pin with you -> the notification
-still arrives, and `NotificationLog` still has an unread row.
-
-Fix is to make `Friendship.muted` an input to notification delivery in the same place
-`NotificationLog` rows are created from a `source_profile` - most cleanly a single
-`is_muted_by(recipient, source)` helper in `services/social/friendship.py` that
-`services/notifications/notifications.py` consults, so the check cannot be forgotten per notification type.
-Deliberately left out of the schema change: wiring a new suppression rule into every
-notification producer is a behaviour change of its own size, and the external API's `is_muted`
-surface (Batch S) needs the flag to exist first.
-
-## RESOLVED (verified 2026-08-19): 16 pre-existing failures outside every prior sweep's `-k` filter
-
-A full unfiltered run on this branch is green (11,436 passed / 0 failed, 2026-08-18). Whatever these
-were, they are not failing now. Original filing follows for the triage notes.
-
-### (ORIGINAL) OPEN 2026-07-28
-
-Every sweep so far this session used a `-k` keyword filter scoped to pin/wiki/location/friend/
-external-API territory. A full unfiltered run (`pytest src/urbanlens/dashboard/tests`, no `-k`,
-~70 minutes) surfaces a different, previously-unswept **16 failed, 7990 passed, 2 xfailed**. None
-of the 16 files were touched by anything in this session (last-commit dates 2026-07-22 through
-2026-07-25, `git log -1` per file) or relate to pins/wikis/locations/friends/the external API -
-this is a fresh, disjoint backlog, not a regression from today's work. **Only triaged, not fixed.**
-
-Two entries from the raw 18-failure sweep output are not real and should be discarded outright if
-re-seen: `test_zzz_client_probe_tmp.py` was a throwaway file created and deleted mid-session for an
-unrelated probe (see the `@given`+`self.client` CLAUDE.md entry) - the long-running sweep's
-collection phase had already imported it before the delete, so it ran from memory once, near the
-end of the ~70-minute run, off a module that no longer exists on disk. And
-`test_spotguessr_geo_bonus.py::BonusPointsForGuessTests::test_geocode_failure_earns_nothing_without_raising`
-is order-dependent pollution from the full run - it **passes standalone**, unlike the 16 below,
-which were re-verified to fail in isolation too (`16 failed, 1 passed` re-running just this set).
-
-Root-caused from a `--tb=short` capture, not yet fixed:
-
-1. **Not a bug - a run that crossed midnight.** `test_global_search_parser.py::
-   ParseQueryStructureTests::test_this_year_ends_today` failed with
-   `datetime.date(2026, 7, 28) != datetime.date(2026, 7, 27)` - the assertion computed "today" at
-   two different points ~70 minutes apart in a suite run that happened to straddle midnight. Not
-   reproducible on demand; would pass on any run that doesn't cross a day boundary mid-execution.
-2. **Unmocked live network calls** (the same class of bug fixed repeatedly earlier in this file):
-   `test_loopnet.py::FetchTests::test_unconfigured_gateway_gracefully_persists_empty` and
-   `test_trip_ai_suggestions.py::ApplySuggestedOrderViewTests::test_valid_permutation_applies` both
-   raised `RuntimeError: External network access is disabled during tests` against real IPs
-   (`10.2.0.214`, `5.148.170.168`). Check whether each is "test forgot to patch, sibling tests
-   show the pattern" (most likely, per every prior instance of this bug this session) or a
-   genuine missing gate in the view/service.
-3. **Test-only bug.** `test_redata_cid_gateway.py::RedataCidGatewayResolveCidsTests::
-   test_non_200_raises_gateway_request_error` - `TypeError: 'Mock' object is not subscriptable`.
-   The mock response object isn't shaped to support whatever subscript the code under test uses;
-   compare against a sibling test in the same file that mocks correctly.
-4. **Possibly Windows-specific.** `test_backup_services.py::BackupFilesTests::
-   test_returns_only_files_sorted_by_mtime_descending` (`[] != [WindowsPath(...new.sql),
-   WindowsPath(...old.sql)]`) and `CollectBackupStatsTests::test_collects_count_latest_size_and_settings`
-   (`0 != 2`) both show the service finding zero files where the test created two - the service's
-   discovery glob/pattern likely doesn't match on Windows path separators, or looks in a path this
-   test's temp dir isn't under. Worth checking whether this fails in Docker/CI too before assuming
-   Windows-only.
-5. **Possibly a real permission bug, worth prioritizing.** `test_trip_ai_suggestions.py::
-   TripAiSuggestionsViewTests::test_non_member_is_rejected` got `404` where it expected `403` - on
-   its face this reads like the uniform-404 privacy pattern used elsewhere in this codebase
-   (wiki discovery, trip detail - see the resolved trip-controller entry above), in which case the
-   test is stale and the code is behaving correctly. But it could also be a plain "wrong pin/trip
-   ownership lookup" bug that happens to 404 for the wrong reason. Read `TripAiSuggestionsView`
-   before assuming either way.
-6. **Hypothesis-found edge case, may be a real off-by-one.**
-   `test_searxng_image_query.py::AssembleImageQueryTests::test_group_count_matches_present_components`
-   failed on `aliases=['0'], area=['(']` with `4 != 3` - a generated alias/area combination made
-   the query-group count disagree with the number of query components actually present. Worth a
-   look at `assemble_image_query`'s group-counting logic directly rather than reverse-engineering
-   it from the failing example.
-7. **Assertion mismatches not yet read in detail** - each needs its own traceback before triage:
-   `test_avatar_colors.py::GroupMemberSearchAvatarColorTests::test_results_get_distinct_colors`
-   (`0 != 4`), ~~`test_dm_search.py::SearchDirectMessagesTests::
-   test_date_range_phrase_filters_by_created` (`[] != [1]`)~~ **FIXED 2026-08-05, see below**,
-   ~~`test_global_search_engine.py::PhotoSearchTests::test_finds_photo_by_generated_keyword`
-   (expected string not found in an empty result list)~~ **FIXED 2026-08-05, see below**,
-   `test_media_own_photos_preview.py::PhotosMediaPreviewTests::` both
-   `test_own_photo_tile_carries_image_id_and_coordinates` and
-   `test_own_photo_tile_without_coordinates_renders_empty_lat_lng` (`204 != 200` - both in the
-   same class, worth checking whether one shared fixture broke both),
-   `test_settings_tos_accepted_display.py::SettingsTosAcceptedDisplayTests::
-   test_shows_the_acceptance_date_when_recorded` ("Mar 4, 2025" not found in the rendered page -
-   possibly the same CSRF-token/date-formatting class of stale-assertion bug fixed elsewhere in
-   this file), and `test_trivia_stall.py::ForceRevealRoundTests::` both
-   `test_a_partial_answer_is_revealed_and_only_the_answerer_is_rated` (`'active' !=
-   TriviaSessionStatus.COMPLETED`) and `test_advances_to_the_next_round_when_more_remain`
-   (`1 != 2`) - both in the same class, likely one shared root cause in the force-reveal flow.
-
-Reproduce with (no `-k` filter, so the full ~70-minute runtime applies):
-```
-pytest src/urbanlens/dashboard/tests -q --reuse-db --tb=short
-```
-Re-running just the 16 test IDs above in one invocation reproduces all of them in ~5 minutes.
 
 ## OPEN 2026-07-27: ~46 pre-existing test failures on `feature/external-api-mobile-v2` (baseline-verified)
 
@@ -833,23 +1356,6 @@ profile). Until fixed, verify backend changes on these dev machines via direct D
 tests (no Django test client, no `realtime.broadcast`) plus a manual browser walkthrough against
 the running `docker compose up` stack, rather than the full `pytest` suite.
 
-## ~~SiteSettings.ai_article_expansion_enabled / ai_article_safety_enabled have no migration~~ (found and fixed 2026-07-25)
-
-While generating a migration for an unrelated new `SiteSettings` field
-(`ai_trivia_wiki_incorporation_enabled`, Trivia Phase 4), `manage.py makemigrations` reported
-these two fields as pending additions even though both are already defined on the model and have
-been in use since the "Implement AI article expansion and safety review features" commit. The
-migration squash ("squash into single migration for release") apparently ran before that commit's
-own migration was authored, or that migration was never committed - every test that creates a
-`SiteSettings` row (effectively the whole suite, via `promote_first_user_if_needed`'s
-`SiteSettings.objects.get_or_create`) failed with `ProgrammingError: column
-dashboard_site_settings.ai_article_expansion_enabled does not exist` on a freshly migrated DB.
-Initially left out of Trivia Phase 4's own migration as out-of-scope, but ended up blocking that
-same phase's dev-pod verification (wiki incorporation directly reuses the article-expansion
-pipeline), so it was folded into
-`0011_trivia_wiki_incorporation_setting.py` alongside the Trivia field rather than filed away
-again - see that migration's own comment.
-
 ## Setup wizard sidebar reuses inverting `--ul-grey-N` tokens on an always-dark panel (found 2026-07-25)
 
 `_setup.scss`'s `.setup-wizard__sidebar` sets `background: rgba(0,0,0,0.3)` on top of whatever
@@ -867,27 +1373,6 @@ missing/undefined custom property - fixing it means either converting the sideba
 tokens to a fixed light-on-dark scheme (like `_tokens.scss`'s `$ui-fp-*`/`$ui-link-on-dark`
 pattern for the map filter panel) or making the sidebar itself genuinely theme-aware. Worth a
 manual dark-mode check of `/setup` before shipping.
-
-## A few more hardcoded danger-red controls without dark overrides in `_pin_lists.scss` (found 2026-07-25)
-
-While fixing the `.saved-filter-region-mode-btn--active` include/exclude buttons (raw
-`#2e7d32`/`#c62828`, now real `--ul-color-success-text`/`--ul-color-danger-text` tokens), noticed
-several sibling controls in the same file with the identical pattern that were **not** in scope
-for that fix: `.pin-list-more-menu-danger` (`color: #ef4444 !important`, ~line 325),
-`.saved-filter-delete-btn` (`color: #ef4444`, ~line 629), and a related hover state at ~line 521
-(`color: #fca5a5`). None has a `[data-theme="dark"]`/`_dark.scss` counterpart. Given
-`--ul-color-danger-text` now exists and already resolves correctly in both themes, these three
-are likely a quick follow-up: swap the raw hex for `var(--ul-color-danger-text, <original-hex>)`
-the same way the region-mode buttons were fixed.
-
-**RESOLVED 2026-08-17 (chunk 582).** All five occurrences across the three controls now use the
-token, keeping their original hex as the fallback. `--ul-color-danger-text` is defined in `:root`
-and again under `[data-theme="dark"]` (`#f87171`), so it resolves in both themes as this entry
-said. The `#fca5a5` hover on `.pin-list-item-remove` was worth a second look rather than a
-mechanical swap: it is a *pale* red, chosen for a dark surface, on a control whose rest state
-already inverts through `--ul-grey-4` - so it was a light-mode contrast problem, not a deliberate
-lighter-on-hover treatment. Compiled clean with `sass`; the built CSS is gitignored
-(`.gitignore:9`), so the source change is what ships.
 
 ## Safety check-in partners: two residual gaps found during a fresh-eyes feature review (2026-07-25)
 
@@ -919,20 +1404,6 @@ Two narrower items were identified but deliberately left open:
   guard against it happening anyway (e.g. a future data-migration bug). Worth a "give up and flag
   for manual review after N failed attempts" backstop if this class of bug ever surfaces in
   practice.
-
-## `test_post_without_name_returns_400` is stale against UL-360's optional-name behavior
-
-`test_trip_controller.py::TripCreateViewTests::test_post_without_name_returns_400` (line ~224)
-posts `{"name": ""}` to `TripCreateView` and asserts a 400. Found failing during the pod
-verification of an unrelated trips-list-page/safety-checkin feature (2026-07-25) - not touched by
-that work. `TripCreateView.post` (`controllers/trip.py`) already has: `name = (body.get("name")
-or "").strip() or random_trip_name()` - per its own "Name is optional (UL-360)" comment, a blank
-submission has deliberately generated a random name instead of rejecting the request since UL-360
-shipped (2026-07-24, see the Feature build entry above). The test predates that change and was
-never updated; it should either assert `200` + a non-empty generated `trip.name`, or be deleted
-if UL-360's own test coverage (`test_trip_names.py`?) already covers the generated-name path.
-
----
 
 ## Full-codebase audit: re-verification pass (2026-07-25)
 
@@ -1120,42 +1591,6 @@ but re-check them then rather than assuming:
    the route and `import_pins_streaming` with it - a live URL that silently mis-places pins is
    worse than no URL.
 
-## `test_spotguessr_geo_bonus.py` leaks a real Valkey cache entry across tests (found 2026-07-26)
-
-Found while running the full Consensus/SpotGuessr regression suite alongside the new Facts
-system tests (unrelated to Facts - `services/spotguessr/geo_bonus.py` was never touched).
-`BonusPointsForGuessTests::test_geocode_failure_earns_nothing_without_raising` fails with
-`AssertionError: 750 != 0` even run alone in its own file (`docker compose exec test-runner
-python -m pytest src/urbanlens/dashboard/tests/hypothesis/test_spotguessr_geo_bonus.py`, 1
-failed / 8 passed) - so it's not cross-file pollution, it's within-class.
-
-`bonus_points_for_guess` -> `_reverse_geocode_admin_cached` (`services/spotguessr/geo_bonus.py:157`)
-caches Nominatim's admin lookup in the real Valkey cache keyed by rounded coordinates, and the
-test class never clears that cache between tests. `test_matching_every_offered_tier_stacks_the_bonus`
-and `test_no_match_at_all_earns_nothing` run earlier in the same file against the same
-`guess_point = Point(-73.75, 42.65, ...)` used by the failing test, so whichever of those wrote a
-cached "match" result first is still there when the geocode-failure test runs - the mocked
-`NominatimGateway` returning `None` never gets consulted because the cache short-circuits it.
-Fix is a `self.enterContext` cache-clearing fixture (or `cache.clear()` in `setUp`) in
-`BonusPointsForGuessTests`, matching how other Valkey-cache-touching test classes in this suite
-already reset between tests.
-
-
-- **`dev.urbanlens.org` sits behind Cloudflare, which caches everything under `/static/...`
-  (compiled `style.css`, `map-annotations.js`, `article-wysiwyg.js`, etc.) for 4 hours
-  (`Cache-Control: max-age=14400`), keyed on the exact URL - these files have no cache-busting
-  hash in their filename, so a fresh rebuild+redeploy does NOT make the live site serve the new
-  CSS/JS immediately; `curl -sD -` will show `cf-cache-status: HIT` and a `last-modified` older
-  than the actual rebuild. A live browser check done shortly after deploying a CSS/JS-only change
-  can silently verify the OLD stale asset while looking like a pass (structural/HTML changes are
-  unaffected - Cloudflare doesn't cache the dynamic page response, only `/static/` files).
-  **Workaround for verification**: fetch the asset with a cache-busting query string
-  (`curl "https://dev.urbanlens.org/static/dashboard/style.css?cb=$(date +%s)"`) to force
-  `cf-cache-status: MISS` and confirm what's actually at the origin, or use Chrome DevTools
-  Protocol's `CSS.getMatchedStylesForNode` (via a Playwright CDP session) to see which rule a
-  live page actually applied if a rendered value looks unexpectedly stale. (This applies to the
-  public dev/staging/prod deployments, not the local docker-compose stack described above.)
-
 ## Messaging / external API (noted 2026-07-26, during the mobile v2 messaging API build)
 
 - **WebSocket credential auth does no per-scope check.** `ApiKeyAuthMiddleware` (see
@@ -1322,31 +1757,6 @@ already reset between tests.
   audit query (`Friendship.objects.filter(status="Blocked", created__lt=<deploy>)`) rather
   than an automated migration.
 
-## 2026-07-28: `test_loopnet.py::FetchTests::test_unconfigured_gateway_gracefully_persists_empty` makes a real outbound connection on this machine
-
-Noted while running the full test suite as a regression check after adding `api_kinds =
-frozenset()` to five plugins' `PanelSource` subclasses (an unrelated change - see Part 6 of
-`docs/notes/mobile_app_notes.md`). This test's own docstring says it expects `RedataGateway()` to
-raise `ValueError` because it's *unconfigured* in the test environment, and only mocks
-`LocationCache.set`. On this machine it instead reaches all the way into `requests` and attempts a
-real TCP connection to `10.2.0.214:443`, which the test sandbox's `LocalhostOnlyNetwork` guard
-correctly blocks (`src/urbanlens/core/testing_network.py`) - so the symptom here is a hard failure
-rather than the silent false-negative the test is nominally guarding against.
-
-Root cause confirmed: this checkout's `.env` sets `UL_REDATA_API_URL=https://redata.urbanlens.org`
-(a real, working REData instance, `resolve`d to `10.2.0.214` here) plus `UL_REDATA_API_KEY` -
-legitimate for this developer's normal workflow against the real service, but Pydantic's
-`app.py` settings load `.env` unconditionally, so it also configures `RedataGateway` under
-`pytest`/`UL_ENVIRONMENT=test`. The test's own name ("unconfigured gateway") only holds on a
-checkout with no REData credentials in `.env` at all; on this one it isn't unconfigured, so
-`fetch()` proceeds past the `ValueError` branch straight into a real HTTP call, which the test
-sandbox's `LocalhostOnlyNetwork` guard (`src/urbanlens/core/testing_network.py`) then correctly
-blocks. Not fixed here - out of scope for the change that surfaced it (`git diff` confirms
-`plugins/builtin/loopnet.py`'s only edit was the additive `api_kinds` class attribute, nowhere
-near `fetch()` or `RedataGateway`) - but the test should mock/patch the gateway (or settings
-should force REData unconfigured under `UL_ENVIRONMENT=test` the way `settings/_gdal_windows.py`
-scopes its own local-only behavior) rather than depending on `.env` being REData-credential-free.
-
 ## 2026-07-28: `services/consensus/fields.py` - 9 pre-existing `[has-type]` mypy errors
 
 Found while running a full `mypy src/urbanlens/dashboard` sweep as part of the external-API P2
@@ -1403,18 +1813,6 @@ open each key's Credentials page and change "Application restrictions" from "HTT
 APIs the key may call) untouched. Requires Cloud Console access neither this session nor the
 REData session had. Confirm both keys - UrbanLens's Custom Search/Image Search key and REData's
 Places API (New) key may or may not be the same underlying Google Cloud project/key.
-
-## (ORIGINAL) 2026-07-30: SearXNG (`search.jmann.me`) image search 403s after coming back up from an outage
-
-Same production log sweep as the entry above. `search.jmann.me` was confirmed down (DNS resolution
-failures) earlier the same evening; once the operator brought it back up, `SearxngGateway.search`/
-`search_images` started getting `403` instead. `searxng.py` never set a `User-Agent` (defaulting to
-`python-requests/x.y`, a common bot-signature block target), so a `User-Agent` header was added as a
-cheap, safe mitigation (`searxng.py`'s `_USER_AGENT` constant, set in `__post_init__`). Not confirmed
-as the actual cause - equally plausible is the instance's own `limiter.toml` bot-detection or a
-fronting WAF/CDN (e.g. Cloudflare) rule that changed when the service was brought back online. If
-403s persist after the User-Agent change, check the instance's own access/limiter logs server-side -
-this session had no access to `search.jmann.me`'s host.
 
 ## 2026-07-31: REData's `/api/v1/parcels/lookup/` is in an OOM/WORKER-TIMEOUT crash loop on chiron
 
@@ -1557,968 +1955,6 @@ itself out as the cause.
 **If you hit this, invoke the file directly or build in the container.** Do not "fix" the
 build script - it is not what is broken.
 
-## Codebase audit (2026-08-06, module 1: core infrastructure) - findings & fixes
-
-- **`ApiCallLog` grew forever** - `prune_older_than_days` was written and documented as
-  the trim mechanism, but nothing ever called it, while every external API call runs three
-  rate-limit COUNTs over the table plus an INSERT. Now pruned daily
-  (`tasks.prune_api_call_logs`). Retention is 400 days, set by the table's *longest reader*:
-  the public costs page reconstructs a 12-month API-spend chart from these rows, so the
-  model helper's 90-day default would have silently zeroed three-quarters of that chart.
-  If you add a longer-window consumer of ApiCallLog, raise the retention with it.
-- **Slug retry loops retried on any unique violation** - `PublicDashboardModel.save()`/
-  `regenerate_slug()` matched any "duplicate key" IntegrityError, so a violation of an
-  unrelated constraint (e.g. Pin's one-pin-per-location-per-profile) burned 20 slug
-  regenerations and could mask the real conflict behind a uuid-suffixed slug. Now only a
-  violation naming a *slug* constraint retries; this makes "slug constraints have 'slug'
-  in their name" a load-bearing naming rule (verified: db_pin_unique_slug_per_profile,
-  uq_pin_list_profile_slug, uq_album_pin_slug/uq_album_wiki_slug, and the field-level
-  uniques on Location/Profile all qualify).
-- **Removed `abstract.Serializer`** - a custom DRF base with context-driven
-  include/exclude-fields machinery that no serializer ever subclassed (every real one uses
-  `serializers.ModelSerializer` directly). Unadopted abstraction; DRF's documented dynamic-
-  fields recipe covers the need if it ever materializes.
-
-Still open (bigger than this pass): `check_rate_limit`'s three COUNTs run per external
-call; fine while windows are indexed and the table is pruned, but a hot service could
-justify a cached counter. `EmailSendLog` is unbounded too - low volume (user-triggered
-email), so left alone deliberately.
-
-## Codebase audit (2026-08-06, module 2: pin/location/place) - findings & fixes
-
-- **`PinQuerySet.overlapping()` was O(n²) intersects plus 3-5 queries per pin** - and it is
-  user-reachable (the `overlapping_pins` saved-filter criterion), so a big collection turned
-  each map filter application into thousands of queries. Now select_relates every relation
-  `resolve_for_pin`'s fallback chain touches and sweeps sorted x-extents so only genuinely
-  bbox-overlapping pairs run real geometry. Still open: `Boundary.resolve_for_pin` itself is
-  per-pin (own row -> wiki row -> place polygon); a batched resolver using the existing
-  `rows_by_pin_id` would cut the remaining per-pin queries but changes a subtle fallback
-  chain - do it with care, with `map_pin_share_detection.py` as the pattern.
-- **`WikiCreationService` lived in `services/locations/creation.py`** - wiki creation filed
-  under locations, while every other wiki service lives in `services/wiki/`. Moved to
-  `services/wiki/wiki_creation.py`; all imports/docs updated.
-- **Stale TODO removed** - `Location.display_name` carried "TODO: assess for deletion" while
-  being load-bearing in tasks, comments, and the map controller.
-
-Noted, deliberately not changed: `Location.__setattr__` special-cases a duck-typed
-`google_place` for unit tests - test scaffolding in production code; removing it means
-fixing several tests to build real GooglePlace rows. `enrichment.py`/`external_data.py`
-carry seven "TODO: Catch specific exceptions" blanket handlers - each is a deliberate
-"never let one source break the cycle" guard, so narrowing them is safe only with
-per-source failure tests.
-
-## Codebase audit (2026-08-06, module 3: tasks/consumers/celery) - findings & fixes
-
-- **Redis visibility_timeout was the default 3600s with acks_late on** - exactly equal to
-  both the hard CELERY_TASK_TIME_LIMIT and the longest countdown= this app schedules
-  (import/export cleanup 3600s, check-in archival grace 1h). At that boundary a
-  legitimately long task, or a countdown sitting unacked in a worker, is redelivered and
-  runs twice. Now pinned to 2h via CELERY_BROKER_TRANSPORT_OPTIONS; keep it above
-  max(time_limit, longest countdown) if either grows.
-- **Two raw `.delay()` calls bypassed `safely_enqueue_task`** (DM address-mention
-  detection inside an on_commit callback, and fact-confidence recompute after evidence
-  recording). Both fire after their row is durably saved, so a broker outage turned an
-  already-successful write into a 500. Routed through the guarded helper; the facts test
-  that asserted on `.delay` re-pointed to the enqueue seam.
-
-Verified clean elsewhere: every signal connect carries dispatch_uid; every
-`.objects.get(pk=)` in tasks.py is DoesNotExist-guarded; no @shared_task lives outside
-tasks.py; consumers never touch the ORM outside database_sync_to_async; the beat schedule
-references no missing task, and no task is unreferenced. Queue split (default "celery" +
-"panel_fetch") matches the two workers' -Q flags.
-
-Also: the pre-audit full suite completed 10018 passed / 1 failed, the one failure being
-the facts test above mid-run (the run's snapshot was taken before that fix) - i.e. the
-tree entering this audit was fully green.
-
-## Codebase audit (2026-08-06, module 4: plugins/API gateways) - findings & fixes
-
-- **Digital Commonwealth was registered everywhere except where it mattered** - the
-  rate limiter and site-admin category map both knew the service, REData has fronted it
-  all along, and a direct-API `DigitalCommonwealthGateway` sat fully dead (never called by
-  any plugin) - so Massachusetts pins simply lacked the archive. Wired the missing half:
-  `DigitalCommonwealthMediaProvider` (REData `reference-documents/search/`, MA-gated,
-  same query-shape flags as its LOC/IA siblings), a `DigitalCommonwealthPlugin`, gallery
-  loaders on both pin and wiki pages, and an `ImageSource` value so wiki-sends keep
-  attribution. Deleted the dead direct gateway. 43 plugins now discovered.
-- **The admin "Search provider" picker was a dead control** - web search moved wholesale
-  to REData's own provider chain, so `SiteSettings.search_provider` was written by the
-  admin form and read by nothing; an admin changing it changed nothing. Removed the
-  picker, the setting (migration 0037), `SearchProviderChoice`, and the never-read
-  `mojeek_api_key`/`marginalia_api_key` env settings from the same era.
-- **Orphan rate-limit registry entries removed** - `google_search` and `news` had no
-  gateway, plugin, or caller anywhere; they only rendered as permanently-zero rows in the
-  admin API-usage report.
-- **Removed `StaticBoundaryProvider`** - its docstring said "kept for tests and explicit
-  callers"; there were neither.
-
-## Codebase audit (2026-08-06, module 5: media/images pipeline) - findings & fixes
-
-- **Eight redundant uuid indexes dropped** (migration 0038) - Pin, Image, Wiki, Trip,
-  Label, Comment, PinVisit, SafetyCheckin each declared `Index(fields=["uuid"])` while
-  `FrontendDashboardModel.uuid` is already `unique=True`, and a unique constraint *is* a
-  btree index in Postgres. Every insert/update on some of the hottest tables maintained a
-  second identical index for nothing. If you add a new FrontendDashboardModel, don't
-  re-add one.
-- **Map-overlay uploads bypassed the upload pipeline** - the overlay controller (added
-  earlier this week) did a raw `Image.objects.create`, skipping the quota check and its
-  per-profile lock, checksum dedupe, `file_size` (so an overlay sheet never counted
-  against quota), and the async EXIF/keyword ingestion. Now goes through the canonical
-  `services.photos.photo_upload.upload_photo`. Anything creating an Image from a *user
-  upload* must use that service; raw creates are for server-fetched bytes only
-  (materialize sets its own size/checksum).
-
-Verified clean: visible_to's per-uploader relationship checks are bounded by the
-gallery's distinct uploaders (documented tradeoff); every other Image-creating path sets
-file_size; media_source_key/media_item_key lookups are indexed; storage sums use the
-single-pass filtered-aggregate helper.
-
-## Codebase audit (2026-08-06, module 6: wiki/community) - findings & fixes
-
-- **Wiki pages had no way up to their parent** - wikis nest themselves (a building's wiki
-  becomes a child of the campus's, a documented feature), and `wiki_access.visible_parent_wiki`
-  was written specifically to make that link safe, but nothing ever called it: no template
-  rendered a parent breadcrumb, so a viewer landing on a nested building wiki was stuck
-  there. Wired it into the wiki hero beside "Back to my pin".
-
-  The gating is the point and is now covered by tests: within one access domain (a building
-  `PART_OF` its parcel) the parent is always reachable, but across a `MEMBER_OF` edge - a
-  campus earned only by holding *every* member parcel - the parent's **name must not reach
-  the response at all**, since a breadcrumb to a page that would 404 confirms a place the
-  viewer hasn't earned exists. The new test asserts absence from the response body, not just
-  absence of a link.
-
-Verified clean: every wiki-scoped controller and external-API view resolves through
-`resolve_visible_wiki` (the two `location_slug` users that don't - `maps.py` building a URL,
-`pin_edit.py` relinking a pin to a Location - aren't wiki access). No dead functions in
-services/wiki, services/comments, or services/consensus once helpers used within their own
-module are accounted for.
-
-Left alone deliberately: `place_visible_to` is public but referenced only by tests - it is a
-coherent part of the access module's public surface (the place-level twin of
-`location_visible_to`), so it reads as API completeness rather than dead weight.
-
-## Codebase audit (2026-08-06, module 7: messaging/e2ee/social) - findings & fixes
-
-- **Notification dropdown was a silent N+1** - `notification_item.html` reads the
-  `pin_share`/`visit_suggestion` reverse OneToOnes to decide whether to offer Accept/Decline
-  (a shared pin) or the three-way merge choice (a suggested visit), but all six call sites
-  selected only `source_profile`. Twenty rows therefore cost up to forty extra queries on
-  nearly every page load. The miss is *invisible* by construction: an absent reverse
-  OneToOne raises `ObjectDoesNotExist`, which Django templates swallow - so nothing breaks,
-  it just gets slow. Added `NotificationQuerySet.for_display()` and routed every
-  dropdown-rendering call site through it, so the relation set lives in one place as the
-  template grows. `notification_center` (external API) deliberately keeps its narrower
-  select: its serializer never reads those relations.
-
-  Worth recording how this was nearly mis-diagnosed: `NotificationLog` has no `pin_share`
-  field, so a field-list search says the template references something that doesn't exist,
-  which reads as "these buttons never render". They do - the names are the `related_name`s
-  of OneToOneFields declared on `PinShare`/`VisitSuggestion`. A reverse accessor is easy to
-  miss from the model's own side; check both directions before concluding a template branch
-  is dead.
-
-Verified clean: every `PinShare.objects.create` path (five of them - direct share, re-share,
-DM address detection, map share, trip share) resolves lineage and calls
-`record_share_exposure`, so the `LocationExposure` chain CLAUDE.md calls out is intact.
-Native push is fully wired (notification post_save -> on_commit -> `dispatch_native_push`).
-Comment mention-gating holds on every surface, including the external API, which serializes
-raw text only for comments that already passed the `VisibleComment` gate. No dead functions
-in services/messaging, services/social, services/sharing, or services/notifications.
-
-## Codebase audit (2026-08-06, module 8: auth/billing/subscriptions/security) - findings & fixes
-
-- **A redelivered Stripe payment could be credited twice (money bug).** `invoice.payment_succeeded`
-  is the one handler with a non-idempotent side effect: `banking.apply_payment` *increments*
-  `total_paid_cents`, which drives `granting_access_for` (i.e. how long pay-what-you-want access
-  stays granted). `StripeWebhookView` recorded the event, handled it, then marked it processed -
-  three separate autocommits. Two ways that double-credits, both of which Stripe's retry policy
-  makes routine rather than theoretical (it redelivers on any non-2xx **or timeout**):
-  a delivery that applied the credit but died before writing `processed_at` gets retried and
-  credits again; and two deliveries arriving at once both read `processed_at` as null and both
-  run the side effects. Handling and marking-as-handled now commit together inside one
-  `transaction.atomic()`, entered after re-reading the event row `select_for_update()` so
-  concurrent duplicates of the same event serialise on it. The audit row is still inserted in its
-  own prior transaction, so a delivery whose handler raises leaves its raw payload behind to debug
-  from. Regression tests cover both paths, including a handler-succeeds-then-marking-fails
-  delivery followed by a retry.
-
-- **TOTP replay protection was a read-modify-write.** `verify_totp_code` read `last_used_step`,
-  compared, then wrote the new step unconditionally - so two submissions of one intercepted code
-  (a phishing proxy replaying it into a parallel session) could both pass the comparison before
-  either wrote, which is the exact thing tracking the step exists to stop. The step is now claimed
-  in the same statement that checks it (`filter(last_used_step__lt=step).update(...)`, verdict from
-  the matched-row count), so Postgres serialises it and exactly one caller wins.
-
-- **The SiteSettings singleton was re-fetched several times per page.** `get_current()` is called
-  from ~80 places, and each was its own `get_or_create(pk=1)` round-trip: three separate context
-  processors fetch it on every request, then the controller fetches it again, then every
-  `user_has_feature()` check fetches it once more. Added a request-scoped memo
-  (`models/site_settings/request_cache.py`), armed by `request_started` and torn down by
-  `request_finished`. Deliberately **not** a process-wide or TTL cache: long-lived Celery workers
-  would pin a settings row for the life of the worker, and the test suite mutates settings through
-  `queryset.update()`, which bypasses `save()` and so cannot invalidate anything. Anywhere without
-  a request never arms the memo and reads through exactly as before. `post_save` clears it so an
-  admin editing settings sees their own change for the rest of that request.
-
-Verified clean: the Stripe webhook does verify signatures (`stripe.Webhook.construct_event` against
-`UL_STRIPE_WEBHOOK_SECRET`, 503 when unset) and is the codebase's only CSRF-exempt endpoint, for a
-documented reason. All 22 API scopes are enforced by at least one view; `ExternalApiView`'s
-fail-closed default genuinely holds (`credential_grants` returns False for a null credential or an
-empty requirement, and `OAUTH2_ONLY_SCOPES` is refused to PAT-style keys regardless of the stored
-grant); `UnscopedExternalApiView` is a documented, deliberate exception. API-key auth hashes with
-Django's password hashers and looks up by indexed public prefix, so it neither iterates every hash
-nor leaks by timing. Login 2FA is lockout-rate-limited. `services/billing/{banking,pricing,
-stripe_client}` and `services/security/{redact,malware_scan}` are all wired, with no dead functions
-in `services/auth`, `services/billing`, or `services/security`.
-
-Not a gap, though it looks like one: `controllers/comments.py` passes `skip_malware_scan=True`.
-The scan is deferred to a Celery task instead, with the comment held `pending_scan` (hidden from
-every other viewer) until it clears - a slow/occasionally-unavailable clamd used to fail whole
-comment submissions.
-
-## Codebase audit (2026-08-06, module 9: games, trips, safety, memories) - findings & fixes
-
-- **One bad safety check-in could silently suppress everyone else's escalation.** The three
-  safety beat tasks (`send_due_checkin_reminders`, `send_final_checkin_warnings`,
-  `escalate_overdue_checkins`) each looped a queryset calling a per-check-in service with no
-  per-item guard, so any exception aborted the whole run. `SafetyCheckin` has a deterministic
-  `ordering`, so a row that fails repeatably - corrupt contact data, an address the mail backend
-  rejects, a template that won't render - fails at the same position on *every* tick, and every
-  check-in behind it never escalates. The failure is silent and unbounded: the sweep just returns
-  early, and the people whose emergency contacts were never called have no way to know. This is
-  the most consequential loop in the app to leave unguarded, and the fix was already the
-  file's own convention - `sweep_due_safety_checkin_archival` immediately below, and all four
-  game/trivia/consensus stall sweeps, already isolate per item. These three were simply missed.
-  `escalate_checkin` is per-contact idempotent (`notified_at__isnull=True`), so retrying a failed
-  check-in on the next tick reaches only the contacts the failed attempt never got to.
-
-- **Same shape in two billing sweeps**, fixed while here. `advance_pwyw_usage_ledgers` had no
-  guard at all - and it is the only thing counting a canceled subscription's banked balance down,
-  so one bad row froze every other user's ledger. `sync_stripe_subscriptions` guarded the Stripe
-  *fetch* but not the *apply*, and `sync_from_stripe_subscription` indexes `items.data[0]`, so a
-  subscription in an unexpected shape aborted the sweep for everyone after it.
-
-- **The Memories feed re-queried up to three times per trip.** `_trips_for_range` annotated
-  `_eff_start`/`_eff_end` to filter on, then discarded them and re-derived the same two dates
-  through `Trip.effective_start_date`/`effective_end_date` (a query apiece for any trip without
-  explicit dates), then called `_trip_representative_point`, which ran a third. Now the
-  annotations are used directly and activities arrive via a `Prefetch` carrying the same
-  `select_related`/ordering the point helper wants. Pinned with a test asserting the query count
-  is flat from one trip to six.
-
-- **The same code filtered and displayed trips by different definitions of "ends".** That
-  annotation took `Max(activities__scheduled_at)` while `effective_end_date` takes the later of
-  `scheduled_at` and `scheduled_end`. A trip whose final activity *runs past* the last start time
-  fell in the gap: filtered out of a window it visibly overlaps. The annotation now uses
-  `Greatest(Max(scheduled_at), Max(scheduled_end))` (Postgres's `GREATEST` ignores NULLs, so an
-  activity with no end doesn't erase the max), so the two agree by construction.
-
-- **Wired up `trip_name_suggestions`**, written for the create-trip dialog's placeholder rotation
-  and never called. The dialog carried a hand-maintained 12-name JS array instead - a second list
-  that would drift from the generator that actually names blank-submitted trips. Now exposed
-  through a `trip_name_ideas` template tag (matching the existing `subscription_role_choices`
-  precedent, since the dialog is included from two pages) and handed to JS via `json_script`.
-
-Verified clean: a definition-level sweep for unwired public functions across all four subsystems
-came back empty apart from the above - calendar sync, trip AI suggestions, and the trip signal
-receivers are all properly connected (`@receiver` plus the `apps.py` import). Games access control
-is systematic: every session-scoped SpotGuessr view resolves through `_participant_session`, which
-404s rather than 403s so a non-participant can't confirm a session id exists, and host-only actions
-(`begin_session`, `end_session_now`) check `host_profile_id` in the service layer rather than the
-view. The memories aggregator's other three sources already `select_related` correctly.
-
-Note on method: an early dead-code sweep that excluded each function's whole defining file produced
-17 false positives (`clamp_rounds`, `can_delete_comment`, `invite_members` and more are all called
-by their own module's public entry points). Excluding only the `def` line itself cut it to three.
-
-## Codebase audit (2026-08-06, module 10: frontend TS, templates, SCSS) - findings & fixes
-
-- **A multi-line `{# #}` comment was rendering to users on the wiki page.** Django's lexer matches
-  comments with a non-DOTALL `{#.*?#}`, so a `{#` whose `#}` sits on a later line is never
-  tokenised as a comment at all - it falls through as ordinary text and prints verbatim in the
-  middle of the page. `pages/location/wiki.html` had one, three lines of internal notes about
-  pin-count truncation, rendered right under the "First pinned" stat. Nothing fails loudly: the
-  page still returns 200 and the markup around it is fine, which is exactly why it survived.
-  Converted to `{% comment %}`, and added `test_template_comment_lint.py` - a `SimpleTestCase`
-  (no DB, runs in under two seconds) that scans all 416 templates for the same shape, so the
-  rule CLAUDE.md already states is now enforced rather than remembered.
-
-- **The pin cache's version and key were hardcoded on both sides of a cross-language contract.**
-  `pages/map/index.html`'s inline script is the only writer; `pin-cache.ts` is the reader; the
-  version (`v: 8`, `c.v !== 8`) and the key (`ul_pins_v5_${uuid}`) were spelled out independently
-  in each. A one-sided bump makes every read return `[]` - no error, the features built on it just
-  go quiet. This is not hypothetical: the module's own comment records that it already happened
-  (the reader sat on v6 after the writer moved on). Exported `PIN_CACHE_VERSION`/`pinCacheKey`
-  and added `pin-cache.contract.test.ts`, which parses the template and fails when the two sides
-  disagree. Confirmed it genuinely fails on drift by bumping one side before committing.
-
-- **Deleted `shared/parent-search.ts`** - dead on three independent counts: no entrypoint imports
-  it (so it is never bundled and the `window.filterParentOptions` global it installs never
-  exists), no template calls that global, and the `.tag-parent-option` class it queries appears
-  nowhere but inside the file itself. It is a superseded client-side filter; the live UI does
-  server-side search against `/map/pins/parent-search/`.
-
-Verified clean: a reachability walk from the 14 real entrypoints found only that one orphan plus
-`tools/generate-e2ee-fixture.ts` (a dev tool, legitimately run by hand). Every `|add:` on an id in
-all 416 templates already goes through `|stringformat:"s"` - the documented `''`-collapse gotcha
-has been fixed thoroughly. No orphaned SCSS partials. No other template/JS data duplication of the
-kind the trip-name array was: every hardcoded JS array in a template is an empty accumulator, and
-the one enum-shaped list (`_TRIP_TABS`) is a set of DOM tab names, not a mirror of a server enum.
-`tsc --noEmit` is clean and all 150 bun tests pass.
-
-Pre-existing, not fixed here: `bun run build` fails at `Formats besides 'esm' are not implemented`
-when it reaches the `entries-classic` (iife) step, with the installed Bun. Confirmed identical at
-HEAD, so it is not a regression from this work. Note it partially writes output before failing -
-it deleted `core.js`/`e2ee.js`/`permissions.js`/`webauthn.js` from the tracked static output and
-rewrote the esm bundles. Anyone running it needs to `git checkout` the static js directory
-afterwards; the tracked build artifacts should not be committed from a run that aborts halfway.
-
-## Codebase audit (2026-08-06, module 11: settings, urls, labels/saved-filter/search/import-export) - findings & fixes
-
-- **`UL_EMAIL_TLS=true` silently disabled STARTTLS.** `base.py` parsed it as
-  `os.getenv("UL_EMAIL_TLS", "True") == "True"` - a literal string comparison, so every spelling
-  but exactly `True` evaluated to False. The same variable is *also* declared in `app.py` as a
-  pydantic `bool`, which accepts `true`/`1`/`yes`/`on`, so the two readers of one variable
-  disagreed - and the disagreement resolved toward sending SMTP credentials and every outbound
-  mail in plaintext, while the operator's env file plainly said TLS was on. Nothing surfaces
-  that: mail still sends. `.env-sample` ships `True`, which is why it went unnoticed. Added
-  `settings/_env.py:env_bool()` (accepts the spellings people actually write, and falls back to
-  the *default* rather than False on an unrecognised value, since False is the unsafe direction
-  here) and routed both `EMAIL_USE_TLS` and `EMAIL_USE_SSL` through it.
-
-- **Removed three env vars from `.env-sample` that no code reads**: `UL_DPLA_API_KEY`,
-  `UL_US_CENSUS_API_KEY`, and `UL_CLOUDFLARE_WORKER_AI_API_KEY`. An operator setting these gets
-  silence - the census gateway (`census_tigerweb`) is keyless, DPLA is an unbuilt roadmap
-  candidate (it stays documented in `docs/ROADMAP.md`, which is where a not-yet-built integration
-  belongs), and the Cloudflare one is a near-miss for the real `UL_CLOUDFLARE_AI_API_KEY` /
-  `UL_CLOUDFLARE_WORKER_AI_ENDPOINT` pair, both of which do exist and are untouched.
-
-- **Two URL patterns share the name `404`** (`UrbanLens/urls.py:113` and
-  `dashboard/urls.py:1997`), both in the root namespace, so `reverse("404")` is ambiguous and
-  resolves to whichever registered last. Left as-is deliberately: nothing reverses that name, and
-  both catch-alls are correctly *scoped* (the dashboard one only sees `/dashboard/*`, since the
-  app is included under that prefix), so this is a naming wart rather than a routing bug. Noted
-  here so the next person who greps for it doesn't re-derive the analysis.
-
-- **`admin_username` / `admin_email` settings are read by nothing.** They export as
-  `ADMIN_USERNAME`/`ADMIN_EMAIL`, which are not Django settings and which no code consults. Left
-  in place (removing pydantic fields is a crash-loop risk class per CLAUDE.local.md, for no
-  functional gain) but recorded as dead configuration.
-
-Verified clean: of 89 pydantic settings fields, only those two are genuinely unread - the other 14
-that a naive grep flags are consumed through `app.py`'s uppercase auto-export into Django settings
-(`ROOT_URLCONF`, `TIME_ZONE`, `STATIC_URL`, ...), which a lowercase search misses. Route names are
-otherwise collision-free across namespaces (the only other same-namespace duplicates are DRF's own
-format-suffix pairs). No dead code in `models/labels`, `models/saved_filter`, `services/search`, or
-`services/import_export` - the four label signal receivers a definition-level sweep flags are all
-`@receiver`-decorated with `dispatch_uid` and connected on import. The export path is thoroughly
-prefetched: every `.all()` iteration over an M2M has a matching `prefetch_related` on the queryset
-feeding it. The import path bounds decompression against zip bombs. `saved_filter_cache` keys on a
-fingerprint of `updated` timestamps, so entries self-invalidate rather than needing explicit
-invalidation hooks.
-
-Corrected mid-audit: I initially read `_queryset_for_kind` (labels controller) as an N+1, since it
-calls `.with_pin_counts()` where the organize page calls `.with_hierarchy()`, and the shared card
-template reads `label.parents.all`. It is not - `with_pin_counts()` prefetches `parents` and
-`children` itself. Worth recording because the shape (two call sites, one prefetch helper) is
-exactly the module 7 notification bug, and here it turned out fine.
-
----
-
-## Codebase audit (2026-08-06): consolidated summary of modules 1-11
-
-Eleven modules, one pass each, module-by-module across the whole codebase. 26 distinct defects
-fixed. Each module's own section above has the detail; this is the shape of what was found.
-
-**The four that would have hurt most in production**, all silent-failure bugs - the system keeps
-returning 200s and the damage is invisible until someone goes looking:
-
-1. *One bad safety check-in could suppress everyone else's escalation* (module 9). Three beat
-   tasks looped without per-item guards over a deterministically-ordered queryset, so a single
-   repeatably-failing row starved every check-in behind it, on every tick, forever. Emergency
-   contacts silently never called.
-2. *A redelivered Stripe payment could be credited twice* (module 8). Handling and
-   marking-as-handled were separate commits, and the credit is an increment. Stripe retries on
-   timeouts, so this was routine, not theoretical.
-3. *`UL_EMAIL_TLS=true` silently disabled STARTTLS* (module 11). A literal `== "True"` compare
-   against a variable that pydantic elsewhere parses as a bool - SMTP credentials and all mail in
-   plaintext while the env file said otherwise.
-4. *Redis `visibility_timeout` left at 3600s with `acks_late` on* (module 3). Any task running
-   over an hour gets redelivered and runs twice, concurrently.
-
-**Recurring patterns, worth internalising more than any single fix:**
-
-- *Two call sites, one fix.* Repeatedly a helper existed and was used correctly in one place and
-  missed in another: notification prefetch (7), safety sweep isolation (9, where the file's own
-  archival sweep three functions below already did it right), billing sweeps (9). When fixing a
-  N+1 or adding a guard, grep for every caller of the same template/service - the second one is
-  usually there.
-- *Read-modify-write where the DB could do it atomically.* TOTP replay steps, webhook
-  idempotency, storage quota, `get_nearby_or_create` - each a check-then-act that two concurrent
-  requests both pass.
-- *Duplicated constants across a language boundary.* The pin-cache version (10), the trip-name
-  list (9), `EMAIL_TLS` vs `EMAIL_USE_TLS` (11). None of these can be caught by types; they need
-  a test that reads both sides, which is now what guards the pin cache.
-- *Silent-by-construction failures.* An absent reverse OneToOne that Django templates swallow
-  (7), a cache-version mismatch that just returns `[]` (10), a sweep that returns early (9). The
-  common thread: no exception, no log, no user-visible error - only a test asserting the
-  *positive* behaviour catches them.
-
-**On method.** Two things repeatedly produced false leads and are worth flagging for whoever
-audits next. First, definition-level "dead code" sweeps: excluding a function's whole defining
-file yielded 17 false positives in module 9 alone (functions called by their own module's public
-entry points), and `@receiver`-decorated signal handlers look unreferenced no matter how you grep.
-Every "dead" finding here was confirmed by hand before deletion, and three suspected N+1s and one
-suspected dead template branch turned out to be fine on inspection - those are recorded too, since
-a wrong conclusion re-derived later costs as much as the original bug. Second, this environment's
-test suite: running against the dev compose stack trips the localhost-only network guard for every
-page-rendering test, so raw failure counts are meaningless. Every module's suspicious failures
-were re-run against a HEAD baseline before being attributed; in each case (166, 88, 19) the
-baseline was identical and the changes were clean.
-
-**Known-broken, not fixed here:** `bun run build` fails at its `entries-classic` (iife) step with
-the installed Bun, and deletes tracked static output before failing (module 10).
-
-## Second pass (2026-08-06): concurrency & data-integrity races - findings & fixes
-
-The first pass kept turning up one shape - check-then-act that two concurrent callers both pass
-(TOTP replay steps, the Stripe webhook marker, storage quota, `get_nearby_or_create`). This pass
-went looking for the ones it missed, prioritising money, quotas, access grants and safety.
-
-- **Consensus tentative answers were accumulated without a lock.** `record_tentative_answers` is
-  find-then-bump-or-create, and two rounds resolving at once for the same wiki is ordinary, not
-  exotic - separate sessions play the same popular wiki concurrently. A threaded test reproduces
-  it exactly: both reads miss, both insert, and one dies with
-  `IntegrityError: duplicate key value violates unique constraint "db_consensus_tentative_unique"`,
-  taking round resolution down with it and losing the players' answers. No unique constraint can
-  cover this on its own - the coordinate branch dedups by *proximity*, which no constraint can
-  express, so there the same race is silent instead: two rows for one location with support split
-  across them, meaning a value the community actually agreed on never reaches the promotion
-  threshold. That is the feature failing at its whole purpose, quietly. Fixed by locking the
-  parent wiki for the upsert, which covers both branches, makes the row-level `+=` safe, and only
-  ever contends with another resolution for the same wiki.
-
-- **E2EE key reset applied rewraps computed against a superseded key.** The endpoint read the
-  bundle, had the client rewrap every conversation and group envelope against *that* public key,
-  and only then opened its transaction - the docstring's "one atomic transaction, no partial
-  state" was true of the writes but not of the read they depended on. A second reset landing in
-  between (a double-submitted or retried request - the endpoint is slow, so this is the realistic
-  path) meant the second request applied its rewraps on top and overwrote the version. Confirmed
-  at HEAD: the test drives a competing bump to v6 mid-flight and the request still returns 200,
-  logging `now v2` - it clobbers the newer bundle and seals conversations to a key the bundle no
-  longer advertises. Those threads are then undecryptable, and there is no recovery path. Fixed
-  by re-reading the bundle `select_for_update()` inside the transaction and returning 409 if the
-  version moved; the client restarts against the current key. The request has to lose cleanly
-  rather than half-succeed.
-
-Verified clean: `services/consensus/points.py` already locks its `ConsensusProfile` row correctly,
-and the trivia/consensus/spotguessr round-completion checks all operate on a `locked_round`. The
-E2EE *enrollment* check-then-act (`exists()` then `create()`) is backstopped by `profile` being a
-`OneToOneField`, so a concurrent double-enroll fails loudly with an IntegrityError rather than
-producing two bundles.
-
-Recorded, not fixed: a family of count-then-create limit checks (`max_partners`, `max_upcoming`
-trips, `max_members`, `max_activities`) can each be exceeded by one or two under concurrent
-requests. Real, but bounded and self-correcting - a user ends up slightly over a soft cap, with no
-corruption and nothing unrecoverable - so they are noted here rather than each acquiring a lock.
-
-Method note: this environment cannot run most of the affected suites - the Redis network guard
-fails every test whose request path touches the cache, including the *entire* class the E2EE reset
-tests live in (36 of 47 fail at HEAD). Both fixes here were verified by pinning that one test's
-cache to locmem and running the RED/GREEN pair explicitly against HEAD and against the fix, rather
-than by reading a green summary line.
-
-## Second pass (2026-08-06): cross-module interactions - findings & fixes
-
-Looking for bugs that live *between* modules, which a module-by-module pass structurally cannot
-see: each module looks correct in isolation and the defect is in the seam.
-
-- **Deleting a pin from its detail page left a ghost marker on the map.** Three correct-looking
-  pieces compose into a bug. (1) The map caches pins in localStorage. (2) Its background poll
-  decides whether to refresh by comparing `Max(updated)` across the profile's pins - which a
-  *deletion* cannot advance, so the poll is structurally blind to deletions; the only signal is
-  the `ul_pins_dirty` flag. (3) `deletePinCascade` is a shared helper in `base.html` called from
-  both the map page and the pin detail page, and it did not set that flag - the map's call site
-  set it separately, and the detail page's call site did not. So a pin deleted from its detail
-  page stayed in the map's cache indefinitely, restored on every subsequent load, with a marker
-  that 404s when clicked. It only self-corrected in the one case where the deleted pin happened
-  to be the most recently updated one, which changes `Max(updated)` and trips the poll's
-  not-equal check by accident.
-
-  Fixed in the shared helper rather than at the second call site, so every present and future
-  caller inherits it. Guarded by a contract test that brace-matches the helper's body out of the
-  template and asserts the flag is set on the success path (and not before the user-cancelled
-  bail-outs) - the same approach used for the pin-cache version contract, and for the same reason:
-  the invariant spans a template and its callers, where no type or constraint can reach.
-
-  Checked the neighbours: map bulk-delete is map-only and manages the cache directly, and
-  undo-restore recreates the row with a fresh `updated`, which the poll does catch. Deletion was
-  the unique blind spot.
-
-Verified clean: every `@receiver` in the codebase passes `dispatch_uid`. No Celery task is
-enqueued inside a `transaction.atomic()` block without `on_commit` (checked by AST, not grep). No
-`@shared_task` calls `.objects.get()` unguarded, so a task dispatched by one module tolerates
-another module deleting its subject first. All six user-upload paths that create an `Image`
-(gallery x2, safety, consensus, direct messages, and the shared photo-upload service) run the
-`image_upload_error` gauntlet. All six `PinShare.objects.create` paths pair with
-`resolve_and_stamp_origin_share`/`resolve_origin_share` + `record_share_exposure`, so the
-`LocationExposure` provenance chain CLAUDE.md calls out is intact. Every render of
-`notification_item.html`, including the single-item re-render after marking one read, goes through
-`NotificationQuerySet.for_display()`.
-
-## Second pass (2026-08-06): access control - findings & fixes
-
-- **Relinking a pin was a way to *earn* wiki access rather than discover it.** Wiki visibility is
-  deliberately gated on discovery - `location_visible_to` grants on an exact `Location` match - so
-  which Location a pin points at is not a neutral preference, it is the thing that confers access.
-  `PinRelinkView` scoped the *pin* to the requester (`_pin_for_user`) but resolved the target
-  `Location` straight from the URL slug with no visibility check. And a Location's slug is its
-  `official_name` (falling back to uuid only when unnamed), so the slug of any notable place is
-  guessable: the test's undiscovered location slugs to literally `hudson-river-state-hospital`.
-  Any authenticated user could therefore POST `pin/<their-pin>/link/<guessed-slug>/` and read the
-  community wiki for a place they had never found - defeating the discovery rule CLAUDE.md calls
-  out as deliberate design. Confirmed end to end against current code: before the fix the wiki
-  returns 404, the relink succeeds, and the same wiki then returns 200.
-
-  Fixed by requiring `location_visible_to(location, pin.profile)` before relinking. This breaks no
-  legitimate flow, which is why the gate is safe rather than merely strict: the location picker
-  offers the pin's own location plus `competing_wiki_locations`, which already filters to
-  `accessible_domain_ids`, and the wiki page's switch button offers those same candidates - every
-  reachable target already passes.
-
-Verified clean, mechanically rather than by eye: an AST sweep for `get_object_or_404` on a
-request-supplied id with no scoping kwarg and no pre-filtered queryset found 59 call sites, and
-every one either re-checks ownership on the next line (`image.profile_id != profile.pk`,
-`suggestion.profile_id != profile.pk`), gates through a service (`is_accepted_partner`,
-`is_owner_or_accepted_partner`), is a token credential, or is admin-only. `detail_pins.py` resolves
-a Location from a slug but gates it with `location_visible_to` immediately. All three
-wiki-scoped `Image` queries apply `.visible_to(profile)`. `views_wiki.py` consistently re-scopes
-children to the resolved wiki (`get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)`). The wiki
-access helpers are fail-closed on a missing place or domain root.
-
-### Environment: the dev container was 30 tracked files behind the working tree
-
-Found while chasing a `ModuleNotFoundError` for `services.places`: the `app` container image was
-built from an older commit and was missing 30 tracked files - the whole `models/place`,
-`models/album` and `models/map_overlay` packages, several controllers, and migrations 0026-0038.
-Every `docker exec ... pytest` run in this audit before this point therefore executed against a
-materially older codebase than the working tree.
-
-The HEAD-vs-fix baselines stand (both sides ran in the same stale container, so the comparison was
-like-for-like, and that is what the no-regression conclusions rest on), but any absolute
-"the suite passes" reading of those runs was weaker than it looked. `docker cp src/urbanlens/.
-urbanlens_devs1_app:/app/src/urbanlens/` resyncs it; the pin-relink fix above was re-verified both
-ways *after* syncing. Worth checking the container is current before trusting a test run here.
-
-## Re-verification against the synced container (2026-08-06)
-
-Every `docker exec ... pytest` run in this audit before the resync executed against an image 30
-tracked files behind the working tree. Re-ran everything that matters now that `/app/src` matches.
-
-- **All 36 regression tests this audit added still pass** against current code with the full
-  migration set (0026-0038 present, so a fresh test database). The bun suite is green at 152/152
-  and `tsc --noEmit` is clean. No fix in modules 1-11 or the second pass depended on the stale
-  schema.
-
-- **The container also held 46 files that no longer exist in the repo**, since `docker cp` adds but
-  never deletes. Five were deleted plugin modules under `plugins/builtin/` - and
-  `plugin_registry.discover()` scans that directory, so the container was registering
-  `duckduckgo`, `marginalia`, `mojeek`, `searxng` and `opentopomap` as live plugins after module 4
-  removed them. Deleted them so discovery matches the codebase. No stale *migrations* were present,
-  so the migration graph was never wrong.
-
-- **Correction to the pin-relink fix (a regression I introduced and caught here).** The first
-  version gated relinking on `location_visible_to` alone. That was too strict: `PinRelinkViewTests`
-  - six pre-existing tests I could not run before the resync - relink to a bare `Location` with no
-  `Place` row, which that predicate rejects. Since the Places feature is recent (migrations
-  0026-0028) and `Location.place` is nullable, a place-less target is an ordinary production case,
-  not a test artifact, so the strict gate would have broken real relinking.
-
-  The gate now accepts a target two ways, matching what the UI actually offers: one the profile can
-  already reach, *or* one covering the pin's own coordinate (`get_all_for_point`, which falls back
-  to a 50 m proximity check for place-less coordinates). A place the user's own pin sits inside is
-  one they discovered by pinning it, so allowing it discloses nothing they could not derive - while
-  a Location kilometres away with no relationship, which is the attack, is still refused.
-
-  Four of those six tests placed their target kilometres from the pin, which quietly asserted that
-  relinking to an arbitrary Location was allowed - the hole itself, encoded as a contract. Moved
-  them inside the pin's own domain, preserving exactly what each test verifies (uuid-slug fallback,
-  merge-vs-relink, another profile's pin not triggering a merge), and documented on the class why
-  the coordinates are deliberate. All six pass with the corrected gate, as do the five
-  pin-relink-access security tests.
-
-Worth stating plainly: the too-strict first version passed every test I could run at the time. It
-was caught only by reading the fixtures of tests the environment could not execute. When a test
-cannot run, its assertions still encode a contract - read them.
-
-## Recheck of the place/album/overlay suites (2026-08-06)
-
-- **All 34 failures were the test suite's own cache configuration, not defects.**
-  `settings/test.py` inherited `base.py`'s Redis/valkey-backed `CACHES`, so any test whose request
-  path touched the cache depended on a live external service. Under the suite's localhost-only
-  network guard that fails with an opaque "External network access is disabled during tests" -
-  a message about the environment that says nothing about the code. Pointing the test cache at
-  locmem turned the nine suites from 34 failed / 125 passed into **159 passed**, with no other
-  change. That covers module 5's map-overlay upload fix and the albums work, whose models were
-  absent from the container when those modules were audited and had therefore never actually been
-  exercised; both are now genuinely verified.
-
-  This was worth fixing at the source rather than per test class. It is also correct on its own
-  merits: tests previously shared one cache instance, so entries could bleed between them, and
-  locmem is per-process and needs nothing running.
-
-- **The container held 10 orphaned test files** for modules this audit deleted earlier -
-  `test_abstract_serializer` (module 1 removed `abstract.Serializer`), the five search-provider
-  suites (module 4), and the Smithsonian/Internet Archive/NPS gateway suites (migrated to REData).
-  None are tracked in the repo; they were leftovers from the old image, and they aborted full-suite
-  collection with import errors for modules that no longer exist. Removed, so the container's tree
-  now matches the repo exactly.
-
-The through-line of this whole re-verification: for most of this audit, "the suite fails here" was
-treated as an immovable property of the environment and worked around one test at a time. It was a
-one-line defect in the test settings. Time spent early on making the harness trustworthy would have
-paid for itself many times over - every module's verification was weaker than it needed to be, and
-one fix (the pin-relink gate) shipped a regression that a runnable suite would have caught
-immediately.
-
-## Full-suite baseline (2026-08-06)
-
-First complete run of the test suite in this audit, possible only after pointing the test cache at
-locmem. **18 failed, 10,025 passed, 1,428 subtests passed, in 58 minutes** (`pytest src/urbanlens`,
-container synced to the repo, fresh test database). That is a 99.8% pass rate and the reference
-point future work should measure against - previously there was no number at all, only per-file
-runs whose failures were indistinguishable from environment noise.
-
-Triage of all 18, none caused by this audit's changes:
-
-- **12 panel failures** (`test_panel_feature_gate` x3, `test_pin_panel_info` x7,
-  `test_pin_panel_live_refresh` x2) - **pre-existing, genuine, and worth a dedicated
-  investigation.** They fail with `204 != 200`: the tests seed `LocationCache` for a panel source
-  and expect the panel to render, but the view falls through to its pending-loader path and then
-  returns 204 from `attempt >= MAX_POLL_ATTEMPTS or not schedule_panel_fetch(...)`.
-  `MAX_POLL_ATTEMPTS` is 30 and the tests pass `attempt=1`, so the 204 comes from
-  `schedule_panel_fetch` returning falsy after a cache lookup that missed data the test just wrote.
-  A sibling test seeding `nominatim` the same way passes, so it is source-specific rather than a
-  broken mechanism. If the lookup really does miss in production, pin-detail panels silently render
-  nothing; if it is only the tests that are stale, they are asserting a contract the code no longer
-  has. Either way it needs resolving - flagged here rather than guessed at.
-
-  Confirmed not mine: reverting the SiteSettings request memo in the container reproduced exactly
-  the same 5 failures in the two files I re-ran (5 failed / 15 passed both ways).
-
-- **5 infrastructure-stats failures** (`test_site_admin_stats` x4, `test_infrastructure_stats` x1) -
-  environmental, and already recorded as such in module 1. They collect live postgres/valkey/celery/
-  nginx status, which no test environment can satisfy without those services reachable.
-
-## Unit 08 (deferred item, now fixed): media send-to-wiki no longer downloads in-request
-
-`media_send_to_wiki` looped up to 20 gallery items calling `materialize_media_item`, each a remote
-download, inside the request handler. Two problems, both user-visible: a multi-second hang with no
-progress indicator, against the project standard that says anything non-instant shows one; and a
-request that times out partway attaches some photos and drops the rest silently while the frontend
-toast reports success for all of them.
-
-Split the way `cache_media_item_into_album` already splits the same work - validate and enqueue in
-the request, download in `tasks.cache_media_item_into_wiki`, which tolerates the wiki or profile
-being deleted between enqueue and run. The endpoint now returns `{"queued": N}` and the toast says
-the photos will appear shortly rather than claiming they are already there. Eight tests cover it,
-including that nothing is materialized in-request, that the 20-item cap still holds, and that a
-malformed entry is reported without stopping the rest of the batch.
-
-## The 12 panel 204 failures: stale tests, not a product bug (2026-08-06)
-
-Verdict: **the panels behave correctly; the tests predated the REData migration.** Nearly every
-info panel is REData-backed now, and each one's `gate()` ends in `redata_configured()`, which reads
-`UL_REDATA_API_URL`/`UL_REDATA_API_KEY` live from app settings. Neither is set in a test
-environment, so the gate refuses and `panel_info` degrades to a quiet 204 - exactly right for an
-install with no REData, and invisible to a test written when the panel simply rendered. The sibling
-test that passes seeds `nominatim`, which is not REData-backed; that is the whole of the
-source-specific split.
-
-Fixed by adding a `RedataConfiguredMixin` (`tests/hypothesis/redata_helpers.py`) to the four
-affected classes. It patches the two *settings values* rather than the `redata_configured` symbol,
-because every plugin module imports that function by name - patching it at its origin would miss
-them all, and patching per module means enumerating every module a test happens to touch. The
-function reads settings at call time, so setting them covers all of them at once. Tests that
-specifically want the unconfigured behaviour keep patching their own module's symbol, which is the
-existing convention (see `test_inaturalist_panel.py`).
-
-Two of the twelve survived that fix, for a second and unrelated reason:
-`PinPanelLiveRefreshTests.setUp` never called `super().setUp()`, so the mixin - and the project's
-own `TestCase.setUp` - never ran for that class. Added the call.
-
-All 50 tests across the three files now pass.
-
-Worth recording how this was found, because the first three attempts were wrong. I hypothesised in
-turn that the Celery broker was unreachable (plausible - `safely_enqueue_task` catches the guard's
-`RuntimeError` and reports "broker unreachable", and the view treats that as "give up quietly"),
-that `render_context` had changed shape, and that the baker recipe placed the pin at null island.
-Each was consistent with the symptom and each was wrong. What settled it in one run was a throwaway
-probe test printing the actual intermediate values - `gate(pin): False` - rather than more reading.
-Reaching for that earlier would have saved three test cycles at ~3 minutes each.
-
-The broker change made while chasing the first hypothesis was kept: pointing `CELERY_BROKER_URL` at
-`memory://` in tests is correct on its own merits, for the same reason as the cache - `apply_async`
-should not need a live service, and a test asserting that a request only *scheduled* work now sees
-that rather than a swallowed connection error.
-
-## Unit 20 (deferred item, now fixed): pin creation no longer blocks on an AI call
-
-`PinSerializer.create()` called `AutoTagService().suggest_for_pin(pin, apply=True)` inline. That
-service runs a keyword stage and then, for any label the keywords missed, calls the LLM gateway -
-a network round-trip. So every pin created through the REST API, or through an import that goes
-via this serializer, waited on an LLM before the response returned.
-
-This is the recurring two-call-sites shape again, and the fix was already sitting there: the task
-`tasks.suggest_pin_category` exists and both other creation paths
-(`services.pins.pin_creation` and the Google Maps import) already enqueue it. Only the serializer
-was left behind. It now enqueues the same task.
-
-Nothing in the response depended on the tagging having run - the previous code swallowed the
-service's exceptions, so a failed tagging attempt was already invisible to the caller. Four tests
-pin the new behaviour, including that the pin is still created when the broker is unreachable
-(`safely_enqueue_task` returns None) and that a create still isn't treated as an explicit rename.
-
-## Unit 09/10 (deferred item, partly fixed): partial bulk actions now say so
-
-`PinSuggestionBulkActionView` skips ids it cannot act on and logs any that raise, then returns
-`processed` alongside `requested`. The page reported only `processed`, as an unqualified success -
-so accepting 3 of 5 rendered "Accepted 3 suggestions", identical in shape to accepting all 5. The
-user is handed a number with nothing to compare it against, and the two that failed are invisible.
-Same silent-partial-failure shape as Unit 08's timeout.
-
-The backend contract was already sufficient; only the toast ignored half of it. It now warns rather
-than congratulates when `processed < requested`. Four tests pin the contract the toast depends on -
-a whole batch, another profile's id being counted but not acted on, one raising item not stopping
-the rest, and accept actually marking the suggestion handled.
-
-Still open from this item: `TripActivity.order` has no uniqueness constraint or locking, so two
-concurrent reorders can interleave. That is the same check-then-act family the second pass covered,
-and is left for a dedicated pass rather than bundled in here.
-
-## Unit 09/10 (second half, now fixed): trip activity ordering was unserialised
-
-Two check-then-act sequences share the `order` column, and a threaded test reproduces both.
-
-`reorder_activities` validated that the submitted ids are an exact permutation of the trip's
-non-completed activities, then applied the positions with one `update()` per row, holding nothing
-in between. Two members dragging the itinerary at once interleave: the observed result was
-`[1, 2, 3, 3]` - one position written twice, another lost entirely, and a final order neither
-member asked for. An activity added between the check and the writes also invalidates the
-permutation the check just approved.
-
-`create_activity` appended at `order=trip.activities.count()`, so two concurrent adds both read the
-same count and both took that position. The same `count()` backs the `max_trip_activities` quota,
-so the pair could also both pass a quota only one of them should have.
-
-**A unique constraint on `(trip, order)` is not the fix**, which is worth recording because it is
-the obvious first idea and it would break the feature. Positions are applied one row at a time, so
-a partial permutation legitimately collides mid-loop; and reordering only covers non-completed
-activities, leaving completed ones holding positions that overlap the reassigned range by design.
-Both would violate the constraint during normal use.
-
-Serialising on the parent trip - the same shape as the Consensus tentative-answer fix - matches how
-the data is actually used. In `create_activity` the lock is entered *after* place resolution, so it
-covers only the read-then-write section rather than a geocoding round-trip. The trip controller's
-own 92 tests pass alongside the three new race tests.
-
-## Unit 24/25 (deferred item, now fixed): round generation re-ran the eligibility query per retry
-
-`generate_round_content` retries up to `_MAX_LOCATION_ATTEMPTS` (25) times, skipping any location
-the mode cannot build a round from. Every attempt re-ran `eligibility.eligible_locations` - a
-multi-join across every participant's pins, and optionally their visits, a label filter and a geo
-bound - so generating a single round could cost 25 executions of the most expensive query on the
-game path. It runs for every round of every session, and a prior fix already had to attack a
-related O(pool size) problem inside `pick_next_location` for the same reason (see its comment about
-`/start/` being slow-to-timing-out).
-
-Nothing eligibility depends on changes between attempts; only the caller's own exclusion list
-grows. The eligible ids are now resolved once and each attempt narrows a plain primary-key
-queryset. Deliberately not converted to a list: `pick_next_location` applies a PostGIS proximity
-filter (`point__distance_gte`) to the candidates, and reimplementing that distance check in Python
-would put a second, divergable copy of the rule in the codebase - a cheap `pk__in` queryset keeps
-the existing contract intact.
-
-Verified both ways: the new test reports `4 != 1` against the previous code and passes with the
-change; all 321 SpotGuessr tests pass.
-
-Trivia's equivalent path was checked and left alone - `eligible_questions` is called once per round
-with a growing exclusion set, not inside a retry loop, so it does not have this shape.
-
-## Final full-suite verification (2026-08-06)
-
-**6 failed, 10,060 passed, 1,428 subtests passed** in 57 minutes, against a recorded baseline of
-18 failed / 10,025 passed. Twelve of the baseline's eighteen are fixed, none were introduced, and
-the extra 35 passing tests are the regression tests this audit added.
-
-The six remaining were all present in the baseline:
-
-- **5 infrastructure-stats tests** (`test_site_admin_stats` x4, `test_infrastructure_stats` x1) -
-  environmental. They collect live postgres/valkey/celery/nginx status and cannot pass without
-  those services reachable from the test process. Not a code defect.
-- **1 settings subtest** (`show_supporter_badge`) - a genuine, small API bug, now fixed. The field
-  was added to `Profile`, to the `SETTINGS_FIELDS` allowlist and to migration 0031, but not to the
-  external API's settings serializers, so `read_settings` produced it and the serializer dropped it
-  again: a preference an external client could neither read nor write. Added to both the read and
-  write serializers, in the position the allowlist declares it. This is exactly the failure mode
-  the serializer's own docstring predicts ("a new preference is invisible here until deliberately
-  added to SETTINGS_FIELDS *and* to this class") - the fail-closed design worked, the second step
-  was just missed.
-
-With that fixed, every remaining failure in the suite is environmental. The audit's cumulative
-work - 11 modules, a second pass, and six deferred Unit items - holds against a full run.
-
-## The last 5 failures were a real bug, not an environment limitation (2026-08-07)
-
-I had recorded the five infrastructure-stats failures as environmental - "they need live
-postgres/valkey/celery/nginx". Looking properly, the reason they failed is a genuine product
-defect: **the site-admin status page 500s when an infrastructure service is unreachable.**
-
-`collect_infrastructure_service_stats` called its four collectors with no isolation. Each collector
-handles the failure it expects (Valkey catches `RedisError`, and so on), but anything else - a
-malformed URL, a DNS error surfacing as `OSError`, a driver raising something new after an upgrade -
-propagated straight out and took the whole page with it. That page exists precisely to tell an
-admin which component is unhealthy, so a component being unhealthy in an unanticipated way hid the
-state of the three that were fine along with the one that wasn't. Exactly the per-item isolation
-gap found in the safety sweeps (module 9).
-
-Each collector now degrades to an "Unavailable" stat of its own. The page always returns four
-entries in display order, however badly the services are behaving - and the five tests pass,
-because the network guard's `RuntimeError` is now reported as a degraded service rather than
-crashing the request. Fixing the product fixed the tests; mocking the tests would have left the
-500 in place.
-
-Two new tests cover the resilience directly: one collector raising must not lose the other three,
-and all four raising must still return four entries.
-
-Worth noting a mistake in my own first attempt: I put the four collectors in a module-level tuple,
-which captured the function objects at import time and silently made them unpatchable - my own new
-tests failed because `mock.patch` on the module attribute had no effect. Naming them inside the
-function keeps the reference resolving at call time. An abstraction that breaks testability is
-worse than the repetition it replaced.
-
-**The suite now has no known non-environmental failures.**
-
-## Same fan-out gap on the Memories feed (2026-08-07)
-
-The site-admin finding generalised on the first place I looked. `get_memory_events` merges four
-independent sources - routes, trips, visits, photos - with no isolation, so any one raising (a
-corrupt row, a missing relation, a geometry error) discarded the other three and 500'd the feed on
-both the HTML page and the external API.
-
-This is the module's own advertised extensibility seam: its docstring says adding a memory type is
-one new function in the source list and nothing else changes. Unguarded fan-out makes that seam a
-liability - a bug in a newly added source takes out the three that already worked. A Memories page
-missing one kind of memory is worth far more than no page at all.
-
-Each source is now drained independently. `extend()` consumes a generator incrementally, so a
-source that fails partway keeps whatever it already yielded rather than losing that too - pinned by
-a test rather than assumed.
-
-**`_EVENT_SOURCES` had the same import-time capture problem** as the infrastructure collectors, and
-this time the tests caught it before the fix landed: two of the four new tests passed/failed in a
-pattern that only made sense if `mock.patch` was having no effect, which is exactly what a
-module-level tuple of function objects causes. Replaced with `_event_sources()`, resolved per call.
-Twice in one session, so it is worth stating as a rule: **a module-level tuple of function
-references is a testability trap** - it freezes the bindings at import and silently ignores
-patching. Name the functions inside the function that uses them.
-
-Verified clean: the pin detail page's street-view provider fan-out already isolates per provider
-and records an `ok=False` result for the admin debug overlay, which is the pattern the rest should
-match.
-
-## Two more unguarded fan-outs, found by an AST sweep (2026-08-07)
-
-An AST sweep for `for <source|provider|panel|handler> in ...` loops that invoke the loop variable
-with no `try` inside found six candidates; two were real.
-
-- **`panel_readiness` (pin detail page)** - the most consequential of the three. It builds the tab
-  strip for the app's busiest page, and it calls `is_ready(pin)` per *bespoke* panel with no guard.
-  Panels are the plugin extensibility surface, so a single plugin raising there returned a 500 for
-  the whole pin page instead of affecting its own tab. Failures are now logged and treated as "not
-  ready", which is the safe default: the tab shows its pending state and polls, exactly as it does
-  for a panel whose data genuinely hasn't arrived yet. The cache-backed and slide-backed panels
-  were already fine - those resolve through one bulk query rather than a call per source.
-
-- **`get_journal_entries`** - same shape, and its own docstring already argued the case: it
-  explains that an *unknown* source key degrades to fewer entries "rather than a 500". A
-  *registered* source that raised did 500. Now isolated per source.
-
-Verified clean: the street-view provider fan-out already isolates per provider and records an
-`ok=False` outcome for the admin debug overlay. The label-merge and pin-bulk loops the sweep also
-flagged iterate the user's own selected rows inside a transaction, where aborting the whole
-operation is the correct behaviour, not a bug.
-
-A note on the panel test, which failed on its first run for an instructive reason: I wrote the test
-panels as `InfoPanelSource` subclasses, but that inherits `LocationCachePanelSource`, so they were
-resolved by the bulk cache query and their `is_ready` was never called - the test exercised a
-branch the fix doesn't touch and reported the fix as broken. Checking the class hierarchy rather
-than re-reading the fix settled it immediately. Test doubles have to sit in the same branch of the
-hierarchy as the code under test, or they quietly prove nothing.
-
-## Query amplification on the map payload (2026-08-07)
-
-Measured rather than read: build N items, count queries, add more, count again, require no growth.
-Three of the four measured paths are flat. The map's pin payload was not - **exactly one extra
-query per pin**, on the highest-traffic serialization in the app.
-
-The probe named it in one run: `SELECT ... FROM dashboard_wikis`, 3 -> 6 as pins went 3 -> 6.
-`serialize()` reads `pin.effective_name`, which falls through to `Location.display_name`, which
-reads the reverse OneToOne `wiki`. `prepare_queryset` select_related `location` but not
-`location__wiki`. `Location.display_name`'s own docstring asks callers to
-`select_related("wiki")` in bulk "to avoid an extra query per row" - the guidance was already
-written down, and the busiest caller in the app was the one that missed it. Same family as the
-notification-dropdown N+1 from module 7: a reverse OneToOne that reads like an attribute.
-
-Added `test_query_amplification.py` as a standing guard over the map payload and the pin detail
-page (flat in both label count and visit count).
-
-Two notes on getting the measurement right, both of which cost a cycle:
-
-- The first harness demanded a delta of exactly zero and reported *-2* on the pin detail page. That
-  is warm-up, not a fix: the first request of a test populates per-process caches. The harness now
-  measures a discarded warm-up call first and asserts one-sided - cost must not *grow*; a page
-  getting cheaper is never the bug being hunted.
-- The first version of the map test called `service.all(service.prepare_queryset(qs))`, but `all()`
-  applies `prepare_queryset` itself. The doubled `Prefetch("labels", ...)` raises
-  `ValueError: 'labels' lookup was already seen with a different queryset` at evaluation. That was
-  my error, not the code's - but it is worth knowing the API raises rather than silently
-  double-prefetching.
-
-## Query amplification on the external API's trips list (2026-08-07)
-
-Extending the harness to the wiki page, trips detail page and the API list endpoints found the
-pages clean - flat in comment, alias, link, edit-history, activity and member count - and one more
-real defect. **The API's trips list cost six queries per trip** (24 -> 42 for three more trips), and
-the probe split it immediately: five against `dashboard_trip_activities`, one against
-`dashboard_trip_memberships`.
-
-- **Five per trip: the effective-date properties.** `TripSummarySerializer` exposes
-  `effective_start_date`, `effective_end_date`, `timeline_status` and `duration_days`, and the last
-  two each read *both* of the first two - which fall back to querying the trip's activities. This
-  is the same defect fixed in the Memories feed in module 9, resurfacing on a different surface
-  because that fix was local to the aggregator.
-
-  Fixed at the model this time instead of at each call site: both properties now prefer a
-  `_eff_start`/`_eff_end` annotation when the queryset supplied one, and otherwise compute once and
-  memoize on the instance. So a list of trips is flat wherever it is annotated, *and* a single trip
-  costs one query however many of the four fields are read. `for_list_page` now supplies the
-  annotations, matching what the Memories aggregator already annotated - including using the later
-  of `scheduled_at` and `scheduled_end`, so the two surfaces agree on when a trip ends.
-
-- **One per trip: the viewer's membership.** `_membership()` ran a targeted query per trip even
-  though `for_list_page` prefetches the whole roster - the row was in memory already. It now reads
-  the prefetch when one exists (checked via `_prefetched_objects_cache`) and keeps the targeted
-  query otherwise, so callers that did not prefetch don't start pulling whole rosters.
-
-The general lesson, now seen three times (Memories trips, the map's `location__wiki`, this): **an
-expensive model property is invisible at the call site.** `serializer.field = source="x"` looks
-free. Making the property itself annotation-aware and memoized fixes every present and future
-caller, which a per-call-site prefetch does not.
-
-877 trip/memories tests pass alongside the new guards.
-
 ## The plugin/panel extension surface, from an author's point of view (2026-08-07)
 
 - **`docs/designs/plugins.md` does not exist.** It is at `docs/designs/plugins.md`, moved there by an
@@ -2553,493 +1989,6 @@ presentation attributes.
 Had I "fixed" the nine panels the first run flagged, I would have added meaningless attributes to
 correct code and called it an improvement. A validation rule asserted against the whole existing
 codebase gets corrected by it; one asserted against a couple of hand-picked examples does not.
-
-## Frontend layer: the inline-JS mass (2026-08-07)
-
-Measured, since the project's stated preference is HTMX first and TypeScript only where HTMX
-cannot do the job: **31 templates carry more than 120 lines of inline `<script>` each, totalling
-19,638 lines.** The worst is `pages/map/index.html` at 5,052 lines of inline JS in a 5,691-line
-template - 89% of the file - followed by `themes/base.html` (1,882), `pages/messages/index.html`
-(1,772), `pages/trips/detail.html` (1,380) and `pages/location/index.html` (1,297).
-
-For comparison, the entire typechecked TypeScript tree is 59 files. `tsconfig.json` includes only
-`frontend/ts/**/*.ts`, so **none of those 19,638 lines are typechecked, bundled, minified, or
-reachable by `bun test`.** Every defect this audit found in that layer - the pin-cache version
-drift, the duplicated trip-name list, the pin-delete cache invalidation - lived in inline template
-JS, which is consistent with it being the least-guarded code in the repo.
-
-This is the largest maintainability gap found in the audit, but "move it to TypeScript" is a
-programme of work rather than a fix, and which parts become HTMX versus bundled modules is a
-design call for the maintainer. Recorded with numbers so it can be prioritised, along with the
-obvious first candidate: `base.html`'s 1,882 lines are shared by every page.
-
-**Correction to the paragraph above**, which originally also said the dev toolbar's 591 lines
-"ship to production for a development-only feature". They do not. `base.html` includes that partial
-only under `{% if show_dev_toolbar %}`, and `SiteSettings.show_dev_admin_features` grants it to
-site admins solely when the effective environment is development or local, and to non-admins only
-when `UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS` is set *and* the environment is
-staging/development/local/testing. Production is excluded on both paths. The toolbar is still worth
-extracting so it is typechecked, but the reason given for prioritising it was wrong, and correcting
-it changes which target is actually valuable: `base.html`, which does render on every page.
-
-Checked and deliberately *not* changed: six templates hardcode the values of a server-side
-`TextChoices` in their JS (`MapViewChoice` and `MapCenterMode` fully, `ThemeChoice`,
-`MapLayerMode`, `DirectMessageShareKind` partially). It reads like the pin-cache version
-duplication, but it is not the same class of defect: those values are stable identifiers used for
-genuine branching (keyboard shortcuts, layer switching), and adding a new choice leaves the
-existing branches working rather than silently disabling a feature. Coupling worth knowing about,
-not a latent bug, and not worth the indirection of emitting them through `json_script`.
-
-### Extracting base.html's inline JS: the pattern and the constraint
-
-The codebase already has the right pattern, and documents it: `entries-classic/core.ts` is a
-classic (non-module) IIFE bundle loaded in `base.html`'s `<head>`, installing window globals via
-`installGlobalX()` helpers from `shared/` modules. Its own docstring explains why it is not
-`type="module"` - module scripts defer until after parsing, and several pages call these globals
-from classic `<script>` tags that run synchronously. So extracting base.html's remaining globals is
-"add a `shared/x.ts` with an `installGlobalX()`, import it in `core.ts`, delete the inline block".
-
-`base.html` exposes 15 such globals. The dialog group is the obvious first extraction -
-`confirmDialog` (used by 10 templates), `deletePinCascade` (4), `urbanlensConfirmExternalLink` (2) -
-because it is self-contained, has no Leaflet dependency, and already has a contract test.
-
-**But the naive move is wrong, and this is the part worth writing down.** That block is not just
-function definitions: its IIFE resolves `#confirm-dialog` and its buttons *at load time* and
-attaches listeners to them, and it sits after the `<dialog>` markup in the body. `core.ts` runs in
-the `<head>`, where those elements do not exist yet - so lifting the block as-is yields null
-element references and a dialog that never opens. The extraction has to bind lazily (resolve the
-elements and attach listeners on first use) before it can move.
-
-Not attempted here for a reason worth stating: this repo has no DOM/browser test layer, so a
-behavioural change to a dialog reached from 10 templates could not be verified beyond typechecking,
-and `bun test` would report success either way. The contract tests added by this audit only parse
-templates for invariants. Specifying the constraint is more useful than a plausible-looking change
-nobody can check - and it makes the case that a small DOM-level test setup would pay for itself
-before this 19,638-line layer is moved.
-
-## A DOM test harness, and the first extraction it made safe (2026-08-07)
-
-The blocker recorded above was real, so it got fixed first: `bun test` had no document, so
-anything touching the DOM could be typechecked but never *exercised*. Added
-`@happy-dom/global-registrator` as a dev dependency and a three-line preload
-(`frontend/ts/testing/dom-setup.ts`, wired through a new `bunfig.toml`).
-
-It immediately paid for itself twice over:
-
-- `pin-cache.test.ts` carried a hand-rolled `MemoryStorage` polyfill assigned onto `globalThis`,
-  which now conflicted with the real one - so those seven tests were rewritten against an actual
-  `Storage` rather than a stand-in.
-- The `base.html` dialog group moved out: `shared/confirm-dialog.ts` now owns `confirmDialog`,
-  `urbanlensConfirmExternalLink` and `deletePinCascade`, installed by `entries-classic/core.ts`,
-  binding `#confirm-dialog` **lazily on first use** exactly as the constraint required. 107 lines
-  of inline JS left `base.html` (1,882 -> 1,776), and 12 behavioural tests now cover what was
-  previously untestable: cancel resolves false, the alt button resolves `"alt"`, the message is
-  HTML-escaped, a 409 asks about children and retries with the chosen mode, a failed delete does
-  not flag the cache, and - the one that matters most - binding still works when the markup appears
-  after the module loads.
-
-  The old `pin-delete-invalidation.contract.test.ts`, which parsed `base.html` looking for the
-  string `ul_pins_dirty`, was deleted: the DOM test asserts the actual behaviour it was
-  approximating.
-
-**The typechecker found a latent type lie on the way through.** `types/globals.d.ts` declared
-`window.confirmDialog` as returning `Promise<boolean>`, but the implementation could already return
-`"alt"` when a caller passed `altLabel` - which the pin-delete "keep child pins" path does. Any
-caller narrowing on that type was trusting something untrue, and `"alt"` is a truthy string, so it
-would have read as a confirmation. Corrected the declaration and made `dialogs.ts`'s
-`confirmAction` narrow explicitly rather than by assumption.
-
-That is the argument for the harness in one paragraph: moving 107 lines under the typechecker
-surfaced a wrong type declaration that had been sitting in a `.d.ts` unexercised. There are 1,776
-lines left in `base.html` alone.
-
-### base.html's remaining 1,776 lines, block by block
-
-Surveyed rather than attacked, so the next extraction starts from evidence. The file has eight
-inline blocks left:
-
-| Block | Lines | Globals | Extractable? |
-| --- | --- | --- | --- |
-| 1 | 158 | `urbanlensMediaThumbFallback`, `urbanlensSizeEditInPlaceInput` | Yes, but carries `{{ csrf_token }}` and Django `messages`, so it needs a `json_script` config first |
-| 2 | 251 | none | Probably - no globals to keep in step |
-| 4 | 62 | `autosaveGuard` | Yes, small and self-contained |
-| 6 | 936 | the comment-map composer group | **Not as one move** - see below |
-| 7 | 307 | `ulSectionCollapsed`, `ulRefreshCollapseRestore`, `ulFlyToToolsFab` | Best next target - no template tags, no Leaflet |
-| 8 | 24 | none | Trivial, but 9 template tags for 24 lines - leave it |
-
-**Block 6 (936 lines, the comment map composer) should not be moved as a single step.** It is one
-IIFE whose functions share closure state, it drives Leaflet through `typeof L` guards, and it
-embeds seven `{% url %}` tags plus the viewer's profile uuid. Moving part of it would leave the
-group's globals defined in two places, which is worse than leaving it; moving all of it would put
-~900 lines of Leaflet-dependent behaviour under a test harness that has no Leaflet. It needs its
-own plan, and probably a Leaflet stub, before it is touched.
-
-**Block 7 is the right next one** - 307 lines, no template tags, no Leaflet, mostly `localStorage`
-and class toggling that happy-dom tests well. One caveat found while reading it: about 70 of those
-lines (`ulFlyToToolsFab` and `_toolsFabTarget`) measure layout via `getBoundingClientRect` and
-`getComputedStyle`, which happy-dom returns as zeros - so that part would move unverified. The two
-concerns share no closure state, only DOM lookups, so they can go as two modules with the
-animation helper's move made deliberately and knowingly untested rather than by accident.
-
-Not started this turn rather than half-finished: a 307-line port left incomplete is worse than one
-not begun, and the survey is what the next attempt actually needs.
-
-## Full-suite verification (2026-08-07): 10,087 passed, 0 failed
-
-**10,087 passed, 0 failed, 1,429 subtests passed, in 58:49.** Not one failure line in the output.
-The progression across the audit:
-
-| Run | Failed | Passed |
-| --- | --- | --- |
-| First complete run (2026-08-06) | 18 | 10,025 |
-| After the panel-test and settings-serializer fixes | 6 | 10,060 |
-| This run | **0** | **10,087** |
-
-Of the original eighteen, twelve were stale panel tests written before the REData gate existed, five
-were the infrastructure-stats tests that turned out to be masking a real 500, and one was a settings
-field the external API had never exposed. None were flaky; each had a cause.
-
-**One caveat, stated because it affects how much this run proves.** Files were copied into the
-container while it was running - the panel-contract validation landed mid-run - so this is not a
-pristine single-commit run. pytest imports test modules at collection, but source modules are
-imported lazily, so a mid-run copy can produce a mixed state. The container's Python tree is
-byte-identical to the repo now, and the affected work (`panel_source_problems` and its ten tests)
-was verified separately, but a run that proves a specific commit end to end needs no concurrent
-copies. Worth doing before a release; not worth re-running an hour for now.
-
-Also unaffected by that caveat: the frontend work landed today is host-side only (bun), never
-copied into the container, so `shared/confirm-dialog.ts` and the happy-dom harness are outside this
-run entirely. They are covered by `bun test` (162 passing) and `tsc --noEmit` (clean).
-
-## Two more bugs found extracting base.html's guard/scroll/dialog blocks (2026-08-07)
-
-Both were live in `base.html`'s inline script, both are now fixed with tests.
-
-**1. Scroll-to-hash threw a `DOMException` on any fragment that is not valid CSS. FIXED.**
-`_scrollToHash` called `document.querySelector(window.location.hash)` directly. A fragment
-is not a selector: ids beginning with a digit, `#/route`, `#foo=bar`, `#!`, `#sec:2` and -
-most relevantly - the `#_=_` and `#access_token=...` that OAuth providers append when
-redirecting back all throw. This app signs in through Google and Discord, so that path is
-reachable in production. Because the handler is bound to `htmx:afterSettle`, it threw again
-on *every* HTMX swap for the life of the page.
-
-Verified by probe before fixing: of eight realistic fragments, five threw. Fixed by trying
-`getElementById` on the decoded fragment first (it takes a literal id, so it copes with all
-of the above), keeping `querySelector` behind a `try` for fragments naming something other
-than an id, and guarding `decodeURIComponent` against malformed escapes. A numeric id such
-as `#123` now actually scrolls, where before it threw.
-
-*Testing note worth remembering:* the first version of this test wrapped `dispatchEvent` in
-`expect(...).not.toThrow()` and passed while the exception was plainly being thrown - a
-listener exception is reported, not propagated, so that assertion can never fail. The test
-had to call the function directly. Assertions around `dispatchEvent` prove nothing about
-what the listener did.
-
-**2. The unsaved-changes guard hijacked ctrl/cmd/shift-click. FIXED.**
-The capture-phase click handler checked the href's scheme and `target="_blank"` but never the
-modifier keys or mouse button. With unsaved changes present, ctrl-clicking a link to open it
-in a background tab was intercepted, `preventDefault`ed, and - on confirming - navigated the
-**current** tab via `location.href`. So the one gesture that would have safely left the page
-alone instead destroyed the changes the guard exists to protect. Fixed by returning early on
-`ctrlKey`/`metaKey`/`shiftKey`/`altKey`/non-primary button.
-
-## The leave-page warning existed three times, with the same two bugs in each (2026-08-07)
-
-Following up the ctrl-click bug found in `base.html`'s auto-save guard: the same
-"confirm before leaving" logic had been copy-pasted into two more pages, and both copies
-carried the identical defects.
-
-  base.html            auto-save guard (unsaved / in-flight changes)
-  safety/detail.html   "nobody would be notified if something happened"
-  tools/index.html     an export is still running
-
-**Bug 1 - modifier clicks were hijacked.** All three checked the href's scheme and
-`target="_blank"` but none checked modifier keys or mouse button. Ctrl/cmd-clicking a link
-to open it in a background tab was intercepted and, on confirming, navigated the *current*
-tab via `location.href` - so the one gesture that would have left the page safely alone
-instead destroyed what the guard was protecting. Worst on the safety page, whose entire
-premise is that leaving means nobody can reach you.
-
-**Bug 2 - the user was asked twice.** The safety and tools copies navigated via
-`location.href` without first clearing their blocked condition. That navigation re-enters
-`beforeunload`, which was still blocked, so the browser's own "Leave site?" prompt appeared
-on top of the one just answered. The safety page even has a `_safetySkipLeaveWarning` flag
-for exactly this, set on form submit and status update - but never in the link path. The
-auto-save guard avoided it only because it happened to call `allowNavigation()` first.
-
-Fixed by extracting the behaviour to `shared/leave-confirmation.ts`, which each page now
-configures with just its condition and wording. The suppression is internal, so no caller
-can forget it. Also filters `download` links, which save a file without navigating - they
-must not be confirmed, because confirming permanently disarms the guard while the page
-stays put.
-
-Net: 39 lines of duplicated template JS removed, 25 tests added covering the behaviour that
-previously had none.
-
-## Live location sharing on a safety check-in failed silently (2026-08-07)
-
-Found by sweeping for `fetch` call sites that mutate state without checking the response.
-Of 34 such sites, most turned out to be false positives (helpers whose callers check, or
-deliberately best-effort calls) - but this one is real, and it is on a safety feature.
-
-`fetch` only rejects on network failure, never on an HTTP error status. Both live-location
-handlers had a `.catch` and no `.ok` check, so every server rejection was invisible:
-
-- **Position updates** were sent with `.catch(function () {})`. The update endpoint returns
-  **400** when sharing has been turned off or the check-in has already concluded. So if a
-  check-in was resolved from elsewhere - a partner marking the owner safe, say - the browser
-  kept watching the GPS and posting a position every 30 seconds, each rejected, forever. The
-  owner saw no indication. The partner watched a marker frozen at the last accepted fix.
-- **The toggle** called `startWatching()` unconditionally and only caught network errors, so
-  a refused toggle left the switch on and the GPS running while the server had recorded
-  nothing.
-
-The drift was visible inside the same file: the delete-check-in handler thirty lines above
-correctly does `if (!r.ok) throw new Error()`.
-
-Fixed by moving the logic to `shared/safety-live-location.ts` (22 tests, including one per
-rejection status) which checks every response, reverts the toggle when the server refuses,
-and warns the owner after two consecutive failed reports - two rather than one because a
-single blip is noise, and once rather than every 30s because a warning that repeats is a
-warning people learn to ignore. Recovery resets it, so a later outage can warn again.
-
-**Not fixed, deliberately:** the remaining ~30 unchecked mutating `fetch` sites. Each needs
-judging on its own - several are intentional fire-and-forget (the profile "skip setup"
-button navigates whether or not the save lands) and a blanket change would be churn. Worth
-a pass when someone can weigh them individually.
-
-## Six writes reported success for requests the server had refused (2026-08-07)
-
-Triage of the 34 unchecked mutating `fetch` calls found in the previous pass. The question
-asked of each: *if this request fails, does the user believe something saved that did not?*
-
-**Six said yes**, all sharing one shape - `fetch(...).then(r => r.json()).then(showSuccess)`
-with no `response.ok` check. `fetch` resolves for 400s and 500s, so the success path ran
-regardless:
-
-| site | what the user saw on failure |
-| --- | --- |
-| `map/index.html` star rating | "Rating saved." - and the local pin cache updated with a rating the server rejected |
-| `map/index.html` pin field edit | "Name updated successfully" |
-| `location/index.html` media relevance | thumb stays marked; reverts on next load |
-| `location/index.html` send-to-wiki | "N photo(s) queued for the wiki" - the inner `.json().catch(=> ({}))` swallowed a 500's HTML page and fell through to the success toast |
-| `location/wiki.html` photo vote | vote stays applied; reverts on next load |
-| `trips/detail.html` marker drag | marker stays where dropped |
-
-The map page is the clearest case of drift: it already had a private `_fetchJson` doing
-`if (!resp.ok) throw`, used for its GET reads - while the two PATCH writes in the same file
-did not use it.
-
-That helper is now `shared/fetch-json.ts` (25 tests), which throws on non-2xx carrying the
-server's own message where it sent one, handles 204 (calling `.json()` on an empty body
-throws, which would turn a successful DRF delete into an apparent failure), and applies the
-CSRF header. The map's private copy is a two-line shim over it.
-
-**Judged fine and left alone**, with the reasoning recorded so the next pass need not
-re-derive it: geolocation visit tracking, map position and dark-mode preference saves (all
-explicitly best-effort - nothing is claimed to the user), the profile skip-setup button
-(navigates either way by design), and `e2ee-client.ts` (its `postJson` is a helper whose
-callers check; the login path checks `.redirected`). The media-sort preference now warns on
-failure since it had no handler at all.
-
-## Bulk writes silently skipped the receivers that maintain derived state (2026-08-07)
-
-First backend unit after five frontend ones. Three checks on the Celery/transaction layer came
-back **clean**, which is worth recording so nobody re-runs them: of 71 `safely_enqueue_task`
-call sites, **none** dispatch inside a `transaction.atomic()` block without `on_commit`
-(verified with an AST walk, after a naive line-based scan proved unreliable for the
-`@transaction.atomic` *decorator* case); there are no `select_for_update()` calls outside a
-transaction; and no Celery task is handed a model instance instead of a pk.
-
-The real finding was elsewhere. `bulk_update`/`bulk_create` issue raw SQL and never fire
-`post_save`, so any receiver maintaining derived state is skipped. Four sites did this:
-
-**1-3. `Label` bulk writes left the map pin cache stale.** `Pin.icon_source_label()` picks the
-winning label by `-order`, so a label's *order* decides which icon and colour a pin draws -
-not just its icon field. `refresh_map_pin_cache_for_label` exists precisely to invalidate the
-server-side pin cache when that changes, and its own docstring says pins would otherwise "keep
-serving the old baked-in icon/color until the cache TTL lapsed". All three bulk paths went
-straight past it:
-
-  - `controllers/organize.py` - drag-to-reorder labels
-  - `external_api/views_labels_bulk.py` - the API's reorder endpoint
-  - `external_api/views_labels_bulk.py` - the API's bulk edit, which writes `icon`, `color`,
-    `order` and `description` directly. The most direct case of all.
-
-So a user reordering their labels saw the map keep drawing the old icons.
-
-**4. Copying a pin list into a trip never reached the calendar.** `copy_list_pins_to_trip`
-uses `bulk_create`, so `sync_trip_on_activity_save` never fired and the new activities never
-reached an auto-synced Google Calendar until some unrelated activity was saved.
-
-Fixed by giving the label receiver a reusable `refresh_map_pin_cache_for_label_ids()` (one
-query for many labels, `distinct()` so a pin carrying two changed labels is refreshed once)
-and calling it from all three bulk paths, and by making `queue_calendar_push` public and
-calling it once after the bulk_create. 8 tests, including one establishing the premise that
-reordering really does change which icon a pin draws - without that, refreshing the cache
-would be pointless.
-
-**Worth generalising:** any new `bulk_create`/`bulk_update` on a model with `post_save`
-receivers needs this same audit. `Pin` alone has six.
-
-## A guard for the bulk-write class, which immediately found a fifth site (2026-08-07)
-
-Follow-up to the four bulk writes fixed in 8ed25a93. Whether a bulk write is dangerous is a
-property of the *model*, not the call site, so a site that is safe today becomes a bug the
-moment somebody adds a receiver to the model it writes - and nothing about that change would
-look wrong in review. `tests/hypothesis/test_bulk_write_signal_guard.py` now fails the build
-on any `bulk_create`/`bulk_update` targeting a model with live `pre/post_save` or
-`pre/post_delete` receivers unless the site is listed in `REVIEWED` with a reason.
-
-Design notes worth keeping:
-- Receivers are read from **Django's live signal registry** (`signal.has_listeners(model)`),
-  not by grepping for `@receiver`. That is what caught the fifth site: `Image` gets its
-  `post_save` connected dynamically from the achievements `_SUBSCRIPTIONS` table, so no grep
-  for a decorator would ever have found it.
-- The allowlist is keyed by `(file, model, operation)`, **not line number**, which would churn
-  on every edit above the call and train people to update it without thinking.
-- Two "guard the guard" tests assert the scan still finds call sites and the registry lookup
-  still returns receivers. These earned their place immediately: the first version of the test
-  had a wrong `PACKAGE_ROOT` and scanned **zero** files, which made the real assertion pass
-  vacuously. Without those two tests it would have been committed green and guarded nothing.
-
-**The fifth site (`pin_sharing.py`, `Image.bulk_create`) turned out to be correct as-is** -
-firing that receiver would credit the *recipient* of a share with a photo-upload streak day
-for photos they did not take. It is recorded in `REVIEWED` with that reasoning. Its one loose
-end: the recipient's photo-count metric is not invalidated at copy time, and self-heals only
-on their next photo action. Left alone as a product question, not a defect.
-
-### But following that thread found two real bugs in the same function
-
-`create_pin_from_share` builds the recipient's `Image` rows field by field, and any field it
-omits silently takes the **model default** instead of the source row's value. Two of those
-defaults actively misdescribe the copy:
-
-- **`source` defaults to `UPLOAD`.** Resharing a pin whose gallery held a materialised Yelp,
-  Wikimedia or Smithsonian photo filed it as the recipient's own upload. `ImageSource` is what
-  drives the Media section's per-source tabs, so the photo also landed in the wrong tab.
-- **`media_type` defaults to `PHOTO`.** A shared video was recreated as a photo, which renders
-  through `<img>` instead of the player - a broken image.
-
-Both fixed by copying `source`, `media_type`, `media_source_key` and `media_item_key`. The
-context FKs it omits (`wiki`, `visit`, `safety_checkin`, `direct_message`, `pin_suggestion`)
-are correctly dropped - they belong to the sender's row, not the copy.
-
-## The Pin share copy dropped four properties, and now cannot drop a fifth (2026-08-07)
-
-Same technique as the Image copy: load the model, diff its concrete fields against the
-kwargs the copy passes, judge each omission. `create_pin_from_share` names 28 of `Pin`'s 43
-fields by hand; 11 were omitted. Seven of those are correct (the recipient's own slug, view
-and visit state, dismissal flags, the wiki cache). Four were not:
-
-- **`pin_type_is_user_provided`.** The field's own comment says it guards `pin_type`
-  "exactly like `name_is_user_provided` guards `name`" - and `name_is_user_provided` *is*
-  copied. It is the only thing that makes `classify_detail_marker` return early, so a
-  recipient's copy carried the sender's chosen type with no protection and the automatic
-  building/parcel classifier was free to overwrite it. Precisely the outcome the flag exists
-  to prevent.
-- **`custom_icon`.** `Pin.effective_icon` checks `custom_icon` *before* `icon`, so a pin with
-  a custom uploaded icon arrived looking like a different pin - while the function's own
-  docstring promises it carries over "every user-visible property (name, icon, ...)".
-- **`cover_photo`.** Correctly not copied verbatim (it points at the sender's `Image` row),
-  but the recipient lost the hero image entirely even though the photos themselves are
-  copied. Now mapped to the recipient's own copy by position, and left null when the sender
-  shared only part of their gallery and not the cover.
-- **`indoor_outdoor`.** The one place-property that did not travel while every sibling
-  (`fences`, `alarms`, `cameras`, `security`, `signs`, `vps`, `plywood`, `locked`, the three
-  dates) did. Currently inert - the field is groundwork with no UI - so this is consistency,
-  not a user-visible fix. Recorded as such rather than overstated.
-
-**The guard matters more than the four fixes.** All of these came from one structural fact:
-the copy names fields by hand, so a field added to `Pin` later is simply absent and takes its
-default, and nothing in review connects "add a column to Pin" with "update a function in the
-sharing service". `SharedPinCopyCoversEveryFieldTests` now fails on any `Pin` field that is
-neither copied nor listed in `NOT_COPIED` with a reason, plus two tests keeping that list
-honest (no entries for fields that no longer exist, none claiming to skip a field the copy
-actually passes).
-
-Mutation-tested before trusting it: removing `slug` from `NOT_COPIED` makes it fail with
-`['slug'] != []`. Worth doing - the first version of the bulk-write guard passed while
-scanning zero files, and a guard nobody has seen fail is not yet known to be a guard.
-
-## The field-by-field copy class is exhausted; albums audited (2026-08-07)
-
-**Negative result, recorded so nobody repeats the search.** Task #35 planned to apply the
-field-diff technique to trip cloning, wiki forking, album copying and the import paths. A
-structural scan for the shape - calls with 6+ kwargs where most values are attribute reads
-off one source object - found only **four** across the whole tree, and two are the paths
-already fixed (`create_pin_from_share`'s Pin and Image copies). The other two are a
-model-bakery recipe and a WebAuthn credential built from a library result, neither a
-model-to-model copy. Checked the alternative idioms too: no `pk = None; save()` clone, no
-`model_to_dict`, no `deepcopy` of instances; the `Model(**kwargs)` sites are serializer
-creates. The features the task guessed at simply do not copy models field by field.
-
-### The album feature is in good shape
-
-Audited as the newest code on the release branch, and it holds up better than most of what
-this audit has touched. Recorded because "we looked and it was fine" is worth knowing:
-
-- Authorization is centralised in `_resolve_album_owner` and every view routes through it.
-- The add endpoint re-scopes posted ids through `eligible_images_for`, so the picker's filter
-  is not the only thing enforcing eligibility - the classic version of this bug.
-- Setting a cover re-scopes through the album's own contents.
-- `cover_image` is `SET_NULL` (with a comment saying why), *and* removal clears it, *and*
-  `cover_from_images` falls back when the cover is not in the viewer's visible set. Three
-  independent defences for the same failure.
-- Duplicate membership is prevented in code *and* by a `uq_album_item` constraint.
-- The broker-unreachable path in `_add_external` falls back to running the download inline -
-  the exact failure mode that went unhandled elsewhere in this codebase.
-
-### One real bug: a check-then-act race on adding photos
-
-`add_images_to_album` reads which images are already in the album, then inserts the rest,
-with no lock and no transaction. `uq_album_item` correctly prevents the duplicate row, but
-the unguarded insert turned the loser of that race into an `IntegrityError` - a 500 rather
-than a no-op.
-
-Not hypothetical: there are two callers, and one is the Celery task
-`cache_media_item_into_album`. Celery delivers at least once, so a redelivered task races
-both itself and the user adding the same photo from the picker once it materialises.
-
-Fixed with `ignore_conflicts=True`, plus counting the rows actually inserted rather than
-returning `len(to_add)` - with conflicts ignored, the length over-reports what the call did,
-which would have shown "2 photos added" when one was already there.
-
-## Check-then-act sweep: one fix, and a hypothesis that was wrong (2026-08-07)
-
-Following up the album race (42a178fa) by looking for the same shape elsewhere: read what
-exists, insert the difference, with a unique constraint behind it.
-
-**A wrong hypothesis, recorded so nobody re-derives it.** The first scan listed 77 models
-with a multi-column unique constraint and flagged 17 unprotected creates. It looked like
-`add_group_members` was a *deterministic* bug: `GroupChatMembership` is documented as one row
-per member *stint*, re-adding is meant to create a brand-new row, and a `(group, profile)`
-constraint would make that impossible - so re-adding anyone who had left should 500.
-
-It does not, because that constraint is **partial**: `(group, profile) WHERE left_at IS
-NULL`. That is exactly the right schema - one active membership, unlimited historical stints
-- and my scan had simply not looked at `condition`. **27 of the 77 constraints are partial**,
-so any future sweep must read the condition before concluding anything. The group-chat stint
-behaviour is correct, and `test_group_chats.py` already covers both halves of it
-(`test_readding_creates_new_stint`, `test_rejoined_member_does_not_see_absence_window`); the
-tests I had written were deleted rather than committed as duplicate coverage.
-
-**What actually discriminates a real instance from a theoretical one is a Celery caller.**
-The album bug mattered because `cache_media_item_into_album` is a task and Celery delivers at
-least once, which makes "two runs at once" ordinary rather than a rare interleaving. Applying
-that filter to the 17 candidates leaves exactly one: `generate_keywords_for_image`, whose
-only caller is the `generate_photo_keywords` task.
-
-It deletes a provider's existing keywords and inserts the new ones. The delete does not
-isolate it from another worker doing the same, so the second insert hit
-`uniq_image_keyword_per_source` and failed the task, leaving that provider's keywords
-missing until something re-ran it. Fixed with `ignore_conflicts=True`.
-
-The remaining 15 need two genuinely simultaneous user actions (two managers adding the same
-person, a double-clicked "add to list"). Left alone deliberately: the failure is a 500 on one
-of two racing requests, the constraint keeps the data correct either way, and blanket-editing
-15 call sites would be churn of the kind this audit has been avoiding. Worth revisiting only
-if one of them acquires a Celery caller.
 
 ## Deleting your own photo silently broke it for everyone you shared it with (2026-08-07)
 
@@ -3077,354 +2026,6 @@ own uploads are refused with an error about photos they did not upload. Whether 
 those rows, charge them, or block the accept is a product/billing decision, and
 `QuotaExemption` is explicitly scoped to "storage the whole community benefits from", which a
 received share is not. Flagged rather than decided.
-
-## External API audit: no changes warranted (2026-08-07)
-
-A full unit spent on the external API's permission, scope and throttle layers found nothing
-to fix. Recording what was checked and how, because the useful output of a clean audit is
-knowing not to repeat it.
-
-**Scope coverage is complete.** All 205 view classes under `external_api/` declare
-`required_scopes` somewhere in their ancestry. Verified by walking the AST and resolving
-inheritance transitively.
-
-**Everything fails closed, in three independent places.** `credential_grants` refuses an
-empty requirement rather than reading it as "nothing required"; `HasApiKeyScope` defaults a
-missing `required_scopes` to an empty set, which that refusal then denies; and
-`ExternalApiView.required_scopes` returns an empty set for a method with no entry. A view
-added without a declaration is unreachable to credentials, not open to them.
-
-**The PAT/OAuth2 split is enforced at check time, not at grant time.** `OAUTH2_ONLY_SCOPES`
-is rejected in `credential_grants` even if a key somehow carries it, so a hand-edited row or
-a future scope-picker bug cannot hand a bearer key access to end-to-end encrypted DMs.
-
-**Object-level ownership holds.** A scan for handlers doing a lookup with no owner-scoping
-token returned three; all three are false positives that scope through a base-class helper
-(`_get_checkin`, `resolve_solo_session`) and then filter by that already-scoped parent.
-
-**Throttle tiers derive from the same declaration that gates access**, so there is no second
-list to drift, and an undeclared method lands in the *tighter* write tier. Only two views
-override the tier and both are documented. The one shape worth checking - a read-tier GET
-that triggers paid external calls - is `PinPanelDetailView`, and it is bounded twice over:
-`schedule_panel_fetch` is single-flight per (source, pin) via a cache marker, and the fetch
-itself runs under the per-service rate limiter (`RateLimitExceededError` is caught in
-`external_data`).
-
-### A lesson about these scans, learned twice
-
-Two scans in this audit produced confident wrong answers because they matched on syntax
-without handling a variant:
-
-- The unique-constraint scan ignored `UniqueConstraint.condition`, so 27 *partial* constraints
-  read as absolute - which is what made a correct group-chat design look like a bug.
-- This scan resolved base classes from `ast.Name`/`ast.Attribute` only, so six views
-  inheriting a *subscripted generic* (`PinSubResourceView[PinNote]`) reported no bases at all
-  and looked unprotected.
-
-Both times the fix was to widen the scanner, and both times the first result was plausible
-enough to act on. Any structural scan here should be re-run against a known-good and a
-known-bad example before its output is trusted.
-
-## The data export disclosed trip members the app masks on screen (2026-08-07)
-
-Audited the import/export paths. Most of it is exemplary and needed no changes - recorded
-here so it is not re-audited:
-
-- **Archive handling is properly defended.** No `extractall` anywhere; members are iterated
-  and extracted individually. `_safe_basename` keeps only the basename (so there is no path
-  left to traverse) *and* rejects `..`; symlinks are skipped in both ZIP (via `external_attr`
-  mode bits) and TAR (`isfile()` only); there are per-file, total-uncompressed and file-count
-  caps; and both formats read one byte past the declared size to catch a compression-ratio
-  attack where the header lies.
-- **The import refuses to write on someone else's behalf.** `_resolve_import_target` requires
-  a pin target to resolve to the importer's *own* pin and a wiki target to pass
-  `location_visible_to`, with the threat named in its docstring.
-- **Friendships import as requests, not facts.** `_import_connections` re-creates each
-  outgoing row through `Friendship.request` rather than honouring the exported status, so a
-  crafted archive cannot forge an ACCEPTED friendship and grant itself friend-level access.
-  The stated principle is the right one: "an import may only re-create actions the importing
-  user could take themselves through the UI".
-
-**The bug was on the export side.** `_export_direct_messages` passes each conversation
-partner through `display_identity_for` and says why in its docstring - "an export never
-reveals a partner's name/avatar beyond what the user could currently see on screen (e.g.
-after being blocked or a privacy change)". `_export_trips` did not apply that rule: it wrote
-`p.user.username` for every trip member and for the creator, while the trip page resolves
-those same people through `resolve_visible_identities` and masks the ones the viewer may not
-identify.
-
-So a user could export their data and read the username of a co-member whose profile
-visibility hides them - `NO_ONE`, or any setting the viewer doesn't satisfy. The codebase
-already agreed this was wrong; only this one function had not been told.
-
-Fixed by resolving member and creator names through `resolve_visible_identities`, the same
-call the trip page makes. `member_uuids` is still exported for masked members: it carries no
-name, and the import's re-invite step reads *that* field rather than `members`, so masking
-the names cannot break the round trip - verified against `_import_trips`, which reads
-`member_uuids` and never `members`.
-
-Seven tests, including one asserting the DM export still masks (it already did - a guard so
-the two exports cannot drift apart again) and one asserting masked members are still *listed*,
-since dropping them would leak a different fact: how many people are on the trip.
-
-## Global search named people the rest of the app masks (2026-08-07)
-
-Generalising the trips-export leak (ea1a62db). If one surface had missed the
-identity-masking rule, others might have, so this was a sweep rather than a guess: find
-every function that emits another party's `username` without calling a masking helper. 48
-matches, most correct by design - `__str__` for admin, notification text addressed *to* the
-person concerned, URL and query parsing that merely mentions the word.
-
-**Three were real, all in global search.** Search results name other people, and every other
-surface that does resolves the name first:
-
-  messages page + DM export      display_identity_for
-  trip comments                  resolve_visible_identities
-  pin/wiki comment list          resolve_visible_identities (the template branches on
-                                 the `is_masked` it sets)
-
-`DirectMessageSearchProvider` built `title=f"{direction} {other.username}"`, and
-`CommentSearchProvider` built both its subtitles from `.username` - for pin/wiki comments
-and for trip comments. So a user could type a word into the search box and read the username
-of a conversation partner or comment author whose profile visibility hides them; the page
-rendering those very same rows would have shown "Member 2".
-
-Worth noting the reach: global search is also exposed through the external API, where the DM
-provider is gated behind `messages:read` (an OAUTH2_ONLY scope) precisely because it returns
-message content. The names were leaking through the same endpoint.
-
-Fixed with one `_display_names` helper used by all three call sites, resolving a whole batch
-in a single call - the resolver recomputes the viewer's allowed-subject set per invocation,
-so per-row resolution would have been both wrong-shaped and slow. Six tests: two that fail
-without the fix, two asserting a *visible* author's name still appears (masking everything
-would be a different bug), and one asserting rows are still returned - the searcher is
-entitled to find the comment, just not to learn who wrote it.
-
-### Two existing tests were asserting the leak
-
-`test_messages_from_person_finds_conversation_without_text_terms` and
-`..._excludes_other_conversations` both checked `self.alice.username in result.title`. With
-masking applied they fail with `'alice' not found in 'From Member 1'`.
-
-Those tests are about *filtering* - that a person-scoped query returns only that person's
-conversation - and were using the title as a convenient proxy for "whose conversation is
-this". The proxy was the leak. They now assert on the result's URL, which carries the
-partner's profile slug, so the original intent is tested without requiring the name to be
-disclosed. Rewriting a test to match new behaviour deserves suspicion, so to be explicit:
-the assertion that changed was incidental to what each test is named for, and the fixture
-profiles are genuinely masked from one another (they are unrelated `baker.make` profiles),
-which is why the leak was visible there at all.
-
-### One refinement the failures prompted
-
-The DM provider now resolves through `display_identity_for` rather than the generic
-`resolve_visible_identities`. Both make the identical visibility decision - the former
-delegates to the latter - but it labels a hidden partner "Former contact", which is what the
-inbox and conversation header already call them. The generic resolver would have said
-"Member 1" in search and "Former contact" in the inbox for the same person.
-
-## Reply/reaction notifications named people the thread masks (2026-08-07)
-
-Third unit on this class, and the first instance where the leaked name leaves the app.
-
-`notify_reply` and `notify_reaction` built `title=f"{actor.username} replied to your
-comment"` and `message=f"@{actor.username} ..."` from the raw username, while the comment
-list resolves authors through `resolve_visible_identities` and the template renders the
-masked name. So the same person was "Member 2" in the thread and their real username in the
-notification about that thread.
-
-**Why this one is worse than a page.** A `NotificationLog` insert is picked up by
-`enqueue_native_push` and delivered to the recipient's registered devices, and
-`notification_text_alerts` builds an SMS body straight from `notification.title`. The name
-reaches a lock screen and a text message - places the app's own masking cannot reach back
-into.
-
-Fixed with an `_actor_names` helper resolving the actor for that specific recipient. It
-returns the name *and* a handle, because `message` used an `@name` mention form: "@Member 2"
-reads like a real mention and is not one, so the `@` is applied only when the recipient may
-actually see who the actor is. The rule is now stated in the module docstring alongside the
-other three it already lists ("never notify someone about their own action", "honour the
-delivery preference", "one deep-link builder").
-
-Seven tests, including one that the notification is still *sent* - masking the name must not
-suppress the event, since the recipient is entitled to know someone replied - and one that
-the deep link is unchanged.
-
-### Where the class ends
-
-The remaining sweep hits were checked and are correct as they stand. Safety check-in contacts
-and safety-chat participants are a closed set the owner explicitly established, and removing
-a partner revokes their access (`remove_checkin_partner` force-closes the socket), so there
-is no lingering-access case of the kind `display_identity_for` exists for. `__str__` methods
-are admin/debug surfaces. Notification text addressed *to* the person concerned must name the
-other party - that is the message.
-
-Four instances across three units: trips export, three global-search providers, and these two
-notifications. The rule is real and applied in six places; it is still not enforced anywhere,
-which is what task #38 weighs.
-
-## Plugin/panel data paths: no changes warranted, one latent trap documented (2026-08-07)
-
-Audited the panel data paths, looking specifically for the shape that would matter most:
-panel results are cached per **location** (`LocationCache` keyed on `(location, source)`, and
-`PanelSource.scope` defaults to `loc{location_id}`), so any panel whose data is *user*-
-specific would serve one user's data to another.
-
-**There is no such panel.** All 34 panel sources use the default location scope, and every
-one of them fetches a property of the place - elevation, parcel, weather, Wikipedia, imagery.
-The per-user-credential integrations that would be dangerous here (Immich, Google Photos,
-Google Calendar) are not panel sources at all. Five classes matched a "per-user" grep; four
-were the word "credential" appearing in a comment.
-
-Also verified: `panel_visible_to` is the single decision shared by the web tab strip and the
-external API - a feature-gated panel cannot be visible on one surface and hidden on the other
-- and it only returns True unconditionally when the source declares no required feature.
-
-### The one real hazard, at a seam rather than in current behaviour
-
-`plugins.builtin.nominatim` calls `update_location_name_from_external_sources(location,
-profile=pin.profile)` during its fetch, which reaches `default_name_resolver(profile=...)`.
-Today that parameter is **unused**, and the resolver's docstring is explicit that name
-resolution is "an intentionally system-driven decision - individual users cannot override the
-source ordering with their own preference". So nothing is wrong now.
-
-But the parameter is documented as a seam for a future profile-aware resolver, and a future
-author consuming it would be walking into a trap: panel fetches are single-flighted per
-*location*, so several users viewing the same place produce one fetch, and the profile it
-carries is whoever's poll claimed the flight marker first. A resolver honouring that profile
-would make a shared location's name depend on which user loaded the page first,
-non-deterministically - and it would look perfectly reasonable in review.
-
-The warning now lives in the seam's own docstring, where someone about to consume the
-parameter will read it, rather than only here.
-
-## Full-suite verification of the whole session: 10,162 passed, 0 failed (2026-08-07)
-
-**10,162 passed, 0 failed, 1,429 subtests passed, in 59:45.** No failure line in the output.
-
-This one carries **no caveat**, unlike the run recorded earlier (4259df61), which was taken
-while files were being copied into the container and so could not claim to prove any single
-commit. This time, before starting: the container was synced to HEAD, the one test file
-deleted during the session (`test_group_membership_rejoin.py`, removed as duplicate coverage)
-was deleted from the container too, `__pycache__` was cleared, and the container's Python file
-list was diffed against `git ls-files` to confirm they matched. Nothing was copied in during
-the 59 minutes. HEAD was `ae5746dc` at both start and finish, with a clean working tree, so
-this run proves that commit.
-
-Frontend, verified host-side and therefore never touching the container: `tsc --noEmit` clean
-and **372 tests passing** across 25 files.
-
-For scale, the session as a whole: 66 commits, 258 files changed, +18,349/-4,793 lines, and
-33 new test files. The suite grew from 10,087 to 10,162 passing tests.
-
-## WebSocket consumers: no changes warranted (2026-08-07)
-
-Audited the Channels consumers, chosen because real-time auth has a classic failure mode -
-permission checked at connect and never again - and because a comment elsewhere in the
-codebase mentioned a partner's permission being "only checked at connect time", which read
-like a lead.
-
-It is not one. The layer is complete:
-
-- **Group names are derived from the authenticated identity, never from URL input.** The
-  notification and DM consumers join `notification_group_name(profile_id)` /
-  `direct_message_group_name(profile_id)` built from the connected profile, so a client
-  cannot subscribe to someone else's channel by editing a path.
-- **Scope is checked before any group is joined**, so a scope-refused connection never
-  becomes a member an in-flight broadcast could be delivered to.
-- **Every consumer re-validates its credential for the life of the socket.** The mixin's
-  `start_credential_revalidation` is called by the notification, DM and game-session
-  consumers and paired with `stop_credential_revalidation` in all three `disconnect`s; the
-  safety chat consumer runs a richer `_revalidate_access_periodically` that re-checks the
-  authorization *relationship* as well, and cancels its own task on disconnect.
-  `_credential_is_still_valid` states the principle: "a socket must not outlive the authority
-  that opened it", and checks each credential kind the way its own HTTP authenticator would -
-  a stamped `revoked_at` for a PAT, a deleted or expired row for an OAuth2 token.
-
-That last point matters most for the DM socket specifically, since `messages:read` is
-OAuth2-only precisely so a leaked long-lived key cannot become a path into someone's DMs.
-Revocation is the remedy for a leak, and a socket that ignored revocation would defeat it.
-It doesn't.
-
-### A narrow grep gave a confident wrong answer, for the third time this session
-
-Searching the consumers for `_revalidate|_is_still_authorized|_credential_is_still_valid`
-returned **zero** matches inside the notification, DM and game consumers, which looked like a
-real inconsistency against the safety consumer - and would have been a serious one. They call
-`start_credential_revalidation`, a name the pattern did not cover.
-
-That is the same mistake as `UniqueConstraint.condition` and subscripted generic bases,
-recorded earlier: a scan matched one spelling of a thing that has several. The rule already
-written down - validate a scan against a known-good and a known-bad case before believing it -
-would have caught all three, and did not get applied here either. Worth treating as a habit
-rather than a note: when a scan reports that one component does something and its siblings do
-not, the first hypothesis should be that the scan is wrong, not the code.
-
-## Undoing a pin delete crashed when the place had been re-pinned (2026-08-07)
-
-Audited the undo framework - the last substantive feature area untouched this session.
-Migrations were checked first and are clean: `makemigrations --check` reports no changes, no
-untracked migrations (the gotcha where an uncommitted one leaks into a dependency), and a
-single linear chain to 0038.
-
-**Ownership is enforced correctly.** `restore_undo_action` explicitly delegates the check -
-its docstring says the caller is responsible for "checking it belongs to the requesting
-profile before calling this" - which is the shape that produces a bug when one caller
-forgets. All three callers honour it: `controllers/undo.py`, `external_api/views_undo.py` and
-`controllers/pin_bulk.py` each resolve through `UndoAction.objects.for_profile(...)`.
-
-**Two real bugs in `PinUndoHandler.restore`,** both from the same constraint:
-`db_pin_unique_location_per_profile` - one *root* pin per location per profile. The handler
-pre-checks every foreign key the batch referenced, and says why: "since recreating the row
-would otherwise fail with an uncaught IntegrityError". It did not check this one.
-
-1. **Delete a pin, drop a new one at the same place, hit undo → IntegrityError → 500.** An
-   ordinary sequence, not a contrived one. Now refused cleanly as `UndoExpiredError` with a
-   message that says what actually happened, matching how every other unsatisfiable restore
-   in this handler behaves.
-
-2. **Restoring a detail pin failed too, for a subtler reason.** Pins were created parent-less
-   and adopted in a second pass (parents need their new pks first). The constraint only
-   covers root pins - so a detail pin is a root pin for the duration of that gap, and
-   collides with whatever root pin stands at its location. Fixed by creating parents before
-   children and setting the link at creation, so a pin is never transiently a root pin it was
-   never meant to be. Repeated passes rather than a sort, so an arbitrarily deep hierarchy in
-   one batch still resolves.
-
-Five tests. Beyond the two failures, they pin down that another profile's pin at the same
-location does *not* block the undo (the constraint is per profile), that the replacement pin
-survives a refused undo, and that an ordinary undo still restores.
-
-## Two more undo handlers crashed on their own unique constraints (2026-08-07)
-
-Following the pin handler's two crashes (e6e9de7c) into the remaining handlers, since they
-share the pattern: recreate a stashed row, having pre-checked whatever would make the recreate
-fail. Each restores a model with unique constraints of its own.
-
-**`SavedFilter` - unique(profile, name). Crashed.** The handler had *no* pre-checks at all:
-one line, straight to `objects.create`. Delete a saved filter, make another one with the same
-name, hit undo - `uq_saved_filter_profile_name`, uncaught IntegrityError, 500. Now checks both
-the owning profile's existence (which it also never checked) and the name.
-
-**`Wiki` - location is unique, one wiki per location. Crashed.** This handler *did* pre-check
-the location, creator and labels, and its docstring gives the right reason - but it checked
-that the location still *exists*, not that it is still free. Delete a wiki, let the location
-acquire another, undo - `dashboard_wikis_location_id_key`, 500. Worth noting this one is the
-easiest to hit without trying: `Wiki.objects.get_or_create_for_location` creates wikis lazily
-from unrelated code paths (photo enrichment, among others), so the location can reacquire a
-wiki with no deliberate user action at all.
-
-**`Trip` - slug is unique. Clean.** Tested the same way and it passes: the slug is regenerated
-on save, so a reused trip name produces a fresh slug rather than a collision. The test is kept
-as a regression guard, written to accept either a successful restore or a clean refusal - just
-not an IntegrityError reaching the caller.
-
-**`SafetyCheckin` - only uuid is unique**, which restore regenerates. Nothing to do.
-
-That makes four crashes of one shape across three handlers. The shape is worth stating plainly
-for whoever adds the next handler: *an undo handler must pre-check every constraint the
-recreate can violate, not only that its foreign keys still resolve.* Three of the four
-handlers that needed it got the foreign-key half right and the constraint half wrong.
 
 ## Account deletion and the constraint-recreate class: both clean (2026-08-07)
 
@@ -3504,259 +2105,6 @@ lagging or offline client, which is a decision for the owner rather than an audi
 already documents a related deliberate trade (recoverability over forward secrecy), so there is
 precedent for either answer being the intended one.
 
-## Corrected the E2EE docstring's overstated claim, and 28 dead doc references (2026-08-07)
-
-Two documentation corrections, both factual rather than judgement calls, so neither waits on
-the open decision in task #40.
-
-**The security claim now matches what the code enforces.** `models/e2ee/group_key.py` said
-"Versioning is what enforces membership boundaries cryptographically", and
-`docs/designs/e2ee.md` said the same. As the previous entry establishes, it does not - nothing
-validates a message's `key_version`, and what actually keeps post-removal messages from a
-removed member is the server's delivery gate. Both now say so, and the model docstring carries
-an explicit instruction not to add a code path that relies on the version alone to keep a
-removed member out. Leaving the original wording was the real risk: a docstring that promises
-a cryptographic guarantee is exactly what stops the next developer from checking.
-
-**28 source references pointed at documents that had moved:**
-
-    docs/designs/drafts/spotguessr.md      -> docs/designs/drafts/spotguessr.md      (21 files)
-    docs/designs/redata-cid-resolution.md   -> docs/designs/redata-cid-resolution.md  (6 files)
-    docs/reports/overpass-mirror-test.md    -> docs/reports/overpass-mirror-test.md   (1 file)
-    docs/designs/e2ee.md                    -> docs/designs/e2ee.md                   (8 files)
-
-Same class as the seven dead `docs/designs/plugins.md` references fixed earlier in this audit: a
-pointer that resolves nowhere is a dead end for whoever follows it, and these were pointing
-away from documents that do exist.
-
-**12 references left alone deliberately**, because fixing them would mean guessing:
-
-- `docs/api-reference.md` (7) - the same filename is referenced elsewhere in this codebase as
-  `../REData/docs/api-reference.md`, a sibling repository. Most of these sit in REData gateway
-  files and are probably that, but `plugins/builtin/photon.py` is not a REData integration and
-  more likely means Photon's own published API docs. Rewriting them would be inventing intent.
-- `docs/notes/ai/completed.md` (4) and `docs/PROBLEMS.md/completed.md` (1, malformed) - no
-  `completed.md` and no `prompts/` directory exist anywhere in this checkout, though
-  `CLAUDE.local.md` describes them as where prior agents' work notes live. The target is
-  genuinely absent, not moved.
-
-### A fourth narrow-pattern error, caught before it did damage
-
-The first scan reported **38** files with a dead `docs/api-reference.md` reference. The regex
-`docs/[A-Za-z0-9_./-]+\.md` had matched the *tail* of `../REData/docs/api-reference.md` - a
-path into a sibling repo, entirely valid. Re-running it anchored (`(?<![\w./-])`) cut the real
-figure to 7. Had the first result been acted on, 31 correct cross-repo references would have
-been rewritten into broken ones. That is the fourth time this session a pattern matched one
-spelling of a thing with several, and the first where acting on it would have *introduced* the
-bug rather than merely missed one.
-
-## Closing verification: 10,174 passed, 0 failed (2026-08-07)
-
-**10,174 passed, 0 failed, 1,429 subtests passed, in 57:59.** No failure line in the output.
-Frontend verified separately and host-side: `tsc --noEmit` clean, 372 tests across 25 files.
-
-Run under the same discipline as 4b5ff2bf, and for the same reason - six commits had landed
-since that one, including real code changes to three undo handlers, and those had been
-verified only by targeted `-k` selections. Container synced to HEAD and its Python file list
-diffed against `git ls-files` before starting; `__pycache__` cleared; nothing copied in during
-the 58 minutes; HEAD `610f97be` at both start and finish with a clean working tree. The run
-proves that commit.
-
-The count moved 10,162 -> 10,174: the twelve undo-restore conflict tests.
-
-### What is left, and who it is left for
-
-The substantive audit is finished. Four findings remain open and every one needs a decision
-from the owner rather than more investigation:
-
-- **Share-received photos and quota** (`#37`) - charged full price for a file consuming no new
-  storage, on the only Image-creating path with no quota check.
-- **Comment deletion semantics** (`#39`) - `Comment.profile` CASCADE vs `TripComment.author`
-  SET_NULL; one of the two is probably not intended.
-- **E2EE rotation enforcement** (`#40`) - the removal boundary is server-enforced, not
-  cryptographic; the sufficient fix costs availability.
-- **12 documentation references** - 7 probably point at the sibling REData repository, 5 at a
-  `completed.md` that exists nowhere despite `CLAUDE.local.md` describing it.
-
-Three further tasks were assessed and deliberately not done: a structural identity-masking
-guard (`#38`) would mostly re-test surfaces already verified correct; routing the remaining
-fetch call sites through `shared/fetch-json.ts` (`#32`) is churn with no bug attached; and
-`base.html`'s last blocks (`#29`) are template-coupled, with the 937-line comment-map composer
-needing a Leaflet stub - a project rather than an audit unit.
-
-### The methodological lesson, stated once more because it recurred
-
-Four times this session a structural scan matched **one spelling of a thing that has several**,
-and each time the result looked authoritative:
-
-| scan | missed | consequence |
-| --- | --- | --- |
-| unique constraints | `UniqueConstraint.condition` | made a correct group-chat design look like a bug |
-| view base classes | subscripted generics (`View[T]`) | made six protected endpoints look unprotected |
-| consumer revalidation | `start_credential_revalidation` | made three consumers look like they never re-check |
-| doc references | `../SiblingRepo/docs/...` | would have broken 31 correct cross-repo links |
-
-The first three wasted effort. The fourth would have *introduced* the bug rather than missed
-one, and was caught only because the number - 38 dead references in a codebase this careful -
-was implausible enough to check. The rule that would have caught all four is cheap: **validate
-a scan against a known-good and a known-bad example before believing its output**, and treat
-"one component does X and its siblings do not" as evidence the scan is wrong before concluding
-the code is.
-
-## Pin lists are now restorable from Undo History; two gaps remain documented (2026-08-08)
-
-Coverage audit of the undo framework from the missing-feature angle: which user-facing
-destructive deletes stash for undo, and which silently do not. Pins (all four delete paths,
-including the DRF endpoint the map's delete dialog calls), wikis, trips, safety check-ins and
-saved filters all stash. **Pin lists, labels, markup maps, albums and custom fields did not** -
-five permanent deletes in an app whose pin-delete dialog promises "You can restore it from
-Settings → Undo History".
-
-**Implemented: `PinListUndoHandler`** (`services/undo/handlers/pin_list.py`), wired into both
-delete endpoints (web + external API). A list is exactly what undo exists for - deleting one
-destroys hand-built curation while the pins survive. Design points, following the rules this
-audit established:
-
-- Pre-checks `uq_pin_list_profile_name` and the owning profile before creating anything, per
-  the constraint rule from the four handler crashes. The slug constraint cannot fire because
-  the slug is regenerated rather than restored.
-- Restores leniently where the missing piece was never part of the deletion: member pins
-  deleted since are skipped (a list of survivors beats no list), and dead
-  `source_saved_filter`/`markup_map` links are dropped - both are SET_NULL on their targets'
-  own deletes, so this matches what would have happened to a live list.
-- `smart_boundary` (GEOS geometry) round-trips as EWKT so the payload stays JSON-safe.
-- The list-delete confirm no longer says "This cannot be undone", which had just become false.
-
-**Documented for follow-up rather than implemented, in judgement order:**
-
-- **Label** - the next most valuable, and more destructive than lists in one way: deleting a
-  label silently strips it from every pin carrying it. A handler needs: the label's own fields,
-  its `parents` m2m (hierarchy), the pk list from `Pin.labels.through` (which pins carried it),
-  and its `LabelCustomization` rows. Restore pre-checks: profile exists, plus whatever
-  name-uniqueness Label enforces per kind (check the model - the organize page suggests
-  per-profile-per-kind). Pins that vanished are skipped like list members. The complication
-  that makes this a deliberate follow-up rather than a quick add: `label_retire_redata_taxonomy
-  _on_delete` fires on label delete (REData taxonomy retirement), so restore likely needs to
-  *un-retire* or re-sync the taxonomy - understand that signal's contract first.
-- **MarkupMap** - hand-drawn annotation data, clearly worth protecting. Complication: markup
-  maps are shared (`MarkupMapShare`), attachable to comments/messages/pin lists, and deletes
-  happen from three controllers. Serialize the geojson + style fields; decide whether shares
-  are restored (probably not - the recipient relationship was severed) and whether
-  comment/message attachments should relink (probably yes when the row still exists, same
-  SET_NULL-lenient rule as lists).
-- **Album / CustomField** - lower value: an album is a grouping of surviving photos
-  (`AlbumItem` rows), a custom field's values cascade with it. Same handler pattern applies
-  directly with nothing novel; do them if a user ever asks.
-
-## Labels are now restorable from Undo History (2026-08-08)
-
-Second of the two designed follow-ups from the undo coverage audit. The gating question -
-whether the REData taxonomy retirement signal makes restore hazardous - resolved cleanly:
-the signal pair is self-healing. Deleting queues a retirement
-(`retire_redata_taxonomy_on_delete`), and recreating fires `post_save`, whose
-`sync_redata_taxonomy_on_save` **upserts** a fresh definition. The parent relinks re-trigger
-definition syncs via the m2m signal, and the pin re-assignments refresh the map pin cache the
-same way any label add does. No special handling needed in the handler at all.
-
-What the handler captures is the part deletion actually destroys: besides the label's own
-fields, the cascade severs both directions of the `parents` self-M2M (children keep existing
-but lose their link) and the label's assignment to every pin carrying it - visible state,
-since label order decides which icon a pin draws.
-
-One deliberate divergence from the other handlers: `Label` has **no unique constraints**, so
-restore never refuses. A name reused since simply yields two labels, which the organize
-page's merge tool already handles - refusing would be stricter than the app itself is. The
-constraint pre-check rule still holds; there is just nothing to pre-check beyond the owning
-profile.
-
-Wired into all three delete sites (single, web bulk, external API bulk). Ten tests, including
-the in-batch hierarchy relink (bulk-deleting parent and child together must link their two
-*new* rows, not the dead pks - same shape as the pin handler's parent ordering bug).
-
-Remaining from the coverage audit: MarkupMap (design documented in the pin-list entry),
-Album, CustomField (low value, pattern applies directly).
-
-## Markup maps are now restorable from Undo History (2026-08-08)
-
-Last of the designed follow-ups from the undo coverage audit. A markup map is hand-drawn
-work - shapes, arrows, labels, security indicators placed one by one - and deleting it
-cascaded away every `PinMarkup` annotation, arguably the most expensive data any of the
-handlers protect.
-
-The shares decision, made and recorded in the handler's docstring: **`MarkupMapShare` rows
-are deliberately not restored.** Recreating them would silently re-expose the map to every
-past recipient; the delete severed those relationships, and an undo brings back the owner's
-work, not other people's access to it. The owner can re-share. Inbound attachments (a
-comment's or DM's `markup_map` FK) are SET_NULL and already nulled before any stash could
-run, so they are out of scope by construction.
-
-Wired into the explicit delete view and both comment-delete sites that destroy an attached
-map as a side effect - the comment itself is not restorable (task #39 pending), but deleting
-a comment must not silently destroy the drawing attached to it. Annotations restore with
-their original authors; one whose author's account is gone is skipped rather than
-misattributed, since its profile FK is CASCADE.
-
-**Undo coverage is now complete for every hand-curated deletable**: pins, wikis, trips,
-safety check-ins, saved filters, pin lists, labels, markup maps. Album and CustomField remain
-deliberately uncovered (an album is a grouping of surviving photos; a custom field's values
-cascade with it) - the handler pattern applies directly if ever wanted.
-
-## The bulk-write guard caught the audit's own new code (2026-08-08)
-
-Full-suite verification of the three undo commits: **10,197 passed, 1 failed** at 43c26dd6,
-and the failure was `test_bulk_write_signal_guard` flagging `PinMarkup.bulk_create` in the
-markup-map undo handler - the guard built earlier in this audit, doing precisely what it was
-built for, against precisely the person who built it.
-
-And it was right on the merits, not just procedurally. The skipped per-item signals defer a
-pin-inference resync of the parent map. The map's own `created` save also defers one, which
-*looks* like cover - but under autocommit that `on_commit` callback can run before the
-annotations are bulk-created, syncing a drawing of zero items, with the skipped per-item
-signals never triggering a later pass. An ordering hazard that review would not have seen.
-
-Fixed per the guard's own instruction (do the work explicitly): `signals.py` now exposes
-`defer_pin_inference_sync` as a public seam, the handler calls it right after the
-`bulk_create`, the guard's REVIEWED entry records the reasoning, and a test proves the resync
-is scheduled at a point where the restored items already exist
-(`captureOnCommitCallbacks(execute=False)`, then run the callbacks under a mock).
-
-Also corrected `docs/FEATURES.md`'s undo entry, which was stale twice over: it called the
-framework "cache-backed" when the payload deliberately lives on the durable `UndoAction` row
-(the model docstring explains a cache entry can vanish before its window ends), and it listed
-four covered models out of the current eight.
-
-Frontend and ruff verified clean alongside. The one failure is fixed and the affected
-selection (265 markup/undo/bulk_write/inference tests) passes; the next full run will confirm
-the whole.
-
-## Confirming full run clean; undo restores now refresh the map cache (2026-08-08)
-
-**10,199 passed, 0 failed, 1,429 subtests, in 58:03** at `f8e0c23d`, under the usual
-discipline (container synced and file-list-verified first, nothing copied during the run).
-This confirms the guard-catch fix: the previous run's one failure is gone and the suite has
-grown 10,174 → 10,199 across the three undo handlers and their guard entry.
-
-**One client-side bug found and fixed while the run executed** (host-side only, so the run's
-claim is unaffected). Investigating the roadmap's open UL-279 showed its server half already
-fixed by 8ed25a93 and the organize/label pages covered by `organize.ts`'s dirty-flagging -
-but the **Undo History restore path** was not covered. The map's client pin cache polls only
-the newest pin's `updated` timestamp: a restored *pin* advances that and is picked up, but a
-restored **label** returns its pin assignments through the M2M without touching any pin row,
-and a restored list or markup map likewise moves nothing the poll can see. So a restore from
-Settings → Undo History left the map rendering the pre-restore world until the cache expired.
-This matters more now than when UL-279 was filed, since label/list/map restores only became
-possible this session.
-
-Fixed as `shared/undo-map-refresh.ts`: a delegated `htmx:afterRequest` listener flagging
-`ul_pins_dirty` after a successful POST to `/undo/…/restore/`, installed once by `core.js`
-rather than inlined in the undo partial - the partial is re-swapped after every restore, so an
-inline listener would stack a copy per swap, the exact trap this session's test harnesses hit
-three times. Seven tests. Frontend suite 372 → 379.
-
-Also checked and deliberately not touched: UL-277 (per-source freshness windows) is parked at
-the owner's explicit request in this file; the nearest open Tier-1 item, but not mine to
-unpark.
-
 ## Filter-view defects cluster: triaged, 3 of 5 already resolved (2026-08-08)
 
 Roadmap Tier-1 item 5 listed five defects and prescribed one agent owning the page. Static
@@ -3789,21 +2137,6 @@ real browser to verify; the roadmap entry carries the design.
 **Page overflows footer** - CSS-level, needs a browser to reproduce; nothing checkable
 statically.
 
-## Verified: this session's frontend work ships on deploy (2026-08-08)
-
-A closing verification worth writing down because the standing "never run `bun run build` on
-this host" rule could otherwise imply the opposite. The tracked `static/dashboard/js/*.js`
-bundles have not been rebuilt this session, and `core.ts` gained a dozen new shared modules -
-so do deploys serve stale bundles missing all of it?
-
-No. `src/bin/init.py` (invoked by the container entrypoint before the healthcheck can pass)
-calls `build_frontend()` at every container start: `bun run sass` + `bun run build` (dev) or
-`bun run deploy` (staging/production), then `collectstatic`. Bundles are compiled fresh from
-the TypeScript source inside the container, with the container's own toolchain. The tracked
-static bundles are dev-host artifacts; the host-side "bun run build is broken / clobbers
-tracked output" note is about this checkout's host environment, not the deploy path - and the
-dev container being up and healthy is itself proof the in-container build succeeds.
-
 ## Where the audit stands (2026-08-08)
 
 Every area reachable from this environment has now been covered. What remains needs something
@@ -3820,82 +2153,27 @@ Nothing on the remaining task list clears the bar of "worth doing without those 
 blocks are template-coupled or need a Leaflet stub. Stated per the standing instruction to
 say so plainly rather than manufacture work.
 
-## RESOLVED 2026-08-19: HEIC/HEIF uploads cannot have their GPS stripped
+## RESOLVED 2026-08-19: E2EE re-wrap recorded a KDF cost its stored blob was not made with
 
-**Resolution: the first route - `pillow-heif` is now a dependency, and HEIC is an ordinary format
-everywhere.** The opener is registered in `dashboard.apps.ready`, so every path that opens an image
-(thumbnails, EXIF extraction, the GPS strip) handles HEIC without knowing it is special. No user
-sees a message and nothing has to be converted.
+The original entry described the client trusting server-supplied Argon2 parameters. That half was
+already fixed: `e2ee-client.ts`'s stale-password re-wrap derives with its own pinned
+`KDF_OPSLIMIT`/`KDF_MEMLIMIT`, never `bundle.kdf_*`, and the comment there explains why it must (a
+compromised server could otherwise answer `password_wrap_stale=true` with near-zero parameters and be
+handed a cheaply-attackable blob).
 
-**Registering the opener was necessary but not sufficient, and the gap is worth knowing about.**
-Two allowlists governed this, and they had drifted: `_EXIF_REWRITABLE_FORMATS` decides whether a
-stored file may be re-encoded, while a *second, literal* set decided whether the modified EXIF was
-handed to `save()`. Adding HEIF to the first alone meant the file was faithfully re-encoded - and
-pillow-heif carried the original EXIF straight through, so the GPS survived a rewrite that logged
-success. The second gate now derives from the first, so the two cannot drift again.
+What was left was the other end of the same change. `/rewrap` replaced `password_wrapped_secret` and
+never touched `kdf_opslimit`/`kdf_memlimit`. Enrol deliberately accepts stronger-than-default
+parameters and stores them, so a bundle enrolled above the floor kept advertising a cost its new blob
+was not made with - and the read paths use `bundle.kdf_*`. Every later password unlock then derived
+the wrong key: the device holding the cached key loops re-wrapping, a device without one loses the
+password path entirely and has only the recovery key. Permanent, and reachable through the public API
+by enrolling above the floor.
 
-Covered by `test_heic_gps_strip.py`, which builds a real HEIC carrying a real GPS IFD and asserts
-it is gone afterwards - and that the photo still opens at its original size, since a strip that
-corrupts the image would be a worse bug than the one it fixes.
-
-The original filing follows.
-
-### (ORIGINAL) OPEN 2026-08-12
-
-Discovered while fixing the TIFF/AVIF GPS-strip leaks (both fixed; see the audit report).
-
-`content_sniffing._IMAGE_EXTENSIONS` accepts `heic`/`heif` uploads, and the codebase notes in
-several places that HEICs "reach the gallery routinely". But `pillow-heif` is not installed, so
-Pillow cannot open them at all: `PILImage.open` raises inside `_process_photo_upload`, the caller
-logs "Image metadata extraction failed" and returns, and the file is stored untouched.
-
-For a user who has turned off `track_pin_visits` (which is what drives `strip_location`), that
-means the app accepted a photo, promised not to keep its location, and stored a file with the
-full GPS IFD intact — the same failure just fixed for TIFF and AVIF, but not fixable the same way
-because the format cannot be decoded at all.
-
-Not fixed here because both routes are the owner's call, not a bug fix:
-
-1. **Add `pillow-heif`** — HEIC then flows through the existing pipeline (it would need adding to
-   `_EXIF_REWRITABLE_FORMATS`, and `_FORMAT_EXTENSIONS`). Costs a new dependency with a bundled
-   libheif; note the licensing on libheif/x265 before adopting.
-2. **Refuse HEIC when a strip is required** — reject the upload for profiles with
-   `track_pin_visits` off, with a message telling the user to convert first. No new dependency,
-   but it rejects the default iPhone photo format for exactly the privacy-conscious users least
-   likely to accept that.
-
-Whichever is chosen, the invariant worth keeping is the one `test_gps_strip_by_format.py` now
-encodes: a format the app *accepts* must either be scrubbable or refused, never silently stored
-with the coordinates the uploader asked to have removed.
-
-## PARTIAL 2026-08-12: E2EE - the client trusts server-supplied Argon2 parameters (server side fixed; client not)
-
-`password_wrapped_secret` is the user's private key wrapped under a key derived from their
-password, and the security claim — stated in `e2ee-crypto.ts`'s own docstring — is that the
-server, which learns `authKey`, must remain unable to compute `wrapKey`. How expensive it is to
-brute-force that blob offline is decided entirely by the Argon2 `opslimit`/`memlimit` used.
-
-**Fixed here (server side).** `E2EEEnrollView` took both values from the request and validated
-only `> 0`, so a caller could enrol with `opslimit=1, memlimit=1`. It now enforces a floor of the
-pinned defaults `(2, 64 MiB)`, still accepting stronger values so a future client can raise them
-without a server change. No compatibility risk: the server default has never been anything else
-(one migration, `0007`), and the real client sends exactly those constants.
-
-**Not fixed — needs a coordinated client+server change.** `e2ee-client.ts` uses
-`bundle.kdf_opslimit`/`bundle.kdf_memlimit` verbatim, with no floor, in three places. Two are
-unwrap paths, where using the stored parameters is *required* for correctness. The third is a
-re-wrap (`e2ee-client.ts`, the "password copy is stale" branch): it derives a fresh wrapping key
-using the server-reported parameters and uploads the newly wrapped private key. A server that
-reports weak parameters therefore gets the private key re-wrapped weakly, and — because the
-`/rewrap` endpoint accepts only `password_wrapped_secret` and `password_wrap_salt` — the stored
-parameters stay whatever the server said, so the weakness persists and future unwraps still work.
-
-Fixing that properly means the re-wrap must choose its own parameters (the current pinned
-constants, never the server's) *and* send them, with `/rewrap` updating the bundle. That is worth
-doing — it would also upgrade any legacy bundle to current strength on its next re-wrap — but it
-is a write path where getting it wrong locks a user out of their own key permanently, so it wants
-review rather than an unattended change. Clamping the *unwrap* paths is not the answer: it would
-make any bundle legitimately below the floor permanently unopenable.
+`/rewrap` now records the parameters alongside the blob, applying the same floor enrol does - so the
+floor cannot be walked around one step later either. Absent parameters mean the **defaults**, not
+"unchanged": the shipped client has always wrapped with its pinned constants here, and leaving the
+bundle's own values was the bug. A recovery-only re-wrap replaces no password blob and so leaves them
+alone. Guarded by `test_e2ee_kdf_floor.RewrapKdfParametersTests`.
 
 ## OPEN 2026-08-12: a password reset does not evict an intruder who minted an API key
 
@@ -3958,111 +2236,6 @@ so an upload slower than the 30s timeout - already having lost the lock to its s
 *that* upload's lock on the way out. It now uses the token-checked release from
 `services.core.locks` (see the 2026-08-12 sweep-lock entry; same defect, same fix).
 
-## RESOLVED (verified 2026-08-19): commit `c3ae4911` cannot start - it imports five files it did not commit
-
-All five modules are tracked today, and `bin/check_imports_tracked.py` - written in response to
-this very defect - passes on the committed tree. The check is wired into pre-commit, so the class
-cannot recur silently. Original filing follows.
-
-### (ORIGINAL) URGENT 2026-08-13
-
-Worse than, and separate from, the migration gap recorded below. `c3ae4911 audit` committed 139
-files but left **five non-test modules untracked**, and 19 committed files import them:
-
-| untracked module | committed importers |
-|---|---|
-| `models/abstract/labelled.py` | 1 |
-| `services/core/locks.py` | 3 |
-| `services/geo/distance.py` | 7 |
-| `services/geo/longitude.py` | 6 |
-| `services/pins/import_failure_guess.py` | 2 |
-| `core/tests/oauth.py` | 6 (test files) |
-
-And one **template**, which fails the same way one layer later - the app starts, then 500s the first
-time the view renders: committed `controllers/pin_import_failures.py` sets
-`_GUESS_PARTIAL = "dashboard/partials/memories/_pin_import_failure_guess.html"`, which is untracked.
-`PinImportFailureGuessView` raises `TemplateDoesNotExist` whenever a guess is produced.
-
-One of those sits directly on Django's model-loading path. Committed
-`models/abstract/__init__.py:10` reads:
-
-```python
-from urbanlens.dashboard.models.abstract.labelled import LabelledModel  # noqa: E402
-```
-
-and committed `models/pin/model.py:100` declares `class Pin(..., abstract.LabelledModel)`. So a
-fresh checkout raises `ModuleNotFoundError: No module named
-'urbanlens.dashboard.models.abstract.labelled'` while importing models - before any view, task or
-test runs. **The web app, every management command, both Celery workers and the whole test suite
-fail to start.**
-
-This is invisible in any working copy that still has the files on disk, which is every machine this
-audit ran on.
-
-**Fix** - add the five modules and both migrations (0040 before 0041):
-
-```
-git add src/urbanlens/dashboard/models/abstract/labelled.py \
-        src/urbanlens/dashboard/services/core/locks.py \
-        src/urbanlens/dashboard/services/geo/distance.py \
-        src/urbanlens/dashboard/services/geo/longitude.py \
-        src/urbanlens/dashboard/services/pins/import_failure_guess.py \
-        src/urbanlens/dashboard/migrations/0040_gotify_token_fail_soft.py \
-        src/urbanlens/dashboard/migrations/0041_pin_import_failure_maps_url.py \
-        src/urbanlens/core/tests/oauth.py \
-        src/urbanlens/dashboard/templates/dashboard/partials/memories/_pin_import_failure_guess.html
-```
-
-`core/tests/oauth.py` was missed by the first manual pass, which filtered `/tests/` paths out while
-looking for modules that break *startup*. It does not - but six committed test files import
-`first_party_application` from it, so they fail at collection. It was found by
-`bin/check_imports_tracked.py`, added in the same session precisely to stop this class from
-depending on someone remembering to look.
-
-78 new test files are also untracked. They do not affect startup, but without them none of this
-audit's regression guards exist in the repository.
-
-Not staged here: this audit does not commit or stage without being asked, and the commit was made
-outside it.
-
-## RESOLVED (verified 2026-08-19): commit `c3ae4911` ships a model field without its migration
-
-`makemigrations --check` reports no pending changes and `bin/check_migration_graph.py` confirms all
-59 migrations depend only on committed ones. Original filing follows.
-
-### (ORIGINAL) URGENT 2026-08-13
-
-`c3ae4911 audit` committed 139 files, including `maps_url` on `PinImportFailure`
-(`models/pin_import_failures/model.py`). It did **not** commit the two migrations that were sitting
-untracked beside it:
-
-- `0040_gotify_token_fail_soft.py`
-- `0041_pin_import_failure_maps_url.py`
-
-Both are still untracked on disk. Verified with Django rather than by inspection: with them moved
-aside, `makemigrations --check --dry-run` against the committed model state reports two pending
-changes - `+ Add field maps_url to pinimportfailure` and `~ Alter field notify_gotify_token on
-sitesettings`.
-
-**Effect on a fresh checkout of this commit:** `migrate` produces a schema with no `maps_url`
-column while the model declares one, so every query touching `PinImportFailure` - the import-failure
-queue, the per-card guess endpoint, the resolve view - fails with
-`ProgrammingError: column dashboard_pin_import_failures.maps_url does not exist`. Existing
-developer databases that already ran the untracked migrations are unaffected, which is what makes
-this easy to miss: it breaks only for someone cloning fresh or deploying.
-
-**Fix** - add both, 0040 first, since 0041 depends on it:
-
-```
-git add src/urbanlens/dashboard/migrations/0040_gotify_token_fail_soft.py \
-        src/urbanlens/dashboard/migrations/0041_pin_import_failure_maps_url.py
-```
-
-Not done here: this audit does not commit or stage without being asked, and the surrounding commit
-was made outside it. Note also that `0040` is not optional even independently of `maps_url` - the
-`fail_soft=True` model change it reflects was already committed before this audit began (see the
-entry above), so `main` was already missing a migration for it.
-
 ## LOW 2026-08-13: two more `get_or_create` sites state a uniqueness they do not enforce
 
 Follow-up to the `Label` work, re-running the corrected sweep (one that understands functional
@@ -4087,65 +2260,6 @@ guarantee currently rests on nothing.
 Not a finding: `services/facts/evidence.py:95` looked identical (`Fact.objects.get_or_create(key=...)`
 against constraints on `('key','location')`, `('image','key')`, `('key','wiki')`) but supplies the
 second half via `**lookup`, which the static sweep cannot see. It is correct.
-
-### (ORIGINAL FILING) 2026-08-13: "detach location" on a pin fails with a 500, every time
-
-`controllers/pin_edit.py:631` (the `else` branch of the location-change handler, reached when the
-user detaches a pin from its shared `Location`) does:
-
-```python
-lat = float(pin.effective_latitude or 0)
-lng = float(pin.effective_longitude or 0)
-location = Location.objects.create(official_name=..., latitude=lat, longitude=lng)
-```
-
-`Pin.effective_latitude` is `float(self.location.latitude)` - the pin's **current** location's
-stored coordinate. `Location` is `unique_together = ("latitude", "longitude")` (declared in
-`0001_initial`, so this is not a regression from recent work). Creating a Location at coordinates a
-Location already occupies is therefore a guaranteed constraint violation.
-
-Reproduced directly, not inferred:
-
-```
-pin.effective_latitude=42.1234  location.latitude=42.1234
-detach create: IntegrityError -> duplicate key value violates unique constraint
-               "dashboard_locations_latitude_longitude_fdb6594d_uniq"
-```
-
-Both branches fail identically - the named-location branch above, and the fallback
-`_create_location_with_canonical_name(lat, lng)`, which ends in the same bare
-`Location.objects.create` (`controllers/maps.py:1156`).
-
-**The fix is a product decision, which is why this is filed rather than patched.** `Location` is a
-*shared* record of a physical place, globally unique on its coordinates - so "give this pin its own
-Location at the same point" is not expressible. What "detach" should do instead is a design
-question with at least three defensible answers:
-
-- nudge the new Location's coordinates by the smallest representable amount, giving a genuinely
-  distinct point (changes where the pin sits, slightly);
-- keep one Location and express the separation another way - the pin already has marker-coordinate
-  fields, which may be what "detach" was reaching for;
-- refuse with an explanation, if two users pinning one physical place is *supposed* to share a
-  Location and detaching was never coherent.
-
-Whichever is right, the current behaviour - an unhandled `IntegrityError` surfacing as a 500 - is
-wrong under all three.
-
-**Why it went unnoticed: the branch has no test.** `PinRelinkView` serves two routes - `pin.link.to`
-(relink to a named Location, which *is* covered, by `test_pin_relink_access.py` and
-`test_pin_location_conflict.py`) and `pin.link` (detach, no location slug). Searching the whole test
-tree for the detach route returns nine hits, and every one is `pin.link.delete` - an unrelated
-endpoint for removing a pin's external links. Nothing posts to `pin.link`.
-
-So this is not a subtle conditional that testing missed; the code path is simply never executed.
-
-**Test added 2026-08-14 (audit chunk 326)**, `tests/hypothesis/test_pin_detach_location.py`. It
-posts to `pin.link` and is marked `xfail(strict=True)` - it does **not** assert the 500, because
-that would cement the bug as intended, and it does not presuppose which of the three fixes is
-right. When detach stops raising, the strict marker fails and tells whoever fixed it to replace
-the marker with a real assertion. The product decision above is untouched and still yours.
-Whatever the fix turns out to be, a test posting to `reverse("pin.link", args=[pin.slug])` belongs
-with it - that single request is enough to catch this class permanently.
 
 ## OPEN 2026-08-13: ~187 write routes have no test that names them
 
@@ -4217,10 +2331,15 @@ It complements rather than duplicates `test_cross_user_route_access.py`, which a
 decision. Nothing else in the sweep crashes. That is the instrument validating itself - it reproduced
 the known bug from a standing start and produced no noise alongside it.
 
-`pin.link` is exempted by name with its reason, and the exemption is kept honest by
-`test_the_known_crash_is_still_crashing`: when the product decision is made and the route fixed, that
-test fails and says to delete the entry. An exemption nobody re-checks is how an allowlist rots into
-a blindfold (chunk 546).
+`pin.link` *was* exempted by name, with the exemption kept honest by
+`test_the_known_crash_is_still_crashing`: when the product decision was made and the route fixed,
+that test would fail and say so. **That is what happened.** As of 2026-08-18 the route answers 400
+with an explanatory message instead of raising `IntegrityError`, and
+`tests/hypothesis/test_write_route_smoke.py` now reads `_KNOWN_CRASHES: set[str] = set()` - the
+allowlist is empty and every write route is held to the no-5xx property with no exceptions. (Read as
+written, the paragraph above sent a reader to an exemption that no longer exists; the mechanism it
+describes worked exactly as intended, which is the point worth keeping. An exemption nobody
+re-checks is how an allowlist rots into a blindfold - chunk 546.)
 
 This does not close the entry. The 186 routes still have no test asserting what they *do*; they now
 have one asserting they do not crash.
@@ -4375,7 +2494,7 @@ side effect of an exception handler. If fail-closed is chosen, the same question
 
 ---
 
-## Colour values interpolated into `style="…"` - resolved for the renderers, open on the server
+## Colour values interpolated into `style="…"` - fixed at every entry point; the model fields still have no validators
 
 **Superseded note (corrected 2026-08-14).** An earlier version of this entry listed
 `markup-engine.ts:66/84/150` and `markup-toolbar.ts:297/299` as unfixed because a hex-only
@@ -4698,69 +2817,28 @@ look unused.
 
 ---
 
-## 20 label-kind literals where the named constant is already used 130 times
+## RESOLVED 2026-08-19: label-kind literals - and the blind spot in the scan that found them
 
-`models/labels/meta.py` defines `KIND_TAG`/`KIND_CATEGORY`/`KIND_STATUS`/`KIND_USER`/`KIND_MEDIA`,
-and the codebase imports them **130 times** outside tests. Twenty query/create sites used the bare string instead; **eighteen are done, two remain**.
+`models/labels/meta.py` defines `KIND_TAG`/`KIND_CATEGORY`/`KIND_STATUS`/`KIND_USER`/`KIND_MEDIA`.
+Every production call site now uses them. What is left below is the part worth keeping: **the scan
+that produced the original list of twenty could not see six of the sites.**
 
-The thirteen done are the ones where the import is provably safe: `models/labels/meta.py` contains
-*only* constants and imports nothing, so it is a leaf module that any layer can import at module
-level without circularity. The two left are both in `models/pin/model.py`'s `to_json()` - `kind="status"` (891) and
-`kind="tag"` (896). Unlike the others they sit in a method with no local `Label` import, so each
-needs a new line rather than a word added to an existing one. (A third, at the old line 863, went
-away with the `__str__` fix - it was the query this audit removed from that method.)
+It resolved choices via `Model._meta.get_field(name).choices`, which structurally cannot follow a
+lookup traversal - so `labels__kind="status"` was invisible to it, and four such sites survived
+(`models/pin/queryset.py` twice on `status` plus once on `category`, `models/wiki/queryset.py` on
+`category` and `tag`). It also missed two plain `Label(kind=...)` creates (`tasks.py`,
+`services/apis/locations/google/maps.py`) that it should have caught. All six were fixed on
+2026-08-19; the two `models/pin/model.py` sites the entry recorded as "the two that remain" had
+already been done before that.
 
-**One entry was withdrawn.** `services/pins/pin_suggestions.py:767` (`source="external_api"`) is
-correct as written: `PinAlias.source` has **no** `choices` - it is deliberately free-text so plugin
-name providers can attribute aliases to themselves, and `AliasSource` defines only `USER` and
-`OTHER`. The scan flagged it because it keyed choices by field *name* across all models rather than
-by `(model, field)`, so `source` inherited the choices of `PinSuggestion.source` and `Image.source`,
-which do define `EXTERNAL_API`. Same collision class as the earlier value-keyed version, one level
-finer. A correct version needs `(model, field)` resolution; nineteen of the twenty original hits
-were on `Label.kind`, where the ambiguity happened not to bite.
+The entry's own stated risk applied most sharply to exactly the sites it could not see: a filter on
+a stale literal silently matches nothing, where a create with one silently writes a value nothing
+queries. **A future sweep of this class must grep `related__field=` traversals separately** -
+`_meta`-driven scans of this shape will keep reporting a clean list while missing them.
 
-**The approach for them is already established in the same files, so this is smaller than it
-looks.** `models/labels/model.py:26` re-exports every `KIND_*` constant from `labels.meta`, and
-`models/pin/model.py` already does function-local imports of both (`labels.meta` at line 534,
-`labels.model` at 811 and 829) - the local import is how these modules avoid the `labels.model`
-<-> `pin.model` cycle. So:
-
-- Sites at 814 and 833 sit in methods that *already* do `from ...labels.model import Label`.
-  Extending that to `import KIND_CATEGORY, Label` is a one-word change with no new statement and
-  no new import edge.
-- Sites at 863, 886 and 891 are in `__str__` and a serialisation method with no local Label
-  import; they need one line each, matching line 534's `from ...labels.meta import ...` pattern.
-- Worth noticing while there: line 863 runs a **database query inside `__str__`**
-  (`self.labels.filter(kind="status")`). `CLAUDE.md` already forbids `save()` in `__str__`; a query
-  there is the same class of problem - it fires on every repr, in admin lists, logs and error
-  pages. Exact list, from a scan that resolves each field's own `choices` via
-`Model._meta.get_field(name).choices` rather than matching values across all enums:
-
-| file | lines | literal |
-|---|---|---|
-| ~~`controllers/maps.py`~~ | ~~534, 666~~ | done 2026-08-14 |
-| ~~`controllers/pin_lists.py`~~ | ~~90~~ | done 2026-08-14 |
-| ~~`controllers/pin_edit.py`~~ | ~~350, 355, 357~~ | done 2026-08-14 |
-| ~~`models/pin/model.py`~~ | ~~814, 833~~ | done 2026-08-14 |
-| `models/pin/model.py` | 891 | `kind="status"` (863 removed with the __str__ fix) |
-| `models/pin/model.py` | 891 | `kind="tag"` |
-| ~~`models/pin/signals.py`~~ | ~~200~~ | done 2026-08-14 - the only site whose file already imported from `labels.meta` at module level |
-| ~~`models/wiki/model.py`~~ | ~~328~~ | done 2026-08-14 |
-| ~~`services/labels/statuses.py`~~ | ~~26, 46~~ | done 2026-08-14 |
-| ~~`services/pins/pin_creation.py`~~ | ~~330, 333~~ | done 2026-08-14 |
-| ~~`services/visits/visits.py`~~ | ~~502, 520~~ | done 2026-08-14 |
-
-Nothing is broken today - the literals match the constants. The risk is the one already fixed in
-`VisitQuerySet.from_takeout` (2026-08-14): the two agree by coincidence, so changing a constant
-leaves these silently filtering on a value nothing produces. Several are in `Pin.add_category` /
-`change_category`, which this audit separately found to have no production callers - so those
-particular ones matter least.
-
-Mechanical but not trivial: each file needs the right import, and `models/pin/model.py` and
-`models/wiki/model.py` import from `labels.model` lazily to avoid circularity, so the constants
-must follow the same pattern.
-
----
+Remaining bare literals are deliberate and must stay: `baker_recipes.py` (test fixtures) and
+`migrations/` (frozen history - a migration that imports a constant changes meaning if the constant
+does).
 
 ## CORRECTION: the `to_json()` prefetch work does not affect the map
 
@@ -4813,269 +2891,6 @@ Care required if adopted: `LabelledModel` may declare the `labels` field itself,
 migration question, not a refactor.
 
 ---
-
-## PARTIAL: per-row queries inside loops - 12 sites, 3 fixed 2026-08-14, the same root cause
-
-Three instances of this were fixed on 2026-08-14 (`Pin.to_json`'s `.filter()`, `Pin.rating`'s
-`.latest()`, and `views_pin_bulk`'s `.exists()` costing len(pins) x len(labels)). An AST sweep for
-the general shape - a **related-manager verb that bypasses `prefetch_related`, inside a loop or
-comprehension** - finds twelve more. None are fixed; each needs its loop read to judge the
-multiplier.
-
-| file | lines | call | note |
-|---|---|---|---|
-| ~~`services/consensus/fields.py`~~ | ~~256, 260, 298, 302~~ | | **FIXED 2026-08-14** - see below |
-| ~~`services/pins/pin_suggestions.py`~~ | ~~888~~ | | **FIXED 2026-08-14** - was one query per date in `suggestion.visit_dates`; now one `__in` query, with the set updated as visits are created so a repeated date is still skipped |
-| `services/pins/pin_suggestions.py` | ~~802~~ | `pin.visit_history.filter(visited_at__date__in=days)` | **false positive** - inside a dict comprehension but evaluated once, not per iteration |
-| ~~`services/memories/photos.py`~~ | ~~165~~ | | **FIXED 2026-08-14** |
-| ~~`services/import_export/export.py`~~ | ~~650, 764~~ | | **BOTH FIXED 2026-08-14** |
-| ~~`services/import_export/import_data.py`~~ | ~~1554~~ | `trip.profiles.count()` | **not worth fixing** - see below |
-| ~~`services/pins/pin_list_membership.py`~~ | ~~89~~ | `pin_list.items.count()` | **not a defect** - the query is load-bearing, see below |
-| ~~`controllers/pin.py`~~ | ~~227~~ | `pin.images.exclude(pk=...)[:20]` | **false positive** - one query; the comprehension iterates an already-sliced queryset |
-
-Discounted as false positives: `export.py:848,850` (`os.path.exists`, which matches the
-`obj.attr.verb(` shape).
-
-**The fix is not uniform** - that is why this is a list rather than a patch. `.count()` in a loop
-often wants an `annotate(Count(...))` on the outer queryset; `.filter()` over a relation often
-wants `prefetch_related` plus a Python filter; `.exists()` often wants a single `__in` query
-outside the loop. Each needs its caller read.
-
-### Progress on the worst one
-
-`_alias_find_missing` / `_alias_find_known` (`fields.py:256,260`) are invoked from
-`services/consensus/selection.py:106` and `:163` as `strategy.find_missing(pool)`. **The remaining
-step is to see how `pool` is built**, because that decides the fix and the two options differ:
-
-**Answered.** `selection.py:71` builds it as `pool = list(eligibility.eligible_wikis(...))` - a
-materialised **list**, with no prefetch. So it is the third case, and the fix needs *both* halves:
-
-1. `prefetch_related("aliases", "images")` on the queryset inside `eligibility.eligible_wikis()`
-   (and `eligible_wikis_for_all()`);
-2. **then** change the helpers to `.all()` + `len()`/truthiness/Python filtering.
-
-Either half alone is wrong. Only (2) makes it *slower* - `.all()` fetches every alias row where
-`.count()` fetched a number. Only (1) does nothing, because `.count()`/`.exists()`/`.filter()`
-never read the cache.
-
-It is also worse than the table suggests: `_pick_normal_round` calls `strategy.find_missing(pool)`
-**once per field kind** (`for kind in fields.all_kinds()`), so the cost is
-kinds x wikis x queries-per-wiki, not wikis x 4.
-
-**Done 2026-08-14.** Both halves applied together, since either alone regresses: the prefetches
-are on `eligible_wikis()`/`eligible_wikis_for_all()`, and all four helpers now use `.all()`. The
-two `wiki.images.filter(latitude__isnull=...)` calls became `any(image.latitude is None and ...)` -
-translating a SQL `__isnull` filter into Python needs both fields checked, and getting it wrong
-would silently change which wikis become round candidates.
-
-Each file carries a comment naming the other: the coupling is invisible from either side alone, and
-an edit to one that ignores the other reintroduces the cost silently. 76 consensus tests pass.
-
-The instrument for confirming any of them is
-`dashboard/tests/hypothesis/test_pin_to_json_prefetch.py`: capture queries over 1 and N objects and
-assert the per-object delta is zero.
-
-
-### `memories/photos.py:165` - RESOLVED
-
-The open question was whether `maybe_suggest_photo_visit` creates a `PinVisit`, which would make a
-precomputed set of visited dates stale mid-loop. **It does not**: `PinVisit` appears exactly once in
-`services/memories/visits.py`, in the module docstring. It creates a `VisitSuggestion` only.
-
-So neither branch adds a date to the set - the "already visited" branch logs another visit on a
-date already in it - and one `__in` query up front is correct. Fixed.
-
-The reasoning is recorded because it is not visible from the loop: whether collapsing a
-per-iteration query is safe depends on what two *other* functions write, and the answer took
-reading both. Same hazard as the Takeout importer and the suggestion-acceptance fix, both resolved
-the same day - a per-iteration query is often reading the loop's own writes.
-changes behaviour unless that is reproduced.
-
-
-### `pin_list_membership.py:89` - the query is load-bearing, leave it
-
-`order=pin_list.items.count()` sits inside a loop that **creates** `PinListItem` rows, so each
-iteration deliberately reads the previous iteration's write to get the next order value.
-Precomputing the count would give every new item the *same* `order`.
-
-A local counter incremented per create looks like the obvious optimisation and is not safe either:
-the same loop's `elif` branch calls `existing.delete()`, so the real count moves in both directions
-and a local counter drifts from it.
-
-This is the exact inverse of the hazard that made the other fixes tricky. There, a per-iteration
-query accidentally read the loop's own writes and collapsing it changed behaviour. Here it does so
-**on purpose**, and collapsing it would break ordering. Both cases look identical to a scan for
-"query inside a loop", which is why every entry on this list needs its loop read rather than
-patched to a pattern.
-
-Cost is one cheap `COUNT` per added pin, on a membership-sync path - worth leaving alone.
-
-
-### `export.py:650` and `:764` - fixes specified, both need the feeding queryset
-
-Neither is fixable at the loop; both need the queryset that supplies it changed. Unlike the
-`.filter()`-on-a-prefetch cases, there is no in-place rewrite that helps.
-
-**`:650` - FIXED 2026-08-14, and the same "both costs" shape as `:764`.** The queryset already did
-`prefetch_related("parents", "pins")`. `parents` is read with `.all()` and uses the cache; `pins` was
-read with `.filter(profile=profile)`, which bypasses it - so every label fetched *all* its pins
-(other profiles' too, for global labels) and then queried again per label. Fixed with:
-
-    Prefetch("pins", queryset=Pin.objects.filter(profile=profile), to_attr="own_pins")
-
-on the label queryset, then `label.own_pins` in the comprehension. `to_attr` matters - without it
-`label.pins.all()` would return the filtered set under a name implying otherwise, which is a trap
-for the next reader. Strictly better on both axes: fewer rows fetched *and* no per-label query.
-
-Worth noting the two relations sat side by side, one right and one wrong, in the same
-`prefetch_related` call - `parents` with `.all()`, `pins` with `.filter()`. That is how easily this
-mistake hides.
-
-**`:764` - FIXED 2026-08-14, and it was worse than specified.** The message queryset *already*
-did `prefetch_related("images")`, and `message.images` is used for nothing but that count. So it
-paid **both** costs: every image row for every message was fetched into a cache, and `.count()`
-ignored the cache and issued a per-message COUNT anyway.
-
-Annotated with `Count("images")` and the prefetch **dropped** - no rows fetched, no per-message
-query. `len(message.images.all())` would have fixed the query but kept the pointless row fetching;
-that is the option to avoid when a relation is only ever counted.
-
-Both are export paths - they run over every label and every message a profile owns, so the
-multiplier is the size of the account. Neither was measured; the instrument is
-`test_pin_to_json_prefetch.py`'s approach (capture queries over 1 and N objects).
-
-## Closing tally on this list
-
-Fourteen candidates, triaged individually:
-
-| outcome | count | notes |
-|---|---|---|
-| **fixed and verified** | 8 | `to_json` labels, `rating`, bulk label removal, consensus selection, suggestion acceptance, photo-visit matching, **label export**, **message export** |
-| **false positives** | 3 | `export.py:848/850` (`os.path.exists`), `pin_suggestions.py:802`, `controllers/pin.py:227` - all one query, flagged for appearing inside a comprehension |
-| **load-bearing, left alone** | 1 | `pin_list_membership.py:89` - reads its own writes deliberately, for ordering |
-| ~~specified, not started~~ | 0 | both `export.py` sites were subsequently fixed - see above |
-| **remaining** | 0 | list fully triaged |
-
-*(This table said "6 fixed / 2 specified" until 2026-08-14, when the two `export.py` sites were
-done and the tally was not updated with them. Third stale count found in this audit's own
-documentation, after the colour-site total and the report's verification header - a number written
-once and not re-checked is the failure mode these documents keep reproducing while describing it.)*
-
-**Three different wrong answers were available for a scan to give here**: six real, three
-false-positive, and one where the "obvious fix" would have broken ordering. A tool that patched
-every hit would have been right less than half the time. Each entry needed its loop read - which is
-also how the correctness traps inside the six real ones were caught (`get_latest_by` ordering,
-`__isnull` conjunctions, and two loops silently reading their own writes).
-
----
-
-## Lead: 11 relations prefetched in a file, then read with a cache-bypassing verb
-
-The last two N+1 fixes (2026-08-14) shared a shape worth hunting: a relation named in
-`prefetch_related(...)` and then read with `.filter()`/`.count()`/`.exists()`, which ignores the
-cache. In both cases a *correct* sibling sat in the same call - `parents` with `.all()` beside
-`pins` with `.filter()`; `images` prefetched purely to be `.count()`ed. There is no visual
-asymmetry.
-
-A file-level sweep for that pairing gives eleven candidates:
-
-| file | line | call |
-|---|---|---|
-| ~~`controllers/pin_sharing.py`~~ | ~~166~~ | **false positive** - one query filtering submitted ids, not in a loop |
-| ~~`controllers/safety.py`~~ | ~~747~~ | **false positive** - a single authorization check on one check-in; `.exists()` is correct there, being cheaper than fetching rows |
-| ~~`controllers/safety.py`~~ | ~~1520~~ | **false positive** - one query for one check-in's template context |
-| ~~`external_api/views.py`~~ | ~~2006, 3369~~ | **false positives** - a single count in a response, and a single map lookup on one check-in |
-| ~~`models/album/model.py`~~ | ~~145~~ | **false positive** - already `len(self.items.all())`; the scan matched `.items.count()` inside the docstring explaining why not to use it |
-| ~~`models/pin_list/model.py`~~ | ~~82~~ | **false positive** - same |
-| `services/messaging/direct_messages.py` | 281, 398, 1259 | `.images.exists()` x3 |
-| ~~`models/pin/model.py`~~ | ~~820~~ | already assessed - a write in `change_category`, once per request, in a method with no production callers |
-
-**This is a lead, not a finding.** The sweep is file-level: it pairs a `prefetch_related("x")`
-*anywhere* in a file with a `.x.filter()` *anywhere else*, and those may be different functions over
-different querysets. Each needs checking that the prefetching queryset is the one feeding that call.
-
-Two shortcuts from the fixes already done:
-
-- If the relation is **only ever counted** (`.items.count()`, `.images.exists()` look like this),
-  the answer is usually `annotate(Count(...))` and **removing** the prefetch - not `len(x.all())`,
-  which fixes the query but keeps the row-fetching.
-- If the filtered rows **are** used, the answer is `Prefetch(..., queryset=..., to_attr=...)`.
-
-**Verified 2026-08-14: the three `direct_messages.py` sites were real, and the worst case of this
-whole pattern.** The conversation-list queryset carries a comment stating that
-`prefetch_related("images")` exists specifically to stop the `message_preview` template tag's
-`images.exists()` from issuing a query per row - "an N+1 across the sidebar's conversation list".
-
-The diagnosis is correct and the remedy does not work: **`.exists()` never reads a prefetch
-cache**. The N+1 was still happening *and* every image row was being fetched as well - strictly
-worse than no prefetch, while reading as solved. A future reader sees a prefetch, a comment naming
-the exact symptom, and concludes it is handled; only a query count says otherwise.
-
-Fixed by making the prefetch deliver what it promises: `.exists()` -> truthiness on `.all()` in
-`templatetags/dashboard_tags.py:message_preview` and the two `direct_messages.py` previews, with
-the comment corrected so the more idiomatic-looking `.exists()` is not "restored" later.
-
-**Two more resolved, as false positives of a kind worth knowing about.**
-`models/album/model.py:145` and `models/pin_list/model.py:82` already do
-`len(self.items.all())`, with docstrings explaining *"rather than `self.items.count()`"* and
-citing prefetch reuse - the scan matched that phrase in the prose. The two places in the codebase
-that document this rule correctly were flagged for breaking it.
-
-Worth noting for the remainder: a text-matching scan cannot tell code from a comment about code,
-and this codebase comments unusually well - so its best-documented spots are the most likely to
-appear on such a list.
-
-**Two more dismissed 2026-08-14**: `pin_sharing.py:166` and `safety.py:747` are single-object
-contexts, not per-row loops. `.exists()` on one check-in's contacts is the *correct* call - it is
-cheaper than fetching rows, and the prefetch-cache argument only applies when the same relation is
-read repeatedly across many objects.
-
-### Closed: 11 candidates, 1 real
-
-All eleven triaged. **One real** - the messaging previews, where a prefetch added specifically to
-stop an N+1, with a comment naming the symptom, never stopped it. **Ten false positives**, of three
-kinds:
-
-- **single-object contexts** (6): one count in a response, one authorization check, one template
-  context, one id filter. `.count()`/`.exists()` are the *correct* calls there - cheaper than
-  fetching rows. The prefetch-cache argument only applies when a relation is read repeatedly across
-  many objects.
-- **docstring prose** (2): `album/model.py` and `pin_list/model.py` already do `len(items.all())`
-  and were matched on the text explaining why not to use `.count()`.
-- **already assessed** (2): a write in `change_category`, and a sliced queryset evaluated once.
-
-~9% precision. That is the honest verdict on this scan: worth running **once**, immediately after
-confirming the pattern twice by hand, and not worth building into a linter. The value came from
-reading the candidates, not from the list.
-
-
-### `import_data.py:1554` - assessed, leave it
-
-`remaining = max_members - trip.profiles.count()` is computed **once per trip**, before the loop
-over members, as a capacity check that has to reflect current state - memberships are being created
-around it.
-
-There is no queryset to annotate: trips are processed one at a time from import rows, so `trip` is
-a freshly created or looked-up object rather than a row in an iterable that could carry
-`annotate(Count("profiles"))`. One cheap `COUNT` per imported trip, on an import path.
-
-Same category as `pin_list_membership.py:89` - a query inside a loop that is structurally
-necessary rather than accidental. **Two of the fourteen candidates on this list were of that kind**,
-which is the argument against treating any such list as a work queue to be cleared: a fifth of it
-was code that should not change.
-
----
-
-## `datetime.date.today()` -> `timezone.localdate()` (superseded)
-
-Filed 2026-08-14 in audit chunk 314 as a fresh finding of 4 sites. It was neither fresh nor 4: the
-2026-08-12 entry above ("`date.today()` bypasses Django's configured timezone") had already
-recorded all **nine**, and had argued against converting them. Chunk 317 then rediscovered the
-missing five by AST scan.
-
-Merged into that entry to keep one record. Kept as a pointer rather than deleted, because the
-duplication is the finding: two days of prior analysis were sitting in this file, in a section the
-audit had been appending to for dozens of chunks, and were not read before acting.
 
 ## Workflow: Django logic can be checked on the host without the container
 
@@ -5868,50 +3683,22 @@ The eight that *were* mechanically provable (anchored on a `def`/`class` the too
 uniquely) are fixed, and `check_doc_line_refs.py` now runs in CI to keep past-end-of-file citations
 at zero.
 
-### (ORIGINAL FILING) 2026-08-17: blocking leaves a saved emergency-contact default pointing at the blocked profile
+## RESOLVED 2026-08-19: two encryption migrations disagreed about whether encrypting is reversible
 
-Found alongside the `MarkupMapShare` revocation, and left for an owner's decision because it is a
-product question rather than a defect.
+0048 now carries a real decrypting `reverse_code` (`decrypt_existing_preference_fields`), modelled
+on 0039's: same `gAAAA%` discriminator so plaintext rows are left alone, and the whole rollback
+aborts if any token-shaped value cannot be decrypted under the configured keys.
 
-`EmergencyContactDefault` is a *template*: it is copied onto each new `SafetyCheckin` as a
-`SafetyCheckinContact` snapshot at creation time. Blocking someone does not remove it, so a check-in
-created *after* the block still copies the blocked profile in as an emergency contact - and the
-safety escalation path will page them.
+What made this decidable rather than a standing argument: the policy had **already been written
+down**. `docs/DATA_ENCRYPTION.md`'s "Migration rollbacks decrypt" (2026-08-15) says rollbacks
+decrypt and abort rather than write garbage, and 0007 and 0039 implement it. 0048 landed two days
+later reversing to noop, which left one file contradicting a documented rule - and it was the more
+dangerous side of the pair, because noop makes `migrate dashboard 0047` *succeed* while leaving
+ciphertext in columns pre-0048 code reads as plaintext. A failure someone can act on beats a success
+that corrupts.
 
-Both answers are defensible, which is why this is filed rather than fixed:
-
-- **Remove it on block.** Consistent with how blocking already treats safety-partner access, and
-  avoids the surprise of paging someone you blocked.
-- **Leave it.** The default is the owner's own saved data, and silently deleting a safety contact is
-  destructive in a feature whose whole purpose is that someone is notified when you do not check in.
-  An owner might block a person socially and still want them called if they go missing.
-
-A third option, probably the best of the three: keep the row, and warn at check-in creation when a
-default resolves to a blocked profile - which informs without deciding for them.
-
-Everything else that links two profiles was enumerated while checking this (twenty models). The rest
-are either already handled (`Friendship`, `SafetyCheckinPartner`, pending `PinShare`,
-`DirectMessageTemporaryAccess`'s read-time veto), private annotations the author owns
-(`ProfileNote`, `ProfileNickname`, `ProfileTrust`, `ProfileLabelAssignment`), or deliberately
-preserved history (`DirectMessage`, `ConversationKey`).
-
-## OPEN 2026-08-17: two encryption migrations disagree about whether encrypting is reversible
-
-`0007_pinshare_bundled_with_markup_map_removed_flags.py` encrypts credential tokens and carries a
-real decrypting `reverse_code` - the guard's own note calls that "exactly the case that must NOT be
-noop". `0048_encrypt_preference_and_contact_label.py` encrypts two preference columns and reverses to
-`RunPython.noop`, with the opposite reasoning stated just as plainly: a reverse would have to decrypt
-under whatever key is active at rollback time, and getting that wrong writes garbage over real data,
-so restore from a backup instead.
-
-Both arguments are sound in isolation and they cannot both be the rule. The question is which risk the
-project accepts: a reverse that can corrupt data under a rotated key, or a reverse that silently
-leaves a column unreadable by the pre-migration code. Whichever is chosen should be written down in
-`docs/DATA_ENCRYPTION.md` and applied to both, because the next person encrypting a column will copy
-whichever migration they happen to open.
-
-Found by `test_migration_noop_reverse_guard`, which forces exactly this review and had not yet seen
-0048 - it arrived in the 2026-08-17 merge.
+The exemption is removed from `tests/hypothesis/test_migration_noop_reverse_guard.py`, and
+`test_migration_0039_reverse.py` now covers 0048 with the same three assertions it applies to 0039.
 
 ## Two tests fail only under a randomized full-suite run (2026-08-18)
 

@@ -83,11 +83,34 @@ Two git-history queries:
   exist ("like its sibling already did", "the same fix"). Each names a spot
   where the author knew the pattern had more than one instance.
 
-Following one such commit led to both money bugs in the billing ledger.
+Following one such commit led to both money bugs in the billing ledger. On
+2026-08-20 the same query paid out twice more, from one line of its output:
+commit `1634837e` ("masks identity **like its sibling does**") had a third
+instance in `services/visits/visits.py`, and reading around it confirmed two
+other raw usernames were correct by design — which is the other half of the
+value, since "checked and correct" is worth recording too.
+
+Its companion `report_model_writers.py` found the `Friendship` lost update the
+same day. Neither report finds bugs on its own; both narrow *where to read*, and
+the reading is what finds them.
+
+**The fix-density half was swept on 2026-08-20** — five readers over the top of
+that list, each finding then handed to an adversarial verifier told to refute it.
+10 findings, 9 survived, 4 fixed (see the 2026-08-20 hunt entry in
+`docs/PROBLEMS.md`). Two lessons about the method rather than the findings:
+
+- **The verify pass earns its cost in both directions.** It killed one finding
+  outright (a "privacy leak" whose facts were already public by design) and
+  corrected another's severity by doing arithmetic the reporter had not — the
+  2FA counter degrades the lockout, it does not disable it.
+- **Verify the findings yourself before acting.** Two of the four fixed differed
+  from their report: the trip-activity 500 affected *every* caller rather than
+  just the edit dialog, and the hidden-activity leak had two further instances
+  the report did not name. A finding is a place to look, not a diagnosis.
 
 ## Structural checks (CI)
 
-Three checkers guard properties that are invisible from a working copy, which is
+Five checkers guard properties that are invisible from a working copy, which is
 exactly why they need checking — the machine that made the mistake is the one
 that cannot see it.
 
@@ -96,6 +119,18 @@ that cannot see it.
 | `bin/check_imports_tracked.py` | An import resolving to a file git is not tracking |
 | `bin/check_migration_graph.py` | A migration depending on one a fresh checkout won't have |
 | `bin/check_doc_line_refs.py` | A documentation citation pointing past end-of-file |
+| `bin/check_outage_not_cached.py` | A `fetch` that caches a swallowed failure as though it were an answer |
+| `bin/check_notification_choke_point.py` | A notification written around the mute preference |
+
+The last two exist because a *defect class* recurred, not because one bug did.
+`check_outage_not_cached.py` came from an outage being stored as "nothing here"
+and outliving the outage; `check_notification_choke_point.py` came from a mute
+preference that two UI surfaces wrote and nothing read, which was possible
+because ~30 places created a `NotificationLog` and honouring a preference meant
+remembering it thirty times. Both replace "remember to" with "cannot forget":
+notifications go through `NotificationLog.objects.notify()`, and a deliberate
+bypass is marked `notify-bypass-ok: <why>` on the line above so the exemption
+sits where the decision is.
 
 `check_doc_line_refs.py --report-drift` additionally lists citations whose line
 exists but no longer holds what the prose claims. That half is *not* enforced:

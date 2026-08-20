@@ -82,7 +82,7 @@ def pick_next_location(
     # (session.get_or_create_round), so an O(pool size) query count there compounds
     # into thousands of round trips and was the dominant cause of SpotGuessr /start/
     # being slow-to-timing-out (see "Unit 24/25 (deferred item, now fixed): round
-    # generation re-ran the eligibility query per retry" in docs/PROBLEMS.md).
+    # generation re-ran the eligibility query per retry" in docs/PROBLEMS-ARCHIVE.md).
     pin_counts = dict(Pin.objects.filter(location_id__in=location_ids).values_list("location_id").annotate(n=Count("pk")).values_list("location_id", "n"))
     photo_counts = dict(Image.objects.filter(location_id__in=location_ids).values_list("location_id").annotate(n=Count("pk")).values_list("location_id", "n"))
 
