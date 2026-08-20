@@ -5370,6 +5370,14 @@ a.popup-title {
     z-index: 1200;
     display: flex;
     flex-direction: column;
+
+    // A class selector beats the UA stylesheet's `[hidden] { display: none }`,
+    // so the attribute Leaflet's togglePinPopupMenu() toggles did nothing on
+    // its own - the menu rendered open, permanently, overlapping the rest of
+    // the popup.
+    &[hidden] {
+        display: none;
+    }
     min-width: 11rem;
     padding: 0.25rem;
     border: 1px solid var(--border-color, #ccc);
