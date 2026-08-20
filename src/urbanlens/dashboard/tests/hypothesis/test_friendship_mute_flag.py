@@ -18,21 +18,22 @@ the consequences were not cosmetic:
 - The prior status was not recorded anywhere, so even a hand-written unmute
   had nothing to restore.
 
-The fix is a separate ``Friendship.muted`` boolean. These tests pin the
-resulting invariant: **mute and unmute change the flag and nothing else**, for
-every status a relationship can be in.
+The fix is a mute flag stored separately from ``status``, one column per side
+of the relationship. These tests pin the resulting invariant: **mute and unmute
+change one person's flag and nothing else**, for every status a relationship
+can be in. What the flag then *suppresses* is pinned in
+``test_friendship_mute_suppression.py``.
 """
 
 from __future__ import annotations
 
 import importlib
 
-from django.apps import apps as django_apps
 from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
@@ -110,7 +111,7 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
 
         self.friendship.refresh_from_db()
         self.assertEqual(self.friendship.status, FriendshipStatus.ACCEPTED)
-        self.assertTrue(self.friendship.muted)
+        self.assertTrue(self.friendship.is_muted_by(self.actor))
         self.assertTrue(Profile.are_friends(self.actor, self.other_profile))
 
     def test_unmute_clears_the_flag_and_still_leaves_status_alone(self) -> None:
@@ -120,7 +121,7 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
 
         self.friendship.refresh_from_db()
         self.assertEqual(self.friendship.status, FriendshipStatus.ACCEPTED)
-        self.assertFalse(self.friendship.muted)
+        self.assertFalse(self.friendship.is_muted_by(self.actor))
         self.assertTrue(Profile.are_friends(self.actor, self.other_profile))
 
     def test_mute_is_idempotent(self) -> None:
@@ -129,7 +130,7 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
         mute_profile(self.actor, self.other_profile)
 
         self.friendship.refresh_from_db()
-        self.assertTrue(self.friendship.muted)
+        self.assertTrue(self.friendship.is_muted_by(self.actor))
         self.assertEqual(Friendship.objects.all().profile(self.actor).count(), 1)
 
     def test_unmute_is_idempotent(self) -> None:
@@ -137,15 +138,44 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
         unmute_profile(self.actor, self.other_profile)
 
         self.friendship.refresh_from_db()
-        self.assertFalse(self.friendship.muted)
+        self.assertFalse(self.friendship.is_muted_by(self.actor))
 
     def test_mute_works_in_either_direction(self) -> None:
         """The row is directional; the action is not - either party may mute."""
         mute_profile(self.other_profile, self.actor)
 
         self.friendship.refresh_from_db()
-        self.assertTrue(self.friendship.muted)
+        self.assertTrue(self.friendship.is_muted_by(self.other_profile))
         self.assertEqual(self.friendship.status, FriendshipStatus.ACCEPTED)
+
+    def test_muting_is_not_mutual(self) -> None:
+        """The bug that made wiring mute into delivery unsafe until now.
+
+        One row joins the pair, so a single shared boolean meant A muting B
+        also read as muted from B's side - and B, who asked for nothing, would
+        have been the one silenced.
+        """
+        mute_profile(self.actor, self.other_profile)
+
+        self.friendship.refresh_from_db()
+        self.assertTrue(self.friendship.is_muted_by(self.actor))
+        self.assertFalse(self.friendship.is_muted_by(self.other_profile))
+
+    def test_one_sides_unmute_leaves_the_others_mute_alone(self) -> None:
+        """Both may mute independently; neither clears the other."""
+        mute_profile(self.actor, self.other_profile)
+        mute_profile(self.other_profile, self.actor)
+
+        unmute_profile(self.actor, self.other_profile)
+
+        self.friendship.refresh_from_db()
+        self.assertFalse(self.friendship.is_muted_by(self.actor))
+        self.assertTrue(self.friendship.is_muted_by(self.other_profile))
+
+    def test_a_stranger_has_no_side_of_the_row_to_read(self) -> None:
+        """Answering False would be a guess; every wrong guess silences somebody."""
+        with self.assertRaises(ValueError):
+            self.friendship.is_muted_by(_profile())
 
     def test_mute_without_a_relationship_raises_not_found(self) -> None:
         """Mute is a volume control on an existing relationship, not a veto on a stranger."""
@@ -160,36 +190,38 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
             unmute_profile(self.actor, stranger)
 
     def test_default_is_unmuted(self) -> None:
-        """A brand-new relationship is not muted."""
-        self.assertFalse(self.friendship.muted)
+        """A brand-new relationship is not muted, by either party."""
+        self.assertFalse(self.friendship.is_muted_by(self.actor))
+        self.assertFalse(self.friendship.is_muted_by(self.other_profile))
 
     @given(status=st.sampled_from(_LIVE_STATUSES))
     @_db_settings
     def test_mute_never_rewrites_any_status(self, status: str) -> None:
         """Property: whatever status a row holds, muting preserves it exactly."""
-        Friendship.objects.filter(pk=self.friendship.pk).update(status=status, muted=False)
+        Friendship.objects.filter(pk=self.friendship.pk).update(status=status, muted_by_from_profile=False, muted_by_to_profile=False)
 
         mute_profile(self.actor, self.other_profile)
 
         self.friendship.refresh_from_db()
         self.assertEqual(self.friendship.status, status)
-        self.assertTrue(self.friendship.muted)
+        self.assertTrue(self.friendship.is_muted_by(self.actor))
 
     @given(status=st.sampled_from(_LIVE_STATUSES))
     @_db_settings
     def test_unmute_never_rewrites_any_status(self, status: str) -> None:
         """Property: the inverse holds too - unmute is status-preserving."""
-        Friendship.objects.filter(pk=self.friendship.pk).update(status=status, muted=True)
+        Friendship.objects.filter(pk=self.friendship.pk).update(status=status, muted_by_from_profile=True, muted_by_to_profile=True)
 
         unmute_profile(self.actor, self.other_profile)
 
         self.friendship.refresh_from_db()
         self.assertEqual(self.friendship.status, status)
-        self.assertFalse(self.friendship.muted)
+        self.assertFalse(self.friendship.is_muted_by(self.actor))
+        self.assertTrue(self.friendship.is_muted_by(self.other_profile), "unmuting is one person's decision")
 
 
 class MuteQuerySetTests(TestCase):
-    """``muted()``/``unmuted()`` filters read the flag, never the status."""
+    """``muted_by()``/``not_muted_by()`` read the flags, never the status."""
 
     def setUp(self) -> None:
         """Create one muted and one unmuted accepted friendship."""
@@ -199,15 +231,22 @@ class MuteQuerySetTests(TestCase):
         self.loud_friend = _profile()
         self.muted_row = _friendship(self.actor, self.muted_friend)
         self.loud_row = _friendship(self.actor, self.loud_friend)
-        self.muted_row.mute()
+        self.muted_row.mute(self.actor)
 
     def test_muted_filter_returns_only_muted_rows(self) -> None:
-        pks = set(Friendship.objects.all().profile(self.actor).muted().values_list("pk", flat=True))
+        pks = set(Friendship.objects.all().muted_by(self.actor).values_list("pk", flat=True))
         self.assertEqual(pks, {self.muted_row.pk})
 
     def test_unmuted_filter_returns_only_unmuted_rows(self) -> None:
-        pks = set(Friendship.objects.all().profile(self.actor).unmuted().values_list("pk", flat=True))
+        pks = set(Friendship.objects.all().not_muted_by(self.actor).values_list("pk", flat=True))
         self.assertEqual(pks, {self.loud_row.pk})
+
+    def test_the_other_partys_mute_is_not_the_viewers(self) -> None:
+        """The filter answers "rows I muted", so the far side's flag must not leak in."""
+        self.loud_row.mute(self.loud_friend)
+
+        self.assertEqual(set(Friendship.objects.all().muted_by(self.actor).values_list("pk", flat=True)), {self.muted_row.pk})
+        self.assertEqual(set(Friendship.objects.all().muted_by(self.loud_friend).values_list("pk", flat=True)), {self.loud_row.pk})
 
     def test_muted_rows_are_still_friends(self) -> None:
         """The whole point: muted rows stay inside ``is_friend()``."""
@@ -215,73 +254,32 @@ class MuteQuerySetTests(TestCase):
         self.assertEqual(pks, {self.muted_row.pk, self.loud_row.pk})
 
 
-class LegacyMutedRowRepairTests(TestCase):
-    """The data migration's own logic, exercised directly.
+class LegacyMutedRowRepairWiringTests(SimpleTestCase):
+    """``0010_v0_6_0``'s legacy ``status='Muted'`` repair, checked structurally.
 
-    The ``0010_v0_6_0`` squash migration decides what a legacy
-    ``status='Muted'`` row *was* before it was muted, and that decision is the
-    one part of this change that cannot be re-derived from the schema
-    afterwards. Running the functions against the live app registry is
-    enough: they are plain ``(apps, schema_editor)`` callables that only
-    issue DML, and the historical model for ``Friendship`` at this point is
-    field-identical to the current one.
+    These used to run the migration's two ``(apps, schema_editor)`` callables
+    against the *live* app registry, which was legitimate only while the
+    historical ``Friendship`` at 0010 was field-identical to the current one.
+    Migration ``0057`` split ``muted`` into one column per side, so the
+    callables now reference a column the live schema no longer has and can only
+    be executed against a real historical state.
+
+    What is still worth holding, and does not need a database, is that the
+    migration wires both directions to the real functions. The forward pass is
+    what un-breaks rows whose relationship state was destroyed by the old
+    encoding; a reverse quietly swapped for ``noop`` would leave a rollback
+    with ``Accepted`` rows the pre-0010 code reads as un-muted - see
+    ``test_migration_noop_reverse_guard``.
     """
 
-    #: The migration module, imported by path because its name starts with a
-    #: digit and so cannot appear in an ``import`` statement.
+    #: Imported by path: the module name starts with a digit.
     migration = importlib.import_module("urbanlens.dashboard.migrations.0010_v0_6_0")
 
-    def setUp(self) -> None:
-        """Create a legacy row in the pre-migration encoding."""
-        super().setUp()
-        self.actor = _profile()
-        self.other_profile = _profile()
-        self.friendship = _friendship(self.actor, self.other_profile, status=FriendshipStatus.MUTED)
+    def test_both_directions_of_the_repair_are_wired(self) -> None:
+        operations = [op for op in self.migration.Migration.operations if type(op).__name__ == "RunPython" and op.code is self.migration.restore_muted_friendships]
 
-    def test_legacy_row_becomes_an_accepted_muted_friendship(self) -> None:
-        """The repair: a muted friend is a friend again, and still muted."""
-        self.migration.restore_muted_friendships(django_apps, None)
-
-        self.friendship.refresh_from_db()
-        self.assertEqual(self.friendship.status, FriendshipStatus.ACCEPTED)
-        self.assertTrue(self.friendship.muted)
-        self.assertTrue(Profile.are_friends(self.actor, self.other_profile))
-
-    def test_repair_leaves_every_other_status_alone(self) -> None:
-        """Only ``Muted`` rows are touched - this is not a blanket re-accept."""
-        untouched = _friendship(_profile(), _profile(), status=FriendshipStatus.BLOCKED)
-
-        self.migration.restore_muted_friendships(django_apps, None)
-
-        untouched.refresh_from_db()
-        self.assertEqual(untouched.status, FriendshipStatus.BLOCKED)
-        self.assertFalse(untouched.muted)
-
-    def test_repair_does_not_restamp_the_friendship_anniversary(self) -> None:
-        """``updated`` is rendered as "friends since" - a repair must not move it."""
-        before = Friendship.objects.get(pk=self.friendship.pk).updated
-
-        self.migration.restore_muted_friendships(django_apps, None)
-
-        self.assertEqual(Friendship.objects.get(pk=self.friendship.pk).updated, before)
-
-    def test_reverse_restores_the_legacy_encoding(self) -> None:
-        """Rolling back must put the row back the way the old schema stored it."""
-        self.migration.restore_muted_friendships(django_apps, None)
-        self.migration.collapse_muted_flag_into_status(django_apps, None)
-
-        self.friendship.refresh_from_db()
-        self.assertEqual(self.friendship.status, FriendshipStatus.MUTED)
-        self.assertFalse(self.friendship.muted)
-
-    def test_repair_is_idempotent(self) -> None:
-        """Re-running the forward pass must not re-accept anything a second time."""
-        self.migration.restore_muted_friendships(django_apps, None)
-        self.migration.restore_muted_friendships(django_apps, None)
-
-        self.friendship.refresh_from_db()
-        self.assertEqual(self.friendship.status, FriendshipStatus.ACCEPTED)
-        self.assertTrue(self.friendship.muted)
+        self.assertEqual(len(operations), 1)
+        self.assertIs(operations[0].reverse_code, self.migration.collapse_muted_flag_into_status)
 
 
 class MuteWebsiteButtonTests(TestCase):
@@ -305,17 +303,17 @@ class MuteWebsiteButtonTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.friendship.refresh_from_db()
-        self.assertTrue(self.friendship.muted)
+        self.assertTrue(self.friendship.is_muted_by(self.actor))
         self.assertEqual(self.friendship.status, FriendshipStatus.ACCEPTED)
 
     def test_unmute_button_clears_the_flag(self) -> None:
-        self.friendship.mute()
+        self.friendship.mute(self.actor)
 
         response = self.client.post(reverse("friend.unmute", args=[self.other_profile.pk]), HTTP_HX_REQUEST="true")
 
         self.assertEqual(response.status_code, 200)
         self.friendship.refresh_from_db()
-        self.assertFalse(self.friendship.muted)
+        self.assertFalse(self.friendship.is_muted_by(self.actor))
         self.assertEqual(self.friendship.status, FriendshipStatus.ACCEPTED)
 
     def test_unmute_of_a_stranger_is_404_not_400(self) -> None:

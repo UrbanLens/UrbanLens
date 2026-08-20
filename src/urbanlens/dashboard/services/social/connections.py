@@ -103,7 +103,7 @@ def suggest_mutual_connection(a: Profile, b: Profile) -> None:
     # not leak into a notification the viewer wasn't otherwise shown it in.
     for viewer, subject in ((a, b), (b, a)):
         display_name = resolve_visible_identity(viewer, subject)["display_name"]
-        NotificationLog.objects.create(
+        NotificationLog.objects.notify(
             profile=viewer,
             source_profile=subject,
             status=Status.UNREAD,

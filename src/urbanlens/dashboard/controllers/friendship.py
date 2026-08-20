@@ -497,7 +497,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             friendship.accept()
             from_profile = Profile.objects.filter(pk=from_profile_id).first()
             if from_profile:
-                NotificationLog.objects.create(
+                NotificationLog.objects.notify(
                     profile=from_profile,
                     status=Status.UNREAD,
                     importance=Importance.MEDIUM,

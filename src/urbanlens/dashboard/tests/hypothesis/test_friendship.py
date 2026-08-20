@@ -8,7 +8,7 @@ Friendship transitions follow strict rules:
   block   → BLOCKED     (re-request blocked)
 
 Mute is deliberately absent from that list: it is not a transition. It sets
-``Friendship.muted`` and leaves ``status`` untouched, because muting an
+the caller's own mute column and leaves ``status`` untouched, because muting an
 accepted friend must not stop them being a friend. See
 ``test_friendship_mute_flag`` for that behaviour and the bug it replaced.
 
@@ -145,17 +145,17 @@ class FriendshipBlockMuteTests(TestCase):
         friendship = _make_requested(self.profile_a, self.profile_b)
         friendship.accept()
 
-        friendship.mute()
+        friendship.mute(self.profile_a)
 
         friendship.refresh_from_db()
-        self.assertTrue(friendship.muted)
+        self.assertTrue(friendship.is_muted_by(self.profile_a))
         self.assertEqual(friendship.status, FriendshipStatus.ACCEPTED)
 
     def test_mute_does_not_block_re_request(self) -> None:
         """Muting is not a rejection, so it must not close the re-request door."""
         friendship = _make_requested(self.profile_a, self.profile_b)
         friendship.decline()
-        friendship.mute()
+        friendship.mute(self.profile_b)
 
         friendship.refresh_from_db()
         self.assertTrue(FriendshipStatus.can_request(friendship.status))

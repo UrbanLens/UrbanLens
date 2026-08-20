@@ -36,7 +36,7 @@ from urbanlens.dashboard.services.core.keyset_cursor import InvalidCursorError, 
 from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +193,7 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile, message: s
     if message:
         body += f' "{message}"'
 
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=to_profile,
         status=Status.UNREAD,
         importance=Importance.MEDIUM,
@@ -232,7 +232,7 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, mes
         except AttributeError:
             accepted_pref = DeliveryPreference.SITE
         if accepted_pref != DeliveryPreference.NONE:
-            NotificationLog.objects.create(
+            NotificationLog.objects.notify(
                 profile=to_profile,
                 status=Status.UNREAD,
                 importance=Importance.MEDIUM,
@@ -390,7 +390,7 @@ def _notify_friend_accepted(requester: Profile, actor: Profile) -> None:
     request notification read, returning the friendship) run whether or not
     the recipient has silenced this type.
     """
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=requester,
         status=Status.UNREAD,
         importance=Importance.MEDIUM,
@@ -539,10 +539,18 @@ def block_profile(actor: Profile, target: Profile) -> Friendship:
 
     friendship = Friendship.objects.all().between(target, actor)
     if friendship:
+        # The mute columns are named for the row's two *ends*, so swapping the
+        # ends without swapping them hands each person the other's preference -
+        # A's mute of B silently becomes B's mute of A, and neither of them did
+        # it. Read before the swap, written with it, in one statement.
+        muted_by_actor = friendship.is_muted_by(actor)
+        muted_by_target = friendship.is_muted_by(target)
         friendship.from_profile = actor
         friendship.to_profile = target
         friendship.status = FriendshipStatus.BLOCKED
-        friendship.save()
+        friendship.muted_by_from_profile = muted_by_actor
+        friendship.muted_by_to_profile = muted_by_target
+        friendship.save(update_fields=["from_profile", "to_profile", "status", "muted_by_from_profile", "muted_by_to_profile", "updated"])
         return friendship
     return Friendship.objects.create(
         from_profile=actor,
@@ -680,7 +688,8 @@ def mute_profile(actor: Profile, target: Profile) -> Friendship:
     volume control on someone you already have a relationship with, whereas
     blocking (above) is a veto that must work on strangers.
 
-    Sets ``Friendship.muted`` and leaves ``status`` exactly as it was. It used
+    Sets ``actor``'s own half of the relationship's mute pair and leaves
+    ``status`` exactly as it was. It used
     to write ``FriendshipStatus.MUTED`` over the status instead, which meant
     muting an accepted friend un-friended them for every visibility gate that
     reads ``Profile.are_friends``, and left no way back - the pre-mute status
@@ -703,7 +712,7 @@ def mute_profile(actor: Profile, target: Profile) -> Friendship:
         FriendshipNotFoundError: No relationship exists between the pair.
     """
     friendship = _existing_friendship(actor, target)
-    friendship.mute()
+    friendship.mute(actor)
     return friendship
 
 
@@ -732,8 +741,99 @@ def unmute_profile(actor: Profile, target: Profile) -> Friendship:
             halves of the toggle answer identically.
     """
     friendship = _existing_friendship(actor, target)
-    friendship.unmute()
+    friendship.unmute(actor)
     return friendship
+
+
+def notifications_muted(recipient: Profile | int | None, source: Profile | int | None) -> bool:
+    """Whether ``recipient`` has muted the relationship notifications from ``source`` travel on.
+
+    The single place the mute preference becomes actual silence. Called from
+    ``NotificationManager.notify``, which every notification producer goes
+    through, so a new notification type honours the preference without its
+    author having to know the preference exists - the reason mute silenced
+    nothing for as long as it did is that each producer would have had to
+    remember.
+
+    Args:
+        recipient: The profile the notification is addressed to, or its pk.
+        source: The profile the notification is *about* - a sharer, a
+            commenter, a requester - or its pk. A notification with no source
+            is nobody's to mute.
+
+    Returns:
+        True when a relationship joins the two and the recipient muted their
+        own side of it. False when either end is missing, when the two are the
+        same profile, or when no relationship exists - muting a stranger is not
+        possible (see :func:`mute_profile`), so there is nothing to consult.
+
+    Note:
+        Asks the same predicate as :func:`profiles_muting` rather than reading
+        the row through ``between()``. Two rows can join one pair (see that
+        method), and the two forms have to reach the same answer - a mute
+        honoured in one-to-one paths and dropped in group ones would be
+        invisible until someone compared them.
+    """
+    if recipient is None or source is None:
+        return False
+    recipient_id = recipient if isinstance(recipient, int) else recipient.pk
+    source_id = source if isinstance(source, int) else source.pk
+    if recipient_id is None or source_id is None or recipient_id == source_id:
+        return False
+
+    return Friendship.objects.filter(
+        Q(from_profile_id=source_id, to_profile_id=recipient_id, muted_by_to_profile=True) | Q(to_profile_id=source_id, from_profile_id=recipient_id, muted_by_from_profile=True),
+    ).exists()
+
+
+@dataclass(frozen=True, slots=True)
+class MutedRecipients:
+    """A batched mute answer, carrying the source it was computed for.
+
+    The source id is not decoration. A bare set of profile ids passed into
+    ``NotificationLog.objects.notify`` would be applied to whatever source that
+    notification names, so a set computed for one person and reused for another
+    would silence the wrong notifications - silently, and only in the paths
+    that batch. Carrying the source lets the consumer notice and fall back to
+    the per-row query instead of trusting it.
+
+    Attributes:
+        source_id: The profile the mutes were resolved against.
+        profile_ids: The recipients who muted them.
+    """
+
+    source_id: int | None
+    profile_ids: frozenset[int]
+
+
+def profiles_muting(source: Profile | int, recipient_ids: Iterable[int]) -> MutedRecipients:
+    """Which of ``recipient_ids`` have muted notifications from ``source``, in one query.
+
+    The batch form of :func:`notifications_muted`, for the paths that notify a
+    whole membership at once. ``_notify_group_message`` is the one that needs
+    it: it deliberately resolves every per-member fact up front (preferences by
+    ``select_related``, unread state by a single grouped query) because a
+    50-member group otherwise costs a hundred queries on the synchronous send
+    path, and a per-member mute lookup would put them straight back.
+
+    Args:
+        source: The profile the notifications are about, or its pk.
+        recipient_ids: The pks of the profiles being notified.
+
+    Returns:
+        The subset of ``recipient_ids`` that muted their side of a
+        relationship with ``source``, tagged with that source. Empty when there
+        is nothing to check.
+    """
+    source_id = source if isinstance(source, int) else source.pk
+    ids = {pk for pk in recipient_ids if pk is not None and pk != source_id}
+    if source_id is None or not ids:
+        return MutedRecipients(source_id=source_id, profile_ids=frozenset())
+
+    rows = Friendship.objects.filter(
+        Q(from_profile_id=source_id, to_profile_id__in=ids, muted_by_to_profile=True) | Q(to_profile_id=source_id, from_profile_id__in=ids, muted_by_from_profile=True),
+    ).values_list("from_profile_id", "to_profile_id")
+    return MutedRecipients(source_id=source_id, profile_ids=frozenset(from_id if from_id != source_id else to_id for from_id, to_id in rows))
 
 
 def invite_by_email(

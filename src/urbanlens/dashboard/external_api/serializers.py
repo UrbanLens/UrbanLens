@@ -1860,22 +1860,22 @@ class FriendshipSerializer(serializers.Serializer):
     #: Which way the original request ran, relative to the caller.
     direction = serializers.ChoiceField(choices=[("incoming", "Incoming"), ("outgoing", "Outgoing")], read_only=True)
     message = serializers.CharField(read_only=True, allow_null=True)
-    #: Whether this relationship is marked muted. Read the flag, never
+    #: Whether **the caller** has muted this relationship. Read the flag, never
     #: ``status``: mute used to be written *over* ``status``, which un-friended
     #: the pair for every gate reading ``Profile.are_friends``. It is now a
-    #: separate boolean and ``status`` is left alone.
+    #: separate per-side boolean and ``status`` is left alone.
     #:
-    #: **Two caveats a client must not paper over.** First, the flag lives on
-    #: the single shared row joining the pair, so it is not per-viewer - label
-    #: it "muted", never "muted by you". Second, and more important:
-    #: *friendship-level mute does not currently suppress anything*. No
-    #: notification delivery path consults it yet (see "`Friendship.muted` is
-    #: stored but nothing reads it" in ``docs/PROBLEMS.md``), so the muter still receives friend-request, pin-share,
-    #: trip-invite and safety notifications from that profile. The preference is
-    #: recorded faithfully and will start being honored when delivery is wired
-    #: up; until then a UI that promises silence would be lying. The two mute
-    #: mechanisms that *do* work are unrelated: ``DirectMessageMute``
-    #: (per-sender DM mute) and per-group chat mute.
+    #: Genuinely "muted by you": the row is shared by the pair but carries one
+    #: column per side, so the other profile's own answer is independent. What
+    #: it suppresses is the in-app notification and everything that follows
+    #: from it - live toast, WhatsApp/SMS alert, native push - for every
+    #: notification type except the safety check-in family, which is exempt
+    #: (``MUTE_EXEMPT_TYPES``) because a preference about someone's chatter is
+    #: not consent to stop watching for them going overdue. Emails a producer
+    #: sends alongside its notification are not covered.
+    #:
+    #: The two narrower mute mechanisms are unrelated and still apply on top:
+    #: ``DirectMessageMute`` (per-sender DM mute) and per-group chat mute.
     is_muted = serializers.BooleanField(read_only=True)
     created = serializers.DateTimeField(read_only=True)
     updated = serializers.DateTimeField(read_only=True)

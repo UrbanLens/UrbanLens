@@ -3538,7 +3538,7 @@ def _serialize_friendship(viewer: Profile, friendship: Friendship, *, visible_pk
         "relationship_type": friendship.relationship_type,
         "direction": "outgoing" if outgoing else "incoming",
         "message": friendship.request_message,
-        "is_muted": friendship.muted,
+        "is_muted": friendship.is_muted_by(viewer),
         "created": friendship.created,
         "updated": friendship.updated,
     }

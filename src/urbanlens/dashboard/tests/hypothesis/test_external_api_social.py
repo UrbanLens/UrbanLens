@@ -175,7 +175,7 @@ class FriendshipTransitionMatrixTests(TestCase):
         It used to write ``status="Muted"``, which un-friended the pair for
         every gate that reads ``Profile.are_friends`` - so an API client that
         muted a friend silently revoked their own access. The endpoint now
-        moves ``Friendship.muted`` and leaves the relationship intact.
+        moves the caller's own mute column and leaves the relationship intact.
         """
         friendship = self._pending_request()
         friendship.status = FriendshipStatus.ACCEPTED
@@ -186,7 +186,7 @@ class FriendshipTransitionMatrixTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         friendship.refresh_from_db()
-        self.assertTrue(friendship.muted)
+        self.assertTrue(friendship.is_muted_by(self.profile))
         self.assertEqual(friendship.status, "Accepted")
         self.assertEqual(response.json()["status"], "Accepted")
 
