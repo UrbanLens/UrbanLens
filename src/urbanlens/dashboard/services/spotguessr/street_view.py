@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
+from urbanlens.dashboard.services.apis.locations.base import SlideFetch
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
 
@@ -68,14 +69,17 @@ def candidate_street_view_for_location(location: Location) -> StreetViewPanorama
     keep a request handler blocked far longer than one candidate's share of
     the request should cost.
     """
-    no_coverage: tuple[list[StreetViewSlide], bool] = ([], False)
+    no_coverage = SlideFetch([], from_cache=False)
     try:
-        slides, _from_cache = call_with_deadline(
+        # Indexed rather than attribute-read: `call_with_deadline` may return
+        # the plain default, and only the slides matter here - one candidate
+        # panorama is either found or it isn't, with nothing to re-warm.
+        slides = call_with_deadline(
             lambda: GoogleMapsGateway().get_street_view_slides(float(location.latitude), float(location.longitude), limit=1),
             timeout=EXTERNAL_CALL_DEADLINE,
             default=no_coverage,
             name="google_maps.street_view",
-        )
+        )[0]
     except Exception:
         logger.info("Street View unavailable for location=%s", location.pk, exc_info=True)
         return None

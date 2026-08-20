@@ -92,3 +92,71 @@ class SiteConditionsOutageTests(TestCase):
             self._source().fetch(self.pin)
 
         self.assertEqual(self._cached(), 0)
+
+
+class RedataPartialProviderOutageTests(TestCase):
+    """A provider outage *inside* a successful request is still an outage.
+
+    The tests above guard a failed request. REData's near-point endpoints answer
+    `200` with `complete: false` when some - not all - of the sources covering a
+    coordinate could not be reached, and its own contract says such a response
+    must never be cached as emptiness. Every panel parsed `complete` and threw
+    it away, so a five-minute outage at one city's permit feed blanked the
+    Permits panel for the whole cache window.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.profile = baker.make(User).profile
+        location = baker.make(Location, latitude=41.73, longitude=-73.92, official_name="Hudson River State Hospital")
+        self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None, name="HRSH")
+
+    def _source(self):
+        from urbanlens.dashboard.plugins.builtin.redata_permits import BuildingPermitsPanelSource
+
+        return BuildingPermitsPanelSource()
+
+    def _cached(self) -> int:
+        return LocationCache.objects.filter(location=self.pin.location, source=self._source().cache_source).count()
+
+    def _envelope(self, *, complete: bool, results: list[dict]):
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+
+        return LocationContextEnvelope(count=len(results), complete=complete, results=results, providers=[])
+
+    def test_an_empty_incomplete_answer_is_not_cached(self) -> None:
+        source = self._source()
+        with mock.patch.object(type(source), "fetch_envelope", return_value=self._envelope(complete=False, results=[])):
+            source.fetch(self.pin)
+
+        self.assertEqual(self._cached(), 0, "could not ask is not an answer - a row here makes the blank permanent")
+
+    def test_an_empty_complete_answer_is_cached(self) -> None:
+        """Asked and told nothing is a real result, and must not be refetched forever."""
+        source = self._source()
+        with mock.patch.object(type(source), "fetch_envelope", return_value=self._envelope(complete=True, results=[])):
+            source.fetch(self.pin)
+
+        self.assertEqual(self._cached(), 1)
+
+    def test_a_partial_answer_with_rows_is_cached(self) -> None:
+        """One flaky provider must not stop the other four's rows being stored."""
+        source = self._source()
+        with mock.patch.object(type(source), "fetch_envelope", return_value=self._envelope(complete=False, results=[{"permit_number": "A-1"}])):
+            source.fetch(self.pin)
+
+        self.assertEqual(self._cached(), 1)
+
+    def test_the_rule_is_inherited_by_every_panel_built_on_the_base(self) -> None:
+        """Stated as a property of the base rather than of one panel.
+
+        Six panels share this fetch; asserting it on one of them only proves
+        the base works, which is the point of moving the rule there.
+        """
+        from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
+
+        for source_cls in RedataInfoPanelSource.__subclasses__():
+            with self.subTest(panel=source_cls.__name__):
+                self.assertIs(source_cls.fetch, RedataInfoPanelSource.fetch, f"{source_cls.__name__} overrides fetch and so opts out of the outage rule")
+                self.assertTrue(getattr(source_cls, "payload_key", ""), f"{source_cls.__name__} declares no payload_key, so the inherited fetch has nowhere to write")

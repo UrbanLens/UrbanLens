@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import itertools
 import json
 import logging
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, NamedTuple
 
 from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, Point, Polygon
 from django.core.cache import cache
@@ -113,15 +113,36 @@ def _collect_slides(generator, limit: int, what: str) -> tuple[list, bool]:
     return slides, False
 
 
+class SlideFetch(NamedTuple):
+    """One provider's answer for a carousel, and how much to trust it.
+
+    ``degraded`` used to stop at ``_collect_slides`` and never reach a caller,
+    so an outage arrived at the panel indistinguishable from "this location has
+    no imagery" - and the panel then trusted that emptiness for twelve hours
+    instead of retrying in five minutes. It is a field rather than an exception
+    because slides yielded before the failure are still worth showing.
+
+    Attributes:
+        slides: What the provider produced, in its own order.
+        from_cache: The answer came from this provider's cache, not the source.
+        degraded: The provider failed part-way. The answer is a floor, and must
+            not be recorded as a settled one.
+    """
+
+    slides: list
+    from_cache: bool
+    degraded: bool = False
+
+
 class SatelliteViewProvider(Gateway, ABC):
     @abstractmethod
     def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide]: ...
 
-    def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> tuple[list[SatelliteSlide], bool]:
+    def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> SlideFetch:
         cache_key = make_cache_key(f"satellite_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
         cached = cache.get(cache_key, _CACHE_MISS)
         if cached is not _CACHE_MISS:
-            return cached, True
+            return SlideFetch(cached, from_cache=True)
 
         slides, degraded = _collect_slides(
             self._generate_satellite_slides(latitude, longitude, zoom=zoom, width=width, height=height),
@@ -130,18 +151,18 @@ class SatelliteViewProvider(Gateway, ABC):
         )
         if not degraded:
             cache.set(cache_key, slides, _external_data_cache_seconds())
-        return slides, False
+        return SlideFetch(slides, from_cache=False, degraded=degraded)
 
 
 class StreetViewProvider(Gateway, ABC):
     @abstractmethod
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]: ...
 
-    def get_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> tuple[list[StreetViewSlide], bool]:
+    def get_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> SlideFetch:
         cache_key = make_cache_key(f"street_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
         cached = cache.get(cache_key, _CACHE_MISS)
         if cached is not _CACHE_MISS:
-            return cached, True
+            return SlideFetch(cached, from_cache=True)
 
         slides, degraded = _collect_slides(
             self._generate_street_view_slides(latitude, longitude, radius=radius),
@@ -150,7 +171,7 @@ class StreetViewProvider(Gateway, ABC):
         )
         if not degraded:
             cache.set(cache_key, slides, _external_data_cache_seconds())
-        return slides, False
+        return SlideFetch(slides, from_cache=False, degraded=degraded)
 
 
 class BoundaryProvider(Service, ABC):

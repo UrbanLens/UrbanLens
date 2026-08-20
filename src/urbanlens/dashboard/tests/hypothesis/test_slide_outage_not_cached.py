@@ -18,6 +18,8 @@ from __future__ import annotations
 from collections.abc import Generator
 from typing import ClassVar
 
+from unittest import mock
+
 from django.core.cache import cache
 
 from urbanlens.core.tests.testcase import TestCase
@@ -74,7 +76,7 @@ class SlideOutageCachingTests(TestCase):
         """A partial answer is worth showing, just not worth remembering."""
         provider = _Provider([_slide("a")], fail=True)
 
-        slides, _ = provider.get_satellite_slides(41.7, -73.9)
+        slides = provider.get_satellite_slides(41.7, -73.9).slides
 
         self.assertEqual([slide.source for slide in slides], ["a"])
 
@@ -89,10 +91,49 @@ class SlideOutageCachingTests(TestCase):
     def test_a_healthy_result_is_cached(self) -> None:
         provider = _Provider([_slide("a")], fail=False)
 
-        first, from_cache_first = provider.get_satellite_slides(41.7, -73.9)
-        second, from_cache_second = provider.get_satellite_slides(41.7, -73.9)
+        first, from_cache_first, _ = provider.get_satellite_slides(41.7, -73.9)
+        second, from_cache_second, _ = provider.get_satellite_slides(41.7, -73.9)
 
         self.assertEqual(provider.calls, 1)
         self.assertFalse(from_cache_first)
         self.assertTrue(from_cache_second)
         self.assertEqual(len(second), len(first))
+
+
+class DegradationReachesTheCallerTests(TestCase):
+    """The provider-level cache skip was only half the rule.
+
+    `_collect_slides` correctly refused to cache a partial answer, but
+    `get_satellite_slides` then returned `(slides, False)` and dropped the
+    `degraded` flag - so `collect_satellite_slides` recorded `ok=True`, the
+    panel saw `complete=True`, and stored its readiness marker for twelve hours
+    instead of five minutes. A two-minute outage emptied the carousel for the
+    rest of the day.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+
+    def test_a_degraded_provider_says_so(self) -> None:
+        provider = _Provider([_slide("a")], fail=True)
+
+        fetched = provider.get_satellite_slides(41.7, -73.9)
+
+        self.assertTrue(fetched.degraded, "the flag the panel reads to decide how long to trust an empty carousel")
+
+    def test_a_healthy_provider_does_not(self) -> None:
+        provider = _Provider([_slide("a")], fail=False)
+
+        fetched = provider.get_satellite_slides(41.7, -73.9)
+
+        self.assertFalse(fetched.degraded)
+
+    def test_the_carousel_marks_a_degraded_provider_as_not_ok(self) -> None:
+        """`ProviderFetchResult.ok` is what SlidesPanelSource.fetch reads."""
+        from urbanlens.dashboard.services.pins import external_data
+
+        with mock.patch.object(external_data, "_satellite_gateways", return_value=[_Provider([], fail=True)]):
+            _slides, results = external_data.collect_satellite_slides(41.7, -73.9)
+
+        self.assertEqual([result.ok for result in results], [False])
