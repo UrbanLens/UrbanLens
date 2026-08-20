@@ -337,10 +337,11 @@ class ProfilePreviewStartView(LoginRequiredMixin, View):
             return redirect("profile.view")
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        if not profile.slug:
-            # Slugs are generated on save; force one so the public URL exists.
-            profile.save()
-        if not profile.slug:
+        # `ensure_slug`, not `save()`: this needs one column and `Profile` is the
+        # most-written row in the app (66 modules), so a whole-row write from
+        # this instance can lose whatever another writer set between the load
+        # above and here. `ensure_slug` writes `update_fields=["slug"]`.
+        if not profile.ensure_slug():
             return redirect("profile.view")
 
         path = reverse("profile.view_user", kwargs={"profile_slug": profile.slug})
