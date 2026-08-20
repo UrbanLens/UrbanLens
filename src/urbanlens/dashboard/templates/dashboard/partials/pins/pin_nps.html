@@ -49,16 +49,19 @@
             </div>
             {% endif %}
 
-            {% if park.operating_hours %}
-            {% with hours=park.operating_hours.0 %}
-            {% if hours.standardHours %}
-            <div class="nps-hours">
-                <i class="material-symbols-outlined">schedule</i>
-                <span class="nps-hours-label">Standard hours vary - </span>
-                <a href="{{ park.url }}" target="_blank" rel="noopener noreferrer">check NPS.gov</a>
-            </div>
-            {% endif %}
-            {% endwith %}
+            {% if facts %}
+            <dl class="nps-facts">
+                {% for fact in facts %}
+                <div class="nps-fact">
+                    <dt>{{ fact.label }}</dt>
+                    {% if fact.href %}
+                    <dd><a href="{{ fact.href }}" target="_blank" rel="noopener noreferrer">{{ fact.value }}</a></dd>
+                    {% else %}
+                    <dd>{{ fact.value }}</dd>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </dl>
             {% endif %}
         </div>
     </div>

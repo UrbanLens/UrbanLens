@@ -39,6 +39,154 @@ if TYPE_CHECKING:
 _MAX_ACTIVITY_CHIPS = 8
 
 
+#: NPS's ``standardHours`` keys, in the order a week is read. Lowercase because
+#: that is what its API emits; the display labels are the values.
+_WEEK: tuple[tuple[str, str], ...] = (
+    ("monday", "Mon"),
+    ("tuesday", "Tue"),
+    ("wednesday", "Wed"),
+    ("thursday", "Thu"),
+    ("friday", "Fri"),
+    ("saturday", "Sat"),
+    ("sunday", "Sun"),
+)
+
+
+def entrance_fee_summary(fees: Any) -> str:
+    """One line describing what it costs to get in.
+
+    "Is it free" is the question this answers, and for the NPS catalog it is a
+    real one: most units charge nothing and a minority charge per vehicle. The
+    panel previously cached ``entrance_fees`` and showed none of it.
+
+    Args:
+        fees: REData's ``entrance_fees`` - NPS's own ``entranceFees`` list of
+            ``{"cost": "35.00", "title": ..., "description": ...}``. ``cost``
+            is a *string* in NPS's API, including for free entry ("0.00").
+
+    Returns:
+        A display string, or ``""`` when the list is absent or unusable.
+        Absent is not free: a unit whose fees NPS has not published must not be
+        advertised as costing nothing.
+    """
+    if not isinstance(fees, list):
+        return ""
+
+    priced: list[tuple[float, str]] = []
+    for fee in fees:
+        if not isinstance(fee, dict):
+            continue
+        raw_cost = str(fee.get("cost") or "").strip()
+        if not raw_cost:
+            continue
+        try:
+            cost = float(raw_cost)
+        except ValueError:
+            # NPS publishes free text here for some units ("varies", "See
+            # below"). Skipping is the honest answer; guessing a number is not.
+            continue
+        title = str(fee.get("title") or "").strip()
+        # NPS prefixes almost every title with "Entrance Fee - "; the prefix is
+        # the column header, not part of the answer.
+        for prefix in ("Entrance Fee - ", "Entrance Fee-", "Entrance Fee "):
+            if title.startswith(prefix):
+                title = title[len(prefix) :].strip()
+                break
+        priced.append((cost, title))
+
+    if not priced:
+        return ""
+    if all(cost == 0 for cost, _ in priced):
+        return "Free"
+
+    cheapest, title = min(priced, key=lambda item: item[0])
+    label = f"${cheapest:,.2f}"
+    if title:
+        label = f"{label} ({title})"
+    return label if len(priced) == 1 else f"From {label}"
+
+
+def standard_hours_summary(operating_hours: Any) -> str:
+    """When the place is open, collapsed into day ranges.
+
+    The template used to render "Standard hours vary - check NPS.gov" whenever
+    ``standardHours`` was present, which is the one case where it did *not*
+    have to say that: the hours were cached and readable.
+
+    Consecutive days with identical hours are grouped, so the common shapes
+    read as "Open daily" or "Mon-Fri: 9:00AM - 5:00PM; Sat-Sun: Closed" rather
+    than as seven lines.
+
+    Args:
+        operating_hours: REData's ``operating_hours`` - NPS's own list of
+            ``{"name": ..., "standardHours": {"monday": ..., ...}}``. The first
+            entry is the park itself; later ones are individual visitor centres
+            and are not what a pin-detail summary is about.
+
+    Returns:
+        A display string, or ``""`` when no usable hours are published.
+    """
+    if not isinstance(operating_hours, list) or not operating_hours:
+        return ""
+    first = operating_hours[0]
+    hours = first.get("standardHours") if isinstance(first, dict) else None
+    if not isinstance(hours, dict):
+        return ""
+
+    days = [(label, str(hours.get(key) or "").strip()) for key, label in _WEEK]
+    if any(not value for _, value in days):
+        # A partially-published week cannot be collapsed honestly - saying
+        # "Mon-Wed: 9-5" while Thursday is simply unknown reads as "closed
+        # Thursday", which is a different claim.
+        return ""
+
+    groups: list[tuple[str, str, str]] = []
+    for label, value in days:
+        if groups and groups[-1][2] == value:
+            groups[-1] = (groups[-1][0], label, value)
+        else:
+            groups.append((label, label, value))
+
+    if len(groups) == 1:
+        return f"{groups[0][2]} daily"
+    return "; ".join(f"{start}: {value}" if start == end else f"{start}-{end}: {value}" for start, end, value in groups)
+
+
+def park_facts(data: dict[str, Any]) -> list[dict[str, str]]:
+    """The park facts worth showing beside its name, as ``{label, value, href}`` rows.
+
+    Shared by the web panel and :meth:`NpsPanelSource.api_payload` so the two
+    cannot drift - the web template previously rendered a subset by hand and
+    the API a different subset.
+
+    Reads fields REData has been caching and nothing was displaying: entrance
+    fees, published hours, and the park's own directions page. ``weather_info``
+    is deliberately left out - it is a paragraph of seasonal prose, and this pin
+    already has a weather panel showing the actual forecast.
+
+    Args:
+        data: The cached park payload.
+
+    Returns:
+        Display rows, omitting anything the park does not publish.
+    """
+    rows: list[dict[str, str]] = []
+    for key, label in (("designation", "Designation"), ("states", "States")):
+        if data.get(key):
+            rows.append({"label": label, "value": str(data[key])})
+    if fee := entrance_fee_summary(data.get("entrance_fees")):
+        rows.append({"label": "Entry", "value": fee})
+    if hours := standard_hours_summary(data.get("operating_hours")):
+        rows.append({"label": "Hours", "value": hours})
+    if directions := str(data.get("directions_url") or "").strip():
+        rows.append({"label": "Directions", "value": "Getting there", "href": directions})
+    # Last: it is a cross-reference ("HUTR"), not something a reader wants
+    # before the opening hours.
+    if data.get("park_code"):
+        rows.append({"label": "Park Code", "value": str(data["park_code"])})
+    return rows
+
+
 class NpsPanelSource(LocationCachePanelSource):
     """National Park Service information for the pin's location."""
 
@@ -91,7 +239,7 @@ class NpsPanelSource(LocationCachePanelSource):
         park_url = data.get("url") or ""
         images = data.get("images") or []
         first_image = images[0] if isinstance(images, list) and images else {}
-        meta = [{"label": label, "value": data[key]} for key, label in (("designation", "Designation"), ("states", "States"), ("park_code", "Park Code")) if data.get(key)]
+        meta = park_facts(data)
 
         return {
             PanelApiKind.INFO.value: info_card(

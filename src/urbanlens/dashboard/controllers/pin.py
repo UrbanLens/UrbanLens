@@ -1463,7 +1463,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nps_info: pin %s is not within any NPS unit", pin_slug)
             return HttpResponse(status=204)
 
-        context = {"park": data, "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1)}
+        from urbanlens.dashboard.plugins.builtin.nps import park_facts
+
+        # The same rows the API serves, from the same helper - the two rendered
+        # different subsets of this payload by hand before, and the hours the
+        # template did have it declined to read ("Standard hours vary - check
+        # NPS.gov", printed over the cached hours).
+        context = {"park": data, "facts": park_facts(data), "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1)}
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
 
     def _location_data_overview_fields(self, source_key: str, data: dict) -> dict | None:
