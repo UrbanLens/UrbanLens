@@ -425,6 +425,18 @@
     // typography as the article/wiki editor - no white-space:pre-wrap here,
     // since paragraph/list breaks are now real HTML elements, not literal
     // newlines in escaped plain text.
+    .visit-weather {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .78rem;
+        color: var(--ul-grey-7);
+
+        .material-symbols-outlined {
+            font-size: 1rem;
+        }
+    }
+
     .visit-notes {
         font-size: .86rem;
         line-height: 1.4;
@@ -1356,6 +1368,96 @@
 }
 
 // -- Generic simple info panel (Photon, Census, EPA, iNaturalist, GDELT, USGS quakes) --
+// The NPS panel shipped with bespoke markup and no stylesheet at all - every
+// `nps-*` class in `pin_nps.html` matched nothing, so the card rendered with
+// only the generic `.card` chrome. These are the rules its own markup needs;
+// the fact grid deliberately mirrors `.simple-info-panel`'s `.simple-info-meta`
+// values so the two panels read alike. Not shared as one selector because
+// hoisting that rule out of `.simple-info-panel` changes its specificity for
+// every panel that uses it, which is a bigger change than this panel is worth.
+.nps-info {
+    .nps-image-wrap {
+        max-height: 11rem;
+        overflow: hidden;
+    }
+
+    .nps-image {
+        width: 100%;
+        max-height: 11rem;
+        object-fit: cover;
+        display: block;
+    }
+
+    .nps-image-caption,
+    .nps-description {
+        margin: .4rem 0 0;
+        font-size: .8rem;
+        color: var(--ul-grey-7);
+    }
+
+    .nps-park-name {
+        margin: .5rem 0 0;
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--ul-grey-9);
+    }
+
+    .nps-activities {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .3rem;
+        margin-top: .6rem;
+    }
+
+    .nps-activities-label {
+        font-size: .68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .02em;
+        color: var(--ul-grey-5);
+    }
+
+    .nps-activity-chip {
+        padding: .1rem .55rem;
+        font-size: .68rem;
+        font-weight: 600;
+        color: var(--ul-primary-color);
+        background: var(--ul-hover-bg-primary, rgba(37, 99, 235, .12));
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+    .nps-facts {
+        margin: .75rem 0 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: .3rem .75rem;
+    }
+
+    .nps-fact {
+        display: flex;
+        flex-direction: column;
+        gap: .05rem;
+        min-width: 0;
+
+        dt {
+            font-size: .68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .02em;
+            color: var(--ul-grey-5);
+        }
+
+        dd {
+            margin: 0;
+            font-size: .8rem;
+            color: var(--ul-grey-8);
+            overflow-wrap: break-word;
+        }
+    }
+}
+
 .simple-info-panel {
     .simple-info-heading {
         display: flex;

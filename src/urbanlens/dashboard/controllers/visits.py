@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
@@ -29,6 +30,10 @@ from urbanlens.dashboard.services.visits.visits import (
     sync_last_visited,
     visit_logging_allowed,
 )
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.locations.visit_weather import RecordedDay
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +79,59 @@ def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, 
     }
 
 
+def _visit_weather(visits: list[PinVisit]) -> dict[int, RecordedDay]:
+    """What the weather actually was on the day of each visit, from cache.
+
+    **Reads only; never fetches.** This runs inside a page render, and a page
+    render must not block on an outbound call - a slow REData would hold up the
+    whole visit list for a decorative line of text, behind a spinner or not.
+    Missing days are queued instead (``tasks.fetch_recorded_weather``) and
+    appear on the next view, which is the same fetch-behind/render-from-cache
+    split every pin-detail panel already uses.
+
+    Grouped by ``Location``, because ``?children=1`` lists visits across a pin's
+    whole subtree and those are different places. Days are handed over as a
+    *set*, not a range: a page of visits to one ruin can span decades, and the
+    range form would fetch and cache every day in between to display ten (see
+    ``visit_weather.recorded_days``).
+
+    No guard for a missing location or date: ``PinVisit.visited_at``,
+    ``PinVisit.pin`` and ``Pin.location`` are all non-null, and
+    ``Location.latitude``/``longitude`` are too - a Location with no
+    coordinates cannot be stored, and an existing one's coordinates are frozen
+    by a database trigger. Writing the check anyway would read as a real
+    possibility to the next person and could never be exercised by a test.
+
+    Args:
+        visits: The page's visits, each with ``pin__location`` selected.
+
+    Returns:
+        ``{visit.pk: RecordedDay}`` for the days already cached, omitting the
+        rest. A day inside ERA5's publication lag is never queued: it is not
+        missing, it is unanswerable until it is published.
+    """
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.locations.visit_weather import missing_days, recorded_days
+    from urbanlens.dashboard.tasks import fetch_recorded_weather
+
+    by_location: dict[int, tuple[Location, list[PinVisit]]] = {}
+    for visit in visits:
+        location = visit.pin.location
+        by_location.setdefault(location.pk, (location, []))[1].append(visit)
+
+    weather: dict[int, RecordedDay] = {}
+    for location, group in by_location.values():
+        days = [visit.visited_at.date() for visit in group]
+        recorded = recorded_days(location, days, allow_fetch=False)
+        for visit in group:
+            entry = recorded.get(visit.visited_at.date().isoformat())
+            if entry is not None and entry.has_readings:
+                weather[visit.pk] = entry
+        if wanted := missing_days(location, days):
+            safely_enqueue_task(fetch_recorded_weather, location.pk, [day.isoformat() for day in wanted])
+    return weather
+
+
 def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     """Render the visit history panel for a pin, paginated newest-first.
 
@@ -116,6 +174,7 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
             "include_children": include_children,
             "adaptive_pagination": True,
             "extra_query": "children=1" if include_children else "",
+            "visit_weather": _visit_weather(list(page_obj.object_list)),
             # The embedded "Log a Visit" dialog's add form prefills its date field
             # with this - see _visit_form.html.
             "default_date": timezone.now().date().isoformat(),
@@ -399,7 +458,10 @@ class VisitEditView(LoginRequiredMixin, View):
         visit.visited_at = visited_at
         visit.notes = request.POST.get("notes", "").strip() or None
         visit.markup_map = materialize_markup_map(pin.profile, parse_map_data(request), existing_map=visit.markup_map, context=pin)
-        visit.save()
+        # `update_fields`, not a bare save: `PinVisit` is written by twelve
+        # modules, one of which re-points `pin` wholesale during a pin merge
+        # (`pin_merge`), and a whole-row write from this instance would undo it.
+        visit.save(update_fields=["visited_at", "notes", "markup_map", "updated"])
         sync_last_visited(pin)
 
         uploaded_new = _sync_visit_photos(request, pin, visit)

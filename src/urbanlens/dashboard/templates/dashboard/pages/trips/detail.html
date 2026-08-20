@@ -1511,7 +1511,11 @@ function tripOpenEditDialog(li) {
         endDateWrap.hidden = !hasEndDate;
         endDateToggleRow.hidden = hasEndDate;
     }
-    document.getElementById('edit-activity-location-uuid').value = li.dataset.actLocationUuid  || '';
+    // actLocationRef, not actLocationUuid: the row carries the location's slug.
+    // Named uuid on both sides for a long time, which is how it came to be
+    // posted into a UUIDField filter and 500 every edit (see
+    // resolve_activity_place).
+    document.getElementById('edit-activity-location-uuid').value = li.dataset.actLocationRef  || '';
     document.getElementById('edit-activity-pin-uuid').value      = '';
     document.getElementById('edit-activity-geocoded-lat').value  = '';
     document.getElementById('edit-activity-geocoded-lng').value  = '';

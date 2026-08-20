@@ -486,7 +486,7 @@ def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], 
             # is picked up by push delivery and SMS, so masking has to happen at
             # write time - it cannot be undone at render time.
             importer_name = resolve_visible_identity(invitee, importer)["display_name"]
-            NotificationLog.objects.create(
+            NotificationLog.objects.notify(
                 profile=invitee,
                 source_profile=importer,
                 status=Status.UNREAD,

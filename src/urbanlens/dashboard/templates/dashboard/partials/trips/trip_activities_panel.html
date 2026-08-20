@@ -65,12 +65,12 @@
                 data-act-time="{% if act.scheduled_at %}{% with t=act.scheduled_at|time:'H:i' %}{% if t != '00:00' %}{{ t }}{% endif %}{% endwith %}{% endif %}"
                 data-act-end-date="{% if act.scheduled_end %}{{ act.scheduled_end|date:'Y-m-d' }}{% endif %}"
                 data-act-end-time="{% if act.scheduled_end %}{% with t=act.scheduled_end|time:'H:i' %}{% if t != '00:00' %}{{ t }}{% endif %}{% endwith %}{% endif %}"
-                data-act-location-uuid="{{ act.location.slug|default:'' }}"
-                data-act-location-name="{{ act.location.display_name|default:'' }}"
+                data-act-location-ref="{{ item.display_location_ref }}"
+                data-act-location-name="{{ item.display_location_name }}"
                 data-act-child-trip-uuid="{{ act.child_trip.uuid|default:'' }}"
                 data-act-child-trip-name="{{ act.child_trip.name|default:'' }}"
                 data-act-status="{{ act.status }}"
-                data-act-location-hidden="{{ act.location_hidden|yesno:'true,false' }}"
+                data-act-location-hidden="{{ item.effective_location_hidden|yesno:'true,false' }}"
                 data-act-can-manage="{{ item.can_manage|yesno:'true,false' }}"
                 data-edit-url="{% url 'trips.activity.edit' trip.slug act.id %}"
                 data-delete-url="{% url 'trips.activity.delete' trip.slug act.id %}"
@@ -100,15 +100,11 @@
                     <div class="trip-activity-title-row">
                         {% if item.pin_slug and not item.effective_location_hidden %}
                         <a href="{% url 'pin.details' item.pin_slug %}" class="trip-activity-name">
-                            {{ act.effective_title }}
+                            {{ item.display_title }}
                         </a>
                         {% else %}
                         <span class="trip-activity-name{% if item.effective_location_hidden %} trip-activity-name--secret{% endif %}">
-                            {% if item.effective_location_hidden %}
-                                Secret Location
-                            {% else %}
-                                {{ act.effective_title }}
-                            {% endif %}
+                            {{ item.display_title }}
                         </span>
                         {% endif %}
                         <span class="trip-activity-status-chip trip-activity-status-chip--{{ act.status }}">
@@ -148,7 +144,7 @@
                     {% endif %}
 
                     {% if viewer_has_joined %}
-                    <div class="activity-rsvp-row" aria-label="Your RSVP for {{ act.effective_title }}">
+                    <div class="activity-rsvp-row" aria-label="Your RSVP for {{ item.display_title }}">
                         <span class="activity-rsvp-label">Your RSVP</span>
                         <div class="rsvp-pill-group activity-rsvp-options" role="group">
                             <button type="button"

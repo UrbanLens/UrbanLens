@@ -245,7 +245,20 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
 
     location_ref = (body.get("location_uuid") or body.get("location_slug") or "").strip()
     if location_ref:
-        location = Location.objects.filter(uuid=location_ref).first() or Location.objects.filter(slug=location_ref).first()
+        # Slug first, and the uuid form only once it parses. Handing a
+        # non-uuid string to a ``UUIDField`` filter raises ``ValidationError``
+        # from the ORM - which a plain view does not turn into a 400, so it is
+        # a 500. The web edit dialog does exactly that on every activity that
+        # has a location: the itinerary row's ``data-act-location-uuid``
+        # attribute has always carried the location's *slug*, and the dialog
+        # posts it back as ``location_uuid``. The pin branch above already
+        # converts before filtering for the same reason; this branch did not.
+        location = Location.objects.filter(slug=location_ref).first()
+        if location is None:
+            try:
+                location = Location.objects.filter(uuid=uuid_module.UUID(location_ref)).first()
+            except ValueError:
+                location = None
         if location is not None:
             return location, None
 
@@ -319,6 +332,31 @@ def create_visit_entries_for_completed_activity(trip: Trip, activity: TripActivi
             )
 
 
+#: What a viewer who may not see an activity's location is shown instead.
+HIDDEN_ACTIVITY_TITLE = "Secret Location"
+
+
+def _masked_activity_title(activity: TripActivity, *, hidden: bool) -> str:
+    """The activity's title as this viewer may see it.
+
+    An activity's ``effective_title`` falls back to its location's name, so for
+    a hidden activity the title *is* the location - which is why masking it is
+    not cosmetic. An activity with its own typed title keeps it: the person who
+    wrote "Meet at the gate" chose those words for the other members to read.
+
+    Args:
+        activity: The activity being rendered.
+        hidden: Whether this viewer may see its location.
+
+    Returns:
+        A display title safe to put anywhere in the page, including in
+        attributes the eye does not reach.
+    """
+    if not hidden:
+        return activity.effective_title
+    return (activity.title or "").strip() or HIDDEN_ACTIVITY_TITLE
+
+
 def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = True) -> list[dict[str, Any]]:
     """Build one render row per activity: index, votes, RSVP, permissions, visibility, leg.
 
@@ -337,7 +375,10 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
         One dict per activity in itinerary order, carrying the activity plus
         ``index``, ``vote_up``/``vote_down``/``user_vote``, ``rsvp``/
         ``rsvp_is_override``/``trip_rsvp``, ``can_manage``,
-        ``effective_location_hidden``, ``pin_slug``, ``has_coords`` and ``leg``.
+        ``effective_location_hidden``, ``display_title``/``display_location_name``/
+        ``display_location_ref`` (already masked for this viewer - templates must
+        use these, never ``act.location`` or ``act.effective_title``),
+        ``pin_slug``, ``has_coords`` and ``leg``.
     """
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
@@ -411,6 +452,15 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
             "trip_rsvp": trip_rsvp,
             "can_manage": viewer_has_joined and (act.added_by_id == viewer.id or viewer_is_organizer),
             "effective_location_hidden": act.location_hidden or (act.id in viewer_hidden),
+            # Already-masked display values, so no template can leak the place
+            # by reaching past the guard for `act.location` or `effective_title`.
+            # The panel did exactly that: it swapped the visible label for
+            # "Secret Location" and then emitted the real name and slug into the
+            # row's own data attributes and the RSVP `aria-label`, where
+            # view-source and a screen reader both find them.
+            "display_title": _masked_activity_title(act, hidden=act.location_hidden or (act.id in viewer_hidden)),
+            "display_location_name": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.display_name if act.location else ""),
+            "display_location_ref": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.slug if act.location else ""),
             # Tested on the loaded relation rather than ``pin_id`` so the
             # ownership check below is provably reached with a real Pin.
             "pin_slug": act.pin.slug if (act.pin is not None and act.pin.profile_id == viewer.id) else None,

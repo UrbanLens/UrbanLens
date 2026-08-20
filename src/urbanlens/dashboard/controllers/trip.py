@@ -1496,6 +1496,85 @@ def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
     return results
 
 
+def _group_by_day(rows: list[dict]) -> list[tuple]:
+    """Bucket weather rows by their activity's calendar day, earliest first.
+
+    Args:
+        rows: Dicts carrying a ``scheduled_at``.
+
+    Returns:
+        ``[(day, rows)]`` with undated rows, if any, last.
+    """
+    from collections import defaultdict
+
+    day_map: dict = defaultdict(list)
+    for row in rows:
+        day_map[row["scheduled_at"].date() if row["scheduled_at"] else None].append(row)
+    dated = sorted(day for day in day_map if day is not None)
+    keys = dated + ([None] if None in day_map else [])
+    return [(day, day_map[day]) for day in keys]
+
+
+def _build_activity_history(activities: list[TripActivity]) -> list[dict]:
+    """For each past activity, what the weather actually was on its day.
+
+    The counterpart of :func:`_build_activity_forecasts`, for activities the
+    forecast can no longer say anything about. A forecast is only meaningful
+    relative to when it was made; a record of a day that has already happened
+    never changes, which is why this needs no freshness handling at all.
+
+    Grouped by coordinate before fetching, and fetched as a *range* per group,
+    so a week-long trip with five activities at one place costs one REData
+    request rather than five. Activities whose position comes from a lat/lng
+    override have no ``Location`` to cache against and take the uncached path -
+    REData still caches the days on its own side.
+
+    Args:
+        activities: Past trip activities, in any order.
+
+    Returns:
+        A list of dicts with keys ``activity``, ``location_name``,
+        ``scheduled_at`` and ``recorded`` (a
+        :class:`~urbanlens.dashboard.services.locations.visit_weather.RecordedDay`),
+        for the activities a reading could be found for. Activities with no
+        coordinates, no date, or a day outside ERA5's window are absent rather
+        than rendered as empty rows.
+    """
+    from urbanlens.dashboard.services.locations.visit_weather import recorded_range, recorded_range_at
+
+    # (rounded coordinate) -> the activities there. Rounding matches
+    # _build_activity_forecasts' own key, so the two group identically. The day
+    # is carried alongside rather than re-derived below: `scheduled_at` is
+    # nullable and the guard that rules that out is here, so re-reading it
+    # later would be reasoning the reader (and the type checker) cannot follow.
+    by_point: dict[tuple[float, float], list[tuple[TripActivity, tuple[float, float], datetime.date]]] = {}
+    for act in activities:
+        coords = activity_coords(act)
+        if coords is None or act.scheduled_at is None:
+            continue
+        by_point.setdefault((round(coords[0], 2), round(coords[1], 2)), []).append((act, coords, act.scheduled_at.date()))
+
+    results: list[dict] = []
+    for group in by_point.values():
+        days = sorted({day for _, _, day in group})
+        first_act, coords, _ = group[0]
+        location = first_act.location or (first_act.pin.location if first_act.pin else None)
+        if location is not None and first_act.lat_override is None:
+            recorded = recorded_range(location, days[0], days[-1])
+        else:
+            recorded = recorded_range_at(coords[0], coords[1], days[0], days[-1])
+
+        for act, _, day in group:
+            entry = recorded.get(day.isoformat())
+            if entry is None or not entry.has_readings:
+                continue
+            location_name = act.effective_title if act.effective_title != "Unnamed activity" else ""
+            results.append({"activity": act, "location_name": location_name, "scheduled_at": act.scheduled_at, "recorded": entry})
+
+    results.sort(key=lambda row: row["scheduled_at"])
+    return results
+
+
 class TripWeatherView(LoginRequiredMixin, View):
     """Render the weather forecast panel for a trip.
 
@@ -1522,12 +1601,29 @@ class TripWeatherView(LoginRequiredMixin, View):
 
         error: str = ""
         grouped: list[tuple] = []
+        recorded_days: list[tuple] = []
 
         if not profile.external_apis_enabled:
             error = "External weather lookups are turned off in your settings."
         else:
             today = timezone.localdate()
-            activities = [act for act in _activity_qs(trip) if act.status != TripActivity.STATUS_COMPLETED and (act.scheduled_at is None or act.scheduled_at.date() >= today)]
+            all_activities = list(_activity_qs(trip))
+            # A past activity is one the forecast can no longer speak to. It gets
+            # the recorded-conditions treatment below instead of being dropped,
+            # which is what left a finished trip's weather panel empty.
+            past_activities = [act for act in all_activities if act.scheduled_at is not None and act.scheduled_at.date() < today]
+            try:
+                recorded = _build_activity_history(past_activities)
+            except (requests.RequestException, KeyError, TypeError, ValueError):
+                # REData's own unavailability is already absorbed inside
+                # `visit_weather._fetch_days`, which answers with no days rather
+                # than raising - so what reaches here is a malformed activity
+                # (an unparseable coordinate, say), not an outage.
+                logger.warning("Historical weather fetch failed for trip %s", trip_slug, exc_info=True)
+                recorded = []
+            recorded_days = _group_by_day(recorded)
+
+            activities = [act for act in all_activities if act.status != TripActivity.STATUS_COMPLETED and (act.scheduled_at is None or act.scheduled_at.date() >= today)]
             if not activities:
                 pass  # no upcoming activities - leave error/grouped empty to hide the section
             else:
@@ -1559,6 +1655,7 @@ class TripWeatherView(LoginRequiredMixin, View):
             {
                 "trip": trip,
                 "grouped": grouped,
+                "recorded_days": recorded_days,
                 "error": error,
             },
         )

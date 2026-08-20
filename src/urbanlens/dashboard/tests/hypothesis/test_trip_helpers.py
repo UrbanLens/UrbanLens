@@ -700,3 +700,124 @@ class TripMembershipQuerySetTests(TestCase):
         result = list(TripMembership.objects.rsvp_yes(self.trip))
 
         self.assertEqual(result, [yes_member])
+
+
+# ---------------------------------------------------------------------------
+# TripWeatherView - a finished trip gets what the weather *was*, not a forecast
+# ---------------------------------------------------------------------------
+
+_HISTORY_ROW = {
+    "date": "2026-05-01",
+    "temperature_max_c": 20.0,
+    "temperature_min_c": 10.0,
+    "temperature_mean_c": 15.0,
+    "precipitation_mm": 25.4,
+    "snowfall_cm": None,
+    "wind_speed_max_kmh": 32.1868,
+    "wind_gusts_max_kmh": None,
+}
+
+
+class TripRecordedWeatherTests(TestCase):
+    """A past trip's weather panel was empty: the view filtered to activities
+    scheduled today or later, so a finished trip had nothing to forecast and the
+    whole card hid. REData's `/weather/history/` answers the question that
+    actually applies to a finished trip.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user: User = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.profile.external_apis_enabled = True
+        self.profile.save(update_fields=["external_apis_enabled"])
+        self.client_ = Client()
+        self.client_.force_login(self.user)
+        self.trip = Trip.objects.create(name="Past Trip", creator=self.profile)
+        TripMembership.objects.get_or_create(trip=self.trip, profile=self.profile, defaults={"rsvp": "yes"})
+
+    def _url(self) -> str:
+        return reverse("trips.weather", args=[self.trip.slug])
+
+    def _past_activity(self, when: datetime.datetime) -> TripActivity:
+        return baker.make(
+            TripActivity,
+            trip=self.trip,
+            title="Powerhouse",
+            scheduled_at=when,
+            lat_override=41.73,
+            lng_override=-73.92,
+            pin=None,
+            location=None,
+        )
+
+    def test_a_past_activity_gets_its_recorded_conditions(self) -> None:
+        when = timezone.make_aware(datetime.datetime(2026, 5, 1, 14, 0))
+        self._past_activity(when)
+
+        with patch(
+            "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
+            return_value={"2026-05-01": _HISTORY_ROW},
+        ):
+            resp = self.client_.get(self._url())
+
+        self.assertEqual(resp.status_code, 200)
+        recorded = resp.context["recorded_days"]
+        self.assertEqual(len(recorded), 1)
+        day, rows = recorded[0]
+        self.assertEqual(day, when.date())
+        self.assertEqual(len(rows), 1)
+        # 20C high, 10C low, 25.4mm rain, 32.1868 km/h wind - in the units every
+        # other weather surface in the app uses.
+        self.assertEqual(rows[0]["recorded"].high_f, 68.0)
+        self.assertEqual(rows[0]["recorded"].low_f, 50.0)
+        self.assertEqual(rows[0]["recorded"].precipitation_in, 1.0)
+        self.assertEqual(rows[0]["recorded"].wind_max_mph, 20.0)
+
+    def test_the_panel_renders_instead_of_hiding(self) -> None:
+        """The whole card used to be `hidden` when there was no forecast to show."""
+        self._past_activity(timezone.make_aware(datetime.datetime(2026, 5, 1, 14, 0)))
+
+        with patch(
+            "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
+            return_value={"2026-05-01": _HISTORY_ROW},
+        ):
+            content = self.client_.get(self._url()).content.decode()
+
+        self.assertIn("What the weather was", content)
+        self.assertNotIn('id="trip-weather-panel" hidden', content)
+
+    def test_several_activities_at_one_place_cost_one_request(self) -> None:
+        """A range is one call however wide, which is what makes this affordable."""
+        for day in (1, 2, 3):
+            self._past_activity(timezone.make_aware(datetime.datetime(2026, 5, day, 9, 0)))
+
+        with patch(
+            "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
+            return_value={"2026-05-01": _HISTORY_ROW},
+        ) as fetch:
+            self.client_.get(self._url())
+
+        self.assertEqual(fetch.call_count, 1)
+        _lat, _lng, start, end = fetch.call_args.args
+        self.assertEqual((start, end), (datetime.date(2026, 5, 1), datetime.date(2026, 5, 3)))
+
+    def test_a_day_outside_era5s_window_is_never_requested(self) -> None:
+        """Inside the publication lag there is nothing to fetch, and caching the
+        blank would make it permanent."""
+        self._past_activity(timezone.now() - datetime.timedelta(days=1))
+
+        with patch("urbanlens.dashboard.services.locations.visit_weather._fetch_days") as fetch:
+            resp = self.client_.get(self._url())
+
+        fetch.assert_not_called()
+        self.assertEqual(resp.context["recorded_days"], [])
+
+    def test_an_unavailable_source_leaves_the_section_empty_rather_than_erroring(self) -> None:
+        self._past_activity(timezone.make_aware(datetime.datetime(2026, 5, 1, 14, 0)))
+
+        with patch("urbanlens.dashboard.services.locations.visit_weather._fetch_days", return_value={}):
+            resp = self.client_.get(self._url())
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["recorded_days"], [])

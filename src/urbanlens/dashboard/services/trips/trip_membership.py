@@ -159,7 +159,7 @@ def notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> None
     # formatting - the message string is stored as plain text, so it must be
     # masked here, not at render time (see identity_visibility.py's docstring).
     inviter_name = resolve_visible_identity(invitee, inviter)["display_name"]
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=invitee,
         source_profile=inviter,
         status=Status.UNREAD,

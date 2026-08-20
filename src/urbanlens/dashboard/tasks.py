@@ -3546,3 +3546,44 @@ def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: 
         logger.warning("cache_media_item_into_wiki: failed to materialize %s for wiki %s", url, wiki_id)
         return None
     return image.pk
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
+    """Fill a Location's recorded-weather cache for a set of days.
+
+    Queued by the visit-history panel, which reads the cache without fetching:
+    that panel renders a page of visits inline, and a page render must not
+    block on an outbound call - a slow REData would hold up the whole visit
+    list for a decorative line of text. So the first view shows what is known
+    and asks for the rest, and the next view has it. This is the same
+    fetch-behind/render-from-cache split every pin-detail panel already uses;
+    it is only unusual here because the days come from the visits rather than
+    from the location.
+
+    Args:
+        location_id: PK of the Location the days belong to.
+        iso_days: ISO dates to fetch, as the caller found them missing.
+
+    Returns:
+        How many days ended up in the cache, for the task log.
+    """
+    from datetime import date
+
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.locations.visit_weather import recorded_days
+
+    location = Location.objects.filter(pk=location_id).first()
+    if location is None:
+        logger.info("fetch_recorded_weather: location %s no longer exists", location_id)
+        return 0
+
+    days = []
+    for iso in iso_days:
+        try:
+            days.append(date.fromisoformat(iso))
+        except ValueError:
+            logger.warning("fetch_recorded_weather: ignoring malformed date %r for location %s", iso, location_id)
+    if not days:
+        return 0
+    return len(recorded_days(location, days))
