@@ -93,14 +93,29 @@ class FetchBuildingPayloadTests(TestCase):
         ):
             self.assertEqual(_fetch_building_payload(42.65, -73.75), {})
 
-    def test_unavailable_gracefully_returns_empty_dict(self) -> None:
+    def test_a_settled_no_coverage_answer_is_cacheable(self) -> None:
+        """REData saying "nothing here" is a result; caching it stops a re-ask."""
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")),
+            patch.object(RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("no_data_found", "nothing")),
         ):
             self.assertEqual(_fetch_building_payload(42.65, -73.75), {})
 
-    def test_unconfigured_gateway_gracefully_returns_empty_dict(self) -> None:
+    def test_a_transient_outage_propagates_rather_than_caching_emptiness(self) -> None:
+        """A LocationCache row marks the source fetched, so an outage must not write one.
+
+        This returned ``{}`` until 2026-08-19, which blanked the card for the
+        whole external-data cache window after any REData hiccup - the defect
+        ``test_outage_not_cached_as_empty.py`` exists to prevent.
+        """
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")),
+            self.assertRaises(PropertyRecordsUnavailableError),
+        ):
+            _fetch_building_payload(42.65, -73.75)
+
+    def test_an_unconfigured_gateway_propagates_too(self) -> None:
         """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
 
         The unconfigured state is simulated rather than left to the ambient
@@ -109,9 +124,16 @@ class FetchBuildingPayloadTests(TestCase):
         instead of exercising this branch. ``__post_init__`` is what raises
         that ValueError, and it's the only patchable seam - RedataGateway is a
         slotted dataclass, so ``base_url`` itself is read-only on the class.
+
+        The panel's own gate keeps it from ever being scheduled in that state;
+        this covers the background enrichment and wiki paths, which reach the
+        fetch by other routes.
         """
-        with patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")):
-            self.assertEqual(_fetch_building_payload(42.65, -73.75), {})
+        with (
+            patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")),
+            self.assertRaises(ValueError),
+        ):
+            _fetch_building_payload(42.65, -73.75)
 
 
 class RenderBuildingAttributesTests(SimpleTestCase):
@@ -207,11 +229,23 @@ class EnrichmentSourceTests(TestCase):
         self.assertEqual(payload, _NEAR_BUILDING)
         self.assertEqual(query_key, "42.65000,-73.75000")
 
-    def test_fetch_returns_empty_dict_when_unconfigured(self) -> None:
+    def test_the_source_is_skipped_entirely_when_unconfigured(self) -> None:
+        """A whole-cycle skip, not a per-location failure.
+
+        `run_enrichment_cycle` consults `gate()` once via `self_reported_skip`;
+        without it the cycle shortlists candidates and every fetch raises.
+        """
+        with patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=False):
+            self.assertFalse(RedataBuildingAttributesEnrichmentSource().gate())
+
+    def test_fetch_propagates_when_unconfigured_rather_than_caching_empty(self) -> None:
+        """Reached only by a caller that skipped the gate; must still not write a row."""
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
-        with patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")):
-            payload, _query_key = RedataBuildingAttributesEnrichmentSource().fetch(location)
-        self.assertEqual(payload, {})
+        with (
+            patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")),
+            self.assertRaises(ValueError),
+        ):
+            RedataBuildingAttributesEnrichmentSource().fetch(location)
 
 
 class PluginContributionsTests(SimpleTestCase):
@@ -233,3 +267,53 @@ class PluginContributionsTests(SimpleTestCase):
         self.assertEqual(providers[0].source, "redata_building")
         self.assertEqual(providers[0].cache_source, "redata_building_attributes")
         self.assertEqual(providers[0].keys, ("name",))
+
+
+class NearestBuildingExclusionTests(SimpleTestCase):
+    """The nearest record is not always the right record.
+
+    REData labels three kinds of record this card cannot honour, and ranking
+    the raw list let each of them win on distance. The chosen building's name is
+    given outright priority when naming a detail pin's location, so a wrong pick
+    renames the user's pin.
+    """
+
+    def _far(self, **extra) -> dict:
+        return {"name": "Far", "latitude": 42.6510, "longitude": -73.7510, **extra}
+
+    def _near(self, **extra) -> dict:
+        return {"name": "Near", "latitude": 42.6500, "longitude": -73.7500, **extra}
+
+    def test_an_envelope_parent_does_not_win_on_distance(self) -> None:
+        """Its number and year describe the block, not any one building in it."""
+        chosen = _nearest_building([self._near(child_refs=["cris:1"]), self._far()], 42.65, -73.75)
+
+        assert chosen is not None
+        self.assertEqual(chosen["name"], "Far")
+
+    def test_an_unresolved_overlap_does_not_win(self) -> None:
+        """REData sets overlap_refs when it cannot say what the record is."""
+        chosen = _nearest_building([self._near(overlap_refs=["cris:9"]), self._far()], 42.65, -73.75)
+
+        assert chosen is not None
+        self.assertEqual(chosen["name"], "Far")
+
+    def test_an_off_property_record_does_not_win(self) -> None:
+        """A parcel inside a broad survey zone gets every surveyed building in it."""
+        chosen = _nearest_building([self._near(is_on_property=False), self._far(is_on_property=True)], 42.65, -73.75)
+
+        assert chosen is not None
+        self.assertEqual(chosen["name"], "Far")
+
+    def test_the_exclusions_are_preferences_not_hard_filters(self) -> None:
+        """One ambiguous record is still better than a blank card."""
+        chosen = _nearest_building([self._near(overlap_refs=["cris:9"])], 42.65, -73.75)
+
+        assert chosen is not None
+        self.assertEqual(chosen["name"], "Near")
+
+    def test_an_ordinary_list_is_unaffected(self) -> None:
+        chosen = _nearest_building([self._far(), self._near()], 42.65, -73.75)
+
+        assert chosen is not None
+        self.assertEqual(chosen["name"], "Near")

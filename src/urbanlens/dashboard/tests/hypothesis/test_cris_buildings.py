@@ -23,7 +23,9 @@ from urbanlens.dashboard.plugins.builtin.cris_buildings import (
     CrisBuildingEnrichmentSource,
     CrisBuildingPanelSource,
     CrisBuildingsPlugin,
+    cris_only,
     nearest_resource,
+    site_resource,
     site_resource_attributes,
 )
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
@@ -587,3 +589,72 @@ class PluginContributionsTests(SimpleTestCase):
         self.assertEqual(providers[0].source, "cris")
         self.assertEqual(providers[0].cache_source, "cris_building_usn")
         self.assertEqual(providers[0].keys, ("USNName",))
+
+
+#: A National Register row of the kind REData's nationwide `nps_nrhp` provider
+#: returns for any US coordinate, including every New York one. It shares the
+#: `resource_type` vocabulary with CRIS and publishes its own position, so it
+#: competes on distance - but carries none of CRIS's raw attribute names.
+_NRHP_BUILDING = {
+    "uuid": "nrhp-1",
+    "provider": "nps_nrhp",
+    "resource_type": "building",
+    # Deliberately nearer the query point than _BUILDING_RESOURCE, so it wins
+    # any distance ranking that does not exclude it first.
+    "source_latitude": 42.650001,
+    "source_longitude": -73.750001,
+    "attributes": {"RESNAME": "Some Listed House", "PROPERTY_ID": "77000123"},
+}
+_NRHP_DISTRICT = {
+    "uuid": "nrhp-2",
+    "provider": "nps_nrhp",
+    "resource_type": "building_district",
+    "attributes": {"RESNAME": "Some Historic District"},
+}
+_CRIS_BUILDING = {**_BUILDING_RESOURCE, "provider": "ny_cris"}
+_CRIS_DISTRICT = {**_DISTRICT_RESOURCE, "provider": "ny_cris"}
+
+
+class ProviderScopingTests(SimpleTestCase):
+    """This panel reads CRIS's own attribute names, so it must read CRIS's rows.
+
+    REData answers `/cultural-resources/lookup/` from a registry of state and
+    municipal inventories plus the nationwide National Register. Inside New
+    York both `ny_cris` and `nps_nrhp` answer, and selecting purely on
+    `resource_type` let an NRHP row win - after which `USNName` is absent, the
+    card renders nothing, and a nomination PDF from the wrong source lands in
+    the CRIS-labelled media tab.
+    """
+
+    def test_an_nrhp_building_does_not_win_on_distance(self) -> None:
+        resources = [_NRHP_BUILDING, _CRIS_BUILDING]
+
+        chosen = nearest_resource(resources, "building", 42.650000, -73.750000)
+
+        self.assertIsNotNone(chosen)
+        self.assertEqual(chosen["provider"], "ny_cris", "the nearer NRHP row must not be picked for a CRIS-only card")
+        self.assertIn("USNName", chosen["attributes"])
+
+    def test_an_nrhp_district_is_not_taken_as_the_site_record(self) -> None:
+        """List order across providers is arbitrary, so first-match is not safe."""
+        chosen = site_resource([_NRHP_DISTRICT, _CRIS_DISTRICT])
+
+        self.assertIsNotNone(chosen)
+        self.assertEqual(chosen["provider"], "ny_cris")
+
+    def test_a_response_with_only_foreign_rows_selects_nothing(self) -> None:
+        """Better an absent card than one headed "CRIS" showing another register."""
+        self.assertIsNone(nearest_resource([_NRHP_BUILDING], "building", 42.65, -73.75))
+        self.assertIsNone(site_resource([_NRHP_DISTRICT]))
+
+    def test_untagged_rows_survive(self) -> None:
+        """Cached responses predating REData's provider registry carry no tag."""
+        self.assertEqual(cris_only([_BUILDING_RESOURCE]), [_BUILDING_RESOURCE])
+
+    def test_the_lookup_names_its_provider(self) -> None:
+        """Filtering client-side still pays for the other providers' queries."""
+        location = SimpleNamespace(latitude="42.650000", longitude="-73.750000")
+        with patch.object(RedataGateway, "lookup_cultural_resources", return_value=[]) as mock_lookup:
+            CrisBuildingEnrichmentSource().fetch(location)
+
+        self.assertEqual(mock_lookup.call_args.kwargs.get("provider"), "ny_cris")

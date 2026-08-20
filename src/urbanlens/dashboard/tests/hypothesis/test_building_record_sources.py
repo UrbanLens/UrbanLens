@@ -78,6 +78,26 @@ class BuildingRowSourceLabelTests(SimpleTestCase):
 
         self.assertEqual(row["source_label"], "")
 
+    def test_every_source_redata_can_return_is_labelled(self) -> None:
+        """A missing label is silent: the chip just does not render.
+
+        REData's `BUILDING_SOURCES` has six entries and four of them had no
+        label here, including `overpass` - which is in its *default* set, so
+        the most common REData-sourced building on any parcel outside NY
+        rendered with no provenance at all.
+        """
+        for key in ("county_gis", "assessor", "cris", "overpass", "microsoft_buildings", "google_open_buildings"):
+            with self.subTest(source=key):
+                row = self._row({"name": "Shed", "sources": [{"source": key}]})
+
+                self.assertNotEqual(row["source_label"], "", f"{key} renders no provenance chip")
+
+    def test_overpass_and_osm_share_one_label_without_repeating_it(self) -> None:
+        """They are the same data under REData's tag and this plugin's fallback tag."""
+        row = self._row({"name": "Shed", "sources": [{"source": "overpass"}, {"source": "osm"}]})
+
+        self.assertEqual(row["source_label"], "OpenStreetMap")
+
 
 class BuildingsOnPropertyTests(SimpleTestCase):
     """REData labels what it over-returns; ignoring the label is how 2604 happened.

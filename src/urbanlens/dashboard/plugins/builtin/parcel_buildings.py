@@ -44,13 +44,43 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 #: Human-readable labels for each provider's own reporting system, for the
-#: per-row source chip. Mirrors redata_building_attributes._SOURCE_LABELS,
-#: plus the OSM entry only this plugin's fallback can produce.
+#: per-row source chip. Shared with ``redata_building_attributes``, which shows
+#: the same provenance on its own card.
+#:
+#: Every tag in REData's ``BUILDING_SOURCES`` needs an entry: a key with no
+#: label renders as no chip at all, so a building whose only source is missing
+#: here reads as if its provenance were unknown. Four of the six were absent
+#: until 2026-08-19, including ``overpass`` - which REData runs by default.
+#: ``osm`` is not one of REData's; it is this plugin's own fallback tag for the
+#: same OpenStreetMap data, which is why both map to one label.
 SOURCE_LABELS: dict[str, str] = {
     "county_gis": "County GIS",
+    "assessor": "County Assessor",
     "cris": "NY SHPO (CRIS)",
+    "overpass": "OpenStreetMap",
     "osm": "OpenStreetMap",
+    "microsoft_buildings": "Microsoft Buildings",
+    "google_open_buildings": "Google Open Buildings",
 }
+
+
+def source_chips(sources: list[str]) -> list[str]:
+    """Human-readable provenance chips for one building's source keys.
+
+    Args:
+        sources: Source keys from :func:`record_sources`.
+
+    Returns:
+        Labels in the order given, without repeats - ``overpass`` and ``osm``
+        share a label, so a record referencing both would otherwise render
+        "OpenStreetMap + OpenStreetMap".
+    """
+    chips: list[str] = []
+    for key in sources:
+        label = SOURCE_LABELS.get(key)
+        if label and label not in chips:
+            chips.append(label)
+    return chips
 
 
 def record_sources(building: dict[str, Any]) -> list[str]:
@@ -351,7 +381,7 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None,
                 "building_number": building.get("building_number") or "",
                 "year_built": building.get("year_built") or "",
                 "source": sources[0] if sources else "",
-                "source_label": " + ".join(label for key in sources if (label := SOURCE_LABELS.get(key, ""))),
+                "source_label": " + ".join(source_chips(sources)),
                 "latitude": building.get("latitude"),
                 "longitude": building.get("longitude"),
                 "geometry": geometry,
@@ -551,9 +581,13 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
                 for row in rows
             ],
             "provider": data.get("provider") or "",
-            # Leaves only: a parent contains rows in this same list, so counting
-            # it too reports a subdivided structure twice.
-            "unpinned_count": sum(1 for row in rows if not row["child_name"] and not row["child_refs"]),
+            # Counts what the "add buildings" dialog would actually offer, which
+            # is every unmatched on-property record including envelope parents -
+            # see pin_restructure.missing_buildings, "offer every real one".
+            # Excluding parents here (as this did until 2026-08-19) made the
+            # mobile panel advertise fewer buildings than the web panel on the
+            # subdivided campuses reconciliation exists for.
+            "unpinned_count": sum(1 for row in rows if not row["child_name"]),
         }
 
 
@@ -565,6 +599,18 @@ class ParcelBuildingsEnrichmentSource(LocationCacheEnrichmentSource):
     cache_source: ClassVar[str] = PARCEL_BUILDINGS_CACHE_SOURCE
     service_keys: ClassVar[tuple[str, ...]] = ("redata_api", "overpass")
     calls_per_item: ClassVar[int] = 2
+
+    def gate(self) -> bool:
+        """Requires REData to be configured - this source has no other backend.
+
+        Without it the cycle picks candidates, every fetch raises, and the run
+        logs one exception per location. Answering here skips the source for
+        the whole cycle instead, which is what "unavailable" means to
+        ``self_reported_skip``.
+        """
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+
+        return redata_configured()
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Enumerate the location's parcel buildings and return them for caching."""

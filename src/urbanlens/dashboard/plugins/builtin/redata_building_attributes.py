@@ -48,12 +48,6 @@ logger = logging.getLogger(__name__)
 
 _CACHE_SOURCE = "redata_building_attributes"
 
-#: Human-readable labels for a source's own reporting system, for the panel's chip.
-_SOURCE_LABELS: dict[str, str] = {
-    "county_gis": "County GIS",
-    "cris": "NY SHPO (CRIS)",
-}
-
 
 def _nearest_building(buildings: list[dict[str, Any]], latitude: float, longitude: float) -> dict[str, Any] | None:
     """Pick the building closest to a coordinate.
@@ -72,16 +66,39 @@ def _nearest_building(buildings: list[dict[str, Any]], latitude: float, longitud
     app's latitudes). The chosen building's name gets outright priority when
     naming a detail pin's location, so a wrong pick is user-visible.
 
+    Three kinds of record are excluded before ranking, because REData labels
+    them and this card cannot honour them: one that is **off the property**
+    (returned deliberately when a parcel sits inside a broad survey zone), one
+    that is an **envelope over other records in the same list** (``child_refs`` -
+    a campus block, whose number and year are not any single building's), and
+    one REData flagged as an **unresolved overlap** (``overlap_refs`` - if it
+    cannot say what the record is, neither can this card). `parcel_buildings`
+    already has the predicates; this used to rank the raw list, so the nearest
+    record won even when it was one of those.
+    Each exclusion is a preference, not a hard filter: when nothing survives,
+    the next-weakest set is ranked instead, so a parcel whose only record is
+    ambiguous still shows what is known rather than going blank.
+
     Args:
         buildings: Building records from :meth:`RedataGateway.lookup_buildings`.
         latitude: WGS-84 latitude of the query point.
         longitude: WGS-84 longitude of the query point.
 
     Returns:
-        The nearest building record, or None when ``buildings`` is empty.
+        The nearest usable building record, or None when ``buildings`` is empty.
     """
     if not buildings:
         return None
+
+    from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property, confident_buildings, countable_buildings
+
+    on_property = buildings_on_property(buildings)
+    leaves = countable_buildings(buildings)
+    # Matched by identity: these helpers return the same dict objects, and a
+    # record dict is neither hashable nor reliably unique by value.
+    confident_ids = {id(record) for record in confident_buildings(buildings)}
+    unambiguous = [record for record in leaves if id(record) in confident_ids]
+    buildings = unambiguous or leaves or on_property or buildings
 
     from urbanlens.dashboard.services.locations.site_scope import meters_between
 
@@ -104,12 +121,15 @@ def _fetch_building_payload(latitude: float, longitude: float, *, location: Loca
     running independently would double REData's per-pin cost for no new data.
     Only a cold cache falls through to fetching directly.
 
-    Tolerates any failure to reach/resolve REData the same way
-    ``plugins.builtin.loopnet``/``cris_buildings`` do (broad catch, cache an
-    empty result) rather than ``property_records.py``'s stricter
-    source-error passthrough - a missing building record is a much lower-
-    stakes gap than a missing property record, so retrying on every
-    background enrichment cycle isn't worth the added complexity.
+    "REData has no building here" is cached as ``{}``; "REData could not be
+    asked" is not. The two used to share one broad ``except``, on the reasoning
+    that a missing building record is lower-stakes than a missing property
+    record - but the existence of a ``LocationCache`` row is what marks a
+    source as fetched, so an outage (or an install with no REData configured at
+    the moment of the fetch) blanked the card for the whole
+    ``external_data_cache_days`` window with nothing to retry it. That is the
+    rule ``tests/hypothesis/test_outage_not_cached_as_empty.py`` exists for, and
+    it applies here too, so a transient reason now propagates.
 
     Args:
         latitude: WGS-84 latitude.
@@ -120,8 +140,16 @@ def _fetch_building_payload(latitude: float, longitude: float, *, location: Loca
     Returns:
         The nearest ``BuildingRecord`` dict, or ``{}`` when REData has no
         parcel or no buildings at this coordinate.
+
+    Raises:
+        PropertyRecordsUnavailableError: REData could not answer for a
+            transient reason. Left to propagate so no row is written and the
+            source stays retryable.
+        ValueError: REData is not configured. Same reasoning - the panel's
+            gate normally prevents this, but the background enrichment and the
+            wiki card reach here by other routes.
     """
-    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import TRANSIENT_REASONS, PropertyRecordsUnavailableError, RedataGateway
     from urbanlens.dashboard.services.locations.site_scope import parcel_buildings
 
     cached_buildings = parcel_buildings(location)
@@ -134,8 +162,12 @@ def _fetch_building_payload(latitude: float, longitude: float, *, location: Loca
         if not parcel_uuid:
             return {}
         buildings = gateway.lookup_buildings(parcel_uuid)
-    except (PropertyRecordsUnavailableError, ValueError):
-        logger.debug("redata_building_attributes: no buildings available near %.2f,%.2f", latitude, longitude, exc_info=True)
+    except PropertyRecordsUnavailableError as exc:
+        if exc.reason in TRANSIENT_REASONS:
+            raise
+        # Every other reason is REData's settled answer about this coordinate
+        # (no coverage, manual lookup only, nothing found) and is worth caching.
+        logger.debug("redata_building_attributes: no buildings near %.2f,%.2f (%s)", latitude, longitude, exc.reason)
         return {}
 
     return _nearest_building(buildings, latitude, longitude) or {}
@@ -170,10 +202,9 @@ def _render_building_attributes(data: dict[str, Any]) -> dict[str, Any] | None:
 
     # A reconciled REData record names its sources in `sources[]`; the flat
     # top-level `source` it replaced is still what Overpass-shaped rows carry.
-    from urbanlens.dashboard.plugins.builtin.parcel_buildings import record_sources
+    from urbanlens.dashboard.plugins.builtin.parcel_buildings import record_sources, source_chips
 
-    chips = [label for key in record_sources(data) if (label := _SOURCE_LABELS.get(key))]
-    return {"heading_name": heading_name, "chips": chips, "meta": meta}
+    return {"heading_name": heading_name, "chips": source_chips(record_sources(data)), "meta": meta}
 
 
 class RedataBuildingAttributesPanelSource(CoordinateGatedInfoPanelSource):
@@ -185,6 +216,16 @@ class RedataBuildingAttributesPanelSource(CoordinateGatedInfoPanelSource):
     icon = "domain"
     title = "Building Attributes"
     geo_boundary: ClassVar[GeoBoundary | None] = USA
+
+    def gate(self, pin: Pin) -> bool:
+        """Also requires REData to be configured - this panel has no other data source.
+
+        Without this the panel was scheduled for every US pin on an install
+        with no REData, and its fetch cached an empty payload for each one.
+        """
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+
+        return super().gate(pin) and redata_configured()
 
     def fetch(self, pin: Pin) -> None:
         """Resolve the pin's nearest building and cache it, keyed by its own coordinates."""
@@ -219,6 +260,18 @@ class RedataBuildingAttributesEnrichmentSource(LocationCacheEnrichmentSource):
     cache_source: ClassVar[str] = _CACHE_SOURCE
     service_keys: ClassVar[tuple[str, ...]] = ("redata_api",)
     geo_boundary: ClassVar[GeoBoundary | None] = USA
+
+    def gate(self) -> bool:
+        """Requires REData to be configured - this source has no other backend.
+
+        Without it the cycle picks candidates, every fetch raises, and the run
+        logs one exception per location. Answering here skips the source for
+        the whole cycle instead, which is what "unavailable" means to
+        ``self_reported_skip``.
+        """
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+
+        return redata_configured()
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Resolve the location's nearest building and return it for caching."""

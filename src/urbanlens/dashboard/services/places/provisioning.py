@@ -79,12 +79,24 @@ def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "",
         if existing := Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).first():
             return existing
 
-    # No stable id: treat two polygons as the same thing when each contains the
-    # other's centroid. Providers disagree about exact edges all the time, and
-    # an overlap-fraction threshold would need tuning per kind; mutual centroid
-    # containment needs none and cannot match two side-by-side parcels.
+    # No stable id match: treat two polygons as the same thing when each
+    # contains the other's centroid. Providers disagree about exact edges all
+    # the time, and an overlap-fraction threshold would need tuning per kind;
+    # mutual centroid containment needs none and cannot match two side-by-side
+    # parcels.
     centroid = polygon.centroid
-    for candidate in Place.objects.current().of_kind(kind).filter(geometry__isnull=False, geometry__contains=centroid):
+    centroid_holders = Place.objects.current().of_kind(kind).filter(geometry__isnull=False, geometry__contains=centroid)
+    for candidate in centroid_holders:
+        # A place already claimed by a *different* id from this same provider is
+        # not this record, whatever the geometry says - the provider has just
+        # told us they are two things. This matters most for nested buildings:
+        # REData reconciles a block and the wings inside it into separate
+        # records on purpose, and an L-shaped block can contain a wing's
+        # centroid while the wing contains the block's, which is exactly what
+        # the mutual-containment test below looks for. Without this check the
+        # two collapse back into one place, undoing the reconciliation.
+        if provider and provider_key and candidate.provider == provider and candidate.provider_key and candidate.provider_key != provider_key:
+            continue
         if candidate.geometry is not None and polygon.contains(candidate.geometry.centroid):
             return candidate
     return None
@@ -285,8 +297,27 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
     if parcel is None:
         return {}
 
-    created: dict[int, Place] = {}
+    # REData's reconciled shape reports nesting: a coarse footprint enclosing
+    # finer ones becomes their `parent_ref` rather than a duplicate of them (its
+    # `docs/buildings-dedup-spec.md`). Parenting every building to the parcel
+    # regardless made an envelope and the wings inside it *siblings* whose
+    # footprints overlap - the Place tree then said two peers occupy the same
+    # ground, which is the shape `resolve_locations_in` has to disambiguate and
+    # the one thing the reconciliation exists to avoid.
+    by_ref: dict[str, int] = {}
     for index, building in enumerate(buildings):
+        ref = str(building.get("ref") or "").strip()
+        if ref and ref not in by_ref:
+            by_ref[ref] = index
+
+    def _parent_index(index: int) -> int | None:
+        """The index this building nests under, or None for parcel-level."""
+        parent_ref = str(buildings[index].get("parent_ref") or "").strip()
+        candidate = by_ref.get(parent_ref) if parent_ref else None
+        return candidate if candidate is not None and candidate != index else None
+
+    def _create(index: int, parent_place: Place) -> None:
+        building = buildings[index]
         footprint = building_footprint(building)
         # "ref" is the reconciled shape's stable id (e.g. "cris:02714.000098")
         # and doubles as the key floorplan lookups use - prefer it.
@@ -297,11 +328,44 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
             provider=provider if key else "",
             provider_key=key,
             name=building_name(building),
-            parent=parcel,
+            parent=parent_place,
             relation=PlaceRelation.PART_OF,
         )
         if place is not None:
             created[index] = place
+
+    created: dict[int, Place] = {}
+    # Parents before children, to whatever depth the source reports (a campus
+    # block parenting a wing parenting an annex). Resolved by repeated passes
+    # rather than recursion so a `parent_ref` cycle - which `parcel_buildings`
+    # already guards against in its own ordering - cannot recurse forever.
+    pending = list(range(len(buildings)))
+    while pending:
+        deferred: list[int] = []
+        progressed = False
+        for index in pending:
+            parent_index = _parent_index(index)
+            if parent_index is None:
+                _create(index, parcel)
+                progressed = True
+            elif parent_index in created:
+                _create(index, created[parent_index])
+                progressed = True
+            elif parent_index in pending:
+                deferred.append(index)
+            else:
+                # Its parent produced no place (no geometry, or upsert declined).
+                # The parcel is the nearest real ancestor.
+                _create(index, parcel)
+                progressed = True
+        if not progressed:
+            # Every remaining building is waiting on another that is also
+            # waiting - a cycle. Attach them to the parcel rather than dropping
+            # buildings the import told the user it would create.
+            for index in deferred:
+                _create(index, parcel)
+            break
+        pending = deferred
 
     lineage.refresh_derived_flags([parcel.pk])
     parcel.refresh_from_db()

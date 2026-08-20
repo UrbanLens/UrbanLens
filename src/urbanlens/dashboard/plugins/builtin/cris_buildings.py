@@ -64,6 +64,16 @@ _DEMOLISHED_ELIGIBILITY = "Not Eligible - Demolished"
 #: Only "building" resources carry the USN Point fields this panel renders;
 #: the other CRIS resource types (district/national-register-listing/
 #: archaeological-buffer-area) are out of scope for this specific plugin.
+#: REData's provider tag for New York's CRIS. Every selector in this module
+#: reads CRIS's own raw ArcGIS attribute names (``USNName``, ``USNNum``,
+#: ``EligibilityDesc``, ...), so it must not be handed a row from one of the
+#: other inventories on the same endpoint - the nationwide ``nps_nrhp``
+#: provider answers for every NY coordinate too, and publishes none of them.
+#: Selecting on ``resource_type`` alone let an NRHP row win on distance and
+#: blank the card. Not to be confused with the ``cris`` *building-source* tag
+#: on ``/parcels/{uuid}/buildings/``, which is a different registry.
+_PROVIDER = "ny_cris"
+
 _RESOURCE_TYPE = "building"
 
 #: Resource types that describe a whole *site* rather than one structure, in
@@ -95,6 +105,25 @@ def attachment_kind(attachment: dict) -> str:
     return str(attachment.get("kind") or "").strip().lower()
 
 
+def cris_only(resources: list[dict]) -> list[dict]:
+    """Keep only the rows CRIS itself answered.
+
+    The lookup is sent with ``?provider=ny_cris`` so REData does not run the
+    others, but a ``LocationCache`` row written before that was added can still
+    hold a mixed list, and a caller may pass one in. Rows with no ``provider``
+    at all are kept: that is what the pre-registry responses this cache may
+    still contain looked like, and they were CRIS by definition.
+
+    Args:
+        resources: Resource dicts from
+            :meth:`RedataGateway.lookup_cultural_resources`.
+
+    Returns:
+        The CRIS-sourced subset, in the order given.
+    """
+    return [r for r in resources if r.get("provider") in (None, "", _PROVIDER)]
+
+
 def site_resource(resources: list[dict]) -> dict | None:
     """Pick the best site-level CRIS resource from a lookup.
 
@@ -107,7 +136,7 @@ def site_resource(resources: list[dict]) -> dict | None:
         fetch), or None when the lookup returned no site-level resource.
     """
     for resource_type in _SITE_RESOURCE_TYPES:
-        match = next((r for r in resources if r.get("resource_type") == resource_type), None)
+        match = next((r for r in cris_only(resources) if r.get("resource_type") == resource_type), None)
         if match is not None:
             return match
     return None
@@ -158,7 +187,7 @@ def nearest_resource(resources: list[dict], resource_type: str, latitude: float,
     """
     from urbanlens.dashboard.services.locations.site_scope import meters_between
 
-    matches = [r for r in resources if r.get("resource_type") == resource_type]
+    matches = [r for r in cris_only(resources) if r.get("resource_type") == resource_type]
     if not matches:
         return None
     best, best_distance = None, float("inf")
@@ -232,7 +261,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         query_key = f"{lat},{lng}"
         try:
             gateway = RedataGateway()
-            resources = gateway.lookup_cultural_resources(lat, lng, radius_meters=_RADIUS_METERS)
+            resources = gateway.lookup_cultural_resources(lat, lng, radius_meters=_RADIUS_METERS, provider=_PROVIDER)
         except (PropertyRecordsUnavailableError, ValueError):
             logger.debug("CrisBuildingPanelSource.fetch: CRIS lookup unavailable for pin %s", pin.pk, exc_info=True)
             LocationCache.set(pin.location, self.cache_source, {}, query_key=query_key)
@@ -480,6 +509,18 @@ class CrisBuildingEnrichmentSource(LocationCacheEnrichmentSource):
     cache_source: ClassVar[str] = "cris_building_usn"
     geo_boundary: ClassVar[GeoBoundary | None] = state_boundary("NY")
 
+    def gate(self) -> bool:
+        """Requires REData to be configured - this source has no other backend.
+
+        Without it the cycle picks candidates, every fetch raises, and the run
+        logs one exception per location. Answering here skips the source for
+        the whole cycle instead, which is what "unavailable" means to
+        ``self_reported_skip``.
+        """
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+
+        return redata_configured()
+
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Find the CRIS "building" resource nearest this location and return its flattened info.
 
@@ -497,7 +538,7 @@ class CrisBuildingEnrichmentSource(LocationCacheEnrichmentSource):
 
         query_key = f"{location.latitude},{location.longitude}"
         try:
-            resources = RedataGateway().lookup_cultural_resources(float(location.latitude), float(location.longitude), radius_meters=_RADIUS_METERS)
+            resources = RedataGateway().lookup_cultural_resources(float(location.latitude), float(location.longitude), radius_meters=_RADIUS_METERS, provider=_PROVIDER)
         except (PropertyRecordsUnavailableError, ValueError):
             return None, query_key
         district = site_resource_attributes(resources)
