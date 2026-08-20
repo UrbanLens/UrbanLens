@@ -13,6 +13,9 @@ rather than by package import.
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import subprocess
+from unittest import mock
 import sys
 import tempfile
 
@@ -44,7 +47,7 @@ if str(_BIN) not in sys.path:
     sys.path.insert(0, str(_BIN))
 
 from opslib import devenv, router  # noqa: E402 - path setup must precede the import
-from opslib.staging import _read_env_var, _table_counts  # noqa: E402
+from opslib.staging import _VERIFIED_TABLES, _db_container, _read_env_var, _table_counts  # noqa: E402
 
 
 class EnvFileReadingTests(SimpleTestCase):
@@ -209,6 +212,24 @@ class ContainerNameCollisionTests(SimpleTestCase):
         self.assertIn("unknown owner", conflict)
 
 
+def _services_with_extra_hosts(override: str) -> set[str]:
+    """Which services in a generated override declare ``extra_hosts``.
+
+    Parsed rather than sliced between service names: the override emits
+    services in its own fixed order, not the order the base compose file lists
+    them, so splitting on "the text between app and celery-worker" reads a
+    different block than it looks like it does.
+    """
+    found: set[str] = set()
+    current = ""
+    for line in override.splitlines():
+        if line.startswith("  ") and not line.startswith("    ") and line.rstrip().endswith(":"):
+            current = line.strip().rstrip(":")
+        elif line.strip() == "extra_hosts:":
+            found.add(current)
+    return found
+
+
 class IsolationOverrideTests(SimpleTestCase):
     def test_every_named_service_is_pinned_to_the_slug(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -230,3 +251,227 @@ class IsolationOverrideTests(SimpleTestCase):
 
             self.assertIn("ul_abc123_app", override)
             self.assertNotIn("clamav", override)
+
+    def test_application_services_can_reach_the_host(self) -> None:
+        """Where this environment's own REData actually is.
+
+        REData publishes its app port on the host; ``127.0.0.1`` inside the app
+        container is the app container, so the configured URL resolved to
+        nothing. The failure is close to invisible - the same URL works from a
+        shell on the host, which is where anyone would test it.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            (checkout / "docker-compose.yml").write_text("services:\n  app:\n    image: x\n  celery-worker:\n    image: y\n  db:\n    image: z\n", encoding="utf-8")
+
+            override = devenv._isolation_override("abc123", checkout)
+
+        routed = _services_with_extra_hosts(override)
+
+        self.assertEqual(routed, {"app", "celery-worker"}, "only services running application code need a route out")
+
+    def test_the_redata_url_names_the_alias_the_override_routes(self) -> None:
+        """The env file and the override are written separately and must agree."""
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            (checkout / "docker-compose.yml").write_text("services:\n  app:\n    image: x\n", encoding="utf-8")
+            override = devenv._isolation_override("abc123", checkout)
+
+        url = devenv.redata_api_url(21860)
+
+        self.assertNotIn("127.0.0.1", url)
+        self.assertIn(url.split("//", 1)[1].split(":", 1)[0], override)
+
+    def test_no_redata_means_no_url(self) -> None:
+        """An environment created with `--no-redata` must not point anywhere."""
+        self.assertEqual(devenv.redata_api_url(None), "")
+
+    def test_a_minted_key_replaces_the_inherited_one(self) -> None:
+        """The seeded key names a row in the *host's* REData database.
+
+        A private instance starts with an empty one, so the inherited key
+        authenticates against nothing and every call is a 401 - from a service
+        that is up, reachable, and answering.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            ul_dir = Path(directory)
+            (ul_dir / ".env").write_text("UL_REDATA_API_KEY=rdk_inherited\nUL_SITE_URL=http://x\n", encoding="utf-8")
+            run = mock.Mock()
+            with mock.patch.object(devenv.subprocess, "run", return_value=mock.Mock(stdout="90 objects imported\nUL_REDATA_KEY=rdk_fresh\n", stderr="")):
+                devenv._provision_redata_key(run, "abc123", ul_dir)
+
+            written = (ul_dir / ".env").read_text(encoding="utf-8")
+
+        self.assertIn("UL_REDATA_API_KEY=rdk_fresh", written)
+        self.assertNotIn("rdk_inherited", written)
+        self.assertIn("UL_SITE_URL=http://x", written, "the rest of the file must survive")
+        self.assertEqual(run.record.call_args.args[1], "ok")
+
+    def test_a_failed_mint_is_recorded_rather_than_raised(self) -> None:
+        """Everything that is not REData still works, which is most of it."""
+        with tempfile.TemporaryDirectory() as directory:
+            ul_dir = Path(directory)
+            (ul_dir / ".env").write_text("UL_REDATA_API_KEY=rdk_inherited\n", encoding="utf-8")
+            run = mock.Mock()
+            with mock.patch.object(devenv.subprocess, "run", return_value=mock.Mock(stdout="", stderr="no such container")):
+                devenv._provision_redata_key(run, "abc123", ul_dir)
+
+            self.assertEqual((ul_dir / ".env").read_text(encoding="utf-8"), "UL_REDATA_API_KEY=rdk_inherited\n")
+
+        self.assertEqual(run.record.call_args.args[1], "failed")
+        self.assertIn("no such container", run.record.call_args.args[2])
+
+    def test_redata_answers_to_the_host_the_url_names(self) -> None:
+        """Routing to it is only half the fix; Django still checks the Host header.
+
+        Verified live 2026-08-20: over the host gateway REData answered 400
+        DisallowedHost, where the same request from the host answered 401. A
+        400 from a service that is plainly up reads as a bad request, not as a
+        misconfigured address, so this half is the easier one to miss.
+        """
+        host = devenv.redata_api_url(21860).split("//", 1)[1].split(":", 1)[0]
+
+        self.assertIn(host, devenv.redata_allowed_hosts().split(","))
+
+
+class ContainerNamingTests(SimpleTestCase):
+    """Three sites needed this name and had already drifted apart.
+
+    The isolation override writes `ul_<slug>_<service>`, the log capture asks
+    for `ul_<slug>_app`, and `list_envs` looked for `agent_<slug>` - a prefix
+    nothing creates, so every environment was reported as not running whatever
+    its actual state.
+    """
+
+    def test_the_name_matches_what_the_override_pins(self) -> None:
+        """Read against the real compose file, since the override only emits
+        services that file actually defines."""
+        override = devenv._isolation_override("demo", _BIN.parent)
+
+        self.assertIn(f"container_name: {devenv.container_name('demo', 'app')}", override)
+        self.assertIn(f"container_name: {devenv.container_name('demo', 'db')}", override)
+
+    def test_a_hyphenated_service_becomes_an_underscore(self) -> None:
+        """Compose service names carry hyphens; container names here do not."""
+        self.assertEqual(devenv.container_name("demo", "app-ws"), "ul_demo_app_ws")
+
+    def test_list_matches_a_running_environment(self) -> None:
+        """`agent_<slug>` matched nothing, so `running` was always False."""
+        listing = "ul_demo_app\nul_demo_db\nsomething_else\n"
+
+        self.assertIn(devenv.container_name("demo", "app"), listing)
+        self.assertNotIn("agent_demo", listing)
+
+
+class StagingDbContainerTests(SimpleTestCase):
+    """The data-preservation check counts rows in a container it has to name correctly.
+
+    Naming it wrong is silent: no container matches, every count comes back -1,
+    and the comparison used to read that as nothing to complain about. Both
+    sides used `UL_ENVIRONMENT` alone, so any deployment setting
+    `UL_CONTAINER_NAME` - the variable that exists precisely to override it -
+    passed the check vacuously.
+    """
+
+    def _env(self, text: str) -> Path:
+        handle = tempfile.NamedTemporaryFile("w", suffix=".env", delete=False)
+        handle.write(text)
+        handle.close()
+        return Path(handle.name)
+
+    def test_container_name_wins_over_environment(self) -> None:
+        env = self._env("UL_ENVIRONMENT=staging\nUL_CONTAINER_NAME=staging_blue\n")
+
+        self.assertEqual(_db_container(env), "urbanlens_staging_blue_db")
+
+    def test_environment_is_the_fallback(self) -> None:
+        self.assertEqual(_db_container(self._env("UL_ENVIRONMENT=staging\n")), "urbanlens_staging_db")
+
+    def test_production_is_the_last_resort(self) -> None:
+        """Matching docker-compose.yml's own default chain."""
+        self.assertEqual(_db_container(self._env("")), "urbanlens_production_db")
+
+
+class VerifiedTablesTests(SimpleTestCase):
+    """A table name that matches nothing counts -1, which the check skipped."""
+
+    def test_every_verified_table_exists_in_the_schema(self) -> None:
+        from django.apps import apps
+
+        known = {model._meta.db_table for model in apps.get_models()}
+
+        missing = [table for table in _VERIFIED_TABLES if table not in known]
+
+        self.assertEqual(missing, [], "a name no model owns can never be counted, so it silently drops out of the comparison")
+
+    def test_the_pins_table_is_named_the_way_the_model_names_it(self) -> None:
+        """`dashboard_pins` was checked for a year and exists nowhere."""
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        self.assertIn(Pin._meta.db_table, _VERIFIED_TABLES)
+
+
+class DestroyFailureTests(SimpleTestCase):
+    """A teardown that failed must not be recorded as an environment removed.
+
+    `destroy` set `containers: True` whatever `docker compose down` returned and
+    popped the registry entry regardless - so a failed teardown left containers
+    running with nothing left recording that they exist, and the CLI exited 0.
+    The registry entry is the only handle anyone has on them.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        env_dir = root / "doomed" / "UrbanLens"
+        env_dir.mkdir(parents=True)
+        (root / "doomed" / "UrbanLens" / ".env").write_text("UL_ENVIRONMENT=development\n", encoding="utf-8")
+        self.registry = root / "registry.json"
+        self.registry.write_text(json.dumps({"doomed": {"slug": "doomed", "path": str(root / "doomed")}}), encoding="utf-8")
+        self._registry_patch = mock.patch.object(devenv, "REGISTRY", self.registry)
+        self._registry_patch.start()
+        self.addCleanup(self._registry_patch.stop)
+        self.addCleanup(self._tmp.cleanup)
+        self.root = root
+
+    def _destroy(self, returncode: int):
+        completed = subprocess.CompletedProcess(args=[], returncode=returncode, stdout="", stderr="network in use")
+        with (
+            mock.patch.object(devenv.subprocess, "run", return_value=completed),
+            # Patched on `router`, not `devenv`: destroy imports it inside the
+            # function, so there is no module-level attribute to replace.
+            mock.patch.object(router, "write_routes"),
+        ):
+            return devenv.destroy("doomed", root=self.root)
+
+    def test_a_failed_teardown_keeps_the_registry_entry(self) -> None:
+        result = self._destroy(returncode=1)
+
+        self.assertFalse(result["containers"])
+        self.assertFalse(result["registry"])
+        self.assertIn("doomed", json.loads(self.registry.read_text()), "the entry is the only record those containers exist")
+
+    def test_a_failed_teardown_reports_why(self) -> None:
+        result = self._destroy(returncode=1)
+
+        self.assertTrue(result.get("errors"), "the compose output is what tells someone what to do next")
+        self.assertIn("network in use", " ".join(result["errors"]))
+
+    def test_a_failed_teardown_marks_the_entry_orphaned(self) -> None:
+        self._destroy(returncode=1)
+
+        self.assertEqual(json.loads(self.registry.read_text())["doomed"]["status"], "orphaned")
+
+    def test_a_failed_teardown_leaves_the_files_alone(self) -> None:
+        """Deleting the checkout of a stack still running removes the way to stop it."""
+        self._destroy(returncode=1)
+
+        self.assertTrue((self.root / "doomed" / "UrbanLens").is_dir())
+
+    def test_a_clean_teardown_still_removes_everything(self) -> None:
+        result = self._destroy(returncode=0)
+
+        self.assertTrue(result["containers"])
+        self.assertTrue(result["registry"])
+        self.assertNotIn("doomed", json.loads(self.registry.read_text()))

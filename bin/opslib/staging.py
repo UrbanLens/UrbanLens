@@ -33,12 +33,40 @@ if TYPE_CHECKING:
 #: Tables compared before and after the clone. Not an exhaustive list - the
 #: point is to notice a restore that silently produced an empty or partial
 #: database, which shows up in the big tables first.
-_VERIFIED_TABLES = ("dashboard_pins", "dashboard_locations", "auth_user", "dashboard_profiles", "dashboard_images")
+#:
+#: ``dashboard_user_pins``, not ``dashboard_pins``: ``Pin.Meta.db_table`` names
+#: the former and the latter exists nowhere. A name that matches no table counts
+#: -1, which the comparison below then skipped, so the single most important
+#: table in this list was never actually compared while the report said five
+#: tables matched.
+_VERIFIED_TABLES = ("dashboard_user_pins", "dashboard_locations", "auth_user", "dashboard_profiles", "dashboard_images")
 
 #: Pages that must answer before staging is called up. Deliberately includes an
 #: authenticated-only path: a 302 to login proves routing and middleware work,
 #: where a 200 on the landing page alone can be served by a half-booted app.
 _SMOKE_PATHS = (("/", (200,)), ("/dashboard/map/", (200, 302)), ("/dashboard/site-admin/", (200, 302, 403)))
+
+
+def _db_container(env_file: Path) -> str:
+    """The Postgres container name a checkout's ``.env`` produces.
+
+    Mirrors docker-compose.yml's own
+    ``urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_db``. Derived
+    in one place because getting it wrong is silent: a name that matches no
+    running container makes every table count -1, and the data-preservation
+    check below reads that as nothing to complain about. Both sides of that
+    comparison used ``UL_ENVIRONMENT`` alone, so any deployment setting
+    ``UL_CONTAINER_NAME`` - which is the reason the variable exists - passed the
+    check vacuously.
+
+    Args:
+        env_file: The checkout's ``.env``.
+
+    Returns:
+        The container name.
+    """
+    environment = _read_env_var(env_file, "UL_ENVIRONMENT", "production")
+    return f"urbanlens_{_read_env_var(env_file, 'UL_CONTAINER_NAME', environment)}_db"
 
 
 def _read_env_var(env_file: Path, key: str, default: str = "") -> str:
@@ -200,7 +228,7 @@ def run_staging_pipeline(
     if prod_dir and not skip_data:
         prod_env = prod_dir / ".env"
         prod_counts = _table_counts(
-            f"urbanlens_{_read_env_var(prod_env, 'UL_ENVIRONMENT', 'production')}_db",
+            _db_container(prod_env),
             _read_env_var(prod_env, "UL_DB_USER", "postgres"),
             _read_env_var(prod_env, "UL_DB_NAME", "postgres"),
             _VERIFIED_TABLES,
@@ -247,14 +275,24 @@ def run_staging_pipeline(
 
     if prod_counts:
         staging_counts = _table_counts(
-            f"urbanlens_{environment}_db",
+            _db_container(env_file),
             _read_env_var(env_file, "UL_DB_USER", "postgres"),
             _read_env_var(env_file, "UL_DB_NAME", "postgres"),
             _VERIFIED_TABLES,
         )
         run.context["staging_counts"] = staging_counts
-        shortfalls = [f"{table}: prod={prod_counts[table]} staging={staging_counts.get(table, -1)}" for table in prod_counts if prod_counts[table] > 0 and staging_counts.get(table, -1) < prod_counts[table]]
-        run.record("data-preserved", "failed" if shortfalls else "ok", "; ".join(shortfalls) or f"{len(prod_counts)} tables match or exceed prod")
+        # A -1 on either side means the count could not be taken - a missing
+        # table, or a container name that matched nothing. That is a check that
+        # did not run, and reporting it as a pass is the failure mode this whole
+        # step exists to catch, so it is a shortfall in its own right.
+        uncountable = [f"{table}: prod={prod_counts[table]} staging={staging_counts.get(table, -1)} (not counted)" for table in _VERIFIED_TABLES if prod_counts.get(table, -1) < 0 or staging_counts.get(table, -1) < 0]
+        compared = [table for table in _VERIFIED_TABLES if prod_counts.get(table, -1) >= 0 and staging_counts.get(table, -1) >= 0]
+        shortfalls = [f"{table}: prod={prod_counts[table]} staging={staging_counts[table]}" for table in compared if prod_counts[table] > 0 and staging_counts[table] < prod_counts[table]]
+        problems = uncountable + shortfalls
+        # `compared`, not `len(prod_counts)`: the old summary counted the tables
+        # it had *asked* about, so a run that compared none of them still said
+        # five matched.
+        run.record("data-preserved", "failed" if problems else "ok", "; ".join(problems) or f"{len(compared)} of {len(_VERIFIED_TABLES)} tables match or exceed prod")
     else:
         run.record("data-preserved", "skipped", "no clone performed")
 

@@ -53,6 +53,12 @@ repos:
         language: system
         files: '\.py$'
         pass_filenames: false
+      - id: notification-choke-point
+        name: every notification write honours the mute preference
+        entry: python3 bin/check_notification_choke_point.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
 
 # TYPESCRIPT
 -   repo: local

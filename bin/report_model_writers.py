@@ -22,6 +22,12 @@ Two ways of ranking that **did not** work, recorded so they are not retried:
 Ownership is the signal. This is a report, not a gate: a bare ``save()`` on a
 busy model is a question worth asking, not a defect on its own.
 
+A ``save()`` on an instance the same function just constructed is an INSERT and
+is **not** listed - there is no earlier load for it to be stale relative to. That
+filter was added on 2026-08-20 after the report's `Comment` finding turned out to
+be exactly that shape; the real finding in the same run was ``Friendship``, whose
+status transitions overwrote the mute columns another writer sets.
+
 Usage:
     bin/report_model_writers.py [--min-writers N] [--all]
 """
@@ -64,6 +70,63 @@ def _model_names() -> set[str]:
             if isinstance(node, ast.ClassDef) and any("Model" in ast.unparse(base) for base in node.bases):
                 names.add(node.name)
     return names
+
+
+def _freshly_constructed(tree: ast.AST, models: set[str]) -> set[tuple[int, str]]:
+    """Locals that hold an instance this function just built, per function.
+
+    A ``save()`` on one of those is an INSERT, not a whole-row overwrite of a
+    row somebody else may have changed - there is no earlier load to be stale
+    relative to. Reporting them buried the real findings: the import path alone
+    contributes several, and each costs a reader the same minute to dismiss.
+
+    Deliberately conservative. A name is only treated as fresh when *every*
+    assignment to it in that function is a direct ``Model(...)`` call - one
+    ``obj = Model.objects.get(...)`` anywhere in the function and the name is
+    reported as before. Under-filtering leaves a false positive; over-filtering
+    hides a defect, and this tool exists to find those.
+
+    Args:
+        tree: The module's parsed AST.
+        models: Known model class names.
+
+    Returns:
+        ``(function id, local name)`` pairs safe to skip.
+    """
+    fresh: set[tuple[int, str]] = set()
+    for function in ast.walk(tree):
+        if not isinstance(function, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        constructed: set[str] = set()
+        rebound: set[str] = set()
+        for node in ast.walk(function):
+            if not isinstance(node, ast.Assign) or len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+                continue
+            name = node.targets[0].id
+            value = node.value
+            if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id in models:
+                constructed.add(name)
+            else:
+                rebound.add(name)
+        fresh.update((id(function), name) for name in constructed - rebound)
+    return fresh
+
+
+def _enclosing_function(tree: ast.AST) -> dict[int, int]:
+    """Map every node to the id of the function that contains it.
+
+    Args:
+        tree: The module's parsed AST.
+
+    Returns:
+        ``{id(node): id(function)}`` for nodes inside a function.
+    """
+    owner: dict[int, int] = {}
+    for function in ast.walk(tree):
+        if isinstance(function, ast.FunctionDef | ast.AsyncFunctionDef):
+            for node in ast.walk(function):
+                owner.setdefault(id(node), id(function))
+    return owner
 
 
 def _instance_hint(node: ast.Call, models: set[str]) -> str | None:
@@ -122,6 +185,8 @@ def main(argv: list[str]) -> int:
             tree = ast.parse(path.read_text())
         except SyntaxError:
             continue
+        fresh = _freshly_constructed(tree, models)
+        owner = _enclosing_function(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
                 continue
@@ -131,8 +196,12 @@ def main(argv: list[str]) -> int:
             if model is None:
                 continue
             writers[model].add(str(path))
-            if node.func.attr == "save" and not node.args and not node.keywords:
-                bare_saves[model].append(f"{path}:{node.lineno}")
+            if node.func.attr != "save" or node.args or node.keywords:
+                continue
+            receiver = node.func.value
+            if isinstance(receiver, ast.Name) and (owner.get(id(node), 0), receiver.id) in fresh:
+                continue
+            bare_saves[model].append(f"{path}:{node.lineno}")
 
     ranked = sorted(writers.items(), key=lambda item: len(item[1]), reverse=True)
     print(f"{'model':32} {'writers':>8}  {'bare save()':>11}")

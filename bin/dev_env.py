@@ -63,7 +63,14 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(devenv.list_envs(), indent=2))
         return 0
 
-    print(json.dumps(devenv.destroy(args.slug, keep_files=args.keep_files), indent=2))
+    record = devenv.destroy(args.slug, keep_files=args.keep_files)
+    print(json.dumps(record, indent=2))
+    # A teardown that left containers running is not a successful destroy, and
+    # this returned 0 for it - so a caller scripting `create`/`destroy` cycles
+    # had no way to notice. `errors` carries the compose output that explains it.
+    if record.get("errors"):
+        print(f"\nTeardown incomplete: {'; '.join(record['errors'])}", file=sys.stderr)
+        return 1
     return 0
 
 
