@@ -99,6 +99,13 @@ def save_widget_layout(profile: Profile, enabled_keys: list[str]) -> list[str]:
 def home_dashboard_context(profile: Profile) -> dict[str, Any]:
     """Build the data context every homepage widget partial draws from.
 
+    Most entries below are unevaluated querysets, so a widget the user has
+    switched off costs nothing - the template never iterates it. Two were not:
+    the ten counts behind ``home_stats`` all execute as the dict is built, and
+    ``home_recent_comments`` is forced by the ``sorted()`` that merges two
+    sources. Those are now built only when their widget is enabled, which is a
+    dozen queries a user who turned both off was paying on every homepage load.
+
     Args:
         profile: The signed-in user's profile.
 
@@ -116,13 +123,17 @@ def home_dashboard_context(profile: Profile) -> dict[str, Any]:
     from urbanlens.dashboard.models.undo.model import UndoAction
     from urbanlens.dashboard.models.wiki_edit import WikiEdit
 
-    recent_pin_comments = Comment.objects.filter(profile=profile).select_related("pin", "wiki", "wiki__location").order_by("-created")[:5]
-    recent_trip_comments = TripComment.objects.by_author(profile)[:5]
-    recent_comments = sorted(
-        chain(recent_pin_comments, recent_trip_comments),
-        key=lambda comment: comment.created,
-        reverse=True,
-    )[:5]
+    enabled = {entry["widget"].key for entry in effective_widget_layout(profile) if entry["enabled"]}
+
+    recent_comments: list = []
+    if "recent_comments" in enabled:
+        recent_pin_comments = Comment.objects.filter(profile=profile).select_related("pin", "wiki", "wiki__location").order_by("-created")[:5]
+        recent_trip_comments = TripComment.objects.by_author(profile)[:5]
+        recent_comments = sorted(
+            chain(recent_pin_comments, recent_trip_comments),
+            key=lambda comment: comment.created,
+            reverse=True,
+        )[:5]
 
     active_checkin_statuses = (
         SafetyCheckinStatus.SCHEDULED,
@@ -130,15 +141,15 @@ def home_dashboard_context(profile: Profile) -> dict[str, Any]:
         SafetyCheckinStatus.OVERDUE,
     )
 
-    maps_count = MarkupMap.objects.for_profile(profile).count()
-    photos_count = Image.objects.filter(profile=profile).count()
-    comments_count = Comment.objects.filter(profile=profile).count() + TripComment.objects.filter(author=profile).count()
-    safety_checkins_count = SafetyCheckin.objects.filter(profile=profile).count() + UndoAction.objects.filter(profile=profile, model_label="safety_checkin").count()
-    trips_created_count = Trip.objects.filter(creator=profile).count()
-    trips_joined_count = TripMembership.objects.filter(profile=profile).exclude(trip__creator=profile).count()
-
-    return {
-        "home_stats": [
+    home_stats: list[dict[str, Any]] = []
+    if "stats" in enabled:
+        maps_count = MarkupMap.objects.for_profile(profile).count()
+        photos_count = Image.objects.filter(profile=profile).count()
+        comments_count = Comment.objects.filter(profile=profile).count() + TripComment.objects.filter(author=profile).count()
+        safety_checkins_count = SafetyCheckin.objects.filter(profile=profile).count() + UndoAction.objects.filter(profile=profile, model_label="safety_checkin").count()
+        trips_created_count = Trip.objects.filter(creator=profile).count()
+        trips_joined_count = TripMembership.objects.filter(profile=profile).exclude(trip__creator=profile).count()
+        home_stats = [
             {"label": "Maps created", "value": maps_count, "icon": "gesture"},
             {"label": "Wiki edits", "value": WikiEdit.objects.filter(editor=profile).count(), "icon": "edit_note"},
             {"label": "Safety check-ins", "value": safety_checkins_count, "icon": "emergency_home"},
@@ -147,7 +158,10 @@ def home_dashboard_context(profile: Profile) -> dict[str, Any]:
             {"label": "Photos uploaded", "value": photos_count, "icon": "photo_camera"},
             {"label": "Comments posted", "value": comments_count, "icon": "forum"},
             {"label": "Pins rated", "value": Review.objects.filter(profile=profile).count(), "icon": "star"},
-        ],
+        ]
+
+    return {
+        "home_stats": home_stats,
         "home_recent_photos": Image.objects.uploaded_by(profile)[:8],
         "home_recent_pins": Pin.objects.filter(profile=profile).select_related("location").order_by("-created")[:6],
         "home_recent_markup_maps": MarkupMap.objects.for_profile(profile).prefetch_related("items").order_by("-created")[:6],
