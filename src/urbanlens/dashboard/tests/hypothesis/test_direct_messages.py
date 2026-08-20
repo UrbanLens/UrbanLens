@@ -12,9 +12,11 @@ Covers:
 
 from __future__ import annotations
 
+from unittest import mock
 from unittest.mock import patch
 
 from django.urls import reverse
+from django.utils import timezone
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
@@ -33,6 +35,8 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
     can_direct_message,
     conversations_for,
     create_direct_message,
+    has_any_conversation,
+    unread_conversations_for,
     has_used_direct_messages,
     is_safe_reaction_emoji,
     thread_page,
@@ -968,3 +972,77 @@ class SenderOwnDeletedForEveryoneVisibilityTests(TestCase):
         delete_message_for_self(message, self.recipient)
         self.assertNotIn(message, DirectMessage.objects.visible_to(self.recipient))
         self.assertIn(message, DirectMessage.objects.visible_to(self.sender))
+
+
+class UnreadDropdownScalingTests(TestCase):
+    """The navbar dropdown shows at most eight unread rows.
+
+    It used to build the entire inbox to find them - every partner's identity,
+    last message and mute state - and then slice. A user with hundreds of
+    conversations paid for all of them on every `msgOpen`, and the empty-state
+    flag ("all caught up" vs "no messages yet") was answered by testing the
+    length of that same list.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make("auth.User")  # absorbs the bootstrap site-admin promotion
+        self.me = _profile()
+
+    def _partner_with(self, *, unread: bool) -> None:
+        other = _profile()
+        message = baker.make(DirectMessage, sender=other, recipient=self.me, body="hi")
+        if not unread:
+            DirectMessage.objects.filter(pk=message.pk).update(read_at=timezone.now())
+
+    def test_only_unread_conversations_are_built(self) -> None:
+        for _ in range(3):
+            self._partner_with(unread=True)
+        for _ in range(5):
+            self._partner_with(unread=False)
+
+        rows = unread_conversations_for(self.me)
+
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(row["unread_count"] for row in rows))
+
+    def test_the_read_conversations_are_not_even_fetched(self) -> None:
+        """Rows built, not rows returned - the cost this was about."""
+        for _ in range(2):
+            self._partner_with(unread=True)
+        for _ in range(8):
+            self._partner_with(unread=False)
+
+        materialised: list = []
+        original = Profile.from_db.__func__
+
+        def counting(cls, db, field_names, values):
+            instance = original(cls, db, field_names, values)
+            materialised.append(instance)
+            return instance
+
+        with mock.patch.object(Profile, "from_db", classmethod(counting)):
+            unread_conversations_for(self.me)
+
+        # Two partners, not ten. An exact count would pin unrelated profile
+        # reads, so this asserts the shape: far fewer than the whole inbox.
+        self.assertLess(len(materialised), 8, f"built {len(materialised)} profiles for two unread conversations")
+
+    def test_an_all_read_inbox_still_reports_having_conversations(self) -> None:
+        """"All caught up" and "no messages yet" are different empty states."""
+        self._partner_with(unread=False)
+
+        self.assertEqual(unread_conversations_for(self.me), [])
+        self.assertTrue(has_any_conversation(self.me))
+
+    def test_an_empty_inbox_reports_no_conversations(self) -> None:
+        self.assertFalse(has_any_conversation(self.me))
+
+    def test_a_group_membership_alone_counts_as_a_conversation(self) -> None:
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
+
+        friend = _profile()
+        _make_accepted_friendship(self.me, friend)
+        create_group_chat(self.me, "Quiet", [friend])
+
+        self.assertTrue(has_any_conversation(self.me))

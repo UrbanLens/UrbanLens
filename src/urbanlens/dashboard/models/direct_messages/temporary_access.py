@@ -105,5 +105,40 @@ class DirectMessageTemporaryAccess(abstract.DashboardModel):
         )
         return granted - blocked
 
+    @classmethod
+    def granting_viewer_pks(cls, profile_id: int, viewer_ids: set[int]) -> set[int]:
+        """The mirror of :meth:`granted_profile_pks`: one profile, many viewers.
+
+        Same rule, same veto. Exists because the two batch shapes are genuinely
+        different questions: rendering a list of people asks "which of these can
+        I see", while notifying a group about one sender asks "which of these
+        people can see them". Answering the second with the first costs a query
+        per viewer, which is the cost it exists to remove.
+
+        Args:
+            profile_id: The profile being viewed.
+            viewer_ids: The profiles requesting access.
+
+        Returns:
+            The subset of ``viewer_ids`` that may view ``profile_id`` via a grant.
+        """
+        if not viewer_ids:
+            return set()
+
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        granted = set(
+            cls.objects.filter(profile_id=profile_id, granted_to_id__in=viewer_ids, expires_at__gt=timezone.now()).values_list("granted_to_id", flat=True),
+        )
+        if not granted:
+            return set()
+
+        blocked = set(
+            Friendship.objects.filter(from_profile_id=profile_id, to_profile_id__in=granted, status=FriendshipStatus.BLOCKED).values_list("to_profile_id", flat=True),
+        ) | set(
+            Friendship.objects.filter(to_profile_id=profile_id, from_profile_id__in=granted, status=FriendshipStatus.BLOCKED).values_list("from_profile_id", flat=True),
+        )
+        return granted - blocked
+
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_dm_temporary_access"

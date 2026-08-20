@@ -559,6 +559,34 @@ class E2EERewrapView(DualAuthJsonView):
             return Response({"error": "password_wrapped_secret and password_wrap_salt must be provided together"}, status=400)
         if not password_wrapped and not recovery_wrapped:
             return Response({"error": "Nothing to update"}, status=400)
+
+        # The KDF cost the *new* blob was wrapped under. Enroll accepts
+        # stronger-than-default parameters on purpose, but this endpoint never
+        # updated them - so a bundle enrolled above the floor kept advertising
+        # its old cost while the re-wrap stored a blob made with the client's
+        # pinned constants. Every later password unlock then derived a key from
+        # the wrong parameters and failed: a device holding the cached key looped
+        # re-wrapping, and a device without one lost the password path entirely
+        # and had to fall back to the recovery key. Permanent, and reachable
+        # through the public API by enrolling above the floor.
+        #
+        # Absent means the defaults rather than "leave them alone": the shipped
+        # client has always wrapped with its pinned `KDF_OPSLIMIT`/`KDF_MEMLIMIT`
+        # here (see the comment at the call site in e2ee-client.ts, which
+        # explains why it must not use the server-supplied values), and those are
+        # pinned to match these constants. So an older client that sends nothing
+        # is describing exactly this.
+        rewrap_opslimit, rewrap_memlimit = DEFAULT_KDF_OPSLIMIT, DEFAULT_KDF_MEMLIMIT
+        if password_wrapped and ("kdf_opslimit" in data or "kdf_memlimit" in data):
+            try:
+                rewrap_opslimit = int(data.get("kdf_opslimit", 0))
+                rewrap_memlimit = int(data.get("kdf_memlimit", 0))
+            except (TypeError, ValueError):
+                return Response({"error": "Invalid kdf parameters"}, status=400)
+            # The same floor enroll applies, for the same reason: this decides
+            # how expensive the stored blob is to attack offline.
+            if rewrap_opslimit < DEFAULT_KDF_OPSLIMIT or rewrap_memlimit < DEFAULT_KDF_MEMLIMIT:
+                return Response({"error": "Invalid kdf parameters"}, status=400)
         # Proof is required for *either* wrapped copy, not just the password
         # one. Gating it on `password_wrapped` alone left the recovery-only
         # rewrap unauthenticated beyond the bearer token: a stolen
@@ -581,7 +609,12 @@ class E2EERewrapView(DualAuthJsonView):
             bundle.password_wrapped_secret = password_wrapped
             bundle.password_wrap_salt = password_wrap_salt
             bundle.password_wrap_stale = False
-            update_fields += ["password_wrapped_secret", "password_wrap_salt", "password_wrap_stale"]
+            # Stored with the blob, never separately: the salt, the ciphertext
+            # and the cost parameters are one description of one wrapping, and
+            # the read path uses all three together.
+            bundle.kdf_opslimit = rewrap_opslimit
+            bundle.kdf_memlimit = rewrap_memlimit
+            update_fields += ["password_wrapped_secret", "password_wrap_salt", "password_wrap_stale", "kdf_opslimit", "kdf_memlimit"]
         if recovery_wrapped:
             bundle.recovery_wrapped_secret = recovery_wrapped
             update_fields.append("recovery_wrapped_secret")

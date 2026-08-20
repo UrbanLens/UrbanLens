@@ -33,6 +33,7 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
     delete_message_for_everyone,
     delete_message_for_self,
     display_identity_for,
+    has_any_conversation,
     is_conversation_muted,
     is_profile_online,
     is_safe_reaction_emoji,
@@ -43,6 +44,7 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
     set_conversation_muted,
     thread_page,
     toggle_reaction,
+    unread_conversations_for,
 )
 
 if TYPE_CHECKING:
@@ -751,12 +753,21 @@ class MessagesDropdownView(LoginRequiredMixin, View):
             from "no messages yet" (no DM history at all).
         """
         profile = _get_profile(request)
-        conversations = all_conversations_for(profile)
-        unread = [conv for conv in conversations if conv["unread_count"]][:DROPDOWN_CONVERSATION_LIMIT]
+        # Narrowed in the query, not after it: this used to build every
+        # conversation in the inbox - partner identity, last message, mute state
+        # - and then keep at most eight of them.
+        unread = unread_conversations_for(profile)[:DROPDOWN_CONVERSATION_LIMIT]
         return render(
             request,
             "dashboard/partials/messages/_dropdown.html",
-            {"conversations": unread, "has_conversations": bool(conversations)},
+            # viewer_id: the preview goes through `message_preview`, which needs
+            # it to apply this viewer's own tombstone/expiry rules. The dropdown
+            # hand-rolled the preview instead until 2026-08-19, which both
+            # showed a deleted message's body and defeated the `images` prefetch
+            # `all_conversations_for` pays for (`.exists()` ignores the cache).
+            # `has_conversations` distinguishes "all caught up" from "no messages
+            # yet", and needs only existence - not the whole inbox built.
+            {"conversations": unread, "has_conversations": has_any_conversation(profile), "viewer_id": profile.pk},
         )
 
 

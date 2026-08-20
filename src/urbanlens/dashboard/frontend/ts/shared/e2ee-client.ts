@@ -365,6 +365,13 @@ async function unlockAfterDerivedLogin(password: string, currentPasswordProof: s
             // enforces the same floor at enroll (controllers/e2ee.py).
             password_wrapped_secret: wrapSecretKey(cached.privateKey, deriveKey(password, wrapSalt, KDF_OPSLIMIT, KDF_MEMLIMIT)),
             password_wrap_salt: wrapSalt,
+            // Sent, not left implied. The server stores these against the blob,
+            // and a bundle enrolled with stronger-than-default parameters used
+            // to keep advertising them after this re-wrap replaced the blob with
+            // one made from the constants above - after which every password
+            // unlock derived the wrong key and failed permanently.
+            kdf_opslimit: KDF_OPSLIMIT,
+            kdf_memlimit: KDF_MEMLIMIT,
             current_password: currentPasswordProof,
         });
     }

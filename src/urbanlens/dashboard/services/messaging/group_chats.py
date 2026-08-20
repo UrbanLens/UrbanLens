@@ -22,14 +22,14 @@ from typing import TYPE_CHECKING, Any
 
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Max, Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message, direct_message_group_name, reaction_summary
-from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+from urbanlens.dashboard.services.profile.identity_visibility import resolve_identity_for_viewers, resolve_visible_identity
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -153,11 +153,13 @@ def create_group_chat(creator: Profile, name: str, members: list[Profile]) -> Gr
         for member in unique_members.values():
             GroupChatMembership.objects.create(group=group, profile=member)
 
+    # Resolved (and masked if needed) toward each specific recipient before
+    # formatting - the message is stored as plain text, so it must be masked
+    # here, not at render time (see identity_visibility.py). One subject, many
+    # recipients, so it resolves in one batch rather than a query per member.
+    creator_names = resolve_identity_for_viewers(creator, list(unique_members.values()))
     for member in unique_members.values():
-        # Resolved (and masked if needed) toward this specific recipient before
-        # formatting - the message is stored as plain text, so it must be
-        # masked here, not at render time (see identity_visibility.py).
-        creator_name = resolve_visible_identity(member, creator)["display_name"]
+        creator_name = creator_names[member.pk]["display_name"]
         _notify_group_event(group, member, f"{creator_name} added you to the group “{group.name}”.")
     _broadcast_group_event(group, {"type": "group_updated", "group_uuid": str(group.uuid)})
     logger.info("Group chat %s created by profile %s with %d members", group.pk, creator.pk, len(unique_members) + 1)
@@ -270,8 +272,9 @@ def add_group_members(group: GroupChat, actor: Profile, members: list[Profile]) 
 
     existing_members = list(ProfileModel.objects.filter(pk__in=active_ids))
     created = [GroupChatMembership.objects.create(group=group, profile=member) for member in to_add.values()]
+    actor_names = resolve_identity_for_viewers(actor, list(to_add.values()))
     for member in to_add.values():
-        actor_name = resolve_visible_identity(member, actor)["display_name"]
+        actor_name = actor_names[member.pk]["display_name"]
         _notify_group_event(group, member, f"{actor_name} added you to the group “{group.name}”.")
     _broadcast_group_event(group, {"type": "group_updated", "group_uuid": str(group.uuid)})
     logger.info("Profile %s added %d members to group %s", actor.pk, len(created), group.pk)
@@ -320,7 +323,7 @@ def remove_group_member(group: GroupChat, actor: Profile, target: Profile) -> No
 # ---------------------------------------------------------------------------
 
 
-def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = None, has_share: bool | None = None) -> dict[str, Any]:
+def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = None, has_share: bool | None = None, sender_identity: dict[str, Any] | None = None) -> dict[str, Any]:
     """Serialize a group message into the JSON payload pushed over the WebSocket.
 
     Args:
@@ -337,6 +340,10 @@ def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = N
             through, instead of letting each call re-run
             ``message.shares.exists()`` for the same message. None computes
             it here (correct for a single call, just not for a per-member loop).
+        sender_identity: This viewer's entry from
+            ``resolve_identity_for_viewers``, for the same reason as
+            ``has_share``: resolving it here costs a query per member, and a
+            per-member loop pays it once each. None resolves it here.
 
     Returns:
         A JSON-serializable dict; ``group_uuid`` lets the frontend route the
@@ -349,7 +356,7 @@ def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = N
         sender_name = message.sender.username
         sender_slug = message.sender.slug or ""
     else:
-        identity = resolve_visible_identity(viewer, message.sender)
+        identity = sender_identity if sender_identity is not None else resolve_visible_identity(viewer, message.sender)
         sender_name = identity["display_name"]
         sender_slug = "" if identity["is_masked"] else (message.sender.slug or "")
     return {
@@ -411,7 +418,7 @@ def _notify_group_event(group: GroupChat, recipient: Profile, text: str) -> None
         pref = DeliveryPreference.SITE
     if pref == DeliveryPreference.NONE:
         return
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=recipient,
         status=Status.UNREAD,
         importance=Importance.MEDIUM,
@@ -465,24 +472,48 @@ def _notify_group_message(message: GroupMessage) -> None:
     # message in this group" check, instead of one `.exists()` query per
     # membership (~100 extra queries on a full 50-member group otherwise) -
     # same anti-N+1 shape as `group_conversations_for`/
-    # `unread_group_conversation_count` below, just applied per-member
-    # in Python instead of OR'd into a single Q (each membership's own
-    # join time/read mark still can't be expressed as one shared filter,
-    # but fetching the candidate rows once and checking them in memory
-    # avoids a query per membership either way).
-    earliest_created = min(membership.created for membership in memberships)
-    other_messages = list(
-        GroupMessage.objects.filter(group_id=group.pk, created__gte=earliest_created).exclude(pk=message.pk).values_list("sender_id", "created"),
+    # `unread_group_conversation_count` below. Each membership's own join time
+    # and read mark can't be expressed as one shared filter, so the check is
+    # finished in Python.
+    #
+    # Only the newest message *per sender* is fetched, which is at most one row
+    # per member. Both conditions below are lower bounds on `created`, so if any
+    # of a sender's messages clears them their newest one does - the older ones
+    # can never decide the answer. Reading every message since the longest-
+    # standing member joined (which for an established group is the entire
+    # history) and scanning it per member made this O(members x messages) on the
+    # synchronous send path, growing with the group's own history forever.
+    latest_by_sender = list(
+        GroupMessage.objects.filter(group_id=group.pk)
+        .exclude(pk=message.pk)
+        .values("sender_id")
+        .annotate(newest=Max("created"))
+        .order_by()
+        .values_list("sender_id", "newest"),
     )
 
     def _already_unread(membership: GroupChatMembership) -> bool:
-        for sender_id, created in other_messages:
+        for sender_id, created in latest_by_sender:
             if sender_id == membership.profile_id or created < membership.created:
                 continue
             if membership.last_read_at is not None and created <= membership.last_read_at:
                 continue
             return True
         return False
+
+    # One query for the whole membership rather than one per member, for the
+    # same reason the unread check above is batched: this runs on the
+    # synchronous send path and a 50-member group would otherwise pay 50
+    # lookups. Friendship-level mute is separate from `membership.muted` below
+    # - that one silences the group, this one silences a person.
+    from urbanlens.dashboard.services.social.friendship import profiles_muting
+
+    muted_recipients = profiles_muting(message.sender_id, [m.profile_id for m in memberships])
+    # The last per-member query in this function. The docstring has claimed a
+    # fixed query count since the unread check and the preference lookup were
+    # batched; the sender's masked name was resolved one member at a time the
+    # whole time, so the claim was true of two of the three things it named.
+    sender_identities = resolve_identity_for_viewers(message.sender, [membership.profile for membership in memberships])
 
     for membership in memberships:
         if membership.muted or is_group_thread_open(membership.profile_id, group.pk):
@@ -502,8 +533,9 @@ def _notify_group_message(message: GroupMessage) -> None:
         # Same viewer-scoped masking the thread render applies - a sender whose
         # profile_visibility hides them from this member must not be revealed
         # by the bell notification before the (masked) thread is even opened.
-        sender_display_name = resolve_visible_identity(membership.profile, message.sender)["display_name"]
-        NotificationLog.objects.create(
+        sender_display_name = sender_identities[membership.profile_id]["display_name"]
+        NotificationLog.objects.notify(
+            muted_recipients=muted_recipients,
             profile=membership.profile,
             source_profile=message.sender,
             status=Status.UNREAD,
@@ -621,11 +653,19 @@ def broadcast_group_message(message: GroupMessage) -> None:
     """
     members = list(message.group.active_memberships().select_related("profile__user"))
 
-    # Computed once for the whole broadcast - serialize_group_message would
-    # otherwise re-run this same exists() query once per member.
+    # Both computed once for the whole broadcast - serialize_group_message
+    # would otherwise re-run the same exists() query, and resolve the sender's
+    # visibility against one member at a time, once per member.
     has_share = message.shares.exists()
+    identities = resolve_identity_for_viewers(message.sender, [membership.profile for membership in members])
 
-    deliveries = [(direct_message_group_name(membership.profile_id), serialize_group_message(message, viewer=membership.profile, has_share=has_share)) for membership in members]
+    deliveries = [
+        (
+            direct_message_group_name(membership.profile_id),
+            serialize_group_message(message, viewer=membership.profile, has_share=has_share, sender_identity=identities.get(membership.profile_id)),
+        )
+        for membership in members
+    ]
 
     def _send() -> None:
         for channel_group, payload in deliveries:
@@ -896,19 +936,34 @@ def group_conversations_for(profile: Profile) -> list[dict[str, Any]]:
             unread_clause &= Q(created__gt=membership.last_read_at)
         unread |= unread_clause
 
-    last_message_by_group: dict[int, GroupMessage] = {}
-    for message in GroupMessage.objects.filter(visible).select_related("sender", "sender__user").order_by("group_id", "-id"):
-        last_message_by_group.setdefault(message.group_id, message)
+    # Two queries, not one scan: the newest id per group is resolved by the
+    # database, then only those rows are fetched with their sender joined.
+    # Reading every visible row and keeping the first per group cost one
+    # three-table-join row per message ever sent in every group the viewer
+    # belongs to - on a sidebar that re-renders after nearly every send, and
+    # with no retention bound, so it got monotonically slower for the site's
+    # most active users. The `unread_counts` aggregate below was always the
+    # right shape; this now matches it.
+    last_ids = [row["last_id"] for row in GroupMessage.objects.filter(visible).values("group_id").annotate(last_id=Max("id")).order_by()]
+    last_message_by_group: dict[int, GroupMessage] = {
+        message.group_id: message for message in GroupMessage.objects.filter(pk__in=last_ids).select_related("sender", "sender__user")
+    }
     unread_counts = dict(GroupMessage.objects.filter(unread).values_list("group_id").annotate(count=Count("id")).order_by())
 
     # The sidebar preview shows the last sender's name - resolve it through the
     # same viewer-scoped identity masking the thread render uses, so a sender
     # whose profile_visibility hides them from this viewer isn't revealed by
     # the preview line before the (masked) thread is even opened.
-    sender_display_names: dict[int, str] = {}
-    for message in last_message_by_group.values():
-        if message.sender_id not in sender_display_names:
-            sender_display_names[message.sender_id] = resolve_visible_identity(profile, message.sender)["display_name"]
+    # Batched over the distinct senders: one resolution for the sidebar rather
+    # than one per group, which is what made this list scale with how many
+    # groups the viewer belongs to once their senders differ.
+    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+
+    last_senders = {message.sender_id: message.sender for message in last_message_by_group.values()}
+    sender_visible_pks = ProfileModel.visible_profile_pks(profile, list(last_senders.values()))
+    sender_display_names: dict[int, str] = {
+        sender_id: resolve_visible_identity(profile, sender, visible_pks=sender_visible_pks)["display_name"] for sender_id, sender in last_senders.items()
+    }
 
     conversations: list[dict[str, Any]] = []
     for membership in memberships:

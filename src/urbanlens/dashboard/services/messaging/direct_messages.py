@@ -400,7 +400,7 @@ def _notify_recipient(message: DirectMessage) -> None:
     else:
         preview = "New message"
     sender_display_name = display_identity_for(message.recipient, message.sender)["display_name"]
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=message.recipient,
         status=Status.UNREAD,
         importance=Importance.MEDIUM,
@@ -1125,11 +1125,17 @@ def display_identity_for(viewer: Profile, partner: Profile, *, visible_pks: set[
     return identity
 
 
-def conversations_for(profile: Profile) -> list[dict[str, Any]]:
+def conversations_for(profile: Profile, *, only_unread: bool = False) -> list[dict[str, Any]]:
     """Return the profile's conversations, most recently active first.
 
     Args:
         profile: The profile whose inbox to build.
+        only_unread: Build rows only for conversations with unread messages.
+            The aggregate below already knows each conversation's unread count,
+            so this narrows the work at the database rather than after it - which
+            is the difference that matters for the navbar dropdown, which shows
+            at most eight unread rows and was resolving every partner's identity,
+            last message and mute state for an entire inbox to find them.
 
     Returns:
         A list of dicts with ``partner`` (Profile), ``last_message``
@@ -1141,7 +1147,12 @@ def conversations_for(profile: Profile) -> list[dict[str, Any]]:
 
     # visible_to: a message this profile deleted from their own view must not
     # surface as the sidebar's last-message preview or count as unread there.
-    rows = list(DirectMessage.objects.visible_to(profile).conversation_rows(profile))
+    aggregate = DirectMessage.objects.visible_to(profile).conversation_rows(profile)
+    if only_unread:
+        # A HAVING on the same aggregate, so the partners/messages/identity
+        # lookups below are sized by what will actually be shown.
+        aggregate = aggregate.filter(unread_count__gt=0)
+    rows = list(aggregate)
     if not rows:
         return []
 
@@ -1176,6 +1187,47 @@ def conversations_for(profile: Profile) -> list[dict[str, Any]]:
             },
         )
     return conversations
+
+
+def has_any_conversation(profile: Profile) -> bool:
+    """Whether this profile has any conversation at all, of either kind.
+
+    The dropdown needs this only to tell "all caught up" from "no messages yet".
+    Asking it by building the whole inbox and testing the list was the expensive
+    half of that empty state.
+
+    Args:
+        profile: The viewer.
+
+    Returns:
+        True when at least one direct message or group membership exists.
+    """
+    from urbanlens.dashboard.models.group_chats.model import GroupChatMembership
+
+    if DirectMessage.objects.visible_to(profile).involving(profile).exists():
+        return True
+    return GroupChatMembership.objects.active().filter(profile=profile).exists()
+
+
+def unread_conversations_for(profile: Profile) -> list[dict[str, Any]]:
+    """Every conversation with unread messages, newest first, across both kinds.
+
+    The navbar dropdown's question. Groups are bounded by how many a person can
+    join and are filtered in Python; direct messages are not bounded at all, so
+    they are narrowed in the query.
+
+    Args:
+        profile: The viewer.
+
+    Returns:
+        Conversation dicts as :func:`all_conversations_for` returns them,
+        limited to those with a non-zero ``unread_count``.
+    """
+    from urbanlens.dashboard.services.messaging.group_chats import group_conversations_for
+
+    merged = conversations_for(profile, only_unread=True) + [conv for conv in group_conversations_for(profile) if conv["unread_count"]]
+    merged.sort(key=lambda conv: conv["last_activity"], reverse=True)
+    return merged
 
 
 def all_conversations_for(profile: Profile) -> list[dict[str, Any]]:

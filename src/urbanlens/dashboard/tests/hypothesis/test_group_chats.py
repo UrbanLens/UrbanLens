@@ -20,8 +20,11 @@ from __future__ import annotations
 
 import base64
 import json
+from unittest import mock
 import uuid as uuid_module
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from model_bakery import baker
 
@@ -379,17 +382,97 @@ class ConversationMergeTests(TestCase):
 
     def test_group_conversations_for_query_count_is_independent_of_group_count(self) -> None:
         """The N+1 regression this batch fixed: query count must not grow
-        with the number of groups the profile belongs to."""
-        create_group_chat(self.me, "One", [self.friend])
-        with self.assertNumQueries(4):
+        with the number of groups the profile belongs to.
+
+        The invariant is *independence*, not an absolute number, so this
+        measures the same call at two sizes and compares. Pinning a literal
+        count made the test assert something it does not care about: the
+        per-sender identity resolution below it costs several queries of its
+        own, and seeding a message (which the interesting case needs) brings
+        those in.
+
+        Every group is seeded with a message on purpose. With none, the newest-
+        message id list is empty and Django skips the fetch entirely, which
+        measures a path this function is not for.
+        """
+        group = create_group_chat(self.me, "One", [self.friend])
+        create_group_message(self.me, group, "first")
+        with CaptureQueriesContext(connection) as one_group:
             group_conversations_for(self.friend)
 
         for i in range(4):
             other = _profile()
             _befriend(self.me, other)
-            create_group_chat(self.me, f"Extra {i}", [self.friend, other])
-        with self.assertNumQueries(4):
+            extra = create_group_chat(self.me, f"Extra {i}", [self.friend, other])
+            create_group_message(self.me, extra, f"msg {i}")
+        with CaptureQueriesContext(connection) as five_groups:
             group_conversations_for(self.friend)
+
+        self.assertEqual(
+            len(five_groups.captured_queries),
+            len(one_group.captured_queries),
+            f"query count grew with group count: {len(one_group.captured_queries)} for one group, "
+            f"{len(five_groups.captured_queries)} for five",
+        )
+
+    def test_query_count_is_independent_of_group_count_with_distinct_senders(self) -> None:
+        """The blind spot in the test above: every group had the *same* last sender.
+
+        The sidebar resolves each last sender's name through the viewer's own
+        visibility, and that answer was resolved one sender at a time. With one
+        sender across every group the dedup cache hid it, so the existing test
+        passed while the cost still scaled with how many *different* people had
+        spoken last.
+        """
+        first_speaker = _profile()
+        _befriend(self.friend, first_speaker)
+        group = create_group_chat(self.me, "One", [self.friend, first_speaker])
+        create_group_message(first_speaker, group, "first")
+        with CaptureQueriesContext(connection) as one_group:
+            group_conversations_for(self.friend)
+
+        for i in range(4):
+            speaker = _profile()
+            _befriend(self.me, speaker)
+            _befriend(self.friend, speaker)
+            extra = create_group_chat(self.me, f"Extra {i}", [self.friend, speaker])
+            create_group_message(speaker, extra, f"msg {i}")
+        with CaptureQueriesContext(connection) as five_groups:
+            group_conversations_for(self.friend)
+
+        self.assertEqual(
+            len(five_groups.captured_queries),
+            len(one_group.captured_queries),
+            f"query count grew with the number of distinct last senders: {len(one_group.captured_queries)} for one, "
+            f"{len(five_groups.captured_queries)} for five",
+        )
+
+    def test_only_the_newest_message_per_group_is_materialised(self) -> None:
+        """Rows fetched, not queries run - the cost this function actually had.
+
+        The query count was always flat; the row count was every message in
+        every group the viewer belongs to, each with `sender`/`sender__user`
+        joined on, discarded after the first per group. That is invisible to
+        `assertNumQueries`, which is why it survived a fix that named itself an
+        N+1 fix. Counting instantiations measures the thing that grew.
+        """
+        group = create_group_chat(self.me, "Busy", [self.friend])
+        for index in range(12):
+            create_group_message(self.me, group, f"m{index}")
+
+        materialised: list[GroupMessage] = []
+        original = GroupMessage.from_db.__func__
+
+        def counting(cls, db, field_names, values):
+            instance = original(cls, db, field_names, values)
+            materialised.append(instance)
+            return instance
+
+        with mock.patch.object(GroupMessage, "from_db", classmethod(counting)):
+            rows = group_conversations_for(self.friend)
+
+        self.assertEqual(rows[0]["last_message"].body, "m11")
+        self.assertEqual(len(materialised), 1, f"one group, one newest message - materialised {len(materialised)}")
 
     def test_unread_group_conversation_count_across_multiple_groups(self) -> None:
         group_a = create_group_chat(self.me, "Alpha", [self.friend])
@@ -414,6 +497,92 @@ class ConversationMergeTests(TestCase):
             create_group_chat(self.me, f"Extra {i}", [self.friend, other])
         with self.assertNumQueries(2):
             unread_group_conversation_count(self.friend)
+
+
+class GroupMessageNotificationCostTests(TestCase):
+    """``_notify_group_message`` must not cost a query per member.
+
+    Its own docstring promises "a small, fixed number of queries regardless of
+    group size", and it goes to some length to keep that: preferences arrive by
+    ``select_related``, unread state by one grouped query, friendship mute by
+    one batched lookup. It runs synchronously inside the sender's request, so a
+    50-member group would otherwise pay a lookup per member for each of them.
+    The invariant is *independence* from member count, not a literal number, so
+    this measures the same call at two sizes.
+
+    Scoped to the notification step deliberately. ``create_group_message`` as a
+    whole is **not** flat: ``broadcast_group_message`` builds one payload per
+    member and resolves the sender's name through each member's own visibility,
+    which is a recorded decision (2026-07-23) rather than an oversight - the
+    alternative leaks a masked name over the live channel. Measuring the whole
+    send would fold that in and this test would be asserting the opposite of
+    what that decision says.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.me = _profile()
+
+    def _group_of(self, size: int, name: str) -> GroupChat:
+        """A group with ``size`` other members, all connected to the sender."""
+        members = []
+        for _ in range(size):
+            other = _profile()
+            _befriend(self.me, other)
+            members.append(other)
+        return create_group_chat(self.me, name, members)
+
+    def _notify_reads(self, group: GroupChat) -> int:
+        """How many *reads* notifying a fresh message costs.
+
+        Writes are excluded because one row per notified member is the work
+        itself - it is the lookups feeding those rows that must not scale. The
+        message is created directly so no member has a prior unread one, which
+        is the case ``_already_unread`` skips and the path this is measuring.
+        """
+        from urbanlens.dashboard.services.messaging.group_chats import _notify_group_message
+
+        message = GroupMessage.objects.create(group=group, sender=self.me, body="hello")
+        with CaptureQueriesContext(connection) as queries:
+            _notify_group_message(message)
+        return len([entry for entry in queries.captured_queries if entry["sql"].lstrip().upper().startswith("SELECT")])
+
+    def test_lookup_count_does_not_grow_with_member_count(self) -> None:
+        two = self._notify_reads(self._group_of(2, "Small"))
+        eight = self._notify_reads(self._group_of(8, "Large"))
+
+        self.assertEqual(eight, two, f"lookups grew with member count: {two} for two members, {eight} for eight")
+
+    def test_every_member_is_still_notified(self) -> None:
+        """The companion the count test needs - zero lookups is also flat."""
+        from urbanlens.dashboard.models.notifications.model import NotificationLog
+
+        group = self._group_of(4, "Four")
+        NotificationLog.objects.all().delete()
+
+        create_group_message(self.me, group, "hello")
+
+        self.assertEqual(NotificationLog.objects.filter(source_profile=self.me).count(), 4)
+
+    def test_a_member_who_muted_the_sender_gets_no_notification(self) -> None:
+        """The batched lookup has to reach the same answer as the per-row one."""
+        from urbanlens.dashboard.models.notifications.model import NotificationLog
+
+        quiet = _profile()
+        loud = _profile()
+        _befriend(self.me, quiet)
+        _befriend(self.me, loud)
+        Friendship.objects.all().between(quiet, self.me).mute(quiet)
+        group = create_group_chat(self.me, "Mixed", [quiet, loud])
+
+        create_group_message(self.me, group, "hello")
+
+        # Filtered to notifications this message raised: joining a group also
+        # notifies ("X added you to the group"), and that one names no source,
+        # so mute leaves it alone by design.
+        from_sender = NotificationLog.objects.filter(source_profile=self.me)
+        self.assertEqual(from_sender.filter(profile=quiet).count(), 0)
+        self.assertEqual(from_sender.filter(profile=loud).count(), 1)
 
 
 class GroupEndpointTests(TestCase):

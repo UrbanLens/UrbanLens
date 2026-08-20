@@ -403,7 +403,7 @@ def invite_to_trip_in_message(
         # sender is visible to recipient, so this must still be resolved
         # (and masked if needed) before formatting the stored message text.
         sender_name = resolve_visible_identity(recipient, sender)["display_name"]
-        NotificationLog.objects.create(
+        NotificationLog.objects.notify(
             profile=recipient,
             source_profile=sender,
             status=Status.UNREAD,
