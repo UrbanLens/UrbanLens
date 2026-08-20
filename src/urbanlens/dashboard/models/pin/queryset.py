@@ -14,6 +14,7 @@ from django.utils import timezone
 
 # App Imports
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
@@ -112,7 +113,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         wikis are ever surfaced as rounds) can build on it directly instead
         of re-deriving the ``Q``.
         """
-        visited_q = Q(last_visited__isnull=False) | Q(labels__name="Visited", labels__kind="status")
+        visited_q = Q(last_visited__isnull=False) | Q(labels__name="Visited", labels__kind=KIND_STATUS)
         return self.filter(visited_q).distinct()
 
     def visited_without_record(self) -> Self:
@@ -133,7 +134,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(last_visited__year__lt=timezone.now().year)
 
     def by_category(self, category):
-        return self.filter(labels__name=category, labels__kind="category")
+        return self.filter(labels__name=category, labels__kind=KIND_CATEGORY)
 
     def by_priority(self, priority):
         return self.filter(priority=priority)
@@ -360,7 +361,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
                 else:
                     qs = qs.filter(reviews__rating__lte=max_rating)
         if has_visits := criteria.get("has_visits"):
-            visited_q = Q(last_visited__isnull=False) | Q(labels__name="Visited", labels__kind="status")
+            visited_q = Q(last_visited__isnull=False) | Q(labels__name="Visited", labels__kind=KIND_STATUS)
             if has_visits == "yes":
                 qs = qs.filter(visited_q)
             elif has_visits == "no":
