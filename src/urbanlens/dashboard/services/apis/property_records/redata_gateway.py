@@ -34,6 +34,23 @@ REASON_BLOCKED = "blocked"
 #: (network errors, malformed responses, unexpected status codes) - all of
 #: those are equally transient from a caller's point of view.
 REASON_SOURCE_ERROR = "source_error"
+#: REData's own outbound pacing refused the call before it reached the county
+#: source - distinct from ``REASON_SOURCE_ERROR`` (the source itself failed),
+#: and just as transient.
+REASON_SOURCE_RATE_LIMITED = "source_rate_limited"
+#: The generic per-endpoint form of the same thing, used by REData's
+#: single-source endpoints (demographics, the places family, cultural-resource
+#: detail) rather than the tiered parcel pipeline.
+REASON_RATE_LIMITED = "rate_limited"
+
+#: Reasons that mean "we could not ask", never "there is nothing here". The
+#: existence of a ``LocationCache`` row is what marks a source as fetched, so a
+#: caller that stores a payload for one of these turns a passing outage into a
+#: blank card for the whole ``external_data_cache_days`` window. Every other
+#: reason REData publishes (``outside_coverage``, ``unresearched``,
+#: ``manual_only``, ``blocked``, ``no_data_found``) is a settled answer about
+#: the coordinate and is worth remembering.
+TRANSIENT_REASONS: frozenset[str] = frozenset({REASON_SOURCE_ERROR, REASON_SOURCE_RATE_LIMITED, REASON_RATE_LIMITED})
 
 
 class PropertyRecordsUnavailableError(GatewayRequestError):
@@ -357,7 +374,7 @@ class RedataGateway(Gateway):
         raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
 
     def lookup_buildings(self, parcel_uuid: str) -> list[dict[str, Any]]:
-        """Return every building REData can find for a parcel, combined across sources.
+        """Return every building REData can find for a parcel, reconciled across sources.
 
         Never fetches/caches a *new* parcel - this only reads buildings for a
         parcel REData already resolved (see :meth:`lookup_parcel_uuid`).
@@ -366,11 +383,20 @@ class RedataGateway(Gateway):
             parcel_uuid: The parcel's REData uuid.
 
         Returns:
-            A list of ``BuildingRecord`` dicts (possibly empty) - each carries
-            at least a coordinate; ``geometry`` is standard GeoJSON (a
-            ``Point`` when no boundary is available). ``building_number``/
-            ``year_built`` are only ever populated for a ``"cris"``-sourced
-            entry today - see REData's own ``docs/api-reference.md``.
+            One dict per *physical building* (possibly empty), not one per
+            source observation - REData reconciles them (its
+            ``docs/buildings-dedup-spec.md``). Each carries at least a
+            coordinate; ``geometry`` is standard GeoJSON (a ``Point`` when no
+            boundary is available).
+
+            Provenance is ``sources[]``, one entry per source referencing that
+            building, ordered richest-information first - the flat top-level
+            ``source`` string it replaced survives only on Overpass-shaped rows
+            this app produces itself, which is why callers read both through
+            ``plugins.builtin.parcel_buildings.record_sources``. Structure is
+            ``ref``/``parent_ref``/``child_refs`` (an envelope over finer
+            records, never a duplicate of them) and ``overlap_refs`` (an
+            ambiguity REData refuses to resolve rather than merging).
 
         Raises:
             PropertyRecordsUnavailableError: The request to REData failed.
@@ -453,8 +479,8 @@ class RedataGateway(Gateway):
             return None
         return body if isinstance(body, dict) else None
 
-    def lookup_cultural_resources(self, latitude: float, longitude: float, *, radius_meters: float = 200) -> list[dict[str, Any]]:
-        """Find (fetching/caching as needed) CRIS cultural/historic resources near a coordinate.
+    def lookup_cultural_resources(self, latitude: float, longitude: float, *, radius_meters: float = 200, provider: str | None = None) -> list[dict[str, Any]]:
+        """Find (fetching/caching as needed) cultural/historic resources near a coordinate.
 
         Only the fast, unauthenticated layer-query tier runs here - a
         resource's full detail record (including its attachments) is a
@@ -464,15 +490,26 @@ class RedataGateway(Gateway):
             latitude: WGS-84 latitude.
             longitude: WGS-84 longitude.
             radius_meters: Search radius around the coordinate.
+            provider: Restrict the search to one of REData's registered
+                providers. This endpoint answers from a **registry** of state
+                and municipal inventories plus the nationwide National
+                Register, so an unrestricted call over (say) New York returns
+                CRIS *and* NRHP rows in one list. A caller that renders one
+                inventory's own fields must name it, or it will sometimes pick
+                a row from a different source that has none of them - and pay
+                for the other providers' queries besides.
 
         Returns:
-            A list of resource dicts (empty outside NY, CRIS's only current
-            coverage) - see the module docs for each resource's fields.
+            A list of resource dicts, each tagged with the ``provider`` that
+            answered - see the module docs for each resource's fields.
 
         Raises:
             PropertyRecordsUnavailableError: The request to REData failed.
         """
-        body = self._get_json("/api/v1/cultural-resources/lookup/", params={"lat": latitude, "lng": longitude, "radius_meters": radius_meters})
+        params: dict[str, Any] = {"lat": latitude, "lng": longitude, "radius_meters": radius_meters}
+        if provider:
+            params["provider"] = provider
+        body = self._get_json("/api/v1/cultural-resources/lookup/", params=params)
         if isinstance(body, list):
             return list(body)
         if isinstance(body, dict):
