@@ -9,16 +9,17 @@ already sits at that point.
 
 Idempotent: re-running updates names and tops up aliases rather than duplicating
 anything, so a demo instance can be refreshed from a newer export on a schedule.
+Companion to ``import_redata_public_locations`` - both write into the same
+manifest via ``services.demo.locations.merge_into_manifest``, so running either
+(in any order, any number of times) never erases what the other contributed.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 
 
 class Command(BaseCommand):
@@ -62,7 +63,9 @@ class Command(BaseCommand):
             self.stdout.write("The export contains no public locations - nothing to import.")
             return
 
-        created, updated = self._import(entries)
+        from urbanlens.dashboard.services.demo.locations import import_location_entries, merge_into_manifest
+
+        created, updated = import_location_entries(entries)
         self.stdout.write(f"Imported {len(entries)} public location(s): {created} created, {updated} updated.")
 
         # The manifest is what seeding reads to decide which places every new
@@ -70,9 +73,7 @@ class Command(BaseCommand):
         # so it can only ever name locations that exist here - a manifest entry
         # with no Location behind it would seed a pin whose detail page has
         # nothing to show, which is the failure this whole path avoids.
-        from urbanlens.dashboard.services.demo.locations import write_manifest
-
-        written = write_manifest(entries)
+        written = merge_into_manifest(entries)
         if written is None:
             self.stdout.write(
                 "UL_DEMO_LOCATIONS_FILE is not set, so no manifest was written and demo accounts will be seeded "
@@ -80,49 +81,3 @@ class Command(BaseCommand):
             )
         else:
             self.stdout.write(f"Wrote the seeding manifest to {written}")
-
-    @transaction.atomic
-    def _import(self, entries: list[dict[str, Any]]) -> tuple[int, int]:
-        """Create or refresh each exported location and its wiki.
-
-        Args:
-            entries: Decoded export entries.
-
-        Returns:
-            ``(created, updated)`` location counts.
-        """
-        from urbanlens.dashboard.models.aliases.model import WikiAlias
-        from urbanlens.dashboard.models.location.model import Location
-        from urbanlens.dashboard.models.wiki.model import Wiki
-
-        created = updated = 0
-        for entry in entries:
-            location, was_created = Location.objects.get_exact_or_create(
-                entry["latitude"],
-                entry["longitude"],
-                defaults={"official_name": entry.get("official_name") or ""},
-            )
-            if was_created:
-                created += 1
-            else:
-                updated += 1
-                if entry.get("official_name") and not location.official_name:
-                    location.official_name = entry["official_name"]
-                    location.save(update_fields=["official_name"])
-
-            wiki_data = entry.get("wiki")
-            if not wiki_data:
-                continue
-
-            wiki, _ = Wiki.objects.get_or_create(
-                location=location,
-                defaults={"name": wiki_data.get("name") or entry.get("official_name") or "", "officially_created": True},
-            )
-            # Top up rather than replace: an alias a demo visitor added during
-            # their session is theirs, and a refresh should not delete it.
-            existing = set(wiki.aliases.values_list("name", flat=True))
-            for alias in wiki_data.get("aliases") or []:
-                if alias and alias not in existing:
-                    WikiAlias.objects.create(wiki=wiki, name=alias)
-
-        return created, updated

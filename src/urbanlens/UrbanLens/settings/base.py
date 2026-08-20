@@ -335,6 +335,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.run_scheduled_demo_account_purge",
         "schedule": crontab(minute=27),
     },
+    # Unconditional too - see run_scheduled_redata_public_locations_sync.
+    "scheduled-redata-public-locations-sync": {
+        "task": "urbanlens.dashboard.tasks.run_scheduled_redata_public_locations_sync",
+        "schedule": crontab(minute=32, hour="*/6"),
+    },
     "spotguessr-stall-sweep": {
         "task": "urbanlens.dashboard.tasks.sweep_stalled_spotguessr_sessions",
         "schedule": 2 * 60,

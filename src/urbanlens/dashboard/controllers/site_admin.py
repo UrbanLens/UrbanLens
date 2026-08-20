@@ -912,6 +912,7 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     # Archival rather than regulatory: these are survey records, the same kind
     # of material as the other entries here.
     "redata_cultural_resources": "Reference & Archives",
+    "redata_public_locations": "Reference & Archives",
     # Parks & Regulatory
     "nps": "Parks & Regulatory",
     "epa_echo": "Parks & Regulatory",

@@ -152,6 +152,15 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         notes="Current conditions/forecast/sun times via GET /weather/ - every registered provider (Open-Meteo, OpenWeatherMap) in one call. See services.apis.locations.weather_resolution.",
     ),
+    "redata_public_locations": ServiceDefaults(
+        display_name="REData Public Locations",
+        # Costs REData no upstream call either - its own local catalog, no
+        # per-source attribution - and is only ever called by demo-instance
+        # seeding, never a real user's request.
+        calls_per_minute=20,
+        calls_per_day=None,
+        notes="State capitols, county seats and national capitals via GET /public-locations/. Used only to seed the demo instance's location pool.",
+    ),
     "redata_capabilities": ServiceDefaults(
         display_name="REData Capability Index",
         # Costs REData no external call - it is a bounds test over its own

@@ -3613,3 +3613,27 @@ def run_scheduled_demo_account_purge() -> bool:
 
     call_command("purge_demo_accounts", execute=True)
     return True
+
+
+@shared_task
+def run_scheduled_redata_public_locations_sync() -> bool:
+    """Refresh the demo instance's location pool from REData. A no-op everywhere else.
+
+    Unconditionally scheduled, same reasoning as
+    ``run_scheduled_demo_account_purge``. REData's ``/public-locations/`` is
+    not deployed anywhere reachable as of 2026-08-20, so this fires and finds
+    nothing to import until that changes - once it does, the pool grows with
+    no further action needed here.
+
+    Returns:
+        True when this ran (this is the demo instance), False otherwise.
+    """
+    from django.core.management import call_command
+
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    if not app_settings.demo_mode:
+        return False
+
+    call_command("import_redata_public_locations")
+    return True
