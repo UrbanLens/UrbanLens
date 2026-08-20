@@ -47,3 +47,43 @@ class Migration0039ReverseTests(SimpleTestCase):
         token_ops = [op for op in migration_0007.Migration.operations if type(op).__name__ == "RunPython" and op.code is migration_0007.encrypt_existing_tokens]
         self.assertEqual(len(token_ops), 1)
         self.assertIs(token_ops[0].reverse_code, migration_0007.decrypt_existing_tokens)
+
+
+_migration_0048 = importlib.import_module("urbanlens.dashboard.migrations.0048_encrypt_preference_and_contact_label")
+
+
+class Migration0048ReverseTests(SimpleTestCase):
+    """0048 is the same in-place encryption, and reversed to noop until 2026-08-19.
+
+    `docs/DATA_ENCRYPTION.md` settled the policy on 2026-08-15 - rollbacks
+    decrypt, and abort rather than write garbage - two days before this
+    migration landed reversing to noop. Rolling back below it then *succeeded*
+    while leaving ciphertext in `photo_taking_preference_other`,
+    `photo_usage_preference_other` and the saved-contact label, which pre-0048
+    code reads as plaintext.
+    """
+
+    def test_the_migration_wires_the_real_reverse(self) -> None:
+        run_python_ops = [op for op in _migration_0048.Migration.operations if type(op).__name__ == "RunPython"]
+
+        self.assertEqual(len(run_python_ops), 1)
+        self.assertIs(run_python_ops[0].reverse_code, _migration_0048.decrypt_existing_preference_fields)
+
+    def test_forward_and_reverse_cover_the_same_columns(self) -> None:
+        """Both directions walk `_COLUMNS`, so drift between them is impossible by construction."""
+        alter_fields = [op for op in _migration_0048.Migration.operations if type(op).__name__ == "AlterField"]
+
+        self.assertEqual(len(_migration_0048._COLUMNS), len(alter_fields))
+
+    def test_the_reverse_can_tell_ciphertext_from_plaintext(self) -> None:
+        """The `gAAAA%` discriminator is what stops a rollback corrupting real plaintext.
+
+        A row written after the `AlterField` but before the `RunPython`, or one
+        the forward pass skipped, still holds plaintext - decrypting it would
+        raise or garble it. The reverse only touches values that look like
+        Fernet tokens, so this pins that they are distinguishable.
+        """
+        field = EncryptedTextField()
+
+        self.assertTrue(field.get_prep_value("a note about someone").startswith("gAAAA"))
+        self.assertFalse("a note about someone".startswith("gAAAA"))

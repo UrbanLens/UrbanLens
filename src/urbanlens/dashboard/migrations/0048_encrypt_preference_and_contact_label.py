@@ -88,6 +88,44 @@ def encrypt_existing_preference_fields(apps, schema_editor) -> None:
             _encrypt_column(cursor, table, column)
 
 
+def _decrypt_column(cursor, table: str, column: str) -> None:
+    """Decrypt every Fernet-encrypted value in ``table.column`` in place.
+
+    Mirrors ``_decrypt_column`` in 0039. A value not shaped like a Fernet token
+    (they always begin ``gAAAA`` - a 0x80 version byte, base64'd) is left
+    untouched: it was written before the forward pass ran, or the forward pass
+    never reached it, and re-processing it would corrupt real plaintext. A
+    token-shaped value that no configured key can decrypt raises, aborting - and
+    rolling back - the reverse rather than writing garbage into a column the
+    pre-0048 code reads as plaintext.
+    """
+    cursor.execute(f"SELECT id, {column} FROM {table} WHERE {column} LIKE 'gAAAA%%'")  # noqa: S608 # nosec B608 - identifiers come from _COLUMNS, not user input
+    for pk, ciphertext in cursor.fetchall():
+        plaintext = _field.from_db_value(ciphertext, None, None)
+        cursor.execute(f"UPDATE {table} SET {column} = %s WHERE id = %s", [plaintext, pk])  # noqa: S608 # nosec B608 - identifiers come from _COLUMNS, not user input
+
+
+def decrypt_existing_preference_fields(apps, schema_editor) -> None:
+    """Real reverse for the in-place encryption above.
+
+    This was ``RunPython.noop`` until 2026-08-19, on the reasoning that a
+    reverse would have to decrypt under whatever key is active at rollback time
+    and getting that wrong writes garbage. But noop is the *worse* half of that
+    trade: ``migrate dashboard 0047`` then **succeeds** while leaving ciphertext
+    in columns the pre-0048 code reads as plaintext - silent corruption that
+    reports success, rather than a failure anyone can act on.
+
+    The project settled the question in ``docs/DATA_ENCRYPTION.md`` ("Migration
+    rollbacks decrypt", 2026-08-15) two days before this migration landed, and
+    0007 and 0039 already implement it: decrypt properly, and abort the whole
+    rollback if any value cannot be decrypted under the configured keys. 0048
+    was the one file contradicting a written rule.
+    """
+    with schema_editor.connection.cursor() as cursor:
+        for table, column in _COLUMNS:
+            _decrypt_column(cursor, table, column)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -208,9 +246,6 @@ class Migration(migrations.Migration):
         ),
         migrations.RunPython(
             code=encrypt_existing_preference_fields,
-            # Irreversible by design: reversing would need to decrypt under
-            # whatever key is active at rollback time, and getting that wrong
-            # writes garbage over real data. Restore from a backup instead.
-            reverse_code=migrations.RunPython.noop,
+            reverse_code=decrypt_existing_preference_fields,
         ),
     ]

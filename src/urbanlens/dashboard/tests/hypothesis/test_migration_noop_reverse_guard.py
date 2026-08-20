@@ -58,12 +58,6 @@ REVIEWED: dict[str, str] = {
     "0010_v0_6_0.py": "Backfills (intro_seen, notification uuids, unchanged defaults) plus create_first_party_client, which seeds a row that is harmless to leave behind.",
     "0046_trip_calendar_link_event_unique.py": "drop_duplicate_event_links merges duplicates so a unique constraint can be added. Un-merging is impossible and unnecessary - what remains is valid in the old schema.",
     "0047_link_url_unique.py": "drop_duplicate_links, same shape as 0046: duplicates removed ahead of a constraint, and the survivors read fine either way.",
-    "0048_encrypt_preference_and_contact_label.py": (
-        "Encrypts two preference columns in place. Knowingly irreversible - the migration says so: a reverse would have to "
-        "decrypt under whatever key is active at rollback time, and getting that wrong writes garbage over real data, so a "
-        "restore is the intended path. Note this differs from 0007, which encrypts *with* a real decrypting reverse; the two "
-        "cannot both be the policy - see docs/PROBLEMS.md."
-    ),
     "0020_seed_vip_subscription_role.py": "Seeds a subscription role. Leaving it on reverse is harmless; deleting it could orphan subscriptions referencing it.",
     "0033_quota_exemptions.py": "mark_existing_external_media_exempt sets a boolean on existing rows. Lossy, valid either way.",
     "0042_label_merge_duplicates.py": "merge_duplicate_labels clears the way for 0043's unique constraint. Same shape as 0005 - un-merging is impossible and merged labels stay valid.",
