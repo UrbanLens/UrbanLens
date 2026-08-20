@@ -161,6 +161,31 @@ def _http_status(url: str, timeout: int = 10) -> int:
         return exc.code
 
 
+def _staging_base_url(site_url: str, app_port: str) -> str:
+    """Where to reach a deployment for its own health/smoke checks.
+
+    "localhost", not "127.0.0.1": Django's ``ALLOWED_HOSTS`` is matched against
+    the Host header verbatim, and every environment's ``.env`` lists
+    "localhost" (for exactly this kind of on-host check) but not the bare IP -
+    probing 127.0.0.1 gets every request rejected with 400 before it reaches a
+    view, which reads as "the site is down" when it is actually up and serving
+    real traffic at its real hostname just fine.
+
+    Args:
+        site_url: ``UL_SITE_URL`` from the checkout's ``.env``, already
+            stripped of a trailing slash; empty when unset.
+        app_port: ``UL_APP_PORT`` from the same file; empty when unset.
+
+    Returns:
+        A URL to probe, or ``""`` when neither setting gives one.
+    """
+    if site_url:
+        return site_url
+    if app_port:
+        return f"http://localhost:{app_port}"
+    return ""
+
+
 def run_staging_pipeline(
     *,
     checkout: Path,
@@ -253,7 +278,7 @@ def run_staging_pipeline(
     run.run_step("compose-up", ["docker", "compose", "up", "--build", "-d"], cwd=checkout, timeout=3600)
 
     app_container = f"urbanlens_{container_name}_app"
-    base_url = site_url or (f"http://127.0.0.1:{app_port}" if app_port else "")
+    base_url = _staging_base_url(site_url, app_port)
     if run.steps[-1].status == "failed":
         # Same reasoning as the dev pipeline: a health wait after a failed
         # start burns the timeout to reach a conclusion already known.
@@ -308,8 +333,22 @@ def run_staging_pipeline(
                 failures.append(f"{path}: {status}")
         run.record("smoke-pages", "failed" if failures else "ok", "; ".join(failures) or f"{len(_SMOKE_PATHS)} paths answered")
 
+    # The Dockerfile installs `--no-dev` for staging/production, deliberately
+    # matching production's dependency set - pytest is not in that image. That
+    # is correct for image parity, not a bug this pipeline should paper over
+    # by installing it; but running the step anyway reports "failed" for a
+    # test suite that never ran, which reads as a real regression.
+    has_pytest = subprocess.run(
+        ["docker", "exec", app_container, "/app/.venv/bin/python", "-c", "import pytest"],
+        cwd=checkout,
+        capture_output=True,
+        check=False,
+    ).returncode == 0
+
     if skip_tests:
         run.record("integration-tests", "skipped", "--skip-tests")
+    elif not has_pytest:
+        run.record("integration-tests", "skipped", "pytest is not installed in this image - staging/production build --no-dev for parity (see Dockerfile); run the test suite in a dev checkout instead")
     else:
         run.run_step(
             "integration-tests",

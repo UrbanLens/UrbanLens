@@ -12,12 +12,12 @@ rather than by package import.
 
 from __future__ import annotations
 
-from pathlib import Path
 import json
+from pathlib import Path
 import subprocess
-from unittest import mock
 import sys
 import tempfile
+from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 
@@ -47,7 +47,7 @@ if str(_BIN) not in sys.path:
     sys.path.insert(0, str(_BIN))
 
 from opslib import devenv, router  # noqa: E402 - path setup must precede the import
-from opslib.staging import _VERIFIED_TABLES, _db_container, _read_env_var, _table_counts  # noqa: E402
+from opslib.staging import _VERIFIED_TABLES, _db_container, _read_env_var, _staging_base_url, _table_counts  # noqa: E402
 
 
 class EnvFileReadingTests(SimpleTestCase):
@@ -390,6 +390,24 @@ class StagingDbContainerTests(SimpleTestCase):
     def test_production_is_the_last_resort(self) -> None:
         """Matching docker-compose.yml's own default chain."""
         self.assertEqual(_db_container(self._env("")), "urbanlens_production_db")
+
+
+class StagingBaseUrlTests(SimpleTestCase):
+    """The URL the pipeline probes itself has to be one ALLOWED_HOSTS accepts.
+
+    A bare IP fails ALLOWED_HOSTS with a 400 on every request, which every
+    downstream check (health wait, smoke pages) then reads as "down" - even
+    though the deployment is up and serving real traffic at its real hostname.
+    """
+
+    def test_site_url_wins_when_set(self) -> None:
+        self.assertEqual(_staging_base_url("https://staging.urbanlens.org", "21830"), "https://staging.urbanlens.org")
+
+    def test_falls_back_to_localhost_not_the_bare_ip(self) -> None:
+        self.assertEqual(_staging_base_url("", "21830"), "http://localhost:21830")
+
+    def test_no_port_and_no_site_url_means_nothing_to_probe(self) -> None:
+        self.assertEqual(_staging_base_url("", ""), "")
 
 
 class VerifiedTablesTests(SimpleTestCase):

@@ -143,8 +143,16 @@ wait_for_healthy() {
 }
 
 echo "==> Dumping production database..."
+# tiger/tiger_data/topology are created once by the postgis_tiger_geocoder and
+# postgis_topology extensions, not by this application's data - they already
+# exist on the target from its own extension setup, so a dump that includes
+# their CREATE SCHEMA statements makes the restore below fail with "schema ...
+# already exists" even though every table that actually holds data restored
+# correctly.
 docker exec -e PGPASSWORD="$PROD_DB_PASS" "$PROD_DB_CONTAINER" \
-    pg_dump -U "$PROD_DB_USER" -d "$PROD_DB_NAME" -Fc -f /tmp/clone.dump
+    pg_dump -U "$PROD_DB_USER" -d "$PROD_DB_NAME" -Fc \
+        --exclude-schema=tiger --exclude-schema=tiger_data --exclude-schema=topology \
+        -f /tmp/clone.dump
 docker cp "$PROD_DB_CONTAINER:/tmp/clone.dump" "./$DUMP_FILE"
 docker exec "$PROD_DB_CONTAINER" rm -f /tmp/clone.dump
 
