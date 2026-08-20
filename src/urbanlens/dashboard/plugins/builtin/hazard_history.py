@@ -29,6 +29,28 @@ _MAX_ROWS = 7
 _PROVIDERS = ("nifc_wildfires", "fema_disasters")
 
 
+def _fire_name(event: dict, year: str) -> str:
+    """The fire's own name, without the year this row already labels it with.
+
+    REData composes ``title`` as ``"<incident> (<year>)"`` because it has no
+    other place to publish the name - the raw incident string is not in
+    ``attributes``. This panel puts the year in the row *label*, so repeating it
+    in the value reads as a mistake.
+
+    Args:
+        event: One ``nifc_wildfires`` hazard event.
+        year: The four-digit year already shown in the row's label.
+
+    Returns:
+        The incident name, or an empty string when REData had none.
+    """
+    title = str(event.get("title") or "").strip()
+    suffix = f" ({year})"
+    if year and title.endswith(suffix):
+        return title[: -len(suffix)].strip()
+    return title
+
+
 class HazardHistoryPanelSource(CoordinateGatedInfoPanelSource):
     """Wildfire perimeters and federal disaster declarations for the pin's site."""
 
@@ -86,13 +108,15 @@ class HazardHistoryPanelSource(CoordinateGatedInfoPanelSource):
             # NIFC publishes acres burned as the magnitude (scale acres_burned)
             # and 1 January of the fire year - year precision is the source's own.
             size = f"{magnitude:,.0f} acres" if isinstance(magnitude, (int, float)) else "size unrecorded"
-            meta.append({"label": f"Wildfire {year or '?'}", "value": f"{event.get('place') or 'Unnamed fire'} ({size})", "href": event.get("url") or ""})
+            meta.append({"label": f"Wildfire {year or '?'}", "value": f"{_fire_name(event, year) or 'Unnamed fire'} ({size})", "href": event.get("url") or ""})
 
         for event in newest_first(declarations)[: _MAX_ROWS - len(meta)]:
             attributes = event.get("attributes") or {}
             year = (event.get("occurred_at") or "")[:4]
             programs = attributes.get("programs") or []
-            detail = attributes.get("designated_area") or event.get("place") or ""
+            # `title` is FEMA's own declarationTitle; `place` is not a field on
+            # REData's HazardEvent and never was, so this fell through to "".
+            detail = attributes.get("designated_area") or event.get("title") or ""
             if programs:
                 # "Declared" and "assistance was actually available" are
                 # different answers; name the authorised programmes.

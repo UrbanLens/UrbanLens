@@ -24,6 +24,7 @@ from urbanlens.dashboard.plugins.builtin.epa_echo import (
     EpaEchoDetailPanelSource,
     EpaEchoNearbyPanelSource,
     EpaFacilityNameProvider,
+    _facility_from_poi,
     _fetch_epa_echo_data,
     _miles_between,
     _propagate_exact_site_to_nearby_locations,
@@ -490,3 +491,80 @@ class DetailPanelFetchPropagatesExactSiteTests(TestCase):
 
         neighbor_row = LocationCache.objects.get(location=neighbor, source="epa_echo")
         self.assertEqual(neighbor_row.data["exact_site"], exact_site)
+
+
+class FacilityFromPoiKeyNamesTests(SimpleTestCase):
+    """The plugin's field names have to match the ones REData actually emits.
+
+    Two were guessed before REData's `epa_echo` provider module existed - the
+    docstring said so - and guessed wrong: `quarters_in_noncompliance` for
+    `quarters_with_violation`, and `last_inspection` for `last_inspection_date`.
+    Nothing failed. Every regulated facility simply printed "last inspected no
+    recorded inspection" and no non-compliance count, on a live page, for as
+    long as the guess stood.
+
+    The fixture below is REData's real shape, read from
+    `REData/src/redata/parcels/services/epa_echo/lookup.py`'s `attributes`
+    block - not the plugin's own shape, which is what made the original
+    mismatch invisible to tests.
+    """
+
+    def _redata_row(self) -> dict:
+        return {
+            "provider": "epa_echo",
+            "external_id": "110000123456",
+            "name": "Old Mill Factory",
+            "category": "Regulated facility",
+            "description": "123 Main St, Albany, NY, 12207",
+            "url": "https://echo.epa.gov/detailed-facility-report?fid=110000123456",
+            "latitude": 42.65,
+            "longitude": -73.75,
+            "attributes": {
+                "quarters_with_violation": "2",
+                "inspection_count": "7",
+                "last_inspection_date": "2025-01-01",
+                "programs": "",
+                "naics": "331110",
+                "sic": "3312",
+                "registry_id": "110000123456",
+                "address": "123 Main St, Albany, NY, 12207",
+                "compliance_status": "Significant Violator",
+                "significant_violator": True,
+                "active": True,
+                "search_lat": 42.65,
+                "search_lon": -73.75,
+            },
+        }
+
+    def test_the_compliance_fields_are_read_from_the_keys_redata_emits(self) -> None:
+        facility = _facility_from_poi(self._redata_row())
+
+        self.assertEqual(facility["last_inspection"], "2025-01-01")
+        self.assertEqual(facility["quarters_in_noncompliance"], "2")
+        self.assertEqual(facility["inspection_count"], "7")
+
+    def test_the_rest_of_the_shape_is_unchanged(self) -> None:
+        facility = _facility_from_poi(self._redata_row())
+
+        self.assertEqual(facility["registry_id"], "110000123456")
+        self.assertEqual(facility["name"], "Old Mill Factory")
+        self.assertEqual(facility["address"], "123 Main St, Albany, NY, 12207")
+        self.assertEqual(facility["compliance_status"], "Significant Violator")
+        self.assertTrue(facility["significant_violator"])
+
+    def test_a_row_with_no_attributes_degrades_rather_than_raising(self) -> None:
+        facility = _facility_from_poi({"external_id": "R1", "name": "Bare"})
+
+        self.assertEqual(facility["last_inspection"], "")
+        self.assertIsNone(facility["quarters_in_noncompliance"])
+
+    def test_the_card_says_when_it_was_inspected(self) -> None:
+        """End to end: the rendered fact used to read "last inspected no recorded inspection"."""
+        source = EpaEchoDetailPanelSource()
+        pin = None  # render_context does not touch the pin for this branch
+
+        context = source.render_context(pin, {"exact_site": _facility_from_poi(self._redata_row())})
+
+        assert context is not None
+        self.assertIn("last inspected 2025-01-01", context["facts"][0]["text"])
+        self.assertIn("2 quarter(s) in noncompliance", context["facts"][0]["text"])

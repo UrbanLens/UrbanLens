@@ -60,8 +60,11 @@ class INaturalistPanelSource(CoordinateGatedInfoPanelSource):
                 {
                     "label": label,
                     "value": value,
-                    # Links straight to this specific sighting, not iNaturalist's homepage.
-                    "href": obs.get("uri") or "",
+                    # Links straight to this specific sighting, not iNaturalist's
+                    # homepage. The field is `url` on REData's NatureObservation;
+                    # reading iNaturalist's own `uri` spelling left every row
+                    # unlinked until 2026-08-19.
+                    "href": obs.get("url") or "",
                 },
             )
 

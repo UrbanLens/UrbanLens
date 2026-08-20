@@ -44,26 +44,31 @@ class AerialMediaSource(GalleryMediaSource):
         LocationCache.set(pin.location, self.cache_source, {"items": items}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Turn cached REData media rows into gallery tiles."""
+        """Turn cached REData media rows into gallery tiles.
+
+        ``url`` is the publisher's permalink *page*, not an image - REData
+        publishes the bytes it mirrored as ``cached_url`` (absolute, and stable
+        where a provider's own thumbnail link expires). Using ``url`` as the
+        tile's image source, as this did until 2026-08-19, renders an HTML page
+        into an ``<img>``; ``page_url`` is not a field REData emits at all, so
+        the "open the original" link fell back to the same value.
+        """
         items = []
         for row in (data or {}).get("items") or []:
-            url = row.get("url") or ""
-            if not url:
+            page_url = row.get("url") or ""
+            image_url = row.get("cached_url") or row.get("thumbnail_url") or ""
+            if not image_url and not page_url:
                 continue
             items.append(
                 MediaItem(
-                    url=url,
-                    thumb_url=row.get("thumbnail_url") or "",
+                    url=image_url or page_url,
+                    thumb_url=row.get("thumbnail_url") or row.get("cached_url") or "",
                     caption=row.get("title") or "Aerial view",
                     source=row.get("credit") or "Aerial",
-                    page_url=row.get("page_url") or url,
+                    page_url=page_url,
                 ),
             )
         return items
-
-    def debug_count(self, data: dict) -> int:
-        """Number of aerial items cached."""
-        return len((data or {}).get("items") or [])
 
 
 class AerialMediaPlugin(UrbanLensPlugin):

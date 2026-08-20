@@ -57,7 +57,10 @@ class UsgsEarthquakePanelSource(CoordinateGatedInfoPanelSource):
             meta.append(
                 {
                     "label": f"M{magnitude:.1f}" if isinstance(magnitude, (int, float)) else "Unknown magnitude",
-                    "value": f"{event.get('place') or 'Unknown location'} - {date_label}",
+                    # `title`, not `place`: REData normalizes every hazard provider
+                    # onto one HazardEvent shape and puts USGS's own `place` string
+                    # there. Reading `place` made every row say "Unknown location".
+                    "value": f"{event.get('title') or 'Unknown location'} - {date_label}",
                     "href": event.get("url") or "",
                 },
             )

@@ -8,14 +8,17 @@ install with no REData, and invisible breakage for a test that assumed the
 pre-REData contract where the panel simply rendered.
 
 Patching the two settings values rather than the ``redata_configured`` symbol is
-deliberate: every plugin module imports that function by name, so patching it at
-its origin would miss them, and patching it per module means listing every module
-a test happens to touch. The function reads the settings at call time, so setting
-them covers all of them at once.
+deliberate: a plugin module that imports that function by name holds its own
+reference, so patching it at its origin would miss them, and patching it per
+module means listing every module a test happens to touch. The function reads
+the settings at call time, so setting them covers all of them at once.
 
 Tests that specifically want the *unconfigured* behaviour patch
 ``redata_configured`` in their own plugin module instead - see
-``test_inaturalist_panel.py`` for that shape.
+``test_inaturalist_panel.py`` for that shape. Panels built on
+``services.pins.redata_panel.RedataInfoPanelSource`` no longer hold a
+module-level reference (the gate imports it inside the call), so those patch
+``...redata_context_gateway.redata_configured`` directly.
 """
 
 from __future__ import annotations

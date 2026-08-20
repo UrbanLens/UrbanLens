@@ -85,16 +85,16 @@ def _miles_between(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 def _facility_from_poi(poi: dict[str, Any]) -> dict[str, Any]:
     """Map a REData ``epa_echo`` points-of-interest row onto this plugin's facility shape.
 
-    REData's own docs (``../REData/docs/api-reference.md``, "Points of
-    interest") describe ``epa_echo`` rows as carrying "compliance status,
-    quarters in non-compliance, significant-violator flag, last inspection" in
-    ``attributes`` - assumed here as ``compliance_status``,
-    ``quarters_in_noncompliance``, ``significant_violator`` and
-    ``last_inspection`` (snake_case, matching REData's own convention
-    elsewhere), pending REData's ``epa_echo`` provider module actually landing
-    to confirm exact key spelling. ``address`` is likewise read from
-    ``attributes`` since the generic ``PointOfInterest`` model has no address
-    column of its own.
+    The compliance data lives in ``attributes``, since the generic
+    ``PointOfInterest`` model promotes only the fields every provider can
+    answer. The keys are REData's own, read from its
+    ``parcels/services/epa_echo/lookup.py``: ``compliance_status``,
+    ``significant_violator``, ``quarters_with_violation``,
+    ``last_inspection_date``, ``inspection_count``, ``active`` and ``address``.
+    Two of them were guessed here before that module existed
+    (``quarters_in_noncompliance``, ``last_inspection``) and guessed wrong, so
+    every facility printed "last inspected no recorded inspection" and no
+    non-compliance count at all until 2026-08-19.
 
     Unlike the direct EPA ECHO API this replaced - whose Detailed Facility
     Report broke compliance history down per environmental statute (RCRA, CAA,
@@ -108,7 +108,9 @@ def _facility_from_poi(poi: dict[str, Any]) -> dict[str, Any]:
     Returns:
         ``{"registry_id", "name", "address", "latitude", "longitude",
         "compliance_status", "significant_violator",
-        "quarters_in_noncompliance", "last_inspection"}``.
+        "quarters_in_noncompliance", "last_inspection", "inspection_count"}``
+        - the two ``quarters``/``inspection`` keys keep this plugin's own
+        names, which the template and the API payload already use.
     """
     attributes = poi.get("attributes") or {}
     return {
@@ -119,8 +121,9 @@ def _facility_from_poi(poi: dict[str, Any]) -> dict[str, Any]:
         "longitude": poi.get("longitude"),
         "compliance_status": attributes.get("compliance_status") or "",
         "significant_violator": bool(attributes.get("significant_violator")),
-        "quarters_in_noncompliance": attributes.get("quarters_in_noncompliance"),
-        "last_inspection": attributes.get("last_inspection") or "",
+        "quarters_in_noncompliance": attributes.get("quarters_with_violation"),
+        "last_inspection": attributes.get("last_inspection_date") or "",
+        "inspection_count": attributes.get("inspection_count"),
     }
 
 
