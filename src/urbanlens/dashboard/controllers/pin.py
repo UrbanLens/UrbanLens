@@ -1609,9 +1609,19 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             source = get_panel_source(key)
             if not isinstance(source, LocationCachePanelSource):
                 continue
-            if source.is_ready(pin):
-                cached = LocationCache.get_fresh(location, source.cache_source)
-                piece = self._location_data_overview_fields(key, cached.data if cached else {})
+            # A fresh row, not `is_ready`. The two answer different questions:
+            # `is_ready` means "is there a tab worth showing", and since
+            # `ed8b3b28` a panel may opt into inspecting its payload to answer
+            # it - which `photon` and `open_elevation` both do. Asking it here
+            # meant a *fetched* source whose answer was legitimately empty
+            # looked unfetched, got rescheduled on every render, and was never
+            # added to `empty_keys`. That is the exact signal the client uses to
+            # hide the dead tab, so the fix that introduced `inspects_content`
+            # stopped the two panels it was written for from ever being hidden.
+            # What this loop needs is "has it been asked yet".
+            cached = LocationCache.get_fresh(location, source.cache_source)
+            if cached is not None:
+                piece = self._location_data_overview_fields(key, cached.data)
                 if piece is None:
                     empty_keys.append(key)
                     continue

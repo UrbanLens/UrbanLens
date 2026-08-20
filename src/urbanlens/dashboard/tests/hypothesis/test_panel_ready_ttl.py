@@ -28,6 +28,7 @@ from django.core.cache import cache
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.services.apis.locations.base import SlideFetch
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -49,10 +50,13 @@ class _StubGateway:
     def __init__(self, error: Exception | None = None) -> None:
         self._error = error
 
-    def get_satellite_slides(self, lat: float, lng: float) -> tuple[list, bool]:
+    def get_satellite_slides(self, lat: float, lng: float) -> SlideFetch:
         if self._error is not None:
             raise self._error
-        return [], False
+        # A real provider returns SlideFetch, whose third field carries whether
+        # it degraded part-way. Returning a bare 2-tuple made this stub the only
+        # "provider" in the codebase that could not report that.
+        return SlideFetch([], from_cache=False)
 
 
 class PanelReadyTtlTests(TestCase):

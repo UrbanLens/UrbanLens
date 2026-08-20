@@ -99,7 +99,7 @@ class PanelInfoDispatchTests(RedataConfiguredMixin, TestCase):
         LocationCache.set(
             self.pin.location,
             "usgs_earthquakes",
-            {"events": [{"magnitude": 4.2, "place": "10km N of Nowhere", "occurred_at": "2026-01-01T00:00:00Z", "url": "https://example.com"}]},
+            {"events": [{"magnitude": 4.2, "title": "10km N of Nowhere", "occurred_at": "2026-01-01T00:00:00Z", "url": "https://example.com"}]},
             query_key="",
         )
         response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "usgs_earthquakes"]))
