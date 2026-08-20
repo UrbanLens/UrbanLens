@@ -559,7 +559,9 @@ class MemoriesVisitView(LoginRequiredMixin, View):
             visit.visited_at = visited_at
             visit.notes = notes
             visit.markup_map = materialize_markup_map(profile, map_data, existing_map=visit.markup_map, context=pin)
-            visit.save()
+            # Same three fields, and the same reason, as the pin-detail edit in
+            # `controllers.visits` - see the comment there.
+            visit.save(update_fields=["visited_at", "notes", "markup_map", "updated"])
             created = False
         else:
             if not visit_logging_allowed(profile):
