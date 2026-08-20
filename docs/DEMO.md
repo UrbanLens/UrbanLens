@@ -41,6 +41,42 @@ aliases.
 Everything else - the personas, their friendships, messages, trips, visits and
 lists - is fabricated, so the instance looks inhabited rather than empty.
 
+## What gets fabricated
+
+`services/demo/social.py` builds the rest of the account once the pins exist:
+accepted friendships between the login account and each persona (and a few
+among the personas), a couple of comments on wikis that a second seeded
+profile actually shares access to, a plaintext direct-message exchange, one
+group chat (memberships created before the messages that depend on them - see
+`seed_group_chat`), a short visit history via `create_manual_visit`, a trip
+with activities on pooled locations, a couple of pin lists, generated (not
+fetched) photos, and awards against whatever `Achievement` definitions already
+exist - never new ones, since those are global and a save fans out to every
+profile on the site.
+
+Every writer there is chosen specifically because it does not notify: plain
+`Friendship.objects.create(status=ACCEPTED)` rather than
+`request()`/`accept()`, plain `DirectMessage.objects.create(...)` rather than
+`create_direct_message()`, and so on. `bin/check_notification_choke_point.py`
+is the structural guard that keeps this true for any writer added later.
+
+**A subtle bug lives here for anyone extending this further.** `seed_demo_account`
+patches `safely_enqueue_task` for the call, and several models this seeder
+touches (Pin, Friendship, Comment...) defer their Celery enqueue to
+`transaction.on_commit` rather than calling it immediately. An
+`on_commit` callback runs whatever the *current* function is at the moment the
+transaction actually commits - not whatever it was when the callback was
+registered. `seed_demo_account` therefore wraps `transaction.atomic()` *inside*
+the `mock.patch(...)` context (`with mock.patch(...), transaction.atomic():`),
+never the other way around - patching inside the atomic block would mean the
+patch has already exited by the time anything deferred actually runs, and
+every queued achievement evaluation or notification would fire for real
+against a live worker. `SeedingCommitOrderingTests` in
+`test_demo_seed_smoke.py` is a genuine `TransactionTestCase` proving this,
+because `TestCase` (savepoint rollback, not commit) and even
+`captureOnCommitCallbacks` (which defers to when the *test's* block exits,
+after the function has already returned either way) cannot exercise it.
+
 ## Where the demo's pins come from
 
 Two sources, both real, both landing in the same manifest:
