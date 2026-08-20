@@ -823,7 +823,7 @@ def _notify_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
     checkin_path = reverse("safety.home")
 
     if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
-        NotificationLog.objects.create(
+        NotificationLog.objects.notify(
             profile=partner.profile,
             source_profile=partner.invited_by,
             status=Status.UNREAD,
@@ -868,7 +868,7 @@ def _notify_checkin_partner_accepted(partner: SafetyCheckinPartner) -> None:
     """
     checkin = partner.checkin
     checkin_path = reverse("safety.checkin.detail", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=checkin.profile,
         source_profile=partner.profile,
         status=Status.UNREAD,
@@ -1292,7 +1292,7 @@ def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
             continue
         portal_path = reverse("safety.contact.portal", kwargs={"token": contact.token})
         if contact.contact_profile_id:
-            NotificationLog.objects.create(
+            NotificationLog.objects.notify(
                 profile=contact.contact_profile,
                 source_profile=checkin.profile,
                 status=Status.UNREAD,
@@ -1687,7 +1687,7 @@ def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
         if pref == DeliveryPreference.NONE:
             continue
         if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
-            NotificationLog.objects.create(
+            NotificationLog.objects.notify(
                 profile=recipient,
                 source_profile=checkin.profile,
                 status=Status.UNREAD,
@@ -1876,7 +1876,7 @@ def send_checkin_reminder(checkin: SafetyCheckin) -> None:
         return
 
     checkin_path = reverse("safety.checkin.checkin", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=checkin.profile,
         status=Status.UNREAD,
         importance=Importance.HIGH,
@@ -1911,7 +1911,7 @@ def send_final_warning(checkin: SafetyCheckin) -> None:
             ``SafetyCheckin.objects.due_for_final_warning``).
     """
     checkin_path = reverse("safety.checkin.checkin", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=checkin.profile,
         status=Status.UNREAD,
         importance=Importance.HIGH,
@@ -1993,7 +1993,7 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
             continue
         portal_path = reverse("safety.contact.portal", kwargs={"token": contact.token})
         if contact.contact_profile_id:
-            NotificationLog.objects.create(
+            NotificationLog.objects.notify(
                 profile=contact.contact_profile,
                 source_profile=checkin.profile,
                 status=Status.UNREAD,
@@ -2113,7 +2113,7 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
     _broadcast_status_update(checkin)
 
     checkin_path = reverse("safety.checkin.detail", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=checkin.profile,
         status=Status.UNREAD,
         importance=Importance.HIGH,
@@ -2138,7 +2138,7 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
             continue
         portal_path = reverse("safety.contact.portal", kwargs={"token": other.token})
         if other.contact_profile:
-            NotificationLog.objects.create(
+            NotificationLog.objects.notify(
                 profile=other.contact_profile,
                 status=Status.UNREAD,
                 importance=Importance.MEDIUM,

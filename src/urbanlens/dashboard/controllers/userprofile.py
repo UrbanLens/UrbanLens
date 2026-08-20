@@ -181,6 +181,11 @@ class ViewProfileView(LoginRequiredMixin, View):
         # FriendshipStatus values are capitalized ("Accepted", "Requested"), so normalize here.
         context["friendship_status"] = friendship.status.lower() if friendship else None
         context["friends_since"] = friendship.updated if friendship and friendship.status == FriendshipStatus.ACCEPTED else None
+        # Resolved here rather than in the template: mute is stored one column
+        # per side of the shared row, so "is this muted" only has an answer
+        # once you say whose view is being rendered - and a template cannot
+        # pass the viewer.
+        context["viewer_muted"] = bool(friendship and friendship.is_muted_by(my_profile))
         # Only the profile that *placed* a block may lift it (see
         # ``services.social.friendship.unblock_profile``). Both parties see the
         # "Blocked" chip, because ``Friendship.objects.between`` matches either

@@ -305,7 +305,7 @@ def _notify_invite(host: Profile, invitee: Profile, session: GameSession) -> Non
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     host_name = resolve_visible_identity(invitee, host)["display_name"]
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=invitee,
         source_profile=host,
         status=Status.UNREAD,

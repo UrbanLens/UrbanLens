@@ -785,7 +785,7 @@ def _notify_extraction_complete(extraction: LinkExtraction) -> None:
             parts.append(f"{article_applied} article(s) expanded")
         message = f"AI finished reading a link for {extraction.pin.effective_name}: {', '.join(parts)}."
 
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=extraction.profile,
         status=Status.UNREAD,
         importance=Importance.LOW,

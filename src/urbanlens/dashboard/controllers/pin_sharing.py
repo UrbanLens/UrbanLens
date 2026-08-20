@@ -218,7 +218,7 @@ class PinShareCreateView(LoginRequiredMixin, View):
                 base_message += f" It comes with {bundled_count} child pin{'s' if bundled_count != 1 else ''}."
             if already_pinned:
                 base_message += " You already have this location pinned."
-            notification = NotificationLog.objects.create(
+            notification = NotificationLog.objects.notify(
                 profile=recipient,
                 source_profile=sender,
                 status=Status.UNREAD,

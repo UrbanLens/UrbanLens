@@ -10,11 +10,12 @@ Expects:
                        profile/index.html)
   friendship_status, friendship, friends_since - only used when viewing
                        another user's profile (see userprofile.py).
-                       friendship.muted is a separate flag from
-                       friendship_status, deliberately: muting must never
-                       change the relationship, so there is no 'muted' status
-                       to branch on and the Mute/Unmute toggle lives inside
-                       the 'accepted' branch instead.
+  viewer_muted      - whether the *viewer* muted this relationship. A separate
+                       flag from friendship_status, deliberately: muting must
+                       never change the relationship, so there is no 'muted'
+                       status to branch on and the Mute/Unmute toggle lives
+                       inside the 'accepted' branch instead. Resolved in the
+                       view because mute is stored per side of a shared row.
   viewer_placed_block - True only when the viewer is the one who placed the
                        block. Both parties see the 'blocked' branch (the
                        relationship row is matched in either direction), but
@@ -79,7 +80,7 @@ Expects:
                     <span class="friendship-since">since {{ friends_since|date:"M Y" }}</span>
                     {% endif %}
                 </div>
-                {% if friendship.muted %}
+                {% if viewer_muted %}
                 <div class="friendship-chip friendship-chip--muted">
                     <i class="material-symbols-outlined">volume_off</i> Muted
                 </div>
@@ -91,7 +92,7 @@ Expects:
                             <i class="material-symbols-outlined">person_remove</i> Remove
                         </button>
                     </form>
-                    {% if friendship.muted %}
+                    {% if viewer_muted %}
                     <form method="post" action="{% url 'friend.unmute' profile.id %}">
                         {% csrf_token %}
                         <button type="submit" class="btn friendship-btn btn--secondary" title="Turn notifications from this user back on">

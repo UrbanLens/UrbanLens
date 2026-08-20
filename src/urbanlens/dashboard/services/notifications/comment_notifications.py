@@ -158,7 +158,7 @@ def notify_reply(actor: Profile, parent_comment: Any, reply: Any = None) -> None
     if _preference(recipient, "comment_reply") == DeliveryPreference.NONE:
         return
     name, handle = _actor_names(recipient, actor)
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=recipient,
         notification_type=NotificationType.COMMENT_REPLY,
         title=f"{name} replied to your comment",
@@ -184,7 +184,7 @@ def notify_reaction(actor: Profile, comment: Any) -> None:
     if _preference(recipient, "comment_liked") == DeliveryPreference.NONE:
         return
     name, handle = _actor_names(recipient, actor)
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=recipient,
         notification_type=NotificationType.COMMENT_LIKED,
         title=f"{name} reacted to your comment",

@@ -80,7 +80,7 @@ class MarkupMapShareCreateView(LoginRequiredMixin, View):
 
         share = MarkupMapShare.objects.create(markup_map=markup_map, from_profile=sender, to_profile=recipient, message=message)
         sender_name = resolve_visible_identity(recipient, sender)["display_name"]
-        notification = NotificationLog.objects.create(
+        notification = NotificationLog.objects.notify(
             profile=recipient,
             source_profile=sender,
             status=Status.UNREAD,

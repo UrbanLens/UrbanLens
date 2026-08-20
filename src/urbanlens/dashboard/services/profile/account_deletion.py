@@ -57,7 +57,7 @@ def request_deletion(profile: Profile) -> None:
     profile.save(update_fields=["deletion_requested_at", "deletion_reminder_sent_at", "updated"])
 
     settings_path = reverse("settings.view")
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=profile,
         status=Status.UNREAD,
         importance=Importance.HIGH,
@@ -96,7 +96,7 @@ def send_deletion_reminder(profile: Profile) -> None:
         profile: The profile whose grace period is about to end.
     """
     settings_path = reverse("settings.view")
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=profile,
         status=Status.UNREAD,
         importance=Importance.HIGH,

@@ -198,7 +198,7 @@ def _notify(profile: Profile, award: UserAchievement) -> None:
         url = None
 
     try:
-        NotificationLog.objects.create(
+        NotificationLog.objects.notify(
             profile=profile,
             notification_type=NotificationType.ACHIEVEMENT_EARNED,
             title=f"Achievement unlocked: {achievement.name}",

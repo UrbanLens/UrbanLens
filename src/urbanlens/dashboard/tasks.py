@@ -1122,7 +1122,7 @@ def _reject_comment_upload(comment, reason: str) -> None:
         logger.warning("Could not build a comment URL while notifying about a rejected upload (comment %s)", comment.pk)
 
     if recipient is not None:
-        NotificationLog.objects.create(
+        NotificationLog.objects.notify(
             profile=recipient,
             notification_type=NotificationType.COMMENT_UPLOAD_FAILED,
             title="Your comment could not be posted",
@@ -1333,7 +1333,7 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     result = {"scanned": scanned, "matched_suggestions": summary.matched_suggestions, "new_pin_suggestions": summary.new_pin_suggestions}
     total_suggestions = summary.matched_suggestions + summary.new_pin_suggestions
     if total_suggestions:
-        NotificationLog.objects.create(
+        NotificationLog.objects.notify(
             profile=profile,
             status=Status.UNREAD,
             importance=Importance.MEDIUM,
@@ -1456,6 +1456,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
         ``(created, exists, skipped)`` for this round only - each retry is a fresh task
         invocation, so these are per-round counts, not per-batch totals.
     """
+    from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY
     from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.location import Location
     from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailureReason
@@ -1478,7 +1479,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
                 # defaults, the get half matches any kind, so a same-named
                 # *tag* was returned and used as the list's category (see
                 # PROBLEMS.md, label lookups by name alone).
-                kind="category",
+                kind=KIND_CATEGORY,
                 defaults={"name": stem},
             )
 
@@ -1609,7 +1610,7 @@ def resolve_deferred_pin_locations(
             record_pin_import_failure(
                 profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR
             )
-        NotificationLog.objects.create(
+        NotificationLog.objects.notify(
             profile=profile,
             status=Status.UNREAD,
             importance=Importance.HIGH,
@@ -1636,7 +1637,7 @@ def resolve_deferred_pin_locations(
             record_pin_import_failure(
                 profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR
             )
-        NotificationLog.objects.create(
+        NotificationLog.objects.notify(
             profile=profile,
             status=Status.UNREAD,
             importance=Importance.HIGH,
@@ -1671,7 +1672,7 @@ def resolve_deferred_pin_locations(
                 record_pin_import_failure(
                     profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_STALLED
                 )
-            NotificationLog.objects.create(
+            NotificationLog.objects.notify(
                 profile=profile,
                 status=Status.UNREAD,
                 importance=Importance.HIGH,
@@ -1736,7 +1737,7 @@ def resolve_deferred_pin_locations(
 
     unresolved = len(result.unresolvable)
     logger.info("resolve_deferred_pin_locations: profile %s batch resolved via %s.", profile_id, result.provider)
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=profile,
         status=Status.UNREAD,
         importance=Importance.MEDIUM,

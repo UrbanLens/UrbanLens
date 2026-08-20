@@ -135,7 +135,7 @@ def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: 
         base_message = f"{sender_name} shared {pin.display_label} with you."
         if already_pinned:
             base_message += " You already have this location pinned."
-        notification = NotificationLog.objects.create(
+        notification = NotificationLog.objects.notify(
             profile=recipient,
             source_profile=sender,
             status=Status.UNREAD,
