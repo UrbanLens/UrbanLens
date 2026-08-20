@@ -124,7 +124,15 @@ def add_demo_context(request: HttpRequest) -> dict[str, object]:
     """
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-    return {"demo_url": app_settings.demo_url, "demo_mode": app_settings.demo_mode}
+    return {
+        "demo_url": app_settings.demo_url,
+        "demo_mode": app_settings.demo_mode,
+        # Where the demo's banner sends someone who wants the real thing. Empty
+        # unless the demo instance has been told the real site's address, since
+        # the demo's own /signup/ would just make another throwaway account on
+        # the instance that is about to delete it.
+        "demo_signup_url": app_settings.demo_real_site_url,
+    }
 
 
 #: URL-name prefixes that belong to a nav-bar section other than their own, e.g.

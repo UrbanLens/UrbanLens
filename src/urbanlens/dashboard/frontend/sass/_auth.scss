@@ -515,3 +515,41 @@ button.auth-inline-link {
         color: var(--ul-grey-6, #6b7280);
     }
 }
+
+// -- Demo-mode banner --------------------------------------------------------
+// Sits on every page of a demo instance (partials/layout/_demo_banner.html).
+// Not dismissible on purpose: somebody who forgets they are in the demo will
+// think the pins they just added were saved, and the account is deleted within
+// a day.
+.demo-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: .6rem;
+    padding: .5rem 1rem;
+    background: $color-indigo-600;
+    color: #fff;
+    font-size: .85rem;
+    line-height: 1.35;
+    text-align: center;
+
+    .material-symbols-outlined {
+        font-size: 1.15rem;
+    }
+
+    &__text strong {
+        font-weight: 700;
+    }
+
+    &__cta {
+        color: #fff;
+        font-weight: 600;
+        text-decoration: underline;
+        white-space: nowrap;
+
+        &:hover {
+            text-decoration: none;
+        }
+    }
+}

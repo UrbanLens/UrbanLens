@@ -56,14 +56,25 @@ def username_is_taken(username: str, *, exclude_user_id: int | None = None) -> b
     confusable characters as equivalent (e.g. ``o``/``0``, ``l``/``1``/``i``,
     ``john_m``/``johnm``).
 
+    The demo prefix is reserved rather than merely unused. Demo accounts are
+    identified by it and deleted by it (``purge_demo_accounts``), so a real
+    account allowed to register ``demo-…`` would be selected by that purge and
+    silently destroyed - and, on the demo instance, could impersonate a seeded
+    persona. Reserved through the confusable-normalised key, so ``dem0-`` cannot
+    walk around it.
+
     Args:
         username: Candidate username.
         exclude_user_id: Optional user primary key to ignore (for self-edits).
 
     Returns:
-        True when the username collides with an existing account.
+        True when the username collides with an existing account, or is reserved.
     """
+    from urbanlens.dashboard.services.demo import DEMO_USERNAME_PREFIX
+
     candidate_key = normalize_username_key(username)
+    if candidate_key.startswith(normalize_username_key(DEMO_USERNAME_PREFIX)):
+        return True
     queryset = User.objects.all()
     if exclude_user_id is not None:
         queryset = queryset.exclude(pk=exclude_user_id)

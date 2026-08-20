@@ -200,6 +200,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "on an instance holding real user data would expose it: see docs/DEMO.md."
         ),
     )
+    demo_real_site_url: str = Field(
+        default="",
+        description=(
+            "Set on the demo instance: absolute URL of the real site, e.g. https://urbanlens.org. "
+            "The demo banner links there for 'create a real account'. Empty hides that link - the "
+            "demo's own signup would only make another throwaway account on the instance that is "
+            "about to delete it."
+        ),
+    )
     demo_locations_file: str = Field(
         default="",
         description=(
