@@ -45,20 +45,43 @@ lists - is fabricated, so the instance looks inhabited rather than empty.
 
 `services/demo/social.py` builds the rest of the account once the pins exist:
 accepted friendships between the login account and each persona (and a few
-among the personas), a couple of comments on wikis that a second seeded
-profile actually shares access to, a plaintext direct-message exchange, one
-group chat (memberships created before the messages that depend on them - see
-`seed_group_chat`), a short visit history via `create_manual_visit`, a trip
-with activities on pooled locations, a couple of pin lists, generated (not
-fetched) photos, and awards against whatever `Achievement` definitions already
-exist - never new ones, since those are global and a save fans out to every
-profile on the site.
+among the personas), labels attached from each profile's own default set
+(`create_default_tags` already gives every profile ~43 on creation - none are
+created here), comments on wikis and on pins, reviews, reactions, a plaintext
+direct-message exchange, one group chat (memberships created before the
+messages that depend on them - see `seed_group_chat`), a visit history via
+`create_manual_visit` plus a couple of pins marked visited with no logged
+visit (the Memories "Visits" queue's whole reason to exist), recorded routes,
+drawn maps, accepted pin shares (via the same provenance calls
+`create_pin_share` itself makes, minus its notification), resolved historical
+safety check-ins, a past trip and an upcoming one (both need an explicit date
+to appear on the Memories timeline at all - see the note below), a couple of
+pin lists, generated (not fetched) photos - including one attached to a visit,
+one to a comment, and one to a direct message - and awards against whatever
+`Achievement` definitions already exist - never new ones, since those are
+global and a save fans out to every profile on the site.
+
+Every Memories page (index, on-this-day, visits, maps, sharing, journal,
+photos) is covered by this content and is exercised end-to-end by
+`test_demo_memories_pages.py` - a real HTTP GET as the seeded account, not
+just a model-level check. One visit and one photo are deliberately dated to
+exactly a year before today, since `MemoriesOnThisDayView` requires an exact
+month/day match in a past year and nothing else in the seed guarantees that by
+chance.
 
 Every writer there is chosen specifically because it does not notify: plain
 `Friendship.objects.create(status=ACCEPTED)` rather than
 `request()`/`accept()`, plain `DirectMessage.objects.create(...)` rather than
 `create_direct_message()`, and so on. `bin/check_notification_choke_point.py`
 is the structural guard that keeps this true for any writer added later.
+
+**A trip with neither `start_date` nor a scheduled activity is invisible on the
+Memories timeline, though it still counts toward the hero-stat trip count.**
+`_trips_for_range` computes a trip's effective date as
+`Coalesce(start_date, first_activity_date)` and filters out rows where that is
+null - present in the count, absent from the map, which is confusing to debug
+because nothing errors. `seed_trips` always passes `start_date`/`scheduled_at`
+explicitly for exactly this reason.
 
 **A subtle bug lives here for anyone extending this further.** `seed_demo_account`
 patches `safely_enqueue_task` for the call, and several models this seeder

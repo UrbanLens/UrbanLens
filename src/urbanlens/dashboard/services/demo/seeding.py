@@ -220,14 +220,44 @@ def seed_demo_account(*, ttl_hours: int = 24) -> User:
         # see services.demo.social for why that distinction is what lets it be
         # invented at all, unlike the pins above.
         social.seed_friendships(owner, personas)
-        social.seed_wiki_comments(pins_by_profile)
-        social.seed_direct_messages(owner, personas)
+        social.seed_labels(pins_by_profile)
+
+        wiki_comments = social.seed_wiki_comments(pins_by_profile)
+        journal_comments = social.seed_journal_content(pins_by_profile)
+        social.seed_reactions(owner, personas)  # after comments exist - it reacts to whatever is already there
+
+        messages = social.seed_direct_messages(owner, personas)
         social.seed_group_chat(owner, personas)
+
+        # The "on this day" callout needs an exact month/day match in a past
+        # year - deliberate on the owner's visits/photos only, once each, is
+        # enough to populate it without every seeded profile claiming the
+        # same anniversary.
+        owner_visits: list[Any] = []
         for profile, pins in pins_by_profile.items():
-            social.seed_visits(profile, pins)
-        social.seed_photos(pins_by_profile)
-        social.seed_trip(owner, personas, pool)
+            visited = social.seed_visits(profile, pins, on_this_day=profile is owner)
+            if profile is owner:
+                owner_visits = visited
+        # Pins seed_visits never touched (it caps at 10) - deliberately
+        # disjoint, since visited_without_record requires zero PinVisit rows.
+        social.mark_unlogged_visits(owner_pins[10:13])
+
+        social.seed_photos(pins_by_profile, on_this_day=True)
+        if owner_visits:
+            social.seed_visit_photo(owner, owner_visits[-1])
+        if messages:
+            social.seed_dm_photo(owner, messages[0])
+        for comment in (wiki_comments or journal_comments)[:1]:
+            social.seed_comment_photo(comment)
+
+        social.seed_routes(owner)
+        social.seed_markup_maps(owner)
+        if personas:
+            social.seed_markup_maps(personas[0])
+        social.seed_pin_shares(owner, personas, owner_pins)
+        social.seed_trips(owner, personas, pool)
         social.seed_pin_lists(owner, owner_pins)
+        social.seed_safety_checkins([owner, *personas])
         social.seed_achievements_and_activity([owner, *personas])
 
         logger.info("demo: seeded account %s with %d pins and %d personas", owner_user.username, len(owner_pins), len(personas))
