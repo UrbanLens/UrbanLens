@@ -24,11 +24,12 @@ Steps, in this order and for these reasons:
 | `pull` / `checkout` | Code first, so the restore runs against the migrations it was dumped for |
 | `clone-prod-data` | Reuses `bin/clone_prod_to_staging.sh` |
 | `compose-up` | Rebuild and restart |
+| `reconnect-nginx` | `compose up` only recreates a service whose own config/image changed — nginx's never does, so a redeployed `app` container leaves nginx pointed at the old one's address, answering 502 to everything below until it is restarted |
 | `wait-healthy` | Polls until the site answers — every assertion after this would otherwise race the container it is checking |
 | `migrations-applied` | `migrate --check`; migrations run inside the container at start, so this is the first point they can be asserted |
 | `data-preserved` | Compares row counts against production's, catching a restore that silently produced a partial database |
 | `smoke-pages` | A few URLs, including one that must redirect — a 200 on the landing page alone can be served by a half-booted app |
-| `integration-tests` | pytest inside the container |
+| `integration-tests` | pytest inside the container, when it's there — staging/production build `--no-dev` for parity, so this step reports "skipped" rather than failing a suite that was never installed |
 
 ### Over HTTP, without SSH
 

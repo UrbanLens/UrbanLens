@@ -287,6 +287,16 @@ def run_staging_pipeline(
         # traceback, so the container is asked directly.
         run.run_step("capture-app-log", ["docker", "logs", "--tail", "60", app_container], cwd=checkout, timeout=180, check=False)
     elif base_url:
+        # `compose up` only recreates a service whose own config or image
+        # changed; nginx's never does, so a deploy that recreates `app` (every
+        # deploy, since new code means a new image) leaves nginx holding the
+        # previous container's resolved address and answering 502 to
+        # everything - including every check below - until something makes it
+        # reconnect. Nothing else in this pipeline does, so it has to be here.
+        # check=False: a failed restart still means "possibly broken", which
+        # the health wait immediately after is what actually decides, not this
+        # step.
+        run.run_step("reconnect-nginx", ["docker", "compose", "restart", "nginx"], cwd=checkout, timeout=120, check=False)
         run.run_check("wait-healthy", lambda: _healthy(base_url), timeout=600, interval=5)
     else:
         run.record("wait-healthy", "failed", "neither UL_SITE_URL nor UL_APP_PORT is set in .env")
