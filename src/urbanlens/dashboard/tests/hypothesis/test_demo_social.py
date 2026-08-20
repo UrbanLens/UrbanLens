@@ -78,3 +78,15 @@ class DemoSocialContentTests(TestCase):
         from urbanlens.dashboard.models.notifications.model import NotificationLog
 
         self.assertEqual(NotificationLog.objects.count(), 0)
+
+    def test_photos_are_real_local_files_not_external_hotlinks(self) -> None:
+        from urbanlens.dashboard.models.images.model import Image
+
+        photo = Image.objects.filter(profile=self.owner).first()
+        self.assertIsNotNone(photo)
+        self.assertTrue(photo.image.name)
+        self.assertEqual(photo.source, "upload")
+        # A real file was actually written to storage, not just a DB row
+        # naming one - open() raises if the storage backend has nothing there.
+        with photo.image.open("rb") as handle:
+            self.assertGreater(len(handle.read()), 0)

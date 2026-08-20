@@ -12,12 +12,14 @@ module-scope import of it is an ``ImportError`` on deploy. Its custom classes
 are registered only in ``settings/test.py`` too, so baking a Profile-touching
 model outside the test runner raises. The recipes stay a test tool.
 
-**No outbound anything.** Seeding runs with Celery dispatch patched out, and the
-profiles are written with ``external_apis_enabled``/``ai_enabled`` off *before*
-any content exists, so a later worker pass cannot pick the rows up and start
-calling paid APIs on their behalf. A blank ``user.email`` is load-bearing rather
-than cosmetic: it is what keeps account mail, invite lookups and the purge's own
-deletion notice silent.
+**No outbound *network* call.** Seeding runs with Celery dispatch patched out,
+and the profiles are written with ``external_apis_enabled``/``ai_enabled`` off
+*before* any content exists, so a later worker pass cannot pick the rows up and
+start calling paid APIs on their behalf. A blank ``user.email`` is load-bearing
+rather than cosmetic: it is what keeps account mail, invite lookups and the
+purge's own deletion notice silent. Photos are the one place real bytes are
+written - generated in memory and saved to this instance's own local storage
+(see ``social.seed_photos``), never fetched from anywhere.
 """
 
 from __future__ import annotations
@@ -223,6 +225,7 @@ def seed_demo_account(*, ttl_hours: int = 24) -> User:
         social.seed_group_chat(owner, personas)
         for profile, pins in pins_by_profile.items():
             social.seed_visits(profile, pins)
+        social.seed_photos(pins_by_profile)
         social.seed_trip(owner, personas, pool)
         social.seed_pin_lists(owner, owner_pins)
         social.seed_achievements_and_activity([owner, *personas])

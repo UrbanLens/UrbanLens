@@ -281,6 +281,64 @@ def seed_pin_lists(owner: Profile, pins: list[Pin]) -> None:
         add_pins_to_list(favorites, pins[len(pins) // 2 :])
 
 
+#: Generated, not photographed - flat colours with a caption drawn on, so the
+#: gallery UI has real image files to render (thumbnailing, lightbox, EXIF
+#: panel gracefully showing nothing) without depending on any external host
+#: staying up, or on a network call this instance may not be allowed to make.
+_PHOTO_PALETTE: list[tuple[int, int, int]] = [(74, 62, 54), (58, 74, 66), (70, 60, 74), (76, 70, 52), (54, 62, 74)]
+
+
+def _placeholder_photo(caption: str, color: tuple[int, int, int]) -> Any:
+    """A small synthetic JPEG, in memory - never touches the network.
+
+    Args:
+        caption: Text drawn onto the image.
+        color: Background RGB.
+
+    Returns:
+        A ``django.core.files.base.ContentFile`` ready to assign to an
+        ``ImageField``.
+    """
+    from io import BytesIO
+
+    from django.core.files.base import ContentFile
+    from PIL import Image as PILImage, ImageDraw
+
+    canvas = PILImage.new("RGB", (640, 480), color)
+    ImageDraw.Draw(canvas).text((24, 24), caption, fill=(235, 235, 235))
+    buffer = BytesIO()
+    canvas.save(buffer, format="JPEG", quality=70)
+    return ContentFile(buffer.getvalue(), name=f"{_rng.randint(10**7, 10**8 - 1)}.jpg")
+
+
+def seed_photos(pins_by_profile: dict[Profile, list[Pin]]) -> None:
+    """A couple of generated photos per profile, attached to their own pins.
+
+    ``source=ImageSource.UPLOAD`` (the field default) is correct here, not a
+    fileless-row workaround: a real file is written to local storage, so this
+    is what a genuine upload looks like, and it is also what
+    ``achievements.signals._is_genuine_upload`` requires for the photo streak
+    - a nice side effect, since it means that surface has something real to
+    show too.
+
+    Args:
+        pins_by_profile: Each seeded profile mapped to its own pins.
+    """
+    from urbanlens.dashboard.models.images.model import Image
+
+    for profile, pins in pins_by_profile.items():
+        for index, pin in enumerate(pins[:2]):
+            color = _PHOTO_PALETTE[index % len(_PHOTO_PALETTE)]
+            photo = Image.objects.create(
+                pin=pin,
+                location=pin.location,
+                profile=profile,
+                image=_placeholder_photo(pin.location.official_name or "UrbanLens", color),
+                taken_at=timezone.now() - timedelta(days=_rng.randint(3, 200)),
+            )
+            _backdate(photo, photo.taken_at)
+
+
 def seed_achievements_and_activity(profiles: list[Profile]) -> None:
     """Award whatever Achievement definitions already exist, and backfill an activity streak.
 
