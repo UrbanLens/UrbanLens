@@ -85,8 +85,7 @@ class PinLink(_LinkBase):
             # this prevents.
             UniqueConstraint(F("pin"), MD5("url"), name="db_plink_pin_url_unique"),
         ]
-        indexes = [
-        ]
+        indexes = []
 
 
 class WikiLink(_LinkBase):
@@ -115,5 +114,4 @@ class WikiLink(_LinkBase):
             # Hashed for the same reason as PinLink's - see the note there.
             UniqueConstraint(F("wiki"), MD5("url"), name="db_wlink_wiki_url_unique"),
         ]
-        indexes = [
-        ]
+        indexes = []

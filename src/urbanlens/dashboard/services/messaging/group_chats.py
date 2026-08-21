@@ -484,12 +484,7 @@ def _notify_group_message(message: GroupMessage) -> None:
     # history) and scanning it per member made this O(members x messages) on the
     # synchronous send path, growing with the group's own history forever.
     latest_by_sender = list(
-        GroupMessage.objects.filter(group_id=group.pk)
-        .exclude(pk=message.pk)
-        .values("sender_id")
-        .annotate(newest=Max("created"))
-        .order_by()
-        .values_list("sender_id", "newest"),
+        GroupMessage.objects.filter(group_id=group.pk).exclude(pk=message.pk).values("sender_id").annotate(newest=Max("created")).order_by().values_list("sender_id", "newest"),
     )
 
     def _already_unread(membership: GroupChatMembership) -> bool:
@@ -945,9 +940,7 @@ def group_conversations_for(profile: Profile) -> list[dict[str, Any]]:
     # most active users. The `unread_counts` aggregate below was always the
     # right shape; this now matches it.
     last_ids = [row["last_id"] for row in GroupMessage.objects.filter(visible).values("group_id").annotate(last_id=Max("id")).order_by()]
-    last_message_by_group: dict[int, GroupMessage] = {
-        message.group_id: message for message in GroupMessage.objects.filter(pk__in=last_ids).select_related("sender", "sender__user")
-    }
+    last_message_by_group: dict[int, GroupMessage] = {message.group_id: message for message in GroupMessage.objects.filter(pk__in=last_ids).select_related("sender", "sender__user")}
     unread_counts = dict(GroupMessage.objects.filter(unread).values_list("group_id").annotate(count=Count("id")).order_by())
 
     # The sidebar preview shows the last sender's name - resolve it through the
@@ -961,9 +954,7 @@ def group_conversations_for(profile: Profile) -> list[dict[str, Any]]:
 
     last_senders = {message.sender_id: message.sender for message in last_message_by_group.values()}
     sender_visible_pks = ProfileModel.visible_profile_pks(profile, list(last_senders.values()))
-    sender_display_names: dict[int, str] = {
-        sender_id: resolve_visible_identity(profile, sender, visible_pks=sender_visible_pks)["display_name"] for sender_id, sender in last_senders.items()
-    }
+    sender_display_names: dict[int, str] = {sender_id: resolve_visible_identity(profile, sender, visible_pks=sender_visible_pks)["display_name"] for sender_id, sender in last_senders.items()}
 
     conversations: list[dict[str, Any]] = []
     for membership in memberships:

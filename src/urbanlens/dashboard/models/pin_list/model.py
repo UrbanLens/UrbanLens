@@ -137,5 +137,4 @@ class PinListItem(abstract.DashboardModel):
         db_table = "dashboard_pin_list_items"
         ordering = ["order", "created"]
         constraints = [UniqueConstraint(fields=["pin_list", "pin"], name="uq_pin_list_item")]
-        indexes = [
-        ]
+        indexes = []

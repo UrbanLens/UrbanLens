@@ -155,15 +155,22 @@ def ensure_router() -> dict[str, Any]:
     subprocess.run(["docker", "rm", "-f", ROUTER_CONTAINER], capture_output=True, text=True, timeout=60, check=False)
     created = subprocess.run(
         [
-            "docker", "run", "-d",
-            "--name", ROUTER_CONTAINER,
-            "--restart", "unless-stopped",
-            "-p", f"{ROUTER_PORT}:80",
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            ROUTER_CONTAINER,
+            "--restart",
+            "unless-stopped",
+            "-p",
+            f"{ROUTER_PORT}:80",
             # Lets the proxied upstreams be host ports rather than container
             # networks, so the router does not need to join every environment's
             # compose network as it is created.
-            "--add-host", "host.docker.internal:host-gateway",
-            "-v", f"{ROUTER_DIR}:/etc/nginx/conf.d:ro",
+            "--add-host",
+            "host.docker.internal:host-gateway",
+            "-v",
+            f"{ROUTER_DIR}:/etc/nginx/conf.d:ro",
             "nginx:alpine",
         ],
         capture_output=True,

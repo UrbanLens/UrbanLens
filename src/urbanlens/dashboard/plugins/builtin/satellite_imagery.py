@@ -109,6 +109,7 @@ def _wanted_providers(latitude: float, longitude: float) -> list[str]:
         return list(_REDATA_PROVIDER_NAMES)
     return [tag for tag in discovered if tag not in _SHOWN_ELSEWHERE and not tag.startswith(_HISTORICAL_MAP_PREFIX)]
 
+
 #: These three need a vendor credential REData holds - their ``url`` is
 #: REData's own authenticated download proxy, not a publicly fetchable image
 #: (see ``RedataImageryGateway.download_bytes``), so their bytes are fetched

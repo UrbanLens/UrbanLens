@@ -238,8 +238,7 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
                 # somewhere beneath it, would both be destroyed by the delete
                 # this detach exists to prevent. Refuse the merge instead.
                 raise PinMergeCollisionError(
-                    f"Cannot merge: child pin {child.pk} has to be detached to top level to avoid a loop, "
-                    "but another top-level pin already occupies its location.",
+                    f"Cannot merge: child pin {child.pk} has to be detached to top level to avoid a loop, but another top-level pin already occupies its location.",
                 )
             continue
         child.parent_pin = survivor

@@ -105,4 +105,3 @@ class QueryScalingTests(QueryScalingMixin, TestCase):
         (7 queries for 2 friends, 17 for 12); the rest were already flat.
         """
         self.assert_flat(reverse("external_api:friends"), HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
-

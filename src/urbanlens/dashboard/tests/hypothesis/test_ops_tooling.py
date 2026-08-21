@@ -46,7 +46,7 @@ _BIN = _opslib_dir()
 if str(_BIN) not in sys.path:
     sys.path.insert(0, str(_BIN))
 
-from opslib import devenv, router  # noqa: E402 - path setup must precede the import
+from opslib import devenv, router, steps  # noqa: E402 - path setup must precede the import
 from opslib.staging import _VERIFIED_TABLES, _db_container, _read_env_var, _staging_base_url, _table_counts  # noqa: E402
 
 
@@ -769,10 +769,16 @@ class DemoAccountSeedingStepTests(SimpleTestCase):
         self.assertEqual(result.status, "warn")
         self.assertIn("created by hand", result.detail)
 
-    def test_an_already_seeded_environment_is_not_reported_as_freshly_created(self) -> None:
-        _, env, _ = self._run_with_output('UL_DEV_SEED={"created": false, "username": "demo"}')
+    def test_an_account_that_already_existed_still_reports_its_credentials(self) -> None:
+        """`created: false` means the username was taken, not that seeding failed.
 
-        self.assertEqual(env.login_username, "")
+        The login works either way, so withholding it only leaves whoever ran
+        `create` without a way in. The step detail says which case it was.
+        """
+        run, env, _ = self._run_with_output('UL_DEV_SEED={"created": false, "username": "demo"}')
+
+        self.assertEqual(env.login_username, "demo")
+        self.assertIn("already present", run.run_step.return_value.detail)
 
     def test_unparseable_output_is_not_read_as_success(self) -> None:
         self.assertEqual(devenv._parse_seed_summary("UL_DEV_SEED={not json"), {})
@@ -785,3 +791,66 @@ class DemoAccountSeedingStepTests(SimpleTestCase):
             devenv._write_env_file(destination, {"UL_DEMO_LOCATIONS_FILE": "/app/demo-locations.json"}, None)
 
             self.assertIn("UL_DEMO_LOCATIONS_FILE=/app/demo-locations.json", destination.read_text(encoding="utf-8"))
+
+
+class SeedSummaryParsingTests(SimpleTestCase):
+    """Recovering the seeder's summary from a noisy stream.
+
+    The seeding step runs `manage.py shell`, which writes the summary to stdout
+    while Django writes plugin discovery, warnings and any traceback to stderr.
+    A real create lost its credentials to exactly that: the marker was printed,
+    then buried.
+    """
+
+    def _summary(self, **extra: object) -> str:
+        payload = {"username": "demo", "created": True, "pins": 3, "landmark": "Hudson River State Hospital", **extra}
+        return f"{devenv._SEED_MARKER}{json.dumps(payload)}"
+
+    def test_a_clean_marker_parses(self) -> None:
+        self.assertEqual(devenv._parse_seed_summary(self._summary())["pins"], 3)
+
+    def test_a_marker_buried_under_later_log_output_still_parses(self) -> None:
+        """The original defect: stdout is concatenated ahead of a chatty stderr,
+        and only the tail of the combined stream was searched."""
+        noise = "INFO urbanlens.dashboard.plugins.registry Discovered 54 plugins\n" * 400
+        self.assertTrue(devenv._parse_seed_summary(self._summary() + "\n" + noise))
+
+    def test_a_marker_with_a_log_prefix_on_its_own_line_parses(self) -> None:
+        self.assertTrue(devenv._parse_seed_summary("2026-08-21 16:00:00 INFO something " + self._summary()))
+
+    def test_an_account_that_already_existed_is_still_reported(self) -> None:
+        """`created: False` means the username was taken, not that the seeder
+        failed - the credentials still work and must still be surfaced."""
+        parsed = devenv._parse_seed_summary(self._summary(created=False, pins=0))
+        self.assertEqual(parsed["username"], "demo")
+        self.assertFalse(parsed["created"])
+
+    def test_no_marker_is_empty(self) -> None:
+        self.assertEqual(devenv._parse_seed_summary("nothing to see here\n" * 10), {})
+
+    def test_unparseable_json_after_the_marker_is_empty(self) -> None:
+        self.assertEqual(devenv._parse_seed_summary(f"{devenv._SEED_MARKER}{{not json"), {})
+
+    def test_a_non_object_payload_is_empty(self) -> None:
+        self.assertEqual(devenv._parse_seed_summary(f"{devenv._SEED_MARKER}[1, 2, 3]"), {})
+
+
+class StepStdoutTests(SimpleTestCase):
+    """`StepResult.stdout` keeps what `output_tail` cannot."""
+
+    def test_stdout_is_captured_separately_from_stderr(self) -> None:
+        run = steps.Run(run_id="t", kind="test", log_path=Path(tempfile.mkdtemp()) / "run.log")
+        result = run.run_step("echo", ["python3", "-c", "import sys; print('MARKER'); sys.stderr.write('x' * 50000)"])
+        self.assertIn("MARKER", result.stdout)
+
+    def test_the_tail_alone_would_have_lost_it(self) -> None:
+        """Proves the defect this field exists for, rather than just the fix."""
+        run = steps.Run(run_id="t", kind="test", log_path=Path(tempfile.mkdtemp()) / "run.log")
+        result = run.run_step("echo", ["python3", "-c", "import sys; print('MARKER'); sys.stderr.write('x' * 50000)"])
+        self.assertNotIn("MARKER", result.output_tail)
+
+    def test_stdout_is_not_written_into_the_run_record(self) -> None:
+        """Run records go to disk; a step's full stdout can be megabytes."""
+        run = steps.Run(run_id="t", kind="test", log_path=Path(tempfile.mkdtemp()) / "run.log")
+        result = run.run_step("echo", ["python3", "-c", "print('hello')"])
+        self.assertNotIn("stdout", result.as_dict())

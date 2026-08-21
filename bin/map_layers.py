@@ -37,11 +37,15 @@ def unique_path(path: Path) -> Path:
 
 
 def convert_image(src_path: Path, dest_path: Path, quality: int) -> None:
-    with Image.open(src_path) as img:
+    with Image.open(src_path) as opened:
         # Convert to RGBA first so transparency is preserved for PNGs/WebPs,
-        # then flatten mode as needed.
-        if img.mode not in ("RGB", "RGBA"):
-            img = img.convert("RGBA" if "A" in img.getbands() else "RGB")
+        # then flatten mode as needed. Bound to a new name rather than
+        # reassigned: rebinding the `with` target would drop the only handle
+        # to the file the context manager has to close.
+        if opened.mode not in ("RGB", "RGBA"):
+            img = opened.convert("RGBA" if "A" in opened.getbands() else "RGB")
+        else:
+            img = opened
 
         # High-quality downscale to the target thumbnail size.
         img = img.resize(SIZE, Image.LANCZOS)

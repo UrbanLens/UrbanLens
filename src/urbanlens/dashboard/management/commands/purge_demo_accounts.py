@@ -51,8 +51,7 @@ class Command(BaseCommand):
 
         if not app_settings.demo_mode and not options["allow_non_demo"]:
             raise CommandError(
-                "UL_DEMO_MODE is off. Refusing to delete accounts by username prefix on an instance that is not "
-                "the demo. Pass --allow-non-demo only for a database you know holds no real data.",
+                "UL_DEMO_MODE is off. Refusing to delete accounts by username prefix on an instance that is not the demo. Pass --allow-non-demo only for a database you know holds no real data.",
             )
 
         cutoff = timezone.now() - timedelta(hours=options["ttl_hours"])

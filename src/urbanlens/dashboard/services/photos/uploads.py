@@ -93,7 +93,7 @@ def upload_photo_for_owner(owner: Pin | Wiki, profile: Profile, image_file: Uplo
         The created :class:`Image`, or an :class:`UploadRejection` explaining
         why it was refused. Callers are expected to branch on the type rather
         than assume success.
-    
+
 
     **The caller must enqueue ``tasks.process_image_upload`` for the returned
     row.** This function stores the file as uploaded - EXIF (including GPS)

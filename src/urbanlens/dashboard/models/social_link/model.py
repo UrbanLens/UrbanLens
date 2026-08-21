@@ -44,5 +44,4 @@ class SocialLink(abstract.DashboardModel):
         constraints = [
             UniqueConstraint(fields=["profile", "platform"], name="social_link_unique_profile_platform"),
         ]
-        indexes = [
-        ]
+        indexes = []

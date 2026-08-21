@@ -290,5 +290,4 @@ class PlaceAccessGrant(abstract.DashboardModel):
         constraints = [
             UniqueConstraint(fields=["profile", "place"], name="place_access_grant_unique"),
         ]
-        indexes = [
-        ]
+        indexes = []

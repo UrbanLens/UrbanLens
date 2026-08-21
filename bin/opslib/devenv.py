@@ -54,6 +54,7 @@ PORT_BASE = int(os.getenv("UL_DEV_PORT_BASE", "31000"))
 PORT_STRIDE = 20
 PORT_CEILING = 39000
 
+
 #: Where each repository is cloned from. Defaults to the checkout already on
 #: this host when there is one: cloning locally needs no credentials, takes
 #: seconds rather than minutes, and cannot be rate-limited - and `git clone`
@@ -389,6 +390,7 @@ def redata_allowed_hosts() -> str:
     """
     return f"localhost,127.0.0.1,{_HOST_ALIAS}"
 
+
 #: Grace before an unhealthy verdict on first boot. Generous on purpose: the
 #: cost of waiting is a slower create, while the cost of being too strict is a
 #: torn-down stack that was working.
@@ -630,14 +632,15 @@ def _seed_demo_account(run: Run, env: DevEnv) -> None:
         timeout=1800,
         check=False,
     )
-    summary = _parse_seed_summary(result.output_tail)
+    summary = _parse_seed_summary(result.stdout or result.output_tail)
     if not summary:
         result.status = "warn"
         result.detail = f"no account was seeded ({result.detail or 'the seeder printed no summary'}); sign-in needs an account created by hand"
         return
 
     env.login_username, env.login_password = username, password
-    result.detail = f"{username} / {password} - {summary.get('pins', 0)} pin(s), landmark {summary.get('landmark', 'none')}; {summary.get('catalog', '')}"
+    made = "seeded" if summary.get("created") else "already present, left as it was"
+    result.detail = f"{username} / {password} - {made}; {summary.get('pins', 0)} pin(s), landmark {summary.get('landmark', 'none')}; {summary.get('catalog', '')}"
 
 
 def _parse_seed_summary(output: str) -> dict[str, Any]:
@@ -646,17 +649,24 @@ def _parse_seed_summary(output: str) -> dict[str, Any]:
     Args:
         output: Captured stdout/stderr of the seeding step.
 
+    An account that already existed reports ``created: False`` and is still a
+    usable login, so it is returned like any other summary. Only an absent or
+    unparseable marker - the seeder genuinely not reporting - is empty.
+
     Returns:
-        The parsed summary. Empty when the marker line is absent or unparseable
-        - which is what "the account was not seeded" looks like from here.
+        The parsed summary, or an empty dict when no marker was found.
     """
     for line in output.splitlines():
-        if line.startswith(_SEED_MARKER):
+        # Not `startswith`: the seeder shares a stream with anything else the
+        # process writes, so the marker can arrive with a log prefix ahead of
+        # it on the same line.
+        position = line.find(_SEED_MARKER)
+        if position >= 0:
             try:
-                parsed = json.loads(line[len(_SEED_MARKER) :])
+                parsed = json.loads(line[position + len(_SEED_MARKER) :])
             except ValueError:
                 return {}
-            return parsed if isinstance(parsed, dict) and parsed.get("created") else {}
+            return parsed if isinstance(parsed, dict) else {}
     return {}
 
 

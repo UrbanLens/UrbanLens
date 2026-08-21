@@ -220,7 +220,7 @@ def create_default_saved_filters(profile: Profile) -> int:
         # "or" carries the priority threshold so this reads as
         # "wanted *or* important", not "wanted *and* important".
         {"op": "or", "ids": [wanted], "min_priority": 4},
-        {"op": "not", "ids": [visited, *( [demolished] if demolished is not None else [] )]},
+        {"op": "not", "ids": [visited, *([demolished] if demolished is not None else [])]},
     ]
 
     defaults = [

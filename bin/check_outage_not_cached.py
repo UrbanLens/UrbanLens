@@ -94,9 +94,7 @@ def _offences_in_function(func: ast.FunctionDef, path: pathlib.Path, source_line
         later_writes = [n for n in ast.walk(func) if _is_persisting_call(n) and getattr(n, "lineno", 0) > node.lineno]
         if later_writes:
             found.append(
-                f"{path.relative_to(REPO_ROOT)}:{swallowing[0].lineno}: `{func.name}` swallows an exception here and "
-                f"still caches at line {later_writes[0].lineno} - an outage would be stored as a result. Return "
-                f"without writing, or re-raise.",
+                f"{path.relative_to(REPO_ROOT)}:{swallowing[0].lineno}: `{func.name}` swallows an exception here and still caches at line {later_writes[0].lineno} - an outage would be stored as a result. Return without writing, or re-raise.",
             )
     return found
 

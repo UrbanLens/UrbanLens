@@ -1803,11 +1803,7 @@ def _claim_resolution(checkin: SafetyCheckin, *, status: str, resolved_by_label:
         True when this call performed the resolution.
     """
     resolved_at = timezone.now()
-    claimed = (
-        SafetyCheckin.objects.filter(pk=checkin.pk)
-        .exclude(status__in=SafetyCheckinStatus.resolved_statuses())
-        .update(status=status, resolved_at=resolved_at, resolved_by_label=resolved_by_label, updated=resolved_at)
-    )
+    claimed = SafetyCheckin.objects.filter(pk=checkin.pk).exclude(status__in=SafetyCheckinStatus.resolved_statuses()).update(status=status, resolved_at=resolved_at, resolved_by_label=resolved_by_label, updated=resolved_at)
     if not claimed:
         return False
     checkin.status = status

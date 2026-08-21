@@ -42,5 +42,4 @@ class PinNote(abstract.DashboardModel):
         # isn't fine enough to guarantee distinct values) - without it, equal
         # timestamps leave "newest first" order up to the database.
         ordering = ["-created", "-pk"]
-        indexes = [
-        ]
+        indexes = []

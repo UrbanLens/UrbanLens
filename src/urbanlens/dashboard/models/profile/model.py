@@ -1312,7 +1312,12 @@ class Profile(abstract.PublicDashboardModel):
             if subject.pk in connected:
                 visible.add(subject.pk)
                 continue
-            if (visibility == VisibilityChoice.COMMON_PIN and subject.pk in common_pin) or (visibility == VisibilityChoice.COMMON_FRIEND and subject.pk in common_friend) or (visibility == VisibilityChoice.COMMON_TRIP and subject.pk in common_trip) or (visibility == VisibilityChoice.ANYTHING_IN_COMMON and (subject.pk in common_pin or subject.pk in common_friend or subject.pk in common_trip)):
+            if (
+                (visibility == VisibilityChoice.COMMON_PIN and subject.pk in common_pin)
+                or (visibility == VisibilityChoice.COMMON_FRIEND and subject.pk in common_friend)
+                or (visibility == VisibilityChoice.COMMON_TRIP and subject.pk in common_trip)
+                or (visibility == VisibilityChoice.ANYTHING_IN_COMMON and (subject.pk in common_pin or subject.pk in common_friend or subject.pk in common_trip))
+            ):
                 visible.add(subject.pk)
 
         # The temporary-access fallback, last, exactly as can_view_profile reaches it.

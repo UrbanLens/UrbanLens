@@ -120,8 +120,7 @@ def _reject_oversized_docx(filename: str, data: bytes) -> None:
         return
     if declared > MAX_DOCUMENT_UNCOMPRESSED_BYTES:
         raise DocumentTooLargeError(
-            f"'{filename}' expands to too much content for AI import "
-            f"({declared:,} bytes uncompressed, max {MAX_DOCUMENT_UNCOMPRESSED_BYTES:,}). Please upload a smaller file.",
+            f"'{filename}' expands to too much content for AI import ({declared:,} bytes uncompressed, max {MAX_DOCUMENT_UNCOMPRESSED_BYTES:,}). Please upload a smaller file.",
         )
 
 

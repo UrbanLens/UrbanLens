@@ -147,18 +147,7 @@ class ParsedQuery:
     @property
     def has_structure(self) -> bool:
         """Whether any structured part (type, date, place, person, near-me) was recognized."""
-        return bool(
-            self.types
-            or self.date_start
-            or self.place
-            or self.near_me
-            or self.person
-            or self.labels
-            or self.exclude_labels
-            or self.has
-            or self.states
-            or self.author
-        )
+        return bool(self.types or self.date_start or self.place or self.near_me or self.person or self.labels or self.exclude_labels or self.has or self.states or self.author)
 
     @property
     def is_empty(self) -> bool:
@@ -636,9 +625,7 @@ def _apply_clauses(parsed: ParsedQuery, scanned: OperatorScan) -> None:
     """
     parsed.clauses = list(scanned.clauses)
     parsed.unknown_keys = tuple(scanned.unknown_keys)
-    parsed.unsupported = tuple(
-        (clause.key, clause.operator.unsupported_reason) for clause in scanned.clauses if clause.operator.unsupported_reason
-    )
+    parsed.unsupported = tuple((clause.key, clause.operator.unsupported_reason) for clause in scanned.clauses if clause.operator.unsupported_reason)
 
     labels: list[str] = []
     exclude_labels: list[str] = []

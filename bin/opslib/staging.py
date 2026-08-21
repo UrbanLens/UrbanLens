@@ -120,7 +120,6 @@ def _table_counts(container: str, db_user: str, db_name: str, tables: tuple[str,
             continue
         try:
             completed = subprocess.run(
-
                 # cannot see: `table` is already proven to match
                 # [A-Za-z_][A-Za-z0-9_]* by this point.
                 ["docker", "exec", container, "psql", "-U", db_user, "-d", db_name, "-tAc", f"SELECT count(*) FROM {table}"],  # noqa: S608
@@ -348,12 +347,15 @@ def run_staging_pipeline(
     # is correct for image parity, not a bug this pipeline should paper over
     # by installing it; but running the step anyway reports "failed" for a
     # test suite that never ran, which reads as a real regression.
-    has_pytest = subprocess.run(
-        ["docker", "exec", app_container, "/app/.venv/bin/python", "-c", "import pytest"],
-        cwd=checkout,
-        capture_output=True,
-        check=False,
-    ).returncode == 0
+    has_pytest = (
+        subprocess.run(
+            ["docker", "exec", app_container, "/app/.venv/bin/python", "-c", "import pytest"],
+            cwd=checkout,
+            capture_output=True,
+            check=False,
+        ).returncode
+        == 0
+    )
 
     if skip_tests:
         run.record("integration-tests", "skipped", "--skip-tests")

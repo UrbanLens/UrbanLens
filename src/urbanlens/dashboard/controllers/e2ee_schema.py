@@ -149,8 +149,5 @@ class E2EEResetResponseSerializer(serializers.Serializer):
     version = serializers.IntegerField(help_text="The new key bundle version.")
     rewrapped = serializers.IntegerField(help_text="Key copies re-sealed to the new keypair; these stay readable.")
     not_rewrapped = serializers.IntegerField(
-        help_text=(
-            "The caller's own conversation keys and group envelopes that were NOT re-sealed. "
-            "They remain sealed to the retired key and are permanently unreadable - surface this to the user."
-        ),
+        help_text=("The caller's own conversation keys and group envelopes that were NOT re-sealed. They remain sealed to the retired key and are permanently unreadable - surface this to the user."),
     )

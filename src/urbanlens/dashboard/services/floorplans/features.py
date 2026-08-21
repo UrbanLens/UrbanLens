@@ -155,10 +155,7 @@ def feature_collection(
                     # Openings ride with their wall rather than as features of
                     # their own: they have no independent position, and a
                     # renderer needs the wall to draw one at all.
-                    "openings": [
-                        {"uuid": str(opening.uuid), "kind": opening.kind, "t_start": opening.t_start, "t_end": opening.t_end, "swing": opening.swing}
-                        for opening in wall.openings.all()
-                    ],
+                    "openings": [{"uuid": str(opening.uuid), "kind": opening.kind, "t_start": opening.t_start, "t_end": opening.t_end, "swing": opening.swing} for opening in wall.openings.all()],
                 },
             }
             if not add(feature, line):

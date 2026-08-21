@@ -49,11 +49,7 @@ class Command(BaseCommand):
         """
         from urbanlens.dashboard.models.public_pins.model import PublicPinCandidate
 
-        candidates = (
-            PublicPinCandidate.objects.passed()
-            .select_related("location", "location__wiki")
-            .order_by("pk")
-        )
+        candidates = PublicPinCandidate.objects.passed().select_related("location", "location__wiki").order_by("pk")
 
         payload: list[dict[str, Any]] = []
         for candidate in candidates:
@@ -99,10 +95,6 @@ class Command(BaseCommand):
         # profile__isnull=True is the whole test for "nobody authored this":
         # images cached from a provider carry no owner, images a user uploaded
         # always do.
-        photos = [
-            image.image.name
-            for image in wiki.images.filter(profile__isnull=True).order_by("pk")
-            if getattr(image, "image", None) and image.image.name
-        ]
+        photos = [image.image.name for image in wiki.images.filter(profile__isnull=True).order_by("pk") if getattr(image, "image", None) and image.image.name]
         aliases = list(wiki.aliases.order_by("pk").values_list("name", flat=True))
         return {"name": wiki.name or "", "aliases": aliases, "photos": photos}

@@ -412,8 +412,7 @@ class TripMembership(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_memberships"
         unique_together = [("trip", "profile")]
-        indexes = [
-        ]
+        indexes = []
         permissions = [
             ("remove_trip_members", "Can remove members from trips"),
         ]
@@ -470,8 +469,7 @@ class TripActivityRSVP(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_activity_rsvps"
         unique_together = [("activity", "membership")]
-        indexes = [
-        ]
+        indexes = []
 
 
 class TripComment(abstract.DashboardModel):
@@ -543,8 +541,7 @@ class TripComment(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_comments"
         ordering = ["created"]
-        indexes = [
-        ]
+        indexes = []
 
 
 class TripActivityVote(abstract.DashboardModel):
@@ -584,5 +581,4 @@ class TripActivityVote(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_activity_votes"
         unique_together = [("activity", "profile")]
-        indexes = [
-        ]
+        indexes = []

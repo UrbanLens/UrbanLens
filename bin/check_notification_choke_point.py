@@ -69,8 +69,7 @@ def _offences_in_file(path: pathlib.Path, tree: ast.AST, lines: list[str]) -> li
             continue
 
         found.append(
-            f"{path.relative_to(REPO_ROOT)}:{node.lineno}: {target} bypasses the mute preference. "
-            f"Use NotificationLog.objects.notify(), or mark the line `{_ALLOW_MARKER} <reason>`.",
+            f"{path.relative_to(REPO_ROOT)}:{node.lineno}: {target} bypasses the mute preference. Use NotificationLog.objects.notify(), or mark the line `{_ALLOW_MARKER} <reason>`.",
         )
     return found
 

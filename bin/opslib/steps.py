@@ -29,6 +29,17 @@ if TYPE_CHECKING:
 _TAIL_CHARS = 4000
 
 
+def _as_text(stream: bytes | str | None) -> str:
+    """Decode a subprocess stream that may be bytes, str, or absent.
+
+    ``TimeoutExpired`` carries whatever was captured before the kill, and does
+    not honour ``text=True`` consistently across Python versions.
+    """
+    if stream is None:
+        return ""
+    return stream.decode("utf-8", "replace") if isinstance(stream, bytes) else stream
+
+
 @dataclass
 class StepResult:
     """One completed step."""
@@ -38,9 +49,16 @@ class StepResult:
     seconds: float
     detail: str = ""
     output_tail: str = ""
+    #: The step's stdout in full, untruncated and without stderr mixed in.
+    #: `output_tail` exists to make a run record readable and so keeps only the
+    #: end of stdout+stderr combined - which silently loses a marker line a
+    #: caller means to parse, because a chatty stderr (Django's logging, for
+    #: one) pushes stdout out of the tail. Deliberately not in `as_dict`: run
+    #: records are written to disk and this can be megabytes.
+    stdout: str = ""
 
     def as_dict(self) -> dict[str, Any]:
-        """JSON-safe form."""
+        """JSON-safe form. Excludes ``stdout`` - see its comment."""
         return {"name": self.name, "status": self.status, "seconds": round(self.seconds, 2), "detail": self.detail, "output_tail": self.output_tail}
 
 
@@ -89,14 +107,17 @@ class Run:
         started = time.monotonic()
         try:
             completed = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout, check=False)
-            output = (completed.stdout or "") + (completed.stderr or "")
+            stdout = completed.stdout or ""
+            output = stdout + (completed.stderr or "")
             ok = completed.returncode == 0
             detail = "" if ok else f"exit {completed.returncode}"
         except subprocess.TimeoutExpired as exc:
-            output = f"timed out after {timeout}s\n{exc.stdout or ''}{exc.stderr or ''}"
+            stdout = _as_text(exc.stdout)
+            output = f"timed out after {timeout}s\n{stdout}{_as_text(exc.stderr)}"
             ok = False
             detail = f"timeout after {timeout}s"
         except OSError as exc:
+            stdout = ""
             output = str(exc)
             ok = False
             detail = str(exc)
@@ -104,7 +125,7 @@ class Run:
         seconds = time.monotonic() - started
         self.log(output.rstrip() or "(no output)")
         status = "ok" if ok else ("warn" if not check else "failed")
-        result = StepResult(name=name, status=status, seconds=seconds, detail=detail, output_tail=output[-_TAIL_CHARS:])
+        result = StepResult(name=name, status=status, seconds=seconds, detail=detail, output_tail=output[-_TAIL_CHARS:], stdout=stdout)
         self.steps.append(result)
         return result
 

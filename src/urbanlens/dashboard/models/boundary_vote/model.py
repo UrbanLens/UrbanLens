@@ -68,8 +68,7 @@ class BoundaryVote(abstract.DashboardModel):
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_boundary_votes"
-        indexes = [
-        ]
+        indexes = []
         constraints = [
             UniqueConstraint(fields=["place", "profile"], name="db_boundary_vote_unique"),
         ]

@@ -22,23 +22,19 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
-## OPEN 2026-08-21: `pre-commit run --files ...` reformats the entire repository
+## NOT A DEFECT 2026-08-21: `ruff-format` formats the whole repo on any pre-commit run
 
-The `ruff-format` hook in `.pre-commit-config.yaml` is declared `always_run: true` with
-`pass_filenames: false`, so it ignores the files it is given and formats everything ruff is not
-configured to exclude. Running `pre-commit run --files <my five files>` on 2026-08-21 modified 38
-unrelated tracked files - and would have rewritten another agent's in-flight edits had they not
-happened to live under `settings/`, which `pyproject.toml`'s `extend-exclude` skips (as it does
-`tests/`, `migrations/` and `__init__.py`). The collateral was identified by re-formatting each
-file's `HEAD` content and reverting the ones that matched byte-for-byte, but that check only works
-because nobody else had touched them.
+Recorded because an agent hit this, wrote it up as a hazard, and reverted the formatting - all of
+which was wrong, so the correction is worth keeping.
 
-That matters here because several agents share checkouts. `always_run`/`pass_filenames: false` is
-presumably there so formatting is enforced repo-wide on a full run; the cost is that the `--files`
-form - the one an agent reaches for to check its own work - is not scoped at all. Options: drop
-both flags and let pre-commit pass filenames, or keep a repo-wide format as a separate CI-only
-hook. Recorded rather than changed: this is a shared-config decision, and the file is not in the
-scope of the change that hit it.
+The `ruff-format` hook is declared `always_run: true` with `pass_filenames: false`, so
+`pre-commit run --files <a few files>` still formats everything ruff does not exclude. That is
+deliberate, and **running `pre-commit` or `ruff-format` is always fine** (Jess, 2026-08-21):
+formatting the repository is the intended behaviour and its output should be kept, not reverted.
+
+The only real consideration is timing, and it is mild: a full-repo format touches files other
+people may have open. Commit or stash in-flight work first if that matters, then run it and keep
+the result. Do not hand-revert formatting to keep a diff small.
 
 ## RESOLVED 2026-08-21: an unpinned bun tag broke every container build
 

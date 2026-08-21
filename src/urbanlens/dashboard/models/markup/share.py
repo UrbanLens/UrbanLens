@@ -48,5 +48,4 @@ class MarkupMapShare(abstract.DashboardModel):
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_markup_map_shares"
-        indexes = [
-        ]
+        indexes = []

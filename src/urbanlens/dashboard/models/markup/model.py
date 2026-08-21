@@ -376,8 +376,7 @@ class CustomLayer(abstract.FrontendDashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_custom_layers"
         ordering = ["order", "created"]
-        indexes = [
-        ]
+        indexes = []
 
 
 class PinMarkup(abstract.FrontendDashboardModel):
@@ -670,5 +669,4 @@ class PinMarkup(abstract.FrontendDashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_pin_markup"
         ordering = ["created"]
-        indexes = [
-        ]
+        indexes = []

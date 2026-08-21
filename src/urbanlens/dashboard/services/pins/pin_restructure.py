@@ -340,11 +340,7 @@ def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
     blocked = already_pinned_points(pin, missing)
     if not blocked:
         return missing
-    return [
-        building
-        for building in missing
-        if (quantize_coordinate(building["latitude"], "latitude"), quantize_coordinate(building["longitude"], "longitude")) not in blocked
-    ]
+    return [building for building in missing if (quantize_coordinate(building["latitude"], "latitude"), quantize_coordinate(building["longitude"], "longitude")) not in blocked]
 
 
 def should_offer(pin: Pin) -> bool:

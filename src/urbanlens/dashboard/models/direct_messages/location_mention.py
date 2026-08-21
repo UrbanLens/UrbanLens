@@ -92,8 +92,7 @@ class DirectMessageLocationMention(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_dm_location_mentions"
         ordering = ["created"]
-        indexes = [
-        ]
+        indexes = []
         constraints = [
             UniqueConstraint(fields=["message", "location"], name="db_dmlocm_one_per_msg_loc"),
         ]

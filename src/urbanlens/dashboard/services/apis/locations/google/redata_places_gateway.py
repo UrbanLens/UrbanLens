@@ -56,6 +56,7 @@ def _rows(body: Any) -> list[dict[str, Any]]:
         body = body.get("results")
     return [row for row in body if isinstance(row, dict)] if isinstance(body, list) else []
 
+
 _REQUEST_TIMEOUT = 30
 
 

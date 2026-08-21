@@ -388,7 +388,6 @@ class MapOverlayDeleteView(LoginRequiredMixin, View):
         return _render_overlay_list(request, owner, qs)
 
 
-
 #: Georeference transformations whose ``rmse_meters`` is not an accuracy figure.
 #: A thin-plate spline interpolates its control points by construction, so its
 #: residual is ~0 whatever the fit is actually like - reporting that as "±0 m"

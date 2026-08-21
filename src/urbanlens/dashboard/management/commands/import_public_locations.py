@@ -46,8 +46,7 @@ class Command(BaseCommand):
 
         if not app_settings.demo_mode and not options["allow_non_demo"]:
             raise CommandError(
-                "UL_DEMO_MODE is off. This import writes real coordinates, which would merge with any real "
-                "Location at the same point. Pass --allow-non-demo only for a database you know holds no real data.",
+                "UL_DEMO_MODE is off. This import writes real coordinates, which would merge with any real Location at the same point. Pass --allow-non-demo only for a database you know holds no real data.",
             )
 
         source = Path(options["path"])
@@ -76,8 +75,7 @@ class Command(BaseCommand):
         written = merge_into_manifest(entries)
         if written is None:
             self.stdout.write(
-                "UL_DEMO_LOCATIONS_FILE is not set, so no manifest was written and demo accounts will be seeded "
-                "with no pins. Set it to persist this import for seeding.",
+                "UL_DEMO_LOCATIONS_FILE is not set, so no manifest was written and demo accounts will be seeded with no pins. Set it to persist this import for seeding.",
             )
         else:
             self.stdout.write(f"Wrote the seeding manifest to {written}")

@@ -16,7 +16,11 @@ and ``log_api_call`` directly - see their docstrings.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 from dataclasses import dataclass, field
 from datetime import timedelta
 from decimal import Decimal

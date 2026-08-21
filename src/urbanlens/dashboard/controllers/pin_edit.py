@@ -628,11 +628,7 @@ class PinRelinkView(LoginRequiredMixin, View):
             #
             # A pin that should not share a place's record wants a *different*
             # place, which is what the relink branch above already does.
-            message = (
-                "A place is shared by everyone who pins it, and a pin sits exactly where its place does - "
-                "so a pin cannot have a place of its own at the same point. Link this pin to a different "
-                "place instead, or move it."
-            )
+            message = "A place is shared by everyone who pins it, and a pin sits exactly where its place does - so a pin cannot have a place of its own at the same point. Link this pin to a different place instead, or move it."
             if is_xhr:
                 return JsonResponse({"error": message}, status=400)
             return HttpResponse(message, status=400)

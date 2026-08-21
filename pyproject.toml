@@ -723,6 +723,10 @@ extend-exclude = [
     "__pycache__",
     "tests",
     "__init__.py",
+    # One-off benchmark and analysis scripts kept beside the reports they
+    # produced. They are records, not importable code, so the package rules
+    # (INP001 in particular) do not apply to them.
+    "docs/reports",
 ]
 #max-complexity = 10
 output-format = 'concise'

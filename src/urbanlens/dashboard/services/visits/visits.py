@@ -264,7 +264,6 @@ def _mutual_candidates(suggested_to: Profile, suggested_by: Profile | None, cand
     return {p.pk: p for p in combined if are_connections(suggested_to, p)}
 
 
-
 def _suggester_name(recipient: Profile, suggested_by: Profile | None) -> str:
     """Name the person a visit suggestion came from, as this recipient may see them.
 

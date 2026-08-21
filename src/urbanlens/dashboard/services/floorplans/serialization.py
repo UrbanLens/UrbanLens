@@ -136,16 +136,9 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
         # provenance ("local" / "community" / "redata"), and the save view
         # merges that in over the document - so a coordinate anchor stored
         # under the same name is silently replaced by the string "local".
-        "plan_origin": (
-            {"lat": float(floorplan.origin_lat), "lng": float(floorplan.origin_lng)}
-            if floorplan.origin_lat is not None and floorplan.origin_lng is not None
-            else None
-        ),
+        "plan_origin": ({"lat": float(floorplan.origin_lat), "lng": float(floorplan.origin_lng)} if floorplan.origin_lat is not None and floorplan.origin_lng is not None else None),
         "rotation_degrees": floorplan.rotation_degrees,
-        "source_pool": [
-            {"uuid": str(row.uuid), "title": row.title, "url": row.url, "note": row.note, "author": row.author, "attributes": row.attributes or {}}
-            for row in source_rows
-        ],
+        "source_pool": [{"uuid": str(row.uuid), "title": row.title, "url": row.url, "note": row.note, "author": row.author, "attributes": row.attributes or {}} for row in source_rows],
         "reference_pool": [
             {
                 "uuid": str(row.uuid),
@@ -426,7 +419,10 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
             wall.by = _required_float_in(payload.get("by"), "wall.by")
             wall.kind = _choice_in(payload.get("kind"), FloorplanWallKind.values, "wall kind", FloorplanWallKind.INTERIOR)
             wall.thickness = _choice_in(
-                payload.get("thickness"), FloorplanWallThickness.values, "wall thickness", FloorplanWallThickness.NORMAL,
+                payload.get("thickness"),
+                FloorplanWallThickness.values,
+                "wall thickness",
+                FloorplanWallThickness.NORMAL,
             )
             wall.name = payload.get("name") or ""
             return wall
