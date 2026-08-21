@@ -6,11 +6,14 @@ block per environment, records what it created, and can list and reclaim them -
 so "which environments are busy?" is a question with an answer rather than an
 investigation.
 
-Each environment gets its own checkout of UrbanLens *and* REData, its own
-containers (compose project name), its own database, and a hostname of
+Each environment gets its own checkout of UrbanLens, its own containers
+(compose project name), its own database, and a hostname of
 ``<slug>.dev.urbanlens.org``. Nothing here talks to Nginx Proxy Manager: the
 dev router (see ``bin/opslib/router.py``) matches on the Host header, so NPM
 needs one wildcard entry, once, rather than an edit per environment.
+
+REData is *shared* by default rather than duplicated - see ``REDATA_MODES``
+for why a private instance costs third-party quota rather than only disk.
 
 Stdlib only - this has to run on a host where the project venv may not exist.
 """
@@ -66,6 +69,35 @@ REPOS = {
     "redata": os.getenv("UL_DEV_RD_REMOTE", "") or _clone_source("/projects/UrbanLens/REData", "https://github.com/UrbanLens/REData.git"),
 }
 
+#: What an environment does about REData. Three states, because two booleans
+#: could contradict each other and this is one decision.
+#:
+#: ``production`` (the default) - point at the shared production REData and do
+#: not build anything. REData exposes almost no write surfaces: most of its
+#: "write" operations do not store what we send, they make REData go *fetch*
+#: external data about a location. A throwaway instance therefore spends
+#: third-party quota pulling data that is destroyed along with the environment.
+#: Production answers most of the same calls straight from its cache without
+#: contacting anything external, and whatever is genuinely new is cached there
+#: long-term instead of being thrown away with the environment.
+#:
+#: ``own`` - clone and start a private REData stack and mint a key in it. For
+#: working *on* the REData integration itself, where a shared instance's cached
+#: answers are the thing under test. Costs roughly eight minutes and eight extra
+#: containers on a cold image cache, plus the quota above.
+#:
+#: ``none`` - neither. ``UL_REDATA_API_URL`` is left empty and REData-backed
+#: features are inert.
+REDATA_PRODUCTION = "production"
+REDATA_OWN = "own"
+REDATA_NONE = "none"
+REDATA_MODES = (REDATA_PRODUCTION, REDATA_OWN, REDATA_NONE)
+
+#: Where the production REData credentials are inherited from when they are not
+#: already in the process environment. The same file the rest of an
+#: environment's secrets come from.
+DEFAULT_SEED_ENV = Path(os.getenv("UL_DEV_SEED_ENV", "/projects/UrbanLens/UrbanLens/.env"))
+
 
 @dataclass
 class DevEnv:
@@ -76,11 +108,18 @@ class DevEnv:
     hostname: str
     url: str
     app_port: int
-    redata_port: int
     created_at: str
     branch: str
     owner: str = ""
     status: str = "creating"
+    #: Which of `REDATA_MODES` this environment was created with. Recorded so
+    #: `list` can answer "does this one have a REData stack of its own", which
+    #: is the difference between eight idle containers and none.
+    redata_mode: str = REDATA_PRODUCTION
+    #: Host port this environment's *own* REData publishes on - None unless
+    #: `redata_mode` is ``own``, because nothing should record an address for a
+    #: stack that does not exist.
+    redata_port: int | None = None
     #: Credentials for the seeded account (see `_seed_demo_account`). Recorded
     #: rather than only printed once, so `list` can answer "how do I get into
     #: this one" later. Not a secret worth hiding: the password is derived from
@@ -238,6 +277,106 @@ def redata_api_url(port: int | None) -> str:
     return f"http://{_HOST_ALIAS}:{port}" if port else ""
 
 
+def production_redata_credentials(source: Path | None = None) -> tuple[str, str]:
+    """The shared production REData's URL and key, for an environment that uses it.
+
+    The process environment wins over the file: exporting
+    ``UL_REDATA_API_URL``/``UL_REDATA_API_KEY`` is a caller naming which REData
+    this environment should talk to, which is a more specific statement than
+    whatever the host's own checkout happens to be configured with.
+
+    Args:
+        source: A ``.env`` to fall back to, or None for `DEFAULT_SEED_ENV`.
+
+    Returns:
+        ``(url, key)``, either of which may be empty when it was not found
+        anywhere. The key is a real production credential: it belongs in the new
+        environment's own ``.env`` and nowhere else - not in the run record, the
+        registry, the JSON the CLI prints, or the log.
+    """
+    # The staging pipeline already solved "read one value out of a .env without
+    # sourcing it" (sourcing a file means running whatever is in it). Imported
+    # inside the function to keep this module's import cheap, matching how
+    # `steps` and `router` are reached.
+    from .staging import _read_env_var
+
+    source = DEFAULT_SEED_ENV if source is None else source
+    url = os.getenv("UL_REDATA_API_URL", "") or _read_env_var(source, "UL_REDATA_API_URL")
+    key = os.getenv("UL_REDATA_API_KEY", "") or _read_env_var(source, "UL_REDATA_API_KEY")
+    return url.rstrip("/"), key
+
+
+def redata_port_for(mode: str, base_port: int) -> int | None:
+    """The host port an environment's own REData publishes on, when it has one.
+
+    Only ``own`` gets one. This does not widen the pool - a block is
+    `PORT_STRIDE` ports wide and is claimed by ``app_port`` alone - it keeps the
+    registry from advertising a REData address for an environment that has no
+    REData, which is exactly what somebody reading `list` is trying to find out.
+
+    Args:
+        mode: One of `REDATA_MODES`.
+        base_port: The environment's allocated block base.
+
+    Returns:
+        The port, or None when this environment has no REData of its own.
+    """
+    return base_port + 1 if mode == REDATA_OWN else None
+
+
+def redata_settings(mode: str, port: int | None, credentials: tuple[str, str]) -> dict[str, str]:
+    """The REData half of an environment's ``.env``.
+
+    Args:
+        mode: One of `REDATA_MODES`.
+        port: This environment's own REData port, for ``own``.
+        credentials: ``(url, key)`` from `production_redata_credentials`.
+
+    Returns:
+        Values for the env file. ``UL_REDATA_API_URL`` is always written, even
+        when empty: the rest of the file is inherited from the host's own
+        ``.env``, which *does* carry a working production URL, so leaving it out
+        would quietly point a ``none`` environment at a real service. The key is
+        written only for ``production`` - an ``own`` environment has one minted
+        into the file afterwards (`_provision_redata_key`), and a ``none``
+        environment has no URL for a key to be used against.
+    """
+    if mode == REDATA_PRODUCTION:
+        url, key = credentials
+        return {"UL_REDATA_API_URL": url, "UL_REDATA_API_KEY": key}
+    return {"UL_REDATA_API_URL": redata_api_url(port) if mode == REDATA_OWN else ""}
+
+
+def redata_mode_note(mode: str, credentials: tuple[str, str], port: int | None) -> tuple[str, str]:
+    """Status and detail for the create's REData step.
+
+    Built from whether the credentials are *present*, never from their values.
+    This string lands in the run record, the JSON the CLI prints and the run
+    log, and the key must appear in none of those.
+
+    Args:
+        mode: One of `REDATA_MODES`.
+        credentials: ``(url, key)`` from `production_redata_credentials`.
+        port: This environment's own REData port, for ``own``.
+
+    Returns:
+        ``(status, detail)`` for `Run.record`. ``warn`` rather than ``failed``
+        when production credentials are missing: an environment without REData
+        is still a working environment, and discarding a build over it would
+        cost far more than the feature is worth here.
+    """
+    if mode == REDATA_OWN:
+        return "ok", f"building a private REData for this environment on port {port} - for work on the REData integration itself; ~8 minutes and eight extra containers on a cold image cache"
+    if mode == REDATA_NONE:
+        return "ok", "no REData: UL_REDATA_API_URL left empty, so REData-backed features are inert here"
+
+    url, key = credentials
+    missing = [name for name, value in (("UL_REDATA_API_URL", url), ("UL_REDATA_API_KEY", key)) if not value]
+    if missing:
+        return "warn", f"{' and '.join(missing)} not set in the process environment or {DEFAULT_SEED_ENV}; REData-backed features will be inert. Set them on the host, or pass --own-redata to build a private instance."
+    return "ok", f"using the shared production REData at {url}; its key was inherited from the host and is deliberately not recorded here"
+
+
 def redata_allowed_hosts() -> str:
     """``RD_ALLOWED_HOSTS`` for an environment's own REData.
 
@@ -328,9 +467,11 @@ def _isolation_override(slug: str, ul_dir: Path) -> str:
         "# branch, and where it is absent the names fall back to UL_ENVIRONMENT and",
         "# collide with the host's own development stack.",
         "#",
-        "# Also gives the application services a route to the host, so this stack's",
-        f"# own REData (published on a host port) is reachable at {_HOST_ALIAS}",
+        "# Also gives the application services a route to the host, so a stack",
+        f"# running its own REData (published on a host port) reaches it at {_HOST_ALIAS}",
         "# rather than at 127.0.0.1, which inside a container is the container.",
+        "# Harmless for an environment using production REData, which is reached",
+        "# over the network like any other integration.",
         "services:",
     ]
     for service in _NAMED_SERVICES:
@@ -373,13 +514,15 @@ _MINT_KEY_MARKER = "UL_REDATA_KEY="
 def _provision_redata_key(run: Run, slug: str, ul_dir: Path) -> None:
     """Give this environment's UrbanLens a key its *own* REData will accept.
 
-    The third half of "the app cannot reach REData", and the one that survives
-    fixing the other two. Secrets are seeded from the host's ``.env`` so a dev
-    environment can reach the integrations it exercises - but
-    ``UL_REDATA_API_KEY`` is not that kind of secret. It names a row in a
-    *database*, and a private REData starts with an empty one, so the inherited
-    key authenticates against nothing and every call comes back 401 - from a
-    service that is up, answering, and reachable.
+    Only reached in ``own`` mode. The third half of "the app cannot reach
+    REData", and the one that survives fixing the other two. Secrets are seeded
+    from the host's ``.env`` so a dev environment can reach the integrations it
+    exercises - but ``UL_REDATA_API_KEY`` is not that kind of secret. It names a
+    row in a *database*, and a private REData starts with an empty one, so the
+    inherited key authenticates against nothing and every call comes back 401 -
+    from a service that is up, answering, and reachable. (Against production
+    REData the same key is exactly right, which is why that mode inherits it
+    rather than minting anything.)
 
     Written into the UrbanLens ``.env`` before its stack starts, so nothing has
     to be restarted afterwards. Best-effort: a failure here leaves the
@@ -604,17 +747,19 @@ def _clone_command(source: str, branch: str, destination: Path) -> list[str]:
     return [*command, source, str(destination)]
 
 
-def create(*, requested_name: str = "", branch: str = "main", owner: str = "", root: Path | None = None, run_dir: Path | None = None, with_redata: bool = True) -> dict[str, Any]:
+def create(*, requested_name: str = "", branch: str = "main", owner: str = "", root: Path | None = None, run_dir: Path | None = None, redata: str = REDATA_PRODUCTION) -> dict[str, Any]:
     """Create a fresh dev environment and bring it up.
 
     Args:
         requested_name: Preferred slug; a random one is generated when empty.
-        branch: Branch to check out in both repositories.
+        branch: Branch to check out.
         owner: Free-text note of who or what asked for it, shown by ``list``.
         root: Parent directory for environments.
         run_dir: Where the run log and record are written.
-        with_redata: Also create and start a REData instance for this
-            environment. UrbanLens is pointed at it automatically.
+        redata: One of `REDATA_MODES` - ``production`` (share the real one, the
+            default), ``own`` (clone and start a private instance) or ``none``.
+            One argument rather than a pair of booleans, which could ask for a
+            private instance and no REData at the same time.
 
     Returns:
         The run record, with the environment under ``context.env``.
@@ -623,6 +768,10 @@ def create(*, requested_name: str = "", branch: str = "main", owner: str = "", r
 
     root = root or DEFAULT_ROOT
     run = new_run("dev-create", run_dir or (root / ".ops-runs"))
+
+    if redata not in REDATA_MODES:
+        run.record("allocate", "failed", f"unknown redata mode {redata!r}; expected one of {', '.join(REDATA_MODES)}")
+        return run.finish()
 
     entries = _load_registry()
     try:
@@ -638,13 +787,15 @@ def create(*, requested_name: str = "", branch: str = "main", owner: str = "", r
         hostname=f"{slug}.{DOMAIN_SUFFIX}",
         url=f"https://{slug}.{DOMAIN_SUFFIX}",
         app_port=base_port,
-        redata_port=base_port + 1,
         created_at=datetime.now(UTC).isoformat(),
         branch=branch,
         owner=owner,
+        redata_mode=redata,
+        redata_port=redata_port_for(redata, base_port),
     )
     run.context["env"] = env.as_dict()
-    run.record("allocate", "ok", f"{slug} -> app {base_port}, redata {base_port + 1}")
+    redata_note = f"own redata {env.redata_port}" if env.redata_port else f"redata: {redata} (no port reserved)"
+    run.record("allocate", "ok", f"{slug} -> app {base_port}, {redata_note}")
 
     # Registered before anything is built, so a failure part-way still holds
     # the ports and the name - a half-built environment that another caller can
@@ -680,14 +831,19 @@ def create(*, requested_name: str = "", branch: str = "main", owner: str = "", r
         return _abandon(f"clone of UrbanLens@{branch or 'default'} failed; nothing to build in {ul_dir}")
 
     rd_dir = env_path / "REData"
-    if with_redata:
+    if redata == REDATA_OWN:
         run.run_step("clone-redata", _clone_command(REPOS["redata"], "", rd_dir), timeout=1800)
         if run.steps[-1].status == "failed" or not rd_dir.is_dir():
             return _abandon(f"clone of REData failed; nothing to build in {rd_dir}")
 
     # Secrets are inherited from whichever checkout this host already runs, so
     # a dev environment can reach the integrations it is meant to exercise.
-    source_env = Path(os.getenv("UL_DEV_SEED_ENV", "/projects/UrbanLens/UrbanLens/.env"))
+    # REData's URL and key are read out of the same file explicitly rather than
+    # left to that inheritance, because the mode decides which value is correct
+    # and only `production` wants the host's.
+    source_env = DEFAULT_SEED_ENV
+    credentials = production_redata_credentials(source_env) if redata == REDATA_PRODUCTION else ("", "")
+    run.record("redata-mode", *redata_mode_note(redata, credentials, env.redata_port))
     _write_env_file(
         ul_dir / ".env",
         {
@@ -711,9 +867,7 @@ def create(*, requested_name: str = "", branch: str = "main", owner: str = "", r
             # included so the published port is directly usable too, which is
             # what the health check and any port-forwarded debugging rely on.
             "UL_ALLOWED_HOSTS": f"{env.hostname},127.0.0.1,localhost",
-            # Routed to the host by the `extra_hosts` entry the isolation
-            # override writes for the application services.
-            "UL_REDATA_API_URL": redata_api_url(env.redata_port if with_redata else None),
+            **redata_settings(redata, env.redata_port, credentials),
             # Where the seeded location catalog is recorded, so a later
             # `import_public_locations`/`import_redata_public_locations` in this
             # environment tops the same manifest up rather than starting a
@@ -744,7 +898,7 @@ def create(*, requested_name: str = "", branch: str = "main", owner: str = "", r
         return run.finish()
     run.record("check-name-collision", "ok", "no container names belong to another stack")
 
-    if with_redata and rd_dir.is_dir():
+    if redata == REDATA_OWN and rd_dir.is_dir():
         rd_source = Path(os.getenv("UL_DEV_SEED_RD_ENV", "/projects/UrbanLens/REData/.env"))
         # RD_ENVIRONMENT is a fixed five-value enum that settings branch on, so
         # it cannot double as a per-instance discriminator the way UrbanLens's
@@ -924,5 +1078,9 @@ def list_envs() -> list[dict[str, Any]]:
     for slug, entry in sorted(entries.items()):
         enriched = dict(entry)
         enriched["running"] = container_name(slug, "app") in running_names
+        # Entries written before REData became a mode carry no answer, and their
+        # `redata_port` cannot supply one - it was allocated whether or not a
+        # stack was built. "unknown" is the honest reading; check the containers.
+        enriched["redata_mode"] = entry.get("redata_mode") or "unknown"
         result.append(enriched)
     return result

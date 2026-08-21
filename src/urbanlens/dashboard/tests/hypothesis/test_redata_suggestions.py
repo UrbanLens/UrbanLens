@@ -12,11 +12,11 @@ from contextlib import contextmanager
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.test import override_settings
 from model_bakery import baker
 
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
@@ -255,6 +255,10 @@ class QueuePinAssignmentSyncTests(TestCase):
         self.assertEqual(enqueue.call_args.args[1], 42)
 
 
+# These exercise the production send path. Off production the write is skipped by design
+# (see services.core.environment), and the test environment is not production - so the
+# send path has to be opted into explicitly here.
+@override_settings(IS_PRODUCTION=True)
 class BackfillProfileTests(TestCase):
     def setUp(self) -> None:
         self.profile = _profile()

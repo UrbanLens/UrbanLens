@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from django.test import override_settings
+
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.labels.redata_labels_gateway import RedataLabelsGateway
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
@@ -41,6 +43,10 @@ class ConstructionTests(SimpleTestCase):
         self.assertEqual(gateway.base_url, "https://redata.example.test")
 
 
+# These exercise the production send path. Off production the write is skipped by design
+# (see services.core.environment), and the test environment is not production - so the
+# send path has to be opted into explicitly here.
+@override_settings(IS_PRODUCTION=True)
 class DefineLabelsTests(SimpleTestCase):
     def test_empty_list_short_circuits_without_a_request(self) -> None:
         session = MagicMock()
@@ -83,6 +89,10 @@ class DefineLabelsTests(SimpleTestCase):
             gateway.define_labels("user-1", [{"external_id": "abc", "name": "Church"}])
 
 
+# These exercise the production send path. Off production the write is skipped by design
+# (see services.core.environment), and the test environment is not production - so the
+# send path has to be opted into explicitly here.
+@override_settings(IS_PRODUCTION=True)
 class SyncAssignmentsTests(SimpleTestCase):
     def test_empty_list_short_circuits_without_a_request(self) -> None:
         session = MagicMock()

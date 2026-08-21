@@ -8,6 +8,8 @@ from celery.schedules import crontab
 from django.core.management.utils import get_random_secret_key
 from dotenv import find_dotenv, load_dotenv
 
+from urbanlens.UrbanLens.settings._env import is_production_environment
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,6 +22,17 @@ load_dotenv(find_dotenv())
 ENVIRONMENT_NAME = os.getenv("UL_ENVIRONMENT", "local").lower()
 _is_local = ENVIRONMENT_NAME == "local"
 _is_dev = ENVIRONMENT_NAME in {"local", "development"}
+
+# Whether this process is the real production deployment, as opposed to a dev
+# slot, a staging box, a test run, or a misconfigured deployment.
+#
+# `_is_dev`/`_is_local` above answer "may I be lax here?" and each name only a
+# subset of the non-production world, so neither can be negated into "is this
+# production": `not _is_dev` is true for staging, testing, and a typo'd
+# UL_ENVIRONMENT alike. This is the positive form, and it is fail-closed - see
+# `_env.is_production_environment`. Guard anything whose wrong answer is
+# expensive on this rather than on `not _is_dev`.
+IS_PRODUCTION = is_production_environment(ENVIRONMENT_NAME)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 #

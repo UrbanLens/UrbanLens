@@ -57,14 +57,14 @@ Useful flags: `--skip-data` (leave staging's database alone), `--skip-tests`,
 
 ```bash
 python3 bin/dev_env.py create --owner "agent: floorplans"   # -> https://a7f3c2.dev.urbanlens.org
-python3 bin/dev_env.py list                                  # what exists, and what is running
+python3 bin/dev_env.py list                                  # what exists, what is running, which REData
 python3 bin/dev_env.py destroy a7f3c2
 ```
 
-Each environment gets its own checkout of UrbanLens **and** REData, its own
-containers, its own database, and its own hostname. This replaces the three
-fixed slots (`s1`/`s2`/`s3`), which ran out and gave no way to tell which were
-free — `list` is that answer now.
+Each environment gets its own checkout of UrbanLens, its own containers, its own
+database, and its own hostname. This replaces the three fixed slots
+(`s1`/`s2`/`s3`), which ran out and gave no way to tell which were free — `list`
+is that answer now.
 
 Ports are allocated in blocks from 31000 and checked against both the registry
 and the live socket table: the registry catches an environment that is merely
@@ -74,6 +74,50 @@ host that was never registered.
 Clones come from the checkouts already on the host when they exist — no
 credentials, no rate limit, and git hardlinks the objects, so it costs seconds
 and almost no disk.
+
+### REData: shared by default, private by request
+
+REData is **not** duplicated per environment. Three modes, one flag:
+
+| Mode | Flag | What it does |
+|---|---|---|
+| `production` | *(default)* | Writes the host's `UL_REDATA_API_URL`/`UL_REDATA_API_KEY` into the environment's `.env`. Nothing is built, nothing is started, no port is reserved. |
+| `own` | `--own-redata` | Clones REData, starts a private stack, and mints a key in it. |
+| `none` | `--no-redata` | Neither. `UL_REDATA_API_URL` is left empty and REData-backed features are inert. |
+
+**Why sharing is the default, and it is not about disk.** REData exposes almost
+no write surfaces. Most of its "write" operations do not store anything we send
+— they make REData go *fetch* external data about a location. So a throwaway
+per-environment REData spends third-party quota pulling data that is then
+deleted along with the environment: real API calls, real cost, nothing kept.
+Pointed at production, the same calls come back from its cache without
+contacting anything external at all, and whatever is genuinely new is cached
+there long-term instead of being thrown away. The eight extra containers and
+roughly eight minutes on a cold image cache are the *cheap* half of what a
+private instance costs.
+
+`--own-redata` is for working **on** the REData integration itself — when the
+shared instance's cached answers are the thing under test, or when a schema or
+API change has to be exercised before it exists in production.
+
+Credentials are inherited, not invented: the process environment wins (exporting
+`UL_REDATA_API_URL`/`UL_REDATA_API_KEY` names which REData an environment should
+use), otherwise they come from the primary checkout's `.env`
+(`UL_DEV_SEED_ENV`). The key is a real production credential, so it goes into
+the new environment's `.env` and nowhere else — never into the run record, the
+registry, the JSON the CLI prints, or the log. If neither source has them, the
+create records a `warn` saying REData features will be inert and carries on; an
+environment without REData is still a working environment.
+
+`--own-redata` still gets its own key minted locally. The inherited one names a
+row in a *database*, and a private REData starts with an empty one, so it
+authenticates against nothing and every call answers 401 — from a service that
+is up, reachable and answering.
+
+The mode is recorded in the registry and shown by `list` as `redata_mode`, so
+"is this environment carrying eight idle containers?" is answerable without
+docker archaeology. Entries created before modes existed read `unknown`: their
+`redata_port` cannot answer it, because one was allocated either way.
 
 ### The URL, and why NPM is only touched once
 

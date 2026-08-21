@@ -22,6 +22,24 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-08-21: `pre-commit run --files ...` reformats the entire repository
+
+The `ruff-format` hook in `.pre-commit-config.yaml` is declared `always_run: true` with
+`pass_filenames: false`, so it ignores the files it is given and formats everything ruff is not
+configured to exclude. Running `pre-commit run --files <my five files>` on 2026-08-21 modified 38
+unrelated tracked files - and would have rewritten another agent's in-flight edits had they not
+happened to live under `settings/`, which `pyproject.toml`'s `extend-exclude` skips (as it does
+`tests/`, `migrations/` and `__init__.py`). The collateral was identified by re-formatting each
+file's `HEAD` content and reverting the ones that matched byte-for-byte, but that check only works
+because nobody else had touched them.
+
+That matters here because several agents share checkouts. `always_run`/`pass_filenames: false` is
+presumably there so formatting is enforced repo-wide on a full run; the cost is that the `--files`
+form - the one an agent reaches for to check its own work - is not scoped at all. Options: drop
+both flags and let pre-commit pass filenames, or keep a repo-wide format as a separate CI-only
+hook. Recorded rather than changed: this is a shared-config decision, and the file is not in the
+scope of the change that hit it.
+
 ## RESOLVED 2026-08-21: an unpinned bun tag broke every container build
 
 `Dockerfile` installed bun with `COPY --from=oven/bun:1` - a floating major tag. Bun **1.4.0**
@@ -185,14 +203,21 @@ containers and its own checkouts on disk; `list` reported both environments runn
 removed containers, files, registry entry and route completely. `--no-redata` skipped the REData
 steps cleanly.
 
-**Still open: a dev environment costs a full second REData stack.** A default `create` starts *two*
-stacks - nine UrbanLens containers and eight REData ones (app, celery-worker with
-Playwright/Chromium, celery-beat, flaresolverr, tor, searxng, valkey, db). On a cold image cache the
-REData half alone took roughly eight minutes, with no output between the `start-redata` step and its
-containers appearing, and that stack is idle for any agent not working on REData integrations.
-`--no-redata` exists but is opt-*out*. The host already runs a shared REData a dev environment could
-point `UL_REDATA_API_URL` at, so sharing it by default and making a private one opt-in is probably
-the cheaper shape - an ops call rather than a defect, hence recorded rather than changed.
+**RESOLVED 2026-08-21: a dev environment no longer costs a second REData stack.** A default
+`create` used to start *two* stacks - nine UrbanLens containers and eight REData ones (app,
+celery-worker with Playwright/Chromium, celery-beat, flaresolverr, tor, searxng, valkey, db), the
+REData half alone taking roughly eight minutes on a cold image cache and then sitting idle for any
+agent not working on REData integrations. The ops call has been made: `create` now takes
+`redata="production" | "own" | "none"` and defaults to **production**, writing the host's
+`UL_REDATA_API_URL`/`UL_REDATA_API_KEY` into the environment's `.env` and building nothing.
+`--own-redata` opts back into a private stack; `--no-redata` still means neither.
+
+The containers were never the main cost. REData exposes almost no write surfaces - most of its
+"write" operations do not store what we send, they make REData go *fetch* external data about a
+location - so a throwaway instance spends third-party quota pulling data that is destroyed with the
+environment. Production serves most of the same calls from its cache without contacting anything,
+and caches whatever is genuinely new for good. See `docs/OPS_TOOLING.md` for the modes and
+`REDATA_MODES` in `bin/opslib/devenv.py` for the reasoning next to the code.
 
 **The cold-boot fix is unexercised.** `docker compose up -d` exits non-zero when a dependent service
 gives up on the app's healthcheck, and the app legitimately takes minutes on a first boot (migrate,

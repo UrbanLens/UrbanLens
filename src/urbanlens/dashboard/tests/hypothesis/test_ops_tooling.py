@@ -282,10 +282,6 @@ class IsolationOverrideTests(SimpleTestCase):
         self.assertNotIn("127.0.0.1", url)
         self.assertIn(url.split("//", 1)[1].split(":", 1)[0], override)
 
-    def test_no_redata_means_no_url(self) -> None:
-        """An environment created with `--no-redata` must not point anywhere."""
-        self.assertEqual(devenv.redata_api_url(None), "")
-
     def test_a_minted_key_replaces_the_inherited_one(self) -> None:
         """The seeded key names a row in the *host's* REData database.
 
@@ -332,6 +328,238 @@ class IsolationOverrideTests(SimpleTestCase):
         host = devenv.redata_api_url(21860).split("//", 1)[1].split(":", 1)[0]
 
         self.assertIn(host, devenv.redata_allowed_hosts().split(","))
+
+
+class RedataModeTests(SimpleTestCase):
+    """Which REData an environment talks to, and what that costs somebody else.
+
+    REData exposes almost no write surfaces: most of its "write" operations do
+    not store what we send, they make REData go *fetch* external data about a
+    location. So a per-environment REData does not only cost eight containers
+    and eight minutes - it spends third-party quota pulling data that is deleted
+    along with the environment. Production answers most of the same calls from
+    its cache without contacting anything, and caches whatever is genuinely new
+    for good. That is why sharing is the default and a private instance is a
+    deliberate flag, and why these mappings are worth pinning: getting the
+    default wrong is not visible from inside the environment at all.
+    """
+
+    def test_the_three_modes_are_the_three_states(self) -> None:
+        self.assertEqual(devenv.REDATA_MODES, ("production", "own", "none"))
+
+    def test_creating_an_environment_shares_production_unless_told_otherwise(self) -> None:
+        """The default is the whole point of the change; a signature default is how it is expressed."""
+        import inspect
+
+        self.assertEqual(inspect.signature(devenv.create).parameters["redata"].default, devenv.REDATA_PRODUCTION)
+
+    def test_an_unknown_mode_is_refused_rather_than_guessed(self) -> None:
+        """`create` reports rather than raises, so this has to be visible in the record."""
+        with tempfile.TemporaryDirectory() as directory:
+            record = devenv.create(redata="sometimes", root=Path(directory), run_dir=Path(directory) / "runs")
+
+        self.assertEqual(record["status"], "failed")
+        self.assertIn("unknown redata mode", record["steps"][0]["detail"])
+
+    def test_only_a_private_instance_reserves_a_port(self) -> None:
+        """Nothing should record an address for a stack that does not exist."""
+        self.assertEqual(devenv.redata_port_for(devenv.REDATA_OWN, 31000), 31001)
+        self.assertIsNone(devenv.redata_port_for(devenv.REDATA_PRODUCTION, 31000))
+        self.assertIsNone(devenv.redata_port_for(devenv.REDATA_NONE, 31000))
+
+    def test_production_writes_the_inherited_url_and_key(self) -> None:
+        values = devenv.redata_settings(devenv.REDATA_PRODUCTION, None, ("https://redata.example.test", "rdk_production"))
+
+        self.assertEqual(values["UL_REDATA_API_URL"], "https://redata.example.test")
+        self.assertEqual(values["UL_REDATA_API_KEY"], "rdk_production")
+
+    def test_a_private_instance_is_addressed_over_the_host_gateway(self) -> None:
+        """Not 127.0.0.1, which inside the app container is the app container."""
+        values = devenv.redata_settings(devenv.REDATA_OWN, 31001, ("https://redata.example.test", "rdk_production"))
+
+        self.assertEqual(values["UL_REDATA_API_URL"], devenv.redata_api_url(31001))
+        self.assertNotIn("127.0.0.1", values["UL_REDATA_API_URL"])
+
+    def test_a_private_instance_does_not_take_the_production_key(self) -> None:
+        """It names a row in a *database*, and a private REData starts with an empty one -
+        so the inherited key authenticates against nothing and every call is a 401.
+        `_provision_redata_key` mints the real one into the file afterwards."""
+        values = devenv.redata_settings(devenv.REDATA_OWN, 31001, ("https://redata.example.test", "rdk_production"))
+
+        self.assertNotIn("UL_REDATA_API_KEY", values)
+
+    def test_no_redata_means_no_url(self) -> None:
+        """An environment created with `--no-redata` must not point anywhere.
+
+        Written explicitly rather than omitted: everything else in the file is
+        inherited from the host's .env, which carries a working production URL,
+        so leaving the key out would silently give this mode a live REData.
+        """
+        values = devenv.redata_settings(devenv.REDATA_NONE, None, ("https://redata.example.test", "rdk_production"))
+
+        self.assertEqual(values["UL_REDATA_API_URL"], "")
+        self.assertEqual(devenv.redata_api_url(None), "")
+
+    def test_no_redata_overrides_the_inherited_url_in_the_written_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.env"
+            source.write_text("UL_REDATA_API_URL=https://redata.urbanlens.org\n", encoding="utf-8")
+            destination = Path(directory) / "out.env"
+
+            devenv._write_env_file(destination, devenv.redata_settings(devenv.REDATA_NONE, None, ("", "")), source)
+
+            written = destination.read_text(encoding="utf-8")
+
+        self.assertIn("UL_REDATA_API_URL=\n", written)
+        self.assertNotIn("redata.urbanlens.org", written)
+
+
+class RedataCredentialInheritanceTests(SimpleTestCase):
+    """Where an environment's production REData credentials come from.
+
+    The key is a real production credential. It has exactly one destination -
+    the new environment's own `.env` - and must not reach the run record, the
+    registry, the JSON the CLI prints, or the log, all of which are read and
+    pasted around casually.
+    """
+
+    def _source(self, text: str) -> Path:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        source = Path(directory.name) / ".env"
+        source.write_text(text, encoding="utf-8")
+        return source
+
+    def test_the_hosts_env_file_supplies_both(self) -> None:
+        source = self._source("UL_REDATA_API_URL=https://redata.example.test\nUL_REDATA_API_KEY=rdk_from_file\n")
+
+        # Blanked rather than deleted: an empty value falls through to the file
+        # exactly as an unset one does, and this host really does export these.
+        with mock.patch.dict("os.environ", {"UL_REDATA_API_URL": "", "UL_REDATA_API_KEY": ""}):
+            self.assertEqual(devenv.production_redata_credentials(source), ("https://redata.example.test", "rdk_from_file"))
+
+    def test_the_process_environment_wins(self) -> None:
+        """Exporting one names which REData this environment should use, which is
+        more specific than whatever the host checkout happens to be set to."""
+        source = self._source("UL_REDATA_API_URL=https://from-file.test\nUL_REDATA_API_KEY=rdk_from_file\n")
+
+        with mock.patch.dict("os.environ", {"UL_REDATA_API_URL": "https://from-env.test", "UL_REDATA_API_KEY": "rdk_from_env"}):
+            self.assertEqual(devenv.production_redata_credentials(source), ("https://from-env.test", "rdk_from_env"))
+
+    def test_a_trailing_slash_is_dropped(self) -> None:
+        """The gateway joins paths onto this; two slashes are a 404 from a service that is up."""
+        with mock.patch.dict("os.environ", {"UL_REDATA_API_URL": "https://redata.example.test/", "UL_REDATA_API_KEY": "k"}):
+            self.assertEqual(devenv.production_redata_credentials(Path("/nonexistent/.env"))[0], "https://redata.example.test")
+
+    def test_nothing_anywhere_is_empty_rather_than_an_error(self) -> None:
+        """A host without REData configured still gets an environment."""
+        with mock.patch.dict("os.environ", {"UL_REDATA_API_URL": "", "UL_REDATA_API_KEY": ""}):
+            self.assertEqual(devenv.production_redata_credentials(Path("/nonexistent/.env")), ("", ""))
+
+    def test_missing_credentials_warn_and_do_not_fail_the_create(self) -> None:
+        """Forty minutes of stack is not worth discarding over one inert integration."""
+        status, detail = devenv.redata_mode_note(devenv.REDATA_PRODUCTION, ("", ""), None)
+
+        self.assertEqual(status, "warn")
+        self.assertIn("inert", detail)
+        self.assertIn("--own-redata", detail, "the note has to say what to do instead")
+
+    def test_a_half_configured_host_still_warns(self) -> None:
+        """A URL with no key is a 401 from a service that is up - the same inertness, harder to read."""
+        status, detail = devenv.redata_mode_note(devenv.REDATA_PRODUCTION, ("https://redata.example.test", ""), None)
+
+        self.assertEqual(status, "warn")
+        self.assertIn("UL_REDATA_API_KEY", detail)
+
+    def test_the_key_never_reaches_the_run_record(self) -> None:
+        """This detail string goes into the JSON the CLI prints and into the log file."""
+        status, detail = devenv.redata_mode_note(devenv.REDATA_PRODUCTION, ("https://redata.example.test", "rdk_do_not_print"), None)
+
+        self.assertEqual(status, "ok")
+        self.assertNotIn("rdk_do_not_print", detail)
+        self.assertIn("https://redata.example.test", detail, "the URL is not a secret, and is the thing worth knowing")
+
+    def test_the_key_never_reaches_the_registry(self) -> None:
+        """`list` prints these entries verbatim, and the registry file is world-readable."""
+        env = devenv.DevEnv(
+            slug="a1b2c3",
+            path="unused",
+            hostname="h",
+            url="https://h",
+            app_port=31000,
+            created_at="now",
+            branch="main",
+            redata_mode=devenv.REDATA_PRODUCTION,
+        )
+
+        serialised = json.dumps(env.as_dict())
+
+        self.assertNotIn("UL_REDATA_API_KEY", serialised)
+        self.assertNotIn("redata_api_key", serialised)
+        self.assertEqual(env.redata_port, None, "an environment with no REData of its own has no REData port")
+
+    def test_the_key_does_reach_the_environments_own_env_file(self) -> None:
+        """The one place it belongs - otherwise the environment is pointed at a service it cannot authenticate to."""
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / ".env"
+
+            devenv._write_env_file(destination, devenv.redata_settings(devenv.REDATA_PRODUCTION, None, ("https://redata.example.test", "rdk_secret")), None)
+
+            self.assertIn("UL_REDATA_API_KEY=rdk_secret", destination.read_text(encoding="utf-8"))
+
+
+class RedataModeReportingTests(SimpleTestCase):
+    """`list` has to say which environments own a REData stack.
+
+    Otherwise the answer to "is this environment costing eight idle containers"
+    is a docker archaeology exercise, which is the same shape of problem the
+    registry exists to remove.
+    """
+
+    def _listing(self, entries: dict) -> list[dict]:
+        with (
+            mock.patch.object(devenv, "_load_registry", return_value=entries),
+            mock.patch.object(devenv.subprocess, "run", return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")),
+        ):
+            return devenv.list_envs()
+
+    def test_the_mode_is_reported(self) -> None:
+        listed = self._listing({"a": {"slug": "a", "redata_mode": devenv.REDATA_OWN}})
+
+        self.assertEqual(listed[0]["redata_mode"], devenv.REDATA_OWN)
+
+    def test_an_entry_from_before_modes_existed_reads_unknown(self) -> None:
+        """Its `redata_port` cannot answer this - one was allocated either way."""
+        listed = self._listing({"a": {"slug": "a", "redata_port": 31001}})
+
+        self.assertEqual(listed[0]["redata_mode"], "unknown")
+
+
+class DevEnvCliFlagTests(SimpleTestCase):
+    """The flags decide whether an environment spends somebody else's API quota.
+
+    Worth pinning rather than discovering: a create takes about forty minutes,
+    so "which mode did that use" is not a question to answer by running it.
+    """
+
+    def _mode(self, argv: list[str]) -> str:
+        import dev_env
+
+        return dev_env.redata_mode(dev_env.build_parser().parse_args(argv))
+
+    def test_the_default_is_production(self) -> None:
+        self.assertEqual(self._mode(["create"]), devenv.REDATA_PRODUCTION)
+
+    def test_own_redata_asks_for_a_private_instance(self) -> None:
+        self.assertEqual(self._mode(["create", "--own-redata"]), devenv.REDATA_OWN)
+
+    def test_no_redata_keeps_its_meaning(self) -> None:
+        self.assertEqual(self._mode(["create", "--no-redata"]), devenv.REDATA_NONE)
+
+    def test_the_two_flags_cannot_be_combined(self) -> None:
+        """A private instance and no REData at all is not a state anything can honour."""
+        with self.assertRaises(SystemExit):
+            self._mode(["create", "--own-redata", "--no-redata"])
 
 
 class ContainerNamingTests(SimpleTestCase):
@@ -510,7 +738,7 @@ class DemoAccountSeedingStepTests(SimpleTestCase):
         result = StepResult(name="seed-demo-account", status=status, seconds=1.0, output_tail=output)
         run = mock.Mock()
         run.run_step.return_value = result
-        env = devenv.DevEnv(slug="a1b2c3", path="unused", hostname="h", url="https://h", app_port=31000, redata_port=31001, created_at="now", branch="main")
+        env = devenv.DevEnv(slug="a1b2c3", path="unused", hostname="h", url="https://h", app_port=31000, created_at="now", branch="main")
         devenv._seed_demo_account(run, env)
         return run, env, result
 

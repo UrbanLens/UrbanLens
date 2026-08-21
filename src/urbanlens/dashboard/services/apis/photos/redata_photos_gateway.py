@@ -26,6 +26,7 @@ import logging
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.apis.redata_json_gateway import RedataJsonGateway
+from urbanlens.dashboard.services.core.environment import skip_upstream_contribution
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -37,6 +38,22 @@ _REQUEST_TIMEOUT = 30
 MAX_PHOTOS_PER_SUBMIT = 200
 MAX_VOTES_PER_SUBMIT = 1000
 MAX_PHOTO_IDS_PER_CONFIDENCE_LOOKUP = 1000
+
+
+def _empty_submit_result() -> dict[str, Any]:
+    """A "nothing was submitted" result.
+
+    Shared by the empty-input and the skipped-off-production paths so the two
+    are indistinguishable to callers. Built fresh per call rather than shared
+    as a module constant - callers receive it as an ordinary response body and
+    may mutate it.
+    """
+    return {"count": 0, "results": {}, "unknown": [], "created": 0, "updated": 0, "image_warnings": {}, "pending": []}
+
+
+def _empty_vote_result(votes: list[dict[str, Any]]) -> dict[str, Any]:
+    """A "no votes recorded" result reporting every supplied vote's photo as unknown."""
+    return {"recorded": 0, "unknown_photo_ids": [str(vote["photo_id"]) for vote in votes if vote.get("photo_id") is not None], "updated_photos": 0}
 
 
 #: Read inline in the site-admin page render, so it is bounded well below
@@ -96,12 +113,19 @@ class RedataPhotosGateway(RedataJsonGateway):
             ``scored_at``, ``upvotes``, ``downvotes``); ``pending`` lists ids
             still queued for scoring (image analysis in progress).
 
+            Off production this is always the empty result, unsent - see
+            :mod:`services.core.environment`. Callers then simply cache no
+            confidence, which is the same state a photo is in before its
+            first successful submission.
+
         Raises:
             GatewayRequestError: The request failed outright, or REData
                 reported a non-2xx status.
         """
         if not photos:
-            return {"count": 0, "results": {}, "unknown": [], "created": 0, "updated": 0, "image_warnings": {}, "pending": []}
+            return _empty_submit_result()
+        if skip_upstream_contribution("REData photo observations (POST /photos/)", detail=f"{len(photos)} photo(s)"):
+            return _empty_submit_result()
         return self._post_json("/api/v1/photos/", {"photos": photos})
 
     def submit_votes(self, votes: list[dict[str, Any]]) -> dict[str, Any]:
@@ -116,12 +140,21 @@ class RedataPhotosGateway(RedataJsonGateway):
             photo REData was never told about is reported in
             ``unknown_photo_ids``, not auto-created.
 
+            Off production nothing is sent and every submitted ``photo_id``
+            comes back in ``unknown_photo_ids`` - see
+            :mod:`services.core.environment`. That is the truthful shape:
+            REData genuinely does not know these votes, and it is the same
+            answer production gives for a photo it was never told about, so
+            callers need no extra branch.
+
         Raises:
             GatewayRequestError: The request failed outright, or REData
                 reported a non-2xx status.
         """
         if not votes:
-            return {"recorded": 0, "unknown_photo_ids": [], "updated_photos": 0}
+            return _empty_vote_result([])
+        if skip_upstream_contribution("REData photo relevance votes (POST /photos/votes/)", detail=f"{len(votes)} vote(s)"):
+            return _empty_vote_result(votes)
         return self._post_json("/api/v1/photos/votes/", {"votes": votes})
 
     def get_confidence_batch(self, photo_ids: list[str]) -> dict[str, Any]:

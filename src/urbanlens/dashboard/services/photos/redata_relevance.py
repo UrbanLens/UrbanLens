@@ -18,6 +18,12 @@ case for most installs - see ``_redata_configured``) is a silent no-op, not
 an error, exactly like every other REData integration in this codebase (see
 ``services.apis.locations.places_resolution._redata_configured``).
 
+Both also send UrbanLens's own content for REData to store and train on, so
+they only fire from production - the gateway enforces this (see
+``services.core.environment``), which is why nothing here re-checks it per
+call site. A dev photo therefore stays unscored and ranks by upload order,
+exactly as it does before its first successful submission.
+
 Submission omits any field UrbanLens has no value for, rather than sending an
 explicit ``None`` - REData's own docs describe a missing signal as "treated
 as missing rather than imputed", i.e. a sparse submission still gets a real

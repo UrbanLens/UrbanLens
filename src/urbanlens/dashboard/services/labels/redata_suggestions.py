@@ -32,6 +32,13 @@ All three are best-effort: a missing/unreachable REData deployment (the
 common case for most installs - see ``_redata_configured``) is a silent
 no-op, not an error, exactly like every other REData integration in this
 codebase (see ``services.apis.locations.places_resolution._redata_configured``).
+
+The first two send UrbanLens's own content for REData to store and train on,
+so they additionally only fire from production. The gateway is what enforces
+that (see ``services.core.environment``), which is why the queue/sync helpers
+here do not re-check it; :func:`backfill_profile` is the one exception, and
+only so the counts it reports stay truthful. Suggestions are a read and are
+unaffected.
 """
 
 from __future__ import annotations
@@ -188,9 +195,18 @@ def backfill_profile(profile: Profile) -> tuple[int, int]:
     Returns:
         ``(labels_synced, pins_synced)`` counts - not a success/failure
         signal, since individual batch failures are logged and swallowed
-        exactly like every other REData call in this module.
+        exactly like every other REData call in this module. ``(0, 0)`` off
+        production, where nothing is sent at all.
     """
+    from urbanlens.dashboard.services.core.environment import skip_upstream_contribution
+
     if not _redata_configured():
+        return (0, 0)
+    # Checked here as well as in the gateway (which is what actually enforces
+    # it) so the counts this returns - and the per-profile totals the
+    # backfill_redata_labels command prints from them - do not claim work that
+    # never left the process.
+    if skip_upstream_contribution("REData label backfill", detail=f"profile {profile.pk}"):
         return (0, 0)
 
     from urbanlens.dashboard.models.labels.model import Label

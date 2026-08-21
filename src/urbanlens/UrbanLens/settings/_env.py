@@ -38,3 +38,33 @@ def env_bool(name: str, default: bool) -> bool:
     if normalized in _FALSE_VALUES:
         return False
     return default
+
+
+#: Environment names that mean "the one real, shared deployment".
+#:
+#: Deliberately a closed allow-list rather than a "not one of the dev names"
+#: denylist: guards keyed on this decide whether it is safe to send UrbanLens's
+#: own data to an upstream service that stores and trains on it, and the
+#: expensive direction of a wrong answer is treating a throwaway deployment as
+#: production. An unset, misspelled, or newly invented ``UL_ENVIRONMENT`` must
+#: therefore land on "not production".
+PRODUCTION_ENVIRONMENT_NAMES = frozenset({"production"})
+
+
+def is_production_environment(name: str | None) -> bool:
+    """Whether an environment name denotes the real production deployment.
+
+    Fail-closed by construction - see :data:`PRODUCTION_ENVIRONMENT_NAMES`.
+    ``None``, ``""``, ``"prod"``, ``"staging"`` and any unrecognised string
+    are all False; only an exact (case- and whitespace-insensitive) match
+    against the allow-list is True.
+
+    Args:
+        name: The environment name to classify, typically ``UL_ENVIRONMENT``.
+
+    Returns:
+        True only for a recognised production environment name.
+    """
+    if not name:
+        return False
+    return name.strip().lower() in PRODUCTION_ENVIRONMENT_NAMES

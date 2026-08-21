@@ -25,6 +25,7 @@ import logging
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.apis.redata_json_gateway import RedataJsonGateway
+from urbanlens.dashboard.services.core.environment import skip_upstream_contribution
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -37,6 +38,31 @@ MAX_LABELS_PER_DEFINE_REQUEST = 2000
 MAX_LOCATIONS_PER_ASSIGNMENT_REQUEST = 500
 DEFAULT_SUGGEST_LIMIT = 10
 MAX_SUGGEST_LIMIT = 50
+
+
+def _empty_define_result() -> dict[str, Any]:
+    """A "no definitions were sent" result.
+
+    Shared by the empty-input and the skipped-off-production paths so the two
+    are indistinguishable to callers. Built fresh per call rather than shared
+    as a module constant - callers receive it as an ordinary response body and
+    may mutate it.
+    """
+    return {"created": 0, "updated": 0, "unknown_parents": {}, "rejected_edges": [], "implied_created": 0, "implied_removed": 0, "statistics_deferred": False}
+
+
+def _empty_assignment_result() -> dict[str, Any]:
+    """A "no assignments were sent" result - counterpart to :func:`_empty_define_result`."""
+    return {
+        "locations_created": 0,
+        "locations_updated": 0,
+        "assignments_added": 0,
+        "assignments_removed": 0,
+        "implied_created": 0,
+        "implied_removed": 0,
+        "unknown_label_ids": [],
+        "statistics_deferred": False,
+    }
 
 
 #: Read inline in the site-admin page render, so it is bounded well below
@@ -91,14 +117,18 @@ class RedataLabelsGateway(RedataJsonGateway):
 
         Returns:
             ``{created, updated, unknown_parents, rejected_edges,
-            implied_created, implied_removed, statistics_deferred}``.
+            implied_created, implied_removed, statistics_deferred}``. Off
+            production nothing is sent and the all-zero result comes back -
+            see :mod:`services.core.environment`.
 
         Raises:
             GatewayRequestError: The request failed outright, or REData
                 reported a non-2xx status.
         """
         if not labels:
-            return {"created": 0, "updated": 0, "unknown_parents": {}, "rejected_edges": [], "implied_created": 0, "implied_removed": 0, "statistics_deferred": False}
+            return _empty_define_result()
+        if skip_upstream_contribution("REData label definitions (POST /labels/)", detail=f"{len(labels)} label(s)"):
+            return _empty_define_result()
         return self._post_json("/api/v1/labels/", {"user_id": user_id, "labels": labels})
 
     def sync_assignments(self, user_id: str, locations: list[dict[str, Any]]) -> dict[str, Any]:
@@ -116,23 +146,18 @@ class RedataLabelsGateway(RedataJsonGateway):
         Returns:
             ``{locations_created, locations_updated, assignments_added,
             assignments_removed, implied_created, implied_removed,
-            unknown_label_ids, statistics_deferred}``.
+            unknown_label_ids, statistics_deferred}``. Off production nothing
+            is sent and the all-zero result comes back - see
+            :mod:`services.core.environment`.
 
         Raises:
             GatewayRequestError: The request failed outright, or REData
                 reported a non-2xx status.
         """
         if not locations:
-            return {
-                "locations_created": 0,
-                "locations_updated": 0,
-                "assignments_added": 0,
-                "assignments_removed": 0,
-                "implied_created": 0,
-                "implied_removed": 0,
-                "unknown_label_ids": [],
-                "statistics_deferred": False,
-            }
+            return _empty_assignment_result()
+        if skip_upstream_contribution("REData label assignments (POST /labels/assignments/)", detail=f"{len(locations)} location(s)"):
+            return _empty_assignment_result()
         return self._post_json("/api/v1/labels/assignments/", {"user_id": user_id, "locations": locations})
 
     def suggest_labels(
