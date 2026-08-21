@@ -22,6 +22,27 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-08-21: production REData 404s on `/api/v1/public-locations/` (and `/capabilities/`)
+
+Verified live against a fresh dev environment (`a962bf8`, `--redata production`, the default as of
+this session): `bin/dev_env.py create` correctly reported credentials (`demo / demo-a962bf8`,
+confirming the seed-summary parser fix), but seeding logged `REData request to
+/api/v1/public-locations/ failed (404)` and fell back to zero catalog pins - only the Hudson River
+State Hospital landmark pin was seeded.
+
+Confirmed with `curl` directly against `https://redata.urbanlens.org/api/v1/public-locations/`
+(plain HTML 404, not a DRF JSON 404 - the route itself isn't matched) and
+`https://redata.urbanlens.org/api/v1/capabilities/` (same). Both routes exist in the local REData
+checkout (`../REData`, `src/redata/api/urls.py`, HEAD `6273443` 2026-08-20) and both are the routes
+the 2026-08-21 session's work built against - `parcels/lookup/` on the same host returns 401
+(route matched, auth/params rejected), so this isn't a credentials problem. Production REData is
+answering from a build older than both routes.
+
+This means "production REData by default" for new dev environments currently seeds no real
+catalog pins - not a UrbanLens-repo defect, but worth knowing before trusting a fresh environment's
+seeded pin count. Resolves itself once REData's production deployment picks up the commit that adds
+these routes; nothing to do here in the meantime beyond this note.
+
 ## NOT A DEFECT 2026-08-21: `ruff-format` formats the whole repo on any pre-commit run
 
 Recorded because an agent hit this, wrote it up as a hazard, and reverted the formatting - all of
