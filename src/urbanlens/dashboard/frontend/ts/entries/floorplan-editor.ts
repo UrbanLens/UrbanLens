@@ -36,6 +36,23 @@ import { createMapLayers } from "../shared/map-layers";
 
 declare const L: typeof import("leaflet");
 
+// @types/leaflet has no idea leaflet-rotate (loaded after leaflet.js in
+// editor.html) exists - it patches L.Map in place rather than exporting its
+// own types, so its additions are declared here rather than left as `any`.
+declare module "leaflet" {
+    interface MapOptions {
+        rotate?: boolean;
+        bearing?: number;
+        touchRotate?: boolean;
+        shiftKeyRotate?: boolean;
+        rotateControl?: boolean | { position?: string; closeOnZeroBearing?: boolean };
+    }
+    interface Map {
+        setBearing(theta: number): void;
+        getBearing(): number;
+    }
+}
+
 type Tool = "select" | "wall" | "marker";
 
 type SelectionItem =
@@ -134,7 +151,21 @@ function boot(): void {
     // footer instead (show_map_footer=True; see createMapLayers' onAttribution below).
     // boxZoom: false - shift+drag is repurposed below for box-select instead
     // of Leaflet's default zoom-to-rectangle, which has no use here.
-    const map = L.map("floorplan-map", { zoomControl: true, doubleClickZoom: false, attributionControl: false, boxZoom: false }).setView([lat, lng], 20);
+    // rotate/touchRotate/shiftKeyRotate/rotateControl (leaflet-rotate, loaded
+    // in editor.html): lets a building that isn't square to true north be
+    // turned to face the screen - two-finger twist on mobile, shift+wheel or
+    // the rotate control's arrow on desktop. shiftKeyRotate is shift+*wheel*,
+    // not shift+drag, so it does not collide with box-select above.
+    const map = L.map("floorplan-map", {
+        zoomControl: true,
+        doubleClickZoom: false,
+        attributionControl: false,
+        boxZoom: false,
+        rotate: true,
+        touchRotate: true,
+        shiftKeyRotate: true,
+        rotateControl: { position: "topright", closeOnZeroBearing: false },
+    }).setView([lat, lng], 20);
 
     // Declared before createMapLayers below: its "underlay" custom toggle
     // reads state.showUnderlay synchronously while the panel builds its
@@ -925,6 +956,26 @@ function boot(): void {
         showContextMenu(event, null);
     });
 
+    // The same value drives wall angle-snapping (see the wall tool's
+    // mousemove/click handlers above) and the map's own visual rotation, so
+    // turning the map to face a building also squares the snap grid to it -
+    // rotating and drawing stay in agreement instead of one silently
+    // fighting the other. No render() here: leaflet-rotate already
+    // repositions every existing layer itself; redrawing would just be
+    // wasted work on every frame of a drag or two-finger twist.
+    map.on("rotate", () => {
+        const bearing = map.getBearing();
+        // Also fires for the load-time setBearing() that restores a saved
+        // plan's rotation - a degrees-to-radians-and-back round trip through
+        // Leaflet's own storage can perturb the value by float noise even
+        // when nothing really changed, so this compares loosely rather than
+        // with ===, which would mark a freshly-loaded plan dirty before any
+        // real edit happened.
+        if (Math.abs(bearing - state.doc.rotation_degrees) < 1e-6) return;
+        state.doc.rotation_degrees = bearing;
+        state.dirty = true;
+    });
+
     document.addEventListener("keydown", (event) => {
         if (event.key === "Alt") state.suspendSnap = true;
         if (event.key === "Escape") {
@@ -1384,6 +1435,10 @@ function boot(): void {
         const anchor = state.doc.plan_origin || { lat, lng };
         state.doc.plan_origin = anchor;
         projection = new PlanProjection(anchor);
+        // Restores a saved plan already turned to face its building -
+        // fitToContent() below then fits bounds against the rotated view,
+        // not the unrotated one.
+        map.setBearing(state.doc.rotation_degrees || 0);
         const nameInput = document.getElementById("floorplan-name") as HTMLInputElement | null;
         if (nameInput) nameInput.value = state.doc.name || "";
         const validFrom = document.getElementById("floorplan-valid-from") as HTMLInputElement | null;
