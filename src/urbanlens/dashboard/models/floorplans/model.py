@@ -138,15 +138,15 @@ class FloorplanMarkerKind(TextChoices):
 
     One table with a kind, rather than a tool and a table per concept: these
     differ in icon and meaning, not in schema.
+
+    Trimmed to the kinds that earn their own icon: an entrance is already a
+    door opening on a wall, and "photo"/"note"/"fixture" markers carried no
+    information a label field didn't already say.
     """
 
-    PHOTO = "photo", "Photo location"
     HAZARD = "hazard", "Hazard"
-    ENTRANCE = "entrance", "Entrance"
     STAIR = "stair", "Stair"
     ELEVATOR = "elevator", "Elevator / shaft"
-    NOTE = "note", "Note"
-    FIXTURE = "fixture", "Fixture"
 
 
 class FloorplanReferenceKind(TextChoices):
@@ -529,7 +529,7 @@ class FloorplanMarker(FloorplanItem):
     floor = ForeignKey(FloorplanFloor, on_delete=CASCADE, related_name="markers")
     x = FloatField()
     y = FloatField()
-    kind = CharField(max_length=16, choices=FloorplanMarkerKind.choices, default=FloorplanMarkerKind.NOTE)
+    kind = CharField(max_length=16, choices=FloorplanMarkerKind.choices, default=FloorplanMarkerKind.HAZARD)
     name = CharField(max_length=255, blank=True, default="")
     facing_degrees = FloatField(null=True, blank=True)
     connector_id = CharField(max_length=64, blank=True, default="")

@@ -487,7 +487,7 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
             marker.floor = _floor
             marker.x = _required_float_in(payload.get("x"), "marker.x")
             marker.y = _required_float_in(payload.get("y"), "marker.y")
-            marker.kind = _choice_in(payload.get("kind"), FloorplanMarkerKind.values, "marker kind", FloorplanMarkerKind.NOTE)
+            marker.kind = _choice_in(payload.get("kind"), FloorplanMarkerKind.values, "marker kind", FloorplanMarkerKind.HAZARD)
             marker.name = payload.get("name") or ""
             marker.facing_degrees = _float_in(payload.get("facing_degrees"), "facing_degrees")
             marker.connector_id = payload.get("connector_id") or ""

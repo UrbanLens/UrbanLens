@@ -1,5 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
+{% load map_components %}
 
 {% block title %}Floorplan · {{ pin.effective_name }}{% endblock %}
 
@@ -33,6 +34,7 @@
 {% endblock %}
 
 {% block content %}
+<div class="floorplan-page">
 {# The editor always opens. A plan does not have to belong to a building the #}
 {# providers know about - most derelict structures have no outline anywhere - #}
 {# so a known building is offered as a shortcut, never as a gate.            #}
@@ -58,31 +60,17 @@
 
 <div class="floorplan-editor">
     <div class="floorplan-editor__stage">
-        <div class="floorplan-toolbar">
-            <div id="floorplan-tools" class="floorplan-toolbar__tools" role="toolbar" aria-label="Drawing tools">
-                <button type="button" class="btn btn--icon is-active" data-tool="select" aria-pressed="true" aria-label="Select">
-                    <i class="material-symbols-outlined">arrow_selector_tool</i>
-                </button>
-                <button type="button" class="btn btn--icon" data-tool="wall" aria-pressed="false" aria-label="Draw walls">
-                    <i class="material-symbols-outlined">timeline</i>
-                </button>
-                <button type="button" class="btn btn--icon" data-tool="marker" aria-pressed="false" aria-label="Place a marker">
-                    <i class="material-symbols-outlined">add_location_alt</i>
-                </button>
-            </div>
-            <div class="floorplan-toolbar__base" role="group" aria-label="Backdrop">
-                <button type="button" class="btn btn--icon-sm is-active" data-base="satellite" aria-pressed="true" aria-label="Aerial backdrop"><i class="material-symbols-outlined">satellite_alt</i></button>
-                <button type="button" class="btn btn--icon-sm" data-base="street" aria-pressed="false" aria-label="Street backdrop"><i class="material-symbols-outlined">map</i></button>
-                <button type="button" class="btn btn--icon-sm" data-base="blank" aria-pressed="false" aria-label="No backdrop"><i class="material-symbols-outlined">check_box_outline_blank</i></button>
-            </div>
-            <button type="button" class="btn btn--icon" id="floorplan-underlay" aria-pressed="false" aria-label="Show the floor below">
-                <i class="material-symbols-outlined">layers</i>
+        <div id="floorplan-tools" class="floorplan-toolbar" role="toolbar" aria-label="Drawing tools">
+            <button type="button" class="btn btn--icon is-active" data-tool="select" aria-pressed="true" aria-label="Select" title="Select">
+                <i class="material-symbols-outlined">arrow_selector_tool</i>
+            </button>
+            <button type="button" class="btn btn--icon" data-tool="wall" aria-pressed="false" aria-label="Draw walls" title="Wall">
+                <i class="material-symbols-outlined">timeline</i>
             </button>
             <div class="floorplan-toolbar__markers" role="group" aria-label="Marker type">
-                <button type="button" class="btn btn--icon-sm" data-marker-kind="photo" aria-label="Photo location"><i class="material-symbols-outlined">photo_camera</i></button>
-                <button type="button" class="btn btn--icon-sm" data-marker-kind="entrance" aria-label="Entrance"><i class="material-symbols-outlined">door_open</i></button>
-                <button type="button" class="btn btn--icon-sm" data-marker-kind="stair" aria-label="Stair"><i class="material-symbols-outlined">stairs</i></button>
-                <button type="button" class="btn btn--icon-sm" data-marker-kind="hazard" aria-label="Hazard"><i class="material-symbols-outlined">warning</i></button>
+                <button type="button" class="btn btn--icon" data-marker-kind="hazard" aria-label="Hazard marker" title="Hazard"><i class="material-symbols-outlined">warning</i></button>
+                <button type="button" class="btn btn--icon" data-marker-kind="stair" aria-label="Stair marker" title="Stair"><i class="material-symbols-outlined">stairs</i></button>
+                <button type="button" class="btn btn--icon" data-marker-kind="elevator" aria-label="Elevator marker" title="Elevator"><i class="material-symbols-outlined">elevator</i></button>
             </div>
         </div>
 
@@ -93,6 +81,15 @@
                  data-publish-url="{% url 'pin.floorplan.publish' pin.slug %}"
                  data-lat="{{ pin.effective_latitude }}"
                  data-lng="{{ pin.effective_longitude }}"></div>
+
+            {# Same shared layers component/engine as every other map on the #}
+            {# site - backdrop, weather/borders, and "Image Overlays" (browse #}
+            {# this pin's own photos for a blueprint to pin and skew onto the #}
+            {# map). "Show floor below" is this page's own custom toggle,    #}
+            {# registered alongside the standard ones (see floorplan-editor.ts). #}
+            <div class="map-bottom-controls">
+                {% map_layers_panel "satellite,street,underlay" panel_id="floorplan-layers" extra_class="map-layers-panel--inline" manage_overlays_url=manage_overlays_url %}
+            </div>
 
             <div id="floorplan-empty" class="floorplan-empty">
                 <h2>Draw the walls; the rooms appear on their own.</h2>
@@ -126,21 +123,42 @@
             <div id="floorplan-form" class="floorplan-form"></div>
         </div>
 
-        <div class="floorplan-sidebar__section">
-            <label class="floorplan-field"><span>Plan name</span>
-                <input class="form-input" type="text" id="floorplan-name" placeholder="As built"></label>
-            <label class="floorplan-field"><span>Valid from</span>
-                <input class="form-input" type="date" id="floorplan-valid-from"></label>
-            <div id="floorplan-versions" class="floorplan-versions" hidden></div>
-        </div>
+        <details class="floorplan-details-accordion">
+            <summary>Add more details</summary>
+            <div class="floorplan-sidebar__section">
+                <label class="floorplan-field"><span>Plan name</span>
+                    <input class="form-input" type="text" id="floorplan-name" placeholder="Ground floor"></label>
+                <label class="floorplan-field"><span>Date</span>
+                    <input class="form-input" type="date" id="floorplan-valid-from"></label>
+                <div id="floorplan-versions" class="floorplan-versions" hidden></div>
+            </div>
+        </details>
 
         <div class="floorplan-sidebar__actions">
             <button type="button" id="floorplan-save" class="btn btn--primary">Save</button>
-            <button type="button" id="floorplan-save-version" class="btn btn--ghost">Save as new version</button>
-            <button type="button" id="floorplan-publish" class="btn btn--ghost">Publish to wiki</button>
+            <div class="floorplan-more-menu">
+                <button type="button" id="floorplan-more-toggle" class="btn btn--icon" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="More">
+                    <i class="material-symbols-outlined">more_vert</i>
+                </button>
+                <div id="floorplan-more-list" class="floorplan-more-menu__list" hidden>
+                    <button type="button" id="floorplan-save-version" class="btn btn--ghost" disabled>Save as new version</button>
+                    <button type="button" id="floorplan-publish" class="btn btn--ghost" disabled>Publish to wiki</button>
+                </div>
+            </div>
         </div>
     </aside>
 </div>
+</div>{# /.floorplan-page #}
+
+{# Same "Manage Image Overlays" dialog as the pin-detail and wiki maps - see #}
+{# _map_annotations_panels.html, this is the same markup verbatim. #}
+{% if manage_overlays_url %}
+<dialog id="map-overlays-dialog" class="custom-layers-dialog ul-dialog" aria-labelledby="dialog-title-image-overlays">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Image Overlays" %}
+    <div id="map-overlays-dialog-body" class="custom-layers-dialog-body ul-dialog-body"
+         hx-get="{{ manage_overlays_url }}" hx-trigger="load" hx-swap="innerHTML"></div>
+</dialog>
+{% endif %}
 
 {{ outline_json|json_script:"floorplan-outline" }}
 {{ overlays_json|json_script:"floorplan-overlays" }}

@@ -32,7 +32,7 @@ import {
 import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
 import { PIXEL_TOLERANCES, snapPoint } from "../shared/floorplan/snapping";
 import { createMapImageOverlays, type MapOverlayEntry } from "../shared/map-image-overlays";
-import { tileLayer } from "../shared/map-layers";
+import { createMapLayers } from "../shared/map-layers";
 
 declare const L: typeof import("leaflet");
 
@@ -49,17 +49,62 @@ const WALL_STYLE: Record<string, { color: string; weight: number; dashArray?: st
 };
 
 const MARKER_ICON: Record<MarkerKind, string> = {
-    photo: "photo_camera",
     hazard: "warning",
-    entrance: "door_open",
     stair: "stairs",
     elevator: "elevator",
-    note: "sticky_note_2",
-    fixture: "settings",
 };
 
-const ROOM_FILL = { color: "#00897b", weight: 1, fillColor: "#26a69a", fillOpacity: 0.16 };
-const UNBOUND_FILL = { color: "#b0bec5", weight: 1, dashArray: "4 4", fillOpacity: 0.05 };
+/** Same palette family as the detail-pin map layer (map-annotations.ts's detailPinColors). */
+const MARKER_COLOR: Record<MarkerKind, string> = {
+    hazard: "#dc2626",
+    stair: "#6b7280",
+    elevator: "#6b7280",
+};
+
+// A white base once the exterior is drawn, so the plan reads as a real floor
+// rather than a translucent overlay on the map beneath it. Rooms tint that
+// base rather than replacing it, so named and unbound space both stay legible
+// against a desaturated backdrop (see `.floorplan-map.has-plan` in the SCSS).
+const ROOM_FILL = { color: "#00897b", weight: 1, fillColor: "#eef6f4", fillOpacity: 0.94 };
+const UNBOUND_FILL = { color: "#b0bec5", weight: 1, dashArray: "4 4", fillColor: "#ffffff", fillOpacity: 0.92 };
+
+/**
+ * A marker icon, styled like the site's detail-pin markers elsewhere
+ * (map-annotations.ts's `detailIcon()`): a colored glyph on a solid
+ * background circle, for contrast against whatever is under it - a bare
+ * glyph blended into the map beneath it.
+ */
+function markerIcon(kind: MarkerKind): L.DivIcon {
+    const color = MARKER_COLOR[kind] || "#2563eb";
+    const size = 22;
+    const pad = 5;
+    const total = size + pad * 2;
+    return L.divIcon({
+        className: "floorplan-marker",
+        html: `<span style="background:#fff;border:2px solid ${color};" class="floorplan-marker__badge"><span class="material-symbols-outlined" style="color:${color};font-size:${size}px;">${MARKER_ICON[kind] || "place"}</span></span>`,
+        iconSize: [total, total],
+        iconAnchor: [total / 2, total],
+        popupAnchor: [0, -total],
+    });
+}
+
+function markerPopupContent(marker: Marker): HTMLElement {
+    const wrap = document.createElement("div");
+    wrap.className = "floorplan-marker-popup";
+    const title = document.createElement("strong");
+    title.textContent = marker.name || marker.kind;
+    wrap.appendChild(title);
+    const kind = document.createElement("p");
+    kind.className = "floorplan-marker-popup__kind";
+    kind.textContent = marker.kind;
+    wrap.appendChild(kind);
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "btn btn--sm btn--danger floorplan-marker-popup__delete";
+    remove.textContent = "Delete";
+    wrap.appendChild(remove);
+    return wrap;
+}
 
 function boot(): void {
     const mapElement = document.getElementById("floorplan-map");
@@ -73,32 +118,60 @@ function boot(): void {
     const lat = parseFloat(mapEl.dataset.lat || "0");
     const lng = parseFloat(mapEl.dataset.lng || "0");
 
-    const map = L.map("floorplan-map", { zoomControl: true, doubleClickZoom: false }).setView([lat, lng], 20);
+    // attributionControl: false - required attribution renders in the page
+    // footer instead (show_map_footer=True; see createMapLayers' onAttribution below).
+    const map = L.map("floorplan-map", { zoomControl: true, doubleClickZoom: false, attributionControl: false }).setView([lat, lng], 20);
+
+    // Declared before createMapLayers below: its "underlay" custom toggle
+    // reads state.showUnderlay synchronously while the panel builds its
+    // initial button states, and a `const` referenced before its own
+    // declaration line throws (temporal dead zone), not just "reads undefined".
+    const state = {
+        doc: emptyDocument({ lat, lng }),
+        floorIndex: 0,
+        tool: "select" as Tool,
+        /** Chain of points for the wall currently being drawn. */
+        drawing: [] as Pt[],
+        cursor: null as Pt | null,
+        snapKind: "" as string,
+        selection: null as { kind: "wall"; wall: Wall } | { kind: "room"; room: RoomSeed } | { kind: "marker"; marker: Marker } | { kind: "opening"; wall: Wall; opening: Opening } | null,
+        markerKind: "hazard" as MarkerKind,
+        dirty: false,
+        suspendSnap: false,
+        faces: [] as Face[],
+        versions: [] as VersionSummary[],
+        showUnderlay: false,
+    };
 
     /**
-     * The backdrop to trace over. Aerial by default, on every floor.
-     *
-     * Imagery shows the building's footprint whichever storey is being drawn,
-     * which is exactly the part that stays constant, so it remains the best
-     * available reference above ground rather than a ground-floor-only aid. A
-     * georeferenced blueprint overlay is better still where one exists (see
-     * the pin's overlay manager) and simply renders on top. The other choices
-     * exist for the cases imagery does not serve - dense tree cover, or a
-     * cluttered site - and cost nothing: geometry is georeferenced
-     * independently of the backdrop, so lengths, angles and areas stay true
-     * whatever is beneath.
+     * The backdrop to trace over, via the same shared layers engine and panel
+     * every other map on the site uses (satellite/street/topographic, plus
+     * weather/borders overlays). Aerial by default: it shows the building's
+     * footprint whichever storey is being drawn, which is exactly the part
+     * that stays constant, so it remains the best available reference above
+     * ground rather than a ground-floor-only aid. A georeferenced blueprint
+     * overlay is better still where one exists (see "Image Overlays" in the
+     * layers panel, wired to this pin's own overlay manager) and simply
+     * renders on top - overlays live in Leaflet's overlayPane, not the
+     * tilePane the desaturation below dims, so a traced blueprint stays crisp.
      */
-    let baseLayer: L.TileLayer | null = null;
-    function setBase(kind: string): void {
-        if (baseLayer) {
-            map.removeLayer(baseLayer);
-            baseLayer = null;
-        }
-        if (kind === "blank") return;
-        baseLayer = tileLayer(kind, { maxZoom: 22, maxNativeZoom: 19 }).addTo(map);
-        baseLayer.bringToBack();
-    }
-    setBase("satellite");
+    const mapLayers = createMapLayers(map, {
+        root: document.getElementById("floorplan-layers"),
+        defaultBase: "satellite",
+        onAttribution: (text) => {
+            const el = document.getElementById("page-footer-attribution-text");
+            if (el) el.textContent = text;
+        },
+        custom: {
+            underlay: {
+                isActive: () => state.showUnderlay,
+                toggle: () => {
+                    state.showUnderlay = !state.showUnderlay;
+                    render();
+                },
+            },
+        },
+    });
 
     const outline = readJson<Array<[number, number]>>("floorplan-outline") || [];
     const overlays = readJson<MapOverlayEntry[]>("floorplan-overlays") || [];
@@ -115,23 +188,6 @@ function boot(): void {
     const ghostLayer = L.layerGroup().addTo(map);
     // Added first so it always paints beneath the live floor.
     const underlayLayer = L.layerGroup().addTo(map);
-
-    const state = {
-        doc: emptyDocument({ lat, lng }),
-        floorIndex: 0,
-        tool: "select" as Tool,
-        /** Chain of points for the wall currently being drawn. */
-        drawing: [] as Pt[],
-        cursor: null as Pt | null,
-        snapKind: "" as string,
-        selection: null as { kind: "wall"; wall: Wall } | { kind: "room"; room: RoomSeed } | { kind: "marker"; marker: Marker } | null,
-        markerKind: "photo" as MarkerKind,
-        dirty: false,
-        suspendSnap: false,
-        faces: [] as Face[],
-        versions: [] as VersionSummary[],
-        showUnderlay: false,
-    };
 
     const toLatLng = (p: Pt): [number, number] => {
         const world = projection.toWorld(p);
@@ -182,6 +238,12 @@ function boot(): void {
         const derived = deriveFaces(segments);
         state.faces = derived.faces;
 
+        // Once there's an exterior to read as "the building", the basemap
+        // recedes (desaturated, in the tile pane only - an image overlay
+        // renders in Leaflet's separate overlayPane, so a traced blueprint
+        // stays crisp) and the plan itself becomes the thing in focus.
+        mapEl.classList.toggle("has-plan", current.walls.some((wall) => wall.kind === "exterior"));
+
         // Rooms first so walls draw on top of their fills.
         for (const face of derived.faces) {
             const seed = current.rooms.find((room) => faceForSeed({ x: room.x, y: room.y }, [face]) === face);
@@ -196,8 +258,12 @@ function boot(): void {
                 permanent: true,
             });
             polygon.on("click", (event) => {
-                L.DomEvent.stop(event);
+                // Checked before stopping propagation: a room fill covers a
+                // large area, and a stop here regardless of tool silently
+                // swallowed every wall/marker click landing inside a room -
+                // exactly where someone is likeliest to want to add one.
                 if (state.tool !== "select") return;
+                L.DomEvent.stop(event);
                 const bound = seed || addSeedAt(centroid(face.ring));
                 state.selection = { kind: "room", room: bound };
                 renderSidebar();
@@ -221,8 +287,8 @@ function boot(): void {
                 ...(selected ? { color: "#00838f", weight: (style?.weight || 3) + 2 } : {}),
             }).addTo(wallLayer);
             line.on("click", (event) => {
-                L.DomEvent.stop(event);
                 if (state.tool !== "select") return;
+                L.DomEvent.stop(event);
                 state.selection = { kind: "wall", wall };
                 renderSidebar();
                 render();
@@ -232,14 +298,16 @@ function boot(): void {
         }
 
         for (const marker of current.markers) {
-            const icon = L.divIcon({
-                className: "floorplan-marker",
-                html: `<span class="material-symbols-outlined">${MARKER_ICON[marker.kind] || "place"}</span>`,
-                iconSize: [24, 24],
+            const node = L.marker(toLatLng({ x: marker.x, y: marker.y }), { icon: markerIcon(marker.kind), draggable: state.tool === "select" }).addTo(markerLayer);
+            node.bindPopup(markerPopupContent(marker), { closeButton: true });
+            node.on("popupopen", () => {
+                node.getPopup()?.getElement()?.querySelector(".floorplan-marker-popup__delete")?.addEventListener("click", () => {
+                    state.selection = { kind: "marker", marker };
+                    deleteSelection();
+                });
             });
-            const node = L.marker(toLatLng({ x: marker.x, y: marker.y }), { icon, draggable: state.tool === "select" }).addTo(markerLayer);
-            node.bindTooltip(marker.name || marker.kind, { direction: "top" });
             node.on("click", (event) => {
+                if (state.tool !== "select") return;
                 L.DomEvent.stop(event);
                 state.selection = { kind: "marker", marker };
                 renderSidebar();
@@ -270,10 +338,24 @@ function boot(): void {
         const b = { x: wall.bx, y: wall.by };
         const at = (t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
         for (const opening of wall.openings) {
+            const openingSelected = state.selection?.kind === "opening" && state.selection.opening === opening;
             const colour = opening.kind === "window" ? "#1e88e5" : "#fb8c00";
-            L.polyline([toLatLng(at(opening.t_start)), toLatLng(at(opening.t_end))], { color: colour, weight: 6 })
+            const line = L.polyline([toLatLng(at(opening.t_start)), toLatLng(at(opening.t_end))], {
+                color: openingSelected ? "#00838f" : colour,
+                weight: openingSelected ? 9 : 6,
+            })
                 .bindTooltip(opening.kind, { direction: "top" })
                 .addTo(wallLayer);
+            // Selectable independently of its wall, so an opening can be
+            // clicked and deleted (keyboard Delete, like every other
+            // selectable item) without selecting the wall it sits in first.
+            line.on("click", (event) => {
+                if (state.tool !== "select") return;
+                L.DomEvent.stop(event);
+                state.selection = { kind: "opening", wall, opening };
+                renderSidebar();
+                render();
+            });
             if (selected) renderOpeningHandles(wall, opening, at);
         }
     }
@@ -394,6 +476,27 @@ function boot(): void {
             y += p.y;
         }
         return { x: x / ring.length, y: y / ring.length };
+    }
+
+    /**
+     * Fly to whatever is already known, instead of opening on a fixed zoom
+     * around the pin's coordinate.
+     *
+     * Preferred order: this floor's own geometry (walls, then room seeds and
+     * markers if a floor somehow has those without walls), else the building
+     * outline, else the fixed fallback `setView` already gave on construction
+     * - a floor with nothing drawn and no known footprint has nothing to fit
+     * to.
+     */
+    function fitToContent(): void {
+        const current = floor();
+        const points: Pt[] = [];
+        for (const wall of current.walls) points.push({ x: wall.ax, y: wall.ay }, { x: wall.bx, y: wall.by });
+        if (!points.length) for (const room of current.rooms) points.push({ x: room.x, y: room.y });
+        if (!points.length) for (const marker of current.markers) points.push({ x: marker.x, y: marker.y });
+        const latLngs = points.length ? points.map(toLatLng) : outline.length ? outline.map(([outlineLat, outlineLng]): [number, number] => [outlineLat, outlineLng]) : null;
+        if (!latLngs) return;
+        map.fitBounds(L.latLngBounds(latLngs), { padding: [32, 32], maxZoom: 22 });
     }
 
     /**
@@ -527,7 +630,10 @@ function boot(): void {
             // floor below, is almost always the next thing wanted, and making
             // the user hunt for and click their own new marker to do it is a
             // step with no purpose.
-            const placed: Marker = { uuid: nextLocalId(), kind: state.markerKind, x: raw.x, y: raw.y, name: "" };
+            // Pre-filled with the type as text - almost always exactly what
+            // someone wants ("Hazard"), and cheaper to edit than to type from
+            // scratch when it is not.
+            const placed: Marker = { uuid: nextLocalId(), kind: state.markerKind, x: raw.x, y: raw.y, name: titleCase(state.markerKind) };
             floor().markers.push(placed);
             state.selection = { kind: "marker", marker: placed };
             renderSidebar();
@@ -574,6 +680,7 @@ function boot(): void {
         if (selection.kind === "wall") current.walls = current.walls.filter((w) => w !== selection.wall);
         if (selection.kind === "room") current.rooms = current.rooms.filter((r) => r !== selection.room);
         if (selection.kind === "marker") current.markers = current.markers.filter((m) => m !== selection.marker);
+        if (selection.kind === "opening") selection.wall.openings = selection.wall.openings.filter((o) => o !== selection.opening);
         state.selection = null;
         renderSidebar();
         markDirty();
@@ -589,34 +696,69 @@ function boot(): void {
         mapEl.classList.toggle("is-drawing", tool !== "select");
         const hint = document.getElementById("floorplan-hint");
         if (hint) {
-            hint.textContent =
-                tool === "wall"
-                    ? "Click to place corners · click the first corner to close · Esc finishes · Alt disables snapping"
-                    : tool === "marker"
-                      ? "Click to drop a marker"
-                      : "Click a wall or room to edit it · Delete removes it";
+            // Select needs no hint - the interaction is the ordinary "click a
+            // thing to work on it" every other tool on the site already uses.
+            hint.textContent = tool === "wall" ? "Click to place corners · click the first corner to close · Esc finishes · Alt disables snapping" : tool === "marker" ? "Click to drop a marker" : "";
         }
         renderSidebar();
     }
 
     // ------------------------------------------------------------- sidebar
 
+    function renameFloor(item: Floor): void {
+        const value = window.prompt("Floor name", item.name || `Level ${item.level}`);
+        if (value === null) return;
+        item.name = value.trim();
+        markDirty();
+        renderSidebar();
+    }
+
+    function deleteFloor(index: number): void {
+        const item = state.doc.floors[index] as Floor;
+        if (state.doc.floors.length <= 1) return;
+        if (!window.confirm(`Delete "${item.name || `Level ${item.level}`}"? This removes everything drawn on it.`)) return;
+        state.doc.floors.splice(index, 1);
+        state.floorIndex = Math.min(state.floorIndex, state.doc.floors.length - 1);
+        state.selection = null;
+        renderSidebar();
+        markDirty();
+    }
+
     function renderFloorTabs(): void {
         const host = document.getElementById("floorplan-floors");
         if (!host) return;
         host.replaceChildren();
         state.doc.floors.forEach((item, index) => {
+            const tab = document.createElement("span");
+            tab.className = "floorplan-floor-tab";
             const button = document.createElement("button");
             button.type = "button";
             button.className = `btn btn--sm${index === state.floorIndex ? " btn--primary" : " btn--ghost"}`;
             button.textContent = item.name || `Level ${item.level}`;
+            button.title = "Double-click to rename";
             button.addEventListener("click", () => {
                 state.floorIndex = index;
                 state.selection = null;
                 renderSidebar();
                 render();
+                fitToContent();
             });
-            host.appendChild(button);
+            button.addEventListener("dblclick", () => renameFloor(item));
+            tab.appendChild(button);
+            if (state.doc.floors.length > 1) {
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "btn btn--icon-sm floorplan-floor-tab__delete";
+                remove.innerHTML = '<i class="material-symbols-outlined">close</i>';
+                remove.setAttribute("aria-label", `Delete ${item.name || "floor"}`);
+                remove.title = "Delete floor";
+                remove.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    deleteFloor(index);
+                });
+                tab.appendChild(remove);
+            }
+            host.appendChild(tab);
         });
         const add = document.createElement("button");
         add.type = "button";
@@ -759,6 +901,14 @@ function boot(): void {
             const heading = document.createElement("h3");
             heading.textContent = "Marker";
             host.appendChild(heading);
+            const name = document.createElement("input");
+            name.className = "form-input";
+            name.value = marker.name || "";
+            name.addEventListener("input", () => {
+                marker.name = name.value;
+                state.dirty = true;
+            });
+            host.appendChild(field("Label", name));
             host.appendChild(
                 field(
                     "Type",
@@ -768,15 +918,23 @@ function boot(): void {
                     }),
                 ),
             );
-            const name = document.createElement("input");
-            name.className = "form-input";
-            name.value = marker.name || "";
-            name.addEventListener("input", () => {
-                marker.name = name.value;
-                state.dirty = true;
-            });
-            host.appendChild(field("Label", name));
             if (CONNECTOR_KINDS.has(marker.kind)) renderConnectorControls(host, marker);
+        }
+
+        if (selection.kind === "opening") {
+            const opening = selection.opening;
+            const heading = document.createElement("h3");
+            heading.textContent = "Opening";
+            host.appendChild(heading);
+            host.appendChild(
+                field(
+                    "Type",
+                    select(["door", "doorway", "window", "hatch"], opening.kind, (v) => {
+                        opening.kind = v as Opening["kind"];
+                        markDirty();
+                    }),
+                ),
+            );
         }
 
         const remove = document.createElement("button");
@@ -919,12 +1077,17 @@ function boot(): void {
         else state.dirty = false;
         setTool("select");
         render();
+        fitToContent();
+        updateMoreMenu();
     }
 
     async function save(asNewVersion = false): Promise<void> {
         const nameInput = document.getElementById("floorplan-name") as HTMLInputElement | null;
         const validFrom = document.getElementById("floorplan-valid-from") as HTMLInputElement | null;
-        state.doc.name = nameInput?.value || "";
+        // A plan name is rarely worth asking for up front - the floor it is
+        // on already has one ("Ground floor"), and that is a fine default a
+        // user can override in "Add more details" when it matters.
+        state.doc.name = nameInput?.value || floor().name || "";
         state.doc.valid_from = validFrom?.value || null;
         const payload: FloorplanDocument = { ...state.doc };
         // Dropping the uuid is what makes the save fork a new dated version
@@ -952,6 +1115,7 @@ function boot(): void {
             const body = (await response.json()) as { ok?: boolean; floorplan?: FloorplanDocument };
             if (body.floorplan?.uuid) state.doc.uuid = body.floorplan.uuid;
             state.dirty = false;
+            updateMoreMenu();
             toast.success(asNewVersion ? "Saved as a new version." : "Floorplan saved.");
         } catch {
             toast.warning("Could not save this floorplan.");
@@ -960,9 +1124,46 @@ function boot(): void {
         }
     }
 
+    /**
+     * "Save as new version" and "Publish to wiki" only make sense once
+     * there is a first version to fork or publish - shown to a brand-new
+     * plan, both would either mean the same thing as Save or fail outright.
+     */
+    function updateMoreMenu(): void {
+        const hasVersion = Boolean(state.doc.uuid);
+        for (const id of ["floorplan-save-version", "floorplan-publish"]) {
+            const button = document.getElementById(id) as HTMLButtonElement | null;
+            if (button) button.disabled = !hasVersion;
+        }
+    }
+
+    const moreToggle = document.getElementById("floorplan-more-toggle") as HTMLButtonElement | null;
+    const moreList = document.getElementById("floorplan-more-list");
+    function closeMoreMenu(): void {
+        if (!moreList || moreList.hidden) return;
+        moreList.hidden = true;
+        moreToggle?.setAttribute("aria-expanded", "false");
+    }
+    moreToggle?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (!moreList) return;
+        moreList.hidden = !moreList.hidden;
+        moreToggle.setAttribute("aria-expanded", String(!moreList.hidden));
+    });
+    document.addEventListener("click", (event) => {
+        if (moreList && !moreList.hidden && !moreList.contains(event.target as Node) && event.target !== moreToggle) closeMoreMenu();
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeMoreMenu();
+    });
+
     document.getElementById("floorplan-save")?.addEventListener("click", () => void save(false));
-    document.getElementById("floorplan-save-version")?.addEventListener("click", () => void save(true));
+    document.getElementById("floorplan-save-version")?.addEventListener("click", () => {
+        closeMoreMenu();
+        void save(true);
+    });
     document.getElementById("floorplan-publish")?.addEventListener("click", () => {
+        closeMoreMenu();
         void (async () => {
             if (!state.doc.uuid) {
                 toast.info("Save the floorplan before publishing it.");
@@ -992,23 +1193,6 @@ function boot(): void {
             setTool("marker");
         });
     }
-    for (const button of document.querySelectorAll<HTMLButtonElement>("[data-base]")) {
-        button.addEventListener("click", () => {
-            setBase(button.dataset.base || "satellite");
-            for (const other of document.querySelectorAll<HTMLButtonElement>("[data-base]")) {
-                const active = other === button;
-                other.classList.toggle("is-active", active);
-                other.setAttribute("aria-pressed", String(active));
-            }
-        });
-    }
-    document.getElementById("floorplan-underlay")?.addEventListener("click", (event) => {
-        state.showUnderlay = !state.showUnderlay;
-        const button = event.currentTarget as HTMLButtonElement;
-        button.classList.toggle("is-active", state.showUnderlay);
-        button.setAttribute("aria-pressed", String(state.showUnderlay));
-        render();
-    });
     document.getElementById("floorplan-start-outline")?.addEventListener("click", () => {
         if (seedFromOutline(floor())) markDirty();
         else toast.info("No building outline is known for this place yet.");
@@ -1040,6 +1224,10 @@ function boot(): void {
     });
 
     void load();
+}
+
+function titleCase(s: string): string {
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
 function readJson<T>(id: string): T | null {

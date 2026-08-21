@@ -4,6 +4,12 @@
 // specifics live here.
 @use 'variables' as *;
 
+// Breathing room below the subnav band, matching .memories-tab-page's own
+// margin-top - without it the editor's toolbar sits flush against the tabs.
+.floorplan-page {
+    margin-top: 1rem;
+}
+
 .floorplan-editor {
     display: grid;
     grid-template-columns: 1fr 320px;
@@ -27,18 +33,22 @@
     &.is-drawing {
         cursor: crosshair;
     }
+
+    // Once there's an exterior wall, the basemap recedes so the plan itself
+    // is the thing in focus - image overlays (a traced blueprint) are
+    // unaffected, since Leaflet renders those in a separate pane.
+    &.has-plan .leaflet-tile-pane {
+        filter: saturate(.35) brightness(.97);
+    }
 }
 
 .floorplan-toolbar {
     display: flex;
-    justify-content: space-between;
     align-items: center;
     gap: .75rem;
     margin-bottom: .5rem;
     flex-wrap: wrap;
 
-    &__tools,
-    &__base,
     &__markers {
         display: flex;
         gap: .25rem;
@@ -211,15 +221,97 @@
     margin-left: 10px;
 }
 
-.floorplan-marker {
+// A background circle around the glyph, same treatment as detail-pin markers
+// elsewhere on the site (map-annotations.ts's detailIcon()) - a bare icon on
+// satellite imagery has too little contrast to read at a glance.
+.floorplan-marker__badge {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--primary-color);
+    border-radius: 50%;
+    padding: 3px;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 35%);
 
     .material-symbols-outlined {
-        font-size: 1.25rem;
-        text-shadow: 0 1px 2px rgb(0 0 0 / 45%);
+        line-height: 1;
+    }
+}
+
+.floorplan-marker-popup {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    min-width: 8rem;
+
+    strong {
+        font-size: .9rem;
+    }
+
+    &__kind {
+        margin: 0;
+        font-size: .78rem;
+        color: var(--ul-grey-6);
+        text-transform: capitalize;
+    }
+}
+
+.floorplan-floor-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+
+    &__delete {
+        color: var(--ul-grey-5);
+
+        &:hover {
+            color: $color-red-600;
+        }
+    }
+}
+
+// Kebab menu for the two actions that only make sense after a first save
+// (Save as new version, Publish to wiki) - deliberately not as prominent as
+// Save itself.
+.floorplan-more-menu {
+    position: relative;
+
+    &__list {
+        position: absolute;
+        bottom: calc(100% + .3rem);
+        right: 0;
+        z-index: 5;
+        display: flex;
+        flex-direction: column;
+        gap: .2rem;
+        padding: .4rem;
+        min-width: 11rem;
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-border);
+        border-radius: $radius-sm;
+        box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+
+        &[hidden] {
+            display: none;
+        }
+
+        .btn {
+            justify-content: flex-start;
+        }
+    }
+}
+
+// "Add more details" - Plan name and Date are worth setting sometimes, but
+// not worth showing by default on every plan.
+.floorplan-details-accordion {
+    summary {
+        cursor: pointer;
+        font-size: .82rem;
+        font-weight: 600;
+        color: var(--ul-grey-6);
+    }
+
+    > .floorplan-sidebar__section {
+        margin-top: .5rem;
     }
 }
 

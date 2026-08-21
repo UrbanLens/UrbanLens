@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
 from django.views import View
 from django.views.generic import TemplateView
 
@@ -386,4 +387,11 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
         # The reference pool attaches to every item, so the photos already on
         # this pin are the likeliest evidence for a wall, a door or its lock.
         context["photos_json"] = [{"uuid": str(image.uuid), "url": image.image.url, "caption": image.caption or ""} for image in pin.images.order_by("-created")[:60] if image.image]
+        # Same "Manage Image Overlays" dialog as the pin-detail and wiki maps -
+        # browsing this pin's own photos for a blueprint/site plan to pin and
+        # skew onto the floorplan map, not a bespoke picker.
+        context["manage_overlays_url"] = reverse("pin.overlays", args=[pin.slug])
+        # attributionControl is off on this map; required attribution renders
+        # in the page footer instead (see createMapLayers' onAttribution).
+        context["show_map_footer"] = True
         return context

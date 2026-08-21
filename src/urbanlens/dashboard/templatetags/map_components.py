@@ -252,6 +252,17 @@ register_map_layer(
 )
 register_map_layer(
     MapLayerSpec(
+        key="underlay",
+        kind="custom",
+        label="Floor below",
+        aria_label="Show the floor below, faintly",
+        tooltip="Show the floor below",
+        icon="layers",
+        button_id="floorplan-underlay-button",
+    )
+)
+register_map_layer(
+    MapLayerSpec(
         key="nearby",
         kind="custom",
         label="Nearby Pins",

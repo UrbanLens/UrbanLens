@@ -1061,10 +1061,10 @@ class FloorplanMarkerTests(TestCase):
         self.assertEqual(linked.count(), 2)
         self.assertEqual({marker.floor.level for marker in linked}, {0, 1})
 
-    def test_a_photo_marker_keeps_its_facing(self) -> None:
+    def test_a_marker_keeps_its_facing(self) -> None:
         save_document(
             self.floorplan,
-            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "photo", "x": 1.0, "y": 1.0, "facing_degrees": 217.5}]}]},
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "facing_degrees": 217.5}]}]},
             profile=self.profile,
         )
 

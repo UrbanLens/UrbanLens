@@ -14,7 +14,10 @@ export type WallKind = "exterior" | "interior" | "virtual" | "collapsed";
 export type WallThickness = "thin" | "normal" | "thick";
 export type OpeningKind = "door" | "doorway" | "window" | "hatch";
 export type OpeningSwing = "none" | "left" | "right" | "double";
-export type MarkerKind = "photo" | "hazard" | "entrance" | "stair" | "elevator" | "note" | "fixture";
+// Trimmed to the kinds that earn their own icon: an entrance is already a
+// door opening on a wall, and "photo"/"note"/"fixture" markers carried no
+// information a label field didn't already say.
+export type MarkerKind = "hazard" | "stair" | "elevator";
 
 export interface Opening {
     uuid?: string;

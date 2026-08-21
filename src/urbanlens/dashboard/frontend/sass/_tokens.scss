@@ -296,7 +296,12 @@ $selected-color: $color-blue-300;
 $section-header-bg: $color-blue-300;
 
 // -- Semantic colors -----------------------------------------------------------
-$text-primary: $color-grey-9;
+// var(), not the raw color: every --ul-grey-N token inverts under
+// [data-theme="dark"] (see below), and $text-primary is compiled once at
+// build time - a raw color here freezes every consumer (.form-input's <select>
+// text among them) at the light-mode value, unreadable once its background
+// (var(--ul-surface-raised)) goes dark.
+$text-primary: var(--ul-grey-9);
 $text-secondary: $color-grey-6;
 $text-muted: $color-grey-4;
 $border-color: $color-grey-0b;
