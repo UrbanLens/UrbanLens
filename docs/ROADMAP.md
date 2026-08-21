@@ -601,6 +601,17 @@ Do not start these without a written design (add it to `docs/`):
 - **Property ownership records via county-strategy AI** (UL-46) — needs the AI-sandbox
   groundwork (UL-163) and a strategy-persistence schema; big but well-sketched in TODO.
 - **Offline maps** (UL-287), **native apps** (UL-72+) — out of current scope; note only.
+- **Hidden reputation/points system gating sensitive wiki content** (UL-397/UL-398) — design doc
+  at `docs/designs/reputation-and-gating.md` (draft, needs Jess's sign-off before code). Most of
+  the scoring/gating primitives already exist (Consensus points, `WikiStatVote`,
+  `SiteFeature`/`user_has_feature`, `Comment.pending_scan`) — this is largely an integration and
+  product-values design, not new infrastructure. Open conflict to resolve first: an existing
+  stated stance against admin-visible individual reputation scores (`controllers/
+  site_admin_models.py`'s docstring), which the new ask directly touches.
+- **Facts model: topic/geography-scoped reliability** (UL-399) — the Facts model itself already
+  exists and works (`dashboard/models/facts/`); missing piece is decomposing
+  `ConsensusProfile.trust_score`'s single global scalar into per-category/per-region posteriors.
+  See the same design doc.
 
 ### 4.5 Tier 5: UI polish backlog
 
@@ -624,6 +635,16 @@ of them may already be complete, and "fixing" them will lead to unwanted ui chan
 - Template partial reorg (UL-292); vestigial-asset cleanup task (UL-205, UL-370).
 - `TODO.md` hygiene (UL-363): when you complete or invalidate an item, strike it with an
   evidence note (the 2026-07-18 strike-sweep set the precedent format).
+- Comment-history cleanup sweep (UL-400) — "used to be X, now Y" narration instead of
+  current-behavior description; `tasks.py`, `controllers/pin.py`,
+  `services/social/friendship.py` are the densest spots found so far.
+- SCSS convention/duplication cleanup (UL-401) — bespoke button/component styles instead of the
+  shared `.btn` convention; measure with the DevTools disable-each-rule method before assuming
+  scale. Also 707 inline `style=` attributes across 114 templates to migrate to SCSS (excluding
+  email templates, where inline styles are required).
+- Floor plan editor CSS-convention + copy polish (UL-402) — not a redesign; audit found the
+  feature is complete and correctly built, just using one-off button classes instead of `.btn`
+  and a couple of overly wordy strings.
 
 ### 4.7 API & data-source expansion (see `docs/reports/api-expansion-candidates.md` for the full menu)
 

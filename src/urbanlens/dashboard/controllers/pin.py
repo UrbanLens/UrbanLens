@@ -90,18 +90,18 @@ _CONDENSED_PLUGIN_TABS = {
 # _viewer_may_see_panel), NOT by membership here - a panel's gate has to be one
 # fact in one place, or the tab strip and the endpoint that serves the tab's
 # content end up disagreeing about who may see it. That disagreement is not
-# hypothetical: this dict used to BE the gate, and pin.panel served every one
-# of these panels to anyone who typed the URL.
+# hypothetical: this dict must never be read as the access gate - if
+# pin.panel served from it directly instead of each source's own
+# required_feature, every panel here would be visible to anyone who typed
+# the URL.
 _NEARBY_RESEARCH_TABS = {
     "epa_echo": "EPA",
 }
 
 # InfoPanelSource keys condensed into the "Location Data" tab strip alongside
 # the (bespoke, non-InfoPanelSource) Nominatim/OpenStreetMap panel - see
-# _pin_location_data_tabs.html. These used to be separate standalone cards
-# with no explanation of how they differ from one another or from OpenStreetMap;
-# grouping them as tabs of one card makes clear they're independent geocoding/
-# data providers rather than duplicated data.
+# _pin_location_data_tabs.html. Grouped as tabs of one card so it's clear
+# they're independent geocoding/data providers rather than duplicated data.
 _LOCATION_DATA_PLUGIN_TABS = {
     "photon": "Photon",
     "overture_building_attributes": "Building Characteristics",
@@ -112,10 +112,10 @@ _LOCATION_DATA_PLUGIN_TABS = {
 #: Every panel key rendered inside a tab strip rather than as its own card.
 #: A panel's chrome is decided here, not by the panel: only this module knows
 #: whether a given key ends up inside a strip (which supplies the card) or
-#: standalone (which does not). Panels used to declare ``nested`` themselves in
-#: ``render_context``, and eight standalone ones declared it wrongly - so they
-#: rendered with no card at all, which is what "Water & Hydrology is not styled
-#: like the other cards" turned out to be.
+#: standalone (which does not). A panel declaring its own ``nested`` status in
+#: ``render_context`` cannot be trusted here - a wrong self-declaration
+#: renders with no card at all, exactly the shape of "Water & Hydrology is
+#: not styled like the other cards."
 _TABBED_PANEL_KEYS = _CONDENSED_PLUGIN_TABS.keys() | _NEARBY_RESEARCH_TABS.keys() | _LOCATION_DATA_PLUGIN_TABS.keys()
 
 # Mirrors plugins.builtin.open_elevation's own module-level constant - kept as

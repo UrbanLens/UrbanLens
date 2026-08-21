@@ -238,6 +238,67 @@ Full design: `docs/designs/spotguessr.md`.
 * Voice chat: peer-to-peer WebRTC mesh signaled over Django Channels (no new server infra). [UL-395]
 * Engagement polish: reveal animations, leaderboards/streaks, competitive and non-competitive play framing. [UL-396]
 
+## Reputation, Trust & Sensitive-Content Gating
+Full design: `docs/designs/reputation-and-gating.md` — **draft, needs Jess's sign-off on several
+open questions (see "Decisions needed" in the doc) before any code lands**, most importantly
+whether a new admin-visible per-user reputation number conflicts with the existing "a reputation
+score for an individual is not something this application has a use for" stance in
+`controllers/site_admin_models.py`.
+* Hidden, never-user-visible reputation/points system gating sensitive wiki content from
+  brand-new/unproven accounts, scaled by a location's existing `WikiStatVote`
+  vulnerability/danger composite. The defining property: **a contribution's value is a function
+  of how badly the target needed it, not a constant per action type** - a photo on a wiki with no
+  photos at all is worth far more than the Nth photo; a cover photo where none existed is worth
+  more than replacing one. Layered on top: recency/metadata quality bonuses, retroactive
+  amplification when others (especially non-friends) positively interact with a contribution,
+  fractional per-period diminishing returns, per-activity and per-wiki caps, and retraction when
+  a contribution is reverted. Lower-weight engagement signals: pin count, geographic pin/view
+  breadth (new metric - nothing similar exists today), logins/streaks, friends, donations,
+  invites, trips, comments/DMs. Subscription-tier bypass via the existing
+  `SiteFeature`/`user_has_feature` mechanism. **Note: `services/consensus/points.py` is NOT a
+  usable base** - it is a visible game score with fixed per-action integer constants and no event
+  ledger, which makes the admin breakdown, per-period decay, caps, and retraction all
+  structurally impossible on it. Needs its own append-only ledger + scorer registry; see the
+  design doc before writing any code. [UL-397]
+* ~~**Prerequisite for UL-397**: add missing attribution FKs to child wikis, wiki boundaries, and
+  cover-photo changes so they can be scored.~~ INVESTIGATED 2026-08-21, **no work needed - do not
+  do this.** All three "missing FK" fixes are wrong on closer reading: (a) `Wiki.created_by` is
+  not general attribution, it "solely gates self-service deletion" (`can_be_deleted_by`), so
+  populating it on child wikis would silently grant a unilateral delete permission that doesn't
+  exist today; (b) `Boundary.profile` is documented as mirroring `pin.profile` (owner of a
+  *personal* boundary) and the source-candidate unique constraint requires it null - a
+  community-editable wiki boundary has no owner, only history; (c) adding a `cover_photo` key to
+  `WikiEdit.changes` would break revert (`revert_edit_fields`' fallback `setattr`s the stringified
+  value onto what is a ForeignKey) and render a bare pk to users in the generic history template.
+  (a) and (b) already have working attribution via their paired `WikiEdit.editor`. (c) becomes a
+  constraint on UL-397 instead: the cover-photo trigger can't be a plain `post_save` (the previous
+  value is gone by then) and must emit explicitly or diff on `pre_save`. See the design doc's
+  "Attribution gaps" section. [UL-404]
+* Sensitivity-gated wiki content consumer built on UL-397: marker/entrance map detail, map
+  markup/custom layers (needs a new private-until-earned layer field - `Wiki.officially_created`
+  is the pattern to copy), other users' comments (`Comment.pending_scan`'s
+  author-only-until-cleared field is a directly reusable precedent for tenure-gated reply
+  visibility), and the real (un-fuzzed) pinned-user count. Includes the "earn your way in
+  locally" mechanic (a first-of-its-kind contribution - first comment, first markup - grants
+  visibility into just that thread/layer before the general threshold is met). [UL-398]
+* Facts model topic/geography-scoped reliability. The Facts model itself already exists and
+  already feeds the trivia and consensus games (`dashboard/models/facts/`, migration
+  `0020_facts`) with trust-weighted, recency-decayed, conflict-aware confidence
+  (`services/facts/confidence.py`) - it does not need to be built. What's missing:
+  `ConsensusProfile.trust_score` is one global scalar per profile, not split by topic/category or
+  geography, so a source can't yet be reliable about trains but not architecture. Needs
+  per-category trust posteriors (mirroring the existing per-mode Glicko-2 pattern) and a
+  topic/category dimension on `Fact`/`FactEvidence`. Note: photo relevant/not-relevant votes
+  (`MediaRelevance`) are currently unweighted net-count only, not trust-weighted as previously
+  assumed - correct that before scoping any work that depends on it. [UL-399]
+* Temporal fact-change tracking: record *when* a real-world fact changed (fences installed,
+  building demolished, camera relocated) as its own timestamped fact, reusing the Facts model
+  rather than adding history fields to every model on every table (explicitly ruled out on
+  cost/query-complexity grounds). No UI needed yet - groundwork only, so a later feature can
+  reconstruct "what did this location look like on date X" without having lost the data. Confirm
+  whether `FactEvidence`'s existing fields already support an optional end date before assuming
+  new schema is needed. [UL-403]
+
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
 * Visualize a location, room, etc, by browsing similar photos chronologically in a visually stimulating way. [UL-73]
@@ -311,6 +372,104 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 ### Fix Generics
 * tags = Label.objects.tags() (and also .categories()) -> Cannot access attribute "categories" for class "Manager" [UL-126]
 * profile = user.profile -> Cannot access attribute "profile" for class "User" [UL-127]
+
+### Comment Hygiene
+* Repo-wide sweep for comments narrating development history ("used to be X, now Y") instead of
+  describing current behavior - already prohibited by CLAUDE.md but still widespread per a
+  2026-08-21 grep sample (900+ raw hits across 500+ files, inflated by false positives like
+  present-tense "no longer exists" status strings, but genuine violations are real and common,
+  not edge cases). Densest concentrations found so far: `tasks.py`, `controllers/pin.py`,
+  `services/social/friendship.py` - good starting points for a targeted pass. Rewrite in place
+  when touching a file for other reasons; a dedicated sweep of the densest files is also
+  worthwhile on its own. [UL-400]
+
+### SCSS / CSS Convention Cleanup
+* Audit and eliminate bespoke button/component CSS that duplicates the shared `.btn` + BEM
+  modifier convention (`_buttons.scss:15`, `@include btn-base`/`btn-primary`/`btn-ghost`/etc.)
+  instead of using it. A 2026-08-21 measurement found 115 non-conventional `*-btn`/`*-button`
+  classes across 53,281 lines of SCSS (72 files); a 4-item sample found real raw chrome
+  duplication in 1/4, legitimate layout-only overrides in 2/4, and correct shared-mixin use in
+  1/4 - so the true duplication rate needs the full DevTools disable-each-rule audit (open the
+  element, disable each top-level style rule, check whether the computed style actually changes)
+  before assuming scale; a prior estimate of "roughly half the SCSS" was not confirmed by this
+  sample and is likely high. Separately: 707 inline `style=` attributes across 114 templates
+  (worst offenders: `pages/map/index.html`, `pages/trips/detail.html`, `pages/setup/index.html`,
+  several `admin_stats_*`/`site_admin_stats*` partials) should move into SCSS - **except** email
+  templates (`email/*.html`, `registration/email/*.html`), where inline styles are a hard
+  requirement for email-client rendering, not a bug to fix. [UL-401]
+## Floorplan Editor Rework
+The feature shipped **completely non-functional** and needs a fundamental rework, not polish.
+
+* ~~The editor is dead at runtime: nothing renders for a new floorplan and no button does
+  anything.~~ RESOLVED 2026-08-21: root cause was `pages/floorplans/editor.html:96` loading the
+  bundle as `<script src=... defer>` when `bin/build-frontend.ts` emits everything in `ts/entries/`
+  as **ESM**. A classic script cannot parse `import`, so the browser threw
+  `Cannot use import statement outside a module` at parse time and **not one line of the 36KB
+  bundle ever executed** - no map, no floor tabs, no listeners on any of the 14 buttons. This was
+  the only page in the codebase loading an `entries/` bundle without `type="module"`; all 11
+  others have it. Verified in a real headless browser before/after: before = map dead, 0 floor
+  tabs, tools unresponsive, fatal pageerror; after = map initialised, floor tabs rendered, tools
+  respond, zero console errors. Also fixed while here: Leaflet's JS was loaded unpinned
+  (`unpkg.com/leaflet`) while its CSS was pinned to 1.9.4 with SRI - Leaflet 2.x is ESM-only and
+  exports no global `L`, so the day `latest` moved this page would have broken again for a
+  completely different reason; now pinned to 1.9.4 with SRI, matching `safety/detail.html`. And
+  `currentFloor()` dereferenced a null doc if a tool was clicked in the window between the toolbar
+  binding and `load()` resolving. [UL-405]
+* ~~**Wall-first geometry model.**~~ RESOLVED 2026-08-21: walls are now the only stored geometry
+  and rooms are *derived* - the enclosed faces of the wall graph, found by a weld -> planarize ->
+  heal -> half-edge face walk (`frontend/ts/shared/floorplan/planar.ts`). A room is a **seed
+  point**, not a polygon (Revit's model), so it binds to whichever face contains it and a geometry
+  edit can never orphan a room's name; an unbound seed renders as a legible "not enclosed" state
+  instead of vanishing. Near-miss corners are healed with a *virtual* join so the room closes
+  without moving the coordinates the user drew (there is a test asserting the input is unchanged
+  after derivation). Geometry moved from WGS-84 to **plan-local metres** with one shared origin
+  per plan: degrees are the wrong space to compute in (a degree of longitude is ~74 km here vs
+  111 km at the equator, so lengths, angles and right-angle snapping are all wrong without a
+  latitude correction), and one origin across floors is what makes floors stackable. 51 TS tests
+  cover T-junctions, heal tolerance boundaries, overshoot, nested rooms, reversed/duplicate walls,
+  slivers, L-shapes, and a 100-room performance check. [UL-406]
+* ~~**Reduce the tool set.**~~ RESOLVED 2026-08-21: eight tools became three (select / wall /
+  marker). Doors and windows are now `FloorplanOpening` rows - intervals `[t_start, t_end]` along
+  a wall with a CHECK constraint and CASCADE delete - rather than free-standing objects, because
+  they cannot exist without a wall and must move with it. Stair/elevator/hazard/photo/entrance
+  collapsed into one marker whose *kind* is a property. [UL-407]
+* ~~**Navigation and page chrome.**~~ RESOLVED 2026-08-21: the page now fills base.html's
+  `{% block subnav %}` with the real `ul-subnav-tabs`/`ul-subnav-tab` components and passes
+  `back_url`/`back_label` to the shared hero. **The building picker is no longer a gate** - the
+  editor always opens, and known buildings are offered as an optional shortcut rather than a dead
+  end telling the user to go pin something first. `Floorplan.place` is nullable and a placeless
+  plan is scoped to its pin (`place=None` alone would have matched every placeless plan on the
+  site - guarded, with a test). [UL-408]
+* ~~**Chrome/UX polish**~~ RESOLVED 2026-08-21: all controls use `.btn` + real BEM modifiers;
+  bespoke button chrome deleted from `_floorplans.scss`; the wordy `title=""` tooltips are gone
+  (replaced by `aria-label`s and one contextual hint line that changes with the active tool); an
+  empty canvas now offers "start from a rectangle" (one click produces four walls *and* a derived
+  room, which teaches the model in one action) alongside "draw walls". [UL-409]
+* Deferred, deliberately: opening drag-handles along a wall (openings are placed mid-wall and
+  edited via the sidebar for now), the adjacent-floor underlay and `connector_id` linking UI (the
+  field exists and is stored), per-plan drawing-axis rotation UI (`rotation_degrees` is stored and
+  honoured by angle snapping, but nothing sets it yet), and scale calibration so area badges can
+  be trusted. Also note `FloorplanLock` was deleted with the old element model - locks are
+  genuinely useful urbex data and want re-adding against `FloorplanOpening`. [UL-410]
+
+* ~~Floor plan editor: none of its buttons/dropdowns/toolbar controls
+  (`.floorplan-save`, `.floorplan-floor-tab`, `.floorplan-toolbar`, etc.) reuse the shared `.btn`
+  classes - all bespoke one-off styles in `_floorplans.scss`. Also tighten several notably wordy
+  UI strings (the no-building-fallback message and the REData-origin banner are the longest).~~
+  PARTIALLY RESOLVED 2026-08-21: a 2026-08-21 audit did **not** find the "form visible before its
+  trigger is clicked" anti-pattern here that was suspected and originally motivated a full
+  redesign - the editor's dynamic containers are correctly empty-until-populated by JS, so scope
+  was always CSS-convention + copy-editing polish, not a redesign. Found and fixed a real,
+  separate bug while investigating: `_floorplans.scss` referenced `--accent-color`/`--border-color`
+  as CSS custom properties that were never defined anywhere in the codebase (confirmed via
+  grep), so every floorplan control had silently always rendered at its hardcoded SCSS fallback
+  color (teal `#00897b`, grey `#ccc`) - completely disconnected from the site's real theme
+  tokens and dark/light switching. Repointed to the real tokens already used identically
+  elsewhere (`var(--primary-color)`, `var(--ul-surface-border)`). The two wordy strings were
+  tightened. **Still open**: the actual `.btn`/BEM-modifier class conversion itself was not done
+  - it would change rendered appearance (now correctly, but still a visible change) and this
+  session had no browser tooling to verify against; do that part with visual verification
+  available. [UL-402]
 
 ## From README Roadmap (migrated)
 Items previously listed in README.md that are not already tracked elsewhere in this file. Some of these may already be implemented, so this list should be looked over and pruned before being relied on.

@@ -96,3 +96,26 @@ class WikiAboutCardLinkStylingTests(TestCase):
         content = self.client.get(reverse("location.wiki", args=[self.location.slug])).content.decode()
         self.assertIn("pin-links-value", content)
         self.assertIn('class="pin-link-chip"', content)
+
+    def test_add_link_trigger_opens_the_shared_dialog(self) -> None:
+        """Regression guard: clicking "add a link" must open the shared
+        add-link dialog, not reveal an always-present inline form - see
+        _pin_link_add_dialog.html."""
+        baker.make(WikiLink, wiki=self.wiki, url="https://example.com/history")
+        content = self.client.get(reverse("location.wiki", args=[self.location.slug])).content.decode()
+        self.assertIn("document.getElementById('wiki-link-add-dialog').showModal()", content)
+        self.assertNotIn('class="pin-link-add-form"', content)
+
+    def test_add_link_dialog_renders_on_the_page(self) -> None:
+        baker.make(WikiLink, wiki=self.wiki, url="https://example.com/history")
+        content = self.client.get(reverse("location.wiki", args=[self.location.slug])).content.decode()
+        self.assertIn('<dialog id="wiki-link-add-dialog"', content)
+
+    def test_add_link_dialog_posts_to_the_wiki_links_endpoint(self) -> None:
+        baker.make(WikiLink, wiki=self.wiki, url="https://example.com/history")
+        content = self.client.get(reverse("location.wiki", args=[self.location.slug])).content.decode()
+        dialog_start = content.index('<dialog id="wiki-link-add-dialog"')
+        dialog_end = content.index("</dialog>", dialog_start)
+        dialog_html = content[dialog_start:dialog_end]
+        self.assertIn(f'hx-post="{reverse("location.wiki.links", args=[self.location.slug])}"', dialog_html)
+        self.assertIn('hx-target="#wiki-links-row"', dialog_html)

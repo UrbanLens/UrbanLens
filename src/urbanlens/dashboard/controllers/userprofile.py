@@ -456,10 +456,10 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             file = request.FILES.get("file_value")
             if not file:
                 return JsonResponse({"error": "No file provided."}, status=400)
-            # Previously this assigned the upload straight onto the model: no
-            # size cap, no magic-byte sniffing, no antivirus - unlike the hero
-            # card's form, which has always run them. Routing both through
-            # ``set_profile_avatar`` closes the unguarded half.
+            # Routed through ``set_profile_avatar`` rather than assigned onto
+            # the model directly: that helper is what applies the size cap,
+            # magic-byte sniffing and antivirus scan, and it is the same path
+            # the hero card's form takes.
             try:
                 set_profile_avatar(profile, file)
             except AvatarUploadError as exc:
@@ -775,8 +775,9 @@ class EditProfileView(LoginRequiredMixin, View):
                 from urbanlens.dashboard.models.email_log.model import EmailType
                 from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent
 
-                # The only unbounded arbitrary-address send path before this
-                # guard - the same per-profile ledger caps as invites.
+                # An arbitrary-address send path, so it takes the same
+                # per-profile ledger caps as invites - without them this is
+                # unbounded.
                 limit_error = email_rate_limit_error(profile)
                 if limit_error:
                     email_error = limit_error

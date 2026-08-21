@@ -568,12 +568,13 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
     # relied on the tag came out of a downscale rendering ninety degrees wrong,
     # silently and permanently. (JPEG/WEBP keep the tag and their pixels; TIFF loses
     # the tag but Pillow rotates the pixels on load, so both stay correct.)
-    # Gated on the same set that decided this file was rewritable at all. It
-    # used to be a second literal list, and the two drifted the moment a format
-    # was added to one: HEIF passed the rewrite check, so the file *was*
-    # re-encoded, but its stripped EXIF was never handed to save() - pillow-heif
-    # then carried the original EXIF through, and the GPS the user asked to
-    # remove survived a rewrite that logged success.
+    # Gated on the same set that decided this file was rewritable at all, not a
+    # second literal list: two lists drift the moment a format is added to one,
+    # and the failure is silent and privacy-relevant. A format that passes the
+    # rewrite check but is missing here gets re-encoded without its stripped
+    # EXIF ever reaching save() - the encoder (pillow-heif, for HEIF) carries
+    # the original EXIF through, and the GPS the user asked to remove survives
+    # a rewrite that logged success.
     if exif_bytes and target_format in _EXIF_REWRITABLE_FORMATS:
         save_kwargs["exif"] = exif_bytes
     if icc_profile:

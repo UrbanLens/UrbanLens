@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.place.model import Place
 
 
-class FloorplanQuerySet(FrontendDashboardQuerySet):
+class FloorplanQuerySet(FrontendDashboardQuerySet["Floorplan"]):
     """Query helpers for versioned floorplan documents."""
 
     def for_place(self, place: Place) -> FloorplanQuerySet:

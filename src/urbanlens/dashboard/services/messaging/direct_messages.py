@@ -470,8 +470,8 @@ def is_email_debounced(sender_id: int, recipient_id: int) -> bool:
     Celery workers racing on the same (sender, recipient) delayed task can't
     both pass: only the first caller's ``cache.add`` succeeds (winning the
     right to send), and it sets the marker in that same step rather than in
-    a later, separate ``cache.set`` inside ``send_message_email_now`` (which
-    previously left a plain check-then-act gap between the two).
+    a later, separate ``cache.set`` inside ``send_message_email_now``, which
+    would leave a plain check-then-act gap between the two.
 
     Args:
         sender_id: PK of the message sender.
@@ -758,11 +758,11 @@ def create_direct_message(
         raise DirectMessageValidationError("Malformed encrypted message.")
     # Attachments are resolved *before* the emptiness check, not after the
     # insert. The check counts image_ids as content, but the attach step below
-    # filters them by ownership and un-attachedness - so a stale, foreign or
-    # already-attached id used to satisfy "not empty", create the message, then
-    # update zero rows. The result was a blank message, persisted, broadcast to
-    # the recipient and answered 201, for a request that attached nothing the
-    # caller asked for.
+    # filters them by ownership and un-attachedness - so resolving afterwards
+    # would let a stale, foreign or already-attached id satisfy "not empty",
+    # create the message, then update zero rows: a blank message, persisted,
+    # broadcast to the recipient and answered 201, for a request that attached
+    # nothing the caller asked for.
     from urbanlens.dashboard.models.images.model import Image
 
     eligible_image_ids: list[int] = []
@@ -1064,12 +1064,12 @@ def set_conversation_muted(viewer: Profile, partner: Profile, *, muted: bool) ->
     """Put one conversation's mute state into the requested state, idempotently.
 
     Declarative rather than a toggle, and that is the whole point of it
-    existing. Every caller before this one flipped the flag, which is unusable
-    over an unreliable link: a retried "mute" whose first (successful) response
-    was lost silently un-mutes the conversation, and the user then misses
-    exactly the notifications they asked to keep off - or gets back the ones
-    they silenced. Naming the desired end state makes a duplicate request a
-    no-op instead of an inversion.
+    existing. A toggle is unusable over an unreliable link: a retried "mute"
+    whose first (successful) response was lost would silently un-mute the
+    conversation, and the user then misses exactly the notifications they
+    asked to keep off - or gets back the ones they silenced. Naming the
+    desired end state makes a duplicate request a no-op instead of an
+    inversion.
 
     Muting is **notification-only**, matching ``DirectMessageMute``'s own
     contract: the conversation, its unread counts, and message delivery are all

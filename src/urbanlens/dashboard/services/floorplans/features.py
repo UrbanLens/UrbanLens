@@ -1,7 +1,7 @@
 """A floorplan's drawable items as GeoJSON, filtered by viewport, storey and kind.
 
-The map-facing counterpart to the document (``serialization.document_for``),
-mirroring REData's ``/floorplans/{uuid}/features/``. Two different questions:
+The map-facing counterpart to the document (``serialization.document_for``).
+Two different questions:
 
 - *"What is this building's plan?"* - the document: nested, whole, editable,
   and the shape the editor round-trips.
@@ -9,20 +9,22 @@ mirroring REData's ``/floorplans/{uuid}/features/``. Two different questions:
   storey inside one viewport, which is what a renderer (Leaflet, QGIS,
   anything that speaks GeoJSON) actually consumes.
 
-A plan can hold tens of thousands of items across a dozen storeys, so the
-whole-document read is the wrong request for a map, and an unbounded feature
-read is the request this endpoint exists to make unnecessary: the bbox filter
-runs in the database (``geometry__bboverlaps``, which uses the spatial index)
-and the result is capped.
+This is where plan-local metres become WGS-84. The projection mirrors
+``frontend/ts/shared/floorplan/coords.ts`` exactly - same Earth radius, same
+equirectangular approximation about the plan origin - because the editor draws
+in local metres and the map draws these features, and a disagreement between
+the two would show up as a plan that shifts when you switch views.
 
-Every feature carries its ``uuid`` and item type, so a feature a user clicks
-can be found in the document and edited without a second identifier scheme.
+Filtering happens in Python rather than the database: walls are stored as four
+float columns, not geometry, so there is no spatial index to defer to. That is
+the right trade - the bbox exists to bound what crosses the wire, and one
+storey of one building is a few hundred rows to begin with.
 """
 
 from __future__ import annotations
 
-import json
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -30,33 +32,52 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: A plan can hold tens of thousands of items; an unpaged read of all of them
-#: is exactly what this endpoint exists to avoid.
+#: A plan can hold thousands of items; an unpaged read of all of them is
+#: exactly what this endpoint exists to avoid.
 MAX_FEATURES = 2000
 
-#: The item types a caller may ask for, in draw order (floors under rooms
-#: under elements) so a renderer that just appends gets sane stacking.
-ITEM_TYPES = ("floor", "room", "element")
+#: The item types a caller may ask for, in draw order (walls under rooms under
+#: markers) so a renderer that just appends gets sane stacking.
+ITEM_TYPES = ("wall", "room", "marker")
+
+#: Mean Earth radius (metres), WGS-84 authalic sphere. Must match coords.ts.
+EARTH_RADIUS_M = 6371008.8
 
 
-def _feature(row, item_type: str, extra: dict[str, Any]) -> dict[str, Any] | None:
-    """One GeoJSON feature, or None when the row has no geometry to draw."""
-    if row.geometry is None:
+class PlanProjection:
+    """Plan-local metres to WGS-84 for one plan origin.
+
+    The server-side twin of ``coords.ts``'s class of the same name; keep the
+    two in step.
+    """
+
+    def __init__(self, origin_lat: float, origin_lng: float) -> None:
+        self.origin_lat = origin_lat
+        self.origin_lng = origin_lng
+        self.metres_per_deg_lat = (math.pi / 180) * EARTH_RADIUS_M
+        self.metres_per_deg_lng = self.metres_per_deg_lat * math.cos(math.radians(origin_lat))
+
+    def to_world(self, x: float, y: float) -> list[float]:
+        """A local point as GeoJSON ``[lng, lat]``."""
+        return [
+            self.origin_lng + (x / self.metres_per_deg_lng if self.metres_per_deg_lng else 0.0),
+            self.origin_lat + y / self.metres_per_deg_lat,
+        ]
+
+
+def _projection(floorplan: Floorplan) -> PlanProjection | None:
+    """The plan's projection, or None when it has no origin to project about."""
+    if floorplan.origin_lat is None or floorplan.origin_lng is None:
         return None
-    return {
-        "type": "Feature",
-        "id": str(row.uuid),
-        "geometry": json.loads(row.geometry.geojson),
-        "properties": {
-            "item_type": item_type,
-            "uuid": str(row.uuid),
-            "name": getattr(row, "name", "") or "",
-            "condition": row.condition,
-            "material": getattr(row, "material", "") or "",
-            "sort_order": row.sort_order,
-            **extra,
-        },
-    }
+    return PlanProjection(float(floorplan.origin_lat), float(floorplan.origin_lng))
+
+
+def _overlaps(points: list[list[float]], bbox: tuple[float, float, float, float]) -> bool:
+    """Whether a feature's own bounds meet the requested viewport."""
+    min_lng, min_lat, max_lng, max_lat = bbox
+    lngs = [point[0] for point in points]
+    lats = [point[1] for point in points]
+    return not (max(lngs) < min_lng or min(lngs) > max_lng or max(lats) < min_lat or min(lats) > max_lat)
 
 
 def feature_collection(
@@ -73,58 +94,119 @@ def feature_collection(
     Args:
         floorplan: The plan version to read.
         bbox: ``(min_lng, min_lat, max_lng, max_lat)`` in WGS-84; only items
-            overlapping it. Filtered in the database, on the spatial index.
+            overlapping it.
         level: Restrict to one storey by its level number.
-        kind: Restrict elements to one :class:`FloorplanElementKind`.
-        item_types: Which of floor/room/element to include.
+        kind: Restrict walls to one :class:`FloorplanWallKind`, or markers to
+            one :class:`FloorplanMarkerKind`.
+        item_types: Which of wall/room/marker to include.
         limit: Hard cap on features returned.
 
     Returns:
         A ``FeatureCollection`` dict, with ``truncated`` set on its top level
         when the cap was reached - silence about a cut-off list reads as
-        "that's everything", which it would not be.
+        "that's everything", which it would not be. Empty when the plan has no
+        origin, since nothing can be placed on a map without one.
     """
-    from django.contrib.gis.geos import Polygon
+    from urbanlens.dashboard.models.floorplans.model import FloorplanFloor, FloorplanMarker, FloorplanRoomSeed, FloorplanWall
 
-    from urbanlens.dashboard.models.floorplans.model import FloorplanElement, FloorplanFloor, FloorplanRoom
-
-    box = Polygon.from_bbox(bbox) if bbox is not None else None
+    projection = _projection(floorplan)
     features: list[dict[str, Any]] = []
     truncated = False
-
-    def collect(queryset, item_type: str, extra_for) -> None:
-        nonlocal truncated
-        if truncated or item_type not in item_types:
-            return
-        if box is not None:
-            queryset = queryset.filter(geometry__bboverlaps=box)
-        # One past the cap, so "there is more" is a fact rather than a guess.
-        for row in queryset[: limit - len(features) + 1]:
-            if len(features) >= limit:
-                truncated = True
-                return
-            feature = _feature(row, item_type, extra_for(row))
-            if feature is not None:
-                features.append(feature)
+    if projection is None:
+        return {"type": "FeatureCollection", "features": features, "count": 0, "truncated": False, "floorplan": str(floorplan.uuid)}
 
     floors = FloorplanFloor.objects.filter(floorplan=floorplan)
     if level is not None:
         floors = floors.filter(level=level)
     floor_levels = dict(floors.values_list("pk", "level"))
+    if not floor_levels:
+        return {"type": "FeatureCollection", "features": features, "count": 0, "truncated": False, "floorplan": str(floorplan.uuid)}
 
-    collect(floors.filter(geometry__isnull=False), "floor", lambda row: {"level": row.level})
+    def add(feature: dict[str, Any], points: list[list[float]]) -> bool:
+        """Append a feature unless filtered out or over the cap."""
+        nonlocal truncated
+        if bbox is not None and not _overlaps(points, bbox):
+            return True
+        if len(features) >= limit:
+            truncated = True
+            return False
+        features.append(feature)
+        return True
 
-    rooms = FloorplanRoom.objects.filter(floor__floorplan=floorplan, geometry__isnull=False)
-    if level is not None:
-        rooms = rooms.filter(floor__level=level)
-    collect(rooms, "room", lambda row: {"level": floor_levels.get(row.floor_id)})
+    if "wall" in item_types:
+        walls = FloorplanWall.objects.filter(floor_id__in=floor_levels).prefetch_related("openings")
+        if kind:
+            walls = walls.filter(kind=kind)
+        for wall in walls:
+            line = [projection.to_world(wall.ax, wall.ay), projection.to_world(wall.bx, wall.by)]
+            feature = {
+                "type": "Feature",
+                "id": str(wall.uuid),
+                "geometry": {"type": "LineString", "coordinates": line},
+                "properties": {
+                    "item_type": "wall",
+                    "uuid": str(wall.uuid),
+                    "name": wall.name,
+                    "kind": wall.kind,
+                    "thickness": wall.thickness,
+                    "condition": wall.condition,
+                    "sort_order": wall.sort_order,
+                    "level": floor_levels.get(wall.floor_id),
+                    # Openings ride with their wall rather than as features of
+                    # their own: they have no independent position, and a
+                    # renderer needs the wall to draw one at all.
+                    "openings": [
+                        {"uuid": str(opening.uuid), "kind": opening.kind, "t_start": opening.t_start, "t_end": opening.t_end, "swing": opening.swing}
+                        for opening in wall.openings.all()
+                    ],
+                },
+            }
+            if not add(feature, line):
+                break
 
-    elements = FloorplanElement.objects.filter(floorplan=floorplan, geometry__isnull=False)
-    if level is not None:
-        elements = elements.filter(floor__level=level)
-    if kind:
-        elements = elements.filter(kind=kind)
-    collect(elements, "element", lambda row: {"kind": row.kind, "level": floor_levels.get(row.floor_id)})
+    if "room" in item_types and not truncated:
+        for room in FloorplanRoomSeed.objects.filter(floor_id__in=floor_levels):
+            point = projection.to_world(room.x, room.y)
+            feature = {
+                "type": "Feature",
+                "id": str(room.uuid),
+                "geometry": {"type": "Point", "coordinates": point},
+                "properties": {
+                    "item_type": "room",
+                    "uuid": str(room.uuid),
+                    "name": room.name,
+                    "condition": room.condition,
+                    "sort_order": room.sort_order,
+                    "level": floor_levels.get(room.floor_id),
+                },
+            }
+            if not add(feature, [point]):
+                break
+
+    if "marker" in item_types and not truncated:
+        markers = FloorplanMarker.objects.filter(floor_id__in=floor_levels)
+        if kind:
+            markers = markers.filter(kind=kind)
+        for marker in markers:
+            point = projection.to_world(marker.x, marker.y)
+            feature = {
+                "type": "Feature",
+                "id": str(marker.uuid),
+                "geometry": {"type": "Point", "coordinates": point},
+                "properties": {
+                    "item_type": "marker",
+                    "uuid": str(marker.uuid),
+                    "name": marker.name,
+                    "kind": marker.kind,
+                    "condition": marker.condition,
+                    "sort_order": marker.sort_order,
+                    "facing_degrees": marker.facing_degrees,
+                    "connector_id": marker.connector_id,
+                    "level": floor_levels.get(marker.floor_id),
+                },
+            }
+            if not add(feature, [point]):
+                break
 
     return {
         "type": "FeatureCollection",
@@ -142,25 +224,31 @@ def bounds_of(floorplan: Floorplan) -> list[float] | None:
         floorplan: The plan version.
 
     Returns:
-        ``[min_lng, min_lat, max_lng, max_lat]``, or None when nothing in the
-        plan has geometry.
+        ``[min_lng, min_lat, max_lng, max_lat]``, or None when the plan has no
+        origin or nothing placed.
     """
-    from django.contrib.gis.db.models import Extent
-    from django.db.models import Q
+    from urbanlens.dashboard.models.floorplans.model import FloorplanFloor, FloorplanMarker, FloorplanRoomSeed, FloorplanWall
 
-    from urbanlens.dashboard.models.floorplans.model import FloorplanElement, FloorplanFloor, FloorplanRoom
-
-    extents = [
-        FloorplanFloor.objects.filter(floorplan=floorplan).aggregate(extent=Extent("geometry"))["extent"],
-        FloorplanRoom.objects.filter(floor__floorplan=floorplan).aggregate(extent=Extent("geometry"))["extent"],
-        FloorplanElement.objects.filter(Q(floorplan=floorplan)).aggregate(extent=Extent("geometry"))["extent"],
-    ]
-    present = [extent for extent in extents if extent is not None]
-    if not present:
+    projection = _projection(floorplan)
+    if projection is None:
         return None
-    return [
-        min(extent[0] for extent in present),
-        min(extent[1] for extent in present),
-        max(extent[2] for extent in present),
-        max(extent[3] for extent in present),
-    ]
+
+    floor_ids = list(FloorplanFloor.objects.filter(floorplan=floorplan).values_list("pk", flat=True))
+    if not floor_ids:
+        return None
+
+    xs: list[float] = []
+    ys: list[float] = []
+    for ax, ay, bx, by in FloorplanWall.objects.filter(floor_id__in=floor_ids).values_list("ax", "ay", "bx", "by"):
+        xs.extend((ax, bx))
+        ys.extend((ay, by))
+    for model in (FloorplanRoomSeed, FloorplanMarker):
+        for x, y in model.objects.filter(floor_id__in=floor_ids).values_list("x", "y"):
+            xs.append(x)
+            ys.append(y)
+    if not xs:
+        return None
+
+    low = projection.to_world(min(xs), min(ys))
+    high = projection.to_world(max(xs), max(ys))
+    return [low[0], low[1], high[0], high[1]]

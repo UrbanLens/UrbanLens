@@ -136,8 +136,8 @@ def mirror_buildings_to_wiki(pin_id: int, selection_keys: list[str]) -> int:
     """Mirror imported buildings onto the community wiki, off the request.
 
     The pin side of a building import has already succeeded by the time this
-    runs, so nothing here may fail it: a wiki-side problem used to surface as
-    a 500 for work that was done (see docs/PROBLEMS.md, 2026-08-18).
+    runs, so nothing here may fail it: a wiki-side problem must not surface as
+    a 500 for work that was already done (see docs/PROBLEMS.md, 2026-08-18).
 
     Takes selection keys rather than the building records themselves so the
     task body stays small and re-resolves against the current cache - a stale
@@ -1186,8 +1186,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
             that suggestion's dates) it should attach to instead of getting a
             fresh one of its own. Omitted assets, and every asset when this is
             ``None`` (the manual "Import from Immich" picker path), fall back
-            to creating their own visit via ``log_visit_on_pin``, unchanged
-            from before this parameter existed.
+            to creating their own visit via ``log_visit_on_pin``.
 
     Returns:
         Counts of imported/skipped/failed assets, surfaced to the polling UI.
@@ -1410,9 +1409,8 @@ def _deferred_deadline_passed(started_at: str | None) -> bool:
 
     Args:
         started_at: ISO timestamp of the batch's first attempt, or None on that
-            first attempt (and for batches queued before this was threaded
-            through, which therefore get a fresh two-day window rather than
-            being failed immediately).
+            first attempt (also None for any batch missing this field, which
+            gets a fresh two-day window rather than being failed immediately).
 
     Returns:
         True when the batch should stop retrying.
@@ -1439,8 +1437,9 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
     """Place every pin in ``deferred_lists`` whose cid this round actually resolved.
 
     Called on *every* round of ``resolve_deferred_pin_locations``, not only the final
-    one - see that task's own docstring ("places whatever resolves now"), which the
-    task previously failed to honour on any round that still had pending cids.
+    one - see that task's own docstring ("places whatever resolves now"): a round with
+    pending cids must still place whatever did resolve, not wait for the batch to
+    fully clear.
 
     The three buckets are handled differently and the distinction is the whole point:
 
@@ -1692,13 +1691,12 @@ def resolve_deferred_pin_locations(
             update_task_progress(self, current=total, total=total, message="Failed: location lookups stalled.")
             return {"created": 0, "exists": 0, "skipped": len(all_cids)}
 
-        # Place whatever DID resolve this round before scheduling the retry. Previously
-        # this branch returned before the placement loop below ever ran, and
-        # `remaining_pins` then dropped every resolved cid from the retry args - so on
-        # any mixed round (some resolved, some pending) the coordinates REData had just
-        # successfully returned were discarded, and the pin was never placed by this
-        # round nor by any later one. A long import is mixed on nearly every round, so
-        # this silently lost the bulk of a large batch.
+        # Place whatever DID resolve this round before scheduling the retry:
+        # `remaining_pins` below drops every resolved cid from the retry args, so any
+        # coordinate not placed here is never placed at all - not this round, not a
+        # later one. A long import is mixed (some resolved, some still pending) on
+        # nearly every round, so skipping this would silently lose the bulk of a large
+        # batch.
         _place_resolved_pins(result, deferred_lists, profile=profile, auto_tag=auto_tag)
 
         pending_set = set(result.pending)
@@ -3308,7 +3306,7 @@ def sweep_achievements(chunk_size: int = 1000) -> int:
     This task only dispatches: profile pks are sliced, in pk order, into
     ranges of at most ``chunk_size`` and each range is evaluated by its own
     :func:`sweep_achievements_range` task. Evaluating everything in one task
-    used to hit the hard ``CELERY_TASK_TIME_LIMIT`` at scale and die
+    would hit the hard ``CELERY_TASK_TIME_LIMIT`` at scale and die
     mid-iteration; a bounded chunk cannot approach the limit, and a chunk that
     crashes anyway costs only its own range until the next nightly dispatch.
     Profiles created after dispatch are simply picked up the following night.

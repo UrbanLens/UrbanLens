@@ -460,6 +460,11 @@
         </form>
     </dialog>
 
+    {# -- Add link dialog (About card's links row) --------------------------- #}
+    <dialog id="wiki-link-add-dialog" class="pin-link-add-dialog ul-dialog" aria-label="Add a link">
+        {% include "dashboard/partials/pins/_pin_link_add_dialog.html" with add_url="location.wiki.links" owner_slug=wiki.location.slug row_id="wiki-links-row" %}
+    </dialog>
+
     {# -- Boundary-vote dialog (renders nothing without 2+ candidates) ------- #}
     {% include "dashboard/partials/wiki/_boundary_vote_dialog.html" with location=location boundary_vote=boundary_vote %}
 

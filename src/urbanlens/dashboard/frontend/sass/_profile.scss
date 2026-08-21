@@ -2215,26 +2215,6 @@ body div.container .profile-annotation-notes {
 // -- Pin Lists ----------------------------------------------------------------
 
 
-.pinlist-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1.75rem;
-
-    .pinlist-title {
-        font-size: 1.6rem;
-        font-weight: 700;
-        color: $text-primary;
-        margin: 0 0 0.25rem;
-    }
-
-    .pinlist-subtitle {
-        font-size: 0.9rem;
-        color: var(--ul-grey-6);
-        margin: 0;
-    }
-}
-
 .detail-pin-wiki-delete {
     border: none;
     background: transparent;
@@ -2261,120 +2241,6 @@ body div.container .profile-annotation-notes {
     }
 }
 
-// Create card
-.pinlist-create-card {
-    @include surface($radius: $radius-md);
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, .05);
-}
-
-// List cards
-.pinlist-card {
-    @include surface($radius: $radius-md);
-    margin-bottom: 0.75rem;
-    transition: box-shadow 0.15s;
-
-    &:hover {
-        box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
-    }
-}
-
-.pinlist-card-view {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem 1.25rem;
-}
-
-.pinlist-card-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: var(--ul-surface-raised);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    overflow: hidden;
-
-    .pinlist-icon-std {
-        color: var(--primary-color);
-        font-size: 1.4rem;
-    }
-
-    .pinlist-icon-empty {
-        color: $text-muted;
-    }
-
-    .pinlist-icon-img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-}
-
-.pinlist-card-body {
-    flex: 1;
-    min-width: 0;
-}
-
-.pinlist-card-name {
-    font-weight: 600;
-    font-size: 1rem;
-    color: $text-primary;
-    margin-bottom: 0.2rem;
-}
-
-.pinlist-card-desc {
-    font-size: 0.85rem;
-    color: var(--ul-grey-6);
-    margin-bottom: 0.4rem;
-    @include truncate;
-}
-
-.pinlist-card-meta {
-    display: flex;
-    gap: 1rem;
-    font-size: 0.8rem;
-    color: $text-muted;
-    align-items: center;
-}
-
-.pinlist-pin-count {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-
-    i {
-        font-size: 0.95rem;
-    }
-}
-
-.pinlist-order-badge {
-    background: var(--ul-grey-4);
-    border-radius: 20px;
-    padding: 1px 8px;
-}
-
-.pinlist-card-actions {
-    display: flex;
-    gap: 4px;
-    flex-shrink: 0;
-}
-
-// Inline edit form (replaces card content via HTMX)
-.pinlist-inline-edit {
-    padding: 1.25rem;
-}
-
-// Shared form elements
-.pinlist-form-grid {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 1rem;
-    margin-bottom: 1rem;
-}
 
 .form-field {
     display: flex;
@@ -2413,12 +2279,6 @@ textarea.form-input {
     resize: vertical;
 }
 
-.pinlist-icon-row {
-    display: flex;
-    gap: 2rem;
-    flex-wrap: wrap;
-    margin: 1rem 0;
-}
 
 // -- Clickable stat link -------------------------------------------------------
 

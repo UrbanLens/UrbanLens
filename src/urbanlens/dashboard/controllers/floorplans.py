@@ -123,11 +123,22 @@ class FloorplanJsonView(LoginRequiredMixin, View):
             an error.
         """
         from urbanlens.dashboard.services.floorplans.resolution import resolve_document
+        from urbanlens.dashboard.services.floorplans.serialization import document_for
 
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
         place = _building_place(pin)
         if place is None:
-            return HttpResponse(status=204)
+            # A placeless plan belongs to this pin alone, so there is no
+            # community/REData cascade to consult - just the user's own row.
+            from urbanlens.dashboard.models.floorplans.model import Floorplan
+
+            own = Floorplan.objects.filter(place__isnull=True, pin=pin, profile=pin.profile).order_by("-created").first()
+            if own is None:
+                return HttpResponse(status=204)
+            # Its own binding: this path always has a document, while the
+            # place-backed one below resolves to None when nothing matches.
+            own_document = {**document_for(own), "origin": "local", "versions": []}
+            return JsonResponse(own_document)
         version_uuid = request.GET.get("version") or ""
         if version_uuid:
             document = _document_for_version(place, pin.profile, version_uuid)
@@ -184,7 +195,7 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
         Returns:
             JsonResponse with the collection; 400 when a filter is malformed.
         """
-        from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanElementKind
+        from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanMarkerKind, FloorplanWallKind
         from urbanlens.dashboard.services.floorplans.features import feature_collection
 
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
@@ -206,9 +217,13 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
         except ValueError as exc:
             return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
+        # One filter serves both wall kinds and marker kinds - they never
+        # collide, and a caller asking for "stair" means markers whether or not
+        # it knows which table that is.
+        allowed = set(FloorplanWallKind.values) | set(FloorplanMarkerKind.values)
         kind = request.GET.get("kind", "")
-        if kind and kind not in FloorplanElementKind.values:
-            return JsonResponse({"ok": False, "error": f"kind must be one of {sorted(FloorplanElementKind.values)}"}, status=400)
+        if kind and kind not in allowed:
+            return JsonResponse({"ok": False, "error": f"kind must be one of {sorted(allowed)}"}, status=400)
 
         return JsonResponse(feature_collection(floorplan, bbox=bbox, level=level, kind=kind))
 
@@ -231,9 +246,10 @@ class FloorplanSaveView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.floorplans.serialization import document_for, save_document
 
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
+        # A plan may be placeless: not every pin resolves to a known building
+        # outline, and refusing to save one made the editor a dead end for
+        # exactly the properties that most need mapping by hand.
         place = _building_place(pin)
-        if place is None:
-            return JsonResponse({"ok": False, "error": "This pin has no single building to attach a floorplan to."}, status=400)
 
         try:
             document = json.loads(request.body or b"{}")
@@ -245,47 +261,27 @@ class FloorplanSaveView(LoginRequiredMixin, View):
         floorplan = floorplan_for_editing(
             place,
             pin.profile,
+            pin=pin,
             version_uuid=str(document.get("uuid") or ""),
             on_date=_parse_date(document.get("valid_from")),
         )
         if floorplan.pin_id is None:
             floorplan.pin = pin
+        # Seed the plan-local origin from the pin the first time anything is
+        # saved. Every coordinate in the document is metres from this point, so
+        # it has to be fixed before the first wall lands and must never move
+        # afterwards - shifting it would silently translate the whole drawing.
+        if floorplan.origin_lat is None or floorplan.origin_lng is None:
+            document.setdefault("plan_origin", {"lat": float(pin.effective_latitude), "lng": float(pin.effective_longitude)})
         try:
             save_document(floorplan, document, profile=pin.profile)
         except ValueError as exc:
             return JsonResponse({"ok": False, "error": str(exc)}, status=400)
-        saved = {**document_for(floorplan), "origin": "local", "versions": _version_list(place, pin.profile)}
+        # A placeless plan has no sibling versions to list: for_place(None)
+        # would match every placeless plan on the site rather than none.
+        versions = _version_list(place, pin.profile) if place is not None else []
+        saved = {**document_for(floorplan), "origin": "local", "versions": versions}
         return JsonResponse({"ok": True, "floorplan": saved})
-
-
-class FloorplanExtractView(LoginRequiredMixin, View):
-    """POST /map/pin/<pin_slug>/floorplan/extract/<overlay_uuid>/ - trace a blueprint.
-
-    Runs vision extraction over one of the pin's aligned blueprint overlays
-    and returns suggested rooms/walls/openings in world coordinates. The
-    editor merges them as editable suggestions; nothing is persisted here.
-    """
-
-    def post(self, request: HttpRequest, pin_slug: str, overlay_uuid) -> HttpResponse:
-        """Extract structure from one overlay.
-
-        Returns:
-            JsonResponse with ``rooms``/``elements`` fragments; 422 when the
-            sheet couldn't be read as a floorplan; 409 when AI isn't
-            available for this install (the editor falls back to manual
-            tracing and says so).
-        """
-        from urbanlens.dashboard.services.floorplans.extraction import extract_overlay_structure
-
-        pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
-        overlay = get_object_or_404(pin.image_overlays.select_related("image"), uuid=overlay_uuid)
-
-        structure = extract_overlay_structure(overlay)
-        if structure is None:
-            return JsonResponse({"ok": False, "error": "Automatic tracing isn't available - trace the sheet manually."}, status=409)
-        if not structure.get("rooms") and not structure.get("elements"):
-            return JsonResponse({"ok": False, "error": "Couldn't recognize a floorplan on this sheet."}, status=422)
-        return JsonResponse({"ok": True, **structure})
 
 
 class FloorplanPublishView(LoginRequiredMixin, View):

@@ -4,10 +4,9 @@
  * layer, and the Details/Photos layers list panel. Used identically by the
  * pin detail page and the Location wiki page.
  *
- * Ported from `_map_annotations_script.html` + the spliced-in
- * `_markup_toolbar_script.html` fragment. Config previously baked into the
- * script via `{{ }}`/`{% %}` now comes from data-* attributes on `#map`
- * (see templates/dashboard/pages/location/index.html and wiki.html).
+ * Config comes from data-* attributes on `#map` rather than being baked into
+ * the script by the template (see templates/dashboard/pages/location/index.html
+ * and wiki.html), which is what lets one compiled bundle serve both pages.
  */
 import { getCsrfToken } from "../shared/csrf";
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
@@ -1313,7 +1312,7 @@ function init(): void {
     // belongs to (for nested entries), and a link to that pin's own detail
     // page - plus Edit/promote-to-parent shortcuts for this pin's own direct
     // children (no hover tooltip - the click popup already covers this, and a
-    // separate hover tooltip here was previously unreadable in dark mode).
+    // separate hover tooltip here renders unreadably in dark mode).
     function detailPinPopupContent(entry: DetailPinEntry): HTMLElement {
         const el = document.createElement("div");
         el.className = "pin-popup child-pin-popup";
@@ -1405,8 +1404,8 @@ function init(): void {
                     // Nested entries (owner_name set) belong to a child pin and are
                     // display-only here - not draggable, edited on their own page.
                     // No hover tooltip - the click popup below already covers name/
-                    // owner/actions, and a separate hover tooltip here was previously
-                    // unreadable in dark mode (dark text on a dark background).
+                    // owner/actions, and a separate hover tooltip here renders
+                    // unreadably in dark mode (dark text on a dark background).
                     const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: !entry.owner_name });
                     if (entry.url) {
                         marker.bindPopup(detailPinPopupContent(entry));

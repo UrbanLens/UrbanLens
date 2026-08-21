@@ -1,19 +1,24 @@
 {% comment %}
-Add-link dialog for the pin details page's standalone Links card. Replaces
-the old inline-reveal form (still used as-is by the wiki page's own
-always-visible links row - see _pin_links_row.html's use_dialog docs) since
-Cancel there only hid the form, not the row itself, leaving a redundant
-"add link" icon showing where the inputs had been. Also reused directly by
-web search results' bookmark button (web_search.html) - same endpoint,
-same target, so a bookmarked result shows up in this same card immediately.
+Shared add-link dialog, used by both the pin details page's standalone
+Links card and the wiki page's About card links row (opened via each row's
+own trigger button - see _pin_links_row.html's dialog_id docs). Replaced
+the wiki row's old inline-reveal form, whose Cancel button only hid the
+form (not the row) and whose CSS defeated the `hidden` attribute so the
+fields showed before the user ever clicked "add link" at all.
 
-Submitting re-renders #pin-links-row (same target/swap the old inline form
-used) so the new link appears in place, then closes itself on success.
+Context:
+  add_url - name of the url that accepts the POST (e.g. "pin.links")
+  owner_slug - the url's first argument (pin slug or location slug)
+  row_id - id of the links row to swap on success (e.g. "pin-links-row")
+
+Submitting re-renders the row named by row_id (same target/swap the old
+inline form used) so the new link appears in place, then closes itself on
+success.
 {% endcomment %}
 {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Link" %}
 <div class="ul-dialog-body">
-    <form hx-post="{% url 'pin.links' pin.slug %}"
-          hx-target="#pin-links-row" hx-swap="outerHTML"
+    <form hx-post="{% url add_url owner_slug %}"
+          hx-target="#{{ row_id }}" hx-swap="outerHTML"
           hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();}">
         {% csrf_token %}
         <div class="form-row">

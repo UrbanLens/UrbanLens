@@ -460,7 +460,7 @@
                  hx-get="{% url 'pin.links' pin.slug %}"
                  hx-trigger="pinLinksChanged from:body"
                  hx-swap="innerHTML">
-                {% include "dashboard/partials/pins/_pin_links_row.html" with pin=pin links=pin.links.all add_url="pin.links" delete_url_name="pin.link.delete" row_id="pin-links-row" owner_slug=pin.slug use_dialog=True %}
+                {% include "dashboard/partials/pins/_pin_links_row.html" with pin=pin links=pin.links.all delete_url_name="pin.link.delete" row_id="pin-links-row" owner_slug=pin.slug show_badge=True %}
             </div>
         </div>
         {% endwith %}
@@ -866,7 +866,7 @@
 
 {# -- Add link dialog -------------------------------------------------------- #}
 <dialog id="pin-link-add-dialog" class="pin-link-add-dialog ul-dialog" aria-label="Add a link">
-    {% include "dashboard/partials/pins/_pin_link_add_dialog.html" %}
+    {% include "dashboard/partials/pins/_pin_link_add_dialog.html" with add_url="pin.links" owner_slug=pin.slug row_id="pin-links-row" %}
 </dialog>
 
 {# -- Pin edit dialog ------------------------------------------------------ #}

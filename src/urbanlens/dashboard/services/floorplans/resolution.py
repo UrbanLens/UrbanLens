@@ -128,6 +128,11 @@ def publish_to_wiki(floorplan: Floorplan, profile: Profile) -> Floorplan | None:
     from urbanlens.dashboard.models.wiki_edit import WikiEdit
     from urbanlens.dashboard.services.floorplans.serialization import document_for, save_document
 
+    # A plan not tied to a place has no community to publish to: the wiki
+    # being published onto is the *place's*, and "somewhere I sketched from
+    # memory" has no such thing.
+    if floorplan.place is None:
+        return None
     try:
         wiki = floorplan.place.wiki
     except ObjectDoesNotExist:
@@ -170,10 +175,19 @@ def can_edit_community(floorplan: Floorplan, profile: Profile) -> bool:
     """
     from urbanlens.dashboard.services.wiki.wiki_access import place_visible_to
 
+    if floorplan.place is None:
+        return False
     return floorplan.wiki_id is not None and place_visible_to(floorplan.place, profile)
 
 
-def floorplan_for_editing(place: Place, profile: Profile, *, version_uuid: str = "", on_date: datetime.date | None = None):
+def floorplan_for_editing(
+    place: Place | None,
+    profile: Profile,
+    *,
+    pin=None,
+    version_uuid: str = "",
+    on_date: datetime.date | None = None,
+):
     """The local floorplan version a save should write into.
 
     Writing is deliberately narrow, because a floorplan is expensive hand
@@ -192,19 +206,35 @@ def floorplan_for_editing(place: Place, profile: Profile, *, version_uuid: str =
     edits that plan's date, while "save as a new version" (the editor drops
     the plan uuid) creates a second version and leaves the original standing.
 
+    A plan need not belong to a known building. When *place* is None the plan
+    is scoped to *pin* instead - a placeless plan is one person's drawing of
+    one pin, so the pin is its identity. Scoping by ``place=None`` would match
+    every placeless plan on the site at once, which is why *pin* is required
+    in that case.
+
     Args:
-        place: The building.
+        place: The building, or None for a plan not tied to one.
         profile: The editing user.
+        pin: The pin the plan belongs to. Required when *place* is None.
         version_uuid: The plan version the document came from, if any.
         on_date: ``valid_from`` for a newly created version.
 
     Returns:
         A saved local ``Floorplan`` row the caller may write into.
+
+    Raises:
+        ValueError: If neither a place nor a pin is given, which would leave
+            the plan unreachable.
     """
     from urbanlens.dashboard.models.floorplans.model import Floorplan
 
+    if place is None and pin is None:
+        raise ValueError("A floorplan needs either a place or a pin to belong to.")
+
+    scope = {"place": place} if place is not None else {"place__isnull": True, "pin": pin}
+
     if version_uuid:
-        named = Floorplan.objects.filter(place=place, uuid=version_uuid).first()
+        named = Floorplan.objects.filter(uuid=version_uuid, **scope).first()
         if named is not None and named.wiki_id is None and named.profile_id == profile.pk:
             return named
         # A published plan is community content: anyone who can see the wiki
@@ -213,7 +243,8 @@ def floorplan_for_editing(place: Place, profile: Profile, *, version_uuid: str =
             return named
     return Floorplan.objects.create(
         place=place,
+        pin=pin,
         profile=profile,
         valid_from=on_date,
-        building_ref=place.provider_key if place.provider == "redata" else "",
+        building_ref=place.provider_key if place is not None and place.provider == "redata" else "",
     )

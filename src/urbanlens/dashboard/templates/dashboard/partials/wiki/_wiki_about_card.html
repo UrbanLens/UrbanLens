@@ -19,7 +19,7 @@ show up immediately instead of only after a reload.
         {% if wiki.description %}
         <p id="wiki-field-description" class="wiki-description">{{ wiki.description }}</p>
         {% endif %}
-        {% include "dashboard/partials/pins/_pin_links_row.html" with wiki=wiki links=wiki.links.all add_url="location.wiki.links" delete_url_name="location.wiki.link.delete" row_id="wiki-links-row" owner_slug=wiki.location.slug %}
+        {% include "dashboard/partials/pins/_pin_links_row.html" with wiki=wiki links=wiki.links.all delete_url_name="location.wiki.link.delete" row_id="wiki-links-row" owner_slug=wiki.location.slug dialog_id="wiki-link-add-dialog" show_label=True %}
         {% if wiki.date_abandoned or wiki.effective_date_last_active %}
         <div class="wiki-meta-dates">
             {% if wiki.date_abandoned %}

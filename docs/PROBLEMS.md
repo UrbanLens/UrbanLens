@@ -22,6 +22,64 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## RESOLVED 2026-08-21: an unpinned bun tag broke every container build
+
+`Dockerfile` installed bun with `COPY --from=oven/bun:1` - a floating major tag. Bun **1.4.0**
+dropped `bun build --format iife` (`error: Formats besides 'esm' are not implemented`), which
+`bin/build-frontend.ts` needs for the `ts/entries-classic/` bundles - the scripts loaded without
+`type=module` (`core.js`, `e2ee.js`, `webauthn.js`, `permissions.js`). The moment that tag moved,
+**every newly built container failed at `bun run build`** and crash-looped in `init.py`, with no
+local change to blame. Hosts that already had bun 1.3.x kept working, so it looked like an
+environment-specific mystery rather than a dependency bump.
+
+Found because a fresh `bin/dev_env.py create` environment would not come up (`ul_<slug>_app`
+stuck `Restarting`). This was **not** limited to dev environments - a staging or production
+rebuild would have hit exactly the same wall.
+
+Pinned to `oven/bun:1.3.14` (matching the host and `bun.lock`), with a comment saying to bump
+deliberately after checking `iife` still builds. The durable fix, if bun keeps iife removed, is
+to stop needing it: `entries-classic` exists only because those four bundles load as classic
+scripts, and the same trap in reverse is what killed the floorplan editor (see the 2026-08-21
+`type="module"` entry in ROADMAP.md, UL-405). Worth revisiting as one piece of work rather than
+carrying an exact pin forever.
+
+## OPEN 2026-08-21: Consensus points are awarded for reverting someone else's edit, and never retracted
+
+Found while surveying scoring infrastructure for UL-397, not while working on Consensus — so this
+is unverified against intent and may be deliberate, but the two halves disagree with each other in
+a way that looks accidental.
+
+`models/wiki_edit/signals.py` awards `MANUAL_EDIT_POINTS = 3` on **every** created `WikiEdit` that
+has an editor and no `consensus_round`. A revert is itself a `WikiEdit`
+(`services/wiki/wiki_edits.py:269`), so **reverting another user's contribution earns the reverter
+points**, and in an edit war both sides are paid on every pass. The same signal also fires for
+alias/link/markup/child-wiki rows, so those each earn the full 3 as well.
+
+Meanwhile `award_points` (`services/consensus/points.py:78`) is only ever called with positive
+amounts and there is **no retraction path anywhere** — a contribution that is later reverted keeps
+its points permanently. `services/achievements/metrics.py:398-407` takes the opposite position for
+the same underlying data, deliberately excluding `reverted=True` edits from the `wiki_edits`
+achievement metric. So the achievement system says a reverted edit doesn't count and the points
+system says it does.
+
+Not fixed here because the fix depends on a product call (should reverting be worth anything? is
+an alias worth the same as an article edit?) and because the points ledger has no per-award record
+to retract against — `award_points`' `reason` argument is logged, never persisted, so there is
+currently no way to know how many points a given edit produced. Both are addressed by the UL-397
+design (`docs/designs/reputation-and-gating.md`), but that is a separate, hidden score; whether
+the *visible* Consensus game score should also change is its own question.
+
+## OPEN 2026-08-21: a wiki with zero description/dates/security/links has no way to add its first link
+
+`_wiki_about_card.html`'s outer guard - `{% if wiki.description or wiki.date_abandoned or
+wiki.effective_date_last_active or wiki.links.exists %}` - renders nothing at all, including the
+links row, when every one of those is empty. The only "add a link" entry point lives inside that
+row (see the `dialog_id` docs on `_pin_links_row.html`, fixed 2026-08-21 to open the shared
+add-link dialog instead of an always-visible inline form), so a wiki that has never had a
+description, dates, security indicators, or a link set on it renders no card and no way to add a
+first link short of using "Suggest Edits" to set some other field first. Pre-existing - the same
+guard gated the old inline form identically - not introduced by that fix, just still open.
+
 ## RESOLVED 2026-08-19: `inspects_content` stopped the two tabs it was written to hide
 
 `ed8b3b28` ("a panel tab appears only when it has something to show") gave `photon` and

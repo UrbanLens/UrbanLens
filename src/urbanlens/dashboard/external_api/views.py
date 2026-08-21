@@ -1676,7 +1676,7 @@ class MemoriesJournalView(PaginatedListMixin, ExternalApiView):
     #: Every scope a credential must hold before the matching journal source is
     #: included, keyed by ``services.memories.journal.JOURNAL_SOURCES`` key.
     #:
-    #: ``photos:read`` alone used to serve the whole feed, which was a scope
+    #: Serving the whole feed on ``photos:read`` alone would be a scope
     #: escalation rather than a convenience: the entries carry complete visit
     #: notes, pin/wiki/trip comment bodies, ratings, and - when a revision has
     #: no edit summary - the full text of private pin and wiki articles. Those
@@ -1710,9 +1710,9 @@ class MemoriesJournalView(PaginatedListMixin, ExternalApiView):
         """Return one page of the caller's journal, newest first.
 
         Uses the external API's standard page-number envelope - see
-        ``PaginatedListMixin`` - rather than the bespoke ``offset``/``limit``/
-        ``total`` shape this endpoint used to answer with, which could never
-        gain a field later without breaking clients.
+        ``PaginatedListMixin`` - rather than a bespoke ``offset``/``limit``/
+        ``total`` shape, which could never gain a field later without breaking
+        clients.
         """
         grants = filter_sources_by_grants(request.auth, self.JOURNAL_SOURCE_SCOPES)
 
@@ -3753,8 +3753,8 @@ class FriendMuteView(FriendActionView):
 
     ``POST`` with no body is retained as a deprecated alias for
     ``{"is_muted": true}``, because it is what shipped first and one integration
-    already calls it. It cannot unmute; there was never a working unmute on this
-    surface (mute used to overwrite ``status``, leaving nothing to restore).
+    already calls it. It cannot unmute - a bodyless ``POST`` has no target state
+    to name, so use ``PATCH`` with ``{"is_muted": false}`` for that.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {

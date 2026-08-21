@@ -2,9 +2,7 @@
 
 Every mutation a user can make to a friend relationship lives here as a plain
 ``(actor, target)`` function so the HTMX controller and the external API can
-share one implementation. Before this split the transitions only existed as
-``FriendController`` methods that read ``request.POST`` and returned rendered
-HTML, which an API-key caller cannot use.
+share one implementation.
 
 The functions raise :class:`FriendshipActionError` subclasses rather than
 returning status codes, so each caller maps failures onto its own protocol
@@ -260,8 +258,9 @@ def _mark_friend_request_notifications_read(viewer_profile: Profile, source_prof
     """Mark the viewer's pending "new friend request" notification(s) from a source as read.
 
     Accepting/declining/ignoring a request on the profile page (rather than via the
-    notification dropdown's own accept/decline buttons) previously left the originating
-    notification unread indefinitely, inflating the bell label count forever.
+    notification dropdown's own accept/decline buttons) must also mark the originating
+    notification read, or it stays unread indefinitely and inflates the bell label count
+    forever.
 
     Args:
         viewer_profile: Profile who just acted on the request.
@@ -302,8 +301,8 @@ def _incoming_pending_request(actor: Profile, target: Profile) -> Friendship:
     the pair's single row in either direction and reports nothing about its
     status, while ``Friendship.accept``/``decline``/``ignore`` overwrite
     ``status`` unconditionally. Answering a request through those two together
-    therefore used to apply the transition to *whatever row happened to exist*,
-    which is wrong in two directions at once:
+    without this premise would apply the transition to *whatever row happened to
+    exist*, which is wrong in two directions at once:
 
     - **A block is not a request.** ``decline()`` or ``ignore()`` against a
       ``Blocked`` row rewrites it to ``Declined``/``Ignored``, so the *blocked*
@@ -517,9 +516,10 @@ def block_profile(actor: Profile, target: Profile) -> Friendship:
     so direction is the only available record - and reusing the existing row
     untouched got that record backwards half the time. A row created by an
     inbound friend request has ``from_profile`` = the requester, so blocking
-    that requester used to leave the *blocked* party owning the row, at which
-    point they (and not the blocker) satisfied :func:`_placed_the_block` and
-    could lift their own block. Swapping the two foreign keys is safe because
+    that requester without repointing would leave the *blocked* party owning
+    the row, at which point they (and not the blocker) would satisfy
+    :func:`_placed_the_block` and could lift their own block. Swapping the
+    two foreign keys is safe because
     ``QuerySet.between`` already guarantees a single row per pair in either
     direction; nothing else reads a blocked row's direction, since every other
     consumer of ``BLOCKED`` (``Profile.are_blocked``, the direct-message
@@ -719,12 +719,9 @@ def mute_profile(actor: Profile, target: Profile) -> Friendship:
 def unmute_profile(actor: Profile, target: Profile) -> Friendship:
     """Un-mute an existing relationship with ``target``.
 
-    The inverse of :func:`mute_profile`, and previously unreachable: with mute
-    stored as a status there was no prior state to restore, so the profile
-    page's Unmute button posted to the friend-*request* endpoint and was
-    rejected (``can_request`` excludes ``Muted``). Now that mute is a flag,
-    unmuting is a single boolean write and the relationship underneath is
-    untouched throughout.
+    The inverse of :func:`mute_profile`. Mute is a boolean flag rather than part
+    of the relationship's status enum, so unmuting is a single boolean write and
+    the relationship underneath is untouched throughout.
 
     Idempotent, for the same retry-safety reason as :func:`mute_profile`.
 
@@ -924,7 +921,7 @@ def invite_by_email(
         to_profile = existing_user.profile
         # Respect visibility settings silently - no error, no distinguishable response.
         # Same evaluator request_friend uses (Profile.visibility_permits already
-        # rejects NO_ONE) - a bare "!= NO_ONE" check here previously let any
+        # rejects NO_ONE) - a bare "!= NO_ONE" check here would let any
         # stranger who knew the email bypass a restricted FRIENDS/COMMON_PIN/
         # COMMON_FRIEND/COMMON_TRIP/ANYTHING_IN_COMMON visibility setting entirely.
         if to_profile != inviter and Profile.visibility_permits(to_profile.friend_request_visibility, to_profile, inviter):

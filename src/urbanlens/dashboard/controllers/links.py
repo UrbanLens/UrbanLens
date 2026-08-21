@@ -56,11 +56,10 @@ def _render_pin_links(request, pin: Pin) -> HttpResponse:
         {
             "pin": pin,
             "links": pin.links.all(),
-            "add_url": "pin.links",
             "delete_url_name": "pin.link.delete",
             "row_id": "pin-links-row",
             "owner_slug": pin.slug,
-            "use_dialog": True,
+            "show_badge": True,
             **ai_extract_button_context(pin.profile.user, pin.profile, pin),
         },
     )
@@ -73,10 +72,11 @@ def _render_wiki_links(request, wiki) -> HttpResponse:
         {
             "wiki": wiki,
             "links": wiki.links.all(),
-            "add_url": "location.wiki.links",
             "delete_url_name": "location.wiki.link.delete",
             "row_id": "wiki-links-row",
             "owner_slug": wiki.location.slug,
+            "dialog_id": "wiki-link-add-dialog",
+            "show_label": True,
         },
     )
 

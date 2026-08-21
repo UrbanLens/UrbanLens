@@ -4111,24 +4111,6 @@ body.page-location-details {
     &:hover { color: var(--primary-color); border-color: var(--primary-color); }
 }
 
-.pin-link-add-form {
-    display: inline-flex;
-    align-items: center;
-    gap: .35rem;
-    flex-wrap: wrap;
-
-    input {
-        padding: .3rem .5rem;
-        border-radius: 6px;
-        border: 1px solid var(--ul-surface-border);
-        font-size: .82rem;
-    }
-
-    input[name="name"] { width: 9rem; }
-    input[name="url"] { width: 14rem; }
-}
-
-
 body.page-location-details .card {
     box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
 }

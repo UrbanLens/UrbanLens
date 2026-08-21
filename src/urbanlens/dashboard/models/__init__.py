@@ -62,14 +62,19 @@ from urbanlens.dashboard.models.facts import Fact, FactDataType, FactEvidence, F
 from urbanlens.dashboard.models.flickr import FlickrAccount
 from urbanlens.dashboard.models.floorplans import (
     Floorplan,
-    FloorplanElement,
-    FloorplanElementKind,
     FloorplanFloor,
-    FloorplanLock,
+    FloorplanMarker,
+    FloorplanMarkerKind,
+    FloorplanOpening,
+    FloorplanOpeningKind,
+    FloorplanOpeningSwing,
     FloorplanReference,
     FloorplanReferenceKind,
-    FloorplanRoom,
+    FloorplanRoomSeed,
     FloorplanSource,
+    FloorplanWall,
+    FloorplanWallKind,
+    FloorplanWallThickness,
 )
 from urbanlens.dashboard.models.friendship import Friendship
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation

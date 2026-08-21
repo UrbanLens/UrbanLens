@@ -1,33 +1,40 @@
-"""Interior floorplans for individual buildings - floors, rooms, elements, locks.
+"""Interior floorplans: walls are the geometry, everything else hangs off them.
 
-This mirrors REData's floorplan schema deliberately, shape for shape (see
-``../REData/src/redata/parcels/models/floorplan/``): REData owns the eventual
-aggregation of external floorplan sources, while UrbanLens holds what users
-author by hand. Keeping the structures identical means one document format,
-one editor, and a future push/pull between the two that is a field-copy, not
-a translation. Local deviations are strictly additive: ``place``/``pin``/
-``profile`` anchor a plan into UrbanLens's own graph, and every item can carry
-the owner's ``labels`` - both invisible to the upstream shape.
+**Walls are the only stored shape.** A room is not a polygon - it is a named
+point that binds, at render time, to whichever enclosed region of the wall
+graph contains it (see ``frontend/ts/shared/floorplan/planar.ts``). That is
+Revit's room model, and it is chosen for two properties this application needs:
 
-The design decisions inherited from that schema, restated:
+- **One source of truth for a shared partition.** When two rooms sit either
+  side of a wall, that wall exists once. Room-polygon models duplicate it, and
+  the two copies drift apart the first time somebody drags one.
+- **Geometry edits cannot destroy room identity.** Moving a wall changes which
+  region a seed sits in, never whether the room, its name, its photos or its
+  labels still exist. A seed left outside every enclosed region is a legible
+  "not enclosed yet" state, not data loss.
 
-- **One generic element table.** Walls, windows, doors, stairs, fixtures and
-  keys differ in ``kind``, not schema: optional geometry, material, condition,
-  build date, description, provenance. Kind-specific detail (glazing, swing
-  direction) rides in ``attributes``.
-- **Openings mount on surfaces via a self-FK** (``mounted_on``): a window or
-  door can sit in a wall, a floor, a ceiling or a roof, and "which surface"
-  is a relationship, not a coordinate.
-- **Locks are their own table**: a door has zero-to-many, and
-  ``key_attributes`` is data a consumer matches keys against, not prose.
-- **Versioning is whole-document**: a layout change is a new ``Floorplan``
-  with a later ``valid_from``. "The floorplan as of 1954" is the query.
-- **Sources and references are per-plan pools** every item points into, so
-  ten walls traced from one scanned drawing share one source row and one
-  photo can evidence a wall, its door, and the door's lock at once.
-- **Geometry is WGS-84** so every element lands directly on the same map as
-  parcels and footprints; the vertical dimension is explicit numeric columns,
-  not 3D geometry.
+**Doors and windows are intervals along a wall**, not free-standing objects
+with their own coordinates. An opening cannot outlive the wall it is cut into,
+moves when that wall moves, and cannot drift off it - all three are properties
+of the schema here rather than rules some editor has to remember.
+
+**Geometry is plan-local metres, not WGS-84.** A degree of longitude is ~74 km
+at this latitude and ~111 km at the equator, so in degrees x and y are
+different units: lengths, angles, right-angle snapping and area all need a
+latitude correction applied at every step, and every place that forgets is a
+subtly wrong drawing. Storing metres east/north of one per-plan origin makes
+the arithmetic ordinary and makes the tolerances the editor reasons about
+("within 0.15 m") expressible as themselves. The origin lives on the plan, not
+the floor, because a shared origin across every floor is what lets storeys be
+stacked and aligned at all. Conversion to WGS-84 happens at the edges, in
+``services.floorplans.features`` for map rendering.
+
+**Versioning is whole-document**: a layout change is a new ``Floorplan`` with a
+later ``valid_from``. "The floorplan as of 1954" is the query.
+
+**Sources and references are per-plan pools** every item points into, so ten
+walls traced from one scanned drawing share one source row, and one photo can
+evidence a wall and the door cut into it at once.
 
 Floorplans are absent by default and never load with a building - most
 buildings will never have one, and the common case pays nothing.
@@ -37,17 +44,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.contrib.gis.db.models import GeometryField
 from django.db.models import (
     CASCADE,
     PROTECT,
     SET_NULL,
+    CheckConstraint,
     DateField,
+    DecimalField,
     F,
     FloatField,
     ForeignKey,
     Index,
     ManyToManyField,
+    Q,
     TextChoices,
     URLField,
 )
@@ -59,26 +68,70 @@ from urbanlens.dashboard.models import abstract
 from .queryset import FloorplanManager
 
 
-class FloorplanElementKind(TextChoices):
-    """What a :class:`FloorplanElement` physically is. Mirrors REData's enum."""
+class FloorplanWallKind(TextChoices):
+    """What a wall segment represents.
 
-    WALL = "wall", "Wall"
-    FLOOR = "floor", "Floor surface"
-    CEILING = "ceiling", "Ceiling"
-    ROOF = "roof", "Roof"
-    COLUMN = "column", "Column"
-    WINDOW = "window", "Window"
+    ``VIRTUAL`` is load-bearing for messy real buildings: it draws as a dashed
+    hint and renders as nothing, but participates fully in enclosing a region.
+    Without it a courtyard, a loading bay, a collapsed side or an unexplored
+    boundary can only be recorded by drawing a wall that is not there.
+    """
+
+    EXTERIOR = "exterior", "Exterior wall"
+    INTERIOR = "interior", "Interior wall"
+    VIRTUAL = "virtual", "Virtual (open edge)"
+    COLLAPSED = "collapsed", "Collapsed / ruined"
+
+
+class FloorplanWallThickness(TextChoices):
+    """Wall thickness, as presets rather than a measurement.
+
+    Nobody documenting a derelict building from memory and photographs knows a
+    wall is 340 mm. Three presets carry every distinction a drawing at this
+    fidelity can honestly express.
+    """
+
+    THIN = "thin", "Thin"
+    NORMAL = "normal", "Normal"
+    THICK = "thick", "Thick"
+
+
+class FloorplanOpeningKind(TextChoices):
+    """What kind of gap is cut into a wall."""
+
     DOOR = "door", "Door"
+    DOORWAY = "doorway", "Doorway (no door)"
+    WINDOW = "window", "Window"
+    HATCH = "hatch", "Hatch"
+
+
+class FloorplanOpeningSwing(TextChoices):
+    """Which way a door opens, where it matters and is known."""
+
+    NONE = "none", "Not known"
+    LEFT = "left", "Left"
+    RIGHT = "right", "Right"
+    DOUBLE = "double", "Double"
+
+
+class FloorplanMarkerKind(TextChoices):
+    """What a point marker on a floor denotes.
+
+    One table with a kind, rather than a tool and a table per concept: these
+    differ in icon and meaning, not in schema.
+    """
+
+    PHOTO = "photo", "Photo location"
+    HAZARD = "hazard", "Hazard"
+    ENTRANCE = "entrance", "Entrance"
     STAIR = "stair", "Stair"
+    ELEVATOR = "elevator", "Elevator / shaft"
+    NOTE = "note", "Note"
     FIXTURE = "fixture", "Fixture"
-    #: What a room-designer tool mostly produces - chairs, beds, appliances.
-    FURNITURE = "furniture", "Furniture"
-    KEY = "key", "Key"
-    OTHER = "other", "Other"
 
 
 class FloorplanReferenceKind(TextChoices):
-    """The media type of a :class:`FloorplanReference`. Mirrors REData's enum."""
+    """The media type of a :class:`FloorplanReference`."""
 
     PHOTO = "photo", "Photo"
     PDF = "pdf", "PDF"
@@ -98,12 +151,12 @@ class FloorplanItem(abstract.FrontendDashboardModel):
         attributes: Anything else a producer knows, unmerged and unjudged.
         source: Where this item's information came from (plan's source pool).
         references: Media showing this item (plan's reference pool).
-        labels: The owner's labels - an UrbanLens addition, absent upstream.
+        labels: The owner's labels.
     """
 
     #: Position within the document that wrote this item. Document order *is*
-    #: the stored order (REData does the same), so a round-trip preserves how
-    #: the author arranged things and a renderer gets a stable draw order.
+    #: the stored order, so a round-trip preserves how the author arranged
+    #: things and a renderer gets a stable draw order.
     sort_order = PositiveIntegerField(default=0)
     description = TextField(blank=True, default="")
     condition = CharField(max_length=255, blank=True, default="")
@@ -121,38 +174,52 @@ class Floorplan(FloorplanItem):
     """One dated version of one building's floorplan.
 
     Attributes:
-        place: The building place this plan describes (UrbanLens anchor).
+        place: The building this plan describes. Null for a plan not tied to
+            one identified structure - a sketch of somewhere the provider
+            chain has no footprint for, which is most of what gets explored.
         pin: The pin it was authored from, when personal.
         profile: The local author; null for plans mirrored from upstream.
-        building_ref: REData's reconciliation ref for the building, when
-            known - the identity a future push/pull correlates on.
+        wiki: Set when published to the place's community wiki.
+        building_ref: REData's reconciliation ref for the building, when known.
         building_name: Free-text fallback naming the building.
         name: Version label ("As built", "After the 1962 fire").
         valid_from: The date this version takes effect; null is the original
             baseline, in force from the beginning of time.
         floor_count: What a source says the building has - may exceed the
             floors actually modelled.
+        origin_lat: Latitude of the plan-local coordinate origin.
+        origin_lng: Longitude of the plan-local coordinate origin.
+        rotation_degrees: The drawing axis, clockwise from north. Buildings sit
+            at arbitrary angles; aligning the axis once makes every subsequent
+            right angle land square against the underlay.
     """
 
-    place = ForeignKey("dashboard.Place", on_delete=PROTECT, related_name="floorplans")
+    #: Nullable so a plan can describe a place the provider chain has no
+    #: footprint for. PROTECT so a place that *is* referenced cannot vanish
+    #: from under one.
+    place = ForeignKey("dashboard.Place", on_delete=PROTECT, null=True, blank=True, related_name="floorplans")
     pin = ForeignKey("dashboard.Pin", on_delete=SET_NULL, null=True, blank=True, related_name="floorplans")
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="floorplans")
-    #: Set when the author published this plan to the place's community wiki.
     #: A community plan is visible to everyone who can see that wiki and
     #: editable by them, with each save recorded as a WikiEdit; a personal
     #: plan (wiki null) is its author's alone. Publishing is always explicit -
-    #: a plan names doors, locks and what opens them.
+    #: a plan names doors and entrances.
     wiki = ForeignKey("dashboard.Wiki", on_delete=CASCADE, null=True, blank=True, related_name="floorplans")
     building_ref = CharField(max_length=255, blank=True, default="")
     building_name = CharField(max_length=255, blank=True, default="")
     name = CharField(max_length=255, blank=True, default="")
     valid_from = DateField(null=True, blank=True)
     floor_count = IntegerField(null=True, blank=True)
+    #: Null until the plan has geometry - a version row can exist before
+    #: anybody has drawn a wall.
+    origin_lat = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    origin_lng = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    rotation_degrees = FloatField(default=0.0)
 
     objects = FloorplanManager()
 
     if TYPE_CHECKING:
-        place_id: int
+        place_id: int | None
         profile_id: int | None
         wiki_id: int | None
 
@@ -234,11 +301,14 @@ class FloorplanReference(abstract.FrontendDashboardModel):
 class FloorplanFloor(FloorplanItem):
     """One storey of the plan.
 
+    Carries no outline of its own: the storey's shape is whatever its walls
+    enclose, so an outline stored here would be a second, divergent answer to
+    the same question.
+
     Attributes:
         floorplan: The plan version this floor belongs to.
         level: Storey number - 0 is ground, negative below grade.
         name: Display label ("Ground floor", "Mezzanine").
-        geometry: The storey's outline in world coordinates.
         elevation_meters: The walking surface's height above sea level.
         height_meters: Floor-to-ceiling height.
     """
@@ -246,7 +316,6 @@ class FloorplanFloor(FloorplanItem):
     floorplan = ForeignKey(Floorplan, on_delete=CASCADE, related_name="floors")
     level = SmallIntegerField(default=0)
     name = CharField(max_length=255, blank=True, default="")
-    geometry = GeometryField(srid=4326, null=True, blank=True)
     elevation_meters = FloatField(null=True, blank=True)
     height_meters = FloatField(null=True, blank=True)
 
@@ -258,106 +327,168 @@ class FloorplanFloor(FloorplanItem):
         return self.name or f"Level {self.level}"
 
 
-class FloorplanRoom(FloorplanItem):
-    """A named space on a floor.
+class FloorplanWall(FloorplanItem):
+    """One straight wall segment, in plan-local metres.
+
+    Always a single segment. A drawn polyline is stored as consecutive walls
+    sharing an endpoint, which is what lets one span of a chain be re-typed,
+    deleted or given a door without splitting anything first.
 
     Attributes:
-        floor: The floor this room is on.
+        floor: The storey this wall stands on.
+        ax: Start point, metres east of the plan origin.
+        ay: Start point, metres north of the plan origin.
+        bx: End point, metres east of the plan origin.
+        by: End point, metres north of the plan origin.
+        kind: Exterior, interior, virtual or collapsed.
+        thickness: Preset thickness for rendering.
+        name: Optional label ("Party wall").
+    """
+
+    floor = ForeignKey(FloorplanFloor, on_delete=CASCADE, related_name="walls")
+    ax = FloatField()
+    ay = FloatField()
+    bx = FloatField()
+    by = FloatField()
+    kind = CharField(max_length=16, choices=FloorplanWallKind.choices, default=FloorplanWallKind.INTERIOR)
+    thickness = CharField(max_length=8, choices=FloorplanWallThickness.choices, default=FloorplanWallThickness.NORMAL)
+    name = CharField(max_length=255, blank=True, default="")
+
+    if TYPE_CHECKING:
+        floor_id: int
+
+    class Meta(abstract.FrontendDashboardModel.Meta):
+        db_table = "dashboard_floorplan_walls"
+        ordering = ("sort_order", "id")
+        indexes = [
+            # How walls are always asked for: every wall on one storey, to
+            # rebuild that storey's enclosed regions.
+            Index(fields=["floor", "kind"], name="idx_floorplan_wall_kind"),
+        ]
+
+    def __str__(self) -> str:
+        return self.name or f"{self.kind} wall {self.pk}"
+
+
+class FloorplanOpening(FloorplanItem):
+    """A door or window, as an interval along one wall.
+
+    Stored as two parameters along the wall rather than its own coordinates:
+    an opening then cannot outlive its wall, cannot fail to move with it, and
+    cannot drift off it. All three would otherwise be invariants some editor
+    had to maintain by hand.
+
+    An opening never breaks the enclosure - a room with a door in it is still
+    a room - so this table is invisible to region detection by construction.
+
+    Attributes:
+        wall: The wall this opening is cut into.
+        kind: Door, doorway, window or hatch.
+        t_start: Where the opening begins along the wall, 0 at ``a``, 1 at ``b``.
+        t_end: Where it ends. Always greater than ``t_start``.
+        swing: Which way a door opens, when it matters and is known.
+        sill_meters: Height of the opening's bottom above the walking surface.
+    """
+
+    wall = ForeignKey(FloorplanWall, on_delete=CASCADE, related_name="openings")
+    kind = CharField(max_length=16, choices=FloorplanOpeningKind.choices, default=FloorplanOpeningKind.DOOR)
+    t_start = FloatField()
+    t_end = FloatField()
+    swing = CharField(max_length=8, choices=FloorplanOpeningSwing.choices, default=FloorplanOpeningSwing.NONE)
+    sill_meters = FloatField(null=True, blank=True)
+
+    if TYPE_CHECKING:
+        wall_id: int
+
+    class Meta(abstract.FrontendDashboardModel.Meta):
+        db_table = "dashboard_floorplan_openings"
+        ordering = ("sort_order", "id")
+        constraints = [
+            # An opening outside its wall, or inside out, is not a drawing
+            # defect to render oddly - it is meaningless. Rejected by the
+            # database so no write path can produce one.
+            CheckConstraint(
+                condition=Q(t_start__gte=0) & Q(t_end__lte=1) & Q(t_start__lt=F("t_end")),
+                name="floorplan_opening_within_wall",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.kind} on wall {self.wall_id}"
+
+
+class FloorplanRoomSeed(FloorplanItem):
+    """A named room, stored as the point that identifies it.
+
+    Not a polygon. The room's shape is whichever enclosed region of the wall
+    graph contains this point, resolved at render time - so the walls and the
+    room can never disagree about where the room is, and editing walls can
+    never delete a room's name, photos or labels.
+
+    A seed that lands outside every enclosed region is a room the drawing does
+    not close yet. That is shown as such, and is recoverable by drawing the
+    missing wall; it is not an error and not data loss.
+
+    Attributes:
+        floor: The storey this room is on.
+        x: Metres east of the plan origin.
+        y: Metres north of the plan origin.
         name: The room's name ("Ward B", "Boiler room").
-        geometry: The room's outline in world coordinates.
         height_meters: Ceiling height inside this room, when it differs.
     """
 
     floor = ForeignKey(FloorplanFloor, on_delete=CASCADE, related_name="rooms")
+    x = FloatField()
+    y = FloatField()
     name = CharField(max_length=255, blank=True, default="")
-    geometry = GeometryField(srid=4326, null=True, blank=True)
     height_meters = FloatField(null=True, blank=True)
-    #: The room this one sits inside - a closet within a ward, a cell block
-    #: within a wing. Rooms nest to arbitrary depth.
-    parent = ForeignKey("self", on_delete=SET_NULL, null=True, blank=True, related_name="children")
-    #: Every storey this room reaches through, for an atrium, a light well or
-    #: a double-height hall. Its own ``floor`` remains where it starts.
-    spans_floors = ManyToManyField(FloorplanFloor, blank=True, related_name="spanning_rooms")
+
+    if TYPE_CHECKING:
+        floor_id: int
 
     class Meta(abstract.FrontendDashboardModel.Meta):
-        db_table = "dashboard_floorplan_rooms"
+        db_table = "dashboard_floorplan_room_seeds"
         ordering = ("sort_order", "id")
 
     def __str__(self) -> str:
         return self.name or f"room {self.pk}"
 
 
-class FloorplanElement(FloorplanItem):
-    """A physical thing on the plan: wall, window, door, stair, fixture, key.
+class FloorplanMarker(FloorplanItem):
+    """A point of interest on a storey: photo, hazard, entrance, stair, note.
 
     Attributes:
-        floorplan: The plan this element belongs to.
-        floor: The floor it stands on; null for plan-level elements (a key).
-        kind: What it physically is.
-        name: Display label ("North stair", "Vault door").
-        geometry: Its shape or position, at whatever fidelity the producer
-            works - Point, LineString or Polygon. Null for geometry-less
-            elements (keys).
-        material: What it is made of.
-        room: The room it belongs to or opens into, when known.
-        mounted_on: The surface element an opening sits in - a window's wall,
-            a hatch's floor, a skylight's roof.
-        base_elevation_meters: Bottom of the element above its floor's
-            walking surface (a window's sill height).
-        height_meters: The element's own height.
+        floor: The storey this marker is on.
+        x: Metres east of the plan origin.
+        y: Metres north of the plan origin.
+        kind: What the marker denotes.
+        name: Display label.
+        facing_degrees: Which way a photo was taken, clockwise from north.
+        connector_id: Ties a stair or shaft to the same shaft on other
+            storeys. Markers sharing one are the same vertical connection,
+            which is what makes a stack of floors read as one building rather
+            than unrelated drawings. Free-form rather than an FK: it is
+            authored client-side while both ends may still be unsaved.
     """
 
-    floorplan = ForeignKey(Floorplan, on_delete=CASCADE, related_name="elements")
-    floor = ForeignKey(FloorplanFloor, on_delete=CASCADE, null=True, blank=True, related_name="elements")
-    kind = CharField(max_length=16, choices=FloorplanElementKind.choices)
+    floor = ForeignKey(FloorplanFloor, on_delete=CASCADE, related_name="markers")
+    x = FloatField()
+    y = FloatField()
+    kind = CharField(max_length=16, choices=FloorplanMarkerKind.choices, default=FloorplanMarkerKind.NOTE)
     name = CharField(max_length=255, blank=True, default="")
-    geometry = GeometryField(srid=4326, null=True, blank=True)
-    material = CharField(max_length=255, blank=True, default="")
-    room = ForeignKey(FloorplanRoom, on_delete=SET_NULL, null=True, blank=True, related_name="elements")
-    mounted_on = ForeignKey("self", on_delete=SET_NULL, null=True, blank=True, related_name="mounted_elements")
-    base_elevation_meters = FloatField(null=True, blank=True)
-    height_meters = FloatField(null=True, blank=True)
-    thickness_meters = FloatField(null=True, blank=True)
-    #: Orientation for an element whose geometry is a bare point - a door's
-    #: swing, a fixture's facing - where the shape cannot express it.
-    rotation_degrees = FloatField(null=True, blank=True)
-    #: What this element joins: a door's two rooms, a window's inside and out.
-    #: The relationship a router walks to answer "can I get from here to
-    #: there?", which geometry alone does not give.
-    connects_rooms = ManyToManyField(FloorplanRoom, blank=True, related_name="connecting_elements")
-    #: Every storey this element passes through - a stair, a shaft, a chimney.
-    spans_floors = ManyToManyField(FloorplanFloor, blank=True, related_name="spanning_elements")
+    facing_degrees = FloatField(null=True, blank=True)
+    connector_id = CharField(max_length=64, blank=True, default="")
+
+    if TYPE_CHECKING:
+        floor_id: int
 
     class Meta(abstract.FrontendDashboardModel.Meta):
-        db_table = "dashboard_floorplan_elements"
+        db_table = "dashboard_floorplan_markers"
         ordering = ("sort_order", "id")
         indexes = [
-            # Scoped to a plan, because that is how elements are asked for -
-            # "the doors in this plan", never "every door everywhere".
-            Index(fields=["floorplan", "kind"], name="idx_floorplan_element_kind"),
+            # Linking a stair to its counterpart on the floor above.
+            Index(fields=["connector_id"], name="idx_floorplan_marker_connector"),
         ]
 
     def __str__(self) -> str:
         return self.name or f"{self.kind} {self.pk}"
-
-
-class FloorplanLock(FloorplanItem):
-    """One lock on an element; a door may carry many or none.
-
-    Attributes:
-        element: The element (usually a door) this lock secures.
-        name: Free-form label/type ("padlock", "deadbolt", "chain").
-        key_attributes: What opens it, as data a consumer can match keys
-            against - producer-defined shape ("bitting", "brand", "keyway").
-    """
-
-    element = ForeignKey(FloorplanElement, on_delete=CASCADE, related_name="locks")
-    name = CharField(max_length=255, blank=True, default="")
-    key_attributes = JSONField(default=dict, blank=True)
-
-    class Meta(abstract.FrontendDashboardModel.Meta):
-        db_table = "dashboard_floorplan_locks"
-        ordering = ("sort_order", "id")
-
-    def __str__(self) -> str:
-        return self.name or f"lock {self.pk}"

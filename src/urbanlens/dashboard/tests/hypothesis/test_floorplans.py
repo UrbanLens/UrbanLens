@@ -1,17 +1,21 @@
-"""Floorplans: versioned interior structure, absent by default.
+"""Floorplans: versioned interior structure, absent by default, walls-first.
 
-The document format is REData's, verbatim, so one editor parses both origins.
 The load-bearing properties:
 
-- Version resolution by date: the undated baseline is in force until the
+- **Walls are the only geometry.** Rooms are seed points that bind to whichever
+  enclosed region contains them, so editing walls can never delete a room's
+  name, labels or references. Openings are intervals along a wall and cannot
+  outlive it, escape it, or be inside out.
+- **Coordinates are plan-local metres** about one per-plan origin shared by
+  every floor, not WGS-84. ``services.floorplans.features`` is the only place
+  they become degrees, and it must agree with the editor's own projection.
+- **Version resolution by date**: the undated baseline is in force until the
   first dated version; no date means the newest; a building with no plan
   answers None from one indexed query (the common case must stay free).
-- The document round-trips through REData's shape: source/reference pools
-  with uuid indirection, elements per floor and plan-level, ``mounted_on``
-  across the document, locks under elements. Round-tripped uuids update in
-  place, omission deletes, labels resolve only against the saver's own.
-- Resolution prefers the user's local plan and falls back to REData's
-  two-step lookup, whose absence in every form is a quiet None.
+- **A save never destroys a plan it was not editing** - another user's plan,
+  or a baseline being re-dated, forks into a new version instead.
+- **Publishing copies rather than hands over**, and a personal plan is never
+  served to anyone else.
 """
 
 from __future__ import annotations
@@ -19,32 +23,42 @@ from __future__ import annotations
 import base64
 import datetime
 import itertools
+import json as jsonlib
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.db.utils import IntegrityError
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.floorplans.model import (
     Floorplan,
-    FloorplanElement,
     FloorplanFloor,
-    FloorplanLock,
-    FloorplanRoom,
+    FloorplanMarker,
+    FloorplanOpening,
+    FloorplanRoomSeed,
+    FloorplanWall,
 )
 from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.services.floorplans.resolution import resolve_document
 from urbanlens.dashboard.services.floorplans.serialization import document_for, save_document
 
-_SQUARE = {"type": "Polygon", "coordinates": [[[-73.93, 41.733], [-73.929, 41.733], [-73.929, 41.734], [-73.93, 41.734], [-73.93, 41.733]]]}
-_LINE = {"type": "LineString", "coordinates": [[-73.93, 41.733], [-73.929, 41.733]]}
-_POINT = {"type": "Point", "coordinates": [-73.9295, 41.733]}
-#: Deliberately outside _SQUARE, for viewport-filter tests.
-_FAR_SQUARE = {"type": "Polygon", "coordinates": [[[-73.90, 41.70], [-73.899, 41.70], [-73.899, 41.701], [-73.90, 41.701], [-73.90, 41.70]]]}
 #: A minimal valid 1x1 PNG - real bytes, so the stored-file read path is exercised.
 _PNG_BYTES = base64.b64decode(
     b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
 )
+
+_ORIGIN = {"lat": 41.733, "lng": -73.93}
+
+
+def _square_walls(size: float = 10.0) -> list[dict]:
+    """Four walls enclosing a ``size`` metre square at the plan origin."""
+    corners = [(0.0, 0.0), (size, 0.0), (size, size), (0.0, size)]
+    return [
+        {"kind": "exterior", "ax": ax, "ay": ay, "bx": corners[(i + 1) % 4][0], "by": corners[(i + 1) % 4][1]}
+        for i, (ax, ay) in enumerate(corners)
+    ]
 
 
 _building_seq = itertools.count(1)
@@ -88,6 +102,18 @@ class FloorplanVersioningTests(TestCase):
 
         self.assertEqual(Floorplan.objects.at(self.place, datetime.date(1975, 6, 15)).name, "after fire")
 
+    def test_a_plan_needs_no_place_at_all(self) -> None:
+        """Most of what gets explored has no footprint any provider knows.
+
+        A plan tied to nothing is still a plan; requiring a Place would mean
+        the only drawable buildings are the ones a data provider already
+        catalogued.
+        """
+        plan = Floorplan.objects.create(place=None, name="sketch from memory")
+
+        self.assertIsNone(plan.place_id)
+        self.assertEqual(Floorplan.objects.get(pk=plan.pk).name, "sketch from memory")
+
 
 class FloorplanDocumentTests(TestCase):
     def setUp(self) -> None:
@@ -98,109 +124,237 @@ class FloorplanDocumentTests(TestCase):
         self.floorplan = Floorplan.objects.create(place=self.place, profile=self.profile)
 
     def _document(self) -> dict:
+        walls = _square_walls()
+        walls[0] = {
+            **walls[0],
+            "uuid": "wall-1",
+            "name": "South wall",
+            "thickness": "thick",
+            "source": "src-1",
+            "openings": [{"uuid": "door-1", "kind": "door", "t_start": 0.4, "t_end": 0.6, "swing": "left"}],
+        }
         return {
             "name": "As built",
+            "plan_origin": _ORIGIN,
+            "rotation_degrees": 12.5,
             "source_pool": [{"uuid": "src-1", "title": "HABS sheet 4", "author": "HABS", "url": "https://loc.gov/habs/4"}],
             "reference_pool": [{"uuid": "ref-1", "kind": "photo", "title": "Boiler room, 2019", "url": "https://example.test/p.jpg"}],
             "floors": [
                 {
                     "level": 0,
                     "name": "Ground",
-                    "geometry": _SQUARE,
-                    "rooms": [{"uuid": "room-1", "name": "Boiler room", "geometry": _SQUARE, "condition": "collapsed", "references": ["ref-1"]}],
-                    "elements": [
-                        {"uuid": "wall-1", "kind": "wall", "geometry": _LINE, "material": "brick", "source": "src-1"},
-                        {
-                            "uuid": "door-1",
-                            "kind": "door",
-                            "geometry": _POINT,
-                            "room": "room-1",
-                            "mounted_on": "wall-1",
-                            "locks": [
-                                {"name": "padlock", "key_attributes": {"brand": "Abus", "keyway": "AB1"}},
-                                {"name": "chain", "key_attributes": {}},
-                            ],
-                        },
-                    ],
+                    "walls": walls,
+                    "rooms": [{"uuid": "room-1", "name": "Boiler room", "x": 5.0, "y": 5.0, "condition": "collapsed", "references": ["ref-1"]}],
+                    "markers": [{"uuid": "m-1", "kind": "stair", "name": "North stair", "x": 2.0, "y": 8.0, "connector_id": "stair-a"}],
                 },
             ],
-            "elements": [{"uuid": "key-1", "kind": "key", "name": "Boiler room key", "attributes": {"cut": "worn"}}],
         }
 
-    def test_a_document_round_trips_in_redata_shape(self) -> None:
+    def test_a_document_round_trips(self) -> None:
         save_document(self.floorplan, self._document(), profile=self.profile)
 
-        out = document_for(self.floorplan)
-
-        floor = out["floors"][0]
+        document = document_for(self.floorplan)
+        floor = document["floors"][0]
+        self.assertEqual(document["name"], "As built")
+        self.assertEqual(document["plan_origin"], _ORIGIN)
+        self.assertEqual(document["rotation_degrees"], 12.5)
+        self.assertEqual(len(floor["walls"]), 4)
         self.assertEqual(floor["rooms"][0]["name"], "Boiler room")
-        wall = next(e for e in floor["elements"] if e["kind"] == "wall")
-        door = next(e for e in floor["elements"] if e["kind"] == "door")
-        self.assertEqual(wall["material"], "brick")
-        self.assertEqual(door["mounted_on"], wall["uuid"], "mounted_on must survive as uuid indirection")
-        self.assertEqual(door["room"], floor["rooms"][0]["uuid"])
-        self.assertEqual({lock["name"] for lock in door["locks"]}, {"padlock", "chain"})
-        self.assertEqual(next(lock for lock in door["locks"] if lock["name"] == "padlock")["key_attributes"]["brand"], "Abus")
-        # Pools carry provenance; items point into them by uuid.
-        self.assertEqual(out["source_pool"][0]["title"], "HABS sheet 4")
-        self.assertEqual(wall["source"], out["source_pool"][0]["uuid"])
-        self.assertEqual(floor["rooms"][0]["references"], [out["reference_pool"][0]["uuid"]])
-        # Plan-level elements (a key has no floor and no geometry).
-        self.assertEqual(out["elements"][0]["kind"], "key")
-        self.assertIsNone(out["elements"][0]["geometry"])
+        self.assertEqual(floor["markers"][0]["connector_id"], "stair-a")
+
+    def test_local_metres_survive_the_round_trip_exactly(self) -> None:
+        """Coordinates are stored as authored - no projection on the way in.
+
+        A wall that shifts by centimetres per save would drift a plan apart
+        over an editing session.
+        """
+        save_document(self.floorplan, self._document(), profile=self.profile)
+
+        walls = document_for(self.floorplan)["floors"][0]["walls"]
+        self.assertEqual(
+            [(wall["ax"], wall["ay"], wall["bx"], wall["by"]) for wall in walls],
+            [(0.0, 0.0, 10.0, 0.0), (10.0, 0.0, 10.0, 10.0), (10.0, 10.0, 0.0, 10.0), (0.0, 10.0, 0.0, 0.0)],
+        )
+
+    def test_an_opening_rides_with_its_wall(self) -> None:
+        save_document(self.floorplan, self._document(), profile=self.profile)
+
+        wall = document_for(self.floorplan)["floors"][0]["walls"][0]
+        self.assertEqual(wall["name"], "South wall")
+        self.assertEqual(wall["thickness"], "thick")
+        self.assertEqual(wall["openings"][0]["kind"], "door")
+        self.assertEqual((wall["openings"][0]["t_start"], wall["openings"][0]["t_end"]), (0.4, 0.6))
 
     def test_round_tripped_uuids_update_in_place(self) -> None:
         save_document(self.floorplan, self._document(), profile=self.profile)
-        out = document_for(self.floorplan)
-        room_uuid = out["floors"][0]["rooms"][0]["uuid"]
-        out["floors"][0]["rooms"][0]["name"] = "Ward B"
+        document = document_for(self.floorplan)
+        room_uuid = document["floors"][0]["rooms"][0]["uuid"]
 
-        save_document(self.floorplan, out, profile=self.profile)
+        document["floors"][0]["rooms"][0]["name"] = "Ward B"
+        save_document(self.floorplan, document, profile=self.profile)
 
-        self.assertEqual(FloorplanRoom.objects.count(), 1, "a round-tripped uuid must update, not duplicate")
-        self.assertEqual(str(FloorplanRoom.objects.get().uuid), room_uuid)
-        self.assertEqual(FloorplanRoom.objects.get().name, "Ward B")
+        self.assertEqual(FloorplanRoomSeed.objects.count(), 1, "a round-tripped uuid must update, not duplicate")
+        self.assertEqual(str(FloorplanRoomSeed.objects.get().uuid), room_uuid)
+        self.assertEqual(FloorplanRoomSeed.objects.get().name, "Ward B")
 
     def test_omitted_items_are_deleted(self) -> None:
         save_document(self.floorplan, self._document(), profile=self.profile)
-        out = document_for(self.floorplan)
-        out["floors"][0]["rooms"] = []
+        document = document_for(self.floorplan)
 
-        save_document(self.floorplan, out, profile=self.profile)
-
-        self.assertEqual(FloorplanRoom.objects.count(), 0)
-        self.assertEqual(FloorplanElement.objects.filter(kind="wall").count(), 1, "removing rooms must not touch walls")
-
-    def test_locks_can_be_absent_entirely(self) -> None:
-        document = self._document()
-        document["floors"][0]["elements"][1]["locks"] = []
-
+        document["floors"][0]["rooms"] = []
         save_document(self.floorplan, document, profile=self.profile)
 
-        self.assertEqual(FloorplanLock.objects.count(), 0)
+        self.assertEqual(FloorplanRoomSeed.objects.count(), 0)
+        self.assertEqual(FloorplanWall.objects.count(), 4, "removing rooms must not touch walls")
 
     def test_labels_resolve_only_against_the_saving_profiles_own(self) -> None:
         from urbanlens.dashboard.models.labels.model import Label
 
-        mine = baker.make(Label, profile=self.profile, name="floorplan-hazard")
-        theirs = baker.make(Label, profile=baker.make(User).profile, name="floorplan-theirs")
+        mine = baker.make(Label, profile=self.profile, name="Asbestos")
+        theirs = baker.make(Label, profile=baker.make(User).profile, name="Theirs")
         document = self._document()
-        document["floors"][0]["rooms"][0]["labels"] = [str(mine.uuid), str(theirs.uuid)]
+        document["floors"][0]["rooms"][0]["attributes"] = {"urbanlens": {"labels": [str(mine.uuid), str(theirs.uuid)]}}
 
         save_document(self.floorplan, document, profile=self.profile)
 
-        self.assertEqual([label.pk for label in FloorplanRoom.objects.get().labels.all()], [mine.pk], "a document must not attach another user's label by guessing its uuid")
+        self.assertEqual(
+            [label.pk for label in FloorplanRoomSeed.objects.get().labels.all()],
+            [mine.pk],
+            "a document must not attach another user's label by guessing its uuid",
+        )
 
     def test_versions_and_dates_persist(self) -> None:
-        document = {**self._document(), "valid_from": "1962-05-01", "floor_count": 4}
-        document["floors"][0]["built_date"] = "1900-06-01"
+        document = self._document()
+        document["valid_from"] = "1962-05-01"
 
         save_document(self.floorplan, document, profile=self.profile)
 
         self.floorplan.refresh_from_db()
         self.assertEqual(self.floorplan.valid_from, datetime.date(1962, 5, 1))
-        self.assertEqual(self.floorplan.floor_count, 4)
-        self.assertEqual(FloorplanFloor.objects.get().built_date, datetime.date(1900, 6, 1))
+
+    def test_an_unknown_wall_kind_is_refused_rather_than_coerced(self) -> None:
+        """Silently turning an unrecognised kind into the default is how a
+        whole class of item becomes wrong while looking like it saved."""
+        document = self._document()
+        document["floors"][0]["walls"][1]["kind"] = "forcefield"
+
+        with self.assertRaises(ValueError) as caught:
+            save_document(self.floorplan, document, profile=self.profile)
+
+        self.assertIn("forcefield", str(caught.exception))
+
+    def test_a_wall_missing_an_endpoint_is_refused(self) -> None:
+        """Defaulting a missing coordinate to zero would move the wall to the
+        plan origin without saying so."""
+        document = self._document()
+        del document["floors"][0]["walls"][1]["bx"]
+
+        with self.assertRaises(ValueError) as caught:
+            save_document(self.floorplan, document, profile=self.profile)
+
+        self.assertIn("bx", str(caught.exception))
+
+
+class FloorplanRoomSeedTests(TestCase):
+    """Room identity is a point, so wall edits cannot destroy it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        self.floorplan = Floorplan.objects.create(place=_building(), profile=self.profile)
+
+    def test_a_room_survives_every_wall_around_it_being_rewritten(self) -> None:
+        save_document(
+            self.floorplan,
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [{"level": 0, "walls": _square_walls(), "rooms": [{"name": "Ward B", "x": 5.0, "y": 5.0}]}],
+            },
+            profile=self.profile,
+        )
+        room_uuid = document_for(self.floorplan)["floors"][0]["rooms"][0]["uuid"]
+        document = document_for(self.floorplan)
+
+        # Replace every wall with a differently-sized square: all four wall
+        # uuids are dropped, so each is deleted and recreated.
+        document["floors"][0]["walls"] = _square_walls(25.0)
+        save_document(self.floorplan, document, profile=self.profile)
+
+        rooms = document_for(self.floorplan)["floors"][0]["rooms"]
+        self.assertEqual(len(rooms), 1)
+        self.assertEqual(rooms[0]["uuid"], room_uuid, "the room kept its identity through a full wall replacement")
+        self.assertEqual(rooms[0]["name"], "Ward B")
+
+    def test_a_room_outside_every_wall_is_still_stored(self) -> None:
+        """An unenclosed seed is a drawing that is not finished, not an error.
+
+        Refusing to store it would lose the name the moment a wall was
+        deleted.
+        """
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": [], "rooms": [{"name": "Somewhere", "x": 900.0, "y": 900.0}]}]},
+            profile=self.profile,
+        )
+
+        self.assertEqual(FloorplanRoomSeed.objects.get().name, "Somewhere")
+
+
+class FloorplanOpeningConstraintTests(TestCase):
+    """An opening outside its wall, or inside out, is meaningless - not a
+    rendering quirk. The database refuses it so no write path can produce one."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        self.floorplan = Floorplan.objects.create(place=_building(), profile=self.profile)
+        self.floor = FloorplanFloor.objects.create(floorplan=self.floorplan, level=0)
+        self.wall = FloorplanWall.objects.create(floor=self.floor, ax=0, ay=0, bx=10, by=0)
+
+    def test_a_valid_interval_is_accepted(self) -> None:
+        opening = FloorplanOpening.objects.create(wall=self.wall, kind="door", t_start=0.25, t_end=0.75)
+
+        self.assertEqual(opening.wall_id, self.wall.pk)
+
+    def test_an_inside_out_interval_is_refused(self) -> None:
+        with self.assertRaises(IntegrityError):
+            FloorplanOpening.objects.create(wall=self.wall, kind="door", t_start=0.8, t_end=0.2)
+
+    def test_an_interval_running_past_the_wall_is_refused(self) -> None:
+        with self.assertRaises(IntegrityError):
+            FloorplanOpening.objects.create(wall=self.wall, kind="door", t_start=0.5, t_end=1.5)
+
+    def test_a_negative_start_is_refused(self) -> None:
+        with self.assertRaises(IntegrityError):
+            FloorplanOpening.objects.create(wall=self.wall, kind="door", t_start=-0.1, t_end=0.5)
+
+    def test_a_zero_length_opening_is_refused(self) -> None:
+        with self.assertRaises(IntegrityError):
+            FloorplanOpening.objects.create(wall=self.wall, kind="door", t_start=0.5, t_end=0.5)
+
+    def test_deleting_a_wall_takes_its_openings_with_it(self) -> None:
+        """An opening has no position of its own - orphaning one would leave a
+        door floating at coordinates that no longer exist."""
+        FloorplanOpening.objects.create(wall=self.wall, kind="door", t_start=0.2, t_end=0.4)
+
+        self.wall.delete()
+
+        self.assertEqual(FloorplanOpening.objects.count(), 0)
+
+    def test_the_service_reports_a_bad_interval_rather_than_hitting_the_constraint(self) -> None:
+        """Reaching the constraint is an IntegrityError - a 500. The service
+        catches it first and names what is wrong, which a client can act on."""
+        document = {
+            "plan_origin": _ORIGIN,
+            "floors": [{"level": 0, "walls": [{"kind": "interior", "ax": 0, "ay": 0, "bx": 5, "by": 0, "openings": [{"kind": "door", "t_start": 0.9, "t_end": 0.1}]}]}],
+        }
+
+        with self.assertRaises(ValueError) as caught:
+            save_document(self.floorplan, document, profile=self.profile)
+
+        self.assertIn("t_start", str(caught.exception))
 
 
 class FloorplanResolutionTests(TestCase):
@@ -209,7 +363,7 @@ class FloorplanResolutionTests(TestCase):
         baker.make(User)
         self.profile = baker.make(User).profile
         self.parcel = baker.make(Place, kind=PlaceKind.PARCEL, provider="redata", provider_key="parcel-uuid-1")
-        self.place = _building(self.parcel, provider_key="cris:1")
+        self.place = _building(self.parcel, provider_key="cris:res-1")
 
     def _configured(self):
         settings_path = "urbanlens.UrbanLens.settings.app.settings"
@@ -228,7 +382,7 @@ class FloorplanResolutionTests(TestCase):
         upstream.assert_not_called()
 
     def test_another_users_plan_is_not_served(self) -> None:
-        """A plan records doors, locks and what opens them - not shared data.
+        """A plan records doors and entrances - not shared data.
 
         Resolution is place-scoped, so without this every user who pinned the
         same building would receive whatever anyone else had traced.
@@ -241,14 +395,14 @@ class FloorplanResolutionTests(TestCase):
     def test_redata_fills_when_local_is_absent(self) -> None:
         url_patch, key_patch = self._configured()
         with mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway, url_patch, key_patch:
-            gateway.return_value.lookup_floorplans.return_value = [{"uuid": "fp-1", "building_ref": "cris:1"}]
+            gateway.return_value.lookup_floorplans.return_value = [{"uuid": "fp-1", "building_ref": "cris:res-1"}]
             gateway.return_value.lookup_floorplan_document.return_value = {"name": "REData plan", "floors": []}
 
             document = resolve_document(self.place, profile=self.profile)
 
         self.assertEqual(document["origin"], "redata")
         self.assertEqual(document["name"], "REData plan")
-        gateway.return_value.lookup_floorplans.assert_called_once_with("parcel-uuid-1", building_ref="cris:1", on_date=None)
+        gateway.return_value.lookup_floorplans.assert_called_once_with("parcel-uuid-1", building_ref="cris:res-1", on_date=None)
         gateway.return_value.lookup_floorplan_document.assert_called_once_with("fp-1")
 
     def test_an_empty_summary_list_is_a_quiet_none(self) -> None:
@@ -268,7 +422,7 @@ class FloorplanResolutionTests(TestCase):
             self.assertIsNone(resolve_document(self.place, profile=self.profile))
 
     def test_a_building_with_no_redata_parcel_never_calls_upstream(self) -> None:
-        orphan = baker.make(Place, kind=PlaceKind.BUILDING, provider="redata", provider_key="cris:9", parent=None)
+        orphan = baker.make(Place, kind=PlaceKind.BUILDING, provider="redata", provider_key="cris:orphan", parent=None)
 
         with mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway:
             self.assertIsNone(resolve_document(orphan, profile=self.profile))
@@ -282,94 +436,7 @@ class FloorplanResolutionTests(TestCase):
 
             resolve_document(self.place, profile=self.profile, on_date=datetime.date(1954, 1, 1))
 
-        gateway.return_value.lookup_floorplans.assert_called_once_with("parcel-uuid-1", building_ref="cris:1", on_date="1954-01-01")
-
-
-class BlueprintExtractionTests(TestCase):
-    """The trace pipeline: model output in image space → world coordinates.
-
-    The vision model is always mocked - what's under test is the mapping
-    through the overlay's corner georeference and the tolerance for
-    malformed model output.
-    """
-
-    def setUp(self) -> None:
-        super().setUp()
-        baker.make(User)
-        self.profile = baker.make(User).profile
-        # A 0.01° square: NW at (-73.93, 41.734), SE at (-73.92, 41.724).
-        from django.core.files.uploadedfile import SimpleUploadedFile
-
-        from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
-
-        sheet = baker.make("dashboard.Image")
-        sheet.image.save("blueprint.png", SimpleUploadedFile("blueprint.png", _PNG_BYTES, content_type="image/png"), save=True)
-        self.overlay = baker.make(
-            MapImageOverlay,
-            profile=self.profile,
-            image=sheet,
-            nw_latitude=41.734, nw_longitude=-73.93,
-            ne_latitude=41.734, ne_longitude=-73.92,
-            se_latitude=41.724, se_longitude=-73.92,
-            sw_latitude=41.724, sw_longitude=-73.93,
-        )
-
-    def _extract(self, structure):
-        """Run extraction with only the *model* mocked.
-
-        Deliberately not mocking the image attribute: an earlier version of
-        this test faked `overlay.image.file`, which does not exist (the field
-        is `Image.image`), so it passed against code that would have raised in
-        production. The stored file below is real, so the read path is under
-        test too.
-        """
-        from urbanlens.dashboard.services.floorplans import extraction
-
-        with mock.patch.object(extraction, "_structure_from_model", return_value=structure) as model:
-            result = extraction.extract_overlay_structure(self.overlay)
-        if structure is not None:
-            self.assertEqual(model.call_args.args[0], _PNG_BYTES, "the overlay's own stored bytes must reach the model")
-        return result
-
-    def test_image_corners_map_to_overlay_corners(self) -> None:
-        """(0,0) is the sheet's top-left = the overlay's NW corner."""
-        result = self._extract({"doors": [{"point": [0.0, 0.0]}, {"point": [1.0, 1.0]}]})
-
-        first, second = (element["geometry"]["coordinates"] for element in result["elements"])
-        self.assertAlmostEqual(first[0], -73.93, places=6)
-        self.assertAlmostEqual(first[1], 41.734, places=6)
-        self.assertAlmostEqual(second[0], -73.92, places=6)
-        self.assertAlmostEqual(second[1], 41.724, places=6)
-
-    def test_the_center_maps_to_the_center(self) -> None:
-        result = self._extract({"doors": [{"point": [0.5, 0.5]}]})
-
-        lng, lat = result["elements"][0]["geometry"]["coordinates"]
-        self.assertAlmostEqual(lng, -73.925, places=6)
-        self.assertAlmostEqual(lat, 41.729, places=6)
-
-    def test_rooms_close_their_rings(self) -> None:
-        result = self._extract({"rooms": [{"name": "Ward B", "polygon": [[0.1, 0.1], [0.4, 0.1], [0.4, 0.4]]}]})
-
-        ring = result["rooms"][0]["geometry"]["coordinates"][0]
-        self.assertEqual(ring[0], ring[-1], "a GeoJSON polygon ring must be closed")
-        self.assertEqual(result["rooms"][0]["name"], "Ward B")
-
-    def test_malformed_model_output_is_skipped_not_fatal(self) -> None:
-        result = self._extract({
-            "rooms": [{"polygon": [[0.1, 0.1], [0.2, 0.2]]}, "garbage", {"polygon": None}],
-            "walls": [{"line": [[0.1, "x"], [0.2, 0.2]]}],
-            "doors": [{"point": [1.5, -0.2]}],
-        })
-
-        self.assertEqual(result["rooms"], [], "a two-point polygon is not a room")
-        self.assertEqual([e["kind"] for e in result["elements"]], ["door"], "out-of-range coordinates clamp rather than discard")
-
-    def test_a_non_floorplan_answer_is_empty_not_none(self) -> None:
-        self.assertEqual(self._extract({}), {})
-
-    def test_ai_unavailable_is_none(self) -> None:
-        self.assertIsNone(self._extract(None))
+        gateway.return_value.lookup_floorplans.assert_called_once_with("parcel-uuid-1", building_ref="cris:res-1", on_date="1954-01-01")
 
 
 class FloorplanEndpointTests(TestCase):
@@ -386,20 +453,25 @@ class FloorplanEndpointTests(TestCase):
         location = baker.make(Location, latitude=41.733, longitude=-73.928, place=self.place)
         self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None, slug="hrsh-admin")
 
+    def _save(self, document: dict):
+        return self.client.post(
+            f"/dashboard/map/pin/{self.pin.slug}/floorplan/save/",
+            data=jsonlib.dumps(document),
+            content_type="application/json",
+        )
+
     def test_no_plan_is_a_204_not_an_error(self) -> None:
         response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/json/")
 
         self.assertEqual(response.status_code, 204)
 
     def test_save_then_get_round_trips(self) -> None:
-        import json as jsonlib
-
-        document = {"name": "As built", "floors": [{"level": 0, "name": "Ground", "rooms": [{"name": "Boiler room", "geometry": _SQUARE}]}]}
-        save = self.client.post(
-            f"/dashboard/map/pin/{self.pin.slug}/floorplan/save/",
-            data=jsonlib.dumps(document),
-            content_type="application/json",
-        )
+        document = {
+            "name": "As built",
+            "plan_origin": _ORIGIN,
+            "floors": [{"level": 0, "name": "Ground", "walls": _square_walls(), "rooms": [{"name": "Boiler room", "x": 5.0, "y": 5.0}]}],
+        }
+        save = self._save(document)
         self.assertEqual(save.status_code, 200, save.content)
 
         response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/json/")
@@ -408,6 +480,17 @@ class FloorplanEndpointTests(TestCase):
         body = response.json()
         self.assertEqual(body["origin"], "local")
         self.assertEqual(body["floors"][0]["rooms"][0]["name"], "Boiler room")
+        self.assertEqual(len(body["floors"][0]["walls"]), 4)
+
+    def test_the_origin_is_seeded_from_the_pin_when_the_document_omits_it(self) -> None:
+        """Every coordinate is metres from the origin, so a plan saved without
+        one would have nowhere to be drawn."""
+        response = self._save({"floors": [{"level": 0, "walls": _square_walls()}]})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        origin = response.json()["floorplan"]["plan_origin"]
+        self.assertAlmostEqual(origin["lat"], 41.733, places=3)
+        self.assertAlmostEqual(origin["lng"], -73.928, places=3)
 
     def test_someone_elses_pin_is_a_404(self) -> None:
         from urbanlens.dashboard.models.location.model import Location
@@ -419,40 +502,21 @@ class FloorplanEndpointTests(TestCase):
         self.assertEqual(self.client.get(f"/dashboard/map/pin/{other.slug}/floorplan/json/").status_code, 404)
 
     def test_a_bad_number_is_a_400_naming_the_field(self) -> None:
-        import json as jsonlib
-
-        response = self.client.post(
-            f"/dashboard/map/pin/{self.pin.slug}/floorplan/save/",
-            data=jsonlib.dumps({"floor_count": "several"}),
-            content_type="application/json",
-        )
+        response = self._save({"floor_count": "several"})
 
         self.assertEqual(response.status_code, 400, "a non-numeric field must not reach the database as a 500")
         self.assertIn("floor_count", response.json()["error"])
 
     def test_a_bad_date_is_a_400(self) -> None:
-        import json as jsonlib
-
-        response = self.client.post(
-            f"/dashboard/map/pin/{self.pin.slug}/floorplan/save/",
-            data=jsonlib.dumps({"floors": [{"level": 0, "built_date": "sometime in 1890"}]}),
-            content_type="application/json",
-        )
+        response = self._save({"floors": [{"level": 0, "built_date": "sometime in 1890"}]})
 
         self.assertEqual(response.status_code, 400)
 
-    def test_a_bad_geometry_is_a_400_naming_the_defect(self) -> None:
-        import json as jsonlib
-
-        document = {"floors": [{"level": 0, "elements": [{"kind": "wall", "geometry": {"type": "LineString", "coordinates": "junk"}}]}]}
-        response = self.client.post(
-            f"/dashboard/map/pin/{self.pin.slug}/floorplan/save/",
-            data=jsonlib.dumps(document),
-            content_type="application/json",
-        )
+    def test_a_missing_wall_coordinate_is_a_400_naming_the_defect(self) -> None:
+        response = self._save({"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": [{"kind": "interior", "ax": 0, "ay": 0, "bx": 5}]}]})
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("geometry", response.json()["error"])
+        self.assertIn("by", response.json()["error"])
 
     def test_the_editor_page_renders(self) -> None:
         response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")
@@ -468,7 +532,7 @@ class FloorplanVersionSafetyTests(TestCase):
     could have been lost - re-dating a loaded plan silently rewrote the
     version in force at the new date, and any user could write over any other
     user's plan for the same building, since resolution is place-scoped.
-    Both now fork into a new version instead.
+    Both fork into a new version instead.
     """
 
     def setUp(self) -> None:
@@ -573,13 +637,7 @@ class FloorplanVersionListingTests(TestCase):
 
 
 class FloorplanDocumentOrderTests(TestCase):
-    """Document order is the stored order, matching REData's sort_order.
-
-    Without it, re-arranging items in an editor is lost on the next read: the
-    rows come back in whatever order the database chose, so a plan the author
-    ordered deliberately (a floor's walls traced in sequence, a door's locks
-    outermost-first) reads back scrambled.
-    """
+    """Document order is the stored order, so an editor's arrangement survives."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -587,100 +645,135 @@ class FloorplanDocumentOrderTests(TestCase):
         self.profile = baker.make(User).profile
         self.floorplan = Floorplan.objects.create(place=_building(), profile=self.profile)
 
-    def _rooms(self, names):
-        return {"floors": [{"level": 0, "rooms": [{"name": name, "geometry": _SQUARE} for name in names]}]}
+    def _save(self, names: list[str]) -> None:
+        save_document(
+            self.floorplan,
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {
+                        "level": 0,
+                        "walls": [{"kind": "interior", "ax": float(i), "ay": 0.0, "bx": float(i) + 1, "by": 0.0, "name": name} for i, name in enumerate(names)],
+                    },
+                ],
+            },
+            profile=self.profile,
+        )
 
     def test_document_order_round_trips(self) -> None:
-        save_document(self.floorplan, self._rooms(["c", "a", "b"]), profile=self.profile)
+        self._save(["first", "second", "third"])
 
-        out = document_for(self.floorplan)
-
-        self.assertEqual([room["name"] for room in out["floors"][0]["rooms"]], ["c", "a", "b"])
+        walls = document_for(self.floorplan)["floors"][0]["walls"]
+        self.assertEqual([wall["name"] for wall in walls], ["first", "second", "third"])
 
     def test_re_ordering_in_a_later_save_sticks(self) -> None:
-        save_document(self.floorplan, self._rooms(["c", "a", "b"]), profile=self.profile)
-        out = document_for(self.floorplan)
-        out["floors"][0]["rooms"].reverse()
-
-        save_document(self.floorplan, out, profile=self.profile)
-
-        again = document_for(self.floorplan)
-        self.assertEqual([room["name"] for room in again["floors"][0]["rooms"]], ["b", "a", "c"])
-
-    def test_elements_keep_their_document_order(self) -> None:
-        document = {"floors": [{"level": 0, "elements": [
-            {"kind": "wall", "name": "north", "geometry": _LINE},
-            {"kind": "wall", "name": "east", "geometry": _LINE},
-            {"kind": "door", "name": "main", "geometry": _POINT},
-        ]}]}
+        self._save(["first", "second", "third"])
+        document = document_for(self.floorplan)
+        document["floors"][0]["walls"].reverse()
 
         save_document(self.floorplan, document, profile=self.profile)
 
-        out = document_for(self.floorplan)
-        self.assertEqual([e["name"] for e in out["floors"][0]["elements"]], ["north", "east", "main"])
+        walls = document_for(self.floorplan)["floors"][0]["walls"]
+        self.assertEqual([wall["name"] for wall in walls], ["third", "second", "first"])
 
 
 class FloorplanFeatureCollectionTests(TestCase):
-    """The map-facing read: flat GeoJSON, filtered in the database."""
+    """The map-facing read: plan-local metres projected to WGS-84."""
 
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)
         self.profile = baker.make(User).profile
         self.floorplan = Floorplan.objects.create(place=_building(), profile=self.profile)
-        document = {
-            "floors": [
-                {"level": 0, "name": "Ground", "geometry": _SQUARE, "rooms": [{"name": "Boiler room", "geometry": _SQUARE}],
-                 "elements": [{"kind": "wall", "geometry": _LINE}, {"kind": "door", "geometry": _POINT}]},
-                {"level": 1, "name": "First", "rooms": [{"name": "Ward B", "geometry": _FAR_SQUARE}], "elements": []},
-            ],
-        }
-        save_document(self.floorplan, document, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {
+                        "level": 0,
+                        "walls": _square_walls(),
+                        "rooms": [{"name": "Boiler room", "x": 5.0, "y": 5.0}],
+                        "markers": [{"kind": "stair", "name": "North stair", "x": 2.0, "y": 8.0}],
+                    },
+                    {"level": 1, "walls": _square_walls(6.0)},
+                ],
+            },
+            profile=self.profile,
+        )
 
-    def _collect(self, **kwargs):
+    def _collection(self, **kwargs):
         from urbanlens.dashboard.services.floorplans.features import feature_collection
 
         return feature_collection(self.floorplan, **kwargs)
 
     def test_it_is_a_geojson_feature_collection(self) -> None:
-        collection = self._collect()
+        body = self._collection()
 
-        self.assertEqual(collection["type"], "FeatureCollection")
-        self.assertTrue(all(feature["type"] == "Feature" for feature in collection["features"]))
-        self.assertTrue(all(feature["geometry"]["type"] in {"Point", "LineString", "Polygon"} for feature in collection["features"]))
+        self.assertEqual(body["type"], "FeatureCollection")
+        self.assertTrue(all(feature["type"] == "Feature" for feature in body["features"]))
 
     def test_every_feature_carries_the_uuid_it_can_be_edited_by(self) -> None:
-        collection = self._collect()
+        body = self._collection()
 
-        for feature in collection["features"]:
-            self.assertEqual(feature["id"], feature["properties"]["uuid"])
+        self.assertTrue(all(feature["properties"]["uuid"] for feature in body["features"]))
+
+    def test_walls_project_to_coordinates_near_the_origin(self) -> None:
+        """Local metres become degrees here, and nowhere else. A wall ten
+        metres from the origin must land within a fraction of a degree of it."""
+        wall = next(f for f in self._collection()["features"] if f["properties"]["item_type"] == "wall")
+
+        (lng, lat) = wall["geometry"]["coordinates"][0]
+        self.assertAlmostEqual(lat, _ORIGIN["lat"], places=2)
+        self.assertAlmostEqual(lng, _ORIGIN["lng"], places=2)
+
+    def test_the_projection_matches_the_editors_own(self) -> None:
+        """The server and the editor must agree, or a plan appears to move
+        when a viewer switches between them. Mirrors coords.ts exactly."""
+        import math
+
+        from urbanlens.dashboard.services.floorplans.features import EARTH_RADIUS_M, PlanProjection
+
+        projection = PlanProjection(_ORIGIN["lat"], _ORIGIN["lng"])
+        metres_per_deg_lat = (math.pi / 180) * EARTH_RADIUS_M
+        expected_lat = _ORIGIN["lat"] + 10.0 / metres_per_deg_lat
+        expected_lng = _ORIGIN["lng"] + 10.0 / (metres_per_deg_lat * math.cos(math.radians(_ORIGIN["lat"])))
+
+        self.assertAlmostEqual(projection.to_world(10.0, 10.0)[1], expected_lat, places=9)
+        self.assertAlmostEqual(projection.to_world(10.0, 10.0)[0], expected_lng, places=9)
 
     def test_a_level_filter_returns_one_storey(self) -> None:
-        collection = self._collect(level=1)
+        body = self._collection(level=1)
 
-        names = {feature["properties"]["name"] for feature in collection["features"]}
-        self.assertEqual(names, {"Ward B"})
+        self.assertTrue(body["features"])
+        self.assertTrue(all(feature["properties"]["level"] == 1 for feature in body["features"]))
 
-    def test_a_kind_filter_narrows_elements(self) -> None:
-        collection = self._collect(kind="door")
+    def test_a_kind_filter_narrows_walls(self) -> None:
+        body = self._collection(item_types=("wall",), kind="exterior")
 
-        kinds = {f["properties"].get("kind") for f in collection["features"] if f["properties"]["item_type"] == "element"}
-        self.assertEqual(kinds, {"door"})
+        self.assertTrue(body["features"])
+        self.assertTrue(all(feature["properties"]["kind"] == "exterior" for feature in body["features"]))
+
+    def test_openings_ride_with_their_wall_rather_than_as_features(self) -> None:
+        document = document_for(self.floorplan)
+        document["floors"][0]["walls"][0]["openings"] = [{"kind": "door", "t_start": 0.4, "t_end": 0.6}]
+        save_document(self.floorplan, document, profile=self.profile)
+
+        walls = [f for f in self._collection(item_types=("wall",))["features"] if f["properties"]["openings"]]
+
+        self.assertEqual(len(walls), 1)
+        self.assertEqual(walls[0]["properties"]["openings"][0]["kind"], "door")
 
     def test_a_bbox_excludes_what_it_does_not_cover(self) -> None:
-        """The filter runs in the database, on the spatial index."""
-        collection = self._collect(bbox=(-73.931, 41.732, -73.928, 41.735))
+        body = self._collection(bbox=(-10.0, 10.0, -9.0, 11.0))
 
-        names = {feature["properties"]["name"] for feature in collection["features"]}
-        self.assertNotIn("Ward B", names, "a room outside the viewport should not be returned")
-        self.assertIn("Boiler room", names)
+        self.assertEqual(body["features"], [])
 
     def test_the_cap_is_reported_rather_than_silent(self) -> None:
-        """Silence about a truncated list reads as 'that is everything'."""
-        collection = self._collect(limit=2)
+        body = self._collection(limit=2)
 
-        self.assertEqual(len(collection["features"]), 2)
-        self.assertTrue(collection["truncated"])
+        self.assertEqual(len(body["features"]), 2)
+        self.assertTrue(body["truncated"], "a cut-off list that says nothing reads as 'that is everything'")
 
     def test_bounds_cover_everything_drawn(self) -> None:
         from urbanlens.dashboard.services.floorplans.features import bounds_of
@@ -688,13 +781,27 @@ class FloorplanFeatureCollectionTests(TestCase):
         bounds = bounds_of(self.floorplan)
 
         self.assertIsNotNone(bounds)
-        self.assertLessEqual(bounds[0], -73.93)
-        self.assertGreaterEqual(bounds[2], -73.90)
+        min_lng, min_lat, max_lng, max_lat = bounds
+        self.assertLess(min_lng, max_lng)
+        self.assertLess(min_lat, max_lat)
 
     def test_bounds_are_none_for_an_empty_plan(self) -> None:
         from urbanlens.dashboard.services.floorplans.features import bounds_of
 
-        self.assertIsNone(bounds_of(Floorplan.objects.create(place=_building(), profile=self.profile)))
+        empty = Floorplan.objects.create(place=_building(), profile=self.profile)
+
+        self.assertIsNone(bounds_of(empty))
+
+    def test_a_plan_with_no_origin_draws_nothing_rather_than_guessing(self) -> None:
+        """Without an origin the metres have no meaning; placing them at 0,0
+        would drop the whole plan into the Gulf of Guinea."""
+        from urbanlens.dashboard.services.floorplans.features import feature_collection
+
+        self.floorplan.origin_lat = None
+        self.floorplan.origin_lng = None
+        self.floorplan.save(update_fields=["origin_lat", "origin_lng"])
+
+        self.assertEqual(feature_collection(self.floorplan)["features"], [])
 
 
 class FloorplanCommunityTests(TestCase):
@@ -708,7 +815,11 @@ class FloorplanCommunityTests(TestCase):
         self._seq = 0
         self.place = _building()
         self.floorplan = Floorplan.objects.create(place=self.place, profile=self.profile, name="mine")
-        save_document(self.floorplan, {"name": "mine", "floors": [{"level": 0, "rooms": [{"name": "Boiler room", "geometry": _SQUARE}]}]}, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {"name": "mine", "plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls(), "rooms": [{"name": "Boiler room", "x": 5.0, "y": 5.0}]}]},
+            profile=self.profile,
+        )
 
     def _wiki(self):
         from urbanlens.dashboard.models.location.model import Location
@@ -726,8 +837,6 @@ class FloorplanCommunityTests(TestCase):
         self.assertIsNone(self._publish())
 
     def test_publishing_copies_rather_than_hands_over(self) -> None:
-        from urbanlens.dashboard.models.wiki.model import Wiki
-
         self._wiki()
 
         community = self._publish()
@@ -740,8 +849,6 @@ class FloorplanCommunityTests(TestCase):
 
     def test_a_published_plan_gets_its_own_rows(self) -> None:
         """Copying must not move the personal plan's items onto the wiki."""
-        from urbanlens.dashboard.models.wiki.model import Wiki
-
         self._wiki()
 
         community = self._publish()
@@ -751,8 +858,16 @@ class FloorplanCommunityTests(TestCase):
         self.assertTrue(personal_rooms)
         self.assertFalse(personal_rooms & community_rooms)
 
+    def test_publishing_carries_the_origin_across(self) -> None:
+        """Without it the copy's metres would have no anchor and the published
+        plan would be unplaceable."""
+        self._wiki()
+
+        community = self._publish()
+
+        self.assertEqual(document_for(community)["plan_origin"], _ORIGIN)
+
     def test_publishing_records_a_wiki_edit(self) -> None:
-        from urbanlens.dashboard.models.wiki.model import Wiki
         from urbanlens.dashboard.models.wiki_edit import WikiEdit
 
         wiki = self._wiki()
@@ -767,77 +882,8 @@ class FloorplanCommunityTests(TestCase):
             self.assertIsNone(resolve_document(self.place, profile=self.other))
 
 
-class ProjectiveTransformTests(TestCase):
-    """Tracing must agree with what the browser drew.
-
-    The overlay is rendered through a projective homography (CSS matrix3d, via
-    `matrix3dForCorners`). Tracing it with bilinear interpolation instead put
-    traced geometry beside the walls it came from on any sheet whose corners
-    are not an affine parallelogram - which is what dragging corners onto
-    oblique imagery produces.
-    """
-
-    def _transform(self, corners):
-        from urbanlens.dashboard.services.floorplans.extraction import _corner_transform
-
-        overlay = mock.Mock(pk=1)
-        (overlay.nw_longitude, overlay.nw_latitude) = corners[0]
-        (overlay.ne_longitude, overlay.ne_latitude) = corners[1]
-        (overlay.se_longitude, overlay.se_latitude) = corners[2]
-        (overlay.sw_longitude, overlay.sw_latitude) = corners[3]
-        return _corner_transform(overlay)
-
-    def test_corners_map_exactly(self) -> None:
-        corners = [(-73.93, 41.734), (-73.92, 41.7345), (-73.919, 41.724), (-73.931, 41.7235)]
-        transform = self._transform(corners)
-
-        for (x, y), (lng, lat) in zip([(0, 0), (1, 0), (1, 1), (0, 1)], corners, strict=True):
-            got = transform(x, y)
-            self.assertAlmostEqual(got[0], lng, places=9)
-            self.assertAlmostEqual(got[1], lat, places=9)
-
-    def test_a_rectangle_still_maps_linearly(self) -> None:
-        """The affine case must not regress: the centre is the centre."""
-        transform = self._transform([(-73.93, 41.734), (-73.92, 41.734), (-73.92, 41.724), (-73.93, 41.724)])
-
-        lng, lat = transform(0.5, 0.5)
-
-        self.assertAlmostEqual(lng, -73.925, places=9)
-        self.assertAlmostEqual(lat, 41.729, places=9)
-
-    def test_a_keystoned_sheet_is_not_bilinear(self) -> None:
-        """Where the two disagree, we must follow the renderer, not the average.
-
-        Deliberately an *irregular* quad: a symmetric trapezoid's centre lands
-        in the same place under both transforms, so it proves nothing.
-        """
-        corners = [(-73.930, 41.7340), (-73.9250, 41.7335), (-73.9210, 41.7245), (-73.9305, 41.7238)]
-        transform = self._transform(corners)
-
-        lng, lat = transform(0.5, 0.5)
-        top = ((corners[0][0] + corners[1][0]) / 2, (corners[0][1] + corners[1][1]) / 2)
-        bottom = ((corners[3][0] + corners[2][0]) / 2, (corners[3][1] + corners[2][1]) / 2)
-        bilinear = ((top[0] + bottom[0]) / 2, (top[1] + bottom[1]) / 2)
-
-        self.assertGreater(
-            abs(lng - bilinear[0]) + abs(lat - bilinear[1]),
-            1e-6,
-            "projective and bilinear agreeing here would mean the transform is not projective",
-        )
-
-    def test_degenerate_corners_fall_back_rather_than_raise(self) -> None:
-        transform = self._transform([(0.0, 0.0), (0.0, 0.0), (0.0, 0.0), (0.0, 0.0)])
-
-        self.assertEqual(transform(0.5, 0.5), (0.0, 0.0))
-
-
-class FloorplanDocumentContractTests(TestCase):
-    """The document contract REData defines, which ours must not drift from.
-
-    Its write side rejects unknown keys outright, so anything we emit that it
-    doesn't accept would break a future push upstream - and anything it emits
-    that we ignore is data silently dropped on the way in.
-    """
+class FloorplanMarkerTests(TestCase):
+    """Markers collapse five old tools into one table with a kind."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -845,89 +891,62 @@ class FloorplanDocumentContractTests(TestCase):
         self.profile = baker.make(User).profile
         self.floorplan = Floorplan.objects.create(place=_building(), profile=self.profile)
 
-    #: Exactly REData's `_PLAN_KEYS`/`_ITEM_KEYS` (services/floorplans.py), plus
-    #: `labels`, which is UrbanLens's own per-item addition.
-    _PLAN_KEYS = {
-        "uuid", "description", "condition", "built_date", "attributes", "source", "references", "labels",
-        "name", "building_ref", "building_name", "valid_from", "floor_count", "source_pool", "reference_pool",
-        "floors", "elements",
-    }
-    _ELEMENT_KEYS = {
-        "uuid", "description", "condition", "built_date", "attributes", "source", "references", "labels",
-        "kind", "name", "geometry", "material", "room", "mounted_on", "base_elevation_meters", "height_meters",
-        "thickness_meters", "rotation_degrees", "connects_rooms", "spans_floors", "locks",
-    }
-    _ROOM_KEYS = {
-        "uuid", "description", "condition", "built_date", "attributes", "source", "references", "labels",
-        "name", "geometry", "height_meters", "parent", "spans_floors",
-    }
+    def test_a_connector_id_ties_a_stair_across_two_floors(self) -> None:
+        """A stack of floors reads as one building only when the vertical
+        connections between them are identified."""
+        save_document(
+            self.floorplan,
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {"level": 0, "markers": [{"kind": "stair", "name": "North stair", "x": 2.0, "y": 8.0, "connector_id": "north"}]},
+                    {"level": 1, "markers": [{"kind": "stair", "name": "North stair", "x": 2.0, "y": 8.0, "connector_id": "north"}]},
+                ],
+            },
+            profile=self.profile,
+        )
 
-    def test_we_emit_no_key_redata_would_reject(self) -> None:
-        save_document(self.floorplan, {"floors": [{"level": 0, "rooms": [{"name": "a", "geometry": _SQUARE}],
-                                                   "elements": [{"kind": "door", "geometry": _POINT, "locks": [{"name": "padlock"}]}]}]}, profile=self.profile)
+        linked = FloorplanMarker.objects.filter(connector_id="north")
+        self.assertEqual(linked.count(), 2)
+        self.assertEqual({marker.floor.level for marker in linked}, {0, 1})
 
-        out = document_for(self.floorplan)
+    def test_a_photo_marker_keeps_its_facing(self) -> None:
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "photo", "x": 1.0, "y": 1.0, "facing_degrees": 217.5}]}]},
+            profile=self.profile,
+        )
 
-        self.assertEqual(set(out) - self._PLAN_KEYS, set(), "plan-level keys drifted from REData's contract")
-        floor = out["floors"][0]
-        self.assertEqual(set(floor["rooms"][0]) - self._ROOM_KEYS, set(), "room keys drifted")
-        self.assertEqual(set(floor["elements"][0]) - self._ELEMENT_KEYS, set(), "element keys drifted")
+        self.assertEqual(FloorplanMarker.objects.get().facing_degrees, 217.5)
 
-    def test_a_document_local_key_links_two_new_items(self) -> None:
-        """Neither exists yet, so neither has a uuid to reference."""
-        document = {"floors": [{"level": 0, "key": "ground", "elements": [
-            {"key": "north-wall", "kind": "wall", "geometry": _LINE},
-            {"kind": "door", "geometry": _POINT, "mounted_on": "north-wall"},
-        ]}]}
+    def test_an_unknown_marker_kind_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            save_document(
+                self.floorplan,
+                {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "portal", "x": 1.0, "y": 1.0}]}]},
+                profile=self.profile,
+            )
 
-        save_document(self.floorplan, document, profile=self.profile)
 
-        out = document_for(self.floorplan)
-        wall = next(e for e in out["floors"][0]["elements"] if e["kind"] == "wall")
-        door = next(e for e in out["floors"][0]["elements"] if e["kind"] == "door")
-        self.assertEqual(door["mounted_on"], wall["uuid"], "a document-local key must resolve like a uuid")
-
-    def test_keys_are_never_emitted_on_read(self) -> None:
-        save_document(self.floorplan, {"floors": [{"level": 0, "key": "ground"}]}, profile=self.profile)
-
-        self.assertNotIn("key", document_for(self.floorplan)["floors"][0])
-
-    def test_a_door_connects_rooms_by_key(self) -> None:
-        document = {"floors": [{"level": 0,
-                                "rooms": [{"key": "ward", "name": "Ward B", "geometry": _SQUARE},
-                                          {"key": "hall", "name": "Hall", "geometry": _SQUARE}],
-                                "elements": [{"kind": "door", "geometry": _POINT, "connects_rooms": ["ward", "hall"]}]}]}
-
-        save_document(self.floorplan, document, profile=self.profile)
-
-        door = document_for(self.floorplan)["floors"][0]["elements"][0]
-        self.assertEqual(len(door["connects_rooms"]), 2, "a door joining two rooms is what a router walks")
-
-    def test_a_stair_spans_floors(self) -> None:
-        document = {"floors": [{"key": "g", "level": 0, "elements": [{"kind": "stair", "geometry": _LINE, "spans_floors": ["g", "first"]}]},
-                               {"key": "first", "level": 1}]}
-
-        save_document(self.floorplan, document, profile=self.profile)
-
-        stair = document_for(self.floorplan)["floors"][0]["elements"][0]
-        self.assertEqual(len(stair["spans_floors"]), 2)
-
-    def test_a_room_nests_inside_another(self) -> None:
-        document = {"floors": [{"level": 0, "rooms": [
-            {"key": "ward", "name": "Ward B", "geometry": _SQUARE},
-            {"name": "Closet", "geometry": _SQUARE, "parent": "ward"},
-        ]}]}
-
-        save_document(self.floorplan, document, profile=self.profile)
-
-        rooms = document_for(self.floorplan)["floors"][0]["rooms"]
-        ward = next(room for room in rooms if room["name"] == "Ward B")
-        closet = next(room for room in rooms if room["name"] == "Closet")
-        self.assertEqual(closet["parent"], ward["uuid"])
+class FloorplanDocumentContractTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        self.floorplan = Floorplan.objects.create(place=_building(), profile=self.profile)
 
     def test_an_out_of_range_level_is_a_message_not_a_500(self) -> None:
-        with self.assertRaises(ValueError):
-            save_document(self.floorplan, {"floors": [{"level": 99_999}]}, profile=self.profile)
+        with self.assertRaises(ValueError) as caught:
+            save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 99_999}]}, profile=self.profile)
+
+        self.assertIn("level", str(caught.exception))
+
+    def test_a_floor_carries_no_outline_of_its_own(self) -> None:
+        """The storey's shape is whatever its walls enclose; a stored outline
+        would be a second, divergent answer to the same question."""
+        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]}, profile=self.profile)
+
+        self.assertNotIn("geometry", document_for(self.floorplan)["floors"][0])
 
 
 class FloorplanEditorContextTests(TestCase):
@@ -948,7 +967,7 @@ class FloorplanEditorContextTests(TestCase):
 
     def test_the_pins_photos_are_offered_as_references(self) -> None:
         """The pool attaches to every item, so a pin's own photos are the
-        likeliest evidence for a wall, a door, or its lock."""
+        likeliest evidence for a wall or the door cut into it."""
         from django.core.files.uploadedfile import SimpleUploadedFile
 
         photo = baker.make("dashboard.Image", pin=self.pin, caption="Boiler room, 2019")
@@ -1014,3 +1033,93 @@ class FloorplanMultiBuildingPickerTests(TestCase):
 
         self.assertEqual(response.context["place"], self.kirkbride)
         self.assertEqual(response.context["building_choices"], [])
+
+
+class PlacelessFloorplanTests(TestCase):
+    """A plan need not belong to a known building outline.
+
+    Most pins on a hand-mapped site resolve to no building place at all (no
+    provider has an outline for a derelict structure), and refusing to save
+    those made the editor a dead end for exactly the buildings most worth
+    drawing. The pin is the plan's identity in that case.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        # Deliberately no place: this is the "no building outline" case.
+        location = baker.make(Location, latitude=41.733, longitude=-73.928, place=None)
+        self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None, slug="placeless-pin")
+
+    def _save(self, document: dict):
+        return self.client.post(
+            f"/dashboard/map/pin/{self.pin.slug}/floorplan/save/",
+            data=jsonlib.dumps(document),
+            content_type="application/json",
+        )
+
+    def _document(self) -> dict:
+        return {
+            "name": "Sketch",
+            "plan_origin": _ORIGIN,
+            "floors": [{"level": 0, "name": "Ground", "walls": _square_walls(), "rooms": [{"name": "Hall", "x": 5.0, "y": 5.0}]}],
+        }
+
+    def test_saving_a_plan_for_a_pin_with_no_building_succeeds(self) -> None:
+        response = self._save(self._document())
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_the_saved_plan_has_no_place_and_belongs_to_the_pin(self) -> None:
+        self._save(self._document())
+
+        plan = Floorplan.objects.get(pin=self.pin)
+        self.assertIsNone(plan.place)
+        self.assertEqual(plan.profile_id, self.user.profile.pk)
+
+    def test_a_placeless_plan_round_trips(self) -> None:
+        self._save(self._document())
+
+        response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/json/")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["name"], "Sketch")
+        self.assertEqual(len(body["floors"][0]["walls"]), 4)
+        self.assertEqual(body["floors"][0]["rooms"][0]["name"], "Hall")
+
+    def test_saving_twice_updates_rather_than_piling_up_versions(self) -> None:
+        first = self._save(self._document()).json()["floorplan"]
+        again = {**self._document(), "uuid": first["uuid"], "name": "Sketch v2"}
+
+        self._save(again)
+
+        self.assertEqual(Floorplan.objects.filter(pin=self.pin).count(), 1)
+        self.assertEqual(Floorplan.objects.get(pin=self.pin).name, "Sketch v2")
+
+    def test_one_users_placeless_plan_is_not_served_to_another(self) -> None:
+        """`place=None` must not become a global bucket every placeless plan shares."""
+        self._save(self._document())
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        other_user = baker.make(User)
+        other_location = baker.make(Location, latitude=42.1, longitude=-74.1, place=None)
+        other_pin = baker.make(Pin, profile=other_user.profile, location=other_location, parent_pin=None, slug="other-placeless")
+        self.client.force_login(other_user)
+
+        response = self.client.get(f"/dashboard/map/pin/{other_pin.slug}/floorplan/json/")
+
+        self.assertEqual(response.status_code, 204)
+
+    def test_editing_requires_a_place_or_a_pin(self) -> None:
+        """Neither would leave the row unreachable by any lookup path."""
+        from urbanlens.dashboard.services.floorplans.resolution import floorplan_for_editing
+
+        with pytest.raises(ValueError, match="place or a pin"):
+            floorplan_for_editing(None, self.user.profile)

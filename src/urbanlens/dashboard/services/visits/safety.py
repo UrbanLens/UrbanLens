@@ -173,10 +173,9 @@ def _send_email(*, to: str, subject: str, template: str, context: dict) -> None:
         logger.exception("Failed to send safety check-in email to %s", to)
     except Exception:
         # A template-context bug (missing var, bad filter) must be logged like every other
-        # delivery failure here, not raised uncaught - especially since escalate_checkin()
-        # would otherwise abort mid-contact-loop on a template bug, which (before the
-        # notified_at idempotency fix above) used to mean re-notifying already-notified
-        # contacts on the next retry.
+        # delivery failure here, not raised uncaught - escalate_checkin() would otherwise
+        # abort mid-contact-loop on a template bug, leaving every remaining contact
+        # unnotified.
         logger.exception("Failed to render/send safety check-in email to %s", to)
 
 
@@ -763,12 +762,11 @@ def decline_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
     Why it is needed at all: ``SafetyCheckinChatConsumer`` checks "may this
     profile watch this check-in?" once, at ``connect()`` time, and then holds
     the socket open - which is why the owner-initiated
-    :func:`remove_checkin_partner` broadcasts. Declining used to be reachable
-    only from the web overview page, which renders a Decline button solely for
-    INVITED rows, and an invitee has no socket to revoke; the external API's
-    decline endpoint deliberately applies no status filter (see
-    :func:`get_partner_role`), so an ACCEPTED partner can now reach this as a
-    resignation. Without the broadcast that partner keeps streaming chat,
+    :func:`remove_checkin_partner` broadcasts. The web overview page renders a
+    Decline button solely for INVITED rows, whose invitee has no socket to
+    revoke, but the external API's decline endpoint deliberately applies no
+    status filter (see :func:`get_partner_role`), so an ACCEPTED partner can
+    reach this as a resignation. Without the broadcast that partner keeps streaming chat,
     status and live-position frames for as long as their tab stays open - a
     partner who resigned still watching where someone physically is.
 

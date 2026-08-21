@@ -1,27 +1,22 @@
-"""Floorplan documents: the JSON shape editors and consumers speak.
+"""Floorplan documents: the JSON shape the editor and consumers speak.
 
-The document format is REData's, verbatim (see
-``../REData/src/redata/parcels/services/floorplans.py``): geometry as GeoJSON,
-``source`` as a uuid into the plan-level ``source_pool``, ``references`` as
-uuids into ``reference_pool``, elements per floor plus plan-level, locks
-nested under elements. One format means the editor parses a REData-origin
-document and a local one identically, and a future push upstream is a POST of
-the same payload (minus the local-only ``labels`` keys, which the upstream
-validator would reject).
+One document carries a whole plan version - origin, floors, walls, the
+openings cut into those walls, room seeds and markers. Coordinates are
+plan-local metres throughout (see ``models.floorplans.model``), never degrees;
+``services.floorplans.features`` is where they become WGS-84 for a map.
 
-Saving is whole-document replacement, like REData's write side: items
-round-tripping a known uuid are updated in place (labels and identity kept),
-items the document omits are deleted, items without a uuid are created.
+Saving is whole-document replacement: an item round-tripping a known uuid is
+updated in place (keeping its identity, labels and references), an item the
+document omits is deleted, an item without a uuid is created. That makes the
+editor's job a single POST of what it currently holds, with no diffing.
 """
 
 from __future__ import annotations
 
 import datetime
-import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from django.contrib.gis.geos import GEOSGeometry
 from django.db import transaction
 
 if TYPE_CHECKING:
@@ -35,36 +30,13 @@ logger = logging.getLogger(__name__)
 #: act on.
 _MIN_LEVEL, _MAX_LEVEL = -32_768, 32_767
 
-
-def _geometry_out(geometry) -> dict | None:
-    return json.loads(geometry.geojson) if geometry is not None else None
-
-
-def _geometry_in(data: dict | None) -> GEOSGeometry | None:
-    """A GeoJSON dict as GEOS geometry (SRID 4326), or None.
-
-    Raises:
-        ValueError: The dict is not a usable GeoJSON geometry.
-    """
-    if not data:
-        return None
-    try:
-        return GEOSGeometry(json.dumps(data), srid=4326)
-    except Exception as exc:
-        raise ValueError(f"unusable geometry: {exc}") from exc
-
-
-#: Consumer-local data lives under this key inside ``attributes``. REData
-#: rejects unknown keys anywhere in a document - deliberately, so a typo like
-#: "goemetry" fails loudly instead of silently dropping a wall - but
-#: round-trips ``attributes`` verbatim and never interprets keys it does not
-#: own. Namespacing keeps our labels portable *through* an upstream push
-#: rather than being stripped before one.
+#: Consumer-local data lives under this key inside ``attributes``, so a
+#: producer that does not own the key round-trips it untouched.
 LOCAL_NAMESPACE = "urbanlens"
 
 
 def _item_out(row: FloorplanItem, source_uuids: dict, reference_uuids: dict) -> dict[str, Any]:
-    """The shared item fields, exactly as REData emits them."""
+    """The item fields every floorplan row shares."""
     attributes = dict(row.attributes or {})
     labels = [str(label.uuid) for label in row.labels.all()]
     local = {key: value for key, value in (attributes.get(LOCAL_NAMESPACE) or {}).items() if key != "labels"}
@@ -96,47 +68,50 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
         floorplan: The version to serialize.
 
     Returns:
-        The document, in REData's shape plus local ``labels`` keys.
+        The document.
     """
     source_rows = list(floorplan.source_pool.all())
     reference_rows = list(floorplan.reference_pool.all())
     source_uuids = {row.pk: str(row.uuid) for row in source_rows}
     reference_uuids = {row.pk: str(row.uuid) for row in reference_rows}
 
-    floors = list(floorplan.floors.prefetch_related("references", "labels", "rooms__references", "rooms__labels", "rooms__spans_floors"))
-    elements = list(
-        floorplan.elements.prefetch_related(
-            "references", "labels", "locks__references", "locks__labels", "connects_rooms", "spans_floors",
+    floors = list(
+        floorplan.floors.prefetch_related(
+            "references",
+            "labels",
+            "walls__references",
+            "walls__labels",
+            "walls__openings__references",
+            "walls__openings__labels",
+            "rooms__references",
+            "rooms__labels",
+            "markers__references",
+            "markers__labels",
         ),
     )
-    element_uuids: dict[int | None, str] = {row.pk: str(row.uuid) for row in elements}
-    room_uuids: dict[int | None, str] = {room.pk: str(room.uuid) for floor in floors for room in floor.rooms.all()}
-    floor_uuids: dict[int | None, str] = {floor.pk: str(floor.uuid) for floor in floors}
 
-    def _element_dict(row) -> dict[str, Any]:
+    def _wall_dict(wall) -> dict[str, Any]:
         return {
-            **_item_out(row, source_uuids, reference_uuids),
-            "kind": row.kind,
-            "name": row.name,
-            "geometry": _geometry_out(row.geometry),
-            "material": row.material,
-            "room": room_uuids.get(row.room_id),
-            "mounted_on": element_uuids.get(row.mounted_on_id),
-            "base_elevation_meters": row.base_elevation_meters,
-            "height_meters": row.height_meters,
-            "thickness_meters": row.thickness_meters,
-            "rotation_degrees": row.rotation_degrees,
-            "connects_rooms": [room_uuids[room.pk] for room in row.connects_rooms.all() if room.pk in room_uuids],
-            "spans_floors": [floor_uuids[floor.pk] for floor in row.spans_floors.all() if floor.pk in floor_uuids],
-            "locks": [
-                {**_item_out(lock, source_uuids, reference_uuids), "name": lock.name, "key_attributes": lock.key_attributes or {}}
-                for lock in row.locks.all()
+            **_item_out(wall, source_uuids, reference_uuids),
+            "kind": wall.kind,
+            "thickness": wall.thickness,
+            "name": wall.name,
+            "ax": wall.ax,
+            "ay": wall.ay,
+            "bx": wall.bx,
+            "by": wall.by,
+            "openings": [
+                {
+                    **_item_out(opening, source_uuids, reference_uuids),
+                    "kind": opening.kind,
+                    "t_start": opening.t_start,
+                    "t_end": opening.t_end,
+                    "swing": opening.swing,
+                    "sill_meters": opening.sill_meters,
+                }
+                for opening in wall.openings.all()
             ],
         }
-
-    elements_by_floor: dict[int | None, list] = {}
-    for row in elements:
-        elements_by_floor.setdefault(row.floor_id, []).append(row)
 
     return {
         **_item_out(floorplan, source_uuids, reference_uuids),
@@ -145,6 +120,16 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
         "building_name": floorplan.building_name,
         "valid_from": floorplan.valid_from.isoformat() if floorplan.valid_from else None,
         "floor_count": floorplan.floor_count,
+        # Deliberately not "origin": resolution.py has long used that key for
+        # provenance ("local" / "community" / "redata"), and the save view
+        # merges that in over the document - so a coordinate anchor stored
+        # under the same name is silently replaced by the string "local".
+        "plan_origin": (
+            {"lat": float(floorplan.origin_lat), "lng": float(floorplan.origin_lng)}
+            if floorplan.origin_lat is not None and floorplan.origin_lng is not None
+            else None
+        ),
+        "rotation_degrees": floorplan.rotation_degrees,
         "source_pool": [
             {"uuid": str(row.uuid), "title": row.title, "url": row.url, "note": row.note, "author": row.author, "attributes": row.attributes or {}}
             for row in source_rows
@@ -157,7 +142,7 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
                 "url": row.url,
                 "description": row.description,
                 "attributes": row.attributes or {},
-                "image_uuid": str(row.image.uuid) if row.image_id else None,
+                "image_uuid": str(row.image.uuid) if row.image is not None else None,
             }
             for row in reference_rows
         ],
@@ -168,23 +153,32 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
                 "name": floor.name,
                 "elevation_meters": floor.elevation_meters,
                 "height_meters": floor.height_meters,
-                "geometry": _geometry_out(floor.geometry),
+                "walls": [_wall_dict(wall) for wall in floor.walls.all()],
                 "rooms": [
                     {
                         **_item_out(room, source_uuids, reference_uuids),
                         "name": room.name,
-                        "geometry": _geometry_out(room.geometry),
+                        "x": room.x,
+                        "y": room.y,
                         "height_meters": room.height_meters,
-                        "parent": room_uuids.get(room.parent_id),
-                        "spans_floors": [floor_uuids[floor.pk] for floor in room.spans_floors.all() if floor.pk in floor_uuids],
                     }
                     for room in floor.rooms.all()
                 ],
-                "elements": [_element_dict(row) for row in elements_by_floor.get(floor.pk, [])],
+                "markers": [
+                    {
+                        **_item_out(marker, source_uuids, reference_uuids),
+                        "kind": marker.kind,
+                        "name": marker.name,
+                        "x": marker.x,
+                        "y": marker.y,
+                        "facing_degrees": marker.facing_degrees,
+                        "connector_id": marker.connector_id,
+                    }
+                    for marker in floor.markers.all()
+                ],
             }
             for floor in floors
         ],
-        "elements": [_element_dict(row) for row in elements_by_floor.get(None, [])],
     }
 
 
@@ -218,6 +212,20 @@ def _float_in(raw, field: str) -> float | None:
         raise ValueError(f"{field} must be a number") from exc
 
 
+def _required_float_in(raw, field: str) -> float:
+    """A coordinate the document must carry.
+
+    Raises:
+        ValueError: Absent or not a number. A wall missing an endpoint is not
+            a wall, and defaulting it to zero would silently move it to the
+            plan origin.
+    """
+    value = _float_in(raw, field)
+    if value is None:
+        raise ValueError(f"{field} is required")
+    return value
+
+
 def _date_in(raw) -> datetime.date | None:
     """Parse an ISO date or None.
 
@@ -229,33 +237,19 @@ def _date_in(raw) -> datetime.date | None:
     return datetime.date.fromisoformat(str(raw))
 
 
-class _Registry:
-    """Resolves a document's cross-references by uuid *or* document-local key.
+def _choice_in(raw, choices, field: str, default: str) -> str:
+    """One of an enum's values, defaulting when absent.
 
-    A client drawing a door on a wall it just drew has no uuid for either -
-    both are new. REData solves this with a write-only ``key``: an item may
-    name itself, and any reference may name that key instead of a uuid. Keys
-    are never emitted on read (uuids are), so they exist only for the
-    duration of one document.
+    Raises:
+        ValueError: Present but unrecognised. Coercing an unknown value to the
+            default is how a whole class of item quietly becomes the wrong
+            thing while looking like it saved.
     """
-
-    def __init__(self) -> None:
-        self._rows: dict[str, Any] = {}
-
-    def register(self, payload: dict, row: Any) -> None:
-        """Index a saved row under its payload uuid and its document key."""
-        for name in (payload.get("uuid"), payload.get("key")):
-            if name:
-                self._rows[str(name)] = row
-        self._rows[str(row.uuid)] = row
-
-    def get(self, name: Any) -> Any:
-        """The row a reference names, or None."""
-        return self._rows.get(str(name)) if name else None
-
-    def many(self, names: Any) -> list[Any]:
-        """Every row a reference list names, skipping the unresolvable."""
-        return [row for row in (self.get(name) for name in (names or [])) if row is not None]
+    if raw is None or raw == "":
+        return default
+    if raw not in choices:
+        raise ValueError(f"unknown {field} {raw!r} - expected one of {sorted(choices)}")
+    return str(raw)
 
 
 class _Pools:
@@ -271,38 +265,38 @@ class _Pools:
         from urbanlens.dashboard.models.floorplans.model import FloorplanReference, FloorplanReferenceKind, FloorplanSource
         from urbanlens.dashboard.models.images.model import Image
 
-        existing = {str(row.uuid): row for row in self.floorplan.source_pool.all()}
+        stale_sources = {str(row.uuid): row for row in self.floorplan.source_pool.all()}
         for payload in document.get("source_pool") or []:
-            row = existing.pop(str(payload.get("uuid") or ""), None) or FloorplanSource(floorplan=self.floorplan)
-            row.floorplan = self.floorplan
-            row.title = payload.get("title") or ""
-            row.url = payload.get("url") or ""
-            row.note = payload.get("note") or ""
-            row.author = payload.get("author") or ""
-            row.attributes = payload.get("attributes") or {}
-            row.save()
-            for name in (payload.get("uuid"), payload.get("key"), row.uuid):
+            source = stale_sources.pop(str(payload.get("uuid") or ""), None) or FloorplanSource(floorplan=self.floorplan)
+            source.floorplan = self.floorplan
+            source.title = payload.get("title") or ""
+            source.url = payload.get("url") or ""
+            source.note = payload.get("note") or ""
+            source.author = payload.get("author") or ""
+            source.attributes = payload.get("attributes") or {}
+            source.save()
+            for name in (payload.get("uuid"), payload.get("key"), source.uuid):
                 if name:
-                    self.sources[str(name)] = row
-        for orphan in existing.values():
-            orphan.delete()
+                    self.sources[str(name)] = source
+        for stale_source in stale_sources.values():
+            stale_source.delete()
 
-        existing = {str(row.uuid): row for row in self.floorplan.reference_pool.all()}
+        stale_references = {str(row.uuid): row for row in self.floorplan.reference_pool.all()}
         for payload in document.get("reference_pool") or []:
-            row = existing.pop(str(payload.get("uuid") or ""), None) or FloorplanReference(floorplan=self.floorplan)
-            row.floorplan = self.floorplan
-            row.kind = payload.get("kind") if payload.get("kind") in FloorplanReferenceKind.values else FloorplanReferenceKind.OTHER
-            row.title = payload.get("title") or ""
-            row.url = payload.get("url") or ""
-            row.description = payload.get("description") or ""
-            row.attributes = payload.get("attributes") or {}
-            row.image = Image.objects.filter(uuid=payload["image_uuid"]).first() if payload.get("image_uuid") else None
-            row.save()
-            for name in (payload.get("uuid"), payload.get("key"), row.uuid):
+            reference = stale_references.pop(str(payload.get("uuid") or ""), None) or FloorplanReference(floorplan=self.floorplan)
+            reference.floorplan = self.floorplan
+            reference.kind = payload.get("kind") if payload.get("kind") in FloorplanReferenceKind.values else FloorplanReferenceKind.OTHER
+            reference.title = payload.get("title") or ""
+            reference.url = payload.get("url") or ""
+            reference.description = payload.get("description") or ""
+            reference.attributes = payload.get("attributes") or {}
+            reference.image = Image.objects.filter(uuid=payload["image_uuid"]).first() if payload.get("image_uuid") else None
+            reference.save()
+            for name in (payload.get("uuid"), payload.get("key"), reference.uuid):
                 if name:
-                    self.references[str(name)] = row
-        for orphan in existing.values():
-            orphan.delete()
+                    self.references[str(name)] = reference
+        for stale_reference in stale_references.values():
+            stale_reference.delete()
 
 
 def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, profile: Profile | None) -> None:
@@ -316,8 +310,6 @@ def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, prof
     except ValueError as exc:
         raise ValueError(f"built_date: {exc}") from exc
     attributes = dict(payload.get("attributes") or {})
-    # Accept a top-level `labels` too: it is what this app emitted before the
-    # namespaced form, and a document saved by an older client is still valid.
     local = dict(attributes.get(LOCAL_NAMESPACE) or {})
     label_uuids = local.pop("labels", None) or payload.get("labels") or []
     if local:
@@ -334,14 +326,14 @@ def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, prof
         row.labels.set(Label.objects.filter(uuid__in=label_uuids, profile=profile))
 
 
-def _sync(existing_by_uuid: dict, payloads: list[dict], build, pools: _Pools, profile: Profile | None) -> list[tuple[dict, Any]]:
+def _sync(existing_by_uuid: dict, payloads: list[dict] | None, build, pools: _Pools, profile: Profile | None) -> list[tuple[dict, Any]]:
     """Reconcile one collection: update by uuid, create the new, delete the omitted."""
     kept: list[tuple[dict, Any]] = []
     for index, payload in enumerate(payloads or []):
         row = existing_by_uuid.pop(str(payload.get("uuid") or ""), None)
         row = build(payload, row)
         # Position in the document is the stored order, so re-arranging items
-        # in an editor survives the round-trip (REData does the same).
+        # in an editor survives the round-trip.
         row.sort_order = index
         _apply_item(row, payload, pools, profile)
         kept.append((payload, row))
@@ -350,44 +342,33 @@ def _sync(existing_by_uuid: dict, payloads: list[dict], build, pools: _Pools, pr
     return kept
 
 
-def _would_cycle(room, parent) -> bool:
-    """Whether making ``parent`` this room's parent closes a loop.
-
-    REData rejects cycles at write time, so a well-formed document has none -
-    but a consumer that walks the chain has to survive one anyway, the same
-    way ``parcel_buildings._tree_ordered`` survives a cyclic ``parent_ref``.
-    """
-    seen = {room.pk}
-    walker = parent
-    while walker is not None:
-        if walker.pk in seen:
-            return True
-        seen.add(walker.pk)
-        walker = walker.parent
-    return False
-
-
 @transaction.atomic
 def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Profile | None) -> Floorplan:
     """Fully replace one floorplan version's contents from a document.
 
     Args:
         floorplan: The version being written.
-        document: The document (REData's shape; see :func:`document_for`).
+        document: The document (see :func:`document_for`).
         profile: Whose labels label-uuids may resolve against.
 
     Returns:
         The saved floorplan.
 
     Raises:
-        ValueError: A geometry or date in the document is unusable.
+        ValueError: Something in the document is unusable, named in the message
+            so the caller can turn it into a 400 a client can act on.
     """
     from urbanlens.dashboard.models.floorplans.model import (
-        FloorplanElement,
-        FloorplanElementKind,
         FloorplanFloor,
-        FloorplanLock,
-        FloorplanRoom,
+        FloorplanMarker,
+        FloorplanMarkerKind,
+        FloorplanOpening,
+        FloorplanOpeningKind,
+        FloorplanOpeningSwing,
+        FloorplanRoomSeed,
+        FloorplanWall,
+        FloorplanWallKind,
+        FloorplanWallThickness,
     )
 
     pools = _Pools(floorplan)
@@ -399,6 +380,11 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
         floorplan.building_ref = document.get("building_ref") or floorplan.building_ref
     floorplan.valid_from = _date_in(document.get("valid_from"))
     floorplan.floor_count = _int_in(document.get("floor_count"), "floor_count")
+    plan_origin = document.get("plan_origin") or {}
+    if plan_origin:
+        floorplan.origin_lat = _float_in(plan_origin.get("lat"), "plan_origin.lat")
+        floorplan.origin_lng = _float_in(plan_origin.get("lng"), "plan_origin.lng")
+    floorplan.rotation_degrees = _float_in(document.get("rotation_degrees"), "rotation_degrees") or 0.0
     _apply_item(floorplan, document, pools, profile)
 
     def build_floor(payload: dict, row: FloorplanFloor | None) -> FloorplanFloor:
@@ -409,95 +395,73 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
             raise ValueError(f"level must be between {_MIN_LEVEL} and {_MAX_LEVEL}")
         floor.level = level
         floor.name = payload.get("name") or ""
-        floor.geometry = _geometry_in(payload.get("geometry"))
         floor.elevation_meters = _float_in(payload.get("elevation_meters"), "elevation_meters")
         floor.height_meters = _float_in(payload.get("height_meters"), "height_meters")
         return floor
 
     floors = _sync({str(f.uuid): f for f in floorplan.floors.all()}, document.get("floors"), build_floor, pools, profile)
 
-    floor_registry = _Registry()
-    for floor_payload, floor in floors:
-        floor_registry.register(floor_payload, floor)
-
-    room_registry = _Registry()
-    room_payloads: list[tuple[dict, FloorplanRoom]] = []
     for floor_payload, floor in floors:
 
-        def build_room(payload: dict, row: FloorplanRoom | None, *, _floor=floor) -> FloorplanRoom:
-            room = row or FloorplanRoom(floor=_floor)
+        def build_wall(payload: dict, row: FloorplanWall | None, *, _floor=floor) -> FloorplanWall:
+            wall = row or FloorplanWall(floor=_floor)
+            wall.floor = _floor
+            wall.ax = _required_float_in(payload.get("ax"), "wall.ax")
+            wall.ay = _required_float_in(payload.get("ay"), "wall.ay")
+            wall.bx = _required_float_in(payload.get("bx"), "wall.bx")
+            wall.by = _required_float_in(payload.get("by"), "wall.by")
+            wall.kind = _choice_in(payload.get("kind"), FloorplanWallKind.values, "wall kind", FloorplanWallKind.INTERIOR)
+            wall.thickness = _choice_in(
+                payload.get("thickness"), FloorplanWallThickness.values, "wall thickness", FloorplanWallThickness.NORMAL,
+            )
+            wall.name = payload.get("name") or ""
+            return wall
+
+        walls = _sync({str(w.uuid): w for w in floor.walls.all()}, floor_payload.get("walls"), build_wall, pools, profile)
+
+        for wall_payload, wall in walls:
+
+            def build_opening(payload: dict, row: FloorplanOpening | None, *, _wall=wall) -> FloorplanOpening:
+                opening = row or FloorplanOpening(wall=_wall)
+                opening.wall = _wall
+                opening.kind = _choice_in(payload.get("kind"), FloorplanOpeningKind.values, "opening kind", FloorplanOpeningKind.DOOR)
+                t_start = _required_float_in(payload.get("t_start"), "opening.t_start")
+                t_end = _required_float_in(payload.get("t_end"), "opening.t_end")
+                # Checked here as well as by the database constraint: reaching
+                # the constraint is an IntegrityError (a 500), while this is a
+                # 400 that names what is wrong.
+                if not 0 <= t_start < t_end <= 1:
+                    raise ValueError(f"opening must satisfy 0 <= t_start < t_end <= 1, got {t_start} and {t_end}")
+                opening.t_start = t_start
+                opening.t_end = t_end
+                opening.swing = _choice_in(payload.get("swing"), FloorplanOpeningSwing.values, "opening swing", FloorplanOpeningSwing.NONE)
+                opening.sill_meters = _float_in(payload.get("sill_meters"), "sill_meters")
+                return opening
+
+            _sync({str(o.uuid): o for o in wall.openings.all()}, wall_payload.get("openings"), build_opening, pools, profile)
+
+        def build_room(payload: dict, row: FloorplanRoomSeed | None, *, _floor=floor) -> FloorplanRoomSeed:
+            room = row or FloorplanRoomSeed(floor=_floor)
             room.floor = _floor
+            room.x = _required_float_in(payload.get("x"), "room.x")
+            room.y = _required_float_in(payload.get("y"), "room.y")
             room.name = payload.get("name") or ""
-            room.geometry = _geometry_in(payload.get("geometry"))
             room.height_meters = _float_in(payload.get("height_meters"), "height_meters")
             return room
 
-        for payload, room in _sync({str(r.uuid): r for r in floor.rooms.all()}, floor_payload.get("rooms"), build_room, pools, profile):
-            room_registry.register(payload, room)
-            room_payloads.append((payload, room))
+        _sync({str(r.uuid): r for r in floor.rooms.all()}, floor_payload.get("rooms"), build_room, pools, profile)
 
-    # Second pass: a room's parent may be defined later in the document than
-    # the room itself, and spans_floors is a many-to-many that needs saved rows.
-    for payload, room in room_payloads:
-        parent = room_registry.get(payload.get("parent"))
-        if parent is not None and not _would_cycle(room, parent):
-            room.parent = parent
-            room.save(update_fields=["parent"])
-        room.spans_floors.set(floor_registry.many(payload.get("spans_floors")))
+        def build_marker(payload: dict, row: FloorplanMarker | None, *, _floor=floor) -> FloorplanMarker:
+            marker = row or FloorplanMarker(floor=_floor)
+            marker.floor = _floor
+            marker.x = _required_float_in(payload.get("x"), "marker.x")
+            marker.y = _required_float_in(payload.get("y"), "marker.y")
+            marker.kind = _choice_in(payload.get("kind"), FloorplanMarkerKind.values, "marker kind", FloorplanMarkerKind.NOTE)
+            marker.name = payload.get("name") or ""
+            marker.facing_degrees = _float_in(payload.get("facing_degrees"), "facing_degrees")
+            marker.connector_id = payload.get("connector_id") or ""
+            return marker
 
-    # Elements are reconciled plan-wide (they live per floor *and* plan-level),
-    # in two passes so `mounted_on` can point at an element defined later in
-    # the document.
-    existing_elements = {str(e.uuid): e for e in floorplan.elements.all()}
-    element_payloads: list[tuple[dict, FloorplanFloor | None]] = [(payload, None) for payload in document.get("elements") or []]
-    for floor_payload, floor in floors:
-        element_payloads.extend((payload, floor) for payload in floor_payload.get("elements") or [])
-
-    element_registry = _Registry()
-    kept_elements: list[tuple[dict, FloorplanElement]] = []
-    for order, (payload, floor) in enumerate(element_payloads):
-        element = existing_elements.pop(str(payload.get("uuid") or ""), None) or FloorplanElement(floorplan=floorplan)
-        element.floorplan = floorplan
-        element.floor = floor
-        # Loud, not coerced: silently turning an unrecognised kind into
-        # "other" is how a whole class of imported element becomes wrong while
-        # looking like it worked. A kind we don't know is a document we can't
-        # honestly store.
-        kind = payload.get("kind") or FloorplanElementKind.OTHER
-        if kind not in FloorplanElementKind.values:
-            raise ValueError(f"unknown element kind {kind!r} - expected one of {sorted(FloorplanElementKind.values)}")
-        element.kind = kind
-        element.name = payload.get("name") or ""
-        element.geometry = _geometry_in(payload.get("geometry"))
-        element.material = payload.get("material") or ""
-        element.room = room_registry.get(payload.get("room"))
-        element.mounted_on = None  # second pass
-        element.base_elevation_meters = _float_in(payload.get("base_elevation_meters"), "base_elevation_meters")
-        element.height_meters = _float_in(payload.get("height_meters"), "height_meters")
-        element.thickness_meters = _float_in(payload.get("thickness_meters"), "thickness_meters")
-        element.rotation_degrees = _float_in(payload.get("rotation_degrees"), "rotation_degrees")
-        element.sort_order = order
-        _apply_item(element, payload, pools, profile)
-        element_registry.register(payload, element)
-        kept_elements.append((payload, element))
-    for orphan in existing_elements.values():
-        orphan.delete()
-
-    for payload, element in kept_elements:
-        mounted = element_registry.get(payload.get("mounted_on"))
-        if mounted is not None and mounted.pk != element.pk:
-            element.mounted_on = mounted
-            element.save(update_fields=["mounted_on"])
-        element.connects_rooms.set(room_registry.many(payload.get("connects_rooms")))
-        element.spans_floors.set(floor_registry.many(payload.get("spans_floors")))
-
-        def build_lock(lock_payload: dict, row: FloorplanLock | None, *, _element=element) -> FloorplanLock:
-            lock = row or FloorplanLock(element=_element)
-            lock.element = _element
-            lock.name = lock_payload.get("name") or ""
-            lock.key_attributes = lock_payload.get("key_attributes") or {}
-            return lock
-
-        _sync({str(lk.uuid): lk for lk in element.locks.all()}, payload.get("locks"), build_lock, pools, profile)
+        _sync({str(m.uuid): m for m in floor.markers.all()}, floor_payload.get("markers"), build_marker, pools, profile)
 
     return floorplan

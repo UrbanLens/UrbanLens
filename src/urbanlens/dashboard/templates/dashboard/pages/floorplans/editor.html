@@ -6,94 +6,131 @@
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 {% endblock %}
 
 {% block hero %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="architecture" title="Floorplan" subtitle=pin.effective_name modifier="top" %}
+{% url 'pin.details' pin.slug as pin_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="architecture" title="Floorplan" subtitle=pin.effective_name modifier="top" back_url=pin_url back_label="Back to pin" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        <nav class="ul-subnav-tabs" aria-label="Pin views">
+            <a href="{% url 'pin.details' pin.slug %}" class="ul-subnav-tab">
+                <i class="material-symbols-outlined">location_on</i>
+                <span>Overview</span>
+            </a>
+            <a href="{% url 'pin.floorplan' pin.slug %}" class="ul-subnav-tab is-active" aria-current="page">
+                <i class="material-symbols-outlined">architecture</i>
+                <span>Floorplan</span>
+            </a>
+        </nav>
+    </div>
+</div>
 {% endblock %}
 
 {% block content %}
-{% if place is None %}
-<div class="card card--secondary floorplan-no-building">
-    {% if building_choices %}
-    <p>This property holds several buildings, and a floorplan belongs to one structure. Pick the
-    building you want to map:</p>
-    <ul class="floorplan-building-picker">
+{# The editor always opens. A plan does not have to belong to a building the #}
+{# providers know about - most derelict structures have no outline anywhere - #}
+{# so a known building is offered as a shortcut, never as a gate.            #}
+{% if place is None and building_choices %}
+<div class="floorplan-building-hint card card--secondary">
+    <span>
+        <i class="material-symbols-outlined">architecture</i>
+        Drawing a plan for this pin. Buildings mapped separately here:
+    </span>
+    <span class="floorplan-building-hint__choices">
         {% for building in building_choices %}
-        <li>
-            {% if building.pin_slug %}
-            <a href="{% url 'pin.floorplan' building.pin_slug %}">
-                <i class="material-symbols-outlined">architecture</i> {{ building.name }}
-            </a>
-            {% else %}
-            <span class="floorplan-building-picker__unpinned">
-                <i class="material-symbols-outlined">add_home</i> {{ building.name }}
-                <em>- add a pin for this building first (Buildings on this Property, on the pin page)</em>
-            </span>
-            {% endif %}
-        </li>
+        {% if building.pin_slug %}
+        <a class="btn btn--sm btn--ghost" href="{% url 'pin.floorplan' building.pin_slug %}">{{ building.name }}</a>
+        {% endif %}
         {% endfor %}
-    </ul>
-    {% else %}
-    <p>This pin doesn't resolve to a single building yet. A floorplan belongs to one structure -
-    on a multi-building property, add the child pins for its buildings (Buildings on this Property,
-    on the pin page) and edit the floorplan on the one you want to map.</p>
-    {% endif %}
+    </span>
 </div>
-{% else %}
+{% endif %}
+
 <div id="floorplan-origin-banner" class="floorplan-origin-banner" hidden>
-    This plan comes from REData. Saving your edits creates your own local version, which takes
-    precedence from then on.
+    From REData. Saving creates your own version.
 </div>
+
 <div class="floorplan-editor">
-    <div class="floorplan-editor__map-wrap">
-        <div id="floorplan-toolbar" class="floorplan-toolbar">
+    <div class="floorplan-editor__stage">
+        <div class="floorplan-toolbar">
             <div id="floorplan-tools" class="floorplan-toolbar__tools" role="toolbar" aria-label="Drawing tools">
-                <button type="button" data-tool="select" class="is-active" title="Select and edit items"><span class="material-symbols-outlined">arrow_selector_tool</span></button>
-                <button type="button" data-tool="outline" title="Draw the floor outline (double-click or Enter to finish)"><span class="material-symbols-outlined">crop_square</span></button>
-                <button type="button" data-tool="room" title="Draw a room (double-click or Enter to finish)"><span class="material-symbols-outlined">meeting_room</span></button>
-                <button type="button" data-tool="wall" title="Draw a wall (double-click or Enter to finish)"><span class="material-symbols-outlined">fence</span></button>
-                <button type="button" data-tool="door" title="Place a door"><span class="material-symbols-outlined">door_front</span></button>
-                <button type="button" data-tool="window" title="Place a window"><span class="material-symbols-outlined">window</span></button>
-                <button type="button" data-tool="stair" title="Place a stair"><span class="material-symbols-outlined">stairs</span></button>
-                <button type="button" data-tool="fixture" title="Place a fixture (boiler, generator...)"><span class="material-symbols-outlined">settings_input_component</span></button>
+                <button type="button" class="btn btn--icon is-active" data-tool="select" aria-pressed="true" aria-label="Select">
+                    <i class="material-symbols-outlined">arrow_selector_tool</i>
+                </button>
+                <button type="button" class="btn btn--icon" data-tool="wall" aria-pressed="false" aria-label="Draw walls">
+                    <i class="material-symbols-outlined">timeline</i>
+                </button>
+                <button type="button" class="btn btn--icon" data-tool="marker" aria-pressed="false" aria-label="Place a marker">
+                    <i class="material-symbols-outlined">add_location_alt</i>
+                </button>
             </div>
-            <a class="floorplan-toolbar__overlays" href="{% url 'pin.details' pin.slug %}" title="Add or align blueprint overlays on the pin map, then return here to trace them">
-                <span class="material-symbols-outlined">wallpaper</span> Blueprints
-            </a>
+            <div class="floorplan-toolbar__markers" role="group" aria-label="Marker type">
+                <button type="button" class="btn btn--icon-sm" data-marker-kind="photo" aria-label="Photo location"><i class="material-symbols-outlined">photo_camera</i></button>
+                <button type="button" class="btn btn--icon-sm" data-marker-kind="entrance" aria-label="Entrance"><i class="material-symbols-outlined">door_open</i></button>
+                <button type="button" class="btn btn--icon-sm" data-marker-kind="stair" aria-label="Stair"><i class="material-symbols-outlined">stairs</i></button>
+                <button type="button" class="btn btn--icon-sm" data-marker-kind="hazard" aria-label="Hazard"><i class="material-symbols-outlined">warning</i></button>
+            </div>
         </div>
-        <div id="floorplan-map" class="floorplan-map"
-             data-json-url="{% url 'pin.floorplan.json' pin.slug %}"
-             data-save-url="{% url 'pin.floorplan.save' pin.slug %}"
-             data-lat="{{ pin.effective_latitude }}"
-             data-lng="{{ pin.effective_longitude }}"
-             data-extract-url="{% url 'pin.floorplan.extract' pin.slug '00000000-0000-0000-0000-000000000000' %}"
-             data-publish-url="{% url 'pin.floorplan.publish' pin.slug %}"></div>
+
+        <div class="floorplan-map-shell">
+            <div id="floorplan-map" class="floorplan-map"
+                 data-json-url="{% url 'pin.floorplan.json' pin.slug %}"
+                 data-save-url="{% url 'pin.floorplan.save' pin.slug %}"
+                 data-publish-url="{% url 'pin.floorplan.publish' pin.slug %}"
+                 data-lat="{{ pin.effective_latitude }}"
+                 data-lng="{{ pin.effective_longitude }}"></div>
+
+            <div id="floorplan-empty" class="floorplan-empty">
+                <h2>Draw the walls; the rooms appear on their own.</h2>
+                <p>Close a loop of walls and it becomes a room you can name.</p>
+                <div class="floorplan-empty__actions">
+                    <button type="button" class="btn btn--primary" id="floorplan-start-rectangle">
+                        <i class="material-symbols-outlined">crop_square</i> Start from a rectangle
+                    </button>
+                    <button type="button" class="btn btn--ghost" data-tool="wall">
+                        <i class="material-symbols-outlined">timeline</i> Draw walls
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <p id="floorplan-hint" class="floorplan-hint" aria-live="polite"></p>
     </div>
+
     <aside class="floorplan-sidebar">
-        <div class="floorplan-sidebar__plan">
-            <label class="floorplan-form__field"><span>Plan name</span>
-                <input type="text" id="floorplan-name" placeholder="As built, after the 1962 fire..."></label>
-            <div id="floorplan-versions" class="floorplan-versions" hidden></div>
-            <label class="floorplan-form__field"><span>Valid from</span>
-                <input type="date" id="floorplan-valid-from" title="When this version of the building took effect. Leave empty for the original layout."></label>
+        <div class="floorplan-sidebar__section">
+            <span class="floorplan-field__label">Floors</span>
+            <div id="floorplan-floors" class="floorplan-floors"></div>
         </div>
-        <div id="floorplan-floors" class="floorplan-floors"></div>
-        <div id="floorplan-trace-list" class="floorplan-trace-list" hidden></div>
-        <div id="floorplan-form" class="floorplan-form"></div>
-        <div class="floorplan-save-row">
-            <button type="button" id="floorplan-save" class="floorplan-save">Save floorplan</button>
-            <button type="button" id="floorplan-publish" class="floorplan-save floorplan-save--version"
-                    title="Share this floorplan on the community wiki for this place, so others who have found it can see and improve it. Your own copy stays yours.">Publish to wiki</button>
-            <button type="button" id="floorplan-save-version" class="floorplan-save floorplan-save--version"
-                    title="Keep the plan you loaded and save these changes as a new dated version - for a renovation, a fire, a rebuild">Save as new version</button>
+
+        <div class="floorplan-sidebar__section">
+            <div id="floorplan-form" class="floorplan-form"></div>
+        </div>
+
+        <div class="floorplan-sidebar__section">
+            <label class="floorplan-field"><span>Plan name</span>
+                <input class="form-input" type="text" id="floorplan-name" placeholder="As built"></label>
+            <label class="floorplan-field"><span>Valid from</span>
+                <input class="form-input" type="date" id="floorplan-valid-from"></label>
+            <div id="floorplan-versions" class="floorplan-versions" hidden></div>
+        </div>
+
+        <div class="floorplan-sidebar__actions">
+            <button type="button" id="floorplan-save" class="btn btn--primary">Save</button>
+            <button type="button" id="floorplan-save-version" class="btn btn--ghost">Save as new version</button>
+            <button type="button" id="floorplan-publish" class="btn btn--ghost">Publish to wiki</button>
         </div>
     </aside>
 </div>
+
 {{ overlays_json|json_script:"floorplan-overlays" }}
 {{ labels_json|json_script:"floorplan-labels" }}
 {{ photos_json|json_script:"floorplan-photos" }}
-<script src="{% static 'dashboard/js/floorplan-editor.js' %}" defer></script>
-{% endif %}
+<script type="module" src="{% static 'dashboard/js/floorplan-editor.js' %}"></script>
 {% endblock %}
