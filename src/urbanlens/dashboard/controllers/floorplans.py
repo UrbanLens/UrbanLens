@@ -111,19 +111,21 @@ def _building_outline(pin: Pin) -> list[list[float]]:
     """The building's footprint as a ring of ``[lat, lng]`` pairs, or empty.
 
     Handed to the editor so a new floor can start from the real exterior
-    instead of asking someone to trace a wall they can already see. Prefers the
-    building footprint and falls back to the property boundary - on a
-    single-building lot they describe the same structure closely enough to be a
-    far better starting point than nothing, and every wall stays editable
-    afterwards either way.
+    instead of asking someone to trace a wall they can already see.
+
+    **Only a BUILDING boundary is used.** The property boundary is deliberately
+    not a fallback: it describes the grounds, so on a campus or any lot larger
+    than its structure it seeds an enormous room shaped like the parcel, which
+    is both wrong and confidently wrong - it looks like survey data. An empty
+    canvas is the better answer when no footprint is known.
 
     Returns:
         The outer ring, without the closing duplicate point (walls are drawn
-        around it cyclically), or an empty list when no boundary is known.
+        around it cyclically), or an empty list when no footprint is known.
     """
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 
-    for boundary_type in (BoundaryType.BUILDING, BoundaryType.PROPERTY):
+    for boundary_type in (BoundaryType.BUILDING,):
         polygon = Boundary.objects.effective_polygon_for_pin(pin, boundary_type)
         if polygon is None:
             continue
