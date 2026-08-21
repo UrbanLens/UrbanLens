@@ -16,7 +16,10 @@ Revit's room model, and it is chosen for two properties this application needs:
 **Doors and windows are intervals along a wall**, not free-standing objects
 with their own coordinates. An opening cannot outlive the wall it is cut into,
 moves when that wall moves, and cannot drift off it - all three are properties
-of the schema here rather than rules some editor has to remember.
+of the schema here rather than rules some editor has to remember. **Locks hang
+off the opening** for the same reason: which door is locked and what opens it
+is field data worth keeping, and a lock outliving its door would be a fact
+about nothing.
 
 **Geometry is plan-local metres, not WGS-84.** A degree of longitude is ~74 km
 at this latitude and ~111 km at the equator, so in degrees x and y are
@@ -112,6 +115,22 @@ class FloorplanOpeningSwing(TextChoices):
     LEFT = "left", "Left"
     RIGHT = "right", "Right"
     DOUBLE = "double", "Double"
+
+
+class FloorplanLockState(TextChoices):
+    """Whether a lock is presently securing its opening.
+
+    Deliberately only the *engagement* axis. Physical integrity - broken,
+    seized, missing - is what every floorplan item's ``condition`` already
+    records, so folding it in here would give a producer two places to write
+    one fact and a reader no rule for which wins. It would also erase the
+    distinction that matters most on site: a broken lock may be hanging open
+    or rusted shut, and "broken" alone does not say whether the door opens.
+    """
+
+    UNKNOWN = "unknown", "Not known"
+    LOCKED = "locked", "Locked"
+    UNLOCKED = "unlocked", "Unlocked"
 
 
 class FloorplanMarkerKind(TextChoices):
@@ -415,6 +434,42 @@ class FloorplanOpening(FloorplanItem):
 
     def __str__(self) -> str:
         return f"{self.kind} on wall {self.wall_id}"
+
+
+class FloorplanLock(FloorplanItem):
+    """One lock on an opening; a door may carry several, or none.
+
+    Hangs off the opening rather than the wall, because that is the thing a
+    lock actually secures: it cannot then outlive the door it is fitted to,
+    and a wall's locks would have nothing to say about which of its three
+    doors each one belongs to.
+
+    ``key_attributes`` is free-form on purpose. What identifies a key -
+    bitting, keyway, brand, "the one on the ring in the office" - differs per
+    building and per person recording it, and any column set fixed here would
+    only push the actual note into a description field instead.
+
+    Attributes:
+        opening: The door or hatch this lock secures.
+        name: Free-form type or label ("padlock", "deadbolt", "chain").
+        state: Whether it is presently locked, so far as anyone has seen.
+        key_attributes: What opens it, in whatever shape the recorder used.
+    """
+
+    opening = ForeignKey(FloorplanOpening, on_delete=CASCADE, related_name="locks")
+    name = CharField(max_length=255, blank=True, default="")
+    state = CharField(max_length=16, choices=FloorplanLockState.choices, default=FloorplanLockState.UNKNOWN)
+    key_attributes = JSONField(default=dict, blank=True)
+
+    if TYPE_CHECKING:
+        opening_id: int
+
+    class Meta(abstract.FrontendDashboardModel.Meta):
+        db_table = "dashboard_floorplan_locks"
+        ordering = ("sort_order", "id")
+
+    def __str__(self) -> str:
+        return self.name or f"lock {self.pk}"
 
 
 class FloorplanRoomSeed(FloorplanItem):

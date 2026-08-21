@@ -107,6 +107,46 @@ def _parse_date(raw: str | None) -> datetime.date | None:
         return None
 
 
+def _building_outline(pin: Pin) -> list[list[float]]:
+    """The building's footprint as a ring of ``[lat, lng]`` pairs, or empty.
+
+    Handed to the editor so a new floor can start from the real exterior
+    instead of asking someone to trace a wall they can already see. Prefers the
+    building footprint and falls back to the property boundary - on a
+    single-building lot they describe the same structure closely enough to be a
+    far better starting point than nothing, and every wall stays editable
+    afterwards either way.
+
+    Returns:
+        The outer ring, without the closing duplicate point (walls are drawn
+        around it cyclically), or an empty list when no boundary is known.
+    """
+    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+
+    for boundary_type in (BoundaryType.BUILDING, BoundaryType.PROPERTY):
+        polygon = Boundary.objects.effective_polygon_for_pin(pin, boundary_type)
+        if polygon is None:
+            continue
+        # A MultiPolygon here means several detached structures; the largest is
+        # the one a floorplan is most likely about.
+        if polygon.geom_type == "MultiPolygon":
+            parts = sorted(polygon, key=lambda part: part.area, reverse=True)
+            if not parts:
+                continue
+            polygon = parts[0]
+        ring = getattr(polygon, "exterior_ring", None)
+        if ring is None:
+            continue
+        points = [[round(y, 7), round(x, 7)] for x, y in list(ring)]
+        # GEOS repeats the first point to close the ring; the editor closes it
+        # itself by walking the points cyclically.
+        if len(points) > 1 and points[0] == points[-1]:
+            points.pop()
+        if len(points) >= 3:
+            return points
+    return []
+
+
 class FloorplanJsonView(LoginRequiredMixin, View):
     """GET /map/pin/<pin_slug>/floorplan/json/ - the plan document, resolved by date."""
 
@@ -338,6 +378,7 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
         context["pin"] = pin
         context["place"] = _building_place(pin)
         context["building_choices"] = _building_choices(pin) if context["place"] is None else []
+        context["outline_json"] = _building_outline(pin)
         context["overlays_json"] = overlay_payload(pin.image_overlays.all())
         context["labels_json"] = [{"uuid": str(label.uuid), "name": label.name} for label in Label.objects.filter(profile=pin.profile).order_by("name")]
         # The reference pool attaches to every item, so the photos already on

@@ -56,7 +56,14 @@ def main(argv: list[str] | None = None) -> int:
         record = devenv.create(requested_name=args.name, branch=args.branch, owner=args.owner, with_redata=not args.no_redata)
         print(json.dumps(record, indent=2))
         if record["status"] == "ok":
-            print(f"\nReady: {record['context']['env']['url']}", file=sys.stderr)
+            created = record["context"]["env"]
+            print(f"\nReady: {created['url']}", file=sys.stderr)
+            # The credentials are in the JSON too; repeated here because the
+            # point of seeding an account is that nobody has to go looking for
+            # it. Empty when the seeding step could not run - which the step
+            # record explains, and which is not a reason to claim a login.
+            if created.get("login_username"):
+                print(f"Log in as: {created['login_username']} / {created['login_password']}", file=sys.stderr)
         return 0 if record["status"] == "ok" else 1
 
     if args.command == "list":

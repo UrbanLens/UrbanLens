@@ -17,6 +17,7 @@ import { toast } from "../shared/dialogs";
 import { PlanProjection, type Pt, distance, projectOnSegment } from "../shared/floorplan/coords";
 import {
     type Floor,
+    type Opening,
     type FloorplanDocument,
     type Marker,
     type MarkerKind,
@@ -36,6 +37,9 @@ import { tileLayer } from "../shared/map-layers";
 declare const L: typeof import("leaflet");
 
 type Tool = "select" | "wall" | "marker";
+
+/** Marker kinds that can join floors together. */
+const CONNECTOR_KINDS = new Set<MarkerKind>(["stair", "elevator"]);
 
 const WALL_STYLE: Record<string, { color: string; weight: number; dashArray?: string }> = {
     exterior: { color: "#263238", weight: 5 },
@@ -70,8 +74,33 @@ function boot(): void {
     const lng = parseFloat(mapEl.dataset.lng || "0");
 
     const map = L.map("floorplan-map", { zoomControl: true, doubleClickZoom: false }).setView([lat, lng], 20);
-    tileLayer("satellite", { maxZoom: 22, maxNativeZoom: 19 }).addTo(map);
 
+    /**
+     * The backdrop to trace over. Aerial by default, on every floor.
+     *
+     * Imagery shows the building's footprint whichever storey is being drawn,
+     * which is exactly the part that stays constant, so it remains the best
+     * available reference above ground rather than a ground-floor-only aid. A
+     * georeferenced blueprint overlay is better still where one exists (see
+     * the pin's overlay manager) and simply renders on top. The other choices
+     * exist for the cases imagery does not serve - dense tree cover, or a
+     * cluttered site - and cost nothing: geometry is georeferenced
+     * independently of the backdrop, so lengths, angles and areas stay true
+     * whatever is beneath.
+     */
+    let baseLayer: L.TileLayer | null = null;
+    function setBase(kind: string): void {
+        if (baseLayer) {
+            map.removeLayer(baseLayer);
+            baseLayer = null;
+        }
+        if (kind === "blank") return;
+        baseLayer = tileLayer(kind, { maxZoom: 22, maxNativeZoom: 19 }).addTo(map);
+        baseLayer.bringToBack();
+    }
+    setBase("satellite");
+
+    const outline = readJson<Array<[number, number]>>("floorplan-outline") || [];
     const overlays = readJson<MapOverlayEntry[]>("floorplan-overlays") || [];
     if (overlays.length) {
         const control = createMapImageOverlays(L, map, { cornersUrl: () => "", csrfToken: getCsrfToken() });
@@ -84,6 +113,8 @@ function boot(): void {
     const markerLayer = L.layerGroup().addTo(map);
     const handleLayer = L.layerGroup().addTo(map);
     const ghostLayer = L.layerGroup().addTo(map);
+    // Added first so it always paints beneath the live floor.
+    const underlayLayer = L.layerGroup().addTo(map);
 
     const state = {
         doc: emptyDocument({ lat, lng }),
@@ -99,6 +130,7 @@ function boot(): void {
         suspendSnap: false,
         faces: [] as Face[],
         versions: [] as VersionSummary[],
+        showUnderlay: false,
     };
 
     const toLatLng = (p: Pt): [number, number] => {
@@ -155,7 +187,14 @@ function boot(): void {
             const seed = current.rooms.find((room) => faceForSeed({ x: room.x, y: room.y }, [face]) === face);
             const polygon = L.polygon(face.ring.map(toLatLng), seed ? ROOM_FILL : UNBOUND_FILL).addTo(roomLayer);
             const label = seed ? seed.name || "Unnamed" : "Unnamed room";
-            polygon.bindTooltip(`${label} · ${face.area.toFixed(1)} m²`, { direction: "center", className: "floorplan-room-label" });
+            // Permanent, not on hover: a room appearing and naming its own area
+            // the instant a loop closes is what teaches the wall-first model,
+            // and a badge nobody sees teaches nothing.
+            polygon.bindTooltip(`${label} · ${face.area.toFixed(1)} m²`, {
+                direction: "center",
+                className: "floorplan-room-label",
+                permanent: true,
+            });
             polygon.on("click", (event) => {
                 L.DomEvent.stop(event);
                 if (state.tool !== "select") return;
@@ -188,7 +227,7 @@ function boot(): void {
                 renderSidebar();
                 render();
             });
-            renderOpenings(wall);
+            renderOpenings(wall, selected);
             if (selected) renderWallHandles(wall);
         }
 
@@ -221,19 +260,97 @@ function boot(): void {
                 .addTo(handleLayer);
         }
 
+        renderUnderlay();
         renderFloorTabs();
         updateEmptyState(current);
     }
 
-    function renderOpenings(wall: Wall): void {
+    function renderOpenings(wall: Wall, selected: boolean): void {
         const a = { x: wall.ax, y: wall.ay };
         const b = { x: wall.bx, y: wall.by };
+        const at = (t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
         for (const opening of wall.openings) {
-            const at = (t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
             const colour = opening.kind === "window" ? "#1e88e5" : "#fb8c00";
             L.polyline([toLatLng(at(opening.t_start)), toLatLng(at(opening.t_end))], { color: colour, weight: 6 })
                 .bindTooltip(opening.kind, { direction: "top" })
                 .addTo(wallLayer);
+            if (selected) renderOpeningHandles(wall, opening, at);
+        }
+    }
+
+    /**
+     * Draggable ends for one opening, shown only while its wall is selected.
+     *
+     * An opening is an interval along its wall, so a handle drags in *t*
+     * rather than in space: the cursor is projected back onto the wall and the
+     * parameter clamped so the two ends cannot cross or leave the wall. That
+     * is what keeps a door on its door frame when the wall is later moved.
+     */
+    function renderOpeningHandles(wall: Wall, opening: Opening, at: (t: number) => Pt): void {
+        const MIN_WIDTH = 0.02; // as a fraction of the wall, so ends stay grabbable
+        for (const end of ["t_start", "t_end"] as const) {
+            const handle = L.circleMarker(toLatLng(at(opening[end])), {
+                radius: 5,
+                color: "#fb8c00",
+                fillColor: "#fff",
+                fillOpacity: 1,
+                weight: 2,
+            }).addTo(handleLayer);
+            let dragging = false;
+            handle.on("mousedown", () => {
+                dragging = true;
+                map.dragging.disable();
+            });
+            map.on("mousemove", (event: L.LeafletMouseEvent) => {
+                if (!dragging) return;
+                const along = projectOnSegment(toLocal(event.latlng), { x: wall.ax, y: wall.ay }, { x: wall.bx, y: wall.by }).t;
+                if (end === "t_start") opening.t_start = Math.min(along, opening.t_end - MIN_WIDTH);
+                else opening.t_end = Math.max(along, opening.t_start + MIN_WIDTH);
+                opening.t_start = Math.max(0, opening.t_start);
+                opening.t_end = Math.min(1, opening.t_end);
+                render();
+            });
+            map.on("mouseup", () => {
+                if (!dragging) return;
+                dragging = false;
+                map.dragging.enable();
+                markDirty();
+            });
+        }
+    }
+
+    /**
+     * The floor below drawn faintly beneath the current one.
+     *
+     * Aligning a stairwell across storeys is otherwise guesswork, and this is
+     * the cheapest way to make it possible: no new concepts, just the walls
+     * you already drew, shown as context. Non-interactive so it can never be
+     * selected or dragged by accident.
+     */
+    function renderUnderlay(): void {
+        underlayLayer.clearLayers();
+        if (!state.showUnderlay) return;
+        const current = floor();
+        const below = state.doc.floors.filter((item) => item.level < current.level).sort((x, y) => y.level - x.level)[0];
+        if (!below) return;
+        for (const wall of below.walls) {
+            L.polyline([toLatLng({ x: wall.ax, y: wall.ay }), toLatLng({ x: wall.bx, y: wall.by })], {
+                color: "#90a4ae",
+                weight: 2,
+                opacity: 0.45,
+                interactive: false,
+            }).addTo(underlayLayer);
+        }
+        for (const marker of below.markers) {
+            if (!CONNECTOR_KINDS.has(marker.kind)) continue;
+            L.circleMarker(toLatLng({ x: marker.x, y: marker.y }), {
+                radius: 4,
+                color: "#90a4ae",
+                weight: 1,
+                opacity: 0.6,
+                fillOpacity: 0.2,
+                interactive: false,
+            }).addTo(underlayLayer);
         }
     }
 
@@ -277,6 +394,42 @@ function boot(): void {
             y += p.y;
         }
         return { x: x / ring.length, y: y / ring.length };
+    }
+
+    /**
+     * Lay the building's real footprint down as exterior walls.
+     *
+     * A storey's outer wall is the one part already known from survey data, so
+     * asking someone to trace around a shape the map is already showing them
+     * is busywork. Seeded per floor rather than shared, because upper storeys
+     * genuinely differ - a setback or a demolished wing is then an edit rather
+     * than a fight with something immovable.
+     *
+     * Args:
+     *     target: The floor to lay walls on. Untouched if it already has any.
+     *
+     * Returns:
+     *     Whether walls were added.
+     */
+    function seedFromOutline(target: Floor): boolean {
+        if (target.walls.length || outline.length < 3) return false;
+        const points = outline.map(([outlineLat, outlineLng]) => projection.toLocal({ lat: outlineLat, lng: outlineLng }));
+        for (let index = 0; index < points.length; index++) {
+            const from = points[index] as Pt;
+            const to = points[(index + 1) % points.length] as Pt;
+            if (distance(from, to) < 0.05) continue;
+            target.walls.push({
+                uuid: nextLocalId(),
+                kind: "exterior",
+                thickness: "normal",
+                ax: from.x,
+                ay: from.y,
+                bx: to.x,
+                by: to.y,
+                openings: [],
+            });
+        }
+        return target.walls.length > 0;
     }
 
     function addSeedAt(point: Pt): RoomSeed {
@@ -370,7 +523,14 @@ function boot(): void {
             return;
         }
         if (state.tool === "marker") {
-            floor().markers.push({ uuid: nextLocalId(), kind: state.markerKind, x: raw.x, y: raw.y, name: "" });
+            // Select what was just placed: naming it, or linking a stair to the
+            // floor below, is almost always the next thing wanted, and making
+            // the user hunt for and click their own new marker to do it is a
+            // step with no purpose.
+            const placed: Marker = { uuid: nextLocalId(), kind: state.markerKind, x: raw.x, y: raw.y, name: "" };
+            floor().markers.push(placed);
+            state.selection = { kind: "marker", marker: placed };
+            renderSidebar();
             markDirty();
             return;
         }
@@ -465,8 +625,10 @@ function boot(): void {
         add.addEventListener("click", () => {
             const levels = state.doc.floors.map((f) => f.level);
             const level = (levels.length ? Math.max(...levels) : -1) + 1;
-            state.doc.floors.push({ level, name: `Level ${level}`, walls: [], rooms: [], markers: [] });
+            const added: Floor = { level, name: `Level ${level}`, walls: [], rooms: [], markers: [] };
+            state.doc.floors.push(added);
             state.floorIndex = state.doc.floors.length - 1;
+            if (seedFromOutline(added)) toast.info("Started this floor from the building outline.");
             markDirty();
             renderSidebar();
         });
@@ -572,6 +734,7 @@ function boot(): void {
             });
             openings.appendChild(addOpening);
             host.appendChild(openings);
+            renderAxisControl(host, wall);
         }
 
         if (selection.kind === "room") {
@@ -613,6 +776,7 @@ function boot(): void {
                 state.dirty = true;
             });
             host.appendChild(field("Label", name));
+            if (CONNECTOR_KINDS.has(marker.kind)) renderConnectorControls(host, marker);
         }
 
         const remove = document.createElement("button");
@@ -621,6 +785,102 @@ function boot(): void {
         remove.textContent = "Delete";
         remove.addEventListener("click", deleteSelection);
         host.appendChild(remove);
+    }
+
+    /**
+     * Link a stair or lift to its counterpart on an adjacent floor.
+     *
+     * Two markers sharing a ``connector_id`` are the same physical shaft. The
+     * id is authored here rather than derived from position because a
+     * switchback stair genuinely lands somewhere else on the floor above, so
+     * proximity would be wrong exactly when it mattered.
+     */
+    function renderConnectorControls(host: HTMLElement, marker: Marker): void {
+        const current = floor();
+        const candidates: Array<{ floor: Floor; marker: Marker }> = [];
+        for (const other of state.doc.floors) {
+            if (Math.abs(other.level - current.level) !== 1) continue;
+            for (const candidate of other.markers) {
+                if (CONNECTOR_KINDS.has(candidate.kind)) candidates.push({ floor: other, marker: candidate });
+            }
+        }
+
+        const wrap = document.createElement("div");
+        wrap.className = "floorplan-connector";
+        const title = document.createElement("span");
+        title.className = "floorplan-field__label";
+        title.textContent = "Connects floors";
+        wrap.appendChild(title);
+
+        if (marker.connector_id) {
+            const linked = document.createElement("p");
+            linked.className = "floorplan-hint";
+            const others = state.doc.floors
+                .filter((item) => item !== current)
+                .filter((item) => item.markers.some((candidate) => candidate.connector_id === marker.connector_id))
+                .map((item) => item.name || `Level ${item.level}`);
+            linked.textContent = others.length ? `Linked to ${others.join(", ")}.` : "Linked, but nothing on another floor shares this connector yet.";
+            wrap.appendChild(linked);
+            const unlink = document.createElement("button");
+            unlink.type = "button";
+            unlink.className = "btn btn--sm btn--ghost";
+            unlink.textContent = "Unlink";
+            unlink.addEventListener("click", () => {
+                marker.connector_id = null;
+                renderSidebar();
+                markDirty();
+            });
+            wrap.appendChild(unlink);
+        } else if (!candidates.length) {
+            const none = document.createElement("p");
+            none.className = "floorplan-hint";
+            none.textContent = "Add a stair or lift on the floor above or below to link them.";
+            wrap.appendChild(none);
+        } else {
+            for (const candidate of candidates) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "btn btn--sm btn--ghost";
+                const where = candidate.floor.name || `Level ${candidate.floor.level}`;
+                button.textContent = `Link to ${candidate.marker.name || candidate.marker.kind} on ${where}`;
+                button.addEventListener("click", () => {
+                    // Adopt the counterpart's id when it already has one, so a
+                    // third floor joins the same shaft rather than starting a
+                    // parallel one.
+                    const shared = candidate.marker.connector_id || nextLocalId();
+                    candidate.marker.connector_id = shared;
+                    marker.connector_id = shared;
+                    renderSidebar();
+                    markDirty();
+                });
+                wrap.appendChild(button);
+            }
+        }
+        host.appendChild(wrap);
+    }
+
+    /**
+     * Square the drawing axis to a wall the user picks.
+     *
+     * Angle snapping works in 45-degree steps around this axis. Buildings sit
+     * at arbitrary angles to true north, so without this "right angle" means
+     * right-angle-to-the-equator and fights every wall on screen.
+     */
+    function renderAxisControl(host: HTMLElement, wall: Wall): void {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "btn btn--sm btn--ghost";
+        button.textContent = "Square the grid to this wall";
+        button.addEventListener("click", () => {
+            const radians = Math.atan2(wall.by - wall.ay, wall.bx - wall.ax);
+            // Fold into [0, 90) - a wall and its perpendicular describe the
+            // same grid, so the axis only ever needs a quarter turn.
+            const degrees = ((radians * 180) / Math.PI + 360) % 90;
+            state.doc.rotation_degrees = degrees;
+            markDirty();
+            toast.info("Right angles now follow this wall.");
+        });
+        host.appendChild(button);
     }
 
     function updateEmptyState(current: Floor): void {
@@ -652,7 +912,11 @@ function boot(): void {
         if (nameInput) nameInput.value = state.doc.name || "";
         const validFrom = document.getElementById("floorplan-valid-from") as HTMLInputElement | null;
         if (validFrom) validFrom.value = state.doc.valid_from || "";
-        state.dirty = false;
+        // A brand-new plan starts from the real footprint when one is known, so
+        // the first thing on screen is the building rather than a blank map.
+        const fresh = state.doc.floors.length === 1 && !(state.doc.floors[0] as Floor).walls.length;
+        if (fresh && seedFromOutline(state.doc.floors[0] as Floor)) state.dirty = true;
+        else state.dirty = false;
         setTool("select");
         render();
     }
@@ -728,6 +992,27 @@ function boot(): void {
             setTool("marker");
         });
     }
+    for (const button of document.querySelectorAll<HTMLButtonElement>("[data-base]")) {
+        button.addEventListener("click", () => {
+            setBase(button.dataset.base || "satellite");
+            for (const other of document.querySelectorAll<HTMLButtonElement>("[data-base]")) {
+                const active = other === button;
+                other.classList.toggle("is-active", active);
+                other.setAttribute("aria-pressed", String(active));
+            }
+        });
+    }
+    document.getElementById("floorplan-underlay")?.addEventListener("click", (event) => {
+        state.showUnderlay = !state.showUnderlay;
+        const button = event.currentTarget as HTMLButtonElement;
+        button.classList.toggle("is-active", state.showUnderlay);
+        button.setAttribute("aria-pressed", String(state.showUnderlay));
+        render();
+    });
+    document.getElementById("floorplan-start-outline")?.addEventListener("click", () => {
+        if (seedFromOutline(floor())) markDirty();
+        else toast.info("No building outline is known for this place yet.");
+    });
     document.getElementById("floorplan-start-rectangle")?.addEventListener("click", () => {
         // Four walls around the current view's middle third: the fastest way to
         // show that closing a loop produces a room.

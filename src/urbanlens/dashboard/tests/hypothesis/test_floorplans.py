@@ -16,6 +16,9 @@ The load-bearing properties:
   or a baseline being re-dated, forks into a new version instead.
 - **Publishing copies rather than hands over**, and a personal plan is never
   served to anyone else.
+- **A lock belongs to its door.** Which door is locked and what opens it is
+  field data worth keeping; a lock outliving the opening it was fitted to
+  would not be.
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.floorplans.model import (
     Floorplan,
     FloorplanFloor,
+    FloorplanLock,
     FloorplanMarker,
     FloorplanOpening,
     FloorplanRoomSeed,
@@ -355,6 +359,153 @@ class FloorplanOpeningConstraintTests(TestCase):
             save_document(self.floorplan, document, profile=self.profile)
 
         self.assertIn("t_start", str(caught.exception))
+
+
+class FloorplanLockTests(TestCase):
+    """A lock belongs to the door it is fitted to.
+
+    "Which door is locked, and what opens it" is the field note this table
+    exists for, so it has to survive a save/reload untouched - including the
+    part of it nobody agreed a schema for. And a lock whose door is gone is a
+    fact about nothing, so it goes with it.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        self.floorplan = Floorplan.objects.create(place=_building(), profile=self.profile)
+
+    #: The lock every test starts from unless it needs a different one.
+    _PADLOCK = {"name": "padlock", "state": "locked", "key_attributes": {"brand": "Abus", "bitting": "44213"}}
+
+    def _document(self, locks: list[dict] | None = None) -> dict:
+        """A one-wall plan whose single door carries ``locks``."""
+        door = {"kind": "door", "t_start": 0.4, "t_end": 0.6, "locks": [dict(self._PADLOCK)] if locks is None else locks}
+        wall = {"kind": "exterior", "ax": 0.0, "ay": 0.0, "bx": 10.0, "by": 0.0, "openings": [door]}
+        return {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": [wall]}]}
+
+    def _locks_in(self, document: dict) -> list[dict]:
+        return document["floors"][0]["walls"][0]["openings"][0]["locks"]
+
+    def test_a_lock_round_trips_under_its_opening(self) -> None:
+        save_document(self.floorplan, self._document(), profile=self.profile)
+
+        locks = self._locks_in(document_for(self.floorplan))
+        self.assertEqual(len(locks), 1)
+        self.assertEqual(locks[0]["name"], "padlock")
+        self.assertEqual(locks[0]["state"], "locked")
+        self.assertEqual(locks[0]["key_attributes"], {"brand": "Abus", "bitting": "44213"})
+
+    def test_key_attributes_survive_a_round_trip_whatever_shape_they_are(self) -> None:
+        """The point of a free-form field is that an unanticipated shape comes
+        back as it went in - otherwise the note may as well have been typed
+        into a column somebody chose in advance."""
+        recorded = {
+            "keyway": "SC1",
+            "bitting": [4, 4, 2, 1, 3],
+            "seen": {"date": "2019-06-02", "by": "note in the caretaker's log"},
+            "opens_with": None,
+            "confirmed": False,
+        }
+        save_document(self.floorplan, self._document([{"name": "deadbolt", "key_attributes": recorded}]), profile=self.profile)
+
+        self.assertEqual(self._locks_in(document_for(self.floorplan))[0]["key_attributes"], recorded)
+
+    def test_a_round_tripped_lock_updates_in_place(self) -> None:
+        save_document(self.floorplan, self._document(), profile=self.profile)
+        document = document_for(self.floorplan)
+        lock_uuid = self._locks_in(document)[0]["uuid"]
+
+        self._locks_in(document)[0]["state"] = "unlocked"
+        save_document(self.floorplan, document, profile=self.profile)
+
+        self.assertEqual(FloorplanLock.objects.count(), 1, "a round-tripped uuid must update, not duplicate")
+        self.assertEqual(str(FloorplanLock.objects.get().uuid), lock_uuid)
+        self.assertEqual(FloorplanLock.objects.get().state, "unlocked")
+
+    def test_omitting_a_lock_deletes_it(self) -> None:
+        save_document(self.floorplan, self._document(), profile=self.profile)
+        document = document_for(self.floorplan)
+
+        document["floors"][0]["walls"][0]["openings"][0]["locks"] = []
+        save_document(self.floorplan, document, profile=self.profile)
+
+        self.assertEqual(FloorplanLock.objects.count(), 0)
+        self.assertEqual(FloorplanOpening.objects.count(), 1, "removing a lock must not touch the door it was on")
+
+    def test_a_second_lock_can_be_added_to_one_door(self) -> None:
+        """A hasp with a padlock and a deadbolt below it is one door, two
+        locks - and the pair has to keep its authored order."""
+        save_document(
+            self.floorplan,
+            self._document([{"name": "padlock", "state": "locked"}, {"name": "chain", "state": "unlocked"}]),
+            profile=self.profile,
+        )
+
+        self.assertEqual([lock["name"] for lock in self._locks_in(document_for(self.floorplan))], ["padlock", "chain"])
+
+    def test_deleting_an_opening_takes_its_locks_with_it(self) -> None:
+        floor = FloorplanFloor.objects.create(floorplan=self.floorplan, level=0)
+        wall = FloorplanWall.objects.create(floor=floor, ax=0, ay=0, bx=10, by=0)
+        opening = FloorplanOpening.objects.create(wall=wall, kind="door", t_start=0.2, t_end=0.4)
+        FloorplanLock.objects.create(opening=opening, name="padlock")
+
+        opening.delete()
+
+        self.assertEqual(FloorplanLock.objects.count(), 0)
+
+    def test_deleting_a_wall_takes_the_locks_on_its_doors_with_it(self) -> None:
+        """Two cascades deep: the lock hangs off the opening, which hangs off
+        the wall, so redrawing a wall cannot leave a lock behind."""
+        floor = FloorplanFloor.objects.create(floorplan=self.floorplan, level=0)
+        wall = FloorplanWall.objects.create(floor=floor, ax=0, ay=0, bx=10, by=0)
+        opening = FloorplanOpening.objects.create(wall=wall, kind="door", t_start=0.2, t_end=0.4)
+        FloorplanLock.objects.create(opening=opening, name="padlock")
+
+        wall.delete()
+
+        self.assertEqual(FloorplanLock.objects.count(), 0)
+
+    def test_a_lock_defaults_to_an_unknown_state(self) -> None:
+        """Most locks are recorded from a photograph, which shows a padlock
+        but not whether it is shut. Defaulting to "locked" would invent that."""
+        save_document(self.floorplan, self._document([{"name": "padlock"}]), profile=self.profile)
+
+        lock = self._locks_in(document_for(self.floorplan))[0]
+        self.assertEqual(lock["state"], "unknown")
+        self.assertEqual(lock["key_attributes"], {})
+
+    def test_an_unknown_lock_state_is_refused_rather_than_coerced(self) -> None:
+        """Silently falling back to "unknown" is how a door that was recorded
+        as locked reads as unrecorded, with nothing to show it happened."""
+        with self.assertRaises(ValueError) as caught:
+            save_document(self.floorplan, self._document([{"name": "padlock", "state": "jammed"}]), profile=self.profile)
+
+        self.assertIn("jammed", str(caught.exception))
+        self.assertEqual(FloorplanLock.objects.count(), 0)
+
+    def test_key_attributes_that_are_not_an_object_are_reported(self) -> None:
+        """Free-form is not shapeless: a list reaches the database intact and
+        breaks readers later, so it is a 400 here rather than a 500 there."""
+        with self.assertRaises(ValueError) as caught:
+            save_document(self.floorplan, self._document([{"name": "padlock", "key_attributes": ["bitting", "44213"]}]), profile=self.profile)
+
+        self.assertIn("key_attributes", str(caught.exception))
+
+    def test_a_locks_own_item_surface_round_trips(self) -> None:
+        """A lock is a floorplan item like any other - its condition and
+        references are how physical state is recorded, which is why ``state``
+        carries only whether it is shut."""
+        document = self._document([{"name": "padlock", "state": "locked", "condition": "rusted", "description": "hasp bent", "references": ["ref-1"]}])
+        document["reference_pool"] = [{"uuid": "ref-1", "kind": "photo", "title": "Door 3, 2019", "url": "https://example.test/d3.jpg"}]
+
+        save_document(self.floorplan, document, profile=self.profile)
+
+        lock = self._locks_in(document_for(self.floorplan))[0]
+        self.assertEqual(lock["condition"], "rusted")
+        self.assertEqual(lock["description"], "hasp bent")
+        self.assertEqual(len(lock["references"]), 1)
 
 
 class FloorplanResolutionTests(TestCase):

@@ -1,7 +1,8 @@
 """Floorplan documents: the JSON shape the editor and consumers speak.
 
 One document carries a whole plan version - origin, floors, walls, the
-openings cut into those walls, room seeds and markers. Coordinates are
+openings cut into those walls, the locks fitted to those openings, room seeds
+and markers. Coordinates are
 plan-local metres throughout (see ``models.floorplans.model``), never degrees;
 ``services.floorplans.features`` is where they become WGS-84 for a map.
 
@@ -83,6 +84,8 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
             "walls__labels",
             "walls__openings__references",
             "walls__openings__labels",
+            "walls__openings__locks__references",
+            "walls__openings__locks__labels",
             "rooms__references",
             "rooms__labels",
             "markers__references",
@@ -108,6 +111,15 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
                     "t_end": opening.t_end,
                     "swing": opening.swing,
                     "sill_meters": opening.sill_meters,
+                    "locks": [
+                        {
+                            **_item_out(lock, source_uuids, reference_uuids),
+                            "name": lock.name,
+                            "state": lock.state,
+                            "key_attributes": lock.key_attributes or {},
+                        }
+                        for lock in opening.locks.all()
+                    ],
                 }
                 for opening in wall.openings.all()
             ],
@@ -360,6 +372,8 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
     """
     from urbanlens.dashboard.models.floorplans.model import (
         FloorplanFloor,
+        FloorplanLock,
+        FloorplanLockState,
         FloorplanMarker,
         FloorplanMarkerKind,
         FloorplanOpening,
@@ -438,7 +452,28 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
                 opening.sill_meters = _float_in(payload.get("sill_meters"), "sill_meters")
                 return opening
 
-            _sync({str(o.uuid): o for o in wall.openings.all()}, wall_payload.get("openings"), build_opening, pools, profile)
+            openings = _sync({str(o.uuid): o for o in wall.openings.all()}, wall_payload.get("openings"), build_opening, pools, profile)
+
+            for opening_payload, opening in openings:
+
+                def build_lock(payload: dict, row: FloorplanLock | None, *, _opening=opening) -> FloorplanLock:
+                    lock = row or FloorplanLock(opening=_opening)
+                    lock.opening = _opening
+                    lock.name = payload.get("name") or ""
+                    lock.state = _choice_in(payload.get("state"), FloorplanLockState.values, "lock state", FloorplanLockState.UNKNOWN)
+                    key_attributes = payload.get("key_attributes") or {}
+                    if not isinstance(key_attributes, dict):
+                        # Free-form, not shapeless: a list or string here reaches
+                        # the database happily and then breaks every reader that
+                        # expects an object, far from the save that caused it.
+                        # ValueError rather than the TypeError ruff wants, because
+                        # every caller in controllers/floorplans.py turns a
+                        # ValueError from this module into a 400 naming the field.
+                        raise ValueError("key_attributes must be an object")  # noqa: TRY004
+                    lock.key_attributes = key_attributes
+                    return lock
+
+                _sync({str(lk.uuid): lk for lk in opening.locks.all()}, opening_payload.get("locks"), build_lock, pools, profile)
 
         def build_room(payload: dict, row: FloorplanRoomSeed | None, *, _floor=floor) -> FloorplanRoomSeed:
             room = row or FloorplanRoomSeed(floor=_floor)

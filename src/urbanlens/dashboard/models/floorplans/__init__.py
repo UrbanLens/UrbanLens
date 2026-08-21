@@ -1,6 +1,8 @@
 from urbanlens.dashboard.models.floorplans.model import (
     Floorplan,
     FloorplanFloor,
+    FloorplanLock,
+    FloorplanLockState,
     FloorplanMarker,
     FloorplanMarkerKind,
     FloorplanOpening,
@@ -18,6 +20,8 @@ from urbanlens.dashboard.models.floorplans.model import (
 __all__ = [
     "Floorplan",
     "FloorplanFloor",
+    "FloorplanLock",
+    "FloorplanLockState",
     "FloorplanMarker",
     "FloorplanMarkerKind",
     "FloorplanOpening",

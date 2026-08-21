@@ -70,6 +70,14 @@
                     <i class="material-symbols-outlined">add_location_alt</i>
                 </button>
             </div>
+            <div class="floorplan-toolbar__base" role="group" aria-label="Backdrop">
+                <button type="button" class="btn btn--icon-sm is-active" data-base="satellite" aria-pressed="true" aria-label="Aerial backdrop"><i class="material-symbols-outlined">satellite_alt</i></button>
+                <button type="button" class="btn btn--icon-sm" data-base="street" aria-pressed="false" aria-label="Street backdrop"><i class="material-symbols-outlined">map</i></button>
+                <button type="button" class="btn btn--icon-sm" data-base="blank" aria-pressed="false" aria-label="No backdrop"><i class="material-symbols-outlined">check_box_outline_blank</i></button>
+            </div>
+            <button type="button" class="btn btn--icon" id="floorplan-underlay" aria-pressed="false" aria-label="Show the floor below">
+                <i class="material-symbols-outlined">layers</i>
+            </button>
             <div class="floorplan-toolbar__markers" role="group" aria-label="Marker type">
                 <button type="button" class="btn btn--icon-sm" data-marker-kind="photo" aria-label="Photo location"><i class="material-symbols-outlined">photo_camera</i></button>
                 <button type="button" class="btn btn--icon-sm" data-marker-kind="entrance" aria-label="Entrance"><i class="material-symbols-outlined">door_open</i></button>
@@ -90,7 +98,12 @@
                 <h2>Draw the walls; the rooms appear on their own.</h2>
                 <p>Close a loop of walls and it becomes a room you can name.</p>
                 <div class="floorplan-empty__actions">
-                    <button type="button" class="btn btn--primary" id="floorplan-start-rectangle">
+                    {% if outline_json %}
+                    <button type="button" class="btn btn--primary" id="floorplan-start-outline">
+                        <i class="material-symbols-outlined">home_work</i> Start from the building outline
+                    </button>
+                    {% endif %}
+                    <button type="button" class="btn {% if outline_json %}btn--ghost{% else %}btn--primary{% endif %}" id="floorplan-start-rectangle">
                         <i class="material-symbols-outlined">crop_square</i> Start from a rectangle
                     </button>
                     <button type="button" class="btn btn--ghost" data-tool="wall">
@@ -129,6 +142,7 @@
     </aside>
 </div>
 
+{{ outline_json|json_script:"floorplan-outline" }}
 {{ overlays_json|json_script:"floorplan-overlays" }}
 {{ labels_json|json_script:"floorplan-labels" }}
 {{ photos_json|json_script:"floorplan-photos" }}

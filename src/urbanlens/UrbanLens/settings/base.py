@@ -689,6 +689,116 @@ CORS_ALLOWED_ORIGINS = list(dict.fromkeys(
 ))
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
 
+
+def _origin_from_url(url: str) -> str | None:
+    """Reduce a URL to the bare origin an ``Origin``/``Referer`` header carries.
+
+    Args:
+        url: An absolute ``http``/``https`` URL. Anything else - a path, a
+            hostname with no scheme, an unparseable port - yields None rather
+            than a half-formed origin.
+
+    Returns:
+        ``scheme://host[:port]``, with IPv6 literals re-bracketed (``urlsplit``
+        strips the brackets that an origin must carry), or None.
+    """
+    from urllib.parse import urlsplit
+
+    try:
+        parsed = urlsplit(url.strip())
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return None
+        port = parsed.port
+    except ValueError:
+        return None
+    # urlsplit parses happily but validates nothing, so a malformed ALLOWED_HOSTS
+    # entry would otherwise become a malformed origin rather than be skipped.
+    if not all(char.isascii() and (char.isalnum() or char in "-._:") for char in parsed.hostname):
+        return None
+    host = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
+    return f"{parsed.scheme}://{host}{f':{port}' if port else ''}"
+
+
+def _derive_trusted_origins(allowed_hosts: list[str], site_url: str, *, allow_http: bool) -> tuple[list[str], list[str]]:
+    """The origins a deployment implicitly trusts because it already answers to them.
+
+    A hardcoded domain list cannot name an ephemeral dev environment's
+    generated hostname (``<slug>.dev.urbanlens.org``, see ``bin/dev_env.py``),
+    and the failure that causes is not the obvious one: pages render perfectly
+    and every POST - login included - is rejected on its Referer, which reads
+    as a broken app rather than an untrusted origin. Deriving the list instead
+    means an operator who has already told this deployment which hostnames it
+    serves does not also have to repeat them here.
+
+    This does not loosen anything: a host reaches this function only because it
+    is already in ``ALLOWED_HOSTS`` or is ``UL_SITE_URL``, both of which are
+    deliberate per-deployment configuration. ``*`` is skipped - it is a
+    catch-all for the Host header, and there is no such thing as a catch-all
+    origin to mint from it.
+
+    Args:
+        allowed_hosts: ``ALLOWED_HOSTS``, as configured for this deployment.
+        site_url: ``UL_SITE_URL`` - already a full origin.
+        allow_http: Whether this deployment is served over plain HTTP too
+            (``UL_UNSAFE_ALLOW_HTTP``); false everywhere HTTPS is enforced, so
+            no ``http://`` origin is minted there.
+
+    Returns:
+        ``(exact, wildcard)``. Exact origins are valid for both
+        ``CSRF_TRUSTED_ORIGINS`` and ``CORS_ALLOWED_ORIGINS``; the wildcard
+        forms (from ``.example.com``-style subdomain entries) are CSRF-only,
+        since django-cors-headers rejects a non-URI origin at check time.
+    """
+    schemes = ["https", "http"] if allow_http else ["https"]
+    exact: list[str] = []
+    wildcard: list[str] = []
+
+    site_origin = _origin_from_url(site_url)
+    if site_origin:
+        exact.append(site_origin)
+
+    for raw in allowed_hosts:
+        entry = raw.strip().lower()
+        if not entry or entry == "*":
+            continue
+        # An entry carrying URL punctuation is not a host Django would ever
+        # match, so nothing may be trusted on its behalf - and read as a URL it
+        # would mean something else entirely ("evil.com/x" -> the whole of
+        # evil.com, "user@host" -> host).
+        if any(char in entry for char in "/@?#"):
+            continue
+        # Django spells "this domain and its subdomains" as a leading dot;
+        # `*.example.com` is not a form it accepts, but operators write it, and
+        # reading it as the same intent beats silently ignoring the entry.
+        covers_subdomains = entry.startswith((".", "*."))
+        entry = entry.removeprefix("*").lstrip(".")
+        if not entry or "*" in entry:
+            continue
+        # A bare IPv6 literal, which ALLOWED_HOSTS canonically brackets already.
+        if entry.count(":") > 1 and not entry.startswith("["):
+            entry = f"[{entry}]"
+        for scheme in schemes:
+            origin = _origin_from_url(f"{scheme}://{entry}")
+            if origin is None:
+                continue
+            exact.append(origin)
+            if covers_subdomains:
+                wildcard.append(origin.replace("://", "://*.", 1))
+
+    return list(dict.fromkeys(exact)), list(dict.fromkeys(wildcard))
+
+
+# The environment variable rather than SITE_URL (defined further down): SITE_URL
+# falls back to http://localhost:21080 when unset, and a fallback nobody
+# configured must not become an origin this deployment trusts.
+_derived_origins, _derived_wildcard_origins = _derive_trusted_origins(
+    ALLOWED_HOSTS,
+    os.getenv("UL_SITE_URL", ""),
+    allow_http=UNSAFE_ALLOW_HTTP,
+)
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys([*CORS_ALLOWED_ORIGINS, *_derived_origins]))
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys([*CSRF_TRUSTED_ORIGINS, *_derived_origins, *_derived_wildcard_origins]))
+
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv("UL_GOOGLE_CLIENT_ID", "")
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.getenv("UL_GOOGLE_CLIENT_SECRET", "")
 SOCIAL_AUTH_DISCORD_KEY = os.getenv("UL_DISCORD_CLIENT_ID", "")

@@ -493,3 +493,67 @@ class DestroyFailureTests(SimpleTestCase):
         self.assertTrue(result["containers"])
         self.assertTrue(result["registry"])
         self.assertNotIn("doomed", json.loads(self.registry.read_text()))
+
+
+class DemoAccountSeedingStepTests(SimpleTestCase):
+    """A created environment must hand back a way in, and must survive not having one.
+
+    The account is the difference between a URL onto an empty database and an
+    environment somebody can look at. It is also the step most likely to fail
+    for a reason that has nothing to do with the stack (an unreachable
+    catalog), which is why nothing here is allowed to fail the create.
+    """
+
+    def _run_with_output(self, output: str, status: str = "ok") -> tuple[mock.Mock, devenv.DevEnv, mock.Mock]:
+        from opslib.steps import StepResult
+
+        result = StepResult(name="seed-demo-account", status=status, seconds=1.0, output_tail=output)
+        run = mock.Mock()
+        run.run_step.return_value = result
+        env = devenv.DevEnv(slug="a1b2c3", path="unused", hostname="h", url="https://h", app_port=31000, redata_port=31001, created_at="now", branch="main")
+        devenv._seed_demo_account(run, env)
+        return run, env, result
+
+    def test_the_password_is_derived_from_the_slug(self) -> None:
+        """Derivable on purpose: whoever reads the hostname can work out the login."""
+        self.assertEqual(devenv.seed_password("a1b2c3"), "demo-a1b2c3")
+
+    def test_a_seeded_account_is_recorded_on_the_environment(self) -> None:
+        _, env, result = self._run_with_output('UL_DEV_SEED={"username": "demo", "created": true, "pins": 12, "landmark": "Hudson River State Hospital", "catalog": "imported 11"}')
+
+        self.assertEqual((env.login_username, env.login_password), ("demo", "demo-a1b2c3"))
+        self.assertIn("demo / demo-a1b2c3", result.detail)
+        self.assertIn("12 pin(s)", result.detail)
+
+    def test_the_credentials_are_passed_as_environment_variables(self) -> None:
+        """Not interpolated into the script, where they would have to be quoted correctly."""
+        run, _, _ = self._run_with_output('UL_DEV_SEED={"created": true, "username": "demo"}')
+
+        command = run.run_step.call_args.args[1]
+        self.assertIn("UL_DEV_SEED_PASSWORD=demo-a1b2c3", command)
+        self.assertIn(devenv.container_name("a1b2c3", "app"), command)
+
+    def test_a_failed_seed_claims_no_login(self) -> None:
+        """Reporting credentials that do not work is worse than reporting none."""
+        _, env, result = self._run_with_output("Traceback (most recent call last): ...", status="warn")
+
+        self.assertEqual((env.login_username, env.login_password), ("", ""))
+        self.assertEqual(result.status, "warn")
+        self.assertIn("created by hand", result.detail)
+
+    def test_an_already_seeded_environment_is_not_reported_as_freshly_created(self) -> None:
+        _, env, _ = self._run_with_output('UL_DEV_SEED={"created": false, "username": "demo"}')
+
+        self.assertEqual(env.login_username, "")
+
+    def test_unparseable_output_is_not_read_as_success(self) -> None:
+        self.assertEqual(devenv._parse_seed_summary("UL_DEV_SEED={not json"), {})
+        self.assertEqual(devenv._parse_seed_summary(""), {})
+
+    def test_the_environment_records_its_own_manifest_path(self) -> None:
+        """So a later import in this environment tops the same manifest up rather than starting a second one."""
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / ".env"
+            devenv._write_env_file(destination, {"UL_DEMO_LOCATIONS_FILE": "/app/demo-locations.json"}, None)
+
+            self.assertIn("UL_DEMO_LOCATIONS_FILE=/app/demo-locations.json", destination.read_text(encoding="utf-8"))

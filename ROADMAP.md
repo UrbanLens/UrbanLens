@@ -445,12 +445,46 @@ The feature shipped **completely non-functional** and needs a fundamental rework
   (replaced by `aria-label`s and one contextual hint line that changes with the active tool); an
   empty canvas now offers "start from a rectangle" (one click produces four walls *and* a derived
   room, which teaches the model in one action) alongside "draw walls". [UL-409]
-* Deferred, deliberately: opening drag-handles along a wall (openings are placed mid-wall and
-  edited via the sidebar for now), the adjacent-floor underlay and `connector_id` linking UI (the
-  field exists and is stored), per-plan drawing-axis rotation UI (`rotation_degrees` is stored and
-  honoured by angle snapping, but nothing sets it yet), and scale calibration so area badges can
-  be trusted. Also note `FloorplanLock` was deleted with the old element model - locks are
-  genuinely useful urbex data and want re-adding against `FloorplanOpening`. [UL-410]
+* ~~Deferred: opening drag-handles, adjacent-floor underlay, `connector_id` linking UI,
+  drawing-axis rotation, scale calibration, and re-adding `FloorplanLock`.~~ RESOLVED 2026-08-21:
+  - **Opening drag-handles**: each opening's ends are draggable while its wall is selected. The
+    handle drags in *t* (the cursor is projected back onto the wall) rather than in space, with
+    the ends clamped so they cannot cross or leave the wall - which is what keeps a door on its
+    frame when the wall is later moved.
+  - **Adjacent-floor underlay**: a toolbar toggle draws the floor below faintly and
+    non-interactively, including its stair/lift markers. Aligning a stairwell across storeys was
+    otherwise guesswork.
+  - **`connector_id` linking**: selecting a stair or lift offers the unlinked connectors on
+    adjacent floors; linking adopts the counterpart's id when it already has one, so a third
+    floor joins the same shaft rather than starting a parallel one. Authored explicitly rather
+    than derived from position, because a switchback stair genuinely lands elsewhere on the floor
+    above - proximity would be wrong exactly when it mattered.
+  - **Drawing axis**: "square the grid to this wall" sets `rotation_degrees` from a selected
+    wall, folded into [0, 90) since a wall and its perpendicular describe the same grid. Angle
+    snapping already honoured the field; now something sets it.
+  - Also fixed while here: placing a marker now selects it, since naming it or linking it is
+    almost always the next action and hunting for your own new marker to do that is a step with
+    no purpose.
+  - **New floors start from the building outline.** `_building_outline()` hands the editor the
+    real footprint (building boundary, falling back to the property boundary) and a brand-new
+    plan - and every floor added afterwards - lays it down as exterior walls. The outer wall is
+    the one part already known from survey data, so tracing around a shape the map is already
+    drawing was busywork. Seeded per floor rather than shared, because upper storeys genuinely
+    differ: a setback or a demolished wing becomes an edit rather than a fight with something
+    immovable. Degrades silently to the previous empty state when no boundary is known.
+  - **Backdrop is selectable, and aerial stays the default on every floor.** Imagery shows the
+    footprint whichever storey is being drawn, and a georeferenced blueprint overlay renders on
+    top of it where one exists. Street and blank are there for the cases imagery does not serve
+    (tree cover, a cluttered site) and cost nothing, since geometry is georeferenced independently
+    of the backdrop.
+  - The derived room's name and area badge are **permanent, not hover-only** - a room appearing
+    and naming its own area the instant a loop closes is what teaches the wall-first model, and a
+    badge nobody sees teaches nothing.
+  - **Scale calibration was deliberately NOT built.** That recommendation assumed drawing on a
+    blank canvas; this editor draws over a georeferenced map and stores plan-local metres derived
+    from a real projection, so lengths and m² badges are already true. A calibration control
+    would be a fudge factor applied to a number that is not wrong.
+  - `FloorplanLock` re-added against `FloorplanOpening` - see UL-411. [UL-410]
 
 * ~~Floor plan editor: none of its buttons/dropdowns/toolbar controls
   (`.floorplan-save`, `.floorplan-floor-tab`, `.floorplan-toolbar`, etc.) reuse the shared `.btn`

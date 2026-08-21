@@ -81,6 +81,12 @@ class DevEnv:
     branch: str
     owner: str = ""
     status: str = "creating"
+    #: Credentials for the seeded account (see `_seed_demo_account`). Recorded
+    #: rather than only printed once, so `list` can answer "how do I get into
+    #: this one" later. Not a secret worth hiding: the password is derived from
+    #: the slug, which is in the hostname.
+    login_username: str = ""
+    login_password: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         """JSON-safe form."""
@@ -406,6 +412,111 @@ def _provision_redata_key(run: Run, slug: str, ul_dir: Path) -> None:
     run.record("provision-redata-key", "ok", "minted a key in this environment's own REData")
 
 
+#: Run inside the environment's own app container, which is the only place the
+#: project's Python, its GDAL and its database all exist together. Credentials
+#: arrive as environment variables rather than interpolated into the source, so
+#: nothing here has to be quoted correctly to be correct.
+_SEED_SCRIPT = """
+import json
+import os
+
+from urbanlens.dashboard.services.demo.seeding import seed_dev_environment
+
+summary = seed_dev_environment(username=os.environ["UL_DEV_SEED_USERNAME"], password=os.environ["UL_DEV_SEED_PASSWORD"])
+print("UL_DEV_SEED=" + json.dumps(summary))
+"""
+
+#: Where the summary is printed, so the shell's own banner does not have to be
+#: parsed around - same reason as `_MINT_KEY_MARKER`.
+_SEED_MARKER = "UL_DEV_SEED="
+
+
+def seed_password(slug: str) -> str:
+    """The seeded account's password for one environment.
+
+    Derived from the slug rather than random so that whoever created the
+    environment - or anyone reading its hostname later - can work it out without
+    finding the run record.
+
+    Args:
+        slug: The environment slug.
+
+    Returns:
+        The password.
+    """
+    return f"demo-{slug}"
+
+
+def _seed_demo_account(run: Run, env: DevEnv) -> None:
+    """Give the environment an account with content, and report its credentials.
+
+    A fresh environment's database is empty, so every page it serves is an empty
+    state: there is nothing to look at and no way in without creating an account
+    by hand first. This seeds the same content the public demo instance gets,
+    under a fixed username, and puts the credentials in the record the caller
+    already reads.
+
+    Best-effort by construction. The content pool comes from a catalog that a
+    brand-new environment may not be able to reach, and an environment with a
+    login but no pins is still a working environment - so a failure here is
+    recorded and the create continues, rather than discarding a stack that took
+    forty minutes to build.
+
+    Args:
+        run: The step recorder for this create.
+        env: The environment being created; its credentials are written back
+            onto it.
+    """
+    username, password = "demo", seed_password(env.slug)
+    result = run.run_step(
+        "seed-demo-account",
+        [
+            "docker",
+            "exec",
+            "-e",
+            f"UL_DEV_SEED_USERNAME={username}",
+            "-e",
+            f"UL_DEV_SEED_PASSWORD={password}",
+            container_name(env.slug, "app"),
+            "/app/.venv/bin/python",
+            "/app/src/urbanlens/manage.py",
+            "shell",
+            "-c",
+            _SEED_SCRIPT,
+        ],
+        timeout=1800,
+        check=False,
+    )
+    summary = _parse_seed_summary(result.output_tail)
+    if not summary:
+        result.status = "warn"
+        result.detail = f"no account was seeded ({result.detail or 'the seeder printed no summary'}); sign-in needs an account created by hand"
+        return
+
+    env.login_username, env.login_password = username, password
+    result.detail = f"{username} / {password} - {summary.get('pins', 0)} pin(s), landmark {summary.get('landmark', 'none')}; {summary.get('catalog', '')}"
+
+
+def _parse_seed_summary(output: str) -> dict[str, Any]:
+    """The seeder's JSON summary, or an empty dict when it did not produce one.
+
+    Args:
+        output: Captured stdout/stderr of the seeding step.
+
+    Returns:
+        The parsed summary. Empty when the marker line is absent or unparseable
+        - which is what "the account was not seeded" looks like from here.
+    """
+    for line in output.splitlines():
+        if line.startswith(_SEED_MARKER):
+            try:
+                parsed = json.loads(line[len(_SEED_MARKER) :])
+            except ValueError:
+                return {}
+            return parsed if isinstance(parsed, dict) and parsed.get("created") else {}
+    return {}
+
+
 def _naming_conflict(slug: str, ul_dir: Path) -> str:
     """Whether this environment's resolved container names belong to another stack.
 
@@ -603,6 +714,12 @@ def create(*, requested_name: str = "", branch: str = "main", owner: str = "", r
             # Routed to the host by the `extra_hosts` entry the isolation
             # override writes for the application services.
             "UL_REDATA_API_URL": redata_api_url(env.redata_port if with_redata else None),
+            # Where the seeded location catalog is recorded, so a later
+            # `import_public_locations`/`import_redata_public_locations` in this
+            # environment tops the same manifest up rather than starting a
+            # second one. /app is the app user's own tree (see the Dockerfile's
+            # COPY --chown), and is what .env-sample suggests for this.
+            "UL_DEMO_LOCATIONS_FILE": "/app/demo-locations.json",
         },
         source_env if source_env.is_file() else None,
     )
@@ -678,12 +795,18 @@ def create(*, requested_name: str = "", branch: str = "main", owner: str = "", r
         if healthy.status != "ok":
             run.record("capture-app-log-detail", "ok", "app never answered; its log follows")
             run.run_step("capture-app-log", ["docker", "logs", "--tail", "60", container_name(slug, "app")], cwd=ul_dir, timeout=180, check=False)
+        else:
+            # Only once the app answers: the entrypoint runs migrations before
+            # it binds a port, so this is also the first moment the schema the
+            # seeder writes into actually exists.
+            _seed_demo_account(run, env)
     else:
         # Waiting fifteen minutes for a container that already failed to start
         # is fifteen minutes of nothing. Report why instead: the app's own log
         # holds the reason, and fetching it here is the difference between a
         # caller knowing what broke and a caller going to find out.
         run.record("wait-healthy", "skipped", "start failed; not waiting on a container that did not start")
+        run.record("seed-demo-account", "skipped", "no running app to seed into")
         # `docker logs <container>` rather than `docker compose logs`: compose
         # prefixes its own variable-substitution warnings, and on this project
         # there are enough of them to push the app's actual traceback out of
