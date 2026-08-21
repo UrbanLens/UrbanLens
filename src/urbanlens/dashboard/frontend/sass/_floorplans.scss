@@ -300,6 +300,49 @@
     }
 }
 
+// Rubber-band box select, drawn over the map container while dragging.
+.floorplan-box-select {
+    position: absolute;
+    z-index: 1000;
+    pointer-events: none;
+    background: rgb(0 131 143 / 12%);
+    border: 1px dashed #00838f;
+}
+
+// Right-click menu for walls/rooms/markers/openings and empty map space.
+.floorplan-context-menu {
+    position: fixed;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    margin: 0;
+    padding: .3rem;
+    min-width: 11rem;
+    list-style: none;
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-border);
+    border-radius: $radius-sm;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 22%);
+
+    button {
+        display: block;
+        width: 100%;
+        padding: .35rem .5rem;
+        text-align: left;
+        font-size: .85rem;
+        color: var(--ul-grey-9);
+        background: none;
+        border: 0;
+        border-radius: $radius-sm;
+        cursor: pointer;
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+    }
+}
+
 // "Add more details" - Plan name and Date are worth setting sometimes, but
 // not worth showing by default on every plan.
 .floorplan-details-accordion {

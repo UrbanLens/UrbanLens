@@ -38,6 +38,12 @@ declare const L: typeof import("leaflet");
 
 type Tool = "select" | "wall" | "marker";
 
+type SelectionItem =
+    | { kind: "wall"; wall: Wall }
+    | { kind: "room"; room: RoomSeed }
+    | { kind: "marker"; marker: Marker }
+    | { kind: "opening"; wall: Wall; opening: Opening };
+
 /** Marker kinds that can join floors together. */
 const CONNECTOR_KINDS = new Set<MarkerKind>(["stair", "elevator"]);
 
@@ -74,14 +80,15 @@ const UNBOUND_FILL = { color: "#b0bec5", weight: 1, dashArray: "4 4", fillColor:
  * background circle, for contrast against whatever is under it - a bare
  * glyph blended into the map beneath it.
  */
-function markerIcon(kind: MarkerKind): L.DivIcon {
+function markerIcon(kind: MarkerKind, selected: boolean): L.DivIcon {
     const color = MARKER_COLOR[kind] || "#2563eb";
     const size = 22;
     const pad = 5;
     const total = size + pad * 2;
+    const ring = selected ? "outline:3px solid #00838f;outline-offset:2px;" : "";
     return L.divIcon({
         className: "floorplan-marker",
-        html: `<span style="background:#fff;border:2px solid ${color};" class="floorplan-marker__badge"><span class="material-symbols-outlined" style="color:${color};font-size:${size}px;">${MARKER_ICON[kind] || "place"}</span></span>`,
+        html: `<span style="background:#fff;border:2px solid ${color};${ring}" class="floorplan-marker__badge"><span class="material-symbols-outlined" style="color:${color};font-size:${size}px;">${MARKER_ICON[kind] || "place"}</span></span>`,
         iconSize: [total, total],
         iconAnchor: [total / 2, total],
         popupAnchor: [0, -total],
@@ -120,7 +127,9 @@ function boot(): void {
 
     // attributionControl: false - required attribution renders in the page
     // footer instead (show_map_footer=True; see createMapLayers' onAttribution below).
-    const map = L.map("floorplan-map", { zoomControl: true, doubleClickZoom: false, attributionControl: false }).setView([lat, lng], 20);
+    // boxZoom: false - shift+drag is repurposed below for box-select instead
+    // of Leaflet's default zoom-to-rectangle, which has no use here.
+    const map = L.map("floorplan-map", { zoomControl: true, doubleClickZoom: false, attributionControl: false, boxZoom: false }).setView([lat, lng], 20);
 
     // Declared before createMapLayers below: its "underlay" custom toggle
     // reads state.showUnderlay synchronously while the panel builds its
@@ -134,7 +143,10 @@ function boot(): void {
         drawing: [] as Pt[],
         cursor: null as Pt | null,
         snapKind: "" as string,
-        selection: null as { kind: "wall"; wall: Wall } | { kind: "room"; room: RoomSeed } | { kind: "marker"; marker: Marker } | { kind: "opening"; wall: Wall; opening: Opening } | null,
+        /** The last-focused selected item - drives which edit form the sidebar shows. Always a member of `multi`. */
+        selection: null as SelectionItem | null,
+        /** Every currently selected item (ctrl+click or box-select can grow this past one). */
+        multi: [] as SelectionItem[],
         markerKind: "hazard" as MarkerKind,
         dirty: false,
         suspendSnap: false,
@@ -225,6 +237,50 @@ function boot(): void {
         render();
     }
 
+    // -------------------------------------------------------------- selection
+
+    /** A stable identity for a selection item, independent of array position. */
+    function itemKey(item: SelectionItem): string {
+        if (item.kind === "opening") return `opening:${item.opening.uuid}`;
+        if (item.kind === "wall") return `wall:${item.wall.uuid}`;
+        if (item.kind === "room") return `room:${item.room.uuid}`;
+        return `marker:${item.marker.uuid}`;
+    }
+
+    function isSelected(item: SelectionItem): boolean {
+        const key = itemKey(item);
+        return state.multi.some((existing) => itemKey(existing) === key);
+    }
+
+    function clearSelection(): void {
+        state.selection = null;
+        state.multi = [];
+    }
+
+    /**
+     * Click-select one item, honoring ctrl/cmd for additive multi-select.
+     *
+     * A plain click replaces the selection with just this item; a ctrl/cmd
+     * click toggles it in place, so building up (or trimming) a multi-select
+     * one item at a time works the same way it does everywhere else.
+     */
+    function selectItem(item: SelectionItem, event: L.LeafletMouseEvent): void {
+        const original = event.originalEvent as MouseEvent | undefined;
+        const additive = Boolean(original && (original.ctrlKey || original.metaKey));
+        if (additive) {
+            const key = itemKey(item);
+            const index = state.multi.findIndex((existing) => itemKey(existing) === key);
+            if (index >= 0) state.multi.splice(index, 1);
+            else state.multi.push(item);
+            state.selection = state.multi.length ? (state.multi[state.multi.length - 1] as SelectionItem) : null;
+        } else {
+            state.multi = [item];
+            state.selection = item;
+        }
+        renderSidebar();
+        render();
+    }
+
     // ---------------------------------------------------------------- render
 
     function render(): void {
@@ -247,7 +303,12 @@ function boot(): void {
         // Rooms first so walls draw on top of their fills.
         for (const face of derived.faces) {
             const seed = current.rooms.find((room) => faceForSeed({ x: room.x, y: room.y }, [face]) === face);
-            const polygon = L.polygon(face.ring.map(toLatLng), seed ? ROOM_FILL : UNBOUND_FILL).addTo(roomLayer);
+            const roomSelected = seed ? isSelected({ kind: "room", room: seed }) : false;
+            const polygon = L.polygon(face.ring.map(toLatLng), {
+                className: "floorplan-room",
+                ...(seed ? ROOM_FILL : UNBOUND_FILL),
+                ...(roomSelected ? { color: "#00838f", weight: 3 } : {}),
+            }).addTo(roomLayer);
             const label = seed ? seed.name || "Unnamed" : "Unnamed room";
             // Permanent, not on hover: a room appearing and naming its own area
             // the instant a loop closes is what teaches the wall-first model,
@@ -265,9 +326,12 @@ function boot(): void {
                 if (state.tool !== "select") return;
                 L.DomEvent.stop(event);
                 const bound = seed || addSeedAt(centroid(face.ring));
-                state.selection = { kind: "room", room: bound };
-                renderSidebar();
-                render();
+                selectItem({ kind: "room", room: bound }, event);
+            });
+            polygon.on("contextmenu", (event) => {
+                if (state.tool !== "select") return;
+                const bound = seed || addSeedAt(centroid(face.ring));
+                showContextMenu(event, { kind: "room", room: bound });
             });
         }
 
@@ -281,37 +345,47 @@ function boot(): void {
 
         for (const wall of current.walls) {
             const style = WALL_STYLE[wall.kind] || WALL_STYLE.interior;
-            const selected = state.selection?.kind === "wall" && state.selection.wall === wall;
+            const selected = isSelected({ kind: "wall", wall });
             const line = L.polyline([toLatLng({ x: wall.ax, y: wall.ay }), toLatLng({ x: wall.bx, y: wall.by })], {
+                className: "floorplan-wall",
                 ...style,
                 ...(selected ? { color: "#00838f", weight: (style?.weight || 3) + 2 } : {}),
             }).addTo(wallLayer);
             line.on("click", (event) => {
                 if (state.tool !== "select") return;
                 L.DomEvent.stop(event);
-                state.selection = { kind: "wall", wall };
-                renderSidebar();
-                render();
+                selectItem({ kind: "wall", wall }, event);
+            });
+            line.on("contextmenu", (event) => {
+                if (state.tool !== "select") return;
+                showContextMenu(event, { kind: "wall", wall });
             });
             renderOpenings(wall, selected);
-            if (selected) renderWallHandles(wall);
+            // Only one wall's handles are ever worth drawing: with several
+            // walls multi-selected there is no single "the" endpoint drag to
+            // offer, and drawing all of them invites dragging the wrong one.
+            if (selected && state.multi.length === 1) renderWallHandles(wall);
         }
 
         for (const marker of current.markers) {
-            const node = L.marker(toLatLng({ x: marker.x, y: marker.y }), { icon: markerIcon(marker.kind), draggable: state.tool === "select" }).addTo(markerLayer);
+            const selected = isSelected({ kind: "marker", marker });
+            const node = L.marker(toLatLng({ x: marker.x, y: marker.y }), { icon: markerIcon(marker.kind, selected), draggable: state.tool === "select" }).addTo(markerLayer);
             node.bindPopup(markerPopupContent(marker), { closeButton: true });
             node.on("popupopen", () => {
                 node.getPopup()?.getElement()?.querySelector(".floorplan-marker-popup__delete")?.addEventListener("click", () => {
                     state.selection = { kind: "marker", marker };
+                    state.multi = [state.selection];
                     deleteSelection();
                 });
             });
             node.on("click", (event) => {
                 if (state.tool !== "select") return;
                 L.DomEvent.stop(event);
-                state.selection = { kind: "marker", marker };
-                renderSidebar();
-                render();
+                selectItem({ kind: "marker", marker }, event);
+            });
+            node.on("contextmenu", (event) => {
+                if (state.tool !== "select") return;
+                showContextMenu(event, { kind: "marker", marker });
             });
             node.on("dragend", () => {
                 const p = toLocal(node.getLatLng());
@@ -338,9 +412,10 @@ function boot(): void {
         const b = { x: wall.bx, y: wall.by };
         const at = (t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
         for (const opening of wall.openings) {
-            const openingSelected = state.selection?.kind === "opening" && state.selection.opening === opening;
+            const openingSelected = isSelected({ kind: "opening", wall, opening });
             const colour = opening.kind === "window" ? "#1e88e5" : "#fb8c00";
             const line = L.polyline([toLatLng(at(opening.t_start)), toLatLng(at(opening.t_end))], {
+                className: "floorplan-opening",
                 color: openingSelected ? "#00838f" : colour,
                 weight: openingSelected ? 9 : 6,
             })
@@ -352,9 +427,11 @@ function boot(): void {
             line.on("click", (event) => {
                 if (state.tool !== "select") return;
                 L.DomEvent.stop(event);
-                state.selection = { kind: "opening", wall, opening };
-                renderSidebar();
-                render();
+                selectItem({ kind: "opening", wall, opening }, event);
+            });
+            line.on("contextmenu", (event) => {
+                if (state.tool !== "select") return;
+                showContextMenu(event, { kind: "opening", wall, opening });
             });
             if (selected) renderOpeningHandles(wall, opening, at);
         }
@@ -377,6 +454,7 @@ function boot(): void {
                 fillColor: "#fff",
                 fillOpacity: 1,
                 weight: 2,
+                className: "floorplan-handle",
             }).addTo(handleLayer);
             let dragging = false;
             handle.on("mousedown", () => {
@@ -439,7 +517,7 @@ function boot(): void {
     function renderWallHandles(wall: Wall): void {
         for (const end of ["a", "b"] as const) {
             const point = end === "a" ? { x: wall.ax, y: wall.ay } : { x: wall.bx, y: wall.by };
-            const handle = L.circleMarker(toLatLng(point), { radius: 6, color: "#00838f", fillColor: "#fff", fillOpacity: 1 }).addTo(handleLayer);
+            const handle = L.circleMarker(toLatLng(point), { radius: 6, color: "#00838f", fillColor: "#fff", fillOpacity: 1, className: "floorplan-handle" }).addTo(handleLayer);
             let dragging = false;
             handle.on("mousedown", () => {
                 dragging = true;
@@ -467,6 +545,183 @@ function boot(): void {
             });
         }
     }
+
+    // ----------------------------------------------------------- box select
+
+    let boxStart: L.Point | null = null;
+    let boxActive = false;
+    let boxRectEl: HTMLDivElement | null = null;
+    // A box-select's mouseup still reaches map.on("click") below (Leaflet's
+    // own drag-vs-click suppression only engages for its own panning, which
+    // this never triggers since map.dragging stays disabled throughout) -
+    // this flag swallows exactly that one synthetic click.
+    let suppressNextClick = false;
+
+    function drawBoxRect(from: L.Point, to: L.Point): void {
+        if (!boxRectEl) return;
+        const left = Math.min(from.x, to.x);
+        const top = Math.min(from.y, to.y);
+        boxRectEl.style.left = `${left}px`;
+        boxRectEl.style.top = `${top}px`;
+        boxRectEl.style.width = `${Math.abs(from.x - to.x)}px`;
+        boxRectEl.style.height = `${Math.abs(from.y - to.y)}px`;
+    }
+
+    /** Items fully enclosed by the box, in plan-space regardless of screen rotation. */
+    function itemsInBox(from: L.Point, to: L.Point): SelectionItem[] {
+        const bounds = L.latLngBounds(map.containerPointToLatLng(from), map.containerPointToLatLng(to));
+        const matches: SelectionItem[] = [];
+        for (const wall of floor().walls) {
+            const a = toLatLng({ x: wall.ax, y: wall.ay });
+            const b = toLatLng({ x: wall.bx, y: wall.by });
+            if (bounds.contains(a) && bounds.contains(b)) matches.push({ kind: "wall", wall });
+        }
+        for (const marker of floor().markers) {
+            if (bounds.contains(toLatLng({ x: marker.x, y: marker.y }))) matches.push({ kind: "marker", marker });
+        }
+        for (const room of floor().rooms) {
+            if (bounds.contains(toLatLng({ x: room.x, y: room.y }))) matches.push({ kind: "room", room });
+        }
+        return matches;
+    }
+
+    function finishBoxSelect(from: L.Point, to: L.Point, additive: boolean): void {
+        const matches = itemsInBox(from, to);
+        if (!matches.length) {
+            if (!additive) clearSelection();
+        } else if (additive) {
+            for (const item of matches) if (!isSelected(item)) state.multi.push(item);
+            state.selection = matches[matches.length - 1] as SelectionItem;
+        } else {
+            state.multi = matches;
+            state.selection = matches[matches.length - 1] as SelectionItem;
+        }
+        renderSidebar();
+        render();
+    }
+
+    // Native DOM listeners rather than Leaflet's own mouse events: this needs
+    // to run *instead of* map panning (not after it), so it has to see the
+    // gesture before Leaflet's drag handler decides what to do with it.
+    //
+    // Gated on shift, not a plain drag: a plain click-drag is already the
+    // map's own pan gesture, and once an exterior is drawn, room fill covers
+    // most of the visible map - a box-select startable only from genuinely
+    // empty background would rarely be reachable. Shift+drag is unclaimed
+    // (boxZoom above frees it) and is the same modifier most drawing tools
+    // already use for exactly this.
+    map.getContainer().addEventListener("mousedown", (event: MouseEvent) => {
+        if (state.tool !== "select" || event.button !== 0 || !event.shiftKey) return;
+        const target = event.target as HTMLElement;
+        // Ordinary wall/room/marker shapes are NOT excluded here - only
+        // things with their own competing drag behavior are: draggable
+        // markers and the wall/opening endpoint handles.
+        if (target.closest(".leaflet-marker-icon, .floorplan-handle, .leaflet-popup, .leaflet-control, .floorplan-context-menu")) return;
+        map.dragging.disable();
+        boxStart = map.mouseEventToContainerPoint(event);
+        boxActive = false;
+    });
+    map.getContainer().addEventListener("mousemove", (event: MouseEvent) => {
+        if (!boxStart) return;
+        const current = map.mouseEventToContainerPoint(event);
+        if (!boxActive) {
+            // A few pixels of slop before committing to box-select, so an
+            // ordinary click on empty space (which still starts here, since
+            // it might become a drag) doesn't spuriously draw a rectangle.
+            if (boxStart.distanceTo(current) < 6) return;
+            boxActive = true;
+            map.dragging.disable();
+            boxRectEl = document.createElement("div");
+            boxRectEl.className = "floorplan-box-select";
+            map.getContainer().appendChild(boxRectEl);
+        }
+        drawBoxRect(boxStart, current);
+    });
+    map.getContainer().addEventListener("mouseup", (event: MouseEvent) => {
+        if (!boxStart) return;
+        if (boxActive) {
+            finishBoxSelect(boxStart, map.mouseEventToContainerPoint(event), event.ctrlKey || event.metaKey);
+            suppressNextClick = true;
+            boxRectEl?.remove();
+            boxRectEl = null;
+        }
+        // Re-enabled unconditionally: mousedown above disables it as soon as
+        // shift is held, before movement confirms this is really a drag.
+        map.dragging.enable();
+        boxStart = null;
+        boxActive = false;
+    });
+
+    // ---------------------------------------------------------- context menu
+
+    let pendingContextPoint: Pt | null = null;
+    let contextMenuEl: HTMLUListElement | null = null;
+
+    function closeContextMenu(): void {
+        contextMenuEl?.remove();
+        contextMenuEl = null;
+    }
+
+    function buildContextMenu(item: SelectionItem | null): HTMLUListElement {
+        const menu = document.createElement("ul");
+        menu.className = "floorplan-context-menu";
+        const addAction = (label: string, handler: () => void): void => {
+            const entry = document.createElement("li");
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = label;
+            button.addEventListener("click", () => {
+                handler();
+                closeContextMenu();
+            });
+            entry.appendChild(button);
+            menu.appendChild(entry);
+        };
+
+        if (!item) {
+            addAction(`Add ${titleCase(state.markerKind)} marker here`, () => {
+                if (!pendingContextPoint) return;
+                const placed: Marker = { uuid: nextLocalId(), kind: state.markerKind, x: pendingContextPoint.x, y: pendingContextPoint.y, name: titleCase(state.markerKind) };
+                floor().markers.push(placed);
+                state.selection = { kind: "marker", marker: placed };
+                state.multi = [state.selection];
+                renderSidebar();
+                markDirty();
+            });
+            return menu;
+        }
+
+        if (item.kind === "wall") {
+            addAction("Add opening", () => {
+                item.wall.openings.push({ uuid: nextLocalId(), kind: "door", t_start: 0.45, t_end: 0.55, swing: "none" });
+                renderSidebar();
+                markDirty();
+            });
+        }
+
+        const count = Math.max(state.multi.length, 1);
+        addAction(count > 1 ? `Delete ${count} items` : "Delete", deleteSelection);
+        return menu;
+    }
+
+    function showContextMenu(event: L.LeafletMouseEvent, item: SelectionItem | null): void {
+        L.DomEvent.stop(event);
+        if (item && !isSelected(item)) {
+            state.multi = [item];
+            state.selection = item;
+            renderSidebar();
+            render();
+        }
+        closeContextMenu();
+        const menu = buildContextMenu(item);
+        const original = event.originalEvent as MouseEvent;
+        menu.style.left = `${original.clientX}px`;
+        menu.style.top = `${original.clientY}px`;
+        document.body.appendChild(menu);
+        contextMenuEl = menu;
+    }
+
+    document.addEventListener("click", () => closeContextMenu());
 
     function centroid(ring: readonly Pt[]): Pt {
         let x = 0;
@@ -606,6 +861,15 @@ function boot(): void {
     });
 
     map.on("click", (event: L.LeafletMouseEvent) => {
+        // A box-select drag ends in a mouseup that Leaflet still reads as a
+        // click (map.dragging was never engaged, so its usual after-a-drag
+        // click suppression never kicks in) - without this the box-select
+        // result would be immediately wiped by the "click empty space
+        // deselects" branch below.
+        if (suppressNextClick) {
+            suppressNextClick = false;
+            return;
+        }
         const raw = toLocal(event.latlng);
         if (state.tool === "wall") {
             const from = state.drawing.length ? (state.drawing[state.drawing.length - 1] as Pt) : null;
@@ -636,11 +900,12 @@ function boot(): void {
             const placed: Marker = { uuid: nextLocalId(), kind: state.markerKind, x: raw.x, y: raw.y, name: titleCase(state.markerKind) };
             floor().markers.push(placed);
             state.selection = { kind: "marker", marker: placed };
+            state.multi = [state.selection];
             renderSidebar();
             markDirty();
             return;
         }
-        state.selection = null;
+        clearSelection();
         renderSidebar();
         render();
     });
@@ -649,12 +914,19 @@ function boot(): void {
         if (state.tool === "wall") commitChain();
     });
 
+    map.on("contextmenu", (event: L.LeafletMouseEvent) => {
+        if (state.tool !== "select") return;
+        pendingContextPoint = toLocal(event.latlng);
+        showContextMenu(event, null);
+    });
+
     document.addEventListener("keydown", (event) => {
         if (event.key === "Alt") state.suspendSnap = true;
         if (event.key === "Escape") {
+            closeContextMenu();
             if (state.drawing.length) commitChain();
             else {
-                state.selection = null;
+                clearSelection();
                 renderSidebar();
                 render();
             }
@@ -675,13 +947,18 @@ function boot(): void {
 
     function deleteSelection(): void {
         const current = floor();
-        const selection = state.selection;
-        if (!selection) return;
-        if (selection.kind === "wall") current.walls = current.walls.filter((w) => w !== selection.wall);
-        if (selection.kind === "room") current.rooms = current.rooms.filter((r) => r !== selection.room);
-        if (selection.kind === "marker") current.markers = current.markers.filter((m) => m !== selection.marker);
-        if (selection.kind === "opening") selection.wall.openings = selection.wall.openings.filter((o) => o !== selection.opening);
-        state.selection = null;
+        const targets: SelectionItem[] = state.multi.length ? state.multi : state.selection ? [state.selection] : [];
+        if (!targets.length) return;
+        const walls = new Set(targets.filter((t): t is Extract<SelectionItem, { kind: "wall" }> => t.kind === "wall").map((t) => t.wall));
+        const rooms = new Set(targets.filter((t): t is Extract<SelectionItem, { kind: "room" }> => t.kind === "room").map((t) => t.room));
+        const markers = new Set(targets.filter((t): t is Extract<SelectionItem, { kind: "marker" }> => t.kind === "marker").map((t) => t.marker));
+        if (walls.size) current.walls = current.walls.filter((w) => !walls.has(w));
+        if (rooms.size) current.rooms = current.rooms.filter((r) => !rooms.has(r));
+        if (markers.size) current.markers = current.markers.filter((m) => !markers.has(m));
+        for (const target of targets) {
+            if (target.kind === "opening") target.wall.openings = target.wall.openings.filter((o) => o !== target.opening);
+        }
+        clearSelection();
         renderSidebar();
         markDirty();
     }
@@ -719,7 +996,7 @@ function boot(): void {
         if (!window.confirm(`Delete "${item.name || `Level ${item.level}`}"? This removes everything drawn on it.`)) return;
         state.doc.floors.splice(index, 1);
         state.floorIndex = Math.min(state.floorIndex, state.doc.floors.length - 1);
-        state.selection = null;
+        clearSelection();
         renderSidebar();
         markDirty();
     }
@@ -738,7 +1015,7 @@ function boot(): void {
             button.title = "Double-click to rename";
             button.addEventListener("click", () => {
                 state.floorIndex = index;
-                state.selection = null;
+                clearSelection();
                 renderSidebar();
                 render();
                 fitToContent();
@@ -810,6 +1087,42 @@ function boot(): void {
             hint.className = "floorplan-hint";
             hint.textContent = "Nothing selected.";
             host.appendChild(hint);
+            return;
+        }
+
+        // More than one item selected: a per-kind edit form doesn't apply,
+        // so offer only what makes sense in bulk - a shared "Type" for an
+        // all-walls selection, and delete, which always applies.
+        if (state.multi.length > 1) {
+            const heading = document.createElement("h3");
+            heading.textContent = `${state.multi.length} items selected`;
+            host.appendChild(heading);
+            if (state.multi.every((item) => item.kind === "wall")) {
+                const typeSelect = document.createElement("select");
+                typeSelect.className = "form-input";
+                const placeholder = document.createElement("option");
+                placeholder.value = "";
+                placeholder.textContent = "Set type for all…";
+                typeSelect.appendChild(placeholder);
+                for (const kind of ["exterior", "interior", "virtual", "collapsed"]) {
+                    const item = document.createElement("option");
+                    item.value = kind;
+                    item.textContent = kind;
+                    typeSelect.appendChild(item);
+                }
+                typeSelect.addEventListener("change", () => {
+                    if (!typeSelect.value) return;
+                    for (const item of state.multi) if (item.kind === "wall") item.wall.kind = typeSelect.value as Wall["kind"];
+                    markDirty();
+                });
+                host.appendChild(field("Type", typeSelect));
+            }
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "btn btn--sm btn--danger";
+            remove.textContent = `Delete ${state.multi.length} items`;
+            remove.addEventListener("click", deleteSelection);
+            host.appendChild(remove);
             return;
         }
 
