@@ -71,6 +71,8 @@ class PinType(TextChoices):
     ENTRANCE = "entrance", "Entrance"
     POINT_OF_INTEREST = "poi", "Point of Interest"
     DANGER = "danger", "Danger"
+    STAIR = "stair", "Stair"
+    ELEVATOR = "elevator", "Elevator / shaft"
     OTHER = "other", "Other"
 
     @property
@@ -93,6 +95,8 @@ PIN_TYPE_ICONS: dict[str, str] = {
     PinType.ENTRANCE.value: "door_front",
     PinType.POINT_OF_INTEREST.value: "star",
     PinType.DANGER.value: "warning",
+    PinType.STAIR.value: "stairs",
+    PinType.ELEVATOR.value: "elevator",
     PinType.OTHER.value: "more_horiz",
 }
 

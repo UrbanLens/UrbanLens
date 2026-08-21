@@ -56,6 +56,20 @@ export interface Marker {
     y: number;
     facing_degrees?: number | null;
     connector_id?: string | null;
+    // WGS-84, computed from x/y and filled in just before every save (see
+    // floorplan-editor.ts's save()) so the server can create/move this
+    // marker's detail-pin twin without re-implementing the plan's
+    // local-to-world projection (PlanProjection.toWorld). Not used for
+    // rendering - x/y projected through the live PlanProjection is what
+    // actually places the marker on the map - so it is fine for this to be
+    // absent on a freshly-loaded document.
+    lat?: number | null;
+    lng?: number | null;
+    // The linked detail pin's own icon/color, when it has customizations of
+    // its own (set via the pin detail page's detail-pin dialog) - null falls
+    // back to the kind-based defaults below, same as a plain detail pin.
+    icon?: string | null;
+    color?: string | null;
 }
 
 export interface Floor {

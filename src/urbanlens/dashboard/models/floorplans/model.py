@@ -59,6 +59,7 @@ from django.db.models import (
     ForeignKey,
     Index,
     ManyToManyField,
+    OneToOneField,
     Q,
     TextChoices,
     URLField,
@@ -523,7 +524,16 @@ class FloorplanMarker(FloorplanItem):
             storeys. Markers sharing one are the same vertical connection,
             which is what makes a stack of floors read as one building rather
             than unrelated drawings. Free-form rather than an FK: it is
-            authored client-side while both ends may still be unsaved.
+            authored client-side while both ends may still be unsaved. Has no
+            ``linked_pin`` equivalent - a detail pin has no notion of "storey"
+            to link across.
+        linked_pin: The detail pin (``Pin.parent_pin``-child) this marker
+            *is*, elsewhere on the site - the pin detail page, its map, its
+            own edit/delete UI. Null only for markers on a wiki-published
+            copy of a plan (see ``services.floorplans.serialization``),
+            which has no owning pin to parent one under. ``CASCADE`` so
+            deleting the detail pin (from the pin page) removes the marker
+            with it, rather than leaving a marker pointing at nothing.
     """
 
     floor = ForeignKey(FloorplanFloor, on_delete=CASCADE, related_name="markers")
@@ -533,9 +543,11 @@ class FloorplanMarker(FloorplanItem):
     name = CharField(max_length=255, blank=True, default="")
     facing_degrees = FloatField(null=True, blank=True)
     connector_id = CharField(max_length=64, blank=True, default="")
+    linked_pin = OneToOneField("dashboard.Pin", on_delete=CASCADE, null=True, blank=True, related_name="floorplan_marker")
 
     if TYPE_CHECKING:
         floor_id: int
+        linked_pin_id: int | None
 
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_markers"

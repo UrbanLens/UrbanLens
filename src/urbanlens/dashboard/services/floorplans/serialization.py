@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanItem
+    from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanFloor, FloorplanItem, FloorplanMarker
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,27 @@ def _item_out(row: FloorplanItem, source_uuids: dict, reference_uuids: dict) -> 
     }
 
 
+def _marker_dict(marker: FloorplanMarker, source_uuids: dict, reference_uuids: dict) -> dict[str, Any]:
+    """One marker's document entry, deferring to its linked pin where it has one.
+
+    A linked pin is the freshest copy of name/icon/color once it exists - it
+    may have been renamed or restyled from the pin detail page since this
+    marker was last saved here.
+    """
+    linked = marker.linked_pin
+    return {
+        **_item_out(marker, source_uuids, reference_uuids),
+        "kind": marker.kind,
+        "name": (linked.name if linked and linked.name else None) or marker.name,
+        "icon": linked.effective_icon if linked else None,
+        "color": linked.effective_color if linked else None,
+        "x": marker.x,
+        "y": marker.y,
+        "facing_degrees": marker.facing_degrees,
+        "connector_id": marker.connector_id,
+    }
+
+
 def document_for(floorplan: Floorplan) -> dict[str, Any]:
     """Assemble one plan version's full nested document.
 
@@ -90,6 +111,8 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
             "rooms__labels",
             "markers__references",
             "markers__labels",
+            "markers__linked_pin",
+            "markers__linked_pin__location",
         ),
     )
 
@@ -169,18 +192,7 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
                     }
                     for room in floor.rooms.all()
                 ],
-                "markers": [
-                    {
-                        **_item_out(marker, source_uuids, reference_uuids),
-                        "kind": marker.kind,
-                        "name": marker.name,
-                        "x": marker.x,
-                        "y": marker.y,
-                        "facing_degrees": marker.facing_degrees,
-                        "connector_id": marker.connector_id,
-                    }
-                    for marker in floor.markers.all()
-                ],
+                "markers": [_marker_dict(marker, source_uuids, reference_uuids) for marker in floor.markers.all()],
             }
             for floor in floors
         ],
@@ -331,6 +343,101 @@ def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, prof
         row.labels.set(Label.objects.filter(uuid__in=label_uuids, profile=profile))
 
 
+#: FloorplanMarkerKind -> PinType for a marker's detail-pin twin. Stair and
+#: elevator earn their own PinType (see models.pin.model.PinType) precisely
+#: so this mapping is not lossy; hazard already had DANGER to reuse.
+_MARKER_KIND_TO_PIN_TYPE = {
+    "hazard": "danger",
+    "stair": "stair",
+    "elevator": "elevator",
+}
+
+
+def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan: Floorplan) -> None:
+    """Create, move, or restyle a marker's detail-pin twin to match it.
+
+    A marker only ever gets one on a personal, pin-owned floorplan - the
+    wiki-published copy (see :func:`services.floorplans.resolution.publish_to_wiki`)
+    has no owning pin to parent a detail pin under, and its own markers stay
+    unlinked rather than reaching across to another profile's private pin.
+
+    Coordinates come from the payload's ``lat``/``lng`` (computed client-side
+    from the marker's plan-local x/y via ``PlanProjection.toWorld`` - this
+    module only knows plan-local metres, and duplicating that projection
+    server-side would be a second implementation to keep in step with the
+    first). Silently no-ops without them rather than raising: an older
+    client, or a marker placed before this existed, should not block saving
+    the rest of the document over a twin it doesn't know how to grow yet.
+
+    Args:
+        marker: The marker to link, already saved (has a pk).
+        payload: This marker's document payload.
+        floorplan: The plan version being saved.
+    """
+    parent_pin = floorplan.pin
+    if parent_pin is None:
+        return
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    lat = _float_in(payload.get("lat"), "marker.lat")
+    lng = _float_in(payload.get("lng"), "marker.lng")
+    if lat is None or lng is None:
+        return
+
+    # get_exact_or_create, not resolve_child_pin_location: stacked floors
+    # legitimately share a ground-plane point (a stairwell sits at the same
+    # lat/lng on every storey it passes through), and that helper's "no two
+    # of one profile's pins at the exact same point" rule exists for the
+    # manual detail-pin dialog, not for this.
+    location, _created = Location.objects.get_exact_or_create(lat, lng)
+
+    linked = marker.linked_pin
+    if linked is None:
+        linked = Pin(parent_pin=parent_pin, profile=parent_pin.profile)
+    linked.name = marker.name or None
+    # Not an explicit rename any more than DetailPinPanelView's own creation
+    # is - the name is prefilled from the marker kind, and should stay
+    # eligible for later canonical-name cleanup.
+    linked.name_is_user_provided = False
+    linked.pin_type = _MARKER_KIND_TO_PIN_TYPE.get(marker.kind, "other")
+    linked.pin_type_is_user_provided = True
+    linked.location = location
+    linked.save()
+    if marker.linked_pin_id != linked.pk:
+        marker.linked_pin = linked
+        marker.save(update_fields=["linked_pin"])
+
+
+def _sync_markers(existing_by_uuid: dict, payloads: list[dict] | None, floor: FloorplanFloor, pools: _Pools, profile: Profile | None, floorplan: Floorplan) -> None:
+    """Reconcile one floor's markers, keeping each one's detail-pin twin in step.
+
+    A hand-rolled counterpart to :func:`_sync` rather than a parameter added
+    to it: markers are the only floorplan item with a twin elsewhere on the
+    site, and threading that through the generic helper would make every
+    other caller (walls, openings, locks, rooms) carry a no-op it never uses.
+    """
+    from urbanlens.dashboard.models.floorplans.model import FloorplanMarker, FloorplanMarkerKind
+
+    for index, payload in enumerate(payloads or []):
+        marker = existing_by_uuid.pop(str(payload.get("uuid") or ""), None) or FloorplanMarker(floor=floor)
+        marker.floor = floor
+        marker.x = _required_float_in(payload.get("x"), "marker.x")
+        marker.y = _required_float_in(payload.get("y"), "marker.y")
+        marker.kind = _choice_in(payload.get("kind"), FloorplanMarkerKind.values, "marker kind", FloorplanMarkerKind.HAZARD)
+        marker.name = payload.get("name") or ""
+        marker.facing_degrees = _float_in(payload.get("facing_degrees"), "facing_degrees")
+        marker.connector_id = payload.get("connector_id") or ""
+        marker.sort_order = index
+        _apply_item(marker, payload, pools, profile)
+        _sync_linked_pin(marker, payload, floorplan)
+    for orphan in existing_by_uuid.values():
+        # A post_delete signal (models.floorplans.signals) removes the
+        # linked pin, if any - the same path a floor or floorplan deletion
+        # cascading down to this marker also goes through.
+        orphan.delete()
+
+
 def _sync(existing_by_uuid: dict, payloads: list[dict] | None, build, pools: _Pools, profile: Profile | None) -> list[tuple[dict, Any]]:
     """Reconcile one collection: update by uuid, create the new, delete the omitted."""
     kept: list[tuple[dict, Any]] = []
@@ -367,8 +474,6 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
         FloorplanFloor,
         FloorplanLock,
         FloorplanLockState,
-        FloorplanMarker,
-        FloorplanMarkerKind,
         FloorplanOpening,
         FloorplanOpeningKind,
         FloorplanOpeningSwing,
@@ -482,17 +587,6 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
 
         _sync({str(r.uuid): r for r in floor.rooms.all()}, floor_payload.get("rooms"), build_room, pools, profile)
 
-        def build_marker(payload: dict, row: FloorplanMarker | None, *, _floor=floor) -> FloorplanMarker:
-            marker = row or FloorplanMarker(floor=_floor)
-            marker.floor = _floor
-            marker.x = _required_float_in(payload.get("x"), "marker.x")
-            marker.y = _required_float_in(payload.get("y"), "marker.y")
-            marker.kind = _choice_in(payload.get("kind"), FloorplanMarkerKind.values, "marker kind", FloorplanMarkerKind.HAZARD)
-            marker.name = payload.get("name") or ""
-            marker.facing_degrees = _float_in(payload.get("facing_degrees"), "facing_degrees")
-            marker.connector_id = payload.get("connector_id") or ""
-            return marker
-
-        _sync({str(m.uuid): m for m in floor.markers.all()}, floor_payload.get("markers"), build_marker, pools, profile)
+        _sync_markers({str(m.uuid): m for m in floor.markers.all()}, floor_payload.get("markers"), floor, pools, profile, floorplan)
 
     return floorplan

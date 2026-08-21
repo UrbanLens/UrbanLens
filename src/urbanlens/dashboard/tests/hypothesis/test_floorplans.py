@@ -1079,6 +1079,205 @@ class FloorplanMarkerTests(TestCase):
             )
 
 
+class FloorplanMarkerLinkedPinTests(TestCase):
+    """A marker on a personal, pin-owned plan is also a detail pin elsewhere on the site."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        baker.make(User)
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.place = _building()
+        location = baker.make(Location, latitude=41.733, longitude=-73.93, place=self.place)
+        self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None, slug="the-parent-pin")
+        self.floorplan = Floorplan.objects.create(place=self.place, pin=self.pin, profile=self.profile)
+
+    def test_a_marker_creates_a_linked_detail_pin(self) -> None:
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "name": "Wet floor", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            profile=self.profile,
+        )
+
+        marker = FloorplanMarker.objects.get()
+        self.assertIsNotNone(marker.linked_pin)
+        linked = marker.linked_pin
+        self.assertEqual(linked.parent_pin_id, self.pin.pk)
+        self.assertEqual(linked.profile_id, self.profile.pk)
+        self.assertEqual(linked.name, "Wet floor")
+        self.assertEqual(linked.pin_type, "danger")
+        self.assertTrue(linked.pin_type_is_user_provided)
+        self.assertAlmostEqual(float(linked.location.latitude), 41.7331, places=4)
+        self.assertAlmostEqual(float(linked.location.longitude), -73.9299, places=4)
+
+    def test_stair_and_elevator_kinds_map_to_their_own_pin_type(self) -> None:
+        save_document(
+            self.floorplan,
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {
+                        "level": 0,
+                        "markers": [
+                            {"kind": "stair", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299},
+                            {"kind": "elevator", "x": 2.0, "y": 2.0, "lat": 41.7332, "lng": -73.9298},
+                        ],
+                    },
+                ],
+            },
+            profile=self.profile,
+        )
+
+        kinds = {marker.kind: marker.linked_pin.pin_type for marker in FloorplanMarker.objects.select_related("linked_pin")}
+        self.assertEqual(kinds, {"stair": "stair", "elevator": "elevator"})
+
+    def test_a_marker_without_coordinates_gets_no_linked_pin(self) -> None:
+        """An older client that never sends lat/lng shouldn't fail to save the rest of the document."""
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0}]}]},
+            profile=self.profile,
+        )
+
+        self.assertIsNone(FloorplanMarker.objects.get().linked_pin)
+
+    def test_a_marker_on_a_pinless_plan_gets_no_linked_pin(self) -> None:
+        """The wiki-published copy of a plan (see publish_to_wiki) has no owning pin to
+        parent a detail pin under, and must never reach across to another profile's own."""
+        placeless = Floorplan.objects.create(place=self.place, profile=self.profile)  # pin left unset
+
+        save_document(
+            placeless,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            profile=self.profile,
+        )
+
+        self.assertIsNone(FloorplanMarker.objects.get().linked_pin)
+
+    def test_deleting_a_marker_from_the_document_deletes_its_linked_pin(self) -> None:
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            profile=self.profile,
+        )
+        marker = FloorplanMarker.objects.get()
+        linked_pk = marker.linked_pin_id
+        floor_uuid = str(marker.floor.uuid)
+
+        # Same floor uuid, but its markers list is now empty - an in-place
+        # edit, not a floor being torn down and rebuilt.
+        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"uuid": floor_uuid, "level": 0, "markers": []}]}, profile=self.profile)
+
+        self.assertFalse(FloorplanMarker.objects.exists())
+        self.assertFalse(Pin.objects.filter(pk=linked_pk).exists())
+
+    def test_deleting_the_linked_pin_deletes_the_marker(self) -> None:
+        """CASCADE the other way too: removing a detail pin from the pin page
+        must not leave a floorplan marker pointing at nothing."""
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            profile=self.profile,
+        )
+        marker = FloorplanMarker.objects.get()
+        linked = marker.linked_pin
+
+        linked.delete()
+
+        self.assertFalse(FloorplanMarker.objects.filter(pk=marker.pk).exists())
+
+    def test_deleting_a_whole_floor_takes_its_markers_linked_pins_with_it(self) -> None:
+        """A floor going away (torn down and redrawn, or the whole plan
+        deleted) cascades to its markers through Django's own FK collector,
+        never through serialization.py's per-marker sync - the linked-pin
+        cleanup has to catch that path too, not just an in-place marker edit."""
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            profile=self.profile,
+        )
+        marker = FloorplanMarker.objects.get()
+        linked_pk = marker.linked_pin_id
+
+        marker.floor.delete()
+
+        self.assertFalse(FloorplanMarker.objects.exists())
+        self.assertFalse(Pin.objects.filter(pk=linked_pk).exists())
+
+    def test_two_floors_can_share_the_exact_same_ground_point(self) -> None:
+        """A stairwell sits at the same lat/lng on every storey it passes
+        through - resolve_child_pin_location's "no two of one profile's pins
+        at the exact point" rule must not apply here."""
+        save_document(
+            self.floorplan,
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {"level": 0, "markers": [{"kind": "stair", "name": "Main stair", "x": 2.0, "y": 8.0, "connector_id": "main", "lat": 41.7331, "lng": -73.9299}]},
+                    {"level": 1, "markers": [{"kind": "stair", "name": "Main stair", "x": 2.0, "y": 8.0, "connector_id": "main", "lat": 41.7331, "lng": -73.9299}]},
+                ],
+            },
+            profile=self.profile,
+        )
+
+        markers = list(FloorplanMarker.objects.select_related("linked_pin__location"))
+        self.assertEqual(len(markers), 2)
+        pins = {marker.linked_pin_id for marker in markers}
+        self.assertEqual(len(pins), 2, "each floor's marker gets its own pin")
+        locations = {marker.linked_pin.location_id for marker in markers}
+        self.assertEqual(len(locations), 1, "siblings on the same ground point share one Location")
+
+    def test_moving_a_marker_moves_its_linked_pin(self) -> None:
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            profile=self.profile,
+        )
+        marker = FloorplanMarker.objects.get()
+        uuid = str(marker.uuid)
+        floor_uuid = str(marker.floor.uuid)
+
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"uuid": floor_uuid, "level": 0, "markers": [{"uuid": uuid, "kind": "hazard", "x": 5.0, "y": 5.0, "lat": 41.7355, "lng": -73.9311}]}]},
+            profile=self.profile,
+        )
+
+        marker.refresh_from_db()
+        self.assertAlmostEqual(float(marker.linked_pin.location.latitude), 41.7355, places=4)
+        self.assertAlmostEqual(float(marker.linked_pin.location.longitude), -73.9311, places=4)
+
+    def test_document_for_prefers_the_linked_pins_own_name_and_style(self) -> None:
+        """The pin is the freshest copy once it exists - it may have been
+        renamed or restyled from the pin detail page since this marker was
+        last saved here."""
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{"kind": "hazard", "name": "Wet floor", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}]},
+            profile=self.profile,
+        )
+        marker = FloorplanMarker.objects.get()
+        linked = marker.linked_pin
+        linked.name = "Renamed from the pin page"
+        linked.icon = "warning"
+        linked.color = "#ff0000"
+        linked.save()
+
+        document = document_for(self.floorplan)
+
+        out = document["floors"][0]["markers"][0]
+        self.assertEqual(out["name"], "Renamed from the pin page")
+        self.assertEqual(out["icon"], "warning")
+        self.assertEqual(out["color"], "#ff0000")
+
+
 class FloorplanDocumentContractTests(TestCase):
     def setUp(self) -> None:
         super().setUp()

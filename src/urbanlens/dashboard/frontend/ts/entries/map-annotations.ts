@@ -611,8 +611,8 @@ function init(): void {
     })();
 
     // -- Detail pins layer ---------------------------------------------------
-    const detailPinColors: Record<string, string> = { parcel: "#0f766e", building: "#6b7280", entrance: "#16a34a", poi: "#d97706", danger: "#dc2626", other: "#7c3aed", location: "#2563eb" };
-    const detailPinIcons: Record<string, string> = { parcel: "crop_free", building: "business", entrance: "door_front", poi: "star", danger: "warning", other: "info", location: "place" };
+    const detailPinColors: Record<string, string> = { parcel: "#0f766e", building: "#6b7280", entrance: "#16a34a", poi: "#d97706", danger: "#dc2626", stair: "#6b7280", elevator: "#6b7280", other: "#7c3aed", location: "#2563eb" };
+    const detailPinIcons: Record<string, string> = { parcel: "crop_free", building: "business", entrance: "door_front", poi: "star", danger: "warning", stair: "stairs", elevator: "elevator", other: "info", location: "place" };
     // Both sub-layers live inside detailsLayer so one toggle shows/hides everything.
     const detailPinLayer = L.layerGroup();
     const markupLayer = L.layerGroup();

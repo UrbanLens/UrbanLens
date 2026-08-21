@@ -80,15 +80,20 @@ const UNBOUND_FILL = { color: "#b0bec5", weight: 1, dashArray: "4 4", fillColor:
  * background circle, for contrast against whatever is under it - a bare
  * glyph blended into the map beneath it.
  */
-function markerIcon(kind: MarkerKind, selected: boolean): L.DivIcon {
-    const color = MARKER_COLOR[kind] || "#2563eb";
+// A marker's icon/color prefer its linked detail pin's own customizations
+// (set via the pin detail page's detail-pin dialog - see Marker.icon/color)
+// over the kind-based defaults, the same priority detailIcon() in
+// map-annotations.ts gives a plain detail pin.
+function markerIcon(marker: Marker, selected: boolean): L.DivIcon {
+    const color = marker.color || MARKER_COLOR[marker.kind] || "#2563eb";
+    const glyph = marker.icon || MARKER_ICON[marker.kind] || "place";
     const size = 22;
     const pad = 5;
     const total = size + pad * 2;
     const ring = selected ? "outline:3px solid #00838f;outline-offset:2px;" : "";
     return L.divIcon({
         className: "floorplan-marker",
-        html: `<span style="background:#fff;border:2px solid ${color};${ring}" class="floorplan-marker__badge"><span class="material-symbols-outlined" style="color:${color};font-size:${size}px;">${MARKER_ICON[kind] || "place"}</span></span>`,
+        html: `<span style="background:#fff;border:2px solid ${color};${ring}" class="floorplan-marker__badge"><span class="material-symbols-outlined" style="color:${color};font-size:${size}px;">${glyph}</span></span>`,
         iconSize: [total, total],
         iconAnchor: [total / 2, total],
         popupAnchor: [0, -total],
@@ -369,7 +374,7 @@ function boot(): void {
 
         for (const marker of current.markers) {
             const selected = isSelected({ kind: "marker", marker });
-            const node = L.marker(toLatLng({ x: marker.x, y: marker.y }), { icon: markerIcon(marker.kind, selected), draggable: state.tool === "select" }).addTo(markerLayer);
+            const node = L.marker(toLatLng({ x: marker.x, y: marker.y }), { icon: markerIcon(marker, selected), draggable: state.tool === "select" }).addTo(markerLayer);
             node.bindPopup(markerPopupContent(marker), { closeButton: true });
             node.on("popupopen", () => {
                 node.getPopup()?.getElement()?.querySelector(".floorplan-marker-popup__delete")?.addEventListener("click", () => {
@@ -1402,6 +1407,18 @@ function boot(): void {
         // user can override in "Add more details" when it matters.
         state.doc.name = nameInput?.value || floor().name || "";
         state.doc.valid_from = validFrom?.value || null;
+        // Every marker's WGS-84 position, freshly computed here rather than
+        // kept live at each edit site (placement, drag) - x/y is the single
+        // source of truth, and this is the one place that has to convert it
+        // for the server, which needs real coordinates to place this
+        // marker's detail-pin twin (see services.floorplans.serialization).
+        for (const item of state.doc.floors) {
+            for (const marker of item.markers) {
+                const world = toLatLng({ x: marker.x, y: marker.y });
+                marker.lat = world[0];
+                marker.lng = world[1];
+            }
+        }
         const payload: FloorplanDocument = { ...state.doc };
         // Dropping the uuid is what makes the save fork a new dated version
         // instead of overwriting the one that was loaded.
