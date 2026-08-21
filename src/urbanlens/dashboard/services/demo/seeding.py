@@ -409,7 +409,8 @@ def seed_landmark_pin(profile: Profile, landmark: dict[str, str] | None = None) 
 def seed_dev_environment(*, username: str = "demo", password: str, ttl_hours: int = 24 * 365) -> dict[str, Any]:
     """Seed one ephemeral dev environment with an account somebody can log into.
 
-    A freshly created environment (``bin/dev_env.py``) has an empty database, so
+    A freshly created environment (the `infrastructure` repo's ``bin/dev_env.py``)
+    has an empty database, so
     every page it serves is an empty state and nothing about the product can be
     seen without first building an account and content by hand. This is the same
     content the public demo instance is seeded with, under a fixed username and

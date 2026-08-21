@@ -137,29 +137,6 @@ is neither - rather than only changing the total.
 Until then a mobile client can advertise one more unpinned building than the dialog will offer, and
 importing will report having created fewer than advertised.
 
-## OPEN 2026-08-20: a fix to `bin/opslib/staging.py`'s Python logic is not exercised by the run that checks it out
-
-`bin/staging_deploy.py` imports `opslib.staging` once at process start, then `run_staging_pipeline`'s
-own `checkout` step later does `git reset --hard origin/<branch>` on the very same checkout - updating
-`bin/opslib/staging.py` on disk mid-run. But the process already has the *old* module's functions
-loaded; Python does not re-import a module because its source file changed underneath it. So a fix to
-this file's Python logic (as opposed to `bin/clone_prod_to_staging.sh`, a bash script `subprocess.run`
-re-reads fresh from disk on every invocation) only takes effect on the run *after* the one that
-checks it out - the run that pulls the fix still executes with the pipeline logic that existed on
-disk before it started.
-
-Found chasing three bugs fixed in one sitting (2026-08-20): a run deployed at `b40ae4a9`, which fixed
-the `127.0.0.1` vs `localhost` health-check host and the missing-pytest hard-failure, still hit both
-bugs - because the process that ran had started before its own checkout step pulled that commit, so
-it was still executing `b7b39667`'s pipeline code. The site was actually fine both times (verified
-directly with `curl` and `docker logs`); the tool's own report was one run behind reality.
-
-Not fixed: the straightforward options (re-exec the process after `checkout`, or `git pull` the repo
-before importing `opslib.staging`) both add complexity to a tool whose whole design principle is
-"stdlib only, must run without the venv" for a problem that, once known, just means: expect one
-Python-logic fix to `opslib/staging.py` to show stale results on the run that introduces it, and
-trust the run after that instead.
-
 ## OPEN 2026-08-19: performance and ops defects found but not fixed
 
 Found during the 2026-08-19 sweep, verified by reading both the query definition and every call
@@ -2517,7 +2494,9 @@ implemented and tested.
 Restoring one is not implemented, not documented, and not tested.
 
 - No code path in `src/` or `bin/` restores a scheduled backup.
-- The only `pg_restore` in the repository is `bin/clone_prod_to_staging.sh:158`, which restores
+- The only `pg_restore` anywhere is the `infrastructure` repo's
+  `bin/clone_prod_to_staging.sh:158` (moved there from this repo's own `bin/`
+  since it was written; see `docs/OPS_TOOLING.md` there), which restores
   `/tmp/clone.dump` - a *different* dump that script creates for itself with its own flags. It has
   nothing to do with the backup directory.
 - That mismatch is a trap rather than a mere omission. `pg_restore` **cannot read a plain-format
@@ -3640,80 +3619,6 @@ feature exists anywhere in the codebase - worth correcting whichever way this is
 `docs/reports/2026-08-11-codebase-audit.md` at the time and carried in that session's running list of
 owner decisions, but never written here until now - which is what made it worth catching: a filed
 item that lives only in a narrative report is not filed.)
-
-## `clone_prod_to_staging.sh` can leave a production dump on disk, and can report success after failing
-
-Found 2026-08-17 while reading `bin/`, which had not been examined. Two issues, both from the same
-cause: the script has `#!/bin/bash` with **no `set -e`, no `set -o pipefail`, and no `trap`**.
-
-**1. A failed run leaves a full production dump on the operator's disk.** The sequence is: dump inside
-the prod container (147), `docker cp` it out to `./$DUMP_FILE` (148), remove the container copy (149),
-bring up staging (152), *wait for it to become healthy* (153), restore (158), and only then remove the
-local file (161-163). `wait_for_healthy` ends in `exit 1` on timeout - which lands between the copy
-out and the cleanup. So if the staging database does not come up, a `pg_dump -Fc` of production -
-every user's email, phone number, encrypted personal fields, safety check-in locations, messages and
-photo metadata - stays in the working directory, and nothing says so.
-
-**2. Failures do not stop it.** Without `set -e`, a failing `pg_dump` still proceeds to `docker cp`
-and `pg_restore`, and a failing `pg_restore` still reaches `docker compose up --build` and prints
-`Done. Staging now mirrors production as of $TIMESTAMP.` A partially-restored staging environment
-that announces success is worse than one that stops.
-
-**This is an omission, not a house style.** Its sibling `bin/deploy.sh` opens with
-`set -euo pipefail` at line 20; the clone script, which is the one handling a production data dump,
-does not. Same directory, same author, one hardened and one not - the shape this audit kept finding
-in application code, here in the ops scripts.
-
-(For completeness, since `bin/` was being read: `bin/deploy_webhook.py` is sound. Both signature
-schemes - GitHub's HMAC-SHA256 and GitLab's shared token - are compared with
-`hmac.compare_digest`, not `==`.)
-
-The remedy is small - `set -euo pipefail`, and a `trap` that removes `./$DUMP_FILE` on any exit unless
-`--keep-dump` was passed - but **not made here**, deliberately: this script drops and replaces a
-database, its failure paths are exactly what would change, and there is no way to exercise it in this
-environment without prod and staging stacks. An untested edit to the error handling of a script whose
-happy path destroys data is a bad trade for the size of the fix.
-
-Worth also deciding separately: the clone copies production personal data into staging **unscrubbed**.
-That may well be intended - staging with real data reproduces real bugs - but it is worth being a
-decision rather than a default, and it interacts with `UL_FIELD_ENCRYPTION_KEY`: if staging shares
-production's key the encrypted columns are readable there, and if it does not, they are permanently
-undecryptable in staging (which is fine, but means those code paths are never exercised).
-
-## `deploy.sh` reports success without waiting for the stack to come up
-
-Found 2026-08-17 alongside the `clone_prod_to_staging.sh` entry above, reading `bin/` for the first
-time. This one is well-guarded in most respects - `set -euo pipefail`, a refusal to deploy with a
-dirty working tree, and an early exit when `origin/$BRANCH` already matches `HEAD`. The gap is at the
-end:
-
-```
-docker compose down
-docker compose up --build -d
-log "==> Deploy complete at $(git rev-parse --short HEAD)"
-```
-
-`up -d` returns when containers have *started*, not when they are serving. `docker-compose.yml` gives
-`app` and `app-ws` healthchecks with 30s and 25s start periods, and this project's own notes describe
-the app healthcheck as not passing until migrations, `collectstatic` and the frontend build have
-finished - minutes on a cold build. So "Deploy complete" is printed while the site may still be
-starting, and prints identically if the new image never becomes healthy at all. `set -e` does not
-help: `up -d` genuinely succeeded.
-
-Combined with the `down` on the line before, the failure mode is: site goes down, new stack fails its
-healthcheck, script exits 0 reporting success, site stays down. `bin/deploy_webhook.py` shells out to
-this script, so an automated deploy answers the Git host with success in exactly that case.
-
-**Same sibling evidence as the entry above, pointing the other way.** `clone_prod_to_staging.sh` -
-the *staging* script - defines and uses a `wait_for_healthy` helper, twice. `deploy.sh` - the
-*production* one - has no health check at all. Between the two scripts, each has the safety the other
-is missing.
-
-The fix is close to free: lift `wait_for_healthy` (or `docker compose ps --format` polling) into
-`deploy.sh` after `up --build -d`, and fail the deploy if the app never becomes healthy. **Not made
-here** for the same reason as above - the script hard-resets the working tree and rebuilds the running
-stack, so it cannot be exercised in this environment, and its failure handling is precisely what the
-change would alter.
 
 ## `.dockerignore` does not exclude `.env`, so deploy-host image builds bake the secrets in
 

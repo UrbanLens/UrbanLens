@@ -201,8 +201,9 @@ name the purge selects on and be destroyed by it.
 
 ## Provisioning
 
-One hostname, one certificate - no wildcard. (`dev_env.py` uses a wildcard for
-ephemeral per-agent environments; that requirement does not transfer here.)
+One hostname, one certificate - no wildcard. (The `infrastructure` repo's
+`dev_env.py` uses a wildcard for ephemeral per-agent environments; that
+requirement does not transfer here.)
 
 1. An A record for `demo.urbanlens.org`.
 2. A certificate for that name on NPM, proxying to the demo stack's port.

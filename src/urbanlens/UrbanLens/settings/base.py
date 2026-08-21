@@ -736,7 +736,8 @@ def _derive_trusted_origins(allowed_hosts: list[str], site_url: str, *, allow_ht
     """The origins a deployment implicitly trusts because it already answers to them.
 
     A hardcoded domain list cannot name an ephemeral dev environment's
-    generated hostname (``<slug>.dev.urbanlens.org``, see ``bin/dev_env.py``),
+    generated hostname (``<slug>.dev.urbanlens.org``, see the `infrastructure`
+    repo's ``bin/dev_env.py``),
     and the failure that causes is not the obvious one: pages render perfectly
     and every POST - login included - is rejected on its Referer, which reads
     as a broken app rather than an untrusted origin. Deriving the list instead

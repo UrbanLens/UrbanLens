@@ -64,5 +64,6 @@ sample_data/Google Takeout.csv
 # mutmut copies the tree here to mutate it.
 mutants/
 
-# Ops run records (bin/opslib) - deploy logs and row counts, host-local.
+# Ops run records - deploy logs and row counts, written into this checkout by
+# the `infrastructure` repo's opslib when it deploys this checkout. Host-local.
 .ops-runs/

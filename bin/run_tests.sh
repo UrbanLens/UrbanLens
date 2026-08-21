@@ -74,15 +74,14 @@ fi
 sync_tree() {
     echo "==> syncing working tree into $CONTAINER"
     docker cp src/. "$CONTAINER":/app/src/
-    # bin/ too, and for the same reason src/ is: `tests/hypothesis/test_ops_tooling.py`
-    # imports `bin/opslib` directly (it is stdlib-only so it can run on a host with
-    # no venv), so without this the ops tooling is tested against whatever was baked
-    # into the image. That is exactly the failure this script's header describes for
-    # src/ - it just went unnoticed here because the import kept working while the
-    # code behind it was months old.
-    docker cp bin/. "$CONTAINER":/app/bin/
+    # bin/ is not synced: nothing under tests/ imports from it anymore now that
+    # bin/opslib and the ops-tooling tests that reached it by path have moved to
+    # the separate `infrastructure` repo (see docs/PROBLEMS.md's history of this
+    # sync, and that repo's tests/test_ops_tooling.py for where those tests live
+    # now). If a future test starts importing something under bin/ again, restore
+    # this the same way src/ is handled below.
     # Not optional: docker cp preserves host ownership, and the app runs as appuser.
-    docker exec -u root "$CONTAINER" chown -R appuser:appuser /app/src /app/bin
+    docker exec -u root "$CONTAINER" chown -R appuser:appuser /app/src
 
     # `docker cp` only ever adds and overwrites - a Python file deleted on the host
     # stays in the container forever. That is not cosmetic: a scratch test file
@@ -115,8 +114,8 @@ verify_parity() {
     container_list=$(mktemp)
     trap 'rm -f "$host_list" "$container_list"' RETURN
 
-    (cd src && find . -name '*.py' | sort; cd ../bin && find . -name '*.py' | sed 's|^\./|bin/|' | sort) > "$host_list"
-    docker exec "$CONTAINER" sh -c "cd /app/src && find . -name '*.py' | sort; cd /app/bin && find . -name '*.py' | sed 's|^\./|bin/|' | sort" > "$container_list"
+    (cd src && find . -name '*.py' | sort) > "$host_list"
+    docker exec "$CONTAINER" sh -c "cd /app/src && find . -name '*.py' | sort" > "$container_list"
 
     if ! diff -q "$host_list" "$container_list" >/dev/null; then
         echo "error: host and container differ - the run would test the wrong code:" >&2
@@ -127,8 +126,8 @@ verify_parity() {
     # File lists matching is not enough: a stale *content* copy has the same
     # names. Compare a checksum of the tree, which is what actually gets run.
     local host_sum container_sum
-    host_sum=$( { (cd src && find . -name '*.py' -exec md5sum {} +); (cd bin && find . -name '*.py' -exec md5sum {} +); } | sort -k2 | md5sum | cut -d' ' -f1)
-    container_sum=$(docker exec "$CONTAINER" sh -c "{ (cd /app/src && find . -name '*.py' -exec md5sum {} +); (cd /app/bin && find . -name '*.py' -exec md5sum {} +); } | sort -k2 | md5sum | cut -d' ' -f1")
+    host_sum=$( (cd src && find . -name '*.py' -exec md5sum {} +) | sort -k2 | md5sum | cut -d' ' -f1)
+    container_sum=$(docker exec "$CONTAINER" sh -c "cd /app/src && find . -name '*.py' -exec md5sum {} +" | sort -k2 | md5sum | cut -d' ' -f1)
     if [ "$host_sum" != "$container_sum" ]; then
         echo "error: host and container file lists match but contents differ - re-run without --no-sync." >&2
         return 1
