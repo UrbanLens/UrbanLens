@@ -587,9 +587,10 @@ function boot(): void {
                 if (!isSelected({ kind: "room", room: seed })) return;
                 const boundary = roomBoundaryWalls(seed);
                 if (!boundary) return;
-                // Nothing would move, so let the press pan the map instead of
-                // running a drag that disables panning and changes nothing.
-                if (!boundary.unique.length && !boundary.shared.length) return;
+                // Every side is shell or shared, so a drag would translate
+                // nothing. Decline it, rather than disabling panning for the
+                // length of a gesture that cannot change anything.
+                if (!boundary.unique.length) return;
                 const key = (p: Pt): string => `${p.x},${p.y}`;
                 const ownPoints = new Set<string>();
                 for (const wall of boundary.unique) {
@@ -810,7 +811,25 @@ function boot(): void {
         renderUnderlay();
         renderFloorTabs();
         updateEmptyState(current);
-        updateRoomLabelFit();
+        scheduleRoomLabelFit();
+    }
+
+    let labelFitFrame: number | null = null;
+
+    /**
+     * Re-fit the room labels once per frame at most.
+     *
+     * ``render()`` runs on every mousemove of every drag, and the fit pass
+     * reads ``offsetWidth``, which forces a synchronous layout. Calling it
+     * straight from render would put a reflow per room into every frame of
+     * every drag.
+     */
+    function scheduleRoomLabelFit(): void {
+        if (labelFitFrame !== null) return;
+        labelFitFrame = requestAnimationFrame(() => {
+            labelFitFrame = null;
+            updateRoomLabelFit();
+        });
     }
 
     /**
@@ -1817,7 +1836,7 @@ function boot(): void {
     // repositions every existing layer itself; redrawing would just be
     // wasted work on every frame of a drag or two-finger twist.
     // A zoom changes what fits without changing anything worth re-rendering.
-    map.on("zoomend", () => updateRoomLabelFit());
+    map.on("zoomend", () => scheduleRoomLabelFit());
 
     map.on("rotate", () => {
         const bearing = map.getBearing();
@@ -2273,32 +2292,31 @@ function boot(): void {
     /**
      * A room's boundary walls, split three ways.
      *
-     * ``unique`` is every wall that bounds this room and no other, whatever
-     * kind it is; ``shared`` is the rest, which some neighbouring room also
-     * relies on. That split is about *topology*, and it is what a move reads:
-     * a room's own walls travel with it and a shared partition stretches to
-     * keep up.
+     * ``unique`` is a wall this room alone relies on: it bounds no other face
+     * *and* is not part of the building's shell. Those travel with the room.
+     * ``shared`` is everything else on the boundary, which stretches to keep
+     * up rather than moving wholesale.
      *
-     * ``deletable`` is a narrower thing - the unique walls minus the
-     * building's exterior - and only deletion reads it, because removing a
-     * room should never tear a hole in the shell around it.
+     * The exterior exclusion is load-bearing and easy to talk yourself out of.
+     * Topologically an exterior wall usually does bound exactly one room - in
+     * a shell split by a single partition, the west wall bounds only the west
+     * room - so a purely topological "unique" hands that wall to the room and
+     * dragging the room tears the side off the building.
      *
-     * Folding those two questions into one list is what made a room whose
-     * boundary happens to be entirely exterior wall stop behaving like a room
-     * at all: it had no unique walls, so it could not be dragged (the gesture
-     * ran, moved nothing, and blocked panning while it did) and offered no
-     * delete control.
+     * A room with no unique walls at all is therefore one whose every side is
+     * shell or shared. There is nothing for a move or a delete to act on, and
+     * both callers check for it rather than running a gesture that does
+     * nothing.
      *
      * Returns null for an unbound seed (no face, so no boundary to gather).
      */
-    function roomBoundaryWalls(room: RoomSeed): { face: Face; unique: Wall[]; shared: Wall[]; deletable: Wall[] } | null {
+    function roomBoundaryWalls(room: RoomSeed): { face: Face; unique: Wall[]; shared: Wall[] } | null {
         const face = faceForSeed({ x: room.x, y: room.y }, state.faces);
         if (!face) return null;
         const boundary = floor().walls.filter((wall) => face.wallIds.includes(wallId(wall)));
-        const unique = boundary.filter((wall) => !state.faces.some((other) => other !== face && other.wallIds.includes(wallId(wall))));
+        const unique = boundary.filter((wall) => wall.kind !== "exterior" && !state.faces.some((other) => other !== face && other.wallIds.includes(wallId(wall))));
         const shared = boundary.filter((wall) => !unique.includes(wall));
-        const deletable = unique.filter((wall) => wall.kind !== "exterior");
-        return { face, unique, shared, deletable };
+        return { face, unique, shared };
     }
 
     /**
@@ -2314,7 +2332,7 @@ function boot(): void {
     function renderRoomDeleteControl(host: HTMLElement, room: RoomSeed): void {
         const boundary = roomBoundaryWalls(room);
         if (!boundary) return;
-        const walls = boundary.deletable;
+        const walls = boundary.unique;
         if (!walls.length) return;
         const button = document.createElement("button");
         button.type = "button";

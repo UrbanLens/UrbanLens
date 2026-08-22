@@ -3939,3 +3939,33 @@ mypy reports `Incompatible types in assignment (expression has type "str | None"
 same file; not investigated or fixed - out of scope for that change. `SavedFilter.color`'s
 Django-stubs-inferred field type looks like the actual mismatch (an F-expression-shaped type rather
 than the plain `str` the field should behave as); worth a look next time this file is touched.
+
+## The building shell is a room, but a room bounded only by shell cannot be moved (2026-08-22)
+
+Jess reported two things that turn out to be the same case, pulling in opposite
+directions: "the base floorplan is considered a room in some cases", and "when a
+room shares walls with the exterior floorplan, it is sometimes not considered a
+room for some things (like being deleted, moved, etc)."
+
+What the code actually does: `roomBoundaryWalls` (floorplan-editor.ts) treats a
+wall as the room's own only when it bounds no other face *and* is not exterior.
+A corner room in a subdivided building still has its partitions, so it moves and
+deletes normally - that half already worked. The only room with no walls of its
+own is one whose entire boundary is shell, which is precisely the "the whole
+building is a room" case: clicking inside a bare exterior outline seeds it, and
+face extraction is right to call it a face because nothing subdivides it.
+
+The exterior exclusion cannot simply be dropped. Verified against planar.ts: in
+an 8x4 shell split by one partition, `west` bounds only the west face, so a
+purely topological "unique" would translate the building's west wall whenever
+that room is dragged. That was tried and reverted.
+
+So the open design question is (a), not (b): should a face bounded entirely by
+exterior wall be nameable as a room at all? Naming a single-room structure (a
+shed) is legitimate; treating the shell of a building someone has not
+subdivided yet as "a room" is what Jess objected to. Both are the same face and
+nothing in the geometry distinguishes them. Needs a product decision, not a fix.
+
+Meanwhile the symptom is gone: such a room no longer runs a drag that disables
+panning and moves nothing, and no longer offers a delete control that only
+cleared its name.
