@@ -25,6 +25,8 @@ import {
     type VersionSummary,
     type Wall,
     emptyDocument,
+    OPENING_KINDS,
+    WALL_KINDS,
     copyFloorContents,
     nextLocalId,
     wallId,
@@ -72,6 +74,10 @@ const CONNECTOR_KINDS = new Set<MarkerKind>(["stair", "elevator"]);
 const WALL_STYLE: Record<string, { color: string; weight: number; dashArray?: string }> = {
     exterior: { color: "#263238", weight: 5 },
     interior: { color: "#546e7a", weight: 3 },
+    // Finely dotted and warmer than the greys: a boundary, drawn as something
+    // other than the building. Distinct from virtual's long dashes and
+    // collapsed's gapped ones at a glance.
+    fence: { color: "#8d6e63", weight: 2, dashArray: "1 4" },
     virtual: { color: "#90a4ae", weight: 2, dashArray: "6 6" },
     collapsed: { color: "#a1887f", weight: 3, dashArray: "2 6" },
 };
@@ -290,6 +296,16 @@ function boot(): void {
         };
     }
 
+    /**
+     * How many drags are in flight.
+     *
+     * A drag re-renders the whole plan on every frame, and handles are pure
+     * overhead while one is running: nothing can be grabbed that is not already
+     * grabbed, and a joint handle per corner is a DOM node per corner rebuilt
+     * per frame.
+     */
+    let activeDrags = 0;
+
     /** What a drag handler is told on every move. */
     interface DragFrame {
         /** Where the pointer is now, in plan-local metres. */
@@ -350,6 +366,7 @@ function boot(): void {
             // touch, Leaflet starts panning from the same contact, and two
             // handlers would move the same finger's worth of distance.
             map.dragging.disable();
+            activeDrags += 1;
 
             // The press identifies *what* was grabbed, but the rest of the
             // gesture is tracked on the map container, which outlives it.
@@ -389,6 +406,7 @@ function boot(): void {
                 window.removeEventListener("pointerup", onFinish);
                 window.removeEventListener("pointercancel", onFinish);
                 window.removeEventListener("lostpointercapture", onFinish);
+                activeDrags = Math.max(0, activeDrags - 1);
                 map.dragging.enable();
                 handlers.end?.(moved);
             };
@@ -953,7 +971,9 @@ function boot(): void {
         }
 
         // After the walls, so a joint sits on top of the lines it belongs to.
-        if (state.tool === "select") renderJointHandles(current);
+        // Not while dragging: they are one DOM node per corner, and whatever is
+        // being dragged has already been grabbed.
+        if (state.tool === "select" && !activeDrags) renderJointHandles(current);
 
         markerNodes.clear();
         for (const marker of current.markers) {
@@ -1112,6 +1132,9 @@ function boot(): void {
 
     function wallSolidIntervals(wall: Wall): Array<[number, number]> {
         const gaps = wall.openings
+            // A window is the exception: you cannot walk through one, so it
+            // draws over an unbroken wall rather than cutting it. A gate can
+            // be walked through, so it reads as a real break like a door.
             .filter((opening) => opening.kind !== "window")
             .map((opening): [number, number] => [opening.t_start, opening.t_end])
             .sort((a, b) => a[0] - b[0]);
@@ -1761,12 +1784,19 @@ function boot(): void {
         }
 
         if (item.kind === "wall") {
-            addAction("Add opening", () => {
-                checkpoint();
-                item.wall.openings.push({ uuid: nextLocalId(), kind: "door", t_start: 0.45, t_end: 0.55, swing: "none" });
-                renderSidebar();
-                markDirty();
-            });
+            // One entry per kind rather than a single "Add opening" that always
+            // made a door. The type could only be changed on an opening that
+            // already existed, so the word "window" appeared nowhere in the UI
+            // until you had made a door and gone looking - which is why Jess
+            // reported windows as unsupported when they have always been a kind.
+            for (const kind of ["door", "window", "gate"] as const) {
+                addAction(`Add ${kind}`, () => {
+                    checkpoint();
+                    item.wall.openings.push({ uuid: nextLocalId(), kind, t_start: 0.45, t_end: 0.55, swing: "none" });
+                    renderSidebar();
+                    markDirty();
+                });
+            }
         }
 
         const count = Math.max(state.multi.length, 1);
@@ -2594,7 +2624,7 @@ function boot(): void {
                 placeholder.value = "";
                 placeholder.textContent = "Set type for all…";
                 typeSelect.appendChild(placeholder);
-                for (const kind of ["exterior", "interior", "virtual", "collapsed"]) {
+                for (const kind of WALL_KINDS) {
                     const item = document.createElement("option");
                     item.value = kind;
                     item.textContent = kind;
@@ -2625,7 +2655,7 @@ function boot(): void {
             host.appendChild(
                 field(
                     "Type",
-                    select(["exterior", "interior", "virtual", "collapsed"], wall.kind, (v) => {
+                    select([...WALL_KINDS], wall.kind, (v) => {
                         wall.kind = v as Wall["kind"];
                         markDirty();
                     }),
@@ -2651,7 +2681,7 @@ function boot(): void {
                 const row = document.createElement("div");
                 row.className = "floorplan-opening-row";
                 row.append(
-                    select(["door", "doorway", "window", "hatch"], opening.kind, (v) => {
+                    select([...OPENING_KINDS], opening.kind, (v) => {
                         opening.kind = v as typeof opening.kind;
                         markDirty();
                     }),
@@ -2736,7 +2766,7 @@ function boot(): void {
             host.appendChild(
                 field(
                     "Type",
-                    select(["door", "doorway", "window", "hatch"], opening.kind, (v) => {
+                    select([...OPENING_KINDS], opening.kind, (v) => {
                         opening.kind = v as Opening["kind"];
                         markDirty();
                     }),

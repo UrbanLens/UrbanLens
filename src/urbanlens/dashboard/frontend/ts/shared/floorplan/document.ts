@@ -10,9 +10,20 @@
 import type { Pt } from "./coords";
 import type { Segment } from "./planar";
 
-export type WallKind = "exterior" | "interior" | "virtual" | "collapsed";
+export type WallKind = "exterior" | "interior" | "fence" | "virtual" | "collapsed";
+
+/**
+ * Every wall kind, in the order they are offered.
+ *
+ * One list, because the editor had four hardcoded copies of these enums and a
+ * kind added to the model reached none of them.
+ */
+export const WALL_KINDS: readonly WallKind[] = ["exterior", "interior", "fence", "virtual", "collapsed"];
 export type WallThickness = "thin" | "normal" | "thick";
-export type OpeningKind = "door" | "doorway" | "window" | "hatch";
+export type OpeningKind = "door" | "doorway" | "gate" | "window" | "hatch";
+
+/** Every opening kind, in the order they are offered. */
+export const OPENING_KINDS: readonly OpeningKind[] = ["door", "doorway", "gate", "window", "hatch"];
 export type OpeningSwing = "none" | "left" | "right" | "double";
 // Trimmed to the kinds that earn their own icon: an entrance is already a
 // door opening on a wall, and "photo"/"note"/"fixture" markers carried no

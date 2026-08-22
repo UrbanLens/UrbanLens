@@ -1259,6 +1259,51 @@ class FloorplanOpeningRehostTests(TestCase):
         self.assertEqual(sum(len(w["openings"]) for w in walls), 0)
 
 
+class FloorplanFenceAndGateTests(TestCase):
+    """A site is often a fence before it is a building."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        self.place = _building()
+        self.floorplan = Floorplan.objects.create(place=self.place, profile=self.profile, name="plan")
+
+    def _save(self, walls: list[dict]) -> None:
+        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile)
+
+    def test_a_fence_round_trips(self) -> None:
+        self._save([{"kind": "fence", "ax": 0.0, "ay": 0.0, "bx": 10.0, "by": 0.0}])
+
+        self.assertEqual(document_for(self.floorplan)["floors"][0]["walls"][0]["kind"], "fence")
+
+    def test_a_gate_round_trips(self) -> None:
+        self._save([{"kind": "fence", "ax": 0.0, "ay": 0.0, "bx": 10.0, "by": 0.0, "openings": [{"kind": "gate", "t_start": 0.4, "t_end": 0.6}]}])
+
+        opening = document_for(self.floorplan)["floors"][0]["walls"][0]["openings"][0]
+        self.assertEqual(opening["kind"], "gate")
+
+    def test_an_unknown_wall_kind_is_still_refused(self) -> None:
+        """Widening the enum must not have widened it to anything."""
+        with self.assertRaises(ValueError):
+            self._save([{"kind": "hedge", "ax": 0.0, "ay": 0.0, "bx": 1.0, "by": 0.0}])
+
+    def test_a_gap_in_a_fence_is_a_virtual_span_and_still_encloses(self) -> None:
+        """A missing run is a stretch where nothing is built, not an opening cut
+        into fabric that continues - and it still bounds the yard, which is what
+        makes the enclosed area nameable."""
+        corners = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
+        walls = []
+        for index, (ax, ay) in enumerate(corners):
+            bx, by = corners[(index + 1) % 4]
+            walls.append({"kind": "virtual" if index == 2 else "fence", "ax": ax, "ay": ay, "bx": bx, "by": by})
+        self._save(walls)
+
+        kinds = [wall["kind"] for wall in document_for(self.floorplan)["floors"][0]["walls"]]
+        self.assertEqual(kinds.count("fence"), 3)
+        self.assertEqual(kinds.count("virtual"), 1)
+
+
 class FloorplanMarkerTests(TestCase):
     """Markers collapse five old tools into one table with a kind."""
 

@@ -81,10 +81,17 @@ class FloorplanWallKind(TextChoices):
     hint and renders as nothing, but participates fully in enclosing a region.
     Without it a courtyard, a loading bay, a collapsed side or an unexplored
     boundary can only be recorded by drawing a wall that is not there.
+
+    ``FENCE`` is a boundary rather than a building element - a yard, a
+    compound, the line you have to get past before the structure. A *gap* in a
+    fence is a ``VIRTUAL`` span rather than an opening, since it is a stretch
+    where nothing is built; an opening is fitted into fabric that continues,
+    which is what a ``GATE`` is.
     """
 
     EXTERIOR = "exterior", "Exterior wall"
     INTERIOR = "interior", "Interior wall"
+    FENCE = "fence", "Fence"
     VIRTUAL = "virtual", "Virtual (open edge)"
     COLLAPSED = "collapsed", "Collapsed / ruined"
 
@@ -107,6 +114,7 @@ class FloorplanOpeningKind(TextChoices):
 
     DOOR = "door", "Door"
     DOORWAY = "doorway", "Doorway (no door)"
+    GATE = "gate", "Gate"
     WINDOW = "window", "Window"
     HATCH = "hatch", "Hatch"
 
