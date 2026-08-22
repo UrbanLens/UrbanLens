@@ -1187,6 +1187,78 @@ class FloorplanFloorDesignationTests(TestCase):
         self.assertEqual([f["level"] for f in document_for(self.floorplan)["floors"]], [0, 1])
 
 
+class FloorplanOpeningRehostTests(TestCase):
+    """A door dragged onto another wall keeps its identity, and its locks."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        self.place = _building()
+        self.floorplan = Floorplan.objects.create(place=self.place, profile=self.profile, name="plan")
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]},
+            profile=self.profile,
+        )
+        document = document_for(self.floorplan)
+        self.walls = document["floors"][0]["walls"]
+
+    def _walls_with(self, opening_on_index: int, opening: dict) -> list[dict]:
+        out = []
+        for index, wall in enumerate(self.walls):
+            entry = {k: wall[k] for k in ("uuid", "kind", "ax", "ay", "bx", "by")}
+            entry["openings"] = [opening] if index == opening_on_index else []
+            out.append(entry)
+        return out
+
+    def test_moving_an_opening_to_another_wall_keeps_its_row(self) -> None:
+        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(0, {"kind": "door", "t_start": 0.4, "t_end": 0.6})}]}, profile=self.profile)
+        first = document_for(self.floorplan)["floors"][0]["walls"][0]["openings"][0]
+
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(2, {"uuid": str(first["uuid"]), "kind": "door", "t_start": 0.4, "t_end": 0.6})}]},
+            profile=self.profile,
+        )
+
+        after = document_for(self.floorplan)["floors"][0]["walls"]
+        self.assertEqual(after[0]["openings"], [])
+        self.assertEqual(len(after[2]["openings"]), 1)
+        self.assertEqual(str(after[2]["openings"][0]["uuid"]), str(first["uuid"]), "the opening was recreated instead of moved")
+
+    def test_a_moved_opening_keeps_its_locks(self) -> None:
+        """FloorplanLock cascades from the opening, so a delete-and-recreate
+        would destroy the lock silently."""
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(0, {"kind": "door", "t_start": 0.4, "t_end": 0.6, "locks": [{"name": "Padlock", "state": "locked"}]})}]},
+            profile=self.profile,
+        )
+        first = document_for(self.floorplan)["floors"][0]["walls"][0]["openings"][0]
+        moved = {"uuid": str(first["uuid"]), "kind": "door", "t_start": 0.4, "t_end": 0.6, "locks": [{"uuid": str(first["locks"][0]["uuid"]), "name": "Padlock", "state": "locked"}]}
+
+        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(1, moved)}]}, profile=self.profile)
+
+        after = document_for(self.floorplan)["floors"][0]["walls"][1]["openings"][0]
+        self.assertEqual(len(after["locks"]), 1)
+        self.assertEqual(after["locks"][0]["name"], "Padlock")
+        # The row itself, not a copy of its contents: a recreated opening
+        # cascades its locks away and rebuilds them under new identities, which
+        # reads as "the lock survived" while silently breaking anything holding
+        # a reference to it.
+        self.assertEqual(str(after["locks"][0]["uuid"]), str(first["locks"][0]["uuid"]))
+
+    def test_an_opening_left_out_entirely_is_still_deleted(self) -> None:
+        """The plan-wide match must not turn omission into permanence."""
+        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(0, {"kind": "door", "t_start": 0.4, "t_end": 0.6})}]}, profile=self.profile)
+
+        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(99, {})}]}, profile=self.profile)
+
+        walls = document_for(self.floorplan)["floors"][0]["walls"]
+        self.assertEqual(sum(len(w["openings"]) for w in walls), 0)
+
+
 class FloorplanMarkerTests(TestCase):
     """Markers collapse five old tools into one table with a kind."""
 

@@ -455,7 +455,6 @@ def _sync(existing_by_uuid: dict, payloads: list[dict] | None, build, pools: _Po
     return kept
 
 
-@transaction.atomic
 def _reject_duplicate_levels(payload: Any) -> None:
     """Refuse a document whose floors would share a storey.
 
@@ -477,6 +476,7 @@ def _reject_duplicate_levels(payload: Any) -> None:
         seen.add(level)
 
 
+@transaction.atomic
 def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Profile | None) -> Floorplan:
     """Fully replace one floorplan version's contents from a document.
 
@@ -553,6 +553,20 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
     _reject_duplicate_levels(document.get("floors"))
 
     existing_floors = floorplan.floors.prefetch_related("walls__openings__locks", "rooms", "markers")
+
+    # An opening can change wall - dragging a door round a corner is an
+    # ordinary edit - so openings are matched by uuid across the whole plan
+    # rather than only within the wall they used to sit on. Matched per wall,
+    # a move reads as "deleted from one, unknown to the other": the row is
+    # destroyed and a new one created, so the opening loses its identity and
+    # its locks go with it (FloorplanLock cascades from the opening).
+    existing_openings: dict[str, FloorplanOpening] = {}
+    for existing_floor in existing_floors:
+        for existing_wall in existing_floor.walls.all():
+            for existing_opening in existing_wall.openings.all():
+                existing_openings[str(existing_opening.uuid)] = existing_opening
+    surviving_openings: set[str] = set()
+
     floors = _sync({str(f.uuid): f for f in existing_floors}, document.get("floors"), build_floor, pools, profile)
 
     for floor_payload, floor in floors:
@@ -595,7 +609,22 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
                 opening.sill_meters = _float_in(payload.get("sill_meters"), "sill_meters")
                 return opening
 
-            openings = _sync({str(o.uuid): o for o in wall.openings.all()}, wall_payload.get("openings"), build_opening, pools, profile)
+            # Only the rows this wall's payload actually claims, so _sync's
+            # own orphan sweep cannot delete one that has moved to another
+            # wall. What is genuinely gone is collected after every wall has
+            # been seen, below.
+            opening_payloads = wall_payload.get("openings") or []
+            claimed: dict[str, FloorplanOpening] = {}
+            if isinstance(opening_payloads, list):
+                for opening_payload in opening_payloads:
+                    if not isinstance(opening_payload, dict):
+                        continue
+                    opening_uuid = str(opening_payload.get("uuid") or "")
+                    if opening_uuid and opening_uuid in existing_openings:
+                        claimed[opening_uuid] = existing_openings[opening_uuid]
+            openings = _sync(claimed, opening_payloads, build_opening, pools, profile)
+            for _, kept_opening in openings:
+                surviving_openings.add(str(kept_opening.uuid))
 
             for opening_payload, opening in openings:
 
@@ -630,5 +659,11 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
         _sync({str(r.uuid): r for r in floor.rooms.all()}, floor_payload.get("rooms"), build_room, pools, profile)
 
         _sync_markers({str(m.uuid): m for m in floor.markers.all()}, floor_payload.get("markers"), floor, pools, profile, floorplan)
+
+    # Deleted last, once every wall has had its say: an opening missing from
+    # the wall it used to be on may simply have moved to another one.
+    for opening_uuid, orphan_opening in existing_openings.items():
+        if opening_uuid not in surviving_openings:
+            orphan_opening.delete()
 
     return floorplan

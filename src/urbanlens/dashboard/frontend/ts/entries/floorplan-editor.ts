@@ -35,7 +35,7 @@ import { contiguousLevels, deriveDesignations } from "../shared/floorplan/design
 import { type DragModifiers, DragGesture, constrainToAxis, modifiersOf } from "../shared/floorplan/drag";
 import { History } from "../shared/floorplan/history";
 import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
-import { PIXEL_TOLERANCES, snapPoint, snapTranslation } from "../shared/floorplan/snapping";
+import { PIXEL_TOLERANCES, clampOpening, snapPoint, snapTranslation } from "../shared/floorplan/snapping";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers } from "../shared/map-layers";
 
@@ -1046,6 +1046,57 @@ function boot(): void {
      * *use* (you can walk through a door, not a window), so it renders as an
      * overlay on an otherwise-continuous wall instead - see renderOpenings().
      */
+    /**
+     * The wall nearest a point, within grabbing distance.
+     *
+     * Args:
+     *     point: Where the pointer is, in plan-local metres.
+     *     exclude: A wall to ignore - the one an opening already sits on, when
+     *         asking whether it should move somewhere better.
+     *
+     * Returns:
+     *     The nearest wall whose body is within the on-wall tolerance, or null
+     *     when the pointer is out in the open.
+     */
+    function wallNear(point: Pt, exclude: Wall | null = null): Wall | null {
+        const tolerance = tolerances().wall;
+        let best: { wall: Wall; distance: number } | null = null;
+        for (const candidate of floor().walls) {
+            if (candidate === exclude) continue;
+            const near = projectOnSegment(point, { x: candidate.ax, y: candidate.ay }, { x: candidate.bx, y: candidate.by });
+            if (near.distance > tolerance) continue;
+            if (!best || near.distance < best.distance) best = { wall: candidate, distance: near.distance };
+        }
+        return best ? best.wall : null;
+    }
+
+    /**
+     * Move an opening onto a different wall, keeping the width it was given.
+     *
+     * An opening is stored as a fraction of the wall it sits in, so carrying
+     * those two numbers across unchanged would make a door narrower on a long
+     * wall and wider on a short one. The metre width is what the author
+     * actually chose, so that is what survives the move.
+     *
+     * Args:
+     *     opening: The opening to move.
+     *     from: The wall it currently belongs to.
+     *     to: The wall it should belong to.
+     *     centreMeters: Where its middle should sit along the new wall.
+     */
+    function rehostOpening(opening: Opening, from: Wall, to: Wall, centreMeters: number): void {
+        const widthMeters = (opening.t_end - opening.t_start) * wallLength(from);
+        const length = wallLength(to);
+        if (length < 1e-6) return;
+        from.openings = from.openings.filter((item) => item !== opening);
+        const halfWidth = Math.min(widthMeters, length) / 2;
+        const centre = Math.min(Math.max(centreMeters, halfWidth), length - halfWidth);
+        const [start, end] = clampOpening((centre - halfWidth) / length, (centre + halfWidth) / length);
+        opening.t_start = start;
+        opening.t_end = end;
+        to.openings.push(opening);
+    }
+
     function wallSolidIntervals(wall: Wall): Array<[number, number]> {
         const gaps = wall.openings
             .filter((opening) => opening.kind !== "window")
@@ -1108,15 +1159,37 @@ function boot(): void {
             // A plain click (no real movement) falls through to that click
             // handler exactly as before; this only acts once a real drag is
             // detected.
-            let slide: { startT: number; width: number; originalStart: number } | null = null;
+            let slide: { startT: number; width: number; originalStart: number; host: Wall } | null = null;
             bindDrag(line.getElement(), {
                 start: () => state.tool === "select",
-                move: ({ local }) => {
+                move: ({ local, modifiers }) => {
                     if (!slide) {
-                        slide = { startT: projectOnSegment(local, a, b).t, width: opening.t_end - opening.t_start, originalStart: opening.t_start };
+                        slide = { startT: projectOnSegment(local, a, b).t, width: opening.t_end - opening.t_start, originalStart: opening.t_start, host: wall };
                         checkpoint();
                     }
-                    const currentT = projectOnSegment(local, a, b).t;
+                    // Dragged onto another wall, the opening goes with it - a
+                    // door put on the wrong side of a room was otherwise a
+                    // delete and a redraw. Alt ("take less") pins it to the wall
+                    // it started on, for working into a corner where two walls
+                    // are both within reach.
+                    const host = slide.host;
+                    const target = modifiers.less ? null : wallNear(local, host);
+                    if (target) {
+                        const targetA = { x: target.ax, y: target.ay };
+                        const targetB = { x: target.bx, y: target.by };
+                        const along = projectOnSegment(local, targetA, targetB).t;
+                        rehostOpening(opening, host, target, along * wallLength(target));
+                        slide = { startT: along, width: opening.t_end - opening.t_start, originalStart: opening.t_start, host: target };
+                        if (isSelected({ kind: "opening", wall: host, opening })) {
+                            state.selection = { kind: "opening", wall: target, opening };
+                            state.multi = [state.selection];
+                        }
+                        render();
+                        return;
+                    }
+                    const hostA = { x: host.ax, y: host.ay };
+                    const hostB = { x: host.bx, y: host.by };
+                    const currentT = projectOnSegment(local, hostA, hostB).t;
                     const start = Math.max(0, Math.min(slide.originalStart + (currentT - slide.startT), 1 - slide.width));
                     opening.t_start = start;
                     opening.t_end = start + slide.width;
