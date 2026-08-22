@@ -383,6 +383,18 @@
     }
 }
 
+.floorplan-floor-tab__chip {
+    display: inline-block;
+    min-width: 1.6em;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.floorplan-floor-tab__name {
+    margin-left: 0.4em;
+    opacity: 0.85;
+}
+
 .floorplan-floor-tab {
     display: inline-flex;
     flex-wrap: nowrap;

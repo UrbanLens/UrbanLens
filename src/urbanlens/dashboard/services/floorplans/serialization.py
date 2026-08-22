@@ -178,6 +178,7 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
             {
                 **_item_out(floor, source_uuids, reference_uuids),
                 "level": floor.level,
+                "designation": floor.designation,
                 "name": floor.name,
                 "elevation_meters": floor.elevation_meters,
                 "height_meters": floor.height_meters,
@@ -455,6 +456,27 @@ def _sync(existing_by_uuid: dict, payloads: list[dict] | None, build, pools: _Po
 
 
 @transaction.atomic
+def _reject_duplicate_levels(payload: Any) -> None:
+    """Refuse a document whose floors would share a storey.
+
+    Args:
+        payload: The document's ``floors`` value, whatever the client sent.
+
+    Raises:
+        ValueError: If two floors claim the same level.
+    """
+    if not isinstance(payload, list):
+        return
+    seen: set[int] = set()
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        level = _int_in(entry.get("level"), "level") or 0
+        if level in seen:
+            raise ValueError(f"two floors cannot share level {level}")
+        seen.add(level)
+
+
 def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Profile | None) -> Floorplan:
     """Fully replace one floorplan version's contents from a document.
 
@@ -506,6 +528,13 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
         if not _MIN_LEVEL <= level <= _MAX_LEVEL:
             raise ValueError(f"level must be between {_MIN_LEVEL} and {_MAX_LEVEL}")
         floor.level = level
+        designation = str(payload.get("designation") or "").strip()
+        # Refused rather than truncated, matching this module's 400-not-500
+        # style: a designation silently cut to "4A2345678" is worse than a
+        # client being told it sent something it cannot have meant.
+        if len(designation) > 8:
+            raise ValueError("designation must be 8 characters or fewer")
+        floor.designation = designation
         floor.name = payload.get("name") or ""
         floor.elevation_meters = _float_in(payload.get("elevation_meters"), "elevation_meters")
         floor.height_meters = _float_in(payload.get("height_meters"), "height_meters")
@@ -515,6 +544,14 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
     # existing wall/opening/lock/room/marker triggers its own query the
     # moment its parent's .all() is called below, and this whole function
     # runs on every autosave tick.
+    # Checked before anything is written. The unique constraint on
+    # (floorplan, level) is DEFERRED - it has to be, since a reorder or a
+    # mid-stack renumber necessarily collides part-way through a save that
+    # writes one row at a time - which means a genuinely duplicated level does
+    # not surface until the outer commit, as an IntegrityError the view has no
+    # way to turn into a useful message. Rejecting it here makes it a 400.
+    _reject_duplicate_levels(document.get("floors"))
+
     existing_floors = floorplan.floors.prefetch_related("walls__openings__locks", "rooms", "markers")
     floors = _sync({str(f.uuid): f for f in existing_floors}, document.get("floors"), build_floor, pools, profile)
 

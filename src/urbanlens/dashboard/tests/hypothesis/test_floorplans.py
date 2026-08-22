@@ -1113,6 +1113,80 @@ class FloorplanCommunityOverwriteTests(TestCase):
         self.assertEqual(body["origin"], "local")
 
 
+class FloorplanFloorDesignationTests(TestCase):
+    """A floor's position in the stack and what it is called are separate facts."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        self.place = _building()
+        self.floorplan = Floorplan.objects.create(place=self.place, profile=self.profile, name="plan")
+
+    def _save(self, floors: list[dict]) -> None:
+        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": floors}, profile=self.profile)
+
+    def test_designation_round_trips(self) -> None:
+        self._save([{"level": 0, "designation": "G"}, {"level": 1, "designation": "4A"}])
+
+        floors = document_for(self.floorplan)["floors"]
+        self.assertEqual([f["designation"] for f in floors], ["G", "4A"])
+
+    def test_a_blank_designation_stays_blank_rather_than_being_invented(self) -> None:
+        """Blank means "derive a label", which is the client's job - so the
+        server must not helpfully fill one in."""
+        self._save([{"level": 0}])
+
+        self.assertEqual(document_for(self.floorplan)["floors"][0]["designation"], "")
+
+    def test_an_over_long_designation_is_refused_not_truncated(self) -> None:
+        with self.assertRaises(ValueError):
+            self._save([{"level": 0, "designation": "123456789"}])
+
+    def test_the_name_is_independent_of_the_designation(self) -> None:
+        self._save([{"level": 3, "designation": "M", "name": "Boiler level"}])
+
+        floor = document_for(self.floorplan)["floors"][0]
+        self.assertEqual(floor["designation"], "M")
+        self.assertEqual(floor["name"], "Boiler level")
+        self.assertEqual(floor["level"], 3)
+
+    def test_two_floors_cannot_share_a_level(self) -> None:
+        """Refused up front as a 400. The unique constraint is DEFERRED, so it
+        would otherwise not fire until the outer commit - by which point the
+        view can only answer 500."""
+        with self.assertRaises(ValueError):
+            self._save([{"level": 1}, {"level": 1}])
+
+    def test_swapping_two_levels_in_one_save_commits(self) -> None:
+        """The constraint has to be DEFERRED: save_document writes floors one
+        row at a time inside a single transaction, so a swap necessarily
+        collides part-way through and would fail a per-statement check."""
+        self._save([{"level": 0, "designation": "G"}, {"level": 1, "designation": "1"}])
+        floors = document_for(self.floorplan)["floors"]
+        lower, upper = floors[0], floors[1]
+
+        self._save(
+            [
+                {"uuid": str(lower["uuid"]), "level": 1, "designation": lower["designation"]},
+                {"uuid": str(upper["uuid"]), "level": 0, "designation": upper["designation"]},
+            ],
+        )
+
+        by_level = {f["level"]: f["designation"] for f in document_for(self.floorplan)["floors"]}
+        self.assertEqual(by_level, {0: "1", 1: "G"})
+
+    def test_a_mid_stack_renumber_in_one_save_commits(self) -> None:
+        """The other shape the deferred constraint exists for: deleting a
+        middle floor and closing the gap moves 2 onto 1's old level."""
+        self._save([{"level": 0}, {"level": 1}, {"level": 2}])
+        floors = document_for(self.floorplan)["floors"]
+
+        self._save([{"uuid": str(floors[0]["uuid"]), "level": 0}, {"uuid": str(floors[2]["uuid"]), "level": 1}])
+
+        self.assertEqual([f["level"] for f in document_for(self.floorplan)["floors"]], [0, 1])
+
+
 class FloorplanMarkerTests(TestCase):
     """Markers collapse five old tools into one table with a kind."""
 

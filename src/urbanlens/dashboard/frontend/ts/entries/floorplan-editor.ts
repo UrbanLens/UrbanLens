@@ -25,11 +25,13 @@ import {
     type VersionSummary,
     type Wall,
     emptyDocument,
+    copyFloorContents,
     nextLocalId,
     wallId,
     wallLength,
     wallSegments,
 } from "../shared/floorplan/document";
+import { contiguousLevels, deriveDesignations } from "../shared/floorplan/designations";
 import { History } from "../shared/floorplan/history";
 import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
 import { PIXEL_TOLERANCES, snapPoint } from "../shared/floorplan/snapping";
@@ -297,7 +299,7 @@ function boot(): void {
 
     const floor = (): Floor => {
         const floors = state.doc.floors;
-        if (!floors.length) floors.push({ level: 0, name: "Ground floor", walls: [], rooms: [], markers: [] });
+        if (!floors.length) floors.push({ level: 0, name: "", walls: [], rooms: [], markers: [] });
         state.floorIndex = Math.min(state.floorIndex, floors.length - 1);
         return floors[state.floorIndex] as Floor;
     };
@@ -1993,12 +1995,32 @@ function boot(): void {
     // ------------------------------------------------------------- sidebar
 
     function renameFloor(item: Floor): void {
-        const value = window.prompt("Floor name", item.name || `Level ${item.level}`);
-        if (value === null) return;
+        const labels = floorLabels();
+        const designation = window.prompt("Floor number or code", item.designation || labels.get(item) || "");
+        if (designation === null) return;
+        const trimmed = designation.trim().slice(0, 8);
         checkpoint();
-        item.name = value.trim();
+        // Typing back the label it already derived means "keep deriving it" -
+        // otherwise accepting the prompt unchanged would freeze every floor's
+        // number, and inserting a storey below would stop renumbering them.
+        item.designation = trimmed === labels.get(item) ? "" : trimmed;
         markDirty();
         renderSidebar();
+    }
+
+    /** Copy one floor's walls (and optionally its room names) onto another. */
+    function duplicateFloor(source: Floor): void {
+        checkpoint();
+        const level = Math.max(...state.doc.floors.map((item) => item.level)) + 1;
+        const added: Floor = { level, name: source.name, designation: "", walls: [], rooms: [], markers: [] };
+        const copied = copyFloorContents(source, { rooms: true, markers: false });
+        added.walls = copied.walls;
+        added.rooms = copied.rooms;
+        state.doc.floors.push(added);
+        normaliseFloors(added);
+        markDirty();
+        renderSidebar();
+        fitToContent();
     }
 
     function deleteFloor(index: number): void {
@@ -2007,43 +2029,108 @@ function boot(): void {
         // Nothing to lose yet - the warning exists to protect drawn work, not
         // to make deleting a floor someone opened by mistake a two-step chore.
         const isEmpty = !item.walls.length && !item.rooms.length && !item.markers.length;
-        if (!isEmpty && !window.confirm(`Delete "${item.name || `Level ${item.level}`}"? This removes everything drawn on it.`)) return;
+        if (!isEmpty && !window.confirm(`Delete "${item.name || floorLabels().get(item) || `Level ${item.level}`}"? This removes everything drawn on it.`)) return;
         checkpoint();
         state.doc.floors.splice(index, 1);
         state.floorIndex = Math.min(state.floorIndex, state.doc.floors.length - 1);
+        // Otherwise the stack reads "1, 2, 4": the storey above a deleted one
+        // keeps a level nothing sits below any more, and "the floor below"
+        // starts meaning a storey two down.
+        normaliseFloors(state.doc.floors[state.floorIndex] as Floor | undefined || null);
         clearSelection();
         renderSidebar();
         markDirty();
+    }
+
+    /**
+     * Keep the stack ordered by level, contiguous, and pointing at the same
+     * storey it was before.
+     *
+     * Everything structural reads adjacency off ``level``: the floor-below
+     * underlay, connector linking, and the server's own ordering. A gap left
+     * by deleting a middle floor makes "the floor below" mean a storey that
+     * is two down, so the repair happens at every mutation rather than being
+     * left for someone to notice.
+     *
+     * Args:
+     *     keep: The floor that should still be selected afterwards. Defaults
+     *         to whichever is selected now.
+     */
+    function normaliseFloors(keep: Floor | null = null): void {
+        const active = keep || (state.doc.floors[state.floorIndex] as Floor | undefined) || null;
+        const repaired = contiguousLevels(state.doc.floors);
+        for (const { floor: item, level } of repaired) item.level = level;
+        state.doc.floors = repaired.map((entry) => entry.floor);
+        const index = active ? state.doc.floors.indexOf(active) : -1;
+        state.floorIndex = index >= 0 ? index : Math.min(state.floorIndex, state.doc.floors.length - 1);
+    }
+
+    /** The lift-button label for each floor, derived from the stack. */
+    function floorLabels(): Map<Floor, string> {
+        return deriveDesignations(state.doc.floors);
+    }
+
+    /**
+     * Start a new floor from the nearest existing one's shell.
+     *
+     * A storey's exterior is almost always the storey below's exterior, and
+     * re-tracing it by hand for every floor is the bulk of the work in a
+     * multi-storey building.
+     */
+    function seedShellFrom(target: Floor): boolean {
+        const others = state.doc.floors.filter((item) => item !== target && item.walls.some((wall) => wall.kind === "exterior"));
+        if (!others.length) return false;
+        const nearest = others.reduce((best, item) => (Math.abs(item.level - target.level) < Math.abs(best.level - target.level) ? item : best));
+        const shell: Floor = { ...nearest, walls: nearest.walls.filter((wall) => wall.kind === "exterior") };
+        const copied = copyFloorContents(shell, { rooms: false, markers: false });
+        target.walls.push(...copied.walls);
+        return copied.walls.length > 0;
     }
 
     function renderFloorTabs(): void {
         const host = document.getElementById("floorplan-floors");
         if (!host) return;
         host.replaceChildren();
-        state.doc.floors.forEach((item, index) => {
+        const labels = floorLabels();
+        // Bottom of the building at the bottom of the strip.
+        [...state.doc.floors].reverse().forEach((item) => {
+            const index = state.doc.floors.indexOf(item);
             const tab = document.createElement("span");
             tab.className = "floorplan-floor-tab";
             const button = document.createElement("button");
             button.type = "button";
             button.className = `btn btn--sm${index === state.floorIndex ? " btn--primary" : " btn--ghost"}`;
-            button.textContent = item.name || `Level ${item.level}`;
-            button.title = "Double-click to rename";
+            // The designation always shows, even for a floor with a nickname.
+            // Renaming a storey used to replace the only thing that said which
+            // storey it was, so a plan of renamed floors could not be read.
+            const chip = document.createElement("span");
+            chip.className = "floorplan-floor-tab__chip";
+            chip.textContent = labels.get(item) || String(item.level);
+            button.appendChild(chip);
+            if (item.name) {
+                const nickname = document.createElement("span");
+                nickname.className = "floorplan-floor-tab__name";
+                nickname.textContent = item.name;
+                button.appendChild(nickname);
+            }
             button.addEventListener("click", () => {
+                if (index === state.floorIndex) {
+                    renameFloor(item);
+                    return;
+                }
                 state.floorIndex = index;
                 clearSelection();
                 renderSidebar();
                 render();
                 fitToContent();
             });
-            button.addEventListener("dblclick", () => renameFloor(item));
             tab.appendChild(button);
             if (state.doc.floors.length > 1) {
                 const remove = document.createElement("button");
                 remove.type = "button";
                 remove.className = "btn btn--icon-sm floorplan-floor-tab__delete";
                 remove.innerHTML = '<i class="material-symbols-outlined">close</i>';
-                remove.setAttribute("aria-label", `Delete ${item.name || "floor"}`);
-                remove.title = "Delete floor";
+                remove.setAttribute("aria-label", `Delete floor ${labels.get(item) || item.level}`);
                 remove.addEventListener("click", (event) => {
                     event.stopPropagation();
                     deleteFloor(index);
@@ -2058,16 +2145,27 @@ function boot(): void {
         add.textContent = "+ Floor";
         add.addEventListener("click", () => {
             checkpoint();
-            const levels = state.doc.floors.map((f) => f.level);
+            const levels = state.doc.floors.map((item) => item.level);
             const level = (levels.length ? Math.max(...levels) : -1) + 1;
-            const added: Floor = { level, name: `Level ${level}`, walls: [], rooms: [], markers: [] };
+            const added: Floor = { level, name: "", walls: [], rooms: [], markers: [] };
             state.doc.floors.push(added);
-            state.floorIndex = state.doc.floors.length - 1;
-            if (seedFromOutline(added)) toast.info("Started this floor from the building outline.");
+            normaliseFloors(added);
+            // The storey below's shell first, the building outline only when
+            // there is no storey below to copy - a plan's upper floors follow
+            // its own exterior, not the provider's footprint.
+            if (!seedShellFrom(added)) seedFromOutline(added);
             markDirty();
             renderSidebar();
         });
         host.appendChild(add);
+
+        const duplicate = document.createElement("button");
+        duplicate.type = "button";
+        duplicate.className = "btn btn--sm btn--ghost";
+        duplicate.innerHTML = '<i class="material-symbols-outlined">content_copy</i>';
+        duplicate.setAttribute("aria-label", "Duplicate this floor");
+        duplicate.addEventListener("click", () => duplicateFloor(floor()));
+        host.appendChild(duplicate);
     }
 
     function field(labelText: string, input: HTMLElement): HTMLLabelElement {
@@ -2369,7 +2467,7 @@ function boot(): void {
             const others = state.doc.floors
                 .filter((item) => item !== current)
                 .filter((item) => item.markers.some((candidate) => candidate.connector_id === marker.connector_id))
-                .map((item) => item.name || `Level ${item.level}`);
+                .map((item) => item.name || floorLabels().get(item) || `Level ${item.level}`);
             linked.textContent = others.length ? `Linked to ${others.join(", ")}.` : "Linked, but nothing on another floor shares this connector yet.";
             wrap.appendChild(linked);
             const unlink = document.createElement("button");
@@ -2392,7 +2490,7 @@ function boot(): void {
                 const button = document.createElement("button");
                 button.type = "button";
                 button.className = "btn btn--sm btn--ghost";
-                const where = candidate.floor.name || `Level ${candidate.floor.level}`;
+                const where = candidate.floor.name || floorLabels().get(candidate.floor) || `Level ${candidate.floor.level}`;
                 button.textContent = `Link to ${candidate.marker.name || candidate.marker.kind} on ${where}`;
                 button.addEventListener("click", () => {
                     // Adopt the counterpart's id when it already has one, so a
@@ -2520,6 +2618,10 @@ function boot(): void {
         else state.dirty = false;
         // A switch away from the version that was selected/mid-drag leaves
         // stale references into a document that no longer exists.
+        // Sparse or colliding levels arrive from a mid-stack delete by an older
+        // client, and from third-party imports. Repaired without marking the
+        // document dirty: the next real edit persists it.
+        normaliseFloors(state.doc.floors[0] as Floor | undefined || null);
         clearSelection();
         // An undo snapshot outliving the document it was taken from is not a
         // safety net: applying it writes the *previous* version's contents,

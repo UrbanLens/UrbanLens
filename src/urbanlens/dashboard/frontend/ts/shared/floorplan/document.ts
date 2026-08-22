@@ -74,7 +74,14 @@ export interface Marker {
 
 export interface Floor {
     uuid?: string;
+    /** Position in the stack; 0 is the ground datum, negatives below it. */
     level: number;
+    /**
+     * The lift-button code ("G", "14", "4A", "B2", "M"). Blank derives one
+     * from the level, which is the ordinary case - see designations.ts.
+     */
+    designation?: string;
+    /** Optional nickname. Never affects numbering. */
     name: string;
     elevation_meters?: number | null;
     height_meters?: number | null;
@@ -115,7 +122,10 @@ export function emptyDocument(at: { lat: number; lng: number }): FloorplanDocume
         valid_from: null,
         plan_origin: at,
         rotation_degrees: 0,
-        floors: [{ level: 0, name: "Ground floor", walls: [], rooms: [], markers: [] }],
+        // No name: writing "Ground floor" into the document as though the
+        // author had typed it is what left a renamed floor with no record of
+        // which storey it was. A blank name derives its label instead.
+        floors: [{ level: 0, name: "", walls: [], rooms: [], markers: [] }],
         source_pool: [],
         reference_pool: [],
     };

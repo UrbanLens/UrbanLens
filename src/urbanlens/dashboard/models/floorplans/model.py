@@ -54,6 +54,7 @@ from django.db.models import (
     CheckConstraint,
     DateField,
     DecimalField,
+    Deferrable,
     F,
     FloatField,
     ForeignKey,
@@ -62,6 +63,7 @@ from django.db.models import (
     OneToOneField,
     Q,
     TextChoices,
+    UniqueConstraint,
     URLField,
 )
 from django.db.models.fields import CharField, IntegerField, PositiveIntegerField, SmallIntegerField, TextField
@@ -331,16 +333,27 @@ class FloorplanFloor(FloorplanItem):
     enclose, so an outline stored here would be a second, divergent answer to
     the same question.
 
+    A storey carries three facts that are easy to conflate and must not be:
+    where it sits in the stack (``level``), what people call it on a lift
+    button (``designation``), and any nickname the author gives it (``name``).
+    Skipping a thirteenth floor by designation while the levels stay
+    contiguous is exactly the case that needs them apart.
+
     Attributes:
         floorplan: The plan version this floor belongs to.
-        level: Storey number - 0 is ground, negative below grade.
-        name: Display label ("Ground floor", "Mezzanine").
+        level: Storey number - 0 is ground, negative below grade. Contiguous
+            within a plan: stacking, the floor-below underlay and stair/lift
+            connectors all read adjacency off it.
+        designation: The lift-button code ("G", "14", "4A", "B2", "M"). Blank
+            means derive it from the level, which is the ordinary case.
+        name: Optional nickname ("Boiler level"). Never affects numbering.
         elevation_meters: The walking surface's height above sea level.
         height_meters: Floor-to-ceiling height.
     """
 
     floorplan = ForeignKey(Floorplan, on_delete=CASCADE, related_name="floors")
     level = SmallIntegerField(default=0)
+    designation = CharField(max_length=8, blank=True, default="")
     name = CharField(max_length=255, blank=True, default="")
     elevation_meters = FloatField(null=True, blank=True)
     height_meters = FloatField(null=True, blank=True)
@@ -348,9 +361,18 @@ class FloorplanFloor(FloorplanItem):
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_floors"
         ordering = ("level", "sort_order", "id")
+        constraints = [
+            # DEFERRED is load-bearing, not decoration. save_document writes
+            # floors one row at a time inside a single transaction, so a
+            # reorder that swaps two levels, or a mid-stack delete that
+            # renumbers 3 down to 2, necessarily collides part-way through.
+            # Checked at commit, those are fine; checked per statement, they
+            # are an IntegrityError.
+            UniqueConstraint(fields=["floorplan", "level"], name="floorplan_floor_unique_level", deferrable=Deferrable.DEFERRED),
+        ]
 
     def __str__(self) -> str:
-        return self.name or f"Level {self.level}"
+        return self.name or self.designation or f"Level {self.level}"
 
 
 class FloorplanWall(FloorplanItem):
