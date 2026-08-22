@@ -861,10 +861,11 @@ raw `Response` semantics (201-vs-200, `redirected`).
 
 **Correctness, user-visible:**
 
-- `entries/map-annotations.ts:2264` - right-click-to-delete-vertex is dead code:
+- ~~`entries/map-annotations.ts:2264` - right-click-to-delete-vertex is dead code:
   `m.on("contextmenu.rcdelete" as never, ...)` is jQuery-style event namespacing that Leaflet does
   not support, so it binds a literal event name that never fires - while the toast at :2338 tells
-  the user to right-click. The `as never` casts were the compiler flagging exactly this.
+  the user to right-click. The `as never` casts were the compiler flagging exactly this.~~ Fixed
+  2026-08-22: binds the real `"contextmenu"` event instead.
 - `entries/map-annotations.ts:1371` - `loadDetailPins` has no ok-check and **clears the existing
   pin layer and list** on failure (console.warn only). :2558 `flushDpAutoSave` swallows validation
   errors, so autosaved edits are silently lost. :2047 `placeMediaItemAt` has no ok-check and no
@@ -887,10 +888,11 @@ raw `Response` semantics (201-vs-200, `redirected`).
   `media-label-edit-dialog-body` case, so Edit swaps a form into a dialog nothing opens.
   Separately, `_organize_label_card.html:77` references `peopleMergeSingle`, which is defined
   nowhere in the codebase.
-- `shared/organize-filter-engine.ts:188` - `countVisibleCards` tests `card.style.display`, but
+- ~~`shared/organize-filter-engine.ts:188` - `countVisibleCards` tests `card.style.display`, but
   tree view sets `display` on the `.tag-tree-item` *wrapper*, so cross-tab match counts and the
   "N categories also match" footer count every card as visible. It duplicates `getOrgVisibleCards`
-  (:99), which gets it right.
+  (:99), which gets it right.~~ Fixed 2026-08-22: `countVisibleCards` now delegates to
+  `getOrgVisibleCards` instead of re-deriving the check.
 - `shared/map-image-overlays.ts:209` - corner drag never handles `pointercancel`; an interrupted
   touch gesture leaves `map.dragging` disabled permanently.
 - `entries/spotguessr.ts:1491` - `submitGuess` has no in-flight guard, so a double-click posts
@@ -903,11 +905,13 @@ raw `Response` semantics (201-vs-200, `redirected`).
   rollback on failure and no save sequencing, so two rapid drags can persist the stale order while
   the DOM shows the new one. `shared/album-map.ts:113` is the model to copy - it rethrows after
   toasting so the marker snaps back.
-- `shared/confirm-dialog.ts:90` - re-entrancy: opening a second dialog while one is open
+- ~~`shared/confirm-dialog.ts:90` - re-entrancy: opening a second dialog while one is open
   overwrites `resolveCurrent` (first promise pends forever) and `showModal()` on an open dialog
-  throws into the promise executor.
-- `shared/scroll-to-hash.ts:50` - re-scrolls on *every* `htmx:afterSettle` for the page's life, so
-  any later swap yanks the reader back to the original anchor.
+  throws into the promise executor.~~ Fixed 2026-08-22: a call while the dialog is already open
+  now settles the earlier one as cancelled first, the same as a backdrop click would.
+- ~~`shared/scroll-to-hash.ts:50` - re-scrolls on *every* `htmx:afterSettle` for the page's life, so
+  any later swap yanks the reader back to the original anchor.~~ Fixed 2026-08-22: remembers the
+  hash it already scrolled to and only re-arms if the hash itself changes.
 - `shared/onboarding-tour.ts:87` - auto-dismiss hooks bind only to elements present at init; HTMX
   swaps orphan them, so dismissed cards reappear.
 - `shared/organize-header.ts:113` - a transient window resize below 768px *permanently* overwrites
