@@ -663,16 +663,22 @@ function boot(): void {
         // stays crisp) and the plan itself becomes the thing in focus.
         mapEl.classList.toggle("has-plan", current.walls.some((wall) => wall.kind === "exterior"));
 
+        // Each seed asked once which face is *its* room, rather than each face
+        // asking every seed whether it is inside. Both give the same answer -
+        // faceForSeed picks the smallest containing face, which is what stops a
+        // hall wearing the name of a cupboard inside it - but asked the other
+        // way round it is a face-squared scan, re-run on every frame of every
+        // drag, since render() is what a drag calls.
+        const seedForFace = new Map<Face, RoomSeed>();
+        for (const room of current.rooms) {
+            const bound = faceForSeed({ x: room.x, y: room.y }, derived.faces);
+            if (bound && !seedForFace.has(bound)) seedForFace.set(bound, room);
+        }
+
         // Rooms first so walls draw on top of their fills.
         roomLabels.length = 0;
         for (const face of derived.faces) {
-            // Matched against every face, not just this one. Asking "is this
-            // seed inside this face?" is a different question from "is this
-            // face this seed's room": faces nest, so a cupboard's seed is
-            // inside the hall around it too, and the hall would label itself
-            // with the cupboard's name - and, once rooms could be rotated,
-            // turn about the cupboard's pivot.
-            const seed = current.rooms.find((room) => faceForSeed({ x: room.x, y: room.y }, derived.faces) === face);
+            const seed = seedForFace.get(face);
             const roomSelected = seed ? isSelected({ kind: "room", room: seed }) : false;
             // A thicker border in a color one shade off the default teal read
             // as nearly the same room at a glance - a tinted fill on top of
@@ -944,11 +950,10 @@ function boot(): void {
                 });
             }
             renderOpenings(wall, selected);
-            // Only one wall's handles are ever worth drawing: with several
-            // walls multi-selected there is no single "the" endpoint drag to
-            // offer, and drawing all of them invites dragging the wrong one.
-            if (selected && state.multi.length === 1) renderWallHandles(wall);
         }
+
+        // After the walls, so a joint sits on top of the lines it belongs to.
+        if (state.tool === "select") renderJointHandles(current);
 
         markerNodes.clear();
         for (const marker of current.markers) {
@@ -1438,53 +1443,87 @@ function boot(): void {
         return result;
     }
 
-    function renderWallHandles(wall: Wall): void {
-        for (const end of ["a", "b"] as const) {
-            const point = end === "a" ? { x: wall.ax, y: wall.ay } : { x: wall.bx, y: wall.by };
-            const handle = L.circleMarker(toLatLng(point), { radius: 6, color: "#00838f", fillColor: "#fff", fillOpacity: 1, className: "floorplan-handle" }).addTo(handleLayer);
-            // Every other wall's endpoint exactly at this corner, found once
-            // at the start of the drag - so dragging a shared corner moves
-            // the whole joined corner together (every wall meeting there
-            // keeps meeting there), rather than tearing this one wall's end
-            // away from the others while they stay put.
-            let linked: Array<{ target: Wall; end: "a" | "b" }> | null = null;
+    /**
+     * Every distinct corner on a floor, with the wall ends that meet there.
+     *
+     * Walls store their own endpoints, so a corner shared by three walls is
+     * three coordinate pairs that happen to be equal. Grouping them is what
+     * turns "an endpoint" into "a joint" - the thing a user actually thinks
+     * they are grabbing.
+     *
+     * Args:
+     *     current: The floor to read.
+     *
+     * Returns:
+     *     One entry per corner, keyed by its exact coordinates.
+     */
+    function wallJoints(current: Floor): Map<string, { point: Pt; ends: Array<{ wall: Wall; end: "a" | "b" }> }> {
+        const joints = new Map<string, { point: Pt; ends: Array<{ wall: Wall; end: "a" | "b" }> }>();
+        const add = (point: Pt, wall: Wall, end: "a" | "b"): void => {
+            const key = `${point.x},${point.y}`;
+            const existing = joints.get(key);
+            if (existing) existing.ends.push({ wall, end });
+            else joints.set(key, { point, ends: [{ wall, end }] });
+        };
+        for (const wall of current.walls) {
+            add({ x: wall.ax, y: wall.ay }, wall, "a");
+            add({ x: wall.bx, y: wall.by }, wall, "b");
+        }
+        return joints;
+    }
+
+    /**
+     * Draw every joint on the floor, and let each one be dragged.
+     *
+     * Moving a joint moves exactly the walls that meet there and nothing else,
+     * which is the one thing the wall-body drags cannot express. It already
+     * worked, but only after selecting exactly one wall, so nobody found it -
+     * and a capability nobody can find is not one the editor has. They are
+     * drawn small so a plan does not turn into a field of dots, and the ones
+     * belonging to the current selection are drawn large enough to aim at.
+     */
+    function renderJointHandles(current: Floor): void {
+        const selectedWalls = new Set(state.multi.filter((item) => item.kind === "wall").map((item) => wallId(item.wall)));
+        for (const joint of wallJoints(current).values()) {
+            const onSelection = joint.ends.some((entry) => selectedWalls.has(wallId(entry.wall)));
+            const handle = L.circleMarker(toLatLng(joint.point), {
+                radius: onSelection ? 6 : 3.5,
+                color: "#00838f",
+                fillColor: "#fff",
+                fillOpacity: 1,
+                weight: onSelection ? 2 : 1,
+                className: "floorplan-handle floorplan-joint",
+            }).addTo(handleLayer);
+
+            // Captured on the first move: the ends are read off the geometry as
+            // it stands now, and re-reading them mid-drag would pick up walls
+            // that have just been dragged onto this corner.
+            let moving: Array<{ wall: Wall; end: "a" | "b" }> | null = null;
             bindDrag(handle.getElement(), {
+                start: () => state.tool === "select",
                 move: ({ local }) => {
-                    if (!linked) {
-                        // Every other wall's endpoint exactly at this corner,
-                        // found once - so dragging a shared corner moves the
-                        // whole joint together, rather than tearing this one
-                        // wall's end away while the others stay put.
-                        linked = [];
-                        for (const other of floor().walls) {
-                            if (other === wall) continue;
-                            if (other.ax === point.x && other.ay === point.y) linked.push({ target: other, end: "a" });
-                            if (other.bx === point.x && other.by === point.y) linked.push({ target: other, end: "b" });
-                        }
+                    if (!moving) {
+                        moving = joint.ends;
                         checkpoint();
                     }
-                    const others = wallSegments(floor()).filter((segment) => segment.wallId !== wall.uuid);
+                    // Every wall on this joint travels with it, so none of them
+                    // can be what it snaps to.
+                    const carried = new Set(moving.map((entry) => wallId(entry.wall)));
+                    const others = wallSegments(current).filter((segment) => !carried.has(segment.wallId));
                     const snapped = snapPoint(local, others, tolerances(), { suspended: state.suspendSnap });
-                    if (end === "a") {
-                        wall.ax = snapped.point.x;
-                        wall.ay = snapped.point.y;
-                    } else {
-                        wall.bx = snapped.point.x;
-                        wall.by = snapped.point.y;
-                    }
-                    for (const link of linked) {
-                        if (link.end === "a") {
-                            link.target.ax = snapped.point.x;
-                            link.target.ay = snapped.point.y;
+                    for (const entry of moving) {
+                        if (entry.end === "a") {
+                            entry.wall.ax = snapped.point.x;
+                            entry.wall.ay = snapped.point.y;
                         } else {
-                            link.target.bx = snapped.point.x;
-                            link.target.by = snapped.point.y;
+                            entry.wall.bx = snapped.point.x;
+                            entry.wall.by = snapped.point.y;
                         }
                     }
                     render();
                 },
                 end: (moved) => {
-                    linked = null;
+                    moving = null;
                     if (moved) markDirty();
                 },
             });

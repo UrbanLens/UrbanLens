@@ -394,6 +394,17 @@
     touch-action: none;
 }
 
+// Joints are drawn on every corner so the gesture is discoverable at all, so
+// they have to stay quiet until aimed at.
+.floorplan-joint {
+    cursor: move;
+    transition: r 80ms ease-out;
+
+    &:hover {
+        r: 7;
+    }
+}
+
 .floorplan-rotate-grip {
     cursor: grab;
 
