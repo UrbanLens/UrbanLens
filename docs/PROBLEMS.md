@@ -3969,3 +3969,34 @@ nothing in the geometry distinguishes them. Needs a product decision, not a fix.
 Meanwhile the symptom is gone: such a room no longer runs a drag that disables
 panning and moves nothing, and no longer offers a delete control that only
 cleared its name.
+
+## Floorplan drags converted to Pointer Events without browser verification (2026-08-22)
+
+All five drags in the floorplan editor (wall body, room fill, opening slide,
+opening end, wall corner) moved from Leaflet mouse events to Pointer Events
+bound on each layer's own element, so that they work with a finger. Before
+this, a touch drag emitted no mouse events at all and only the Leaflet-native
+marker drag worked on a phone.
+
+**This could not be verified here.** There is no usable browser on this host:
+the Playwright chromium under ~/.cache/ms-playwright fails with `error while
+loading shared libraries: libatk-1.0.so.0`, and there is no passwordless sudo
+to install the GTK/ATK stack it wants. So the conversion is reasoned, typed and
+unit-tested at the logic layer (shared/floorplan/drag.ts), but the binding layer
+has never actually run.
+
+What to exercise first in a real browser, desktop and phone:
+  - dragging a wall body, and the Ctrl (network) and Alt (detach) variants
+  - dragging a room fill, and confirming a press on an *unselected* room still
+    pans the map rather than moving it
+  - dragging a wall corner and a door end - these previously had no slop, so
+    check that a tap selects without nudging
+  - that a plain tap still selects (the pointerdown handler deliberately calls
+    stopPropagation and never preventDefault, precisely so the click survives)
+  - two-finger pan and pinch-zoom over drawn geometry, which `touch-action:
+    none` on .floorplan-wall/.floorplan-room/.floorplan-opening/.floorplan-handle
+    could plausibly interfere with
+
+Known gap left in place: the wall tool's rubber-band preview still follows
+map.on("mousemove"), so on touch there is no live preview line while drawing -
+taps still place corners, because Leaflet synthesises click from a tap.

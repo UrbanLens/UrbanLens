@@ -383,6 +383,17 @@
     }
 }
 
+// Without this the browser claims a finger drag as a page scroll or a pinch
+// and never delivers pointermove, so every drag below would be mouse-only -
+// which is exactly what it was. Set on the drawn geometry rather than the map
+// container, so panning and pinch-zooming the plan itself still work.
+.floorplan-wall,
+.floorplan-room,
+.floorplan-opening,
+.floorplan-handle {
+    touch-action: none;
+}
+
 .floorplan-floor-fields {
     display: flex;
     gap: 0.4rem;

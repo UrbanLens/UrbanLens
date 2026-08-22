@@ -32,7 +32,7 @@ import {
     wallSegments,
 } from "../shared/floorplan/document";
 import { contiguousLevels, deriveDesignations } from "../shared/floorplan/designations";
-import { DragGesture, constrainToAxis, modifiersOf } from "../shared/floorplan/drag";
+import { type DragModifiers, DragGesture, constrainToAxis, modifiersOf } from "../shared/floorplan/drag";
 import { History } from "../shared/floorplan/history";
 import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
 import { PIXEL_TOLERANCES, snapPoint, snapTranslation } from "../shared/floorplan/snapping";
@@ -288,6 +288,99 @@ function boot(): void {
             wall: PIXEL_TOLERANCES.wall * mpp,
             extension: PIXEL_TOLERANCES.extension * mpp,
         };
+    }
+
+    /** What a drag handler is told on every move. */
+    interface DragFrame {
+        /** Where the pointer is now, in plan-local metres. */
+        local: Pt;
+        /** Where the pointer is now, as a map container point. */
+        pixel: L.Point;
+        /** The modifiers held when the press landed, frozen for the gesture. */
+        modifiers: DragModifiers;
+    }
+
+    /**
+     * Attach a drag to a rendered layer.
+     *
+     * Bound in *pointer* events rather than mouse events, and on the layer's
+     * own element rather than on the map. Both matter:
+     *
+     * - A finger drag emits no mouse events at all, so every drag in this
+     *   editor except the Leaflet-native marker one was unreachable on a
+     *   phone. Pointer events cover mouse, touch and pen through one path, so
+     *   there is no second implementation to drift.
+     * - Listeners on the element die with the element. Leaflet rebuilds these
+     *   layers on every render, and render runs on every frame of every drag,
+     *   so map-level listeners accumulated in their hundreds.
+     *
+     * ``setPointerCapture`` keeps the gesture attached to the thing that was
+     * grabbed even when the pointer leaves it, which is what makes dragging a
+     * 3px wall possible at all.
+     *
+     * Args:
+     *     element: The layer's DOM node; nothing is bound when it is absent.
+     *     handlers: ``start`` may return false to decline the gesture, leaving
+     *         the press to the map (which is how pressing an unselected room
+     *         still pans). ``move`` is called only once the pointer has
+     *         travelled far enough to count as a drag. ``end`` is told whether
+     *         it ever did.
+     */
+    function bindDrag(
+        element: Element | undefined | null,
+        handlers: {
+            start?: (event: PointerEvent) => boolean | void;
+            move: (frame: DragFrame) => void;
+            end?: (moved: boolean) => void;
+            slopPx?: number;
+        },
+    ): void {
+        if (!element) return;
+        element.addEventListener("pointerdown", (raw) => {
+            const event = raw as PointerEvent;
+            // Left button only for a mouse; any contact for touch or pen.
+            if (event.pointerType === "mouse" && event.button !== 0) return;
+            if (handlers.start?.(event) === false) return;
+            // Stopped so Leaflet's own map-drag does not run this gesture too.
+            // Propagation only, never preventDefault: suppressing the default
+            // action here would also suppress the click that follows, and a
+            // press that does not move is how everything gets selected.
+            L.DomEvent.stopPropagation(event);
+            // Disabled up front rather than once the drag is live: on touch,
+            // Leaflet starts panning from the same contact, and two handlers
+            // moving the same finger's worth of distance fight each other.
+            map.dragging.disable();
+
+            const gesture = new DragGesture({ x: event.clientX, y: event.clientY }, modifiersOf(event), handlers.slopPx);
+            let moved = false;
+            try {
+                element.setPointerCapture(event.pointerId);
+            } catch {
+                // Capture is an optimisation, not a requirement - the
+                // listeners below still fire without it.
+            }
+
+            const onMove = (rawMove: Event): void => {
+                const moveEvent = rawMove as PointerEvent;
+                if (moveEvent.pointerId !== event.pointerId) return;
+                if (!gesture.advance({ x: moveEvent.clientX, y: moveEvent.clientY })) return;
+                moved = true;
+                const pixel = map.mouseEventToContainerPoint(moveEvent);
+                handlers.move({ local: toLocal(map.containerPointToLatLng(pixel)), pixel, modifiers: gesture.modifiers });
+            };
+            const onFinish = (): void => {
+                element.removeEventListener("pointermove", onMove);
+                element.removeEventListener("pointerup", onFinish);
+                element.removeEventListener("pointercancel", onFinish);
+                element.removeEventListener("lostpointercapture", onFinish);
+                map.dragging.enable();
+                handlers.end?.(moved);
+            };
+            element.addEventListener("pointermove", onMove);
+            element.addEventListener("pointerup", onFinish);
+            element.addEventListener("pointercancel", onFinish);
+            element.addEventListener("lostpointercapture", onFinish);
+        });
     }
 
     /**
@@ -599,50 +692,49 @@ function boot(): void {
             // selects first; this only engages on an actual drag of a room
             // that's already the selection, and never for a shift-drag (box-
             // select's own gesture, which starts from the same mousedown).
-            polygon.on("mousedown", (event: L.LeafletMouseEvent) => {
-                if (state.tool !== "select" || !seed) return;
-                if (event.originalEvent?.shiftKey) return;
-                if (!isSelected({ kind: "room", room: seed })) return;
-                const boundary = roomBoundaryWalls(seed);
-                if (!boundary) return;
-                // Every side is shell or shared, so a drag would translate
-                // nothing. Decline it, rather than disabling panning for the
-                // length of a gesture that cannot change anything.
-                if (!boundary.unique.length) return;
-                const key = (p: Pt): string => `${p.x},${p.y}`;
-                const ownPoints = new Set<string>();
-                for (const wall of boundary.unique) {
-                    ownPoints.add(key({ x: wall.ax, y: wall.ay }));
-                    ownPoints.add(key({ x: wall.bx, y: wall.by }));
-                }
-                const origins = new Map<Wall, { ax: number; ay: number; bx: number; by: number }>();
-                for (const wall of [...boundary.unique, ...boundary.shared]) origins.set(wall, { ax: wall.ax, ay: wall.ay, bx: wall.bx, by: wall.by });
-                const seedOrigin = { x: seed.x, y: seed.y };
-                const startPoint = map.latLngToContainerPoint(event.latlng);
-                const startLocal = toLocal(event.latlng);
-                const gesture = new DragGesture({ x: startPoint.x, y: startPoint.y }, modifiersOf(event.originalEvent as MouseEvent | undefined));
-                let dragging = true;
-                let dragActive = false;
-                const onMove = (moveEvent: L.LeafletMouseEvent): void => {
-                    if (!dragging) return;
-                    const nowPoint = map.latLngToContainerPoint(moveEvent.latlng);
-                    if (!gesture.advance({ x: nowPoint.x, y: nowPoint.y })) return;
-                    if (!dragActive) {
-                        dragActive = true;
+            let roomDrag: { local: Pt; boundary: NonNullable<ReturnType<typeof roomBoundaryWalls>>; origins: Map<Wall, { ax: number; ay: number; bx: number; by: number }>; ownPoints: Set<string>; seedOrigin: Pt } | null = null;
+            bindDrag(polygon.getElement(), {
+                start: (event) => {
+                    if (state.tool !== "select" || !seed) return false;
+                    if (event.shiftKey) return false;
+                    // A plain press only selects; dragging a room you have not
+                    // selected yet would move the building out from under a
+                    // gesture that meant to pan.
+                    if (!isSelected({ kind: "room", room: seed })) return false;
+                    const boundary = roomBoundaryWalls(seed);
+                    if (!boundary) return false;
+                    // Every side is shell or shared, so a drag would translate
+                    // nothing. Decline it, rather than taking the map's pan.
+                    if (!boundary.unique.length) return false;
+                    return true;
+                },
+                move: ({ local, modifiers }) => {
+                    const bound = seed as RoomSeed;
+                    if (!roomDrag) {
+                        const boundary = roomBoundaryWalls(bound);
+                        if (!boundary) return;
+                        const key = (p: Pt): string => `${p.x},${p.y}`;
+                        const ownPoints = new Set<string>();
+                        for (const wall of boundary.unique) {
+                            ownPoints.add(key({ x: wall.ax, y: wall.ay }));
+                            ownPoints.add(key({ x: wall.bx, y: wall.by }));
+                        }
+                        const origins = new Map<Wall, { ax: number; ay: number; bx: number; by: number }>();
+                        for (const wall of [...boundary.unique, ...boundary.shared]) origins.set(wall, { ax: wall.ax, ay: wall.ay, bx: wall.bx, by: wall.by });
+                        roomDrag = { local, boundary, origins, ownPoints, seedOrigin: { x: bound.x, y: bound.y } };
                         checkpoint();
-                        map.dragging.disable();
                     }
-                    const nowLocal = toLocal(moveEvent.latlng);
-                    let dx = nowLocal.x - startLocal.x;
-                    let dy = nowLocal.y - startLocal.y;
-                    if (gesture.modifiers.constrain) {
+                    const { boundary, origins, ownPoints, seedOrigin } = roomDrag;
+                    const key = (p: Pt): string => `${p.x},${p.y}`;
+                    let dx = local.x - roomDrag.local.x;
+                    let dy = local.y - roomDrag.local.y;
+                    if (modifiers.constrain) {
                         const squared = constrainToAxis({ x: dx, y: dy }, (state.doc.rotation_degrees * Math.PI) / 180);
                         dx = squared.x;
                         dy = squared.y;
                     }
-                    // Shared walls are stretched by this drag too (see below),
-                    // so they cannot be snap targets for it - see the wall-body
-                    // drag for what leaving them in does.
+                    // Shared walls are stretched by this drag too, so they
+                    // cannot be its snap targets - see the wall-body drag.
                     const carried = new Set([...boundary.unique, ...boundary.shared].map((item) => wallId(item)));
                     const corners: Pt[] = [];
                     for (const item of boundary.unique) {
@@ -670,21 +762,14 @@ function boot(): void {
                             wall.by = orig.by + dy;
                         }
                     }
-                    seed.x = seedOrigin.x + dx;
-                    seed.y = seedOrigin.y + dy;
+                    bound.x = seedOrigin.x + dx;
+                    bound.y = seedOrigin.y + dy;
                     render();
-                };
-                const onUp = (): void => {
-                    dragging = false;
-                    if (dragActive) {
-                        map.dragging.enable();
-                        markDirty();
-                    }
-                    map.off("mousemove", onMove);
-                    map.off("mouseup", onUp);
-                };
-                map.on("mousemove", onMove);
-                map.on("mouseup", onUp);
+                },
+                end: (moved) => {
+                    roomDrag = null;
+                    if (moved) markDirty();
+                },
             });
         }
 
@@ -697,6 +782,14 @@ function boot(): void {
         }
 
         for (const wall of current.walls) {
+            // Captured on the first move rather than the press, so a press that
+            // never becomes a drag costs nothing.
+            let dragOrigin: { local: Pt; a: Pt; b: Pt } | null = null;
+            let dragLinks: {
+                stretchToA: Array<{ wall: Wall; end: "a" | "b" }>;
+                stretchToB: Array<{ wall: Wall; end: "a" | "b" }>;
+                network: Array<{ wall: Wall; end: "a" | "b"; origX: number; origY: number }>;
+            } | null = null;
             const style = WALL_STYLE[wall.kind] || WALL_STYLE.interior;
             const selected = isSelected({ kind: "wall", wall });
             const a = { x: wall.ax, y: wall.ay };
@@ -736,55 +829,50 @@ function boot(): void {
                 // The mode is latched at the press and frozen for the gesture.
                 // Read fresh on every move, as it used to be, one drag could
                 // pass through all three and finish in a state matching none.
-                line.on("mousedown", (event: L.LeafletMouseEvent) => {
-                    if (state.tool !== "select") return;
-                    if (event.originalEvent?.shiftKey) return; // box-select's own gesture
-                    const startPoint = map.latLngToContainerPoint(event.latlng);
-                    const startLocal = toLocal(event.latlng);
-                    const origA = { x: wall.ax, y: wall.ay };
-                    const origB = { x: wall.bx, y: wall.by };
-                    const current = floor();
-                    const stretchToA = wallsTouchingPoint(current, origA, wall);
-                    const stretchToB = wallsTouchingPoint(current, origB, wall);
-                    const network = connectedNetwork(current, wall);
-                    const gesture = new DragGesture({ x: startPoint.x, y: startPoint.y }, modifiersOf(event.originalEvent as MouseEvent | undefined));
-                    let dragging = true;
-                    let dragActive = false;
-                    const onMove = (moveEvent: L.LeafletMouseEvent): void => {
-                        if (!dragging) return;
-                        const nowPoint = map.latLngToContainerPoint(moveEvent.latlng);
-                        if (!gesture.advance({ x: nowPoint.x, y: nowPoint.y })) return;
-                        if (!dragActive) {
-                            dragActive = true;
+                bindDrag(line.getElement(), {
+                    start: (event) => {
+                        if (state.tool !== "select") return false;
+                        if (event.shiftKey) return false; // box-select's own gesture
+                        return true;
+                    },
+                    move: ({ local, modifiers }) => {
+                        if (!dragOrigin) {
+                            dragOrigin = { local, a: { x: wall.ax, y: wall.ay }, b: { x: wall.bx, y: wall.by } };
+                            const current = floor();
+                            dragLinks = {
+                                stretchToA: wallsTouchingPoint(current, dragOrigin.a, wall),
+                                stretchToB: wallsTouchingPoint(current, dragOrigin.b, wall),
+                                network: connectedNetwork(current, wall),
+                            };
                             checkpoint();
-                            map.dragging.disable();
                         }
-                        const nowLocal = toLocal(moveEvent.latlng);
-                        let dx = nowLocal.x - startLocal.x;
-                        let dy = nowLocal.y - startLocal.y;
-                        if (gesture.modifiers.constrain) {
+                        const links = dragLinks as NonNullable<typeof dragLinks>;
+                        const origA = dragOrigin.a;
+                        const origB = dragOrigin.b;
+                        let dx = local.x - dragOrigin.local.x;
+                        let dy = local.y - dragOrigin.local.y;
+                        if (modifiers.constrain) {
                             const squared = constrainToAxis({ x: dx, y: dy }, (state.doc.rotation_degrees * Math.PI) / 180);
                             dx = squared.x;
                             dy = squared.y;
                         }
-                        // Everything this drag rewrites, not just the wall
-                        // under the cursor. A stretched neighbour's shared
-                        // corner is moved to follow the wall on every frame,
-                        // so leaving it in the candidate set means the wall is
-                        // always within snapping distance of the endpoint it
-                        // dragged there a frame ago - which pulls the delta
-                        // back to the previous frame's value and freezes the
-                        // drag after the first move.
-                        const carried = gesture.modifiers.more
-                            ? network.map((link) => link.wall)
-                            : gesture.modifiers.less
+                        // Everything this drag rewrites, not just the wall under
+                        // the cursor. A stretched neighbour's shared corner is
+                        // moved to follow the wall on every frame, so leaving it
+                        // in the candidate set means the wall is always within
+                        // snapping distance of the endpoint it dragged there a
+                        // frame ago - which pulls the delta back and freezes the
+                        // drag after its first move.
+                        const carried = modifiers.more
+                            ? links.network.map((link) => link.wall)
+                            : modifiers.less
                               ? [wall]
-                              : [wall, ...stretchToA.map((link) => link.wall), ...stretchToB.map((link) => link.wall)];
+                              : [wall, ...links.stretchToA.map((link) => link.wall), ...links.stretchToB.map((link) => link.wall)];
                         const snapped = snapDragTranslation([origA, origB], { x: dx, y: dy }, new Set(carried.map((item) => wallId(item))));
                         dx = snapped.x;
                         dy = snapped.y;
-                        if (gesture.modifiers.more) {
-                            for (const link of network) {
+                        if (modifiers.more) {
+                            for (const link of links.network) {
                                 if (link.end === "a") {
                                     link.wall.ax = link.origX + dx;
                                     link.wall.ay = link.origY + dy;
@@ -798,8 +886,8 @@ function boot(): void {
                             wall.ay = origA.y + dy;
                             wall.bx = origB.x + dx;
                             wall.by = origB.y + dy;
-                            if (!gesture.modifiers.less) {
-                                for (const link of stretchToA) {
+                            if (!modifiers.less) {
+                                for (const link of links.stretchToA) {
                                     if (link.end === "a") {
                                         link.wall.ax = wall.ax;
                                         link.wall.ay = wall.ay;
@@ -808,7 +896,7 @@ function boot(): void {
                                         link.wall.by = wall.ay;
                                     }
                                 }
-                                for (const link of stretchToB) {
+                                for (const link of links.stretchToB) {
                                     if (link.end === "a") {
                                         link.wall.ax = wall.bx;
                                         link.wall.ay = wall.by;
@@ -820,16 +908,12 @@ function boot(): void {
                             }
                         }
                         render();
-                    };
-                    const onUp = (): void => {
-                        dragging = false;
-                        if (dragActive) map.dragging.enable();
-                        map.off("mousemove", onMove);
-                        map.off("mouseup", onUp);
-                        if (dragActive) markDirty();
-                    };
-                    map.on("mousemove", onMove);
-                    map.on("mouseup", onUp);
+                    },
+                    end: (moved) => {
+                        dragOrigin = null;
+                        dragLinks = null;
+                        if (moved) markDirty();
+                    },
                 });
             }
             renderOpenings(wall, selected);
@@ -1004,39 +1088,24 @@ function boot(): void {
             // A plain click (no real movement) falls through to that click
             // handler exactly as before; this only acts once a real drag is
             // detected.
-            line.on("mousedown", (event: L.LeafletMouseEvent) => {
-                if (state.tool !== "select") return;
-                const startPoint = map.latLngToContainerPoint(event.latlng);
-                const startT = projectOnSegment(toLocal(event.latlng), a, b).t;
-                const width = opening.t_end - opening.t_start;
-                const originalStart = opening.t_start;
-                const gesture = new DragGesture({ x: startPoint.x, y: startPoint.y }, modifiersOf(event.originalEvent as MouseEvent | undefined));
-                let dragging = true;
-                let dragActive = false;
-                const onMove = (moveEvent: L.LeafletMouseEvent): void => {
-                    if (!dragging) return;
-                    const nowPoint = map.latLngToContainerPoint(moveEvent.latlng);
-                    if (!gesture.advance({ x: nowPoint.x, y: nowPoint.y })) return;
-                    if (!dragActive) {
-                        dragActive = true;
+            let slide: { startT: number; width: number; originalStart: number } | null = null;
+            bindDrag(line.getElement(), {
+                start: () => state.tool === "select",
+                move: ({ local }) => {
+                    if (!slide) {
+                        slide = { startT: projectOnSegment(local, a, b).t, width: opening.t_end - opening.t_start, originalStart: opening.t_start };
                         checkpoint();
-                        map.dragging.disable();
                     }
-                    const currentT = projectOnSegment(toLocal(moveEvent.latlng), a, b).t;
-                    const start = Math.max(0, Math.min(originalStart + (currentT - startT), 1 - width));
+                    const currentT = projectOnSegment(local, a, b).t;
+                    const start = Math.max(0, Math.min(slide.originalStart + (currentT - slide.startT), 1 - slide.width));
                     opening.t_start = start;
-                    opening.t_end = start + width;
+                    opening.t_end = start + slide.width;
                     render();
-                };
-                const onUp = (): void => {
-                    dragging = false;
-                    if (dragActive) map.dragging.enable();
-                    map.off("mousemove", onMove);
-                    map.off("mouseup", onUp);
-                    if (dragActive) markDirty();
-                };
-                map.on("mousemove", onMove);
-                map.on("mouseup", onUp);
+                },
+                end: (moved) => {
+                    slide = null;
+                    if (moved) markDirty();
+                },
             });
             // The opening's own selection, not the wall's - selecting a door
             // replaces the whole selection with {kind: "opening", ...}, which
@@ -1067,35 +1136,24 @@ function boot(): void {
                 weight: 2,
                 className: "floorplan-handle",
             }).addTo(handleLayer);
-            handle.on("mousedown", (event: L.LeafletMouseEvent) => {
-                map.dragging.disable();
-                const startPoint = map.latLngToContainerPoint(event.latlng);
-                const gesture = new DragGesture({ x: startPoint.x, y: startPoint.y }, modifiersOf(event.originalEvent as MouseEvent | undefined));
-                let moved = false;
-                const onMove = (moveEvent: L.LeafletMouseEvent): void => {
-                    const nowPoint = map.latLngToContainerPoint(moveEvent.latlng);
-                    if (!gesture.advance({ x: nowPoint.x, y: nowPoint.y })) return;
-                    if (!moved) {
-                        moved = true;
+            let editing = false;
+            bindDrag(handle.getElement(), {
+                move: ({ local }) => {
+                    if (!editing) {
+                        editing = true;
                         checkpoint();
                     }
-                    const along = projectOnSegment(toLocal(moveEvent.latlng), { x: wall.ax, y: wall.ay }, { x: wall.bx, y: wall.by }).t;
+                    const along = projectOnSegment(local, { x: wall.ax, y: wall.ay }, { x: wall.bx, y: wall.by }).t;
                     if (end === "t_start") opening.t_start = Math.min(along, opening.t_end - MIN_WIDTH);
                     else opening.t_end = Math.max(along, opening.t_start + MIN_WIDTH);
                     opening.t_start = Math.max(0, opening.t_start);
                     opening.t_end = Math.min(1, opening.t_end);
                     render();
-                };
-                // Paired with the mousedown, not registered per render - see
-                // renderWallHandles for what the unpaired version cost.
-                const onUp = (): void => {
-                    map.off("mousemove", onMove);
-                    map.off("mouseup", onUp);
-                    map.dragging.enable();
+                },
+                end: (moved) => {
+                    editing = false;
                     if (moved) markDirty();
-                };
-                map.on("mousemove", onMove);
-                map.on("mouseup", onUp);
+                },
             });
         }
     }
@@ -1192,31 +1250,24 @@ function boot(): void {
             // the whole joined corner together (every wall meeting there
             // keeps meeting there), rather than tearing this one wall's end
             // away from the others while they stay put.
-            handle.on("mousedown", (event: L.LeafletMouseEvent) => {
-                map.dragging.disable();
-                const startPoint = map.latLngToContainerPoint(event.latlng);
-                const gesture = new DragGesture({ x: startPoint.x, y: startPoint.y }, modifiersOf(event.originalEvent as MouseEvent | undefined));
-                const linked: Array<{ target: Wall; end: "a" | "b" }> = [];
-                for (const other of floor().walls) {
-                    if (other === wall) continue;
-                    if (other.ax === point.x && other.ay === point.y) linked.push({ target: other, end: "a" });
-                    if (other.bx === point.x && other.by === point.y) linked.push({ target: other, end: "b" });
-                }
-                let moved = false;
-                const onMove = (moveEvent: L.LeafletMouseEvent): void => {
-                    const nowPoint = map.latLngToContainerPoint(moveEvent.latlng);
-                    // A press that never travels the slop distance is a
-                    // selection, not an edit. These handles had no threshold at
-                    // all, so grabbing a corner to select it moved it by a pixel
-                    // and left an undo step for the accident.
-                    if (!gesture.advance({ x: nowPoint.x, y: nowPoint.y })) return;
-                    if (!moved) {
-                        moved = true;
+            let linked: Array<{ target: Wall; end: "a" | "b" }> | null = null;
+            bindDrag(handle.getElement(), {
+                move: ({ local }) => {
+                    if (!linked) {
+                        // Every other wall's endpoint exactly at this corner,
+                        // found once - so dragging a shared corner moves the
+                        // whole joint together, rather than tearing this one
+                        // wall's end away while the others stay put.
+                        linked = [];
+                        for (const other of floor().walls) {
+                            if (other === wall) continue;
+                            if (other.ax === point.x && other.ay === point.y) linked.push({ target: other, end: "a" });
+                            if (other.bx === point.x && other.by === point.y) linked.push({ target: other, end: "b" });
+                        }
                         checkpoint();
                     }
-                    const raw = toLocal(moveEvent.latlng);
                     const others = wallSegments(floor()).filter((segment) => segment.wallId !== wall.uuid);
-                    const snapped = snapPoint(raw, others, tolerances(), { suspended: state.suspendSnap });
+                    const snapped = snapPoint(local, others, tolerances(), { suspended: state.suspendSnap });
                     if (end === "a") {
                         wall.ax = snapped.point.x;
                         wall.ay = snapped.point.y;
@@ -1234,20 +1285,11 @@ function boot(): void {
                         }
                     }
                     render();
-                };
-                // Bound here rather than at render time, and unbound on
-                // release: these used to be registered on every render() -
-                // which runs on every frame of every drag - and never removed,
-                // so a few seconds of dragging left hundreds of dead handlers
-                // firing on every subsequent mouse move for the rest of the session.
-                const onUp = (): void => {
-                    map.off("mousemove", onMove);
-                    map.off("mouseup", onUp);
-                    map.dragging.enable();
+                },
+                end: (moved) => {
+                    linked = null;
                     if (moved) markDirty();
-                };
-                map.on("mousemove", onMove);
-                map.on("mouseup", onUp);
+                },
             });
         }
     }
