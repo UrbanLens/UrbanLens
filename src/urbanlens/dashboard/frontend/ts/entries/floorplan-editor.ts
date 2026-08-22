@@ -35,7 +35,7 @@ import { contiguousLevels, deriveDesignations } from "../shared/floorplan/design
 import { DragGesture, constrainToAxis, modifiersOf } from "../shared/floorplan/drag";
 import { History } from "../shared/floorplan/history";
 import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
-import { PIXEL_TOLERANCES, snapPoint } from "../shared/floorplan/snapping";
+import { PIXEL_TOLERANCES, snapPoint, snapTranslation } from "../shared/floorplan/snapping";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers } from "../shared/map-layers";
 
@@ -291,41 +291,18 @@ function boot(): void {
     }
 
     /**
-     * Nudge a rigid translation so that one of the points it moves lands on a
-     * snap target.
-     *
-     * Only the endpoint drag ever snapped, so a wall or a room dragged into
-     * place stopped a few centimetres short of the wall it was meant to meet -
-     * looking joined, deriving no room, and leaving the author to wonder why.
-     * The whole group moves by the same corrected delta, so the thing being
-     * dragged keeps its shape.
+     * Snap a rigid translation against this floor, minus what the drag itself
+     * rewrites.
      *
      * Args:
-     *     moved: The points this drag carries, at their pre-drag positions.
-     *     delta: The translation the pointer asks for, in plan-local metres.
-     *     exclude: Walls to leave out of the candidate set - a wall cannot
-     *         snap to itself, and neither can the group it travels with.
-     *
-     * Returns:
-     *     The delta to apply, corrected toward the nearest snap if one is in
-     *     reach and unchanged otherwise.
+     *     moved: The carried points, at their pre-drag positions.
+     *     delta: The translation asked for, in plan-local metres.
+     *     exclude: Wall ids this drag mutates, which cannot be its own targets.
      */
-    function snapTranslation(moved: readonly Pt[], delta: Pt, exclude: ReadonlySet<string>): Pt {
-        if (state.suspendSnap || !moved.length) return delta;
+    function snapDragTranslation(moved: readonly Pt[], delta: Pt, exclude: ReadonlySet<string>): Pt {
+        if (state.suspendSnap) return delta;
         const others = wallSegments(floor()).filter((segment) => !exclude.has(segment.wallId));
-        if (!others.length) return delta;
-        const tolerance = tolerances();
-        let best: { dx: number; dy: number; distance: number } | null = null;
-        for (const point of moved) {
-            const target = { x: point.x + delta.x, y: point.y + delta.y };
-            const snapped = snapPoint(target, others, tolerance);
-            if (snapped.kind === "free") continue;
-            const dx = snapped.point.x - target.x;
-            const dy = snapped.point.y - target.y;
-            const away = Math.hypot(dx, dy);
-            if (!best || away < best.distance) best = { dx, dy, distance: away };
-        }
-        return best ? { x: delta.x + best.dx, y: delta.y + best.dy } : delta;
+        return snapTranslation(moved, delta, others, tolerances());
     }
 
     /** Metres per screen pixel at the current zoom, for pixel-sized tolerances. */
@@ -663,13 +640,16 @@ function boot(): void {
                         dx = squared.x;
                         dy = squared.y;
                     }
-                    const carried = new Set(boundary.unique.map((item) => wallId(item)));
+                    // Shared walls are stretched by this drag too (see below),
+                    // so they cannot be snap targets for it - see the wall-body
+                    // drag for what leaving them in does.
+                    const carried = new Set([...boundary.unique, ...boundary.shared].map((item) => wallId(item)));
                     const corners: Pt[] = [];
                     for (const item of boundary.unique) {
                         const origin = origins.get(item) as { ax: number; ay: number; bx: number; by: number };
                         corners.push({ x: origin.ax, y: origin.ay }, { x: origin.bx, y: origin.by });
                     }
-                    const snapped = snapTranslation(corners, { x: dx, y: dy }, carried);
+                    const snapped = snapDragTranslation(corners, { x: dx, y: dy }, carried);
                     dx = snapped.x;
                     dy = snapped.y;
                     for (const wall of boundary.unique) {
@@ -787,8 +767,20 @@ function boot(): void {
                             dx = squared.x;
                             dy = squared.y;
                         }
-                        const carried = gesture.modifiers.more ? network.map((link) => link.wall) : [wall];
-                        const snapped = snapTranslation([origA, origB], { x: dx, y: dy }, new Set(carried.map((item) => wallId(item))));
+                        // Everything this drag rewrites, not just the wall
+                        // under the cursor. A stretched neighbour's shared
+                        // corner is moved to follow the wall on every frame,
+                        // so leaving it in the candidate set means the wall is
+                        // always within snapping distance of the endpoint it
+                        // dragged there a frame ago - which pulls the delta
+                        // back to the previous frame's value and freezes the
+                        // drag after the first move.
+                        const carried = gesture.modifiers.more
+                            ? network.map((link) => link.wall)
+                            : gesture.modifiers.less
+                              ? [wall]
+                              : [wall, ...stretchToA.map((link) => link.wall), ...stretchToB.map((link) => link.wall)];
+                        const snapped = snapDragTranslation([origA, origB], { x: dx, y: dy }, new Set(carried.map((item) => wallId(item))));
                         dx = snapped.x;
                         dy = snapped.y;
                         if (gesture.modifiers.more) {
