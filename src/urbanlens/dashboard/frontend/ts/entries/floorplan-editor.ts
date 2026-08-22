@@ -173,6 +173,15 @@ function boot(): void {
         rotateControl: { position: "topright", closeOnZeroBearing: false },
     }).setView([lat, lng], 20);
 
+    // leaflet-rotate's own control renders in Leaflet's standard top-right
+    // corner, which visually overlapped #floorplan-tools sitting in that same
+    // corner. Moving its actual DOM node into the toolbar (rather than
+    // rebuilding the drag-to-rotate gesture) keeps its tested behavior intact
+    // while making it read as one more tool alongside the others.
+    const rotateControlEl = map.getContainer().querySelector(".leaflet-control-rotate");
+    const toolbarContentEl = document.querySelector("#floorplan-tools .map-buttons-content");
+    if (rotateControlEl && toolbarContentEl) toolbarContentEl.appendChild(rotateControlEl);
+
     // Declared before createMapLayers below: its "underlay" custom toggle
     // reads state.showUnderlay synchronously while the panel builds its
     // initial button states, and a `const` referenced before its own
@@ -512,16 +521,22 @@ function boot(): void {
         for (const face of derived.faces) {
             const seed = current.rooms.find((room) => faceForSeed({ x: room.x, y: room.y }, [face]) === face);
             const roomSelected = seed ? isSelected({ kind: "room", room: seed }) : false;
+            // A thicker border in a color one shade off the default teal read
+            // as nearly the same room at a glance - a tinted fill on top of
+            // it is what actually reads as "this one, selected" rather than
+            // "this one, ever so slightly different."
             const polygon = L.polygon(face.ring.map(toLatLng), {
                 className: "floorplan-room",
                 ...(seed ? ROOM_FILL : UNBOUND_FILL),
-                ...(roomSelected ? { color: "#00838f", weight: 3 } : {}),
+                ...(roomSelected ? { color: "#00838f", weight: 4, fillColor: "#00838f", fillOpacity: 0.28 } : {}),
             }).addTo(roomLayer);
             const label = seed ? seed.name || "Unnamed" : "Unnamed room";
             // Permanent, not on hover: a room appearing and naming its own area
             // the instant a loop closes is what teaches the wall-first model,
             // and a badge nobody sees teaches nothing.
-            polygon.bindTooltip(`${label} · ${face.area.toFixed(1)} m²`, {
+            // The area reads as secondary metadata, not part of the name
+            // itself - a subtler line underneath rather than run in beside it.
+            polygon.bindTooltip(`<span class="floorplan-room-label__name">${escHtml(label)}</span><span class="floorplan-room-label__area">${face.area.toFixed(1)} m²</span>`, {
                 direction: "center",
                 className: "floorplan-room-label",
                 permanent: true,
@@ -541,13 +556,84 @@ function boot(): void {
                 const bound = seed || addSeedAt(centroid(face.ring));
                 showContextMenu(event, { kind: "room", room: bound });
             });
+            // Dragging an already-selected room moves it as a whole: its own
+            // unique walls translate rigidly together, and any wall it merely
+            // borders (a shared partition, the exterior) stretches to follow
+            // the corner it shares with this room while its own far end - not
+            // part of this room at all - stays put. A plain click still only
+            // selects first; this only engages on an actual drag of a room
+            // that's already the selection, and never for a shift-drag (box-
+            // select's own gesture, which starts from the same mousedown).
+            polygon.on("mousedown", (event: L.LeafletMouseEvent) => {
+                if (state.tool !== "select" || !seed) return;
+                if (event.originalEvent?.shiftKey) return;
+                if (!isSelected({ kind: "room", room: seed })) return;
+                const boundary = roomBoundaryWalls(seed);
+                if (!boundary) return;
+                const key = (p: Pt): string => `${p.x},${p.y}`;
+                const ownPoints = new Set<string>();
+                for (const wall of boundary.unique) {
+                    ownPoints.add(key({ x: wall.ax, y: wall.ay }));
+                    ownPoints.add(key({ x: wall.bx, y: wall.by }));
+                }
+                const origins = new Map<Wall, { ax: number; ay: number; bx: number; by: number }>();
+                for (const wall of [...boundary.unique, ...boundary.shared]) origins.set(wall, { ax: wall.ax, ay: wall.ay, bx: wall.bx, by: wall.by });
+                const seedOrigin = { x: seed.x, y: seed.y };
+                const startPoint = map.latLngToContainerPoint(event.latlng);
+                const startLocal = toLocal(event.latlng);
+                let dragging = true;
+                let dragActive = false;
+                const onMove = (moveEvent: L.LeafletMouseEvent): void => {
+                    if (!dragging) return;
+                    if (!dragActive) {
+                        if (startPoint.distanceTo(map.latLngToContainerPoint(moveEvent.latlng)) < 4) return;
+                        dragActive = true;
+                        map.dragging.disable();
+                    }
+                    const nowLocal = toLocal(moveEvent.latlng);
+                    const dx = nowLocal.x - startLocal.x;
+                    const dy = nowLocal.y - startLocal.y;
+                    for (const wall of boundary.unique) {
+                        const orig = origins.get(wall) as { ax: number; ay: number; bx: number; by: number };
+                        wall.ax = orig.ax + dx;
+                        wall.ay = orig.ay + dy;
+                        wall.bx = orig.bx + dx;
+                        wall.by = orig.by + dy;
+                    }
+                    for (const wall of boundary.shared) {
+                        const orig = origins.get(wall) as { ax: number; ay: number; bx: number; by: number };
+                        if (ownPoints.has(key({ x: orig.ax, y: orig.ay }))) {
+                            wall.ax = orig.ax + dx;
+                            wall.ay = orig.ay + dy;
+                        }
+                        if (ownPoints.has(key({ x: orig.bx, y: orig.by }))) {
+                            wall.bx = orig.bx + dx;
+                            wall.by = orig.by + dy;
+                        }
+                    }
+                    seed.x = seedOrigin.x + dx;
+                    seed.y = seedOrigin.y + dy;
+                    render();
+                };
+                const onUp = (): void => {
+                    dragging = false;
+                    if (dragActive) {
+                        map.dragging.enable();
+                        markDirty();
+                    }
+                    map.off("mousemove", onMove);
+                    map.off("mouseup", onUp);
+                };
+                map.on("mousemove", onMove);
+                map.on("mouseup", onUp);
+            });
         }
 
         // Seeds that bind to no face - the "not enclosed" state.
         for (const room of current.rooms) {
             if (faceForSeed({ x: room.x, y: room.y }, derived.faces)) continue;
             L.circleMarker(toLatLng({ x: room.x, y: room.y }), { radius: 5, color: "#ef6c00", fillOpacity: 1 })
-                .bindTooltip(`${room.name || "Room"} — not enclosed`, { direction: "top" })
+                .bindTooltip(`${escHtml(room.name || "Room")} — not enclosed`, { direction: "top" })
                 .addTo(roomLayer);
         }
 
@@ -804,7 +890,13 @@ function boot(): void {
                 map.on("mousemove", onMove);
                 map.on("mouseup", onUp);
             });
-            if (selected) renderOpeningHandles(wall, opening, at);
+            // The opening's own selection, not the wall's - selecting a door
+            // replaces the whole selection with {kind: "opening", ...}, which
+            // does not also count as its wall being selected, so gating this
+            // on `selected` (the wall) meant these handles could only ever
+            // appear if the wall happened to be selected too, which selecting
+            // an opening directly never does.
+            if (openingSelected) renderOpeningHandles(wall, opening, at);
         }
     }
 
@@ -1116,6 +1208,65 @@ function boot(): void {
         map.dragging.enable();
         boxStart = null;
         boxActive = false;
+    });
+
+    // Click-and-drag draws a single wall directly, instead of the map just
+    // panning underneath the gesture (which is what happened before, since
+    // nothing disabled map.dragging for this tool) - the existing click-
+    // click-click chain for several connected walls still works unchanged,
+    // since this only engages once real movement is detected, and only when
+    // no chain is already in progress.
+    let wallDragStartPixel: L.Point | null = null;
+    let wallDragStartLocal: Pt | null = null;
+    let wallDragActive = false;
+    let wallDragLine: L.Polyline | null = null;
+    map.getContainer().addEventListener("mousedown", (event: MouseEvent) => {
+        if (state.tool !== "wall" || event.button !== 0 || state.drawing.length) return;
+        const target = event.target as HTMLElement;
+        if (target.closest(".leaflet-marker-icon, .floorplan-handle, .leaflet-popup, .leaflet-control, .floorplan-context-menu")) return;
+        map.dragging.disable();
+        wallDragStartPixel = map.mouseEventToContainerPoint(event);
+        wallDragStartLocal = snapPoint(toLocal(map.containerPointToLatLng(wallDragStartPixel)), wallSegments(floor()), tolerances(), { suspended: state.suspendSnap }).point;
+        wallDragActive = false;
+    });
+    map.getContainer().addEventListener("mousemove", (event: MouseEvent) => {
+        if (!wallDragStartPixel || !wallDragStartLocal) return;
+        const current = map.mouseEventToContainerPoint(event);
+        if (!wallDragActive) {
+            // A few pixels of slop so an ordinary click that starts the
+            // click-click chain (which also begins here, since it might
+            // become a drag) doesn't spuriously draw a zero-length wall.
+            if (wallDragStartPixel.distanceTo(current) < 6) return;
+            wallDragActive = true;
+        }
+        const snapped = snapPoint(toLocal(map.containerPointToLatLng(current)), wallSegments(floor()), tolerances(), {
+            from: wallDragStartLocal,
+            suspended: state.suspendSnap,
+            axisRadians: (state.doc.rotation_degrees * Math.PI) / 180,
+        });
+        wallDragLine?.remove();
+        wallDragLine = L.polyline([toLatLng(wallDragStartLocal), toLatLng(snapped.point)], { color: "#00acc1", weight: 3, dashArray: "5 5" }).addTo(ghostLayer);
+    });
+    map.getContainer().addEventListener("mouseup", (event: MouseEvent) => {
+        if (!wallDragStartPixel || !wallDragStartLocal) return;
+        if (wallDragActive) {
+            const snapped = snapPoint(toLocal(map.containerPointToLatLng(map.mouseEventToContainerPoint(event))), wallSegments(floor()), tolerances(), {
+                from: wallDragStartLocal,
+                suspended: state.suspendSnap,
+                axisRadians: (state.doc.rotation_degrees * Math.PI) / 180,
+            });
+            state.drawing = [wallDragStartLocal, snapped.point];
+            commitChain();
+            suppressNextClick = true;
+            wallDragLine?.remove();
+            wallDragLine = null;
+        }
+        // Re-enabled unconditionally: mousedown above disables it before
+        // movement confirms this is really a drag, same as box-select.
+        map.dragging.enable();
+        wallDragStartPixel = null;
+        wallDragStartLocal = null;
+        wallDragActive = false;
     });
 
     // ---------------------------------------------------------- context menu
@@ -1692,7 +1843,10 @@ function boot(): void {
     function deleteFloor(index: number): void {
         const item = state.doc.floors[index] as Floor;
         if (state.doc.floors.length <= 1) return;
-        if (!window.confirm(`Delete "${item.name || `Level ${item.level}`}"? This removes everything drawn on it.`)) return;
+        // Nothing to lose yet - the warning exists to protect drawn work, not
+        // to make deleting a floor someone opened by mistake a two-step chore.
+        const isEmpty = !item.walls.length && !item.rooms.length && !item.markers.length;
+        if (!isEmpty && !window.confirm(`Delete "${item.name || `Level ${item.level}`}"? This removes everything drawn on it.`)) return;
         snapshotForUndo();
         state.doc.floors.splice(index, 1);
         state.floorIndex = Math.min(state.floorIndex, state.doc.floors.length - 1);
@@ -1962,17 +2116,38 @@ function boot(): void {
      * proximity would be wrong exactly when it mattered.
      */
     /**
+     * A room's boundary walls, split into what is actually its own versus
+     * what it merely borders.
+     *
+     * "Unique" excludes a wall that is either the building's own exterior or
+     * still bounds some *other* face - a corner room's boundary is partly the
+     * exterior shell, and an interior partition can be shared with the room
+     * on its other side. Bulk-deleting or moving used to take those with it
+     * wholesale, which looked like the room had torn a hole in the building.
+     *
+     * Returns null for an unbound seed (no face, so no boundary to gather).
+     */
+    function roomBoundaryWalls(room: RoomSeed): { face: Face; unique: Wall[]; shared: Wall[] } | null {
+        const face = faceForSeed({ x: room.x, y: room.y }, state.faces);
+        if (!face) return null;
+        const boundary = floor().walls.filter((wall) => face.wallIds.includes(wallId(wall)));
+        const unique = boundary.filter((wall) => wall.kind !== "exterior" && !state.faces.some((other) => other !== face && other.wallIds.includes(wallId(wall))));
+        const shared = boundary.filter((wall) => !unique.includes(wall));
+        return { face, unique, shared };
+    }
+
+    /**
      * Select (and offer to delete) a whole room at once - its seed and every
-     * wall forming its boundary - rather than one wall at a time.
+     * wall unique to its boundary - rather than one wall at a time.
      *
      * Only offered for an enclosed room: an unbound seed has no face, so
      * there is no wall boundary to gather - the generic Delete button at the
      * bottom of the sidebar already covers removing the seed alone.
      */
     function renderRoomDeleteControl(host: HTMLElement, room: RoomSeed): void {
-        const face = faceForSeed({ x: room.x, y: room.y }, state.faces);
-        if (!face) return;
-        const walls = floor().walls.filter((wall) => face.wallIds.includes(wallId(wall)));
+        const boundary = roomBoundaryWalls(room);
+        if (!boundary) return;
+        const walls = boundary.unique;
         if (!walls.length) return;
         const button = document.createElement("button");
         button.type = "button";
@@ -1984,6 +2159,13 @@ function boot(): void {
             deleteSelection();
         });
         host.appendChild(button);
+        // The generic Delete button below only ever removes the seed (this
+        // room's name) - worth spelling out once this more drastic option is
+        // also on screen, so the two don't read as the same action.
+        const note = document.createElement("p");
+        note.className = "floorplan-hint";
+        note.textContent = "The Delete button below only clears this room's name, keeping its walls.";
+        host.appendChild(note);
     }
 
     function renderConnectorControls(host: HTMLElement, marker: Marker): void {
@@ -2166,8 +2348,19 @@ function boot(): void {
                 body: JSON.stringify(payload),
             });
             if (!response.ok) {
-                const text = await response.text();
-                toast.warning(text || "Could not save this floorplan.");
+                // The save view always answers errors as {ok, error} JSON -
+                // anything else (an nginx/proxy error page for a 502, a bare
+                // 500 with no body of its own) is not a message meant for a
+                // person, and toasting it raw once dumped a whole HTML error
+                // page - headings and all - into the toast.
+                let message = `Could not save this floorplan. (${response.status})`;
+                try {
+                    const body = (await response.json()) as { error?: string };
+                    if (body.error) message = body.error;
+                } catch {
+                    // Not JSON - keep the generic, status-coded message above.
+                }
+                toast.warning(message);
                 return;
             }
             // The save view answers {ok, floorplan: <document>} - the uuid is
@@ -2292,6 +2485,13 @@ function boot(): void {
 
 function titleCase(s: string): string {
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+/** Escapes a user-provided string (a room/plan name) for interpolation into
+ * a Leaflet tooltip's HTML content, which renders its string argument as
+ * markup rather than plain text. */
+function escHtml(value: string): string {
+    return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 }
 
 function readJson<T>(id: string): T | null {

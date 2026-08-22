@@ -66,23 +66,35 @@
 <div class="floorplan-editor">
     <div class="floorplan-editor__stage">
         <div class="floorplan-map-shell">
-            {# Floats over the map's top-right corner - same placement as the #}
-            {# main map's own tool pill (#map-buttons) - rather than a bar    #}
-            {# above the map, for a consistent "tools live on the map" feel. #}
-            <div id="floorplan-tools" class="floorplan-toolbar" role="toolbar" aria-label="Drawing tools">
-                <button type="button" class="btn btn--icon is-active" data-tool="select" aria-pressed="true" aria-label="Select" title="Select (V) · ctrl+click or shift+drag to select several">
-                    <i class="material-symbols-outlined">arrow_selector_tool</i>
+            {# Same markup/classes as the main map's own tool pill             #}
+            {# (_map_toolbar.html) - not that inclusion tag itself, since     #}
+            {# these tools are stateful (data-tool) rather than one-shot      #}
+            {# onclick actions, but the shared classes guarantee the same     #}
+            {# look, and the collapse toggle works for free (see             #}
+            {# themes/base.html's delegated .map-toolbar-collapse handler).  #}
+            {# The rotate control (leaflet-rotate, added to the map's own    #}
+            {# top-right corner) is reparented in here by floorplan-editor.ts #}
+            {# so it reads as one more tool instead of overlapping this pill. #}
+            <div id="floorplan-tools" class="map-buttons floorplan-toolbar" role="toolbar" aria-label="Drawing tools">
+                <button type="button" class="map-toolbar-collapse" aria-label="Toggle floorplan tools"
+                        data-tooltip="Collapse toolbar" data-tooltip-float="true" data-tooltip-pos="below">
+                    <i class="material-symbols-outlined">chevron_right</i>
                 </button>
-                <button type="button" class="btn btn--icon" data-tool="wall" aria-pressed="false" aria-label="Draw walls" title="Wall (W)">
-                    <i class="material-symbols-outlined">timeline</i>
-                </button>
-                <button type="button" class="btn btn--icon" data-tool="room" aria-pressed="false" aria-label="Add room" title="Click to generate a whole rectangular room, sized and joined from what's already drawn (R)">
-                    <i class="material-symbols-outlined">meeting_room</i>
-                </button>
-                <div class="floorplan-toolbar__markers" role="group" aria-label="Marker type">
-                    <button type="button" class="btn btn--icon" data-marker-kind="hazard" aria-label="Hazard marker" title="Hazard (H)"><i class="material-symbols-outlined">warning</i></button>
-                    <button type="button" class="btn btn--icon" data-marker-kind="stair" aria-label="Stair marker" title="Stair (S)"><i class="material-symbols-outlined">stairs</i></button>
-                    <button type="button" class="btn btn--icon" data-marker-kind="elevator" aria-label="Elevator marker" title="Elevator (E)"><i class="material-symbols-outlined">elevator</i></button>
+                <div class="map-buttons-content">
+                    <button type="button" class="map-btn-icon is-active" data-tool="select" aria-pressed="true" aria-label="Select" title="Select (V) · ctrl+click or shift+drag to select several">
+                        <i class="material-symbols-outlined">check_box</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="wall" aria-pressed="false" aria-label="Draw walls" title="Wall (W)">
+                        <i class="material-symbols-outlined">timeline</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="room" aria-pressed="false" aria-label="Add room" title="Click to generate a whole rectangular room, sized and joined from what's already drawn (R)">
+                        <i class="material-symbols-outlined">meeting_room</i>
+                    </button>
+                    <div class="floorplan-toolbar__markers" role="group" aria-label="Marker type">
+                        <button type="button" class="map-btn-icon" data-marker-kind="hazard" aria-label="Hazard marker" title="Hazard (H)"><i class="material-symbols-outlined">warning</i></button>
+                        <button type="button" class="map-btn-icon" data-marker-kind="stair" aria-label="Stair marker" title="Stair (S)"><i class="material-symbols-outlined">stairs</i></button>
+                        <button type="button" class="map-btn-icon" data-marker-kind="elevator" aria-label="Elevator marker" title="Elevator (E)"><i class="material-symbols-outlined">elevator</i></button>
+                    </div>
                 </div>
             </div>
 

@@ -30,8 +30,17 @@
     border-radius: $radius-md;
     border: 1px solid var(--ul-surface-border);
 
+    // Leaflet's own .leaflet-interactive rule sets a pointer cursor on every
+    // room/wall/marker shape, which otherwise wins over this class living on
+    // an ancestor - a non-select tool needs the crosshair to hold even while
+    // hovering a shape, since it reads as "in select mode" the moment it
+    // doesn't.
     &.is-drawing {
         cursor: crosshair;
+
+        .leaflet-interactive {
+            cursor: crosshair;
+        }
     }
 
     // Once there's an exterior wall, the basemap recedes so the plan itself
@@ -42,41 +51,47 @@
     }
 }
 
-// Floats over the map's top-right corner, matching #map-buttons (the main
-// map's own tool pill) so every map on the site puts its tools in the same
-// place - see _layout.scss's .map-buttons for the rule this mirrors.
+// Position/background/border/collapse all come from .map-buttons itself
+// (_layout.scss) - the same markup and classes as the main map's own tool
+// pill (_map_toolbar.html), so this only adds what's actually floorplan-
+// specific: the marker-kind sub-group, the active-tool state (.map-btn-icon
+// has no such state of its own - the main map signals "select mode" on the
+// map element instead, which doesn't fit a set of mutually exclusive tools),
+// and fitting the reparented leaflet-rotate control to the same icon size.
 .floorplan-toolbar {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 6px;
-    background: var(--ul-grey-0);
-    opacity: 0.92;
-    border-radius: $radius-md;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 9%);
-    border: 1px solid var(--ul-grey-3);
-    flex-wrap: wrap;
-    max-width: calc(100% - 24px);
-
-    &:hover {
-        opacity: 1;
-    }
-
-    .btn--icon {
-        width: 2.5rem;
-        height: 2.5rem;
-    }
-
     &__markers {
         display: flex;
         gap: .25rem;
         padding-left: .35rem;
         margin-left: .1rem;
         border-left: 1px solid var(--ul-grey-3);
+    }
+
+    .map-btn-icon.is-active {
+        background: var(--ul-hover-bg);
+        border-color: var(--ul-primary-color, var(--primary-color));
+        color: var(--ul-primary-color, var(--primary-color));
+        opacity: 1;
+    }
+
+    // leaflet-rotate's own control (reparented in here by floorplan-editor.ts
+    // so it reads as one more tool instead of floating over this pill) is
+    // sized and positioned for a standalone Leaflet corner control - shrink
+    // it to match everything else in the row.
+    .leaflet-control-rotate {
+        margin: 0;
+        border: 0;
+        box-shadow: none;
+
+        &.leaflet-bar {
+            border-radius: $radius-sm;
+        }
+
+        a.leaflet-control-rotate-toggle {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: $radius-sm;
+        }
     }
 }
 
@@ -276,12 +291,27 @@
     background: transparent;
     border: 0;
     box-shadow: none;
-    font-weight: 600;
-    color: #1a1a1a;
+    text-align: center;
     text-shadow:
         0 0 3px #fff,
         0 0 3px #fff,
         0 1px 2px rgb(255 255 255 / 90%);
+
+    &__name {
+        display: block;
+        font-weight: 600;
+        color: #1a1a1a;
+    }
+
+    // The area is secondary to the name, not a value of equal weight next to
+    // it - a smaller, softer line underneath reads that way at a glance.
+    &__area {
+        display: block;
+        font-weight: 400;
+        font-size: .82em;
+        color: #1a1a1a;
+        opacity: .6;
+    }
 }
 
 // Live length/snap readout that follows the cursor while drawing a wall.
