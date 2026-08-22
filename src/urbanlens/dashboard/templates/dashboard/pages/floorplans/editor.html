@@ -175,6 +175,25 @@
 
         <div class="floorplan-sidebar__section">
             <div id="floorplan-form" class="floorplan-form"></div>
+            {# The site's shared icon picker, rendered once and shown only while #}
+            {# a marker is selected. Server-rendered because the icon set lives  #}
+            {# in Python; the editor reads its hidden input, which now announces #}
+            {# a pick (see shared/icon-picker.ts).                               #}
+            <div id="floorplan-marker-appearance" hidden>
+                <label class="floorplan-field"><span>Icon</span>
+                    {% include 'dashboard/partials/ui/_icon_picker.html' with picker_id="floorplan-marker" field_name="marker_icon" current_icon="" %}
+                </label>
+                <label class="floorplan-field"><span>Colour</span>
+                    <span id="floorplan-marker-colors" class="floorplan-swatches">
+                        {% for choice in color_choices %}
+                        <button type="button" class="floorplan-swatch" data-color="{{ choice.0 }}"
+                                style="background:{{ choice.0 }}" aria-label="{{ choice.1 }}"></button>
+                        {% endfor %}
+                        <button type="button" class="floorplan-swatch floorplan-swatch--none" data-color=""
+                                aria-label="Default for this marker type"></button>
+                    </span>
+                </label>
+            </div>
         </div>
 
         <details class="floorplan-details-accordion">

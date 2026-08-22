@@ -1350,6 +1350,60 @@ class FloorplanMarkerTests(TestCase):
             )
 
 
+class FloorplanMarkerAppearanceTests(TestCase):
+    """A marker's look is stored on its linked detail pin, and must survive a save."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        self.place = _building()
+        location = baker.make(Location, latitude=41.7401, longitude=-73.9401, place=self.place)
+        self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None)
+        self.floorplan = Floorplan.objects.create(place=self.place, profile=self.user.profile, pin=self.pin)
+
+    def _save(self, marker: dict) -> dict:
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [marker]}]},
+            profile=self.user.profile,
+        )
+        return document_for(self.floorplan)["floors"][0]["markers"][0]
+
+    def test_an_icon_and_colour_survive_the_round_trip(self) -> None:
+        """The document has always *read* these off the linked pin; nothing
+        wrote them back, so anything set in the editor vanished on save."""
+        saved = self._save({"kind": "hazard", "x": 1.0, "y": 2.0, "lat": 41.7401, "lng": -73.9401, "icon": "warning", "color": "#F44336"})
+
+        self.assertEqual(saved["icon"], "warning")
+        self.assertEqual(saved["color"], "#F44336")
+
+    def test_clearing_a_colour_returns_the_kind_default(self) -> None:
+        """Blank means "no override", which has to be distinguishable from a
+        payload that simply did not mention the field."""
+        first = self._save({"kind": "hazard", "x": 1.0, "y": 2.0, "lat": 41.7401, "lng": -73.9401, "icon": "warning", "color": "#F44336"})
+        # Asserted before clearing: without it this test passes whenever the
+        # colour is never written at all, which is the bug it exists to catch.
+        self.assertEqual(first["color"], "#F44336")
+
+        saved = self._save({"uuid": str(first["uuid"]), "kind": "hazard", "x": 1.0, "y": 2.0, "lat": 41.7401, "lng": -73.9401, "icon": "", "color": ""})
+
+        self.assertIsNone(saved["color"])
+
+    def test_appearance_is_not_stored_on_the_marker(self) -> None:
+        """One value, not two: FloorplanMarker must stay free of appearance
+        columns or the pin page and the floorplan can disagree."""
+        self._save({"kind": "hazard", "x": 1.0, "y": 2.0, "lat": 41.7401, "lng": -73.9401, "icon": "warning", "color": "#F44336"})
+
+        marker = self.floorplan.floors.first().markers.first()
+        self.assertFalse(hasattr(marker, "color"))
+        self.assertEqual(marker.linked_pin.color, "#F44336")
+        self.assertEqual(marker.linked_pin.icon, "warning")
+
+
 class FloorplanMarkerLinkedPinTests(TestCase):
     """A marker on a personal, pin-owned plan is also a detail pin elsewhere on the site."""
 

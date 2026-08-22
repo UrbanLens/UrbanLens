@@ -38,6 +38,7 @@ import {
 } from "../shared/floorplan/document";
 import { contiguousLevels, deriveDesignations } from "../shared/floorplan/designations";
 import { type DragModifiers, DragGesture, constrainToAxis, modifiersOf, snapRotation } from "../shared/floorplan/drag";
+import { installGlobalIconPicker } from "../shared/icon-picker";
 import { History } from "../shared/floorplan/history";
 import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
 import { PIXEL_TOLERANCES, clampOpening, snapPoint, snapTranslation } from "../shared/floorplan/snapping";
@@ -155,6 +156,9 @@ function markerPopupContent(marker: Marker): HTMLElement {
 }
 
 function boot(): void {
+    // The shared picker's markup calls IconPicker.* from inline onclick, so the
+    // global has to exist before any of it is clicked.
+    installGlobalIconPicker();
     const mapElement = document.getElementById("floorplan-map");
     if (!mapElement) return;
     // Rebound so the null check survives into the closures below.
@@ -2670,11 +2674,55 @@ function boot(): void {
         host.appendChild(box);
     }
 
+    /**
+     * Show the shared icon and colour controls for the selected marker.
+     *
+     * The controls are server-rendered once in the page and moved into view
+     * rather than rebuilt per selection: the icon set and the palette live in
+     * Python, and a copy of either here would be a second list to keep in step
+     * with the pin detail page - which is the thing this is meant to prevent.
+     *
+     * Appearance is stored on the marker's linked detail pin, not on the
+     * marker, so a marker styled here and the same pin styled from the pin page
+     * are editing one value.
+     *
+     * Args:
+     *     marker: The selected marker, or null to hide the controls.
+     */
+    function renderMarkerAppearance(marker: Marker | null): void {
+        const host = document.getElementById("floorplan-marker-appearance");
+        if (!host) return;
+        host.hidden = marker === null;
+        if (!marker) return;
+
+        const iconInput = document.getElementById("icon-value-floorplan-marker") as HTMLInputElement | null;
+        if (iconInput) {
+            iconInput.value = marker.icon || "";
+            iconInput.onchange = () => {
+                checkpoint();
+                marker.icon = iconInput.value || null;
+                markDirty();
+            };
+        }
+
+        for (const swatch of host.querySelectorAll<HTMLButtonElement>(".floorplan-swatch")) {
+            const colour = swatch.dataset.color || "";
+            swatch.classList.toggle("is-active", (marker.color || "") === colour);
+            swatch.onclick = () => {
+                checkpoint();
+                marker.color = colour || null;
+                markDirty();
+                renderSidebar();
+            };
+        }
+    }
+
     function renderSidebar(): void {
         const host = document.getElementById("floorplan-form");
         if (!host) return;
         host.replaceChildren();
         const selection = state.selection;
+        renderMarkerAppearance(selection && selection.kind === "marker" && state.multi.length === 1 ? selection.marker : null);
         if (!selection) return;
 
         // More than one item selected: a per-kind edit form doesn't apply,

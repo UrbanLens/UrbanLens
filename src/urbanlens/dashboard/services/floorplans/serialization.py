@@ -404,6 +404,18 @@ def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan
     linked.pin_type = _MARKER_KIND_TO_PIN_TYPE.get(marker.kind, "other")
     linked.pin_type_is_user_provided = True
     linked.location = location
+    # Appearance is stored on the pin, never on the marker: the document reads
+    # it back through linked.effective_icon/effective_color (see _marker_dict),
+    # so a second copy on FloorplanMarker would be a second answer to the same
+    # question. Only the write half was missing, which is why anything set in
+    # the floorplan editor vanished on save.
+    #
+    # Blank means "no override", so the kind's own default returns - that is
+    # how a marker is un-styled, and it has to be distinguishable from absent.
+    if "icon" in payload:
+        linked.icon = (payload.get("icon") or "").strip() or None
+    if "color" in payload:
+        linked.color = (payload.get("color") or "").strip() or None
     linked.save()
     if marker.linked_pin_id != linked.pk:
         marker.linked_pin = linked

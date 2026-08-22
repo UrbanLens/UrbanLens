@@ -385,9 +385,15 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
             profile__user=self.request.user,
         )
         from urbanlens.dashboard.controllers.map_overlays import overlay_payload
+        from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES
         from urbanlens.dashboard.models.labels.model import Label
 
         context["pin"] = pin
+        # The same icon set and palette every other picker on the site uses, so
+        # a marker styled here and a detail pin styled from the pin page cannot
+        # offer different choices.
+        context["icon_categories"] = ICON_CATEGORIES
+        context["color_choices"] = COLOR_CHOICES
         context["place"] = _building_place(pin)
         context["building_choices"] = _building_choices(pin) if context["place"] is None else []
         context["outline_json"] = _building_outline(pin)
