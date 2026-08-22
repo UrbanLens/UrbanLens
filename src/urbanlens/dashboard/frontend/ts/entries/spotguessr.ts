@@ -1490,6 +1490,13 @@ async function startGame(mode: string): Promise<void> {
 
 async function submitGuess(): Promise<void> {
     if (!state.guessMarker || state.sessionId === null || state.currentRoundId === null) return;
+    const submitBtn = el<HTMLButtonElement>("sg-submit-guess-btn");
+    // Closes the double-click window: nothing else disables this button
+    // between placing a marker and the reveal actually landing, so a second
+    // click before the first request resolves posted a second guess for the
+    // same round and double-counted the score.
+    if (submitBtn.disabled) return;
+    submitBtn.disabled = true;
     const latlng = state.guessMarker.getLatLng();
     const payload: Record<string, string> = { latitude: String(latlng.lat), longitude: String(latlng.lng) };
     if (state.dateGuessingEnabled) {
@@ -1500,6 +1507,7 @@ async function submitGuess(): Promise<void> {
     const reveal: RevealPayload = await postForm(urlFor(urls.guess, state.sessionId, state.currentRoundId), payload);
     if (reveal.error) {
         toast.error(reveal.error);
+        submitBtn.disabled = false; // the marker is still placed - let them retry
         return;
     }
     showReveal(reveal);

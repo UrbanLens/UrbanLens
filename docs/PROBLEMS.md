@@ -902,12 +902,22 @@ raw `Response` semantics (201-vs-200, `redirected`).
   `getOrgVisibleCards` instead of re-deriving the check.
 - `shared/map-image-overlays.ts:209` - corner drag never handles `pointercancel`; an interrupted
   touch gesture leaves `map.dragging` disabled permanently.
-- `entries/spotguessr.ts:1491` - `submitGuess` has no in-flight guard, so a double-click posts
-  twice and double-counts the session score; :840 `reportRoundTimeout` has no error handling, so a
-  failed timeout POST hangs the round forever. All three games silently null the WebSocket on
-  close with no reconnect and no "connection lost" notice.
-- `entries/trivia.ts:856` and `entries/consensus.ts:1051` - missing the round-id guard spotguessr
-  has (`lastRevealedRoundId`), so the last player to answer double-counts HUD points.
+- ~~`entries/spotguessr.ts:1491` - `submitGuess` has no in-flight guard, so a double-click posts
+  twice and double-counts the session score~~ Fixed 2026-08-22: disables the submit button for the
+  duration of the request, re-enabling only on failure. **Still open**: `:840 reportRoundTimeout`
+  has no error handling, so a failed timeout POST hangs the round forever; all three games silently
+  null the WebSocket on close with no reconnect and no "connection lost" notice.
+- ~~`entries/trivia.ts:856` and `entries/consensus.ts:1051` - missing the round-id guard spotguessr
+  has (`lastRevealedRoundId`), so the last player to answer double-counts HUD points.~~ Fixed
+  2026-08-22, differently in each game because their reveal broadcasts aren't the same shape:
+  trivia.ts gets a `lastRevealedRoundId` guard matching spotguessr's, since `submitAnswer`'s own
+  response can independently credit the same round `showBroadcastReveal` will also see.
+  consensus.ts needed a **resolution-aware** guard instead
+  (`{roundId, resolution}`, not just `roundId`) - `services/consensus/session.py`'s competitive-round
+  disagreement sub-phase broadcasts `round.revealed` for the *same* round_id twice by design (once
+  `vote_open` with zero points, again once the tiebreak vote resolves with the real ones), so a
+  bare round-id guard would have silently discarded every vote-winner's actual points instead of
+  fixing anything.
 - ~~`shared/organize-priority.ts:69` and `shared/album-items.ts:118` - optimistic reorder with no
   rollback on failure~~, so a failed save left the DOM showing an order the server never actually
   got. Partially fixed 2026-08-22: both now capture the order at drag-start (also covers the
