@@ -879,9 +879,16 @@ raw `Response` semantics (201-vs-200, `redirected`).
 - `shared/map-export.ts:270` + `themes/base.html:816` - `download()` awaits tile fetches (up to 8s
   each) but no caller awaits it: no spinner, no toast, unhandled rejections, and the save flow
   closes the composer mid-export so shapes project against a map being torn down.
-- `shared/markup-toolbar.ts:748` - `flushMarkupAutoSave` never checks `r.ok`, so a 400 (e.g.
+- ~~`shared/markup-toolbar.ts:748` - `flushMarkupAutoSave` never checks `r.ok`, so a 400 (e.g.
   over-long label) reports success; the single pending-save slot also means editing item A then B
-  inside the 500ms debounce silently discards A's changes, and nothing flushes on unload.
+  inside the 500ms debounce silently discards A's changes~~ Fixed 2026-08-22: added the ok-check,
+  and replaced the single shared slot with a per-item-uuid map, since it turned out reachable
+  without even editing two items in sequence - `setItemLayer` (the sidebar's inline layer picker)
+  shares the same autosave path and can target a completely different item than whatever the edit
+  panel has open. **Still open**: nothing flushes pending autosaves on unload/tab-close - a
+  `beforeunload` handler can't reliably await an in-flight `fetch`, and this app's CSRF header
+  doesn't fit `navigator.sendBeacon`'s simple-request shape, so that half needs its own dedicated
+  pass rather than a quick addition here.
 - `entries/organize.ts:106,311` - the Media tab is **fully dead UI**: the template renders it
   selectable with checkboxes, a filter bar and Edit buttons, but no `OrgTabManager` is built for
   it, `ORG_FILTER_NAMESPACES`/`TAB_FILTER_NS` omit it, and the consolidated dialog opener has no
