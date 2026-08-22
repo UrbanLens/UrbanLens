@@ -2728,7 +2728,12 @@ function boot(): void {
                 fitToContent();
             });
             tab.appendChild(button);
-            if (state.doc.floors.length > 1) {
+            // Only the floor you are on offers to delete itself. One X per row
+            // put a destructive control on every floor in the building at once,
+            // which is a lot of red for a strip you mostly use to change floors -
+            // and the one you are least likely to mean is the one furthest from
+            // the floor you are looking at.
+            if (state.doc.floors.length > 1 && index === state.floorIndex) {
                 const remove = document.createElement("button");
                 remove.type = "button";
                 remove.className = "btn btn--icon-sm floorplan-floor-tab__delete";
