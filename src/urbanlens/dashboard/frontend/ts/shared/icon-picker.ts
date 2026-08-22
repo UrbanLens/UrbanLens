@@ -1,6 +1,6 @@
 /**
  * Icon picker widget shared by categories/tags/organize's create and bulk-edit
- * dialogs (dashboard/partials/_icon_picker.html). The partial's markup calls
+ * dialogs (dashboard/partials/ui/_icon_picker.html). The partial's markup calls
  * `IconPicker.toggle/setTab/search/pick(...)` via inline onclick/oninput
  * attributes, including markup injected later via HTMX (edit dialogs) - so
  * this stays a `window.IconPicker` global rather than an imported class,
