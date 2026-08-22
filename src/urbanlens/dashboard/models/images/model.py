@@ -218,6 +218,20 @@ class Image(abstract.FrontendDashboardModel):
     # Kept separate from the `location` FK so each photo can scatter at its exact
     # capture point on the map layer; `location` records which shared place the
     # photo belongs to.
+    #
+    # KNOWN OMISSION: one pair of columns holds two different provenances - what
+    # EXIF reported, and where a person put it - with nothing in the schema
+    # recording which a given row holds. Two consequences worth knowing before
+    # writing here:
+    #   * The EXIF answer survives only in `exif_data["GPSInfo"]`, and only for
+    #     profiles that did not opt out of location metadata (tasks.py pops
+    #     GPSInfo when strip_location is set).
+    #   * tasks.process_image_upload rewrites these columns unconditionally from
+    #     EXIF, and a dozen call sites can re-enqueue it, so a re-run replaces a
+    #     manually corrected position with the EXIF one.
+    # TODO: add exif_latitude/exif_longitude (or a coordinate_source field)
+    # before any NEW writer is introduced. Placing a photo from the floorplan
+    # editor is deliberately NOT that writer until this exists.
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     # Crowd-sourced approximation of this photo's own position, from
@@ -237,6 +251,13 @@ class Image(abstract.FrontendDashboardModel):
     # angle, over time" comparison UI - not read or displayed anywhere yet.
     # Same GPS-IFD-sourced privacy opt-out as latitude/longitude: never
     # extracted for a profile with visit-history tracking off.
+    #
+    # TODO: EXIF is currently the only writer - there is no UI that sets a
+    # heading. The planned first consumer is a photo attached to a floorplan
+    # item (FloorplanReference), pointed at the thing it depicts. That UI has to
+    # declare its own reference frame, because GPSImgDirectionRef - true versus
+    # magnetic north - is not preserved (services.media.images.extract_gps_direction),
+    # so a manually set heading and an EXIF one are not directly comparable.
     direction = DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     # SHA-256 hex digest of the uploaded file, used to reject duplicate uploads.
     # Nullable because rows predating this field are backfilled lazily (in

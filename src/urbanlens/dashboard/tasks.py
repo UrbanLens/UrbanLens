@@ -678,6 +678,11 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
         return None
 
+    # Dropping GPSInfo makes "what did the EXIF say" permanently unanswerable
+    # for this photo - the deliberate exception to exif_data being the surviving
+    # record of EXIF provenance. That is the point of the opt-out, not an
+    # oversight; any future coordinate-provenance work must treat a
+    # location-stripped photo as having no EXIF position rather than an unknown one.
     if strip_location and exif_data:
         exif_data.pop("GPSInfo", None)
 
@@ -836,6 +841,13 @@ def process_image_upload(self, image_id: int) -> bool:
 
     update_fields, coords = result.update_fields, result.coords
 
+    # Unconditional, unlike the exif_data write in _process_photo_upload, which
+    # only fills a row that has none. A re-enqueued or retried run therefore
+    # replaces a manually placed position with the EXIF one.
+    # TODO: guard this once Image records which provenance its coordinates have
+    # (see the latitude/longitude comment in models/images/model.py). Left as-is
+    # deliberately: changing it without that column would trade one silent
+    # overwrite for another.
     if coords:
         lat, lng = coords
         image.latitude = Decimal(str(lat))

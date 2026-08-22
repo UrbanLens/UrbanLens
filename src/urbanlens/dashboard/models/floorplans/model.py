@@ -183,6 +183,12 @@ class FloorplanItem(abstract.FrontendDashboardModel):
     built_date = DateField(null=True, blank=True)
     attributes = JSONField(default=dict, blank=True)
     source = ForeignKey("dashboard.FloorplanSource", on_delete=SET_NULL, null=True, blank=True, related_name="+")
+    # The attachment path for photos of a wall, opening, room or marker: the
+    # media lives once in the plan's reference pool and any number of items
+    # point at it. Attachment is item-level, not a point on a wall - this
+    # relation carries no geometry, and a photo's own position and heading live
+    # on the linked Image (latitude/longitude/direction), whose coordinate
+    # provenance is not yet separable; see models/images/model.py.
     references = ManyToManyField("dashboard.FloorplanReference", blank=True, related_name="%(class)ss")
     labels = ManyToManyField("dashboard.Label", blank=True, related_name="floorplan_%(class)ss")
 
