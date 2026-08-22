@@ -3899,3 +3899,43 @@ second" estimate, likely much longer with hundreds of Django tests per mutant); 
 grounded in confirmed import analysis, not an empirical before/after kill-rate comparison. If a
 future mutation run still shows `identity_visibility.py` mutants surviving now that real tests are
 selected, that would be genuine, actionable coverage gaps - worth a closer look then.
+
+## RESOLVED 2026-08-22: `PinList`'s edit endpoints reverted concurrent edits to untouched fields
+
+Both `PinListEditView.post` (internal, HTMX-driven inline rename/description edit and smart-rule
+changes) and `PinListDetailView.patch` (external API) ended with a bare `pin_list.save()` -
+writing every column from that request's in-memory snapshot. A rename request that loaded the row
+before a concurrent request (another tab, or the other of these two independent
+implementations) changed `description`/`smart_filter`/`smart_boundary`/etc. would silently revert
+that other change the moment its own save ran, last-write-wins on the whole row rather than just
+the fields it actually touched. Same bug class as the one `services/wiki/wiki_edits.py`'s
+`save_edited_fields` already guards against on a comparably shared model.
+
+Fixed both views the same way: track a `changed_fields: set[str]` as each field is actually
+mutated, then `pin_list.save(update_fields=[*changed_fields, "updated"])` instead of a bare
+`save()` (skipped entirely when nothing changed). Confirmed the `PinListsCollectionTests.post`
+create path is not a lost-update risk - `pin_list = PinList(...)` there is a brand-new unsaved
+instance, so a bare `save()` on it is a normal create, not this bug.
+
+Proved with a new regression test per endpoint (`PinListEditConcurrentWriteTests` in
+`test_pin_lists.py`, `PinListDetailTests.test_concurrent_edit_to_another_field_survives_a_rename`
+in `test_external_api_lists.py`): each patches the view's own list-loading function with a
+`side_effect` that injects a concurrent `PinList.objects.filter(pk=...).update(description=...)`
+between that function returning and the view's `save()` - simulating the actual race rather than
+a pre-request update the view's own read would already see. Both tests fail against the old bare
+`save()` (confirmed via `git stash` on just the source files) and pass with the fix; full
+`test_pin_lists.py` + `test_external_api_lists.py` suite (97 tests) passes.
+
+Not yet investigated: the same bare-`save()` lost-update shape may exist on `Label`, `Trip`,
+`TripActivity`, `SavedFilter`, `Place`, and `Album`'s own edit endpoints - flagged as candidates
+by a fix-density read of `report_model_writers.py`'s output, not yet individually verified as
+real bugs (the `PinList` create-path false positive above shows not every bare `save()` is one).
+
+## `SavedFilterDetailView.patch` has a pre-existing mypy type error (found 2026-08-22, not fixed)
+
+`external_api/views.py`, `SavedFilterDetailView.patch`: `saved_filter.color = clean_color(data["color"], default="...")` -
+mypy reports `Incompatible types in assignment (expression has type "str | None", variable has type
+"str | int | Combinable")`. Found incidentally while mypy-checking an unrelated `PinList` fix in the
+same file; not investigated or fixed - out of scope for that change. `SavedFilter.color`'s
+Django-stubs-inferred field type looks like the actual mismatch (an F-expression-shaped type rather
+than the plain `str` the field should behave as); worth a look next time this file is touched.

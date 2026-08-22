@@ -1843,26 +1843,38 @@ class PinListDetailView(ExternalApiView):
         # Captured before anything is applied, so the resync decision below
         # compares the real before/after rather than assuming a change.
         before = (pin_list.is_smart, pin_list.smart_filter, pin_list.smart_boundary)
+        # A bare save() writes every column from this request's snapshot,
+        # silently reverting any field a concurrent request changed in
+        # between - including one made through PinListEditView, the other
+        # independent implementation of this same partial-update logic.
+        changed_fields: set[str] = set()
 
         if "name" in data:
             if PinList.objects.for_profile(profile).filter(name=data["name"]).exclude(pk=pin_list.pk).exists():
                 return Response({"error": "You already have a list with that name."}, status=400)
             pin_list.name = data["name"]
+            changed_fields.add("name")
         if "description" in data:
             pin_list.description = data["description"]
+            changed_fields.add("description")
         if "is_smart" in data:
             pin_list.is_smart = data["is_smart"]
+            changed_fields.add("is_smart")
         if "smart_boundary" in data:
             pin_list.smart_boundary = data["smart_boundary"]
+            changed_fields.add("smart_boundary")
         if "smart_filter" in data:
             pin_list.smart_filter = data["smart_filter"]
+            changed_fields.add("smart_filter")
         if "source_saved_filter_uuid" in data:
             pin_list.source_saved_filter = source_filter
+            changed_fields.add("source_saved_filter")
             # Pointing a list at a filter copies that filter's criteria in;
             # detaching it (null) leaves the last snapshot in place, matching
             # PinListEditView and the SET_NULL on the FK itself.
             if source_filter is not None:
                 pin_list.smart_filter = source_filter.criteria
+                changed_fields.add("smart_filter")
 
         if pin_list.smart_filter is not None:
             try:
@@ -1870,7 +1882,8 @@ class PinListDetailView(ExternalApiView):
             except CriteriaOwnershipError as exc:
                 return Response({"error": exc.safe_message}, status=400)
 
-        pin_list.save()
+        if changed_fields:
+            pin_list.save(update_fields=[*changed_fields, "updated"])
 
         after = (pin_list.is_smart, pin_list.smart_filter, pin_list.smart_boundary)
         if before != after:
