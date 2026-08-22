@@ -3874,3 +3874,28 @@ event sequences (exactly the class of bug the SCSS/dark-mode entries above neede
 Whoever next needs actual browser automation here should either get the missing GTK libraries
 installed (a one-time host fix, needs sudo) or use `/run-skill-generator` to capture whatever
 does end up working as a committed project skill, so the next session doesn't rediscover this.
+
+## RESOLVED 2026-08-22: `pyproject.toml`'s mutmut test-selection pointed at the wrong file for `identity_visibility.py`
+
+`bin/run_mutation_tests.sh --results` showed all ~105 mutants in
+`services/profile/identity_visibility.py` as `no tests` rather than `killed`/`survived` - a
+different, meaningless status: mutmut never even ran a test against them. The configured
+`pytest_add_cli_args_test_selection` listed `test_identity_visibility_batch.py` for this module,
+but that file tests `Profile.visible_profile_pks`/`Friendship` batching and never imports
+`services.profile.identity_visibility` at all - confirmed by grepping its imports. The actual
+tests (`test_identity_visibility.py`, plus `test_dm_share_live_updates.py`,
+`test_map_pin_share_detection_integration.py`, and `test_query_scaling_group_members.py`, all of
+which directly import `resolve_visible_identity(ies)`) were simply missing from the list.
+
+Fixed by adding those four files to the selection (and, while already in that section of
+`pyproject.toml`, two files that were the same kind of miss for `wiki_edits.py`:
+`test_wiki_revert_of_revert.py` and the new `test_wiki_boundary_revert.py`, both of which
+directly exercise that module but weren't listed either - only `test_wiki_edit_field_scope.py`
+was). All seven newly-added files pass together as a baseline (124 tests, 98.82s).
+
+**Not independently re-verified against a fresh mutation run** (a full pass across all three
+`only_mutate` modules is expensive - see `bin/run_mutation_tests.sh`'s own "roughly one mutant per
+second" estimate, likely much longer with hundreds of Django tests per mutant); the fix is
+grounded in confirmed import analysis, not an empirical before/after kill-rate comparison. If a
+future mutation run still shows `identity_visibility.py` mutants surviving now that real tests are
+selected, that would be genuine, actionable coverage gaps - worth a closer look then.

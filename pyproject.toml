@@ -991,8 +991,19 @@ pytest_add_cli_args = ["--reuse-db", "-q"]
 pytest_add_cli_args_test_selection = [
     "src/urbanlens/dashboard/tests/hypothesis/test_billing_banking.py",
     "src/urbanlens/dashboard/tests/hypothesis/test_billing_ledger_concurrency.py",
-    "src/urbanlens/dashboard/tests/hypothesis/test_identity_visibility_batch.py",
+    # test_identity_visibility_batch.py does NOT cover this module - it tests
+    # Profile.visible_profile_pks/Friendship batching and never imports
+    # services.profile.identity_visibility. Its presence here (instead of the
+    # files that actually do) is why every one of this module's ~105 mutants
+    # reported "no tests" rather than a real killed/survived verdict - fixed
+    # 2026-08-22, see docs/PROBLEMS.md.
+    "src/urbanlens/dashboard/tests/hypothesis/test_identity_visibility.py",
+    "src/urbanlens/dashboard/tests/hypothesis/test_dm_share_live_updates.py",
+    "src/urbanlens/dashboard/tests/hypothesis/test_map_pin_share_detection_integration.py",
+    "src/urbanlens/dashboard/tests/hypothesis/test_query_scaling_group_members.py",
     "src/urbanlens/dashboard/tests/hypothesis/test_wiki_edit_field_scope.py",
+    "src/urbanlens/dashboard/tests/hypothesis/test_wiki_revert_of_revert.py",
+    "src/urbanlens/dashboard/tests/hypothesis/test_wiki_boundary_revert.py",
 ]
 # test_wiki_edits_service.py is excluded on purpose: its Hypothesis property
 # tests trip HealthCheck.differing_executors under mutmut's runner, which is an
