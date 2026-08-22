@@ -247,6 +247,10 @@ class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     async def receive(self, text_data=None, bytes_data=None):
         """Ignore client frames - this socket is server → client only.
 
+        That already covers the client's ``{"type": "ping"}`` keep-alive (see
+        ``_notification_push.html``), which needs no reply: the frame exists only
+        to be traffic, so the Cloudflare tunnel doesn't time an idle connection out.
+
         Channels' base consumer calls ``receive(bytes_data=...)`` for a binary WS frame;
         accepting both keyword arguments (rather than only ``text_data``) keeps a stray binary
         frame from raising an uncaught ``TypeError`` that would otherwise kill the connection.
@@ -776,8 +780,9 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """Persist an incoming chat message and broadcast it to the check-in's group.
 
         Args:
-            text_data: JSON string with a ``body`` field. Unparseable or
-                blank frames are silently ignored - there's no message to
+            text_data: JSON string with a ``body`` field, or a
+                ``{"type": "ping"}`` keep-alive. Unparseable, blank and
+                keep-alive frames are silently ignored - there's no message to
                 report failure for. A frame that fails validation or fails
                 to save gets an explicit ``{"type": "error", ...}`` reply
                 instead.
@@ -789,6 +794,27 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         if text_data is None:
             return
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Safety chat received an unparseable frame on checkin %s", self.checkin.pk)
+            return
+        if not isinstance(data, dict):
+            # Valid JSON, but not a frame: ``"5"`` and ``[]`` parse fine and would
+            # raise AttributeError on ``.get`` below, killing the connection.
+            return
+
+        # The client's keep-alive - see ``ts/shared/live-socket.ts`` and the copy
+        # of it inlined in ``_chat_panel.html``, which exist because Cloudflare
+        # closes an idle tunnelled socket at around 100 seconds. Handled ahead of
+        # the scope gate below because a ping writes nothing, and answering a
+        # keep-alive with "this credential isn't allowed to send here" every 45
+        # seconds would be nonsense. Deliberately unanswered: the frame's only job
+        # is to be traffic, and the client never waits for a reply, so a pong would
+        # only double the frames on every idle connection.
+        if data.get("type") == "ping":
+            return
+
         # safety:read is a listen-only grant on the session route. The contact
         # route is exempt for the same reason connect() exempts it: its authority
         # is the magic-link token, not a credential, and an emergency contact
@@ -797,11 +823,6 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         # below still applies every content and archival rule to whatever they send.
         if self.contact is None and not self.credential_allows(ApiKeyScope.SAFETY_WRITE):
             await self.send(text_data=json.dumps({"type": "error", "detail": _INSUFFICIENT_SCOPE_DETAIL}))
-            return
-        try:
-            data = json.loads(text_data)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("Safety chat received an unparseable frame on checkin %s", self.checkin.pk)
             return
         body = str(data.get("body") or "").strip()
         if not body:
@@ -1135,11 +1156,12 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
                 logger.exception("%s socket failed to leave group %s cleanly", self.game_label, self.group_name)
 
     async def receive(self, text_data=None, bytes_data=None):
-        """Persist an incoming chat message and broadcast it - the only client-to-server frame this socket accepts.
+        """Persist an incoming chat message and broadcast it - the only client-to-server frame this socket acts on.
 
         Args:
-            text_data: JSON string with a ``body`` field. Unparseable or
-                blank frames are silently ignored - there's no message to
+            text_data: JSON string with a ``body`` field, or a
+                ``{"type": "ping"}`` keep-alive. Unparseable, blank and
+                keep-alive frames are silently ignored - there's no message to
                 report failure for.
             bytes_data: Unused - this socket is JSON-text-only. Accepting (and
                 ignoring) it keeps a stray binary frame from raising an uncaught
@@ -1149,18 +1171,34 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         if text_data is None:
             return
-        # Every frame this socket accepts writes something on the sender's
-        # behalf, so games:write gates the whole method: a games:read credential
-        # is a listen-only grant. Reported as an error frame rather than a close,
-        # matching DirectMessageConsumer - closing would put the client into a
-        # reconnect loop over a condition retrying cannot fix.
-        if not self.credential_allows(ApiKeyScope.GAMES_WRITE):
-            await self.send(text_data=json.dumps({"type": "error", "detail": _INSUFFICIENT_SCOPE_DETAIL}))
-            return
         try:
             data = json.loads(text_data)
         except (json.JSONDecodeError, TypeError):
             logger.warning("%s socket received an unparseable frame on session %s", self.game_label, self.session_id)
+            return
+        if not isinstance(data, dict):
+            # Valid JSON, but not a frame: ``"5"`` and ``[]`` parse fine and would
+            # raise AttributeError on ``.get`` below, killing the connection.
+            return
+
+        # The client's keep-alive - see ``ts/shared/live-socket.ts``, which every
+        # game client now opens its socket through, because Cloudflare closes an
+        # idle tunnelled socket at around 100 seconds and a lobby waiting on the
+        # host is idle by definition. Handled ahead of the scope gate below
+        # because a ping writes nothing, and answering a keep-alive with "this
+        # credential isn't allowed to send here" every 45 seconds would be
+        # nonsense. Deliberately unanswered: the frame's only job is to be
+        # traffic, and the client never waits for a reply.
+        if data.get("type") == "ping":
+            return
+
+        # Every other frame this socket accepts writes something on the sender's
+        # behalf, so games:write gates the rest of the method: a games:read
+        # credential is a listen-only grant. Reported as an error frame rather
+        # than a close, matching DirectMessageConsumer - closing would put the
+        # client into a reconnect loop over a condition retrying cannot fix.
+        if not self.credential_allows(ApiKeyScope.GAMES_WRITE):
+            await self.send(text_data=json.dumps({"type": "error", "detail": _INSUFFICIENT_SCOPE_DETAIL}))
             return
         body = str(data.get("body") or "").strip()
         if not body:

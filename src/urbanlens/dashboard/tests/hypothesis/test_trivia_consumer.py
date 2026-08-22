@@ -179,6 +179,28 @@ class TriviaSessionConsumerTests(TransactionTestCase):
 
         await comm.disconnect()
 
+    def test_a_heartbeat_ping_is_ignored(self) -> None:
+        _run(self._a_heartbeat_ping_is_ignored())
+
+    async def _a_heartbeat_ping_is_ignored(self) -> None:
+        # Every game client pings every 45s so Cloudflare's ~100s idle cutoff
+        # can't kill a lobby waiting on the host (ts/shared/live-socket.ts). The
+        # ping gets no reply, and the socket has to survive it - this is the
+        # shared _ParticipantSessionConsumer.receive() all three games use.
+        comm = self._communicator(self.host.user)
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+
+        await comm.send_to(text_data=json.dumps({"type": "ping"}))
+        self.assertTrue(await comm.receive_nothing(timeout=0.2))
+
+        with broadcasts_delivered_inline():
+            await comm.send_to(text_data=json.dumps({"body": "still here"}))
+            relayed = json.loads(await comm.receive_from())
+        self.assertEqual(relayed["message"]["body"], "still here")
+
+        await comm.disconnect()
+
     def test_an_unparseable_frame_is_silently_ignored(self) -> None:
         _run(self._an_unparseable_frame_is_silently_ignored())
 

@@ -15,6 +15,7 @@
 import { getCsrfToken } from "../shared/csrf";
 import { confirmAction, toast } from "../shared/dialogs";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
+import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
 
 declare global {
     interface Window {
@@ -142,7 +143,7 @@ let sessionId: number | null = null;
 let currentRound: RoundPayload | null = null;
 let isMultiplayer = false;
 let hostProfileId: number | null = null;
-let ws: WebSocket | null = null;
+let ws: LiveSocketHandle | null = null;
 let friendOptions: FriendOption[] = [];
 let totalRounds = 0;
 let sessionPoints = 0;
@@ -410,18 +411,17 @@ function setRailAvailable(on: boolean): void {
 
 function connectSessionSocket(): void {
     if (ws || sessionId === null) return;
-    const proto = location.protocol === "https:" ? "wss://" : "ws://";
-    // Built entirely from the current page's own location - always same-origin.
-    ws = new WebSocket(`${proto}${location.host}/ws/trivia/session/${sessionId}/`);  // lgtm[js/request-forgery]
-    ws.addEventListener("message", (event) => {
-        try {
-            handleSocketMessage(JSON.parse(event.data));
-        } catch {
-            // Ignore unparseable frames - nothing actionable to do with one.
-        }
-    });
-    ws.addEventListener("close", () => {
-        ws = null;
+    // shared/live-socket.ts adds the heartbeat this socket needs to survive the
+    // Cloudflare tunnel's idle cutoff, and the reconnect it never had.
+    ws = openLiveSocket({
+        path: `/ws/trivia/session/${sessionId}/`,
+        onMessage: handleSocketMessage,
+        // 4404 here means the host removed this player, or the entitlement went
+        // away - nothing more is coming, so drop the handle rather than leave a
+        // dead one blocking a later join.
+        onPermanentClose: () => {
+            ws = null;
+        },
     });
     el("trivia-chat-panel").hidden = false;
     setRailAvailable(true);
@@ -494,8 +494,9 @@ function initChat(): void {
         event.preventDefault();
         const input = el<HTMLInputElement>("trivia-chat-input");
         const body = input.value.trim();
-        if (!body || !ws) return;
-        ws.send(JSON.stringify({ body }));
+        // send() is false while the socket is reconnecting - leave what they
+        // typed in the box rather than clearing it for a message that never left.
+        if (!body || !ws?.send({ body })) return;
         input.value = "";
     });
 }
