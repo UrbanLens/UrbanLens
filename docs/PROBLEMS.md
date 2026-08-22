@@ -944,8 +944,14 @@ raw `Response` semantics (201-vs-200, `redirected`).
 - ~~`shared/scroll-to-hash.ts:50` - re-scrolls on *every* `htmx:afterSettle` for the page's life, so
   any later swap yanks the reader back to the original anchor.~~ Fixed 2026-08-22: remembers the
   hash it already scrolled to and only re-arms if the hash itself changes.
-- `shared/onboarding-tour.ts:87` - auto-dismiss hooks bind only to elements present at init; HTMX
-  swaps orphan them, so dismissed cards reappear.
+- ~~`shared/onboarding-tour.ts:87` - auto-dismiss hooks bind only to elements present at init; HTMX
+  swaps orphan them, so dismissed cards reappear.~~ Fixed 2026-08-22: re-runs registration on every
+  `htmx:afterSettle` (a `WeakSet` keeps that idempotent rather than stacking a second listener onto
+  an element that survived the swap unchanged). Found and fixed the same fix's own prerequisite bug
+  while here: the doc comment says `retryEvent` fires *in addition to* `htmx:afterSettle`, but the
+  code was an `if/else` between them - Organize's own `retryEvent` (a tab-switch, not an HTMX event)
+  meant that page never listened to `htmx:afterSettle` at all, so re-registration would have gone
+  in but never actually run for any HTMX-driven update there.
 - ~~`shared/organize-header.ts:113` - a transient window resize below 768px *permanently* overwrites
   the stored gallery view preference.~~ Fixed 2026-08-22: the mobile fallback is now purely a
   display-time computation (`effectiveView()`) layered over the stored preference rather than a
