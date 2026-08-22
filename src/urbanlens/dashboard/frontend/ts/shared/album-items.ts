@@ -115,7 +115,13 @@ window.addEventListener("popstate", restoreFromHistory);
 
 // -- Reordering ----------------------------------------------------------------
 
-async function saveAlbumOrder(grid: HTMLElement): Promise<void> {
+/** Reorder failed - put the grid back the way the server still has it,
+ * rather than leaving a drag shown as if it landed when it didn't. */
+function restoreAlbumOrder(grid: HTMLElement, previousOrder: HTMLElement[]): void {
+    previousOrder.forEach((el) => grid.appendChild(el));
+}
+
+async function saveAlbumOrder(grid: HTMLElement, previousOrder: HTMLElement[]): Promise<void> {
     const panel = albumPanel();
     const url = panel?.dataset.reorderUrl;
     if (!url) return;
@@ -127,6 +133,7 @@ async function saveAlbumOrder(grid: HTMLElement): Promise<void> {
         toast.success("Photo order saved.");
     } catch (err) {
         toast.error(`Could not save order: ${(err as Error).message}`);
+        restoreAlbumOrder(grid, previousOrder);
     }
 }
 
@@ -138,12 +145,20 @@ export function initAlbumSortable(): void {
     const grid = document.getElementById("album-items-grid");
     if (!grid || grid.dataset.albumSortable !== "1") return;
 
+    // Captured on drag start, not derived from oldIndex/newIndex on end: two
+    // rapid drags can each fire a save while the earlier one is still in
+    // flight, and restoring a snapshot taken *before this specific drag*
+    // is what makes a failed save undo only its own change.
+    let dragStartOrder: HTMLElement[] = [];
     albumSortable = new Sortable(grid, {
         animation: 150,
         ghostClass: "album-item--ghost",
         fallbackTolerance: 3,
+        onStart: () => {
+            dragStartOrder = Array.from(grid.querySelectorAll<HTMLElement>(".album-item[data-item-id]"));
+        },
         onEnd: () => {
-            saveAlbumOrder(grid);
+            saveAlbumOrder(grid, dragStartOrder);
         },
     });
 }

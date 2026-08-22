@@ -908,10 +908,19 @@ raw `Response` semantics (201-vs-200, `redirected`).
   close with no reconnect and no "connection lost" notice.
 - `entries/trivia.ts:856` and `entries/consensus.ts:1051` - missing the round-id guard spotguessr
   has (`lastRevealedRoundId`), so the last player to answer double-counts HUD points.
-- `shared/organize-priority.ts:69` and `shared/album-items.ts:118` - optimistic reorder with no
-  rollback on failure and no save sequencing, so two rapid drags can persist the stale order while
-  the DOM shows the new one. `shared/album-map.ts:113` is the model to copy - it rethrows after
-  toasting so the marker snaps back.
+- ~~`shared/organize-priority.ts:69` and `shared/album-items.ts:118` - optimistic reorder with no
+  rollback on failure~~, so a failed save left the DOM showing an order the server never actually
+  got. Partially fixed 2026-08-22: both now capture the order at drag-start (also covers the
+  priority list's non-drag reorder paths - the order-editor and the top/bottom jump buttons) and
+  restore it if the save fails. **The "no save sequencing" half is still open, and is not just a
+  missing debounce**: since each save POSTs the *whole* order rather than a delta, chaining saves
+  so they reach the server one-at-a-time interacts badly with the rollback above - if an earlier
+  queued save fails and reverts to *its* pre-drag order, a later save that already succeeded would,
+  on its own turn in the chain, read that just-reverted DOM and re-persist the stale order as if it
+  were correct. Fixing this properly needs either a monotonic version per save (reject/ignore a
+  write older than what the server has) or reworking rollback to fall through to the *next* known
+  order rather than always "what preceded this specific drag" - either way, real design work, not
+  a quick addition.
 - ~~`shared/confirm-dialog.ts:90` - re-entrancy: opening a second dialog while one is open
   overwrites `resolveCurrent` (first promise pends forever) and `showModal()` on an open dialog
   throws into the promise executor.~~ Fixed 2026-08-22: a call while the dialog is already open
