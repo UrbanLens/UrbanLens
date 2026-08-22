@@ -511,7 +511,12 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
         floor.height_meters = _float_in(payload.get("height_meters"), "height_meters")
         return floor
 
-    floors = _sync({str(f.uuid): f for f in floorplan.floors.all()}, document.get("floors"), build_floor, pools, profile)
+    # Prefetched exactly like document_for() reads it: without this, every
+    # existing wall/opening/lock/room/marker triggers its own query the
+    # moment its parent's .all() is called below, and this whole function
+    # runs on every autosave tick.
+    existing_floors = floorplan.floors.prefetch_related("walls__openings__locks", "rooms", "markers")
+    floors = _sync({str(f.uuid): f for f in existing_floors}, document.get("floors"), build_floor, pools, profile)
 
     for floor_payload, floor in floors:
 

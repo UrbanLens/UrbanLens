@@ -193,37 +193,42 @@ never see the rule engine, only vote buttons on a place that already qualifies.
 
 ## Building Floorplans
 
-Interior structure for one building, drawn by hand or traced from a schematic. Absent by default -
-most buildings will never have one, so nothing loads a floorplan alongside a building; they answer
-only through their own endpoints (`controllers/floorplans.py`).
+Interior structure for one building: walls are the only drawn geometry, and everything else derives
+from or hangs off them. Absent by default - most buildings will never have one, so nothing loads a
+floorplan alongside a building; they answer only through their own endpoints
+(`controllers/floorplans.py`).
 
-- **Data model** (`models/floorplans/`) mirrors REData's floorplan schema shape for shape, so one
-  document format serves both origins and a future push upstream is a field-copy: floors, rooms, one
-  generic element table (wall / floor surface / ceiling / roof / column / window / door / stair /
-  fixture / **key**), zero-to-many locks per element with `key_attributes` describing what opens
-  them, and per-plan **source** and **reference pools** every item points into by uuid (ten walls
-  traced from one drawing share one source row; one photo can evidence a wall, its door and the
-  door's lock at once). Openings mount on a surface via a `mounted_on` self-FK - a skylight is a
-  window on a roof, a hatch is a door in a floor. Every item may carry the owner's labels.
+- **Wall-first data model** (`models/floorplans/`) - a room is not a polygon but a named seed point
+  that binds, at render time, to whichever enclosed region of the wall graph contains it (the
+  face-derivation in `frontend/ts/shared/floorplan/planar.ts`), so a partition shared by two rooms
+  exists once and moving a wall can never destroy a room's name, photos or labels. `FloorplanWall`
+  segments (exterior / interior / virtual - a dashed hint for a boundary that isn't physically there
+  / collapsed) carry `FloorplanOpening`s as intervals along themselves (`t_start`/`t_end`, not their
+  own coordinates) so a door or window cannot outlive its wall or drift off it; `FloorplanLock` rows
+  hang off an opening. `FloorplanMarker` covers point features (hazard / stair / elevator), with
+  `connector_id` tying a stair or shaft to its counterpart on other storeys and an optional
+  `linked_pin` making a marker a real detail pin elsewhere on the site. Every item draws from
+  per-plan **source** and **reference pools** by uuid, and may carry the owner's labels.
 - **Versioned whole-document, by date** — a layout change (a renovation, a fire) is a *new*
   `Floorplan` row with a later `valid_from`; the undated baseline is in force from the beginning of
   time. `?date=YYYY-MM-DD` answers "as of then", no date answers current
   (`models/floorplans/queryset.py`)
-- **Geometry is WGS-84** so every wall, room and door lands directly on the same map as parcels and
-  building footprints, and any consumer can render or spatially query it
-- **Visual editor** (`/map/pin/<slug>/floorplan/`, `frontend/ts/entries/floorplan-editor.ts`) —
-  draw over satellite imagery with the pin's georeferenced blueprint overlays showing underneath;
-  per-floor tabs, tools for outline/rooms/walls/doors/windows/stairs/fixtures, **vertex-level
-  editing** (drag a corner, drag a midpoint to insert one, alt-click to remove), per-item name /
-  material / condition / built date / description / labels / sources / references, and a lock list
-  with key attributes on doors. Versions are switchable in-page, and "Save as new version" forks
-  rather than overwrites
-- **Blueprint tracing** — upload a schematic as a map image overlay, drag its corners until it lines
-  up (the same georeferencing the historical-map sheets use), then **Auto-trace** asks the
-  configured vision model for rooms, walls, doors and windows in image space and maps them through
-  the overlay's corner georeference into world coordinates
-  (`services/floorplans/extraction.py`). Results arrive as editable suggestions, never
-  silently-committed rows; with no AI configured the editor works identically by hand
+- **Geometry is plan-local metres, not WGS-84** - one origin per plan, shared across its floors so
+  storeys stack and align, with lengths/angles/right-angle snapping computed as ordinary metres
+  instead of needing a latitude correction at every step. Conversion to WGS-84 happens only at the
+  edges - map rendering and the GeoJSON endpoint below (`services/floorplans/features.py`, mirrored
+  by `frontend/ts/shared/floorplan/coords.ts`)
+- **Visual editor** (`/map/pin/<slug>/floorplan/`, `frontend/ts/entries/floorplan-editor.ts`) — draw
+  walls over satellite imagery or a georeferenced blueprint overlay, with leaflet-rotate squaring
+  the view (and the snap grid) to a building that isn't north-facing. Three tools - select, wall,
+  marker - plus a one-click room tool that generates and subdivides rectangles sized from the plan's
+  own rooms. Rooms are *derived*, not vertex-edited: dragging a wall's corner, a corner it shares
+  with other walls, or its whole body (propagate / rigid-move / detach modifiers) is how geometry
+  changes, and enclosed regions recompute from that. Openings drag along their wall's length; a
+  marker links stairs/elevators across floors by connector. No manual Save button - autosave
+  debounces every edit, backed by an undo stack. A new floor seeds its exterior walls from the
+  building's real footprint when one is known. Versions are switchable in-page, and "Save as new
+  version" forks rather than overwrites
 - **Personal by default, shared on purpose** — a plan records where the doors are, what locks them
   and what opens those locks, so local plans are scoped to their author. "Publish to wiki" copies a
   version onto the place's community wiki (the author keeps their own), after which anyone who can
@@ -248,9 +253,6 @@ only through their own endpoints (`controllers/floorplans.py`).
   REData's `/parcels/{uuid}/liens/` and `/parcels/{uuid}/tax-payments/`. For this application
   they are the most telling records on the card: an open code-enforcement lien and years of
   unpaid tax are what "abandoned" looks like in public records
-- **Relationships geometry can't express** — a door's `connects_rooms` (what a router walks to
-  answer "can I get from here to there?"), a stair's or shaft's `spans_floors`, a room's `parent`
-  for nesting (a closet inside a ward), plus `thickness_meters` and `rotation_degrees`
 
 ## External Data Enrichment (Pin Detail Page)
 

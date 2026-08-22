@@ -316,6 +316,13 @@ function boot(): void {
     let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
     let saving = false;
 
+    /** Resolves once no save is in flight - callers that don't go through
+     * queueAutosave() (Save as new version, Publish) still need this so their
+     * request can never overlap one that is already running. */
+    async function waitForSaveSlot(): Promise<void> {
+        while (saving) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
     /** Debounced auto-save: there is no Save button any more (see editor.html) -
      * every edit is expected to reach the server on its own, a little after
      * the user stops making them. */
@@ -2304,6 +2311,71 @@ function boot(): void {
         else updateSaveStatus();
     }
 
+    /** A frozen-order, same-object record of what a save's payload actually
+     * held, taken at the moment it was sent - see snapshotForSend(). */
+    interface SentSnapshot {
+        floor: Floor;
+        walls: Wall[];
+        wallOpenings: Opening[][];
+        rooms: RoomSeed[];
+        markers: Marker[];
+    }
+
+    /**
+     * Record each floor's item arrays *in the order sent*, without copying
+     * the items themselves - editing (including deleting something) can
+     * continue on `state.doc` while this save's request is in flight, and
+     * applyServerIds() must still land each returned uuid on the exact
+     * object that was actually sent, not on whatever a live array index
+     * happens to point at once the response arrives.
+     */
+    function snapshotForSend(doc: FloorplanDocument): SentSnapshot[] {
+        return doc.floors.map((floor) => ({
+            floor,
+            walls: [...floor.walls],
+            wallOpenings: floor.walls.map((wall) => [...wall.openings]),
+            rooms: [...floor.rooms],
+            markers: [...floor.markers],
+        }));
+    }
+
+    /**
+     * Copy the server's real per-item uuids back onto the objects a save
+     * actually sent, matched positionally against `sent` rather than by uuid
+     * (the client's own new items don't have a real one yet) and rather than
+     * by live array position (see snapshotForSend()). This is safe because
+     * `_sync` on the server assigns `sort_order` from the payload's array
+     * index and every item's `Meta.ordering` starts with `sort_order`, so
+     * `saved.floors[i]` is exactly the row that came from `sent[i]` in the
+     * same request - whatever was created keeps its position, and only
+     * orphaned items (already absent from the payload) are missing from
+     * `saved`.
+     */
+    function applyServerIds(sent: SentSnapshot[], saved: FloorplanDocument): void {
+        (saved.floors || []).forEach((savedFloor, floorIndex) => {
+            const entry = sent[floorIndex];
+            if (!entry) return;
+            entry.floor.uuid = savedFloor.uuid;
+            (savedFloor.walls || []).forEach((savedWall, wallIndex) => {
+                const wall = entry.walls[wallIndex];
+                if (!wall) return;
+                wall.uuid = savedWall.uuid;
+                (savedWall.openings || []).forEach((savedOpening, openingIndex) => {
+                    const opening = entry.wallOpenings[wallIndex]?.[openingIndex];
+                    if (opening) opening.uuid = savedOpening.uuid;
+                });
+            });
+            (savedFloor.rooms || []).forEach((savedRoom, roomIndex) => {
+                const room = entry.rooms[roomIndex];
+                if (room) room.uuid = savedRoom.uuid;
+            });
+            (savedFloor.markers || []).forEach((savedMarker, markerIndex) => {
+                const marker = entry.markers[markerIndex];
+                if (marker) marker.uuid = savedMarker.uuid;
+            });
+        });
+    }
+
     /**
      * Persist the current document.
      *
@@ -2313,6 +2385,11 @@ function boot(): void {
      * which is not something autosave should ever do on its own.
      */
     async function save(asNewVersion = false): Promise<void> {
+        // Two overlapping saves would each overwrite state.doc.uuid from
+        // their own response when they resolve, regardless of which request
+        // was sent first - whichever *resolves* last wins, which can silently
+        // revert a just-forked "new version" back to the one it forked from.
+        await waitForSaveSlot();
         const nameInput = document.getElementById("floorplan-name") as HTMLInputElement | null;
         const validFrom = document.getElementById("floorplan-valid-from") as HTMLInputElement | null;
         // A plan name is rarely worth asking for up front - the floor it is
@@ -2338,6 +2415,9 @@ function boot(): void {
         if (asNewVersion) delete payload.uuid;
         delete payload.origin;
         delete payload.versions;
+        // Taken now, before anything below can await - state.doc may keep
+        // changing while this request is in flight (see snapshotForSend()).
+        const sent = snapshotForSend(state.doc);
 
         saving = true;
         updateSaveStatus();
@@ -2365,9 +2445,18 @@ function boot(): void {
             }
             // The save view answers {ok, floorplan: <document>} - the uuid is
             // nested, and picking it up is what makes the next save update
-            // this version instead of forking another one.
+            // this version instead of forking another one. Every nested
+            // item's own real uuid is in there too and has to come back the
+            // same way: the server matches an item to an existing row purely
+            // by uuid, so anything still carrying its client-only local id
+            // (every item created this session) would otherwise be unmatched
+            // on the *next* save, silently deleted as an "orphan" and
+            // recreated under a new identity - see applyServerIds().
             const body = (await response.json()) as { ok?: boolean; floorplan?: FloorplanDocument };
-            if (body.floorplan?.uuid) state.doc.uuid = body.floorplan.uuid;
+            if (body.floorplan) {
+                state.doc.uuid = body.floorplan.uuid;
+                applyServerIds(sent, body.floorplan);
+            }
             state.dirty = false;
             updateMoreMenu();
             // Autosave stays quiet - a toast for every keystroke-driven save
@@ -2427,17 +2516,30 @@ function boot(): void {
                 return;
             }
             if (state.dirty && !window.confirm("Publish the last saved version? Unsaved changes are not included.")) return;
-            const response = await fetch(publishUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                body: JSON.stringify({ uuid: state.doc.uuid }),
-            });
-            const body = await response.json().catch(() => ({}) as { ok?: boolean; error?: string });
-            if (!response.ok || !body.ok) {
-                toast.warning(body.error || "Could not publish this floorplan.");
-                return;
+            // Shares the same in-flight flag as save() - both so this can't
+            // overlap an autosave (the same race a concurrent save() call
+            // could hit), and so it gets the same "Saving..." feedback for
+            // free instead of leaving the button looking inert during its
+            // own round trip.
+            await waitForSaveSlot();
+            saving = true;
+            updateSaveStatus();
+            try {
+                const response = await fetch(publishUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                    body: JSON.stringify({ uuid: state.doc.uuid }),
+                });
+                const body = await response.json().catch(() => ({}) as { ok?: boolean; error?: string });
+                if (!response.ok || !body.ok) {
+                    toast.warning(body.error || "Could not publish this floorplan.");
+                    return;
+                }
+                toast.success("Published to the community wiki.");
+            } finally {
+                saving = false;
+                updateSaveStatus();
             }
-            toast.success("Published to the community wiki.");
         })();
     });
 

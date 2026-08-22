@@ -22,14 +22,22 @@ class FloorplanQuerySet(FrontendDashboardQuerySet["Floorplan"]):
         """Every version of this building's plan, oldest first.
 
         Args:
-            place: The building.
+            place: The building. Never ``None`` - a placeless plan is scoped
+                to its pin instead (see ``floorplan_for_editing``), because
+                ``filter(place=None)`` matches every placeless plan on the
+                site rather than none of them.
 
         Returns:
             Versions ordered by ``valid_from`` with the undated original
             first.
+
+        Raises:
+            ValueError: ``place`` is ``None``.
         """
         from django.db.models import F
 
+        if place is None:
+            raise ValueError("for_place() requires a place; a placeless plan has no such list - scope by pin instead.")
         return self.filter(place=place).order_by(F("valid_from").asc(nulls_first=True))
 
     def at(self, place: Place, on_date: datetime.date | None = None, *, profile=None, community: bool = False) -> Floorplan | None:
@@ -40,7 +48,7 @@ class FloorplanQuerySet(FrontendDashboardQuerySet["Floorplan"]):
         the answer is simply the latest version not after the date.
 
         Args:
-            place: The building.
+            place: The building. Never ``None`` - see :meth:`for_place`.
             on_date: The date to resolve at; None means "now".
             profile: Restrict to this profile's own *personal* plans. Callers
                 serving a user should always pass one - a plan records door,
@@ -54,9 +62,14 @@ class FloorplanQuerySet(FrontendDashboardQuerySet["Floorplan"]):
         Returns:
             The floorplan in force, or None when there is none at all (the
             common case, and deliberately cheap: one indexed query).
+
+        Raises:
+            ValueError: ``place`` is ``None``.
         """
         from django.db.models import F
 
+        if place is None:
+            raise ValueError("at() requires a place; a placeless plan has no such lookup - scope by pin instead.")
         versions = self.filter(place=place)
         if community:
             versions = versions.filter(wiki__isnull=False)

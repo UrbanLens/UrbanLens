@@ -3797,3 +3797,27 @@ Left the `color-scheme: dark` additions in place (correct regardless, and may we
 Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GTK-backed popup) -
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
+
+## No working headless-browser path exists on this host for live UI verification (2026-08-22)
+
+Tried to drive the floorplan editor in a real browser (per the standing rule that a UX/behavior
+claim needs to be run, not just read) against a fresh `bin/dev_env.py` environment. Every cached
+Playwright Chromium build on this host - `chromium-1148`, `chromium-1228`, and both matching
+`chromium_headless_shell` revisions - fails to launch with the same error:
+`error while loading shared libraries: libatk-1.0.so.0: cannot open shared object file`. This is a
+missing system GTK dependency, not a Playwright/browser-revision mismatch (confirmed across three
+different cached revisions and both the full-chromium and headless-shell binaries). No passwordless
+sudo exists on this host to `apt-get install` the missing libraries (see `CLAUDE.local.md`), so this
+could not be worked around in-session.
+
+Practical effect: nothing in this environment can currently drive a real browser end-to-end
+(screenshot, click, read computed styles). Static code reading plus backend-level reproduction
+(a real Django test client hitting the actual view/serialization code) is the fallback, and is what
+this session used instead - see `test_floorplans.py`'s `FloorplanSessionItemIdentityTests` for an
+example of proving a frontend/backend interaction bug this way without a browser. That fallback
+cannot catch anything that only manifests in rendered layout, computed CSS, or real pointer/drag
+event sequences (exactly the class of bug the SCSS/dark-mode entries above needed a browser for).
+
+Whoever next needs actual browser automation here should either get the missing GTK libraries
+installed (a one-time host fix, needs sudo) or use `/run-skill-generator` to capture whatever
+does end up working as a committed project skill, so the next session doesn't rediscover this.

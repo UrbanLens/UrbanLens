@@ -1278,6 +1278,102 @@ class FloorplanMarkerLinkedPinTests(TestCase):
         self.assertEqual(out["color"], "#ff0000")
 
 
+class FloorplanSessionItemIdentityTests(TestCase):
+    """A session-created item's row must survive a second save.
+
+    ``_sync()`` matches a payload item to an existing row purely by uuid and
+    deletes anything left unmatched as an orphan - so the *client* is the one
+    responsible for round-tripping the real uuid a save just assigned. This
+    reproduces exactly what the editor's fixed ``save()`` sends on its second
+    autosave: the same document, with every item's uuid replaced by whatever
+    the first save's response returned for the item at that position (see
+    ``applyServerIds()`` in ``frontend/ts/entries/floorplan-editor.ts``).
+    Before that merge existed, a second save reused nothing - it deleted and
+    recreated every floor/wall/room/marker under a new pk (and, for a marker,
+    a new linked ``Pin``) on every autosave after the first.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.place = _building()
+        location = baker.make(Location, latitude=41.733, longitude=-73.93, place=self.place)
+        self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None, slug="the-parent-pin")
+        self.floorplan = Floorplan.objects.create(place=self.place, pin=self.pin, profile=self.profile)
+
+    @staticmethod
+    def _merge_server_uuids(original: dict, saved: dict) -> dict:
+        """What the fixed editor's second save sends - see applyServerIds()."""
+        merged = jsonlib.loads(jsonlib.dumps(original))
+        for floor, saved_floor in zip(merged.get("floors", []), saved.get("floors", []), strict=False):
+            floor["uuid"] = saved_floor["uuid"]
+            for wall, saved_wall in zip(floor.get("walls", []), saved_floor.get("walls", []), strict=False):
+                wall["uuid"] = saved_wall["uuid"]
+                for opening, saved_opening in zip(wall.get("openings", []), saved_wall.get("openings", []), strict=False):
+                    opening["uuid"] = saved_opening["uuid"]
+            for room, saved_room in zip(floor.get("rooms", []), saved_floor.get("rooms", []), strict=False):
+                room["uuid"] = saved_room["uuid"]
+            for marker, saved_marker in zip(floor.get("markers", []), saved_floor.get("markers", []), strict=False):
+                marker["uuid"] = saved_marker["uuid"]
+        return merged
+
+    def test_walls_a_room_and_a_marker_keep_their_row_across_a_second_save(self) -> None:
+        document = {
+            "plan_origin": _ORIGIN,
+            "floors": [
+                {
+                    "level": 0,
+                    "walls": _square_walls(),
+                    "rooms": [{"name": "Great room", "x": 5.0, "y": 5.0}],
+                    "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}],
+                },
+            ],
+        }
+        save_document(self.floorplan, document, profile=self.profile)
+        first_save = document_for(self.floorplan)
+
+        floor_pk = FloorplanFloor.objects.get().pk
+        wall_pks = set(FloorplanWall.objects.values_list("pk", flat=True))
+        room_pk = FloorplanRoomSeed.objects.get().pk
+        marker = FloorplanMarker.objects.get()
+        marker_pk = marker.pk
+        linked_pin_pk = marker.linked_pin_id
+
+        second_payload = self._merge_server_uuids(document, first_save)
+        save_document(self.floorplan, second_payload, profile=self.profile)
+
+        self.assertEqual(FloorplanFloor.objects.get().pk, floor_pk, "the floor was destroyed and recreated")
+        self.assertEqual(set(FloorplanWall.objects.values_list("pk", flat=True)), wall_pks, "walls were destroyed and recreated")
+        self.assertEqual(FloorplanRoomSeed.objects.get().pk, room_pk, "the room seed was destroyed and recreated")
+        second_marker = FloorplanMarker.objects.get()
+        self.assertEqual(second_marker.pk, marker_pk, "the marker was destroyed and recreated")
+        self.assertEqual(second_marker.linked_pin_id, linked_pin_pk, "the marker's linked pin churned to a new row")
+
+    def test_without_the_uuid_merge_a_second_save_does_churn(self) -> None:
+        """Documents the failure mode the fix above closes: the same second
+        save, but built the way the *old*, unfixed save() built it - carrying
+        forward only the top-level document uuid, leaving every nested item's
+        client-only local id untouched."""
+        document = {
+            "plan_origin": _ORIGIN,
+            "floors": [{"level": 0, "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7331, "lng": -73.9299}]}],
+        }
+        save_document(self.floorplan, document, profile=self.profile)
+        marker_pk = FloorplanMarker.objects.get().pk
+        linked_pin_pk = FloorplanMarker.objects.get().linked_pin_id
+
+        # Same document sent again, uuids untouched - what the old save() did.
+        save_document(self.floorplan, document, profile=self.profile)
+
+        second_marker = FloorplanMarker.objects.get()
+        self.assertNotEqual(second_marker.pk, marker_pk)
+        self.assertNotEqual(second_marker.linked_pin_id, linked_pin_pk)
+
+
 class FloorplanDocumentContractTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
