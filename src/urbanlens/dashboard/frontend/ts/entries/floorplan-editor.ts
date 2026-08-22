@@ -25,10 +25,13 @@ import {
     type VersionSummary,
     type Wall,
     emptyDocument,
+    type ItemDetails,
     OPENING_KINDS,
     WALL_KINDS,
+    attribute,
     copyFloorContents,
     nextLocalId,
+    setAttribute,
     wallId,
     wallLength,
     wallSegments,
@@ -2586,14 +2589,14 @@ function boot(): void {
         return label;
     }
 
-    function select(options: string[], value: string, onChange: (v: string) => void): HTMLSelectElement {
+    function select(options: ReadonlyArray<{ value: string; label: string }>, value: string, onChange: (v: string) => void): HTMLSelectElement {
         const node = document.createElement("select");
         node.className = "form-input";
         for (const option of options) {
             const item = document.createElement("option");
-            item.value = option;
-            item.textContent = option;
-            if (option === value) item.selected = true;
+            item.value = option.value;
+            item.textContent = option.label;
+            if (option.value === value) item.selected = true;
             node.appendChild(item);
         }
         node.addEventListener("change", () => {
@@ -2601,6 +2604,70 @@ function boot(): void {
             onChange(node.value);
         });
         return node;
+    }
+
+    /**
+     * The fields every item has, whatever kind of thing it is.
+     *
+     * Walls, openings, rooms and markers all inherit the same surface on the
+     * server - description, condition, an open attribute bag - and none of it
+     * was reachable. It is one shared block rather than four per-type forms so
+     * that a field added here appears everywhere at once, which is the whole
+     * reason the model puts them on a common base.
+     *
+     * Folded away by default. Most of the time someone is drawing walls, not
+     * annotating them, and a form that is always open makes the common case
+     * read as the unusual one.
+     *
+     * Args:
+     *     host: Where to append.
+     *     item: The selected item, mutated in place as fields change.
+     *     key: Stable identity for the item, so a run of keystrokes in one
+     *         field collapses into a single undo step.
+     */
+    function renderItemDetails(host: HTMLElement, item: ItemDetails, key: string): void {
+        const filled = Boolean(item.description || item.condition || attribute(item, "material"));
+        const box = document.createElement("details");
+        box.className = "floorplan-details";
+        // Already-annotated items open on selection: the disclosure is there to
+        // keep empty fields out of the way, not to hide what someone wrote.
+        box.open = filled;
+        const summary = document.createElement("summary");
+        summary.textContent = "Details";
+        box.appendChild(summary);
+
+        const text = (label: string, value: string, placeholder: string, onInput: (next: string) => void): void => {
+            const input = document.createElement("input");
+            input.className = "form-input";
+            input.type = "text";
+            input.value = value;
+            input.placeholder = placeholder;
+            input.addEventListener("input", () => {
+                checkpoint(`${key}:${label}`);
+                onInput(input.value);
+                markDirtyQuiet();
+            });
+            box.appendChild(field(label, input));
+        };
+
+        text("Material", attribute(item, "material"), "Brick, timber, breeze block", (next) => setAttribute(item, "material", next));
+        text("Condition", item.condition || "", "Sound, rotten, part-collapsed", (next) => {
+            item.condition = next;
+        });
+
+        const notes = document.createElement("textarea");
+        notes.className = "form-input";
+        notes.rows = 3;
+        notes.value = item.description || "";
+        notes.placeholder = "Anything worth remembering about this";
+        notes.addEventListener("input", () => {
+            checkpoint(`${key}:description`);
+            item.description = notes.value;
+            markDirtyQuiet();
+        });
+        box.appendChild(field("Notes", notes));
+
+        host.appendChild(box);
     }
 
     function renderSidebar(): void {
@@ -2624,7 +2691,7 @@ function boot(): void {
                 placeholder.value = "";
                 placeholder.textContent = "Set type for all…";
                 typeSelect.appendChild(placeholder);
-                for (const kind of WALL_KINDS) {
+                for (const kind of WALL_KINDS.map((entry) => entry.value)) {
                     const item = document.createElement("option");
                     item.value = kind;
                     item.textContent = kind;
@@ -2655,7 +2722,7 @@ function boot(): void {
             host.appendChild(
                 field(
                     "Type",
-                    select([...WALL_KINDS], wall.kind, (v) => {
+                    select(WALL_KINDS, wall.kind, (v) => {
                         wall.kind = v as Wall["kind"];
                         markDirty();
                     }),
@@ -2664,10 +2731,18 @@ function boot(): void {
             host.appendChild(
                 field(
                     "Thickness",
-                    select(["thin", "normal", "thick"], wall.thickness, (v) => {
-                        wall.thickness = v as Wall["thickness"];
-                        markDirty();
-                    }),
+                    select(
+                        [
+                            { value: "thin", label: "Thin" },
+                            { value: "normal", label: "Normal" },
+                            { value: "thick", label: "Thick" },
+                        ],
+                        wall.thickness,
+                        (v) => {
+                            wall.thickness = v as Wall["thickness"];
+                            markDirty();
+                        },
+                    ),
                 ),
             );
 
@@ -2681,7 +2756,7 @@ function boot(): void {
                 const row = document.createElement("div");
                 row.className = "floorplan-opening-row";
                 row.append(
-                    select([...OPENING_KINDS], opening.kind, (v) => {
+                    select(OPENING_KINDS, opening.kind, (v) => {
                         opening.kind = v as typeof opening.kind;
                         markDirty();
                     }),
@@ -2729,7 +2804,6 @@ function boot(): void {
             });
             name.addEventListener("change", () => render());
             host.appendChild(field("Name", name));
-            renderRoomDeleteControl(host, room);
         }
 
         if (selection.kind === "marker") {
@@ -2749,10 +2823,14 @@ function boot(): void {
             host.appendChild(
                 field(
                     "Type",
-                    select(Object.keys(MARKER_ICON), marker.kind, (v) => {
-                        marker.kind = v as MarkerKind;
-                        markDirty();
-                    }),
+                    select(
+                        Object.keys(MARKER_ICON).map((kind) => ({ value: kind, label: titleCase(kind) })),
+                        marker.kind,
+                        (v) => {
+                            marker.kind = v as MarkerKind;
+                            markDirty();
+                        },
+                    ),
                 ),
             );
             if (CONNECTOR_KINDS.has(marker.kind)) renderConnectorControls(host, marker);
@@ -2766,7 +2844,7 @@ function boot(): void {
             host.appendChild(
                 field(
                     "Type",
-                    select([...OPENING_KINDS], opening.kind, (v) => {
+                    select(OPENING_KINDS, opening.kind, (v) => {
                         opening.kind = v as Opening["kind"];
                         markDirty();
                     }),
@@ -2778,7 +2856,24 @@ function boot(): void {
         // deleting it removes the name and leaves every wall standing, which
         // reads as a delete that did not work. Removing a room for real is
         // renderRoomDeleteControl's job, and it says what it will take.
-        if (selection.kind !== "room") {
+        // Appended once for whatever is selected, rather than inside each of
+        // the per-kind branches above: these fields come from a base class that
+        // every item shares, so a form that had to remember to include them
+        // would eventually forget for one kind.
+        const details: ItemDetails | null =
+            selection.kind === "wall"
+                ? selection.wall
+                : selection.kind === "opening"
+                  ? selection.opening
+                  : selection.kind === "room"
+                    ? selection.room
+                    : selection.kind === "marker"
+                      ? selection.marker
+                      : null;
+        if (details) renderItemDetails(host, details, itemKey(selection));
+
+        if (selection.kind === "room") renderRoomDeleteControl(host, selection.room);
+        else {
             const remove = document.createElement("button");
             remove.type = "button";
             remove.className = "btn btn--sm btn--danger";

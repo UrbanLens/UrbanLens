@@ -396,6 +396,28 @@
 
 // Joints are drawn on every corner so the gesture is discoverable at all, so
 // they have to stay quiet until aimed at.
+.floorplan-details {
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--ul-surface-border);
+    padding-top: 0.5rem;
+
+    > summary {
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 600;
+        opacity: 0.75;
+        list-style-position: inside;
+    }
+
+    &[open] > summary {
+        margin-bottom: 0.5rem;
+    }
+
+    textarea.form-input {
+        resize: vertical;
+    }
+}
+
 .floorplan-joint {
     cursor: move;
     transition: r 80ms ease-out;

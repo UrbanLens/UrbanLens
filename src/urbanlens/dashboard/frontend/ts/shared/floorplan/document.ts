@@ -13,24 +13,64 @@ import type { Segment } from "./planar";
 export type WallKind = "exterior" | "interior" | "fence" | "virtual" | "collapsed";
 
 /**
- * Every wall kind, in the order they are offered.
+ * Every wall kind, in the order they are offered, with what to call it.
  *
  * One list, because the editor had four hardcoded copies of these enums and a
- * kind added to the model reached none of them.
+ * kind added to the model reached none of them. The labels mirror the model's
+ * own choice labels: a dropdown reading "virtual" and "collapsed" is showing
+ * the database its own column values, and "Virtual (open edge)" is the phrase
+ * that says what picking it does.
  */
-export const WALL_KINDS: readonly WallKind[] = ["exterior", "interior", "fence", "virtual", "collapsed"];
+export const WALL_KINDS: ReadonlyArray<{ value: WallKind; label: string }> = [
+    { value: "exterior", label: "Exterior wall" },
+    { value: "interior", label: "Interior wall" },
+    { value: "fence", label: "Fence" },
+    { value: "virtual", label: "Virtual (open edge)" },
+    { value: "collapsed", label: "Collapsed / ruined" },
+];
 export type WallThickness = "thin" | "normal" | "thick";
 export type OpeningKind = "door" | "doorway" | "gate" | "window" | "hatch";
 
-/** Every opening kind, in the order they are offered. */
-export const OPENING_KINDS: readonly OpeningKind[] = ["door", "doorway", "gate", "window", "hatch"];
+/** Every opening kind, in the order they are offered, with what to call it. */
+export const OPENING_KINDS: ReadonlyArray<{ value: OpeningKind; label: string }> = [
+    { value: "door", label: "Door" },
+    { value: "doorway", label: "Doorway (no door)" },
+    { value: "gate", label: "Gate" },
+    { value: "window", label: "Window" },
+    { value: "hatch", label: "Hatch" },
+];
 export type OpeningSwing = "none" | "left" | "right" | "double";
 // Trimmed to the kinds that earn their own icon: an entrance is already a
 // door opening on a wall, and "photo"/"note"/"fixture" markers carried no
 // information a label field didn't already say.
 export type MarkerKind = "hazard" | "stair" | "elevator";
 
-export interface Opening {
+/**
+ * The fields every floorplan item carries, whatever kind of thing it is.
+ *
+ * Mirrors ``FloorplanItem`` on the server, which walls, openings, rooms,
+ * markers and floors all inherit. Optional here because a freshly drawn item
+ * has none of them - but note they round-trip whether or not this file
+ * declares them, since the document is parsed JSON and the server rewrites
+ * every one of these from the payload on save. Declaring them is what lets the
+ * editor *show* them.
+ */
+export interface ItemDetails {
+    /** Free text about the thing itself. */
+    description?: string;
+    /** What state it is in - "sound", "rotten", "collapsed in 2019". */
+    condition?: string;
+    /** ISO date, when known. */
+    built_date?: string | null;
+    /**
+     * Producer-specific extras. Material lives here rather than in a column of
+     * its own: it is one of an open-ended set of properties a surveyor might
+     * record, and every one of those would otherwise be a migration.
+     */
+    attributes?: Record<string, unknown>;
+}
+
+export interface Opening extends ItemDetails {
     uuid?: string;
     kind: OpeningKind;
     t_start: number;
@@ -39,7 +79,7 @@ export interface Opening {
     sill_meters?: number | null;
 }
 
-export interface Wall {
+export interface Wall extends ItemDetails {
     uuid?: string;
     kind: WallKind;
     thickness: WallThickness;
@@ -51,7 +91,7 @@ export interface Wall {
     openings: Opening[];
 }
 
-export interface RoomSeed {
+export interface RoomSeed extends ItemDetails {
     uuid?: string;
     name: string;
     x: number;
@@ -59,7 +99,7 @@ export interface RoomSeed {
     height_meters?: number | null;
 }
 
-export interface Marker {
+export interface Marker extends ItemDetails {
     uuid?: string;
     kind: MarkerKind;
     name?: string;
@@ -83,7 +123,7 @@ export interface Marker {
     color?: string | null;
 }
 
-export interface Floor {
+export interface Floor extends ItemDetails {
     uuid?: string;
     /** Position in the stack; 0 is the ground datum, negatives below it. */
     level: number;
@@ -230,4 +270,38 @@ export function copyFloorContents(source: Floor, options: CopyFloorOptions = {})
         : [];
 
     return { walls, rooms: copiedRooms, markers: copiedMarkers };
+}
+
+/**
+ * Read a single attribute off an item.
+ *
+ * Args:
+ *     item: Any floorplan item.
+ *     key: The attribute name.
+ *
+ * Returns:
+ *     The value as text, or "" when unset or not a string.
+ */
+export function attribute(item: ItemDetails, key: string): string {
+    const value = item.attributes?.[key];
+    return typeof value === "string" ? value : "";
+}
+
+/**
+ * Write a single attribute, dropping it when cleared.
+ *
+ * Storing "" would make an item that has been emptied indistinguishable from
+ * one that was filled in with nothing, and leaves the key in every payload
+ * forever.
+ *
+ * Args:
+ *     item: Any floorplan item; mutated in place.
+ *     key: The attribute name.
+ *     value: The new value; blank removes the key.
+ */
+export function setAttribute(item: ItemDetails, key: string, value: string): void {
+    const next = { ...(item.attributes || {}) };
+    if (value.trim()) next[key] = value;
+    else delete next[key];
+    item.attributes = next;
 }
