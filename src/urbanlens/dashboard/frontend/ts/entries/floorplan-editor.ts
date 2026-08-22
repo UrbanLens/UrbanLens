@@ -2271,20 +2271,54 @@ function boot(): void {
 
     // ------------------------------------------------------------ persistence
 
-    async function load(): Promise<void> {
-        try {
-            const response = await fetch(jsonUrl, { headers: { Accept: "application/json" } });
-            if (response.status === 204) {
-                state.doc = emptyDocument({ lat, lng });
-            } else if (response.ok) {
-                const body = (await response.json()) as FloorplanDocument;
-                state.doc = { ...emptyDocument({ lat, lng }), ...body };
-                if (!state.doc.floors?.length) state.doc.floors = emptyDocument({ lat, lng }).floors;
-                state.versions = body.versions || [];
-            }
-        } catch {
-            toast.warning("Could not load this floorplan.");
+    /** Whether this document is something other than the viewer's own saved
+     * work - a wiki-published plan, or (once REData floorplans exist)
+     * upstream data - so editing it should say so before anyone draws over
+     * it. Saving always forks the viewer's own local copy either way. */
+    function renderOriginBanner(): void {
+        const banner = document.getElementById("floorplan-origin-banner");
+        if (!banner) return;
+        if (state.doc.origin === "community") {
+            banner.textContent = "Published to this place's community wiki by another explorer. Saving creates your own version.";
+            banner.hidden = false;
+        } else if (state.doc.origin === "redata") {
+            banner.textContent = "From REData. Saving creates your own version.";
+            banner.hidden = false;
+        } else {
+            banner.hidden = true;
         }
+    }
+
+    /** Every other version of this plan the viewer has, so "Save as new
+     * version" (and publishing an older baseline) leads somewhere instead of
+     * forking a plan nothing ever lets the user find again. */
+    function renderVersions(): void {
+        const container = document.getElementById("floorplan-versions");
+        if (!container) return;
+        const versions = state.versions || [];
+        container.innerHTML = "";
+        container.hidden = versions.length < 2;
+        if (versions.length < 2) return;
+        const label = document.createElement("span");
+        label.className = "floorplan-field__label";
+        label.textContent = "Versions";
+        container.appendChild(label);
+        for (const version of versions) {
+            const isCurrent = version.uuid === state.doc.uuid;
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "btn btn--ghost";
+            button.textContent = isCurrent ? `${version.name || "Untitled"} (current)` : version.name || "Untitled";
+            button.title = version.valid_from ? `In force from ${version.valid_from}` : "The original baseline";
+            button.disabled = isCurrent;
+            button.addEventListener("click", () => void switchVersion(version.uuid));
+            container.appendChild(button);
+        }
+    }
+
+    /** Adopt a just-fetched document (initial load or a version switch) and
+     * refresh everything that depends on it. */
+    function finishLoadingDocument(): void {
         const anchor = state.doc.plan_origin || { lat, lng };
         state.doc.plan_origin = anchor;
         projection = new PlanProjection(anchor);
@@ -2301,7 +2335,13 @@ function boot(): void {
         const fresh = state.doc.floors.length === 1 && !(state.doc.floors[0] as Floor).walls.length;
         if (fresh && seedFromOutline(state.doc.floors[0] as Floor)) state.dirty = true;
         else state.dirty = false;
+        // A switch away from the version that was selected/mid-drag leaves
+        // stale references into a document that no longer exists.
+        clearSelection();
+        state.floorIndex = 0;
         setTool("select");
+        renderOriginBanner();
+        renderVersions();
         render();
         fitToContent();
         updateMoreMenu();
@@ -2309,6 +2349,51 @@ function boot(): void {
         // with no Save button any more, nothing else would ever persist it.
         if (state.dirty) queueAutosave();
         else updateSaveStatus();
+    }
+
+    async function load(): Promise<void> {
+        try {
+            const response = await fetch(jsonUrl, { headers: { Accept: "application/json" } });
+            if (response.status === 204) {
+                state.doc = emptyDocument({ lat, lng });
+            } else if (response.ok) {
+                const body = (await response.json()) as FloorplanDocument;
+                state.doc = { ...emptyDocument({ lat, lng }), ...body };
+                if (!state.doc.floors?.length) state.doc.floors = emptyDocument({ lat, lng }).floors;
+                state.versions = body.versions || [];
+            }
+        } catch {
+            toast.warning("Could not load this floorplan.");
+        }
+        finishLoadingDocument();
+    }
+
+    /** Switch to another saved version, the way "Save as new version" implies
+     * one can be switched back to - see renderVersions(). */
+    async function switchVersion(uuid: string): Promise<void> {
+        // Nothing prompts before switching - autosave already means the user
+        // never explicitly asked to "save", so flush whatever is pending
+        // instead of discarding it the way abandoning the page might.
+        if (state.dirty) await save(false);
+        // A save for the version being left could still be in flight; letting
+        // its response land after the switch would overwrite state.doc.uuid
+        // (by then the *new* version's) back to the one just left.
+        await waitForSaveSlot();
+        try {
+            const response = await fetch(`${jsonUrl}?version=${encodeURIComponent(uuid)}`, { headers: { Accept: "application/json" } });
+            if (!response.ok) {
+                toast.warning("Could not load that version.");
+                return;
+            }
+            const body = (await response.json()) as FloorplanDocument;
+            state.doc = { ...emptyDocument({ lat, lng }), ...body };
+            if (!state.doc.floors?.length) state.doc.floors = emptyDocument({ lat, lng }).floors;
+            state.versions = body.versions || [];
+        } catch {
+            toast.warning("Could not load that version.");
+            return;
+        }
+        finishLoadingDocument();
     }
 
     /** A frozen-order, same-object record of what a save's payload actually
@@ -2456,9 +2541,16 @@ function boot(): void {
             if (body.floorplan) {
                 state.doc.uuid = body.floorplan.uuid;
                 applyServerIds(sent, body.floorplan);
+                // A save always answers "local" (see FloorplanSaveView) - a
+                // document loaded as someone else's community plan is, from
+                // this point on, the viewer's own forked copy.
+                state.doc.origin = body.floorplan.origin;
+                state.versions = body.floorplan.versions || [];
             }
             state.dirty = false;
             updateMoreMenu();
+            renderOriginBanner();
+            renderVersions();
             // Autosave stays quiet - a toast for every keystroke-driven save
             // would be constant noise. The two explicit "more" menu actions
             // still confirm themselves; nothing else calls this with asNewVersion.

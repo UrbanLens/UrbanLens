@@ -275,8 +275,18 @@
     }
 }
 
-.floorplan-versions[hidden] {
-    display: none;
+.floorplan-versions {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+
+    &[hidden] {
+        display: none;
+    }
+
+    .btn {
+        justify-content: flex-start;
+    }
 }
 
 // -- Map overlays -----------------------------------------------------------
