@@ -307,8 +307,13 @@ class FloorplanSaveView(LoginRequiredMixin, View):
             pin=pin,
             version_uuid=str(document.get("uuid") or ""),
             on_date=_parse_date(document.get("valid_from")),
+            allow_community=bool(document.get("edit_community")),
         )
-        if floorplan.pin_id is None:
+        # A wiki-owned row is shared: parenting it to whoever happened to save
+        # it next would hand one profile's private pin the whole community
+        # plan, and mint detail pins in that account for other people's
+        # markers (see serialization._sync_linked_pin's stated invariant).
+        if floorplan.pin_id is None and floorplan.wiki_id is None:
             floorplan.pin = pin
         # Seed the plan-local origin from the pin the first time anything is
         # saved. Every coordinate in the document is metres from this point, so
@@ -323,7 +328,11 @@ class FloorplanSaveView(LoginRequiredMixin, View):
         # A placeless plan has no sibling versions to list: for_place(None)
         # would match every placeless plan on the site rather than none.
         versions = _version_list(place, pin.profile) if place is not None else []
-        saved = {**document_for(floorplan), "origin": "local", "versions": versions}
+        # Real provenance, not an assumption: a hardcoded "local" told the
+        # client it owned a row it had merely been allowed to edit, which hid
+        # the community banner from the next render.
+        origin = "community" if floorplan.wiki_id is not None else "local"
+        saved = {**document_for(floorplan), "origin": origin, "versions": versions}
         return JsonResponse({"ok": True, "floorplan": saved})
 
 

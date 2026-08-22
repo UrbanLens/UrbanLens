@@ -44,7 +44,7 @@ from urbanlens.dashboard.models.floorplans.model import (
     FloorplanRoomSeed,
     FloorplanWall,
 )
-from urbanlens.dashboard.models.place.model import Place, PlaceKind
+from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation
 from urbanlens.dashboard.services.floorplans.resolution import resolve_document
 from urbanlens.dashboard.services.floorplans.serialization import document_for, save_document
 
@@ -1031,6 +1031,86 @@ class FloorplanCommunityTests(TestCase):
         with mock.patch("urbanlens.dashboard.services.floorplans.resolution._redata_document", return_value=None), \
              mock.patch("urbanlens.dashboard.services.floorplans.resolution._community_plan", return_value=None):
             self.assertIsNone(resolve_document(self.place, profile=self.other))
+
+
+class FloorplanCommunityOverwriteTests(TestCase):
+    """A save that carries a community plan's uuid must not rewrite that plan.
+
+    ``floorplan_for_editing`` deliberately lets anyone who can edit the wiki
+    write the shared row - but the editor reaches it from a debounced autosave
+    that fires seconds after the page opens, while the banner on screen says
+    "Saving creates your own version". These pin the promise the UI makes.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.author = baker.make(User).profile
+        self.visitor = baker.make(User)
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        self.parcel = baker.make(Place, kind=PlaceKind.PARCEL)
+        self.place = baker.make(Place, kind=PlaceKind.BUILDING, parent=self.parcel, parent_relation=PlaceRelation.PART_OF)
+        # Without a domain root the wiki is visible to nobody, can_edit_community
+        # is False for everyone, and these tests would pass by never reaching
+        # the in-place community write they exist to pin down.
+        Place.objects.filter(pk=self.place.pk).update(domain_root_id=self.parcel.domain_root_id)
+        self.place.refresh_from_db()
+        location = baker.make(Location, latitude=41.7331, longitude=-73.9281, place=self.place)
+        baker.make(Wiki, place=self.place, location=location)
+        self.pin = baker.make(Pin, profile=self.visitor.profile, location=location, parent_pin=None, slug="visitor-pin")
+        from urbanlens.dashboard.services.wiki.wiki_access import place_visible_to
+
+        assert place_visible_to(self.place, self.visitor.profile), "test setup must actually grant wiki access"
+
+
+        personal = Floorplan.objects.create(place=self.place, profile=self.author, name="author's plan")
+        save_document(
+            personal,
+            {"name": "author's plan", "plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls(), "rooms": [{"name": "Boiler room", "x": 5.0, "y": 5.0}]}]},
+            profile=self.author,
+        )
+        from urbanlens.dashboard.services.floorplans.resolution import publish_to_wiki
+
+        self.community = publish_to_wiki(personal, self.author)
+        assert self.community is not None
+        self.client.force_login(self.visitor)
+
+    def _save(self, document: dict):
+        return self.client.post(
+            f"/dashboard/map/pin/{self.pin.slug}/floorplan/save/",
+            data=jsonlib.dumps(document),
+            content_type="application/json",
+        )
+
+    def test_saving_a_community_plans_uuid_does_not_destroy_it(self) -> None:
+        """The whole-document save deletes by omission, so an overwrite here
+        wipes every wall and room the author published."""
+        response = self._save({"uuid": str(self.community.uuid), "plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": []}]})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        document = document_for(Floorplan.objects.get(pk=self.community.pk))
+        self.assertEqual(len(document["floors"][0]["walls"]), 4, "the published plan lost its walls")
+        self.assertEqual(document["floors"][0]["rooms"][0]["name"], "Boiler room")
+
+    def test_a_community_row_never_adopts_the_saving_users_private_pin(self) -> None:
+        """serialization._sync_linked_pin documents that a wiki copy has no
+        owning pin; adopting one mints detail pins in that account for other
+        people's markers."""
+        self._save({"uuid": str(self.community.uuid), "plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]})
+
+        self.community.refresh_from_db()
+        self.assertIsNone(self.community.pin_id)
+
+    def test_the_response_reports_provenance_rather_than_assuming_local(self) -> None:
+        response = self._save({"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]})
+
+        body = response.json()["floorplan"]
+        saved = Floorplan.objects.get(uuid=body["uuid"])
+        self.assertIsNone(saved.wiki_id)
+        self.assertEqual(body["origin"], "local")
 
 
 class FloorplanMarkerTests(TestCase):
