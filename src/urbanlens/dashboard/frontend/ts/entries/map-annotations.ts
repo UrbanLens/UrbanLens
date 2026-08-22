@@ -11,7 +11,7 @@
 import { getCsrfToken } from "../shared/csrf";
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import type { CustomLayerToggle } from "../shared/map-layers";
-import { createMapImageOverlays, type MapOverlayEntry } from "../shared/map-image-overlays";
+import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers, tileLayer } from "../shared/map-layers";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
 import { makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize } from "../shared/photo-map";
@@ -877,29 +877,15 @@ function init(): void {
     });
 
     // Hooks the manage-overlays dialog calls by name (it is server-rendered
-    // HTML, so it can't import from this module).
-    window.ulMapOverlayStartAlign = (uuid: string) => {
-        imageOverlays?.startAlign(uuid);
-        (document.getElementById("map-overlays-dialog") as HTMLDialogElement | null)?.close();
-    };
-    window.ulMapOverlayPreviewOpacity = (uuid: string, value: string) => imageOverlays?.previewOpacity(uuid, Number(value));
-    // A new overlay lands covering roughly the current viewport, so aligning
-    // it is a small adjustment rather than a hunt across the world.
-    window.ulMapOverlaySeedCorners = () => {
-        const input = document.getElementById("map-overlay-initial-corners") as HTMLInputElement | null;
-        if (!input) return;
-        const bounds = map.getBounds().pad(-0.25);
-        const nw = bounds.getNorthWest();
-        const ne = bounds.getNorthEast();
-        const se = bounds.getSouthEast();
-        const sw = bounds.getSouthWest();
-        input.value = JSON.stringify([
-            [nw.lat, nw.lng],
-            [ne.lat, ne.lng],
-            [se.lat, se.lng],
-            [sw.lat, sw.lng],
-        ]);
-    };
+    // HTML, so it can't import from this module) - shared with the floorplan
+    // editor's own copy of this dialog, see wireManageOverlaysDialog's docstring.
+    if (imageOverlays) {
+        wireManageOverlaysDialog({
+            map,
+            control: imageOverlays,
+            onAlignStart: () => (document.getElementById("map-overlays-dialog") as HTMLDialogElement | null)?.close(),
+        });
+    }
 
     // URL base for detail pin edit/delete: strip the placeholder UUID off the end.
     const dpEditBase = cfg.detailPinEditUrlTemplate.replace("00000000-0000-0000-0000-000000000000/", "");

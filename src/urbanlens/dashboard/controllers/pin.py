@@ -287,6 +287,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "manage_layers_url": reverse("pin.layers", args=[pin.slug]),
                 "map_overlays_json": overlay_payload(MapImageOverlay.objects.for_pin(pin)),
                 "manage_overlays_url": reverse("pin.overlays", args=[pin.slug]),
+                "manage_overlays_historical_url": reverse("pin.overlays.historical", args=[pin.slug]),
                 "overlay_corners_url_template": reverse("pin.overlays.corners", args=[pin.slug, OVERLAY_UUID_PLACEHOLDER]),
                 "profile": profile,
                 "parent_pin": pin.parent_pin,

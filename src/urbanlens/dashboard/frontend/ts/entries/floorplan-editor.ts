@@ -32,7 +32,7 @@ import {
 } from "../shared/floorplan/document";
 import { type Face, type HealedJoin, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
 import { PIXEL_TOLERANCES, snapPoint } from "../shared/floorplan/snapping";
-import { createMapImageOverlays, type MapOverlayEntry } from "../shared/map-image-overlays";
+import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers } from "../shared/map-layers";
 
 declare const L: typeof import("leaflet");
@@ -54,7 +54,7 @@ declare module "leaflet" {
     }
 }
 
-type Tool = "select" | "wall" | "marker";
+type Tool = "select" | "wall" | "room" | "marker";
 
 type SelectionItem =
     | { kind: "wall"; wall: Wall }
@@ -228,11 +228,22 @@ function boot(): void {
     });
 
     const outline = readJson<Array<[number, number]>>("floorplan-outline") || [];
-    const overlays = readJson<MapOverlayEntry[]>("floorplan-overlays") || [];
-    if (overlays.length) {
-        const control = createMapImageOverlays(L, map, { cornersUrl: () => "", csrfToken: getCsrfToken() });
-        control.sync(overlays.map((entry) => ({ ...entry, locked: true })));
-    }
+    // Always created, even with zero overlays at load time: the manage-overlays
+    // dialog can add the pin's first one later, and without a live control to
+    // sync() against, it would need a full page reload to actually appear.
+    // Forced locked - overlays here are a traced-reference backdrop, and their
+    // own drag handles would compete with the wall/marker tools' map gestures.
+    const overlayControl = createMapImageOverlays(L, map, { cornersUrl: () => "", csrfToken: getCsrfToken() });
+    const withForcedLock = (entries: MapOverlayEntry[]): MapOverlayEntry[] => entries.map((entry) => ({ ...entry, locked: true }));
+    overlayControl.sync(withForcedLock(readJson<MapOverlayEntry[]>("floorplan-overlays") || []));
+    document.body.addEventListener("ul:map-overlays-changed", (e) => {
+        overlayControl.sync(withForcedLock((e as CustomEvent).detail?.overlays || []));
+    });
+    wireManageOverlaysDialog({
+        map,
+        control: overlayControl,
+        onAlignStart: () => (document.getElementById("map-overlays-dialog") as HTMLDialogElement | null)?.close(),
+    });
 
     let projection = new PlanProjection({ lat, lng });
     const wallLayer = L.layerGroup().addTo(map);
@@ -566,6 +577,89 @@ function boot(): void {
                     if (state.tool !== "select") return;
                     showContextMenu(event, { kind: "wall", wall });
                 });
+                // Dragging the wall's body moves the whole wall, not just one
+                // endpoint (see renderWallHandles for that). Three modes,
+                // decided fresh on every move so switching mid-drag works:
+                //   - default: this wall moves, and every other wall sharing
+                //     one of its original endpoints stretches to follow that
+                //     corner - its own other, unshared endpoint stays put.
+                //   - Alt: the whole connected network - every wall reachable
+                //     through a shared corner - moves together, rigidly.
+                //   - Ctrl/Cmd: only this wall moves, detaching it; neighbors
+                //     keep their original points entirely.
+                // A plain click (no real movement) still reaches the click
+                // handler above, same threshold approach as the opening drag.
+                line.on("mousedown", (event: L.LeafletMouseEvent) => {
+                    if (state.tool !== "select") return;
+                    const startPoint = map.latLngToContainerPoint(event.latlng);
+                    const startLocal = toLocal(event.latlng);
+                    const origA = { x: wall.ax, y: wall.ay };
+                    const origB = { x: wall.bx, y: wall.by };
+                    const current = floor();
+                    const stretchToA = wallsTouchingPoint(current, origA, wall);
+                    const stretchToB = wallsTouchingPoint(current, origB, wall);
+                    const network = connectedNetwork(current, wall);
+                    let dragging = true;
+                    let dragActive = false;
+                    const onMove = (moveEvent: L.LeafletMouseEvent): void => {
+                        if (!dragging) return;
+                        if (!dragActive) {
+                            if (startPoint.distanceTo(map.latLngToContainerPoint(moveEvent.latlng)) < 4) return;
+                            dragActive = true;
+                            map.dragging.disable();
+                        }
+                        const nowLocal = toLocal(moveEvent.latlng);
+                        const dx = nowLocal.x - startLocal.x;
+                        const dy = nowLocal.y - startLocal.y;
+                        const original = moveEvent.originalEvent as MouseEvent | undefined;
+                        if (original?.altKey) {
+                            for (const link of network) {
+                                if (link.end === "a") {
+                                    link.wall.ax = link.origX + dx;
+                                    link.wall.ay = link.origY + dy;
+                                } else {
+                                    link.wall.bx = link.origX + dx;
+                                    link.wall.by = link.origY + dy;
+                                }
+                            }
+                        } else {
+                            wall.ax = origA.x + dx;
+                            wall.ay = origA.y + dy;
+                            wall.bx = origB.x + dx;
+                            wall.by = origB.y + dy;
+                            if (!original?.ctrlKey && !original?.metaKey) {
+                                for (const link of stretchToA) {
+                                    if (link.end === "a") {
+                                        link.wall.ax = wall.ax;
+                                        link.wall.ay = wall.ay;
+                                    } else {
+                                        link.wall.bx = wall.ax;
+                                        link.wall.by = wall.ay;
+                                    }
+                                }
+                                for (const link of stretchToB) {
+                                    if (link.end === "a") {
+                                        link.wall.ax = wall.bx;
+                                        link.wall.ay = wall.by;
+                                    } else {
+                                        link.wall.bx = wall.bx;
+                                        link.wall.by = wall.by;
+                                    }
+                                }
+                            }
+                        }
+                        render();
+                    };
+                    const onUp = (): void => {
+                        dragging = false;
+                        if (dragActive) map.dragging.enable();
+                        map.off("mousemove", onMove);
+                        map.off("mouseup", onUp);
+                        if (dragActive) markDirty();
+                    };
+                    map.on("mousemove", onMove);
+                    map.on("mouseup", onUp);
+                });
             }
             renderOpenings(wall, selected);
             // Only one wall's handles are ever worth drawing: with several
@@ -792,6 +886,51 @@ function boot(): void {
                 interactive: false,
             }).addTo(underlayLayer);
         }
+    }
+
+    /** Every other wall whose endpoint exactly coincides with `point`. */
+    function wallsTouchingPoint(current: Floor, point: Pt, exclude: Wall): Array<{ wall: Wall; end: "a" | "b" }> {
+        const hits: Array<{ wall: Wall; end: "a" | "b" }> = [];
+        for (const other of current.walls) {
+            if (other === exclude) continue;
+            if (other.ax === point.x && other.ay === point.y) hits.push({ wall: other, end: "a" });
+            if (other.bx === point.x && other.by === point.y) hits.push({ wall: other, end: "b" });
+        }
+        return hits;
+    }
+
+    /**
+     * Every (wall, end) reachable from `seed`'s own two endpoints by following
+     * shared corners - the whole rigid network a body-drag can carry with it
+     * under ALT (see the wall body's own mousedown handler). Captured once at
+     * drag start, with each endpoint's *original* coordinates, so applying a
+     * uniform delta later doesn't compound across ticks or double-move a
+     * point reachable two different ways.
+     */
+    function connectedNetwork(current: Floor, seed: Wall): Array<{ wall: Wall; end: "a" | "b"; origX: number; origY: number }> {
+        const visitedPoints = new Set<string>();
+        const key = (p: Pt): string => `${p.x},${p.y}`;
+        const queue: Pt[] = [
+            { x: seed.ax, y: seed.ay },
+            { x: seed.bx, y: seed.by },
+        ];
+        const result: Array<{ wall: Wall; end: "a" | "b"; origX: number; origY: number }> = [];
+        while (queue.length) {
+            const point = queue.pop() as Pt;
+            if (visitedPoints.has(key(point))) continue;
+            visitedPoints.add(key(point));
+            for (const wall of current.walls) {
+                if (wall.ax === point.x && wall.ay === point.y) {
+                    result.push({ wall, end: "a", origX: wall.ax, origY: wall.ay });
+                    queue.push({ x: wall.bx, y: wall.by });
+                }
+                if (wall.bx === point.x && wall.by === point.y) {
+                    result.push({ wall, end: "b", origX: wall.bx, origY: wall.by });
+                    queue.push({ x: wall.ax, y: wall.ay });
+                }
+            }
+        }
+        return result;
     }
 
     function renderWallHandles(wall: Wall): void {
@@ -1124,6 +1263,164 @@ function boot(): void {
         return seed;
     }
 
+    // --------------------------------------------------------- room tool
+
+    const ROOM_SIDES = ["north", "south", "east", "west"] as const;
+    type RoomSide = (typeof ROOM_SIDES)[number];
+    type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
+
+    /**
+     * Learn a room size from this floor's own already-enclosed rooms - the
+     * more that exist, the closer a fresh guess tracks what this plan
+     * actually looks like. Falls back to a plausible default (a small
+     * bedroom) the first time, with nothing yet to learn from.
+     *
+     * `containerFace` - the face the new room's own center point already sits
+     * inside, if any - is excluded: it is whatever the user is subdividing
+     * (often the whole exterior shell), not a peer of the room being added,
+     * and averaging it in would make every new room balloon to that size.
+     */
+    function learnedRoomSize(current: Floor, containerFace: Face | null): { width: number; height: number } {
+        const DEFAULT_WIDTH = 4;
+        const DEFAULT_HEIGHT = 3.5;
+        const sizes: Array<{ width: number; height: number }> = [];
+        for (const room of current.rooms) {
+            const face = faceForSeed({ x: room.x, y: room.y }, state.faces);
+            if (!face || face === containerFace) continue;
+            const xs = face.ring.map((p) => p.x);
+            const ys = face.ring.map((p) => p.y);
+            sizes.push({ width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) });
+        }
+        if (!sizes.length) return { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
+        return {
+            width: sizes.reduce((sum, s) => sum + s.width, 0) / sizes.length,
+            height: sizes.reduce((sum, s) => sum + s.height, 0) / sizes.length,
+        };
+    }
+
+    /**
+     * Which compass side of its own room's bounding box a wall's midpoint
+     * falls on - a shared vocabulary for "the same side" that works across
+     * differently-shaped and differently-sized rooms. A wall near a corner
+     * still reads as belonging to whichever axis it runs furthest out on.
+     */
+    function sideOfRoom(wall: Wall, bounds: Bounds): RoomSide {
+        const midX = (wall.ax + wall.bx) / 2;
+        const midY = (wall.ay + wall.by) / 2;
+        const centerX = (bounds.minX + bounds.maxX) / 2;
+        const centerY = (bounds.minY + bounds.maxY) / 2;
+        const dx = (midX - centerX) / Math.max(1e-6, (bounds.maxX - bounds.minX) / 2);
+        const dy = (midY - centerY) / Math.max(1e-6, (bounds.maxY - bounds.minY) / 2);
+        if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? "east" : "west";
+        return dy > 0 ? "south" : "north";
+    }
+
+    /**
+     * The compass side existing doors most often sit on, learned the same way
+     * as room size - or a random side the first time, with no doors yet to
+     * learn from.
+     */
+    function learnedDoorSide(current: Floor, containerFace: Face | null): RoomSide {
+        const tally: Record<RoomSide, number> = { north: 0, south: 0, east: 0, west: 0 };
+        for (const room of current.rooms) {
+            const face = faceForSeed({ x: room.x, y: room.y }, state.faces);
+            if (!face || face === containerFace) continue;
+            const xs = face.ring.map((p) => p.x);
+            const ys = face.ring.map((p) => p.y);
+            const bounds: Bounds = { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+            for (const id of face.wallIds) {
+                const wall = current.walls.find((w) => wallId(w) === id);
+                if (!wall || !wall.openings.some((o) => o.kind !== "window")) continue;
+                tally[sideOfRoom(wall, bounds)]++;
+            }
+        }
+        const best = ROOM_SIDES.reduce((a, b) => (tally[b] > tally[a] ? b : a));
+        if (tally[best] > 0) return best;
+        return ROOM_SIDES[Math.floor(Math.random() * ROOM_SIDES.length)] as RoomSide;
+    }
+
+    /**
+     * Click-once room generation: a rectangle sized from this floor's own
+     * rooms (or a sensible default), its corners snapped onto whatever
+     * existing geometry sits nearby so it joins up rather than floating free,
+     * with a door on whichever side existing doors tend to favor (or a random
+     * one, the first time). Everything this creates is an ordinary wall or
+     * opening afterward - dragging a corner, the wall's body, or the door
+     * works exactly as it would for anything hand-drawn, and reusing an
+     * exactly-coincident existing wall (rather than drawing a duplicate on
+     * top of it) is what "joined with the nearest other walls" means here.
+     */
+    function placeRoomAt(center: Pt): void {
+        const current = floor();
+        // Whatever the click landed inside, before anything new is added -
+        // usually nothing yet (open floor), sometimes the whole exterior
+        // shell if it was already clicked into once. Either way it is being
+        // subdivided, not matched.
+        const containerFace = faceForSeed(center, state.faces);
+        const { width, height } = learnedRoomSize(current, containerFace);
+        const angle = (state.doc.rotation_degrees * Math.PI) / 180;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const halfW = width / 2;
+        const halfH = height / 2;
+        const localCorners: Pt[] = [
+            { x: -halfW, y: -halfH },
+            { x: halfW, y: -halfH },
+            { x: halfW, y: halfH },
+            { x: -halfW, y: halfH },
+        ];
+        const rawCorners = localCorners.map((p) => ({
+            x: center.x + p.x * cos - p.y * sin,
+            y: center.y + p.x * sin + p.y * cos,
+        }));
+        const segments = wallSegments(current);
+        const snapTolerance = tolerances();
+        const corners = rawCorners.map((corner) => snapPoint(corner, segments, snapTolerance, { suspended: state.suspendSnap }).point);
+
+        const doorSide = learnedDoorSide(current, containerFace);
+        const bounds: Bounds = {
+            minX: Math.min(...corners.map((p) => p.x)),
+            maxX: Math.max(...corners.map((p) => p.x)),
+            minY: Math.min(...corners.map((p) => p.y)),
+            maxY: Math.max(...corners.map((p) => p.y)),
+        };
+
+        const perimeterWalls: Wall[] = [];
+        for (let i = 0; i < corners.length; i++) {
+            const a = corners[i] as Pt;
+            const b = corners[(i + 1) % corners.length] as Pt;
+            if (distance(a, b) < 1e-6) continue; // a degenerate side once two corners snapped together
+            const existing = current.walls.find((w) => (w.ax === a.x && w.ay === a.y && w.bx === b.x && w.by === b.y) || (w.ax === b.x && w.ay === b.y && w.bx === a.x && w.by === a.y));
+            if (existing) {
+                perimeterWalls.push(existing);
+                continue;
+            }
+            const wall: Wall = { uuid: nextLocalId(), kind: current.walls.length === 0 ? "exterior" : "interior", thickness: "normal", ax: a.x, ay: a.y, bx: b.x, by: b.y, openings: [] };
+            current.walls.push(wall);
+            perimeterWalls.push(wall);
+        }
+
+        if (perimeterWalls.length) {
+            // Whichever of this room's own walls best matches the learned
+            // side - not necessarily doorSide exactly, since a corner snap
+            // can shrink a side to nothing or merge it into a reused wall.
+            let target = perimeterWalls[0] as Wall;
+            for (const wall of perimeterWalls) {
+                if (sideOfRoom(wall, bounds) === doorSide) {
+                    target = wall;
+                    break;
+                }
+            }
+            if (!target.openings.some((o) => o.kind !== "window")) target.openings.push({ uuid: nextLocalId(), kind: "door", t_start: 0.45, t_end: 0.55, swing: "none" });
+        }
+
+        const seed = addSeedAt(center);
+        state.selection = { kind: "room", room: seed };
+        state.multi = [state.selection];
+        setTool("select");
+        markDirty();
+    }
+
     // ------------------------------------------------------------- drawing
 
     function commitChain(): void {
@@ -1232,6 +1529,10 @@ function boot(): void {
             drawGhost();
             return;
         }
+        if (state.tool === "room") {
+            placeRoomAt(raw);
+            return;
+        }
         if (state.tool === "marker") {
             // Select what was just placed: naming it, or linking a stair to the
             // floor below, is almost always the next thing wanted, and making
@@ -1316,6 +1617,7 @@ function boot(): void {
         }
         if (key === "1" || key === "v") setTool("select");
         if (key === "2" || key === "w") setTool("wall");
+        if (key === "r") setTool("room");
         if (key === "3" || key === "m") setTool("marker");
         if (key === "h") {
             state.markerKind = "hazard";
@@ -1365,7 +1667,14 @@ function boot(): void {
         if (hint) {
             // Select needs no hint - the interaction is the ordinary "click a
             // thing to work on it" every other tool on the site already uses.
-            hint.textContent = tool === "wall" ? "Click to place corners · click the first corner to close · Esc finishes · Alt disables snapping" : tool === "marker" ? "Click to drop a marker" : "";
+            hint.textContent =
+                tool === "wall"
+                    ? "Click to place corners · click the first corner to close · Esc finishes · Alt disables snapping"
+                    : tool === "room"
+                      ? "Click to generate a rectangular room, sized and joined from what's already drawn"
+                      : tool === "marker"
+                        ? "Click to drop a marker"
+                        : "";
         }
         renderSidebar();
     }

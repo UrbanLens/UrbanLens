@@ -618,6 +618,11 @@ urlpatterns = [
                                 name="pin.overlays.historical",
                             ),
                             path(
+                                "<slug:pin_slug>/overlays/media/",
+                                map_overlays.OverlayMediaPickerView.as_view(),
+                                name="pin.overlays.media",
+                            ),
+                            path(
                                 "<slug:pin_slug>/overlays/<uuid:overlay_uuid>/",
                                 map_overlays.MapOverlayEditView.as_view(),
                                 name="pin.overlays.edit",
@@ -1406,6 +1411,11 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/overlays/historical/",
                     map_overlays.HistoricalMapBrowseView.as_view(),
                     name="location.wiki.overlays.historical",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/overlays/media/",
+                    map_overlays.OverlayMediaPickerView.as_view(),
+                    name="location.wiki.overlays.media",
                 ),
                 path(
                     "<slug:location_slug>/wiki/overlays/<uuid:overlay_uuid>/",

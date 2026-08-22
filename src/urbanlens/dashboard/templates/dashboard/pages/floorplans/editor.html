@@ -76,6 +76,9 @@
                 <button type="button" class="btn btn--icon" data-tool="wall" aria-pressed="false" aria-label="Draw walls" title="Wall (W)">
                     <i class="material-symbols-outlined">timeline</i>
                 </button>
+                <button type="button" class="btn btn--icon" data-tool="room" aria-pressed="false" aria-label="Add room" title="Click to generate a whole rectangular room, sized and joined from what's already drawn (R)">
+                    <i class="material-symbols-outlined">meeting_room</i>
+                </button>
                 <div class="floorplan-toolbar__markers" role="group" aria-label="Marker type">
                     <button type="button" class="btn btn--icon" data-marker-kind="hazard" aria-label="Hazard marker" title="Hazard (H)"><i class="material-symbols-outlined">warning</i></button>
                     <button type="button" class="btn btn--icon" data-marker-kind="stair" aria-label="Stair marker" title="Stair (S)"><i class="material-symbols-outlined">stairs</i></button>
@@ -174,6 +177,15 @@
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Image Overlays" %}
     <div id="map-overlays-dialog-body" class="custom-layers-dialog-body ul-dialog-body"
          hx-get="{{ manage_overlays_url }}" hx-trigger="load" hx-swap="innerHTML"></div>
+    {# Loads once, independent of the row-list body above - see the same #}
+    {# div's own comment in _map_annotations_panels.html. #}
+    <div class="map-overlay-historical ul-dialog-body">
+        <h4 class="map-overlay-historical-heading">Historical maps covering this location</h4>
+        <div id="map-overlay-historical-results"
+             hx-get="{% url 'pin.overlays.historical' pin.slug %}" hx-trigger="load" hx-swap="innerHTML">
+            <p class="map-overlay-manage-empty">Looking for georeferenced maps covering this spot...</p>
+        </div>
+    </div>
 </dialog>
 {% endif %}
 

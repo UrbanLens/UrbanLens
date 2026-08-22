@@ -177,6 +177,7 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "parent_wiki": visible_parent_wiki(wiki, profile),
                 "map_overlays_json": overlay_payload(MapImageOverlay.objects.for_wiki(wiki)),
                 "manage_overlays_url": reverse("location.wiki.overlays", args=[location.slug]),
+                "manage_overlays_historical_url": reverse("location.wiki.overlays.historical", args=[location.slug]),
                 "overlay_corners_url_template": reverse("location.wiki.overlays.corners", args=[location.slug, OVERLAY_UUID_PLACEHOLDER]),
                 "location": location,
                 "profile": profile,

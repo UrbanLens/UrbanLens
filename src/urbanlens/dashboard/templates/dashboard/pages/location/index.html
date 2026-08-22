@@ -2163,33 +2163,4 @@
         });
     }());
 </script>
-<script>
-
-    {% comment %}
-    Picking an existing Media-gallery item as a map overlay. The manage-overlays
-    dialog is server-rendered so it can't import from the map bundle; it calls
-    this by name. Reads the tile's own data-* attributes (the same ones the
-    lightbox and album-add flows use) rather than duplicating the gallery's
-    knowledge of where an item came from.
-    {% endcomment %}
-    (function () {
-        window.ulMapOverlayPickFromMedia = function () {
-            var grid = document.getElementById('media-gallery-grid') || document.getElementById('wiki-media-grid');
-            var tile = grid && grid.querySelector('.media-item.is-selected, .media-item.media-item--relevant');
-            if (!tile) tile = grid && grid.querySelector('.media-item');
-            if (!tile) {
-                if (window.toastr) toastr.info('Open the Media section and pick a photo first.');
-                return;
-            }
-            document.getElementById('map-overlay-media-url').value = tile.dataset.mediaRemoteUrl || tile.dataset.mediaUrl || '';
-            document.getElementById('map-overlay-media-source').value = tile.dataset.mediaSource || '';
-            document.getElementById('map-overlay-media-page-url').value = tile.dataset.mediaPageUrl || '';
-            var note = document.getElementById('map-overlay-picked-media');
-            if (note) {
-                note.textContent = 'Using: ' + (tile.dataset.mediaCaption || tile.dataset.mediaSourceName || 'selected media item');
-                note.hidden = false;
-            }
-        };
-    }());
-</script>
 {% endblock %}

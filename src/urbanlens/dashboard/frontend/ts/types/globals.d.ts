@@ -70,13 +70,17 @@ declare global {
         // shared/album-items.ts; called from the server-rendered Media gallery
         // tiles, which that module doesn't own.
         albumAddExternalMedia?: (addUrl: string, media: { source: string; url: string; page_url?: string; caption?: string }) => Promise<void>;
-        // Georeferenced map image overlays. Defined by the pin/wiki map
-        // entry (entries/map-annotations.ts) and called by name from the
-        // server-rendered manage-overlays dialog, which can't import it.
+        // Georeferenced map image overlays. Defined by shared/map-image-overlays.ts's
+        // wireManageOverlaysDialog(), called from both the pin/wiki map entry and
+        // the floorplan editor, and invoked by name from the server-rendered
+        // manage-overlays dialog, which can't import either.
         ulMapOverlayStartAlign?: (uuid: string) => void;
         ulMapOverlayPreviewOpacity?: (uuid: string, value: string) => void;
         ulMapOverlaySeedCorners?: () => void;
-        ulMapOverlayPickFromMedia?: () => void;
+        ulMapOverlayPickFromMedia?: (galleryJsonUrl?: string) => void;
+        ulMapOverlayChooseImage?: (id: number, caption: string) => void;
+        ulMapOverlaySyncSubmitState?: () => void;
+        ulMapOverlayHandleDrop?: (event: DragEvent, zone: HTMLElement) => void;
     }
 
     const toastr: Toastr;

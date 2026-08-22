@@ -121,6 +121,36 @@ class OverlayOwnerTests(TestCase):
         mock_materialize.assert_called_once()
         self.assertEqual(MapImageOverlay.objects.for_pin(self.pin).get().image_id, materialized.pk)
 
+    def test_an_existing_owned_photo_is_used_directly(self) -> None:
+        """Picked from the dialog's own "this page's media" grid - already a
+        real Image on this pin, so it must be reused as-is, not re-downloaded
+        or duplicated the way a transient gallery item is."""
+        from urbanlens.dashboard.models.images.model import Image
+
+        existing = baker.make(Image, profile=self.user.profile, pin=self.pin)
+        with patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item") as mock_materialize:
+            response = self.client.post(
+                reverse("pin.overlays", args=[self.pin.slug]),
+                {"corners": json.dumps(_CORNERS), "image_id": str(existing.pk)},
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_materialize.assert_not_called()
+        self.assertEqual(MapImageOverlay.objects.for_pin(self.pin).get().image_id, existing.pk)
+
+    def test_another_pins_photo_cannot_be_picked(self) -> None:
+        """A posted image_id is scoped to this owner - it isn't a free-form
+        lookup across every Image in the database."""
+        from urbanlens.dashboard.models.images.model import Image
+
+        other_pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile)
+        someone_elses_photo = baker.make(Image, profile=other_pin.profile, pin=other_pin)
+        response = self.client.post(
+            reverse("pin.overlays", args=[self.pin.slug]),
+            {"corners": json.dumps(_CORNERS), "image_id": str(someone_elses_photo.pk)},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(MapImageOverlay.objects.for_pin(self.pin).exists())
+
     def test_another_users_pin_is_not_reachable(self) -> None:
         other_pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile)
         response = self.client.post(
