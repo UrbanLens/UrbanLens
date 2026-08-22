@@ -2282,23 +2282,36 @@ class LabelDetailView(ExternalApiView):
         if error is not None:
             return error
 
+        # A bare save() writes every column from this request's snapshot,
+        # silently reverting any field a concurrent request changed in
+        # between - including one made through LabelEditView, the other
+        # independent implementation of this same partial-update logic.
+        changed_fields: list[str] = []
+
         if "name" in data:
             conflict = find_conflicting_label(profile=profile, name=data["name"], kind=label.kind, exclude_pk=label.pk)
             if conflict is not None:
                 return Response({"error": label_conflict_message(conflict, singular_title=label.kind.title())}, status=409)
             label.name = data["name"]
+            changed_fields.append("name")
         if "description" in data:
             label.description = data.get("description") or None
+            changed_fields.append("description")
         if "color" in data:
             label.color = clean_color(data.get("color"))
+            changed_fields.append("color")
         if "icon" in data:
             label.icon = data.get("icon") or None
+            changed_fields.append("icon")
         if "order" in data:
             label.order = data["order"]
+            changed_fields.append("order")
         if "allow_auto_tag" in data:
             label.allow_auto_tag = data["allow_auto_tag"]
+            changed_fields.append("allow_auto_tag")
         if "keywords" in data:
             label.keywords = data.get("keywords") or None
+            changed_fields.append("keywords")
 
         # Validated before anything is written. Saving first and checking the
         # hierarchy afterwards meant a PATCH combining an ordinary field with a
@@ -2310,7 +2323,14 @@ class LabelDetailView(ExternalApiView):
             return Response({"error": "That parent would create a loop in the label hierarchy."}, status=400)
 
         # `kind` is deliberately ignored on update - see LabelWriteSerializer.
-        label.save()
+        if changed_fields:
+            label.save(update_fields=changed_fields)
+            # A label's icon/color/name feed into every pin's cached map marker
+            # without touching the Pin row itself, so the client's cache-
+            # freshness check (keyed to Max(Pin.updated)) would otherwise never
+            # notice this change - same reasoning as LabelEditView's internal
+            # equivalent, missing here before this fix.
+            Pin.objects.filter(profile=profile, labels=label).update(updated=timezone.now())
 
         if "parent_uuids" in data:
             label.parents.set(parents)

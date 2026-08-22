@@ -1994,18 +1994,55 @@ function boot(): void {
 
     // ------------------------------------------------------------- sidebar
 
-    function renameFloor(item: Floor): void {
+    /**
+     * Editable fields for whichever floor is showing.
+     *
+     * Two fields rather than one, sitting under the strip where they can be
+     * seen: a floor's code and its nickname are different facts, and the
+     * previous single prompt could only ever set one of them - which is how
+     * naming a floor came to destroy the record of which storey it was.
+     *
+     * The code field is left blank when the label is derived, with the derived
+     * value as its placeholder. That way an empty box reads as "this follows
+     * the stack", and clearing a code goes back to following it, without
+     * either state needing a caption.
+     */
+    function renderFloorFields(host: HTMLElement, item: Floor): void {
         const labels = floorLabels();
-        const designation = window.prompt("Floor number or code", item.designation || labels.get(item) || "");
-        if (designation === null) return;
-        const trimmed = designation.trim().slice(0, 8);
-        checkpoint();
-        // Typing back the label it already derived means "keep deriving it" -
-        // otherwise accepting the prompt unchanged would freeze every floor's
-        // number, and inserting a storey below would stop renumbering them.
-        item.designation = trimmed === labels.get(item) ? "" : trimmed;
-        markDirty();
-        renderSidebar();
+        const row = document.createElement("div");
+        row.className = "floorplan-floor-fields";
+
+        const code = document.createElement("input");
+        code.className = "form-input floorplan-floor-fields__code";
+        code.value = item.designation || "";
+        code.placeholder = labels.get(item) || "";
+        code.maxLength = 8;
+        code.setAttribute("aria-label", "Floor number or code");
+        code.addEventListener("input", () => {
+            checkpoint(`floor-code:${item.uuid || item.level}`);
+            item.designation = code.value.trim().slice(0, 8);
+            markDirtyQuiet();
+        });
+        // Re-rendered on commit, not per keystroke: every other floor's derived
+        // label can change as a result of this one, and rebuilding the strip
+        // under the cursor would take the focus with it.
+        code.addEventListener("change", () => renderSidebar());
+        row.appendChild(code);
+
+        const nickname = document.createElement("input");
+        nickname.className = "form-input floorplan-floor-fields__name";
+        nickname.value = item.name || "";
+        nickname.placeholder = "Nickname";
+        nickname.setAttribute("aria-label", "Floor nickname");
+        nickname.addEventListener("input", () => {
+            checkpoint(`floor-name:${item.uuid || item.level}`);
+            item.name = nickname.value;
+            markDirtyQuiet();
+        });
+        nickname.addEventListener("change", () => renderSidebar());
+        row.appendChild(nickname);
+
+        host.appendChild(row);
     }
 
     /** Copy one floor's walls (and optionally its room names) onto another. */
@@ -2114,10 +2151,7 @@ function boot(): void {
                 button.appendChild(nickname);
             }
             button.addEventListener("click", () => {
-                if (index === state.floorIndex) {
-                    renameFloor(item);
-                    return;
-                }
+                if (index === state.floorIndex) return;
                 state.floorIndex = index;
                 clearSelection();
                 renderSidebar();
@@ -2166,6 +2200,8 @@ function boot(): void {
         duplicate.setAttribute("aria-label", "Duplicate this floor");
         duplicate.addEventListener("click", () => duplicateFloor(floor()));
         host.appendChild(duplicate);
+
+        renderFloorFields(host, floor());
     }
 
     function field(labelText: string, input: HTMLElement): HTMLLabelElement {

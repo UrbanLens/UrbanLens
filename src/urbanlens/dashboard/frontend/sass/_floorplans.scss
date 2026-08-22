@@ -383,6 +383,25 @@
     }
 }
 
+.floorplan-floor-fields {
+    display: flex;
+    gap: 0.4rem;
+    width: 100%;
+    margin-top: 0.5rem;
+
+    &__code {
+        width: 4.5rem;
+        flex: 0 0 auto;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__name {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+}
+
 .floorplan-floor-tab__chip {
     display: inline-block;
     min-width: 1.6em;
