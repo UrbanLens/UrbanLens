@@ -47,6 +47,11 @@ export interface HealedJoin {
     at: Pt;
     /** Distance that was bridged, in metres. */
     gap: number;
+    /** The two original endpoints the join bridges, for a caller that wants
+     * to actually move them together rather than just note where they are -
+     * this module itself never does, per the module docstring. */
+    a: Pt;
+    b: Pt;
 }
 
 export interface DeriveOptions {
@@ -268,7 +273,7 @@ function heal(graph: Graph, gap: number): HealedJoin[] {
         graph.edges.push({ u: a, v: best, wallId: "__healed__" });
         const pa = graph.points[a] as Pt;
         const pb = graph.points[best] as Pt;
-        healed.push({ at: { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 }, gap: bestDistance });
+        healed.push({ at: { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 }, gap: bestDistance, a: pa, b: pb });
     }
     return healed;
 }

@@ -69,7 +69,11 @@ variant="strip": compact icon row for dialogs (comment map composer/viewer).
             <span class="map-layer-thumb map-layer-thumb--icon">
                 <i class="material-symbols-outlined">add_photo_alternate</i>
             </span>
-            <span>Image Overlays</span>
+            {# Not "Image Overlays" - too long for this tile's width at this #}
+            {# font size, so it wrapped and threw off row alignment with the #}
+            {# other (single-line) layer buttons. The icon plus the dialog's #}
+            {# own "Image Overlays" title still make the meaning clear. #}
+            <span>Overlays</span>
         </button>
         {% endif %}
     </div>

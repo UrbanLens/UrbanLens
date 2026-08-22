@@ -3,6 +3,13 @@
 @use "mixins" as *;
 
 [data-theme="dark"] {
+    // Native <select> popups (and other browser/OS chrome - scrollbars,
+    // autofill, etc.) render outside our CSS box, and some engines decide
+    // their palette from the document root's own color-scheme rather than
+    // the individual control's - the per-element `select` rule below alone
+    // left the actual option list's browser-native background unchanged in
+    // some engines, still light behind our (light-on-dark) text color.
+    color-scheme: dark;
 
     @include input-selectors {
         color: var(--ul-grey-6);
@@ -11,10 +18,9 @@
         color: var(--ul-grey-5);
     }
 
-    // Native <select> popups render with browser/OS chrome, not our CSS box -
-    // without this hint Chromium/Firefox can pop the option list in light
-    // chrome while still inheriting our (light-on-dark) text color above,
-    // producing illegible text.
+    // Belt-and-suspenders: also set directly on every select, in case an
+    // engine prefers the originating element's own color-scheme over the
+    // root's for its popup.
     select {
         color-scheme: dark;
     }

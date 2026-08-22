@@ -26,10 +26,11 @@ import {
     type Wall,
     emptyDocument,
     nextLocalId,
+    wallId,
     wallLength,
     wallSegments,
 } from "../shared/floorplan/document";
-import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
+import { type Face, type HealedJoin, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
 import { PIXEL_TOLERANCES, snapPoint } from "../shared/floorplan/snapping";
 import { createMapImageOverlays, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers } from "../shared/map-layers";
@@ -123,10 +124,15 @@ function markerPopupContent(marker: Marker): HTMLElement {
     const title = document.createElement("strong");
     title.textContent = marker.name || marker.kind;
     wrap.appendChild(title);
-    const kind = document.createElement("p");
-    kind.className = "floorplan-marker-popup__kind";
-    kind.textContent = marker.kind;
-    wrap.appendChild(kind);
+    // Only when the name says something the kind doesn't already - a marker
+    // left at its default ("Elevator") has nothing more to add by repeating
+    // "elevator" underneath it.
+    if (marker.name && marker.name.trim().toLowerCase() !== marker.kind.toLowerCase()) {
+        const kind = document.createElement("p");
+        kind.className = "floorplan-marker-popup__kind";
+        kind.textContent = marker.kind;
+        wrap.appendChild(kind);
+    }
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "btn btn--sm btn--danger floorplan-marker-popup__delete";
@@ -232,6 +238,9 @@ function boot(): void {
     const wallLayer = L.layerGroup().addTo(map);
     const roomLayer = L.layerGroup().addTo(map);
     const markerLayer = L.layerGroup().addTo(map);
+    // Rebuilt every render() - lets selectItem() find a marker's freshly
+    // recreated Leaflet layer afterward (see its own comment for why).
+    const markerNodes = new Map<Marker, L.Marker>();
     const handleLayer = L.layerGroup().addTo(map);
     const ghostLayer = L.layerGroup().addTo(map);
     // Added first so it always paints beneath the live floor.
@@ -271,7 +280,92 @@ function boot(): void {
     function markDirty(): void {
         state.dirty = true;
         render();
+        queueAutosave();
     }
+
+    /** Like markDirty(), but skips the render - for a keystroke mid-edit
+     * (a room/marker name field) where the caller already defers its own
+     * re-render to a later event, so this would just be redundant work. */
+    function markDirtyQuiet(): void {
+        state.dirty = true;
+        queueAutosave();
+    }
+
+    // ------------------------------------------------------------- autosave
+
+    let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+    let saving = false;
+
+    /** Debounced auto-save: there is no Save button any more (see editor.html) -
+     * every edit is expected to reach the server on its own, a little after
+     * the user stops making them. */
+    function queueAutosave(): void {
+        updateSaveStatus();
+        if (autosaveTimer !== null) clearTimeout(autosaveTimer);
+        const attempt = (): void => {
+            // A save from a moment ago is still in flight (slow network,
+            // fast edits) - wait for it rather than firing a second
+            // concurrent request that could land out of order.
+            if (saving) {
+                autosaveTimer = setTimeout(attempt, 400);
+                return;
+            }
+            autosaveTimer = null;
+            void save(false);
+        };
+        autosaveTimer = setTimeout(attempt, 1200);
+    }
+
+    function updateSaveStatus(): void {
+        const el = document.getElementById("floorplan-save-status");
+        if (!el) return;
+        if (saving) {
+            el.textContent = "Saving…";
+            el.className = "floorplan-save-status";
+        } else if (state.dirty) {
+            el.textContent = "Unsaved changes";
+            el.className = "floorplan-save-status is-unsaved";
+        } else {
+            el.textContent = "Saved";
+            el.className = "floorplan-save-status";
+        }
+    }
+
+    // ------------------------------------------------------------------ undo
+
+    const UNDO_LIMIT = 20;
+    let undoStack: FloorplanDocument[] = [];
+
+    /** Snapshot the whole document before a destructive change, so it can be restored. */
+    function snapshotForUndo(): void {
+        undoStack.push(JSON.parse(JSON.stringify(state.doc)) as FloorplanDocument);
+        if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+        updateUndoButton();
+    }
+
+    function updateUndoButton(): void {
+        const button = document.getElementById("floorplan-undo") as HTMLButtonElement | null;
+        if (button) button.disabled = undoStack.length === 0;
+    }
+
+    function undo(): void {
+        const previous = undoStack.pop();
+        if (!previous) return;
+        state.doc = previous;
+        clearSelection();
+        // The restored floors array may be shorter than the one being
+        // viewed (undoing a floor deletion's own inverse: adding one back
+        // works the same way, via floorIndex clamping in floor() below).
+        state.floorIndex = Math.min(state.floorIndex, Math.max(state.doc.floors.length - 1, 0));
+        renderSidebar();
+        render();
+        fitToContent();
+        updateUndoButton();
+        markDirtyQuiet();
+    }
+
+    document.getElementById("floorplan-undo")?.addEventListener("click", undo);
+    updateUndoButton();
 
     // -------------------------------------------------------------- selection
 
@@ -315,6 +409,48 @@ function boot(): void {
         }
         renderSidebar();
         render();
+        // A marker's own click handler and Leaflet's default bindPopup click
+        // handling fire on the same native click that got us here - but
+        // render() just tore down and rebuilt the whole marker layer, which
+        // silently destroys whatever popup Leaflet opened in the meantime.
+        // Reopen it on the freshly rebuilt node so it actually reaches the
+        // screen.
+        if (item.kind === "marker") markerNodes.get(item.marker)?.openPopup();
+    }
+
+    /**
+     * Actually join the endpoints planar.ts only noted were nearly touching.
+     *
+     * Mutates the walls in place - moving both ends of a healed pair to
+     * their midpoint - so a hand-drawn near-miss becomes a real, single
+     * vertex rather than two dangling points held together by a virtual
+     * edge that only exists inside deriveFaces()'s own graph.
+     *
+     * Returns:
+     *     Whether anything was moved, so the caller knows to re-derive faces
+     *     against the corrected geometry before using them.
+     */
+    function closeHealedGaps(current: Floor, healed: readonly HealedJoin[]): boolean {
+        let changed = false;
+        for (const join of healed) {
+            const midpoint = { x: (join.a.x + join.b.x) / 2, y: (join.a.y + join.b.y) / 2 };
+            for (const end of [join.a, join.b]) {
+                for (const wall of current.walls) {
+                    if (wall.ax === end.x && wall.ay === end.y) {
+                        wall.ax = midpoint.x;
+                        wall.ay = midpoint.y;
+                        changed = true;
+                    }
+                    if (wall.bx === end.x && wall.by === end.y) {
+                        wall.bx = midpoint.x;
+                        wall.by = midpoint.y;
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if (changed) markDirtyQuiet();
+        return changed;
     }
 
     // ---------------------------------------------------------------- render
@@ -326,9 +462,34 @@ function boot(): void {
         handleLayer.clearLayers();
 
         const current = floor();
-        const segments = wallSegments(current);
-        const derived = deriveFaces(segments);
+        let segments = wallSegments(current);
+        let derived = deriveFaces(segments);
+        // planar.ts deliberately never moves what the author drew (see its
+        // own docstring) - it only notes that two endpoints nearly meet. This
+        // is the one place that acts on that note and actually joins them, so
+        // a "healed" gap is a real, single vertex afterward rather than two
+        // walls that only look joined because a virtual edge bridges them.
+        // Re-derived so the rest of this render sees the corrected topology
+        // immediately, rather than one frame of a room fill still drawn to
+        // the pre-snap dangling points.
+        if (closeHealedGaps(current, derived.healed)) {
+            segments = wallSegments(current);
+            derived = deriveFaces(segments);
+        }
         state.faces = derived.faces;
+
+        // A seed with no walls left on its floor can never bind to anything
+        // again - "not enclosed yet" is only a meaningful, recoverable state
+        // while there is something left to draw the missing wall onto.
+        if (!current.walls.length && current.rooms.length) {
+            snapshotForUndo();
+            current.rooms = [];
+            if (state.selection?.kind === "room") {
+                clearSelection();
+                renderSidebar();
+            }
+            markDirtyQuiet();
+        }
 
         // Once there's an exterior to read as "the building", the basemap
         // recedes (desaturated, in the tile pane only - an image overlay
@@ -382,20 +543,30 @@ function boot(): void {
         for (const wall of current.walls) {
             const style = WALL_STYLE[wall.kind] || WALL_STYLE.interior;
             const selected = isSelected({ kind: "wall", wall });
-            const line = L.polyline([toLatLng({ x: wall.ax, y: wall.ay }), toLatLng({ x: wall.bx, y: wall.by })], {
-                className: "floorplan-wall",
-                ...style,
-                ...(selected ? { color: "#00838f", weight: (style?.weight || 3) + 2 } : {}),
-            }).addTo(wallLayer);
-            line.on("click", (event) => {
-                if (state.tool !== "select") return;
-                L.DomEvent.stop(event);
-                selectItem({ kind: "wall", wall }, event);
-            });
-            line.on("contextmenu", (event) => {
-                if (state.tool !== "select") return;
-                showContextMenu(event, { kind: "wall", wall });
-            });
+            const a = { x: wall.ax, y: wall.ay };
+            const b = { x: wall.bx, y: wall.by };
+            const along = (t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+            // A door/doorway/hatch renders as an actual break in the wall -
+            // one solid segment per interval left once its openings are cut
+            // out - rather than a colored line sitting on top of a wall that
+            // reads as unbroken; a window stays an overlay on a continuous
+            // wall, since it does not let anyone through (see renderOpenings).
+            for (const [s0, s1] of wallSolidIntervals(wall)) {
+                const line = L.polyline([toLatLng(along(s0)), toLatLng(along(s1))], {
+                    className: "floorplan-wall",
+                    ...style,
+                    ...(selected ? { color: "#00838f", weight: (style?.weight || 3) + 2 } : {}),
+                }).addTo(wallLayer);
+                line.on("click", (event) => {
+                    if (state.tool !== "select") return;
+                    L.DomEvent.stop(event);
+                    selectItem({ kind: "wall", wall }, event);
+                });
+                line.on("contextmenu", (event) => {
+                    if (state.tool !== "select") return;
+                    showContextMenu(event, { kind: "wall", wall });
+                });
+            }
             renderOpenings(wall, selected);
             // Only one wall's handles are ever worth drawing: with several
             // walls multi-selected there is no single "the" endpoint drag to
@@ -403,9 +574,11 @@ function boot(): void {
             if (selected && state.multi.length === 1) renderWallHandles(wall);
         }
 
+        markerNodes.clear();
         for (const marker of current.markers) {
             const selected = isSelected({ kind: "marker", marker });
             const node = L.marker(toLatLng({ x: marker.x, y: marker.y }), { icon: markerIcon(marker, selected), draggable: state.tool === "select" }).addTo(markerLayer);
+            markerNodes.set(marker, node);
             node.bindPopup(markerPopupContent(marker), { closeButton: true });
             node.on("popupopen", () => {
                 node.getPopup()?.getElement()?.querySelector(".floorplan-marker-popup__delete")?.addEventListener("click", () => {
@@ -431,16 +604,38 @@ function boot(): void {
             });
         }
 
-        // Healed joins, so a bridged near-miss is visible rather than magic.
-        for (const join of derived.healed) {
-            L.circleMarker(toLatLng(join.at), { radius: 3, color: "#7e57c2", fillOpacity: 0.9, weight: 1 })
-                .bindTooltip(`Gap of ${join.gap.toFixed(2)} m closed automatically`, { direction: "top" })
-                .addTo(handleLayer);
-        }
-
         renderUnderlay();
         renderFloorTabs();
         updateEmptyState(current);
+    }
+
+    /**
+     * The parts of a wall's centreline still solid, once its door/doorway/
+     * hatch openings are cut out of it.
+     *
+     * A window stays out of this: it reads as a break in the wall's own
+     * *use* (you can walk through a door, not a window), so it renders as an
+     * overlay on an otherwise-continuous wall instead - see renderOpenings().
+     */
+    function wallSolidIntervals(wall: Wall): Array<[number, number]> {
+        const gaps = wall.openings
+            .filter((opening) => opening.kind !== "window")
+            .map((opening): [number, number] => [opening.t_start, opening.t_end])
+            .sort((a, b) => a[0] - b[0]);
+        const merged: Array<[number, number]> = [];
+        for (const gap of gaps) {
+            const last = merged[merged.length - 1];
+            if (last && gap[0] <= last[1]) last[1] = Math.max(last[1], gap[1]);
+            else merged.push(gap);
+        }
+        const solid: Array<[number, number]> = [];
+        let cursor = 0;
+        for (const gap of merged) {
+            if (gap[0] > cursor) solid.push([cursor, gap[0]]);
+            cursor = Math.max(cursor, gap[1]);
+        }
+        if (cursor < 1) solid.push([cursor, 1]);
+        return solid;
     }
 
     function renderOpenings(wall: Wall, selected: boolean): void {
@@ -449,11 +644,19 @@ function boot(): void {
         const at = (t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
         for (const opening of wall.openings) {
             const openingSelected = isSelected({ kind: "opening", wall, opening });
-            const colour = opening.kind === "window" ? "#1e88e5" : "#fb8c00";
+            // A window stays a colored line over an otherwise-continuous
+            // wall - it doesn't let anyone through, so a break would be the
+            // wrong signal. A door/doorway/hatch already reads as a break in
+            // the wall itself (see wallSolidIntervals()), so this only needs
+            // to stay clickable there, not draw attention a second time -
+            // opacity alone, not weight, so the actual hit/drag target stays
+            // just as easy to grab as before.
+            const isWindow = opening.kind === "window";
             const line = L.polyline([toLatLng(at(opening.t_start)), toLatLng(at(opening.t_end))], {
                 className: "floorplan-opening",
-                color: openingSelected ? "#00838f" : colour,
+                color: openingSelected ? "#00838f" : isWindow ? "#1e88e5" : "#fb8c00",
                 weight: openingSelected ? 9 : 6,
+                opacity: openingSelected || isWindow ? 1 : 0.45,
             })
                 .bindTooltip(opening.kind, { direction: "top" })
                 .addTo(wallLayer);
@@ -468,6 +671,44 @@ function boot(): void {
             line.on("contextmenu", (event) => {
                 if (state.tool !== "select") return;
                 showContextMenu(event, { kind: "opening", wall, opening });
+            });
+            // Dragging the line itself slides the opening along its wall,
+            // keeping its width fixed - on the same layer as the click
+            // handler above rather than a separate overlay, so there is only
+            // ever one target under the cursor to resolve a click against.
+            // A plain click (no real movement) falls through to that click
+            // handler exactly as before; this only acts once a real drag is
+            // detected.
+            line.on("mousedown", (event: L.LeafletMouseEvent) => {
+                if (state.tool !== "select") return;
+                const startPoint = map.latLngToContainerPoint(event.latlng);
+                const startT = projectOnSegment(toLocal(event.latlng), a, b).t;
+                const width = opening.t_end - opening.t_start;
+                const originalStart = opening.t_start;
+                let dragging = true;
+                let dragActive = false;
+                const onMove = (moveEvent: L.LeafletMouseEvent): void => {
+                    if (!dragging) return;
+                    if (!dragActive) {
+                        if (startPoint.distanceTo(map.latLngToContainerPoint(moveEvent.latlng)) < 4) return;
+                        dragActive = true;
+                        map.dragging.disable();
+                    }
+                    const currentT = projectOnSegment(toLocal(moveEvent.latlng), a, b).t;
+                    const start = Math.max(0, Math.min(originalStart + (currentT - startT), 1 - width));
+                    opening.t_start = start;
+                    opening.t_end = start + width;
+                    render();
+                };
+                const onUp = (): void => {
+                    dragging = false;
+                    if (dragActive) map.dragging.enable();
+                    map.off("mousemove", onMove);
+                    map.off("mouseup", onUp);
+                    if (dragActive) markDirty();
+                };
+                map.on("mousemove", onMove);
+                map.on("mouseup", onUp);
             });
             if (selected) renderOpeningHandles(wall, opening, at);
         }
@@ -525,10 +766,13 @@ function boot(): void {
      */
     function renderUnderlay(): void {
         underlayLayer.clearLayers();
-        if (!state.showUnderlay) return;
         const current = floor();
         const below = state.doc.floors.filter((item) => item.level < current.level).sort((x, y) => y.level - x.level)[0];
-        if (!below) return;
+        // Offering "Floor below" when there is none to show is worse than no
+        // toggle at all - it looks like the feature is broken rather than
+        // inapplicable.
+        document.querySelector<HTMLElement>('#floorplan-layers [data-map-layer="underlay"]')?.toggleAttribute("hidden", !below);
+        if (!state.showUnderlay || !below) return;
         for (const wall of below.walls) {
             L.polyline([toLatLng({ x: wall.ax, y: wall.ay }), toLatLng({ x: wall.bx, y: wall.by })], {
                 color: "#90a4ae",
@@ -555,9 +799,21 @@ function boot(): void {
             const point = end === "a" ? { x: wall.ax, y: wall.ay } : { x: wall.bx, y: wall.by };
             const handle = L.circleMarker(toLatLng(point), { radius: 6, color: "#00838f", fillColor: "#fff", fillOpacity: 1, className: "floorplan-handle" }).addTo(handleLayer);
             let dragging = false;
+            // Every other wall's endpoint exactly at this corner, found once
+            // at the start of the drag - so dragging a shared corner moves
+            // the whole joined corner together (every wall meeting there
+            // keeps meeting there), rather than tearing this one wall's end
+            // away from the others while they stay put.
+            let linked: Array<{ target: Wall; end: "a" | "b" }> = [];
             handle.on("mousedown", () => {
                 dragging = true;
                 map.dragging.disable();
+                linked = [];
+                for (const other of floor().walls) {
+                    if (other === wall) continue;
+                    if (other.ax === point.x && other.ay === point.y) linked.push({ target: other, end: "a" });
+                    if (other.bx === point.x && other.by === point.y) linked.push({ target: other, end: "b" });
+                }
             });
             map.on("mousemove", (event: L.LeafletMouseEvent) => {
                 if (!dragging) return;
@@ -571,16 +827,51 @@ function boot(): void {
                     wall.bx = snapped.point.x;
                     wall.by = snapped.point.y;
                 }
+                for (const link of linked) {
+                    if (link.end === "a") {
+                        link.target.ax = snapped.point.x;
+                        link.target.ay = snapped.point.y;
+                    } else {
+                        link.target.bx = snapped.point.x;
+                        link.target.by = snapped.point.y;
+                    }
+                }
                 render();
             });
             map.on("mouseup", () => {
                 if (!dragging) return;
                 dragging = false;
+                linked = [];
                 map.dragging.enable();
                 markDirty();
             });
         }
     }
+
+    // ------------------------------------------------------------ popups
+
+    // A click that lands elsewhere on the map while a marker's popup is open
+    // closes that popup (Leaflet's own default) - without this, the very
+    // same click also reached the "marker" tool's placement branch below and
+    // dropped a second, unwanted marker right where the user only meant to
+    // dismiss the popup. Snapshotted on mousedown, in the capture phase, so
+    // it reads the state before Leaflet's own close-on-click-away logic (or
+    // anything else reacting to this same mousedown) has run.
+    let popupOpenCount = 0;
+    map.on("popupopen", () => {
+        popupOpenCount++;
+    });
+    map.on("popupclose", () => {
+        popupOpenCount = Math.max(0, popupOpenCount - 1);
+    });
+    let popupOpenAtMousedown = false;
+    map.getContainer().addEventListener(
+        "mousedown",
+        () => {
+            popupOpenAtMousedown = popupOpenCount > 0;
+        },
+        true,
+    );
 
     // ----------------------------------------------------------- box select
 
@@ -829,7 +1120,7 @@ function boot(): void {
     function addSeedAt(point: Pt): RoomSeed {
         const seed: RoomSeed = { uuid: nextLocalId(), name: "", x: point.x, y: point.y };
         floor().rooms.push(seed);
-        state.dirty = true;
+        markDirtyQuiet();
         return seed;
     }
 
@@ -854,6 +1145,7 @@ function boot(): void {
                 });
             }
             state.dirty = true;
+            queueAutosave();
         }
         state.drawing = [];
         ghostLayer.clearLayers();
@@ -906,6 +1198,10 @@ function boot(): void {
             suppressNextClick = false;
             return;
         }
+        if (popupOpenAtMousedown) {
+            popupOpenAtMousedown = false;
+            return;
+        }
         const raw = toLocal(event.latlng);
         if (state.tool === "wall") {
             const from = state.drawing.length ? (state.drawing[state.drawing.length - 1] as Pt) : null;
@@ -916,8 +1212,19 @@ function boot(): void {
             });
             // Clicking the chain's own origin closes the loop and finishes.
             const origin = state.drawing[0];
-            if (origin && state.drawing.length >= 2 && distance(snapped.point, origin) < 12 * metresPerPixel()) {
+            const closeTolerance = 12 * metresPerPixel();
+            if (origin && state.drawing.length >= 2 && distance(snapped.point, origin) < closeTolerance) {
                 state.drawing.push(origin);
+                commitChain();
+                return;
+            }
+            // Clicking the chain's own last point again finishes it open-ended
+            // (no closing segment) - the same thing double-click already
+            // does, offered as a second click on the same spot too, since
+            // that is an easy thing to reach for without the map having
+            // registered it as an actual double-click.
+            const last = state.drawing[state.drawing.length - 1];
+            if (last && state.drawing.length >= 2 && distance(snapped.point, last) < closeTolerance) {
                 commitChain();
                 return;
             }
@@ -973,10 +1280,18 @@ function boot(): void {
         // real edit happened.
         if (Math.abs(bearing - state.doc.rotation_degrees) < 1e-6) return;
         state.doc.rotation_degrees = bearing;
-        state.dirty = true;
+        markDirtyQuiet();
     });
 
     document.addEventListener("keydown", (event) => {
+        const target = event.target as HTMLElement | null;
+        // Every hotkey below is a bare letter (mnemonics: W for Wall, and so
+        // on) - without this, typing a room name like "Waiting room" fires
+        // the Wall tool on its own "w". The old 1/2/3 keys never had this
+        // problem (plan names rarely contain a digit), which is presumably
+        // why it went unnoticed until letters were added alongside them.
+        const typing = !!(target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
         if (event.key === "Alt") state.suspendSnap = true;
         if (event.key === "Escape") {
             closeContextMenu();
@@ -988,14 +1303,32 @@ function boot(): void {
             }
         }
         if ((event.key === "Delete" || event.key === "Backspace") && state.selection) {
-            const target = event.target as HTMLElement | null;
-            if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+            if (typing) return;
             event.preventDefault();
             deleteSelection();
         }
-        if (event.key === "1") setTool("select");
-        if (event.key === "2") setTool("wall");
-        if (event.key === "3") setTool("marker");
+        if (typing) return;
+        const key = event.key.toLowerCase();
+        if (key === "z" && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            undo();
+            return;
+        }
+        if (key === "1" || key === "v") setTool("select");
+        if (key === "2" || key === "w") setTool("wall");
+        if (key === "3" || key === "m") setTool("marker");
+        if (key === "h") {
+            state.markerKind = "hazard";
+            setTool("marker");
+        }
+        if (key === "s") {
+            state.markerKind = "stair";
+            setTool("marker");
+        }
+        if (key === "e") {
+            state.markerKind = "elevator";
+            setTool("marker");
+        }
     });
     document.addEventListener("keyup", (event) => {
         if (event.key === "Alt") state.suspendSnap = false;
@@ -1005,6 +1338,7 @@ function boot(): void {
         const current = floor();
         const targets: SelectionItem[] = state.multi.length ? state.multi : state.selection ? [state.selection] : [];
         if (!targets.length) return;
+        snapshotForUndo();
         const walls = new Set(targets.filter((t): t is Extract<SelectionItem, { kind: "wall" }> => t.kind === "wall").map((t) => t.wall));
         const rooms = new Set(targets.filter((t): t is Extract<SelectionItem, { kind: "room" }> => t.kind === "room").map((t) => t.room));
         const markers = new Set(targets.filter((t): t is Extract<SelectionItem, { kind: "marker" }> => t.kind === "marker").map((t) => t.marker));
@@ -1050,6 +1384,7 @@ function boot(): void {
         const item = state.doc.floors[index] as Floor;
         if (state.doc.floors.length <= 1) return;
         if (!window.confirm(`Delete "${item.name || `Level ${item.level}`}"? This removes everything drawn on it.`)) return;
+        snapshotForUndo();
         state.doc.floors.splice(index, 1);
         state.floorIndex = Math.min(state.floorIndex, state.doc.floors.length - 1);
         clearSelection();
@@ -1138,13 +1473,7 @@ function boot(): void {
         if (!host) return;
         host.replaceChildren();
         const selection = state.selection;
-        if (!selection) {
-            const hint = document.createElement("p");
-            hint.className = "floorplan-hint";
-            hint.textContent = "Nothing selected.";
-            host.appendChild(hint);
-            return;
-        }
+        if (!selection) return;
 
         // More than one item selected: a per-kind edit form doesn't apply,
         // so offer only what makes sense in bulk - a shared "Type" for an
@@ -1259,10 +1588,11 @@ function boot(): void {
             name.placeholder = "Boiler room";
             name.addEventListener("input", () => {
                 room.name = name.value;
-                state.dirty = true;
+                markDirtyQuiet();
             });
             name.addEventListener("change", () => render());
             host.appendChild(field("Name", name));
+            renderRoomDeleteControl(host, room);
         }
 
         if (selection.kind === "marker") {
@@ -1275,7 +1605,7 @@ function boot(): void {
             name.value = marker.name || "";
             name.addEventListener("input", () => {
                 marker.name = name.value;
-                state.dirty = true;
+                markDirtyQuiet();
             });
             host.appendChild(field("Label", name));
             host.appendChild(
@@ -1322,6 +1652,31 @@ function boot(): void {
      * switchback stair genuinely lands somewhere else on the floor above, so
      * proximity would be wrong exactly when it mattered.
      */
+    /**
+     * Select (and offer to delete) a whole room at once - its seed and every
+     * wall forming its boundary - rather than one wall at a time.
+     *
+     * Only offered for an enclosed room: an unbound seed has no face, so
+     * there is no wall boundary to gather - the generic Delete button at the
+     * bottom of the sidebar already covers removing the seed alone.
+     */
+    function renderRoomDeleteControl(host: HTMLElement, room: RoomSeed): void {
+        const face = faceForSeed({ x: room.x, y: room.y }, state.faces);
+        if (!face) return;
+        const walls = floor().walls.filter((wall) => face.wallIds.includes(wallId(wall)));
+        if (!walls.length) return;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "btn btn--sm btn--danger";
+        button.textContent = `Delete room and its ${walls.length} wall${walls.length === 1 ? "" : "s"}`;
+        button.addEventListener("click", () => {
+            state.multi = [{ kind: "room", room }, ...walls.map((wall): SelectionItem => ({ kind: "wall", wall }))];
+            state.selection = state.multi[0] as SelectionItem;
+            deleteSelection();
+        });
+        host.appendChild(button);
+    }
+
     function renderConnectorControls(host: HTMLElement, marker: Marker): void {
         const current = floor();
         const candidates: Array<{ floor: Floor; marker: Marker }> = [];
@@ -1452,8 +1807,20 @@ function boot(): void {
         render();
         fitToContent();
         updateMoreMenu();
+        // A footprint-seeded plan is dirty the instant it loads (see above) -
+        // with no Save button any more, nothing else would ever persist it.
+        if (state.dirty) queueAutosave();
+        else updateSaveStatus();
     }
 
+    /**
+     * Persist the current document.
+     *
+     * Called automatically a little after each edit (see queueAutosave()),
+     * and directly for the two deliberate actions in the "more" menu -
+     * asNewVersion forks a dated version instead of overwriting this one,
+     * which is not something autosave should ever do on its own.
+     */
     async function save(asNewVersion = false): Promise<void> {
         const nameInput = document.getElementById("floorplan-name") as HTMLInputElement | null;
         const validFrom = document.getElementById("floorplan-valid-from") as HTMLInputElement | null;
@@ -1481,8 +1848,8 @@ function boot(): void {
         delete payload.origin;
         delete payload.versions;
 
-        const button = document.getElementById("floorplan-save") as HTMLButtonElement | null;
-        if (button) button.disabled = true;
+        saving = true;
+        updateSaveStatus();
         try {
             const response = await fetch(saveUrl, {
                 method: "POST",
@@ -1501,11 +1868,15 @@ function boot(): void {
             if (body.floorplan?.uuid) state.doc.uuid = body.floorplan.uuid;
             state.dirty = false;
             updateMoreMenu();
-            toast.success(asNewVersion ? "Saved as a new version." : "Floorplan saved.");
+            // Autosave stays quiet - a toast for every keystroke-driven save
+            // would be constant noise. The two explicit "more" menu actions
+            // still confirm themselves; nothing else calls this with asNewVersion.
+            if (asNewVersion) toast.success("Saved as a new version.");
         } catch {
             toast.warning("Could not save this floorplan.");
         } finally {
-            if (button) button.disabled = false;
+            saving = false;
+            updateSaveStatus();
         }
     }
 
@@ -1542,7 +1913,6 @@ function boot(): void {
         if (event.key === "Escape") closeMoreMenu();
     });
 
-    document.getElementById("floorplan-save")?.addEventListener("click", () => void save(false));
     document.getElementById("floorplan-save-version")?.addEventListener("click", () => {
         closeMoreMenu();
         void save(true);

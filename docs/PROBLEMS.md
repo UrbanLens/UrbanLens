@@ -3767,3 +3767,33 @@ which this run did not record because `-q` suppressed the header.
 Worth fixing properly rather than pinning the seed: an order-dependent test is a test that will
 fail on someone else's machine for no visible reason. When picking it up, run the full suite with
 `-p randomly --randomly-seed=<n>` and bisect with `pytest --randomly-seed=<n> -x`.
+
+## Native `<select>` popup stays light-on-light in dark mode despite `color-scheme: dark` (2026-08-22)
+
+The floorplan editor's opening-type `<select class="form-input">` (and likely every other bare
+`<select>` on the site) is illegible in dark mode: unselected `<option>` rows render as light grey
+text on a light grey popup background. `_dark.scss` already had `[data-theme="dark"] select {
+color-scheme: dark; }` for exactly this (the standard fix - native option-list popups are
+browser/OS chrome, not the page's own CSS box, and `color-scheme` is the documented hook for
+telling the browser to use its dark native-widget palette there). Verified live that the rule
+does land - `getComputedStyle(select).colorScheme` reports `"dark"`, and `data-theme="dark"` is
+present on `<html>` - yet the popup still rendered light in both `--headless=old` and
+`--headless=new` Chromium.
+
+Added `color-scheme: dark;` directly on `[data-theme="dark"]` itself too (not just nested under
+`select`), on the chance an engine reads the document root's scheme rather than each control's for
+this - still no visible change under either headless mode.
+
+This didn't budge across two different Chromium rendering paths with the CSS verified correct, so
+the remaining suspect is Linux/GTK-specific: Chromium's `<select>` popup on Linux is known to
+sometimes defer to the system GTK theme for the dropdown list chrome rather than the page's
+`color-scheme`, independent of what the page declares. If that's what's happening, no page-level
+CSS can fix it - the actual fix would be replacing the native `<select>` with a custom-styled
+dropdown (`<ul>`/`<div>`-based combobox), which is a real UI component to build, not a styling
+tweak, and wasn't attempted here since it's out of scope for what looked like a small dark-mode
+fix.
+
+Left the `color-scheme: dark` additions in place (correct regardless, and may well fix this on
+Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GTK-backed popup) -
+someone should verify on a non-Linux browser whether this is actually resolved there before
+deciding whether the custom-dropdown rewrite is worth doing.

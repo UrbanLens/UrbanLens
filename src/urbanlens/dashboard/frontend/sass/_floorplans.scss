@@ -42,16 +42,41 @@
     }
 }
 
+// Floats over the map's top-right corner, matching #map-buttons (the main
+// map's own tool pill) so every map on the site puts its tools in the same
+// place - see _layout.scss's .map-buttons for the rule this mirrors.
 .floorplan-toolbar {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 1000;
     display: flex;
     align-items: center;
-    gap: .75rem;
-    margin-bottom: .5rem;
+    gap: 4px;
+    padding: 6px;
+    background: var(--ul-grey-0);
+    opacity: 0.92;
+    border-radius: $radius-md;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 9%);
+    border: 1px solid var(--ul-grey-3);
     flex-wrap: wrap;
+    max-width: calc(100% - 24px);
+
+    &:hover {
+        opacity: 1;
+    }
+
+    .btn--icon {
+        width: 2.5rem;
+        height: 2.5rem;
+    }
 
     &__markers {
         display: flex;
         gap: .25rem;
+        padding-left: .35rem;
+        margin-left: .1rem;
+        border-left: 1px solid var(--ul-grey-3);
     }
 }
 
@@ -138,10 +163,35 @@
         gap: .5rem;
     }
 
-    &__actions {
+    // Predictable top-right corner for the one remaining explicit action -
+    // see the "more" menu's own comment in editor.html for why it's the only
+    // one left now that ordinary edits autosave.
+    &__header {
         display: flex;
-        flex-direction: column;
-        gap: .4rem;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+    }
+
+    &__header-actions {
+        display: flex;
+        align-items: center;
+        gap: .25rem;
+    }
+}
+
+// "Saved" / "Saving…" / "Unsaved changes" - the only feedback autosave gets,
+// now that there is no Save button click to confirm one just happened.
+.floorplan-save-status {
+    font-size: .8rem;
+    color: var(--ul-grey-5);
+
+    &.is-unsaved {
+        color: var(--ul-color-warning-text);
+    }
+
+    &.is-error {
+        color: $color-red-600;
     }
 }
 
@@ -163,7 +213,16 @@
 .floorplan-floors {
     display: flex;
     flex-wrap: wrap;
+    align-items: flex-start;
     gap: .25rem;
+
+    // The "+ Floor" button - a plain child, not wrapped in .floorplan-floor-tab
+    // like the others - matches their height so it doesn't stand out as
+    // bigger for having no delete button next to it.
+    > .btn {
+        height: 2rem;
+        white-space: nowrap;
+    }
 }
 
 .floorplan-form {
@@ -174,6 +233,14 @@
     h3 {
         margin: 0;
         font-size: .95rem;
+    }
+
+    // The sitewide default placeholder color reads close enough to real text
+    // on this field's background that an example name ("Boiler room") looked
+    // like an actual value rather than a hint.
+    input.form-input::placeholder {
+        color: var(--ul-grey-5);
+        opacity: .55;
     }
 }
 
@@ -199,13 +266,22 @@
 
 // -- Map overlays -----------------------------------------------------------
 
+// A fixed dark color, not a --ul-grey-* token: the room fill it sits over
+// (ROOM_FILL/UNBOUND_FILL in floorplan-editor.ts) is a plain white/near-white
+// Leaflet style, not theme-aware, so a token that inverts for dark mode was
+// turning this light-on-white - illegible regardless of the site's own theme.
+// The white halo still helps on the satellite/aerial backdrop before any
+// exterior wall exists (see .has-plan), doubled up for a stronger edge.
 .floorplan-room-label {
     background: transparent;
     border: 0;
     box-shadow: none;
     font-weight: 600;
-    color: var(--ul-grey-8);
-    text-shadow: 0 1px 2px rgb(255 255 255 / 80%);
+    color: #1a1a1a;
+    text-shadow:
+        0 0 3px #fff,
+        0 0 3px #fff,
+        0 1px 2px rgb(255 255 255 / 90%);
 }
 
 // Live length/snap readout that follows the cursor while drawing a wall.
@@ -240,8 +316,12 @@
 .floorplan-marker-popup {
     display: flex;
     flex-direction: column;
-    gap: .3rem;
+    gap: .4rem;
     min-width: 8rem;
+    // .leaflet-popup-content/-wrapper are zeroed out globally (_map.scss) so
+    // the main map's own pin popups can own their padding - this needs its
+    // own, or it renders flush against the popup's rounded edge.
+    padding: .65rem .85rem;
 
     strong {
         font-size: .9rem;
@@ -257,11 +337,23 @@
 
 .floorplan-floor-tab {
     display: inline-flex;
-    align-items: center;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    align-items: stretch;
     gap: 1px;
+
+    // Fixed height on both children - without it a bare label button (no
+    // delete button) and one paired with the smaller __delete icon button
+    // report different natural heights, so the lone "+ Floor" button (no
+    // delete button next to it) rendered visibly taller than the others.
+    .btn {
+        height: 2rem;
+        white-space: nowrap;
+    }
 
     &__delete {
         color: var(--ul-grey-5);
+        flex-shrink: 0;
 
         &:hover {
             color: $color-red-600;

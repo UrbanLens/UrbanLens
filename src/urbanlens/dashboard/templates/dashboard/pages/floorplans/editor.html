@@ -65,21 +65,24 @@
 
 <div class="floorplan-editor">
     <div class="floorplan-editor__stage">
-        <div id="floorplan-tools" class="floorplan-toolbar" role="toolbar" aria-label="Drawing tools">
-            <button type="button" class="btn btn--icon is-active" data-tool="select" aria-pressed="true" aria-label="Select" title="Select">
-                <i class="material-symbols-outlined">arrow_selector_tool</i>
-            </button>
-            <button type="button" class="btn btn--icon" data-tool="wall" aria-pressed="false" aria-label="Draw walls" title="Wall">
-                <i class="material-symbols-outlined">timeline</i>
-            </button>
-            <div class="floorplan-toolbar__markers" role="group" aria-label="Marker type">
-                <button type="button" class="btn btn--icon" data-marker-kind="hazard" aria-label="Hazard marker" title="Hazard"><i class="material-symbols-outlined">warning</i></button>
-                <button type="button" class="btn btn--icon" data-marker-kind="stair" aria-label="Stair marker" title="Stair"><i class="material-symbols-outlined">stairs</i></button>
-                <button type="button" class="btn btn--icon" data-marker-kind="elevator" aria-label="Elevator marker" title="Elevator"><i class="material-symbols-outlined">elevator</i></button>
-            </div>
-        </div>
-
         <div class="floorplan-map-shell">
+            {# Floats over the map's top-right corner - same placement as the #}
+            {# main map's own tool pill (#map-buttons) - rather than a bar    #}
+            {# above the map, for a consistent "tools live on the map" feel. #}
+            <div id="floorplan-tools" class="floorplan-toolbar" role="toolbar" aria-label="Drawing tools">
+                <button type="button" class="btn btn--icon is-active" data-tool="select" aria-pressed="true" aria-label="Select" title="Select (V) · ctrl+click or shift+drag to select several">
+                    <i class="material-symbols-outlined">arrow_selector_tool</i>
+                </button>
+                <button type="button" class="btn btn--icon" data-tool="wall" aria-pressed="false" aria-label="Draw walls" title="Wall (W)">
+                    <i class="material-symbols-outlined">timeline</i>
+                </button>
+                <div class="floorplan-toolbar__markers" role="group" aria-label="Marker type">
+                    <button type="button" class="btn btn--icon" data-marker-kind="hazard" aria-label="Hazard marker" title="Hazard (H)"><i class="material-symbols-outlined">warning</i></button>
+                    <button type="button" class="btn btn--icon" data-marker-kind="stair" aria-label="Stair marker" title="Stair (S)"><i class="material-symbols-outlined">stairs</i></button>
+                    <button type="button" class="btn btn--icon" data-marker-kind="elevator" aria-label="Elevator marker" title="Elevator (E)"><i class="material-symbols-outlined">elevator</i></button>
+                </div>
+            </div>
+
             <div id="floorplan-map" class="floorplan-map"
                  data-json-url="{% url 'pin.floorplan.json' pin.slug %}"
                  data-save-url="{% url 'pin.floorplan.save' pin.slug %}"
@@ -119,6 +122,28 @@
     </div>
 
     <aside class="floorplan-sidebar">
+        {# Predictable top-right corner, not tucked below other content - the #}
+        {# "more" menu (its two actions only apply after a first save; see    #}
+        {# updateMoreMenu()) is the only explicit action left now that every  #}
+        {# ordinary edit autosaves (see save()/markDirty() in floorplan-editor.ts). #}
+        <div class="floorplan-sidebar__header">
+            <span id="floorplan-save-status" class="floorplan-save-status" aria-live="polite"></span>
+            <div class="floorplan-sidebar__header-actions">
+                <button type="button" id="floorplan-undo" class="btn btn--icon" disabled aria-label="Undo" title="Undo">
+                    <i class="material-symbols-outlined">undo</i>
+                </button>
+                <div class="floorplan-more-menu">
+                    <button type="button" id="floorplan-more-toggle" class="btn btn--icon" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="More">
+                        <i class="material-symbols-outlined">more_vert</i>
+                    </button>
+                    <div id="floorplan-more-list" class="floorplan-more-menu__list" hidden>
+                        <button type="button" id="floorplan-save-version" class="btn btn--ghost" disabled>Save as new version</button>
+                        <button type="button" id="floorplan-publish" class="btn btn--ghost" disabled>Publish to wiki</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="floorplan-sidebar__section">
             <span class="floorplan-field__label">Floors</span>
             <div id="floorplan-floors" class="floorplan-floors"></div>
@@ -138,19 +163,6 @@
                 <div id="floorplan-versions" class="floorplan-versions" hidden></div>
             </div>
         </details>
-
-        <div class="floorplan-sidebar__actions">
-            <button type="button" id="floorplan-save" class="btn btn--primary">Save</button>
-            <div class="floorplan-more-menu">
-                <button type="button" id="floorplan-more-toggle" class="btn btn--icon" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="More">
-                    <i class="material-symbols-outlined">more_vert</i>
-                </button>
-                <div id="floorplan-more-list" class="floorplan-more-menu__list" hidden>
-                    <button type="button" id="floorplan-save-version" class="btn btn--ghost" disabled>Save as new version</button>
-                    <button type="button" id="floorplan-publish" class="btn btn--ghost" disabled>Publish to wiki</button>
-                </div>
-            </div>
-        </div>
     </aside>
 </div>
 </div>{# /.floorplan-page #}
