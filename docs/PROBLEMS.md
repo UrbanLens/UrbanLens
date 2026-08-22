@@ -3985,6 +3985,14 @@ to install the GTK/ATK stack it wants. So the conversion is reasoned, typed and
 unit-tested at the logic layer (shared/floorplan/drag.ts), but the binding layer
 has never actually run.
 
+One defect was caught by review before it could ship further: the first version
+bound the move/up phase to the *layer's* element. render() clears every layer
+and runs on every frame of a drag, so the drag's own first move destroyed the
+element it was bound to - releasing pointer capture and ending the gesture after
+one frame. Tracking now happens on window, with capture on the map container,
+both of which outlive render(). That is also why the old code bound to the map
+and paid for it with the listener leak.
+
 What to exercise first in a real browser, desktop and phone:
   - dragging a wall body, and the Ctrl (network) and Alt (detach) variants
   - dragging a room fill, and confirming a press on an *unselected* room still

@@ -346,18 +346,28 @@ function boot(): void {
             // action here would also suppress the click that follows, and a
             // press that does not move is how everything gets selected.
             L.DomEvent.stopPropagation(event);
-            // Disabled up front rather than once the drag is live: on touch,
-            // Leaflet starts panning from the same contact, and two handlers
-            // moving the same finger's worth of distance fight each other.
+            // Disabled at the press rather than once the drag is live: on
+            // touch, Leaflet starts panning from the same contact, and two
+            // handlers would move the same finger's worth of distance.
             map.dragging.disable();
 
+            // The press identifies *what* was grabbed, but the rest of the
+            // gesture is tracked on the map container, which outlives it.
+            // render() runs on every frame of a drag and clears every layer,
+            // so the element under the pointer is destroyed by the drag's own
+            // first move - taking its listeners, and its pointer capture, with
+            // it. Watching the element instead would end every drag after one
+            // frame.
+            const surface = map.getContainer();
             const gesture = new DragGesture({ x: event.clientX, y: event.clientY }, modifiersOf(event), handlers.slopPx);
             let moved = false;
+            let finished = false;
             try {
-                element.setPointerCapture(event.pointerId);
+                surface.setPointerCapture(event.pointerId);
             } catch {
-                // Capture is an optimisation, not a requirement - the
-                // listeners below still fire without it.
+                // Capture is an optimisation: it keeps a pointer that wanders
+                // off the map reporting here. The listeners below still fire
+                // without it.
             }
 
             const onMove = (rawMove: Event): void => {
@@ -368,18 +378,28 @@ function boot(): void {
                 const pixel = map.mouseEventToContainerPoint(moveEvent);
                 handlers.move({ local: toLocal(map.containerPointToLatLng(pixel)), pixel, modifiers: gesture.modifiers });
             };
-            const onFinish = (): void => {
-                element.removeEventListener("pointermove", onMove);
-                element.removeEventListener("pointerup", onFinish);
-                element.removeEventListener("pointercancel", onFinish);
-                element.removeEventListener("lostpointercapture", onFinish);
+            const onFinish = (rawEnd: Event): void => {
+                const endEvent = rawEnd as PointerEvent;
+                if (endEvent.pointerId !== undefined && endEvent.pointerId !== event.pointerId) return;
+                // pointerup releases capture, so lostpointercapture follows it -
+                // without this the gesture would be ended twice.
+                if (finished) return;
+                finished = true;
+                window.removeEventListener("pointermove", onMove);
+                window.removeEventListener("pointerup", onFinish);
+                window.removeEventListener("pointercancel", onFinish);
+                window.removeEventListener("lostpointercapture", onFinish);
                 map.dragging.enable();
                 handlers.end?.(moved);
             };
-            element.addEventListener("pointermove", onMove);
-            element.addEventListener("pointerup", onFinish);
-            element.addEventListener("pointercancel", onFinish);
-            element.addEventListener("lostpointercapture", onFinish);
+            // On window rather than the map: a pointer released outside the map
+            // still has to end the gesture, or the listeners stay and panning
+            // stays disabled. Capture above normally retargets these to the
+            // container anyway; this is what makes the failure case survivable.
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onFinish);
+            window.addEventListener("pointercancel", onFinish);
+            window.addEventListener("lostpointercapture", onFinish);
         });
     }
 
