@@ -30,7 +30,8 @@ import {
     wallLength,
     wallSegments,
 } from "../shared/floorplan/document";
-import { type Face, type HealedJoin, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
+import { History } from "../shared/floorplan/history";
+import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
 import { PIXEL_TOLERANCES, snapPoint } from "../shared/floorplan/snapping";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers } from "../shared/map-layers";
@@ -204,6 +205,8 @@ function boot(): void {
         faces: [] as Face[],
         versions: [] as VersionSummary[],
         showUnderlay: false,
+        /** The plan could not be fetched, so what is on screen is not it. */
+        loadFailed: false,
     };
 
     /**
@@ -315,6 +318,16 @@ function boot(): void {
 
     let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
     let saving = false;
+    /** The last save attempt failed and the document is still unsaved. */
+    let saveFailed = false;
+    /**
+     * Backoff for retries, in milliseconds. A save fails for reasons that
+     * usually clear on their own - a dropped connection, a restarting server -
+     * so giving up after one attempt strands work the user cannot see is at
+     * risk. The last delay repeats indefinitely rather than escalating.
+     */
+    const RETRY_DELAYS = [2000, 5000, 15000, 60000] as const;
+    let retryAttempt = 0;
 
     /** Resolves once no save is in flight - callers that don't go through
      * queueAutosave() (Save as new version, Publish) still need this so their
@@ -326,7 +339,11 @@ function boot(): void {
     /** Debounced auto-save: there is no Save button any more (see editor.html) -
      * every edit is expected to reach the server on its own, a little after
      * the user stops making them. */
-    function queueAutosave(): void {
+    function queueAutosave(delay = 1200): void {
+        // The single funnel every edit reaches, so one guard here is enough:
+        // what is on screen after a failed load is a blank document, not the
+        // plan, and persisting it would replace the real one.
+        if (state.loadFailed) return;
         updateSaveStatus();
         if (autosaveTimer !== null) clearTimeout(autosaveTimer);
         const attempt = (): void => {
@@ -340,15 +357,20 @@ function boot(): void {
             autosaveTimer = null;
             void save(false);
         };
-        autosaveTimer = setTimeout(attempt, 1200);
+        autosaveTimer = setTimeout(attempt, delay);
     }
 
     function updateSaveStatus(): void {
         const el = document.getElementById("floorplan-save-status");
         if (!el) return;
+        const retry = document.getElementById("floorplan-retry-save");
+        if (retry) retry.hidden = !saveFailed || saving;
         if (saving) {
             el.textContent = "Saving…";
             el.className = "floorplan-save-status";
+        } else if (saveFailed) {
+            el.textContent = "Not saved";
+            el.className = "floorplan-save-status is-error";
         } else if (state.dirty) {
             el.textContent = "Unsaved changes";
             el.className = "floorplan-save-status is-unsaved";
@@ -360,39 +382,77 @@ function boot(): void {
 
     // ------------------------------------------------------------------ undo
 
-    const UNDO_LIMIT = 20;
-    let undoStack: FloorplanDocument[] = [];
+    const cloneDocument = (doc: FloorplanDocument): FloorplanDocument => JSON.parse(JSON.stringify(doc)) as FloorplanDocument;
+    const history = new History<FloorplanDocument>(cloneDocument);
 
-    /** Snapshot the whole document before a destructive change, so it can be restored. */
-    function snapshotForUndo(): void {
-        undoStack.push(JSON.parse(JSON.stringify(state.doc)) as FloorplanDocument);
-        if (undoStack.length > UNDO_LIMIT) undoStack.shift();
-        updateUndoButton();
+    /**
+     * Record the document as it stands, so the edit about to happen becomes one
+     * undo step. Call before mutating, at the start of a gesture.
+     *
+     * Args:
+     *     group: Collapses a run of related edits - successive keystrokes in
+     *         one name field - into a single step.
+     */
+    function checkpoint(group: string | null = null): void {
+        history.checkpoint(state.doc, group);
+        updateHistoryButtons();
     }
 
-    function updateUndoButton(): void {
-        const button = document.getElementById("floorplan-undo") as HTMLButtonElement | null;
-        if (button) button.disabled = undoStack.length === 0;
+    /** Forget both stacks - the document they describe is no longer loaded. */
+    function clearHistory(): void {
+        history.clear();
+        updateHistoryButtons();
     }
 
-    function undo(): void {
-        const previous = undoStack.pop();
-        if (!previous) return;
-        state.doc = previous;
+    function updateHistoryButtons(): void {
+        const undoButton = document.getElementById("floorplan-undo") as HTMLButtonElement | null;
+        if (undoButton) undoButton.disabled = !history.canUndo;
+        const redoButton = document.getElementById("floorplan-redo") as HTMLButtonElement | null;
+        if (redoButton) redoButton.disabled = !history.canRedo;
+    }
+
+    /** Adopt a document restored from either direction of the history. */
+    function applyHistoryState(doc: FloorplanDocument): void {
+        state.doc = doc;
         clearSelection();
-        // The restored floors array may be shorter than the one being
-        // viewed (undoing a floor deletion's own inverse: adding one back
-        // works the same way, via floorIndex clamping in floor() below).
+        // The restored floors array may be shorter than the one being viewed
+        // (undoing a floor deletion's own inverse: adding one back works the
+        // same way, via floorIndex clamping in floor() below).
         state.floorIndex = Math.min(state.floorIndex, Math.max(state.doc.floors.length - 1, 0));
         renderSidebar();
         render();
-        fitToContent();
-        updateUndoButton();
+        updateHistoryButtons();
         markDirtyQuiet();
     }
 
+    function undo(): void {
+        const previous = history.undo(state.doc);
+        if (previous === null) {
+            toast.info("Nothing to undo.");
+            return;
+        }
+        applyHistoryState(previous);
+    }
+
+    function redo(): void {
+        const next = history.redo(state.doc);
+        if (next === null) {
+            toast.info("Nothing to redo.");
+            return;
+        }
+        applyHistoryState(next);
+    }
+
+    document.getElementById("floorplan-retry-save")?.addEventListener("click", () => {
+        // Straight to a save rather than re-arming the debounce: the user is
+        // asking for it now, and waitForSaveSlot() inside save() already keeps
+        // it from overlapping a retry that is mid-flight.
+        retryAttempt = 0;
+        void save(false);
+    });
     document.getElementById("floorplan-undo")?.addEventListener("click", undo);
-    updateUndoButton();
+    document.getElementById("floorplan-redo")?.addEventListener("click", redo);
+    updateHistoryButtons();
 
     // -------------------------------------------------------------- selection
 
@@ -445,41 +505,6 @@ function boot(): void {
         if (item.kind === "marker") markerNodes.get(item.marker)?.openPopup();
     }
 
-    /**
-     * Actually join the endpoints planar.ts only noted were nearly touching.
-     *
-     * Mutates the walls in place - moving both ends of a healed pair to
-     * their midpoint - so a hand-drawn near-miss becomes a real, single
-     * vertex rather than two dangling points held together by a virtual
-     * edge that only exists inside deriveFaces()'s own graph.
-     *
-     * Returns:
-     *     Whether anything was moved, so the caller knows to re-derive faces
-     *     against the corrected geometry before using them.
-     */
-    function closeHealedGaps(current: Floor, healed: readonly HealedJoin[]): boolean {
-        let changed = false;
-        for (const join of healed) {
-            const midpoint = { x: (join.a.x + join.b.x) / 2, y: (join.a.y + join.b.y) / 2 };
-            for (const end of [join.a, join.b]) {
-                for (const wall of current.walls) {
-                    if (wall.ax === end.x && wall.ay === end.y) {
-                        wall.ax = midpoint.x;
-                        wall.ay = midpoint.y;
-                        changed = true;
-                    }
-                    if (wall.bx === end.x && wall.by === end.y) {
-                        wall.bx = midpoint.x;
-                        wall.by = midpoint.y;
-                        changed = true;
-                    }
-                }
-            }
-        }
-        if (changed) markDirtyQuiet();
-        return changed;
-    }
-
     // ---------------------------------------------------------------- render
 
     function render(): void {
@@ -489,34 +514,15 @@ function boot(): void {
         handleLayer.clearLayers();
 
         const current = floor();
-        let segments = wallSegments(current);
-        let derived = deriveFaces(segments);
-        // planar.ts deliberately never moves what the author drew (see its
-        // own docstring) - it only notes that two endpoints nearly meet. This
-        // is the one place that acts on that note and actually joins them, so
-        // a "healed" gap is a real, single vertex afterward rather than two
-        // walls that only look joined because a virtual edge bridges them.
-        // Re-derived so the rest of this render sees the corrected topology
-        // immediately, rather than one frame of a room fill still drawn to
-        // the pre-snap dangling points.
-        if (closeHealedGaps(current, derived.healed)) {
-            segments = wallSegments(current);
-            derived = deriveFaces(segments);
-        }
+        // Drawing a frame must never edit the document. planar.ts bridges a
+        // near-miss with a virtual edge so the region still closes while the
+        // authored coordinates stay exactly as drawn; acting on that note by
+        // welding the real endpoints destroyed geometry it had no mandate to
+        // touch, and did it from inside the draw path where undo could not
+        // see it. Seeds left orphaned by a deletion are pruned by whoever
+        // did the deleting (see pruneOrphanedSeeds).
+        const derived = deriveFaces(wallSegments(current));
         state.faces = derived.faces;
-
-        // A seed with no walls left on its floor can never bind to anything
-        // again - "not enclosed yet" is only a meaningful, recoverable state
-        // while there is something left to draw the missing wall onto.
-        if (!current.walls.length && current.rooms.length) {
-            snapshotForUndo();
-            current.rooms = [];
-            if (state.selection?.kind === "room") {
-                clearSelection();
-                renderSidebar();
-            }
-            markDirtyQuiet();
-        }
 
         // Once there's an exterior to read as "the building", the basemap
         // recedes (desaturated, in the tile pane only - an image overlay
@@ -595,6 +601,7 @@ function boot(): void {
                     if (!dragActive) {
                         if (startPoint.distanceTo(map.latLngToContainerPoint(moveEvent.latlng)) < 4) return;
                         dragActive = true;
+                        checkpoint();
                         map.dragging.disable();
                     }
                     const nowLocal = toLocal(moveEvent.latlng);
@@ -699,6 +706,7 @@ function boot(): void {
                         if (!dragActive) {
                             if (startPoint.distanceTo(map.latLngToContainerPoint(moveEvent.latlng)) < 4) return;
                             dragActive = true;
+                            checkpoint();
                             map.dragging.disable();
                         }
                         const nowLocal = toLocal(moveEvent.latlng);
@@ -783,6 +791,7 @@ function boot(): void {
                 if (state.tool !== "select") return;
                 showContextMenu(event, { kind: "marker", marker });
             });
+            node.on("dragstart", () => checkpoint());
             node.on("dragend", () => {
                 const p = toLocal(node.getLatLng());
                 marker.x = p.x;
@@ -879,6 +888,7 @@ function boot(): void {
                     if (!dragActive) {
                         if (startPoint.distanceTo(map.latLngToContainerPoint(moveEvent.latlng)) < 4) return;
                         dragActive = true;
+                        checkpoint();
                         map.dragging.disable();
                     }
                     const currentT = projectOnSegment(toLocal(moveEvent.latlng), a, b).t;
@@ -926,25 +936,31 @@ function boot(): void {
                 weight: 2,
                 className: "floorplan-handle",
             }).addTo(handleLayer);
-            let dragging = false;
             handle.on("mousedown", () => {
-                dragging = true;
                 map.dragging.disable();
-            });
-            map.on("mousemove", (event: L.LeafletMouseEvent) => {
-                if (!dragging) return;
-                const along = projectOnSegment(toLocal(event.latlng), { x: wall.ax, y: wall.ay }, { x: wall.bx, y: wall.by }).t;
-                if (end === "t_start") opening.t_start = Math.min(along, opening.t_end - MIN_WIDTH);
-                else opening.t_end = Math.max(along, opening.t_start + MIN_WIDTH);
-                opening.t_start = Math.max(0, opening.t_start);
-                opening.t_end = Math.min(1, opening.t_end);
-                render();
-            });
-            map.on("mouseup", () => {
-                if (!dragging) return;
-                dragging = false;
-                map.dragging.enable();
-                markDirty();
+                let moved = false;
+                const onMove = (event: L.LeafletMouseEvent): void => {
+                    if (!moved) {
+                        moved = true;
+                        checkpoint();
+                    }
+                    const along = projectOnSegment(toLocal(event.latlng), { x: wall.ax, y: wall.ay }, { x: wall.bx, y: wall.by }).t;
+                    if (end === "t_start") opening.t_start = Math.min(along, opening.t_end - MIN_WIDTH);
+                    else opening.t_end = Math.max(along, opening.t_start + MIN_WIDTH);
+                    opening.t_start = Math.max(0, opening.t_start);
+                    opening.t_end = Math.min(1, opening.t_end);
+                    render();
+                };
+                // Paired with the mousedown, not registered per render - see
+                // renderWallHandles for what the unpaired version cost.
+                const onUp = (): void => {
+                    map.off("mousemove", onMove);
+                    map.off("mouseup", onUp);
+                    map.dragging.enable();
+                    if (moved) markDirty();
+                };
+                map.on("mousemove", onMove);
+                map.on("mouseup", onUp);
             });
         }
     }
@@ -1036,52 +1052,62 @@ function boot(): void {
         for (const end of ["a", "b"] as const) {
             const point = end === "a" ? { x: wall.ax, y: wall.ay } : { x: wall.bx, y: wall.by };
             const handle = L.circleMarker(toLatLng(point), { radius: 6, color: "#00838f", fillColor: "#fff", fillOpacity: 1, className: "floorplan-handle" }).addTo(handleLayer);
-            let dragging = false;
             // Every other wall's endpoint exactly at this corner, found once
             // at the start of the drag - so dragging a shared corner moves
             // the whole joined corner together (every wall meeting there
             // keeps meeting there), rather than tearing this one wall's end
             // away from the others while they stay put.
-            let linked: Array<{ target: Wall; end: "a" | "b" }> = [];
             handle.on("mousedown", () => {
-                dragging = true;
                 map.dragging.disable();
-                linked = [];
+                const linked: Array<{ target: Wall; end: "a" | "b" }> = [];
                 for (const other of floor().walls) {
                     if (other === wall) continue;
                     if (other.ax === point.x && other.ay === point.y) linked.push({ target: other, end: "a" });
                     if (other.bx === point.x && other.by === point.y) linked.push({ target: other, end: "b" });
                 }
-            });
-            map.on("mousemove", (event: L.LeafletMouseEvent) => {
-                if (!dragging) return;
-                const raw = toLocal(event.latlng);
-                const others = wallSegments(floor()).filter((s) => s.wallId !== wall.uuid);
-                const snapped = snapPoint(raw, others, tolerances(), { suspended: state.suspendSnap });
-                if (end === "a") {
-                    wall.ax = snapped.point.x;
-                    wall.ay = snapped.point.y;
-                } else {
-                    wall.bx = snapped.point.x;
-                    wall.by = snapped.point.y;
-                }
-                for (const link of linked) {
-                    if (link.end === "a") {
-                        link.target.ax = snapped.point.x;
-                        link.target.ay = snapped.point.y;
-                    } else {
-                        link.target.bx = snapped.point.x;
-                        link.target.by = snapped.point.y;
+                let moved = false;
+                const onMove = (event: L.LeafletMouseEvent): void => {
+                    // Recorded on the first real movement, not on the press:
+                    // a press that never moves is a selection, not an edit,
+                    // and would otherwise leave an undo step that does nothing.
+                    if (!moved) {
+                        moved = true;
+                        checkpoint();
                     }
-                }
-                render();
-            });
-            map.on("mouseup", () => {
-                if (!dragging) return;
-                dragging = false;
-                linked = [];
-                map.dragging.enable();
-                markDirty();
+                    const raw = toLocal(event.latlng);
+                    const others = wallSegments(floor()).filter((segment) => segment.wallId !== wall.uuid);
+                    const snapped = snapPoint(raw, others, tolerances(), { suspended: state.suspendSnap });
+                    if (end === "a") {
+                        wall.ax = snapped.point.x;
+                        wall.ay = snapped.point.y;
+                    } else {
+                        wall.bx = snapped.point.x;
+                        wall.by = snapped.point.y;
+                    }
+                    for (const link of linked) {
+                        if (link.end === "a") {
+                            link.target.ax = snapped.point.x;
+                            link.target.ay = snapped.point.y;
+                        } else {
+                            link.target.bx = snapped.point.x;
+                            link.target.by = snapped.point.y;
+                        }
+                    }
+                    render();
+                };
+                // Bound here rather than at render time, and unbound on
+                // release: these used to be registered on every render() -
+                // which runs on every frame of every drag - and never removed,
+                // so a few seconds of dragging left hundreds of dead handlers
+                // firing on every subsequent mouse move for the rest of the session.
+                const onUp = (): void => {
+                    map.off("mousemove", onMove);
+                    map.off("mouseup", onUp);
+                    map.dragging.enable();
+                    if (moved) markDirty();
+                };
+                map.on("mousemove", onMove);
+                map.on("mouseup", onUp);
             });
         }
     }
@@ -1305,6 +1331,7 @@ function boot(): void {
         if (!item) {
             addAction(`Add ${titleCase(state.markerKind)} marker here`, () => {
                 if (!pendingContextPoint) return;
+                checkpoint();
                 const placed: Marker = { uuid: nextLocalId(), kind: state.markerKind, x: pendingContextPoint.x, y: pendingContextPoint.y, name: titleCase(state.markerKind) };
                 floor().markers.push(placed);
                 state.selection = { kind: "marker", marker: placed };
@@ -1317,6 +1344,7 @@ function boot(): void {
 
         if (item.kind === "wall") {
             addAction("Add opening", () => {
+                checkpoint();
                 item.wall.openings.push({ uuid: nextLocalId(), kind: "door", t_start: 0.45, t_end: 0.55, swing: "none" });
                 renderSidebar();
                 markDirty();
@@ -1414,7 +1442,15 @@ function boot(): void {
         return target.walls.length > 0;
     }
 
-    function addSeedAt(point: Pt): RoomSeed {
+    /**
+     * Args:
+     *     point: Where the seed goes, in plan-local metres.
+     *     record: Whether this is a gesture of its own. False when the caller
+     *         has already checkpointed, so placing a whole room is one undo
+     *         step rather than two.
+     */
+    function addSeedAt(point: Pt, record = true): RoomSeed {
+        if (record) checkpoint();
         const seed: RoomSeed = { uuid: nextLocalId(), name: "", x: point.x, y: point.y };
         floor().rooms.push(seed);
         markDirtyQuiet();
@@ -1509,6 +1545,7 @@ function boot(): void {
      * top of it) is what "joined with the nearest other walls" means here.
      */
     function placeRoomAt(center: Pt): void {
+        checkpoint();
         const current = floor();
         // Whatever the click landed inside, before anything new is added -
         // usually nothing yet (open floor), sometimes the whole exterior
@@ -1572,7 +1609,7 @@ function boot(): void {
             if (!target.openings.some((o) => o.kind !== "window")) target.openings.push({ uuid: nextLocalId(), kind: "door", t_start: 0.45, t_end: 0.55, swing: "none" });
         }
 
-        const seed = addSeedAt(center);
+        const seed = addSeedAt(center, false);
         state.selection = { kind: "room", room: seed };
         state.multi = [state.selection];
         setTool("select");
@@ -1584,6 +1621,7 @@ function boot(): void {
     function commitChain(): void {
         const points = state.drawing;
         if (points.length >= 2) {
+            checkpoint();
             for (let i = 0; i < points.length - 1; i++) {
                 const a = points[i] as Pt;
                 const b = points[i + 1] as Pt;
@@ -1699,6 +1737,7 @@ function boot(): void {
             // Pre-filled with the type as text - almost always exactly what
             // someone wants ("Hazard"), and cheaper to edit than to type from
             // scratch when it is not.
+            checkpoint();
             const placed: Marker = { uuid: nextLocalId(), kind: state.markerKind, x: raw.x, y: raw.y, name: titleCase(state.markerKind) };
             floor().markers.push(placed);
             state.selection = { kind: "marker", marker: placed };
@@ -1738,6 +1777,7 @@ function boot(): void {
         // with ===, which would mark a freshly-loaded plan dirty before any
         // real edit happened.
         if (Math.abs(bearing - state.doc.rotation_degrees) < 1e-6) return;
+        checkpoint("rotate");
         state.doc.rotation_degrees = bearing;
         markDirtyQuiet();
     });
@@ -1770,7 +1810,13 @@ function boot(): void {
         const key = event.key.toLowerCase();
         if (key === "z" && (event.ctrlKey || event.metaKey)) {
             event.preventDefault();
-            undo();
+            if (event.shiftKey) redo();
+            else undo();
+            return;
+        }
+        if (key === "y" && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            redo();
             return;
         }
         if (key === "1" || key === "v") setTool("select");
@@ -1798,7 +1844,7 @@ function boot(): void {
         const current = floor();
         const targets: SelectionItem[] = state.multi.length ? state.multi : state.selection ? [state.selection] : [];
         if (!targets.length) return;
-        snapshotForUndo();
+        checkpoint();
         const walls = new Set(targets.filter((t): t is Extract<SelectionItem, { kind: "wall" }> => t.kind === "wall").map((t) => t.wall));
         const rooms = new Set(targets.filter((t): t is Extract<SelectionItem, { kind: "room" }> => t.kind === "room").map((t) => t.room));
         const markers = new Set(targets.filter((t): t is Extract<SelectionItem, { kind: "marker" }> => t.kind === "marker").map((t) => t.marker));
@@ -1808,9 +1854,27 @@ function boot(): void {
         for (const target of targets) {
             if (target.kind === "opening") target.wall.openings = target.wall.openings.filter((o) => o !== target.opening);
         }
+        if (walls.size) pruneOrphanedSeeds(current);
         clearSelection();
         renderSidebar();
         markDirty();
+    }
+
+    /**
+     * Drop room seeds that deleting walls has left with nothing to bind to.
+     *
+     * A seed reports itself as "not enclosed" while there is still geometry
+     * it could plausibly be closed against, which is a recoverable state
+     * worth keeping. With no walls left on the floor at all there is nothing
+     * to recover toward, so the seed is only a dot in the user's way.
+     *
+     * Args:
+     *     current: The floor whose seeds should be reconsidered.
+     */
+    function pruneOrphanedSeeds(current: Floor): void {
+        if (current.walls.length || !current.rooms.length) return;
+        current.rooms = [];
+        if (state.selection?.kind === "room") clearSelection();
     }
 
     function setTool(tool: Tool): void {
@@ -1842,6 +1906,7 @@ function boot(): void {
     function renameFloor(item: Floor): void {
         const value = window.prompt("Floor name", item.name || `Level ${item.level}`);
         if (value === null) return;
+        checkpoint();
         item.name = value.trim();
         markDirty();
         renderSidebar();
@@ -1854,7 +1919,7 @@ function boot(): void {
         // to make deleting a floor someone opened by mistake a two-step chore.
         const isEmpty = !item.walls.length && !item.rooms.length && !item.markers.length;
         if (!isEmpty && !window.confirm(`Delete "${item.name || `Level ${item.level}`}"? This removes everything drawn on it.`)) return;
-        snapshotForUndo();
+        checkpoint();
         state.doc.floors.splice(index, 1);
         state.floorIndex = Math.min(state.floorIndex, state.doc.floors.length - 1);
         clearSelection();
@@ -1903,6 +1968,7 @@ function boot(): void {
         add.className = "btn btn--sm btn--ghost";
         add.textContent = "+ Floor";
         add.addEventListener("click", () => {
+            checkpoint();
             const levels = state.doc.floors.map((f) => f.level);
             const level = (levels.length ? Math.max(...levels) : -1) + 1;
             const added: Floor = { level, name: `Level ${level}`, walls: [], rooms: [], markers: [] };
@@ -1934,7 +2000,10 @@ function boot(): void {
             if (option === value) item.selected = true;
             node.appendChild(item);
         }
-        node.addEventListener("change", () => onChange(node.value));
+        node.addEventListener("change", () => {
+            checkpoint();
+            onChange(node.value);
+        });
         return node;
     }
 
@@ -1967,6 +2036,7 @@ function boot(): void {
                 }
                 typeSelect.addEventListener("change", () => {
                     if (!typeSelect.value) return;
+                    checkpoint();
                     for (const item of state.multi) if (item.kind === "wall") item.wall.kind = typeSelect.value as Wall["kind"];
                     markDirty();
                 });
@@ -2057,6 +2127,7 @@ function boot(): void {
             name.value = room.name;
             name.placeholder = "Boiler room";
             name.addEventListener("input", () => {
+                checkpoint(`room-name:${room.uuid}`);
                 room.name = name.value;
                 markDirtyQuiet();
             });
@@ -2074,6 +2145,7 @@ function boot(): void {
             name.className = "form-input";
             name.value = marker.name || "";
             name.addEventListener("input", () => {
+                checkpoint(`marker-name:${marker.uuid}`);
                 marker.name = name.value;
                 markDirtyQuiet();
             });
@@ -2266,7 +2338,19 @@ function boot(): void {
     function updateEmptyState(current: Floor): void {
         const empty = document.getElementById("floorplan-empty");
         if (!empty) return;
+        if (state.loadFailed) {
+            empty.replaceChildren(el("h2", "Could not load this floorplan."), el("p", "Nothing here has been saved. Reload the page to try again."));
+            empty.hidden = false;
+            return;
+        }
         empty.hidden = current.walls.length > 0;
+    }
+
+    /** A text element, for the handful of places that build one inline. */
+    function el(tag: string, text: string): HTMLElement {
+        const node = document.createElement(tag);
+        node.textContent = text;
+        return node;
     }
 
     // ------------------------------------------------------------ persistence
@@ -2332,12 +2416,16 @@ function boot(): void {
         if (validFrom) validFrom.value = state.doc.valid_from || "";
         // A brand-new plan starts from the real footprint when one is known, so
         // the first thing on screen is the building rather than a blank map.
-        const fresh = state.doc.floors.length === 1 && !(state.doc.floors[0] as Floor).walls.length;
+        const fresh = !state.loadFailed && state.doc.floors.length === 1 && !(state.doc.floors[0] as Floor).walls.length;
         if (fresh && seedFromOutline(state.doc.floors[0] as Floor)) state.dirty = true;
         else state.dirty = false;
         // A switch away from the version that was selected/mid-drag leaves
         // stale references into a document that no longer exists.
         clearSelection();
+        // An undo snapshot outliving the document it was taken from is not a
+        // safety net: applying it writes the *previous* version's contents,
+        // carrying that version's uuid, over the one now open.
+        clearHistory();
         state.floorIndex = 0;
         setTool("select");
         renderOriginBanner();
@@ -2347,7 +2435,7 @@ function boot(): void {
         updateMoreMenu();
         // A footprint-seeded plan is dirty the instant it loads (see above) -
         // with no Save button any more, nothing else would ever persist it.
-        if (state.dirty) queueAutosave();
+        if (state.dirty && !state.loadFailed) queueAutosave();
         else updateSaveStatus();
     }
 
@@ -2361,9 +2449,19 @@ function boot(): void {
                 state.doc = { ...emptyDocument({ lat, lng }), ...body };
                 if (!state.doc.floors?.length) state.doc.floors = emptyDocument({ lat, lng }).floors;
                 state.versions = body.versions || [];
+            } else {
+                // Neither branch above matched, so state.doc is still the
+                // blank document state was initialised with. Left unflagged,
+                // the seeding and autosave at the end of
+                // finishLoadingDocument() would persist that blank as a new
+                // version - which then wins the most-recent tie-break and
+                // reads as though the real plan had been deleted.
+                state.loadFailed = true;
+                toast.error("Could not load this floorplan. Reload to try again.");
             }
         } catch {
-            toast.warning("Could not load this floorplan.");
+            state.loadFailed = true;
+            toast.error("Could not load this floorplan. Reload to try again.");
         }
         finishLoadingDocument();
     }
@@ -2496,8 +2594,12 @@ function boot(): void {
         }
         const payload: FloorplanDocument = { ...state.doc };
         // Dropping the uuid is what makes the save fork a new dated version
-        // instead of overwriting the one that was loaded.
-        if (asNewVersion) delete payload.uuid;
+        // instead of overwriting the one that was loaded. A document that
+        // arrived from somewhere other than this user's own plans always
+        // forks: the banner promises "saving creates your own version", and
+        // an autosave firing a second after the page opened is nobody's
+        // decision to edit someone else's published work in place.
+        if (asNewVersion || state.doc.origin !== "local") delete payload.uuid;
         delete payload.origin;
         delete payload.versions;
         // Taken now, before anything below can await - state.doc may keep
@@ -2526,6 +2628,7 @@ function boot(): void {
                     // Not JSON - keep the generic, status-coded message above.
                 }
                 toast.warning(message);
+                noteSaveFailure();
                 return;
             }
             // The save view answers {ok, floorplan: <document>} - the uuid is
@@ -2541,13 +2644,15 @@ function boot(): void {
             if (body.floorplan) {
                 state.doc.uuid = body.floorplan.uuid;
                 applyServerIds(sent, body.floorplan);
-                // A save always answers "local" (see FloorplanSaveView) - a
-                // document loaded as someone else's community plan is, from
-                // this point on, the viewer's own forked copy.
+                // The response reports where the saved row actually lives, so
+                // a document loaded as someone else's community plan becomes
+                // "local" here precisely because the save forked it.
                 state.doc.origin = body.floorplan.origin;
                 state.versions = body.floorplan.versions || [];
             }
             state.dirty = false;
+            saveFailed = false;
+            retryAttempt = 0;
             updateMoreMenu();
             renderOriginBanner();
             renderVersions();
@@ -2557,10 +2662,20 @@ function boot(): void {
             if (asNewVersion) toast.success("Saved as a new version.");
         } catch {
             toast.warning("Could not save this floorplan.");
+            noteSaveFailure();
         } finally {
             saving = false;
             updateSaveStatus();
         }
+    }
+
+    /** Arm the next retry after a failed save, backing off as they pile up. */
+    function noteSaveFailure(): void {
+        saveFailed = true;
+        const delay = RETRY_DELAYS[Math.min(retryAttempt, RETRY_DELAYS.length - 1)] as number;
+        retryAttempt += 1;
+        // Through queueAutosave so a retry cannot overlap an in-flight save.
+        queueAutosave(delay);
     }
 
     /**
@@ -2645,12 +2760,14 @@ function boot(): void {
         });
     }
     document.getElementById("floorplan-start-outline")?.addEventListener("click", () => {
+        checkpoint();
         if (seedFromOutline(floor())) markDirty();
         else toast.info("No building outline is known for this place yet.");
     });
     document.getElementById("floorplan-start-rectangle")?.addEventListener("click", () => {
         // Four walls around the current view's middle third: the fastest way to
         // show that closing a loop produces a room.
+        checkpoint();
         const bounds = map.getBounds();
         const a = toLocal(bounds.getSouthWest());
         const b = toLocal(bounds.getNorthEast());

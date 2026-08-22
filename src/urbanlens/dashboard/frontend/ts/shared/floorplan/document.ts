@@ -151,3 +151,62 @@ export const wallEnd = (wall: Wall): Pt => ({ x: wall.bx, y: wall.by });
 
 /** Metres of wall, for the length readout. */
 export const wallLength = (wall: Wall): number => Math.hypot(wall.bx - wall.ax, wall.by - wall.ay);
+
+/** What to carry across when one floor's contents are copied onto another. */
+export interface CopyFloorOptions {
+    /** Room seeds, so the copy keeps the names the author already typed. */
+    rooms?: boolean;
+    /** Markers. Off by default: a hazard is a fact about one storey. */
+    markers?: boolean;
+    /**
+     * Whether copied markers keep their ``connector_id``. Off by default:
+     * that id is what makes two markers the same stairwell, so carrying it
+     * over silently joins the copy into the original's shaft.
+     */
+    connectors?: boolean;
+}
+
+/**
+ * A deep copy of *source*'s contents, with fresh identity throughout.
+ *
+ * Every uuid is replaced rather than carried over. The server matches a
+ * document item to an existing row purely by uuid and deletes by omission, so
+ * a copy that kept the source's uuids would not duplicate the floor - it would
+ * *move* every row onto the target and leave the floor it was copied from
+ * empty.
+ *
+ * Args:
+ *     source: The floor to copy from. Not modified.
+ *     options: What to carry across besides walls; see
+ *         :class:`CopyFloorOptions`.
+ *
+ * Returns:
+ *     Walls (with their openings), and optionally rooms and markers, all
+ *     newly identified and safe to append to another floor.
+ */
+export function copyFloorContents(source: Floor, options: CopyFloorOptions = {}): Pick<Floor, "walls" | "rooms" | "markers"> {
+    const { rooms = true, markers = false, connectors = false } = options;
+
+    const walls: Wall[] = source.walls.map((wall) => ({
+        ...wall,
+        uuid: nextLocalId(),
+        openings: wall.openings.map((opening) => ({ ...opening, uuid: nextLocalId() })),
+    }));
+
+    const copiedRooms: RoomSeed[] = rooms ? source.rooms.map((room) => ({ ...room, uuid: nextLocalId() })) : [];
+
+    const copiedMarkers: Marker[] = markers
+        ? source.markers.map((marker) => {
+              // lat/lng are recomputed from x/y before every save; carrying
+              // the source's across would only be stale until then.
+              const { lat: _lat, lng: _lng, ...rest } = marker;
+              return {
+                  ...rest,
+                  uuid: nextLocalId(),
+                  connector_id: connectors ? marker.connector_id : null,
+              };
+          })
+        : [];
+
+    return { walls, rooms: copiedRooms, markers: copiedMarkers };
+}

@@ -127,6 +127,26 @@ describe("deriveFaces", () => {
         expect(result.dangling.length).toBeGreaterThan(0);
     });
 
+    test("a wall shorter than the heal gap is not bridged to itself", () => {
+        // Both ends of a short stub are dangling, and they are each other's
+        // nearest candidate - so the healer used to fold the wall onto its own
+        // midpoint, which the editor then wrote back as a zero-length wall.
+        const stub: Segment[] = [{ wallId: "stub", a: { x: 0, y: 0 }, b: { x: 0.4, y: 0 } }];
+        const result = deriveFaces(stub);
+        expect(result.healed).toEqual([]);
+        expect(result.dangling).toHaveLength(2);
+    });
+
+    test("a doorjamb stub beside a wall still heals to its neighbour, not to itself", () => {
+        const walls: Segment[] = [
+            { wallId: "jamb", a: { x: 0, y: 0 }, b: { x: 0.3, y: 0 } },
+            { wallId: "run", a: { x: 0.5, y: 0 }, b: { x: 4, y: 0 } },
+        ];
+        const result = deriveFaces(walls);
+        expect(result.healed).toHaveLength(1);
+        expect(result.healed[0]?.gap).toBeCloseTo(0.2, 6);
+    });
+
     test("an overshooting wall still encloses, and the stub does not become a room", () => {
         // The right wall runs past the top wall by 0.5 m.
         const walls: Segment[] = [

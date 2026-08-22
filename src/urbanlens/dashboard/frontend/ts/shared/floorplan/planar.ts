@@ -243,7 +243,28 @@ function buildGraph(segments: Segment[], weldTolerance: number): Graph {
  * of a tidy drawing. The join is added as an extra edge rather than by moving
  * either endpoint, so what the user drew is preserved exactly.
  */
-function heal(graph: Graph, gap: number): HealedJoin[] {
+/**
+ * Whether the segment ``a``->``b`` reaches its target without running through
+ * geometry that is already there.
+ *
+ * A dangling end's nearest free neighbour is not always the one it meant: a
+ * short stub beside a longer wall is closer to that wall's *far* end than to
+ * the end beside it, and joining those two spans straight over the stub. A
+ * join that passes through another vertex is one the author would have drawn
+ * to that vertex instead.
+ */
+function joinIsClear(graph: Graph, a: number, b: number, tolerance: number): boolean {
+    const pa = graph.points[a] as Pt;
+    const pb = graph.points[b] as Pt;
+    for (let i = 0; i < graph.points.length; i++) {
+        if (i === a || i === b) continue;
+        const near = projectOnSegment(graph.points[i] as Pt, pa, pb);
+        if (near.t > 0 && near.t < 1 && near.distance <= tolerance) return false;
+    }
+    return true;
+}
+
+function heal(graph: Graph, gap: number, weldTolerance: number): HealedJoin[] {
     const degree = new Map<number, number>();
     for (const e of graph.edges) {
         degree.set(e.u, (degree.get(e.u) || 0) + 1);
@@ -261,11 +282,15 @@ function heal(graph: Graph, gap: number): HealedJoin[] {
         for (let j = i + 1; j < dangling.length; j++) {
             const b = dangling[j] as number;
             if (joined.has(b)) continue;
+            // A wall shorter than the gap has both of its own ends dangling,
+            // and they are the closest pair to each other - bridging them
+            // folds the wall onto itself instead of joining it to anything.
+            if (graph.edges.some((e) => (e.u === a && e.v === b) || (e.u === b && e.v === a))) continue;
             const d = distance(graph.points[a] as Pt, graph.points[b] as Pt);
-            if (d < bestDistance) {
-                best = b;
-                bestDistance = d;
-            }
+            if (d >= bestDistance) continue;
+            if (!joinIsClear(graph, a, b, weldTolerance)) continue;
+            best = b;
+            bestDistance = d;
         }
         if (best < 0) continue;
         joined.add(a);
@@ -367,7 +392,7 @@ export function deriveFaces(segments: Segment[], options: DeriveOptions = {}): D
 
     const split = planarize(segments, weldTolerance);
     const graph = buildGraph(split, weldTolerance);
-    const healed = heal(graph, healGap);
+    const healed = heal(graph, healGap, weldTolerance);
     const faces = extractFaces(graph, minFaceArea);
 
     const degree = new Map<number, number>();

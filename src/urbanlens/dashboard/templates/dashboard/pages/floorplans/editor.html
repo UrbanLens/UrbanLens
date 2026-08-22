@@ -146,9 +146,15 @@
         {# ordinary edit autosaves (see save()/markDirty() in floorplan-editor.ts). #}
         <div class="floorplan-sidebar__header">
             <span id="floorplan-save-status" class="floorplan-save-status" aria-live="polite"></span>
+            <button type="button" id="floorplan-retry-save" class="btn btn--sm btn--ghost" hidden>
+                <i class="material-symbols-outlined">refresh</i> Retry
+            </button>
             <div class="floorplan-sidebar__header-actions">
                 <button type="button" id="floorplan-undo" class="btn btn--icon" disabled aria-label="Undo" title="Undo (Ctrl+Z)">
                     <i class="material-symbols-outlined">undo</i>
+                </button>
+                <button type="button" id="floorplan-redo" class="btn btn--icon" disabled aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+                    <i class="material-symbols-outlined">redo</i>
                 </button>
                 <div class="floorplan-more-menu">
                     <button type="button" id="floorplan-more-toggle" class="btn btn--icon" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="More">
