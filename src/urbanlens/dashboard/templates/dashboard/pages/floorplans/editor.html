@@ -97,17 +97,26 @@
                             data-tooltip="Wall (W)" data-tooltip-float="true">
                         <i class="material-symbols-outlined">timeline</i>
                     </button>
+                    <button type="button" class="map-btn-icon" data-tool="opening" aria-pressed="false" aria-label="Add an opening"
+                            data-tooltip="Opening (D) · tap a wall" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">sensor_door</i>
+                    </button>
                     <button type="button" class="map-btn-icon" data-tool="room" aria-pressed="false" aria-label="Add room"
                             data-tooltip="Click to generate a whole rectangular room, sized and joined from what's already drawn (R)" data-tooltip-float="true">
                         <i class="material-symbols-outlined">meeting_room</i>
                     </button>
-                    <div class="floorplan-toolbar__markers" role="group" aria-label="Marker type">
-                        <button type="button" class="map-btn-icon" data-marker-kind="hazard" aria-label="Hazard marker" data-tooltip="Hazard (H)" data-tooltip-float="true"><i class="material-symbols-outlined">warning</i></button>
-                        <button type="button" class="map-btn-icon" data-marker-kind="stair" aria-label="Stair marker" data-tooltip="Stair (S)" data-tooltip-float="true"><i class="material-symbols-outlined">stairs</i></button>
-                        <button type="button" class="map-btn-icon" data-marker-kind="elevator" aria-label="Elevator marker" data-tooltip="Elevator (E)" data-tooltip-float="true"><i class="material-symbols-outlined">elevator</i></button>
-                    </div>
+                    <button type="button" class="map-btn-icon" data-tool="marker" aria-pressed="false" aria-label="Add a marker"
+                            data-tooltip="Marker (M) · hazard, stair or lift" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">pin_drop</i>
+                    </button>
                 </div>
             </div>
+
+            {# What the armed tool will do next. Beside the tools rather than in #}
+            {# the sidebar, which stacks below the map on a phone - the settings #}
+            {# for a tool have to be reachable while using it. Built by          #}
+            {# floorplan-editor.ts, which knows which tool is armed.             #}
+            <div id="floorplan-tool-options" class="floorplan-tool-options" role="group" aria-label="Tool options" hidden></div>
 
             <div id="floorplan-map" class="floorplan-map"
                  data-json-url="{% url 'pin.floorplan.json' pin.slug %}"

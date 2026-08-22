@@ -64,7 +64,7 @@ declare module "leaflet" {
     }
 }
 
-type Tool = "select" | "box" | "rotate" | "wall" | "room" | "marker";
+type Tool = "select" | "box" | "rotate" | "wall" | "opening" | "room" | "marker";
 
 type SelectionItem =
     | { kind: "wall"; wall: Wall }
@@ -215,6 +215,12 @@ function boot(): void {
         /** Every currently selected item (ctrl+click or box-select can grow this past one). */
         multi: [] as SelectionItem[],
         markerKind: "hazard" as MarkerKind,
+        /** What the wall tool draws next. */
+        wallKind: "interior" as Wall["kind"],
+        /** What the opening tool cuts next - this is where windows live. */
+        openingKind: "door" as Opening["kind"],
+        /** Snapping, as a setting. The backtick key suspends it momentarily. */
+        snapEnabled: true,
         dirty: false,
         suspendSnap: false,
         faces: [] as Face[],
@@ -291,6 +297,17 @@ function boot(): void {
         return [world.lat, world.lng];
     };
     const toLocal = (latlng: L.LatLng): Pt => projection.toLocal({ lat: latlng.lat, lng: latlng.lng });
+
+    /**
+     * Whether snapping is off right now.
+     *
+     * Two controls, deliberately: a switch for someone tracing something that
+     * genuinely is not square, and a held key for the one point in a drawing
+     * that has to sit off the grid. Neither can express the other's case - a
+     * toggle you must remember to turn back on is a trap, and a key you must
+     * hold for ten minutes is not a setting.
+     */
+    const snapOff = (): boolean => state.suspendSnap || !state.snapEnabled;
 
     /** Snap tolerances in metres, derived from the fixed pixel tolerances. */
     function tolerances(): { endpoint: number; wall: number; extension: number } {
@@ -437,7 +454,7 @@ function boot(): void {
      *     exclude: Wall ids this drag mutates, which cannot be its own targets.
      */
     function snapDragTranslation(moved: readonly Pt[], delta: Pt, exclude: ReadonlySet<string>): Pt {
-        if (state.suspendSnap) return delta;
+        if (snapOff()) return delta;
         const others = wallSegments(floor()).filter((segment) => !exclude.has(segment.wallId));
         return snapTranslation(moved, delta, others, tolerances());
     }
@@ -1383,7 +1400,7 @@ function boot(): void {
                 // Suspending snap gives a free angle; otherwise it steps, since
                 // turning a room by hand is an attempt to line it up with
                 // something and the last half-degree is unhittable freehand.
-                const angle = state.suspendSnap ? now - turning.start : snapRotation(now - turning.start);
+                const angle = snapOff() ? now - turning.start : snapRotation(now - turning.start);
                 for (const wall of boundary.unique) {
                     const origin = turning.walls.get(wall) as { a: Pt; b: Pt };
                     const a = rotate(origin.a, angle, pivot);
@@ -1539,7 +1556,7 @@ function boot(): void {
                     // can be what it snaps to.
                     const carried = new Set(moving.map((entry) => wallId(entry.wall)));
                     const others = wallSegments(current).filter((segment) => !carried.has(segment.wallId));
-                    const snapped = snapPoint(local, others, tolerances(), { suspended: state.suspendSnap });
+                    const snapped = snapPoint(local, others, tolerances(), { suspended: snapOff() });
                     for (const entry of moving) {
                         if (entry.end === "a") {
                             entry.wall.ax = snapped.point.x;
@@ -1714,7 +1731,7 @@ function boot(): void {
         if (target.closest(".leaflet-marker-icon, .floorplan-handle, .leaflet-popup, .leaflet-control, .floorplan-context-menu")) return;
         map.dragging.disable();
         wallDragStartPixel = map.mouseEventToContainerPoint(event);
-        wallDragStartLocal = snapPoint(toLocal(map.containerPointToLatLng(wallDragStartPixel)), wallSegments(floor()), tolerances(), { suspended: state.suspendSnap }).point;
+        wallDragStartLocal = snapPoint(toLocal(map.containerPointToLatLng(wallDragStartPixel)), wallSegments(floor()), tolerances(), { suspended: snapOff() }).point;
         wallDragActive = false;
     });
     map.getContainer().addEventListener("mousemove", (event: MouseEvent) => {
@@ -1729,7 +1746,7 @@ function boot(): void {
         }
         const snapped = snapPoint(toLocal(map.containerPointToLatLng(current)), wallSegments(floor()), tolerances(), {
             from: wallDragStartLocal,
-            suspended: state.suspendSnap,
+            suspended: snapOff(),
             axisRadians: (state.doc.rotation_degrees * Math.PI) / 180,
         });
         wallDragLine?.remove();
@@ -1740,7 +1757,7 @@ function boot(): void {
         if (wallDragActive) {
             const snapped = snapPoint(toLocal(map.containerPointToLatLng(map.mouseEventToContainerPoint(event))), wallSegments(floor()), tolerances(), {
                 from: wallDragStartLocal,
-                suspended: state.suspendSnap,
+                suspended: snapOff(),
                 axisRadians: (state.doc.rotation_degrees * Math.PI) / 180,
             });
             state.drawing = [wallDragStartLocal, snapped.point];
@@ -2022,7 +2039,7 @@ function boot(): void {
         }));
         const segments = wallSegments(current);
         const snapTolerance = tolerances();
-        const corners = rawCorners.map((corner) => snapPoint(corner, segments, snapTolerance, { suspended: state.suspendSnap }).point);
+        const corners = rawCorners.map((corner) => snapPoint(corner, segments, snapTolerance, { suspended: snapOff() }).point);
 
         const doorSide = learnedDoorSide(current, containerFace);
         const bounds: Bounds = {
@@ -2074,13 +2091,17 @@ function boot(): void {
         const points = state.drawing;
         if (points.length >= 2) {
             checkpoint();
+            const kind = state.wallKind;
             for (let i = 0; i < points.length - 1; i++) {
                 const a = points[i] as Pt;
                 const b = points[i + 1] as Pt;
                 if (distance(a, b) < 1e-6) continue;
                 floor().walls.push({
                     uuid: nextLocalId(),
-                    kind: floor().walls.length === 0 ? "exterior" : "interior",
+                    // The first wall on an empty floor is the shell whatever the
+                    // panel says - nobody starts a plan with an interior
+                    // partition - and after that the panel decides.
+                    kind: floor().walls.length === 0 ? "exterior" : kind,
                     thickness: "normal",
                     ax: a.x,
                     ay: a.y,
@@ -2125,7 +2146,7 @@ function boot(): void {
         const from = state.drawing.length ? (state.drawing[state.drawing.length - 1] as Pt) : null;
         const snapped = snapPoint(raw, wallSegments(floor()), tolerances(), {
             from,
-            suspended: state.suspendSnap,
+            suspended: snapOff(),
             axisRadians: (state.doc.rotation_degrees * Math.PI) / 180,
         });
         state.cursor = snapped.point;
@@ -2152,7 +2173,7 @@ function boot(): void {
             const from = state.drawing.length ? (state.drawing[state.drawing.length - 1] as Pt) : null;
             const snapped = snapPoint(raw, wallSegments(floor()), tolerances(), {
                 from,
-                suspended: state.suspendSnap,
+                suspended: snapOff(),
                 axisRadians: (state.doc.rotation_degrees * Math.PI) / 180,
             });
             // Clicking the chain's own origin closes the loop and finishes.
@@ -2179,6 +2200,28 @@ function boot(): void {
         }
         if (state.tool === "room") {
             placeRoomAt(raw);
+            return;
+        }
+        if (state.tool === "opening") {
+            const near = wallNear(raw);
+            if (!near) {
+                toast.info("Tap a wall to cut an opening into it.");
+                return;
+            }
+            checkpoint();
+            const length = wallLength(near.wall);
+            // A fixed 0.9m, not a fixed fraction of the wall: a door is a door
+            // whether it is in a 2m partition or a 12m elevation, and the
+            // fraction that used to be hardcoded made it neither.
+            const width = Math.min(0.9, length * 0.9) / length;
+            const centre = projectOnSegment(raw, { x: near.wall.ax, y: near.wall.ay }, { x: near.wall.bx, y: near.wall.by }).t;
+            const [start, end] = clampOpening(centre - width / 2, centre + width / 2);
+            const cut: Opening = { uuid: nextLocalId(), kind: state.openingKind, t_start: start, t_end: end, swing: "none" };
+            near.wall.openings.push(cut);
+            state.selection = { kind: "opening", wall: near.wall, opening: cut };
+            state.multi = [state.selection];
+            renderSidebar();
+            markDirty();
             return;
         }
         if (state.tool === "marker") {
@@ -2241,9 +2284,11 @@ function boot(): void {
         } catch {
             // Best effort; the window listeners below carry the gesture anyway.
         }
+        let turned = false;
         const onMove = (moveRaw: Event): void => {
             const moveEvent = moveRaw as PointerEvent;
             if (moveEvent.pointerId !== event.pointerId) return;
+            turned = true;
             map.setBearing(startBearing + (angleAt(moveEvent) - startAngle));
         };
         let done = false;
@@ -2254,6 +2299,10 @@ function boot(): void {
             window.removeEventListener("pointerup", onFinish);
             window.removeEventListener("pointercancel", onFinish);
             map.dragging.enable();
+            // The release reads as a click on the canvas, which would otherwise
+            // fall through to "clicked empty space" and drop the selection -
+            // so turning the plan to look at something would deselect it.
+            if (turned) suppressNextClick = true;
         };
         window.addEventListener("pointermove", onMove);
         window.addEventListener("pointerup", onFinish);
@@ -2324,6 +2373,7 @@ function boot(): void {
         }
         if (key === "1" || key === "v") setTool("select");
         if (key === "b") setTool("box");
+        if (key === "d") setTool("opening");
         if (key === "t") setTool("rotate");
         if (key === "2" || key === "w") setTool("wall");
         if (key === "r") setTool("room");
@@ -2401,6 +2451,83 @@ function boot(): void {
         return new Set(current.rooms.filter((room) => faceForSeed({ x: room.x, y: room.y }, state.faces)));
     }
 
+    /**
+     * What the armed tool will do next, shown beside the tools.
+     *
+     * The alternative is modifier keys, and modifiers cannot be seen, cannot be
+     * discovered and do not exist on a phone at all. Everything here is a
+     * visible control first; the keyboard shortcuts are accelerators for these,
+     * not the only way to reach them.
+     */
+    function renderToolOptions(): void {
+        const host = document.getElementById("floorplan-tool-options");
+        if (!host) return;
+        host.replaceChildren();
+
+        const group = <T extends string>(label: string, options: ReadonlyArray<{ value: T; label: string }>, current: T, onPick: (value: T) => void): void => {
+            const wrap = document.createElement("div");
+            wrap.className = "floorplan-tool-options__group";
+            const title = document.createElement("span");
+            title.className = "floorplan-tool-options__label";
+            title.textContent = label;
+            wrap.appendChild(title);
+            for (const option of options) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = `btn btn--sm${option.value === current ? " btn--primary" : " btn--ghost"}`;
+                button.textContent = option.label;
+                button.setAttribute("aria-pressed", String(option.value === current));
+                button.addEventListener("click", () => {
+                    onPick(option.value);
+                    renderToolOptions();
+                });
+                wrap.appendChild(button);
+            }
+            host.appendChild(wrap);
+        };
+
+        if (state.tool === "wall") {
+            group("New walls", WALL_KINDS, state.wallKind, (value) => {
+                state.wallKind = value;
+            });
+        }
+        if (state.tool === "opening") {
+            group("Cut a", OPENING_KINDS, state.openingKind, (value) => {
+                state.openingKind = value;
+            });
+        }
+        if (state.tool === "marker") {
+            group(
+                "Marker",
+                (Object.keys(MARKER_ICON) as MarkerKind[]).map((kind) => ({ value: kind, label: titleCase(kind) })),
+                state.markerKind,
+                (value) => {
+                    state.markerKind = value;
+                },
+            );
+        }
+
+        // Snapping applies to every tool that puts a point somewhere, so it is
+        // the one control that stays put rather than changing with the tool.
+        if (state.tool !== "rotate" && state.tool !== "box") {
+            const wrap = document.createElement("div");
+            wrap.className = "floorplan-tool-options__group";
+            const toggle = document.createElement("button");
+            toggle.type = "button";
+            toggle.className = `btn btn--sm${state.snapEnabled ? " btn--primary" : " btn--ghost"}`;
+            toggle.setAttribute("aria-pressed", String(state.snapEnabled));
+            toggle.innerHTML = '<i class="material-symbols-outlined">grid_on</i> Snap';
+            toggle.addEventListener("click", () => {
+                state.snapEnabled = !state.snapEnabled;
+                renderToolOptions();
+            });
+            wrap.appendChild(toggle);
+            host.appendChild(wrap);
+        }
+
+        host.hidden = host.childElementCount === 0;
+    }
+
     function setTool(tool: Tool): void {
         if (state.drawing.length) commitChain();
         state.tool = tool;
@@ -2420,7 +2547,9 @@ function boot(): void {
                     ? "Drag a region to select everything inside it · Esc returns to Select"
                     : tool === "rotate"
                       ? "Drag anywhere to turn the plan · Esc returns to Select"
-                      : tool === "wall"
+                      : tool === "opening"
+                        ? "Tap a wall to cut the opening showing above"
+                        : tool === "wall"
                     ? "Click to place corners · click the first corner to close · Esc finishes · hold ` to ignore snapping"
                     : tool === "room"
                       ? "Click to generate a rectangular room, sized and joined from what's already drawn"
@@ -2428,6 +2557,7 @@ function boot(): void {
                           ? "Click to drop a marker"
                           : "";
         }
+        renderToolOptions();
         renderSidebar();
     }
 
@@ -3565,6 +3695,8 @@ function boot(): void {
     for (const button of document.querySelectorAll<HTMLButtonElement>("[data-tool]")) {
         button.addEventListener("click", () => setTool((button.dataset.tool as Tool) || "select"));
     }
+    // Kept working for anything that still renders one; the toolbar's own
+    // marker-kind buttons now live in the tool options panel.
     for (const button of document.querySelectorAll<HTMLButtonElement>("[data-marker-kind]")) {
         button.addEventListener("click", () => {
             state.markerKind = button.dataset.markerKind as MarkerKind;
