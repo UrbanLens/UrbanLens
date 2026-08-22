@@ -394,6 +394,14 @@
     touch-action: none;
 }
 
+.floorplan-rotate-grip {
+    cursor: grab;
+
+    &:active {
+        cursor: grabbing;
+    }
+}
+
 .floorplan-floor-fields {
     display: flex;
     gap: 0.4rem;

@@ -151,3 +151,27 @@ export function constrainToAxis(delta: Pt, axisRadians: number): Pt {
     }
     return { x: -across * sin, y: across * cos };
 }
+
+/** Rotation snaps to this many degrees unless the author suspends snapping. */
+export const ROTATION_STEP_DEGREES = 15;
+
+/**
+ * Round a rotation onto the nearest step.
+ *
+ * Rotating a room by hand is almost always an attempt to line it up with
+ * something, and a free angle makes the last half-degree impossible to hit.
+ *
+ * Args:
+ *     radians: The raw angle the pointer describes.
+ *     stepDegrees: Increment to round onto; pass 0 to leave the angle alone.
+ *
+ * Returns:
+ *     The rounded angle, in radians.
+ */
+export function snapRotation(radians: number, stepDegrees: number = ROTATION_STEP_DEGREES): number {
+    if (stepDegrees <= 0) return radians;
+    const step = (stepDegrees * Math.PI) / 180;
+    // The + 0 collapses negative zero, which rounding a small negative angle
+    // produces and which formats as "-0°" in a readout.
+    return Math.round(radians / step) * step + 0;
+}

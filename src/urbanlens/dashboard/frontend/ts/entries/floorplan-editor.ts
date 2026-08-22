@@ -14,7 +14,7 @@
 
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
-import { PlanProjection, type Pt, distance, projectOnSegment } from "../shared/floorplan/coords";
+import { PlanProjection, type Pt, distance, projectOnSegment, rotate } from "../shared/floorplan/coords";
 import {
     type Floor,
     type Opening,
@@ -32,7 +32,7 @@ import {
     wallSegments,
 } from "../shared/floorplan/document";
 import { contiguousLevels, deriveDesignations } from "../shared/floorplan/designations";
-import { type DragModifiers, DragGesture, constrainToAxis, modifiersOf } from "../shared/floorplan/drag";
+import { type DragModifiers, DragGesture, constrainToAxis, modifiersOf, snapRotation } from "../shared/floorplan/drag";
 import { History } from "../shared/floorplan/history";
 import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
 import { PIXEL_TOLERANCES, clampOpening, snapPoint, snapTranslation } from "../shared/floorplan/snapping";
@@ -689,6 +689,7 @@ function boot(): void {
                 permanent: true,
             });
             roomLabels.push({ polygon, ring: face.ring });
+            if (seed && roomSelected && state.multi.length === 1) renderRoomRotateGrip(seed, face);
             polygon.on("click", (event) => {
                 // Checked before stopping propagation: a room fill covers a
                 // large area, and a stop here regardless of tool silently
@@ -1049,25 +1050,26 @@ function boot(): void {
     /**
      * The wall nearest a point, within grabbing distance.
      *
+     * Reports the distance as well as the wall, because callers deciding
+     * whether to move something onto it need to know it is a real improvement
+     * and not merely a different answer.
+     *
      * Args:
      *     point: Where the pointer is, in plan-local metres.
-     *     exclude: A wall to ignore - the one an opening already sits on, when
-     *         asking whether it should move somewhere better.
      *
      * Returns:
-     *     The nearest wall whose body is within the on-wall tolerance, or null
-     *     when the pointer is out in the open.
+     *     The nearest wall whose body is within the on-wall tolerance, with
+     *     how far away it is, or null when the pointer is out in the open.
      */
-    function wallNear(point: Pt, exclude: Wall | null = null): Wall | null {
+    function wallNear(point: Pt): { wall: Wall; distance: number } | null {
         const tolerance = tolerances().wall;
         let best: { wall: Wall; distance: number } | null = null;
         for (const candidate of floor().walls) {
-            if (candidate === exclude) continue;
             const near = projectOnSegment(point, { x: candidate.ax, y: candidate.ay }, { x: candidate.bx, y: candidate.by });
             if (near.distance > tolerance) continue;
             if (!best || near.distance < best.distance) best = { wall: candidate, distance: near.distance };
         }
-        return best ? best.wall : null;
+        return best;
     }
 
     /**
@@ -1173,7 +1175,14 @@ function boot(): void {
                     // it started on, for working into a corner where two walls
                     // are both within reach.
                     const host = slide.host;
-                    const target = modifiers.less ? null : wallNear(local, host);
+                    const hostAway = projectOnSegment(local, { x: host.ax, y: host.ay }, { x: host.bx, y: host.by }).distance;
+                    const nearest = modifiers.less ? null : wallNear(local);
+                    // Strictly closer, not merely different. Near a corner both
+                    // walls are within reach, so "the nearest wall that is not
+                    // the one I am on" is a different answer every frame and the
+                    // opening ping-pongs between them for as long as the pointer
+                    // sits there.
+                    const target = nearest && nearest.wall !== host && nearest.distance < hostAway ? nearest.wall : null;
                     if (target) {
                         const targetA = { x: target.ax, y: target.ay };
                         const targetB = { x: target.bx, y: target.by };
@@ -1287,6 +1296,95 @@ function boot(): void {
                 interactive: false,
             }).addTo(underlayLayer);
         }
+    }
+
+    /**
+     * A handle for turning a selected room.
+     *
+     * The room tool builds rectangles squared to the plan's own axis, which is
+     * the right default and the wrong answer for a building that is not quite
+     * square: the new room cannot be joined to walls sitting a degree or two
+     * off. Rotating it is the missing move, and the grip lives on the room
+     * rather than in a mode - there is nothing to arm and nothing to leave.
+     *
+     * Only the room's own walls turn. A wall it shares with a neighbour is
+     * carried at the corner they have in common and no further, exactly as
+     * moving the room already does, because the neighbour has an equal claim.
+     */
+    function renderRoomRotateGrip(seed: RoomSeed, face: Face): void {
+        const boundary = roomBoundaryWalls(seed);
+        if (!boundary || !boundary.unique.length) return;
+        const pivot = centroid(face.ring);
+        // Clear of the room's own edge by a fixed screen distance, so the grip
+        // is equally reachable on a cupboard and on a hall.
+        const reach = Math.max(...face.ring.map((point) => distance(point, pivot))) + 26 * metresPerPixel();
+        const axis = (state.doc.rotation_degrees * Math.PI) / 180;
+        const gripAt = { x: pivot.x + Math.cos(axis - Math.PI / 2) * reach, y: pivot.y + Math.sin(axis - Math.PI / 2) * reach };
+
+        L.polyline([toLatLng(pivot), toLatLng(gripAt)], { color: "#00838f", weight: 1, dashArray: "3 3", interactive: false }).addTo(handleLayer);
+        const grip = L.circleMarker(toLatLng(gripAt), { radius: 7, color: "#00838f", fillColor: "#fff", fillOpacity: 1, weight: 2, className: "floorplan-handle floorplan-rotate-grip" }).addTo(handleLayer);
+
+        const key = (p: Pt): string => `${p.x},${p.y}`;
+        let turning: { start: number; walls: Map<Wall, { a: Pt; b: Pt }>; seedAt: Pt; ownPoints: Set<string> } | null = null;
+        bindDrag(grip.getElement(), {
+            move: ({ local }) => {
+                if (!turning) {
+                    const ownPoints = new Set<string>();
+                    for (const wall of boundary.unique) {
+                        ownPoints.add(key({ x: wall.ax, y: wall.ay }));
+                        ownPoints.add(key({ x: wall.bx, y: wall.by }));
+                    }
+                    const walls = new Map<Wall, { a: Pt; b: Pt }>();
+                    for (const wall of [...boundary.unique, ...boundary.shared]) walls.set(wall, { a: { x: wall.ax, y: wall.ay }, b: { x: wall.bx, y: wall.by } });
+                    turning = { start: Math.atan2(local.y - pivot.y, local.x - pivot.x), walls, seedAt: { x: seed.x, y: seed.y }, ownPoints };
+                    checkpoint();
+                }
+                const now = Math.atan2(local.y - pivot.y, local.x - pivot.x);
+                // Suspending snap gives a free angle; otherwise it steps, since
+                // turning a room by hand is an attempt to line it up with
+                // something and the last half-degree is unhittable freehand.
+                const angle = state.suspendSnap ? now - turning.start : snapRotation(now - turning.start);
+                for (const wall of boundary.unique) {
+                    const origin = turning.walls.get(wall) as { a: Pt; b: Pt };
+                    const a = rotate(origin.a, angle, pivot);
+                    const b = rotate(origin.b, angle, pivot);
+                    wall.ax = a.x;
+                    wall.ay = a.y;
+                    wall.bx = b.x;
+                    wall.by = b.y;
+                }
+                for (const wall of boundary.shared) {
+                    const origin = turning.walls.get(wall) as { a: Pt; b: Pt };
+                    if (turning.ownPoints.has(key(origin.a))) {
+                        const moved = rotate(origin.a, angle, pivot);
+                        wall.ax = moved.x;
+                        wall.ay = moved.y;
+                    }
+                    if (turning.ownPoints.has(key(origin.b))) {
+                        const moved = rotate(origin.b, angle, pivot);
+                        wall.bx = moved.x;
+                        wall.by = moved.y;
+                    }
+                }
+                // The seed turns with the room, so the region keeps the name it
+                // was given rather than rebinding to whatever now sits over the
+                // point it used to occupy.
+                const movedSeed = rotate(turning.seedAt, angle, pivot);
+                seed.x = movedSeed.x;
+                seed.y = movedSeed.y;
+                const readout = document.getElementById("floorplan-hint");
+                if (readout) readout.textContent = `${Math.round((angle * 180) / Math.PI)}°`;
+                render();
+            },
+            end: (moved) => {
+                turning = null;
+                if (moved) {
+                    const readout = document.getElementById("floorplan-hint");
+                    if (readout) readout.textContent = "";
+                    markDirty();
+                }
+            },
+        });
     }
 
     /** Every other wall whose endpoint exactly coincides with `point`. */

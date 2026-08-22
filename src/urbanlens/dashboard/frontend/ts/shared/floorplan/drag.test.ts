@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { DragGesture, NO_MODIFIERS, SLOP_PIXELS, constrainToAxis, modifiersOf } from "./drag";
+import { DragGesture, NO_MODIFIERS, ROTATION_STEP_DEGREES, SLOP_PIXELS, constrainToAxis, modifiersOf, snapRotation } from "./drag";
 
 const at = (x: number, y: number) => ({ x, y });
 
@@ -125,5 +125,35 @@ describe("constrainToAxis", () => {
         const result = constrainToAxis(at(0, 0), 0.7);
         expect(result.x).toBeCloseTo(0, 9);
         expect(result.y).toBeCloseTo(0, 9);
+    });
+});
+
+describe("snapRotation", () => {
+    const deg = (d: number): number => (d * Math.PI) / 180;
+    const asDegrees = (r: number): number => Math.round((r * 180) / Math.PI);
+
+    test("rounds onto the nearest step", () => {
+        expect(asDegrees(snapRotation(deg(13)))).toBe(15);
+        expect(asDegrees(snapRotation(deg(7)))).toBe(0);
+        expect(asDegrees(snapRotation(deg(46)))).toBe(45);
+    });
+
+    test("a value already on a step is unchanged", () => {
+        expect(asDegrees(snapRotation(deg(90)))).toBe(90);
+    });
+
+    test("works through negative angles", () => {
+        expect(asDegrees(snapRotation(deg(-13)))).toBe(-15);
+        expect(asDegrees(snapRotation(deg(-7)))).toBe(0);
+    });
+
+    test("a zero step leaves the angle exactly as given", () => {
+        // How suspending snapping produces a free rotation.
+        expect(snapRotation(deg(13.4), 0)).toBeCloseTo(deg(13.4), 9);
+    });
+
+    test("the default step is the exported one", () => {
+        expect(asDegrees(snapRotation(deg(1)))).toBe(0);
+        expect(asDegrees(snapRotation(deg(ROTATION_STEP_DEGREES - 1)))).toBe(ROTATION_STEP_DEGREES);
     });
 });
