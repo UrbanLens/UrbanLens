@@ -866,12 +866,18 @@ raw `Response` semantics (201-vs-200, `redirected`).
   not support, so it binds a literal event name that never fires - while the toast at :2338 tells
   the user to right-click. The `as never` casts were the compiler flagging exactly this.~~ Fixed
   2026-08-22: binds the real `"contextmenu"` event instead.
-- `entries/map-annotations.ts:1371` - `loadDetailPins` has no ok-check and **clears the existing
+- ~~`entries/map-annotations.ts:1371` - `loadDetailPins` has no ok-check and **clears the existing
   pin layer and list** on failure (console.warn only). :2558 `flushDpAutoSave` swallows validation
-  errors, so autosaved edits are silently lost. :2047 `placeMediaItemAt` has no ok-check and no
-  loading indicator for a server-side image materialize. :1643/:1712 bulk promote/delete
-  `Promise.all` paths have no `.catch`, so one failure is an unhandled rejection with the
-  selection never cleared.
+  errors, so autosaved edits are silently lost. :2047 `placeMediaItemAt` has no ok-check~~ ...
+  :1643/:1712 bulk promote/delete `Promise.all` paths have no `.catch`, so one failure is an
+  unhandled rejection with the selection never cleared. Fixed 2026-08-22, except the last part was
+  already half done: `doDeleteSelectedDp` (the `:1712` delete path) already had its `.catch(() =>
+  false)` from an earlier, unrelated change - only `doPromoteSelectedDp` (`:1643`) still needed it,
+  and now has the identical fix with a comment pointing at its already-fixed sibling. **Still
+  open**: `placeMediaItemAt` still has no loading indicator for the server-side image-materialize
+  step it waits on - not attempted here since `window.mediaApplyMaterializedDrop`'s own contract
+  (defined in the gallery/organize module) would need to be understood first, and this file has no
+  established loading-state convention for the drag-and-drop-onto-map interaction to reuse.
 - `entries/photo-location-scan.ts:207` - the `webkitdirectory` fallback path (Firefox/Safari)
   reuses an already-aborted `AbortController`, so after one Stop click **every** later scan halts
   on the first file. Also: hits accumulate across scans (re-scanning double-counts into clusters),
