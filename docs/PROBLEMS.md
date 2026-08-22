@@ -882,9 +882,17 @@ raw `Response` semantics (201-vs-200, `redirected`).
   reuses an already-aborted `AbortController`, so after one Stop click **every** later scan halts
   on the first file. Also: hits accumulate across scans (re-scanning double-counts into clusters),
   and the photo uploads that run *after* the "Uploaded" toast have no progress indicator.
-- `shared/map-export.ts:270` + `themes/base.html:816` - `download()` awaits tile fetches (up to 8s
+- ~~`shared/map-export.ts:270` + `themes/base.html:816` - `download()` awaits tile fetches (up to 8s
   each) but no caller awaits it: no spinner, no toast, unhandled rejections, and the save flow
-  closes the composer mid-export so shapes project against a map being torn down.
+  closes the composer mid-export so shapes project against a map being torn down.~~ Fixed
+  2026-08-22: all three call sites in `base.html` now await the promise, toast on failure, and
+  disable their trigger for the duration (the read-only viewer's button gets the real `.is-loading`
+  spinner since it already has `.btn`; the composer's own bespoke `cmc-download-btn` just disables,
+  since it doesn't participate in that class and this fix didn't attempt to move it onto one). The
+  save flow now chains `_closeComposer()` onto the download's own completion instead of firing the
+  download and closing the composer in the same tick - it was the composer's `deactivate()`
+  tearing down `_composerMap` itself while `download()` was still awaiting tile fetches from it,
+  exactly contradicting the comment already in that code explaining why the close had to wait.
 - ~~`shared/markup-toolbar.ts:748` - `flushMarkupAutoSave` never checks `r.ok`, so a 400 (e.g.
   over-long label) reports success; the single pending-save slot also means editing item A then B
   inside the 500ms debounce silently discards A's changes~~ Fixed 2026-08-22: added the ok-check,

@@ -813,15 +813,22 @@
                         });
                     })
                     .then(function (shouldDownload) {
-                        if (shouldDownload) {
-                            window.MapExport.download(_composerMap, {
-                                layers: _composerLayers,
-                                getShapes: function () { return _composerShapes; },
-                                filename: 'map-screenshot.jpg',
-                            });
-                        }
-                        _closeComposer();
+                        // Awaited, not fired-and-forgotten: this was closing the
+                        // composer (tearing down _composerSession, which owns
+                        // _composerMap) immediately after *starting* the download,
+                        // not after it finished - the tile-fetch-and-draw below
+                        // could still be reading from a map that had just been
+                        // destroyed. Caught locally so a download failure (the
+                        // save already succeeded) doesn't report as "Failed to
+                        // save map" via the outer catch.
+                        if (!shouldDownload) return;
+                        return window.MapExport.download(_composerMap, {
+                            layers: _composerLayers,
+                            getShapes: function () { return _composerShapes; },
+                            filename: 'map-screenshot.jpg',
+                        }).catch(function () { toastr.error('Map saved, but the JPEG download failed.'); });
                     })
+                    .then(function () { _closeComposer(); })
                     .catch(function () { toastr.error('Failed to save map.'); })
                     .finally(function () { _saveBtn.disabled = false; });
                 return;
@@ -841,11 +848,15 @@
         // -- Download current view as JPEG -------------------------------------
         document.getElementById('cmc-download').addEventListener('click', function () {
             if (!_composerMap) return;
+            var btn = this;
+            btn.disabled = true;
             window.MapExport.download(_composerMap, {
                 layers: _composerLayers,
                 getShapes: function () { return _composerShapes; },
                 filename: 'map-screenshot.jpg',
-            });
+            })
+                .catch(function () { toastr.error('Failed to download the map image.'); })
+                .finally(function () { btn.disabled = false; });
         });
 
         // -- Clear attached map from a form ------------------------------------
@@ -863,11 +874,18 @@
             if (!downloadBtn) return;
             var cached = _viewerMaps[downloadBtn.dataset.mapId];
             if (!cached) return;
+            downloadBtn.classList.add('is-loading');
+            downloadBtn.disabled = true;
             window.MapExport.download(cached.map, {
                 layers: cached.layers,
                 getShapes: function () { return cached.shapes; },
                 filename: 'map-' + downloadBtn.dataset.mapId + '.jpg',
-            });
+            })
+                .catch(function () { toastr.error('Failed to download the map image.'); })
+                .finally(function () {
+                    downloadBtn.classList.remove('is-loading');
+                    downloadBtn.disabled = false;
+                });
         });
 
         // Wire the read-only viewer's Edit button: seeds the shared composer
