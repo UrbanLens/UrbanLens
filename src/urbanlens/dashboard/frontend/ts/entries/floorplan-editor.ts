@@ -14,7 +14,7 @@
 
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
-import { PlanProjection, type Pt, distance, projectOnSegment, rotate } from "../shared/floorplan/coords";
+import { PlanProjection, type Pt, distance, interiorPoint, projectOnSegment, rotate } from "../shared/floorplan/coords";
 import {
     type Floor,
     type Opening,
@@ -666,7 +666,13 @@ function boot(): void {
         // Rooms first so walls draw on top of their fills.
         roomLabels.length = 0;
         for (const face of derived.faces) {
-            const seed = current.rooms.find((room) => faceForSeed({ x: room.x, y: room.y }, [face]) === face);
+            // Matched against every face, not just this one. Asking "is this
+            // seed inside this face?" is a different question from "is this
+            // face this seed's room": faces nest, so a cupboard's seed is
+            // inside the hall around it too, and the hall would label itself
+            // with the cupboard's name - and, once rooms could be rotated,
+            // turn about the cupboard's pivot.
+            const seed = current.rooms.find((room) => faceForSeed({ x: room.x, y: room.y }, derived.faces) === face);
             const roomSelected = seed ? isSelected({ kind: "room", room: seed }) : false;
             // A thicker border in a color one shade off the default teal read
             // as nearly the same room at a glance - a tinted fill on top of
@@ -697,12 +703,12 @@ function boot(): void {
                 // exactly where someone is likeliest to want to add one.
                 if (state.tool !== "select") return;
                 L.DomEvent.stop(event);
-                const bound = seed || addSeedAt(centroid(face.ring));
+                const bound = seed || addSeedAt(interiorPoint(face.ring));
                 selectItem({ kind: "room", room: bound }, event);
             });
             polygon.on("contextmenu", (event) => {
                 if (state.tool !== "select") return;
-                const bound = seed || addSeedAt(centroid(face.ring));
+                const bound = seed || addSeedAt(interiorPoint(face.ring));
                 showContextMenu(event, { kind: "room", room: bound });
             });
             // Dragging an already-selected room moves it as a whole: its own
@@ -1314,7 +1320,7 @@ function boot(): void {
     function renderRoomRotateGrip(seed: RoomSeed, face: Face): void {
         const boundary = roomBoundaryWalls(seed);
         if (!boundary || !boundary.unique.length) return;
-        const pivot = centroid(face.ring);
+        const pivot = interiorPoint(face.ring);
         // Clear of the room's own edge by a fixed screen distance, so the grip
         // is equally reachable on a cupboard and on a hall.
         const reach = Math.max(...face.ring.map((point) => distance(point, pivot))) + 26 * metresPerPixel();
@@ -1747,16 +1753,6 @@ function boot(): void {
     }
 
     document.addEventListener("click", () => closeContextMenu());
-
-    function centroid(ring: readonly Pt[]): Pt {
-        let x = 0;
-        let y = 0;
-        for (const p of ring) {
-            x += p.x;
-            y += p.y;
-        }
-        return { x: x / ring.length, y: y / ring.length };
-    }
 
     /**
      * Fly to whatever is already known, instead of opening on a fixed zoom
