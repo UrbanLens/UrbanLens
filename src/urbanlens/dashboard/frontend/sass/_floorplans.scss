@@ -302,6 +302,14 @@
     border: 0;
     box-shadow: none;
     text-align: center;
+
+    // Zoomed out far enough, a room's name is wider than the room, and the
+    // names obscure the geometry they annotate. `visibility`, not `display`:
+    // the label has to keep its box so it can still be measured on the next
+    // pass, or it would report zero width, always "fit", and flicker back.
+    &.is-clipped {
+        visibility: hidden;
+    }
     text-shadow:
         0 0 3px #fff,
         0 0 3px #fff,

@@ -264,6 +264,8 @@ function boot(): void {
     // Rebuilt every render() - lets selectItem() find a marker's freshly
     // recreated Leaflet layer afterward (see its own comment for why).
     const markerNodes = new Map<Marker, L.Marker>();
+    /** Room fills and their rings, so labels can be re-fitted after a zoom. */
+    const roomLabels: Array<{ polygon: L.Polygon; ring: readonly Pt[] }> = [];
     const handleLayer = L.layerGroup().addTo(map);
     const ghostLayer = L.layerGroup().addTo(map);
     // Added first so it always paints beneath the live floor.
@@ -531,6 +533,7 @@ function boot(): void {
         mapEl.classList.toggle("has-plan", current.walls.some((wall) => wall.kind === "exterior"));
 
         // Rooms first so walls draw on top of their fills.
+        roomLabels.length = 0;
         for (const face of derived.faces) {
             const seed = current.rooms.find((room) => faceForSeed({ x: room.x, y: room.y }, [face]) === face);
             const roomSelected = seed ? isSelected({ kind: "room", room: seed }) : false;
@@ -554,6 +557,7 @@ function boot(): void {
                 className: "floorplan-room-label",
                 permanent: true,
             });
+            roomLabels.push({ polygon, ring: face.ring });
             polygon.on("click", (event) => {
                 // Checked before stopping propagation: a room fill covers a
                 // large area, and a stop here regardless of tool silently
@@ -583,6 +587,9 @@ function boot(): void {
                 if (!isSelected({ kind: "room", room: seed })) return;
                 const boundary = roomBoundaryWalls(seed);
                 if (!boundary) return;
+                // Nothing would move, so let the press pan the map instead of
+                // running a drag that disables panning and changes nothing.
+                if (!boundary.unique.length && !boundary.shared.length) return;
                 const key = (p: Pt): string => `${p.x},${p.y}`;
                 const ownPoints = new Set<string>();
                 for (const wall of boundary.unique) {
@@ -803,6 +810,47 @@ function boot(): void {
         renderUnderlay();
         renderFloorTabs();
         updateEmptyState(current);
+        updateRoomLabelFit();
+    }
+
+    /**
+     * Hide a room's name once it no longer fits inside the room.
+     *
+     * A permanent centred label is what teaches the wall-first model - a room
+     * naming itself the instant a loop closes - but zoomed out far enough the
+     * name is wider than the room it belongs to, and a row of names sprawling
+     * across each other's rooms obscures the very geometry they annotate.
+     *
+     * Hidden with ``visibility``, not ``display``: a label removed from layout
+     * measures zero, would always "fit", and would flicker back on the next
+     * pass.
+     */
+    function updateRoomLabelFit(): void {
+        // Every measurement first, every write second. Toggling a class between
+        // reads invalidates layout and forces a reflow per label.
+        const decisions: Array<{ element: HTMLElement; fits: boolean }> = [];
+        for (const { polygon, ring } of roomLabels) {
+            const element = polygon.getTooltip()?.getElement();
+            if (!element) continue;
+            let minX = Infinity;
+            let maxX = -Infinity;
+            let minY = Infinity;
+            let maxY = -Infinity;
+            for (const point of ring) {
+                const pixel = map.latLngToContainerPoint(toLatLng(point));
+                minX = Math.min(minX, pixel.x);
+                maxX = Math.max(maxX, pixel.x);
+                minY = Math.min(minY, pixel.y);
+                maxY = Math.max(maxY, pixel.y);
+            }
+            // The screen-space bounding box, which for a concave room is more
+            // generous than the room itself - deliberately, since the cost of
+            // hiding a name that would have fitted is higher than the cost of
+            // keeping one that slightly overhangs.
+            const fits = element.offsetWidth <= maxX - minX && element.offsetHeight <= maxY - minY;
+            decisions.push({ element, fits });
+        }
+        for (const { element, fits } of decisions) element.classList.toggle("is-clipped", !fits);
     }
 
     /**
@@ -1768,6 +1816,9 @@ function boot(): void {
     // fighting the other. No render() here: leaflet-rotate already
     // repositions every existing layer itself; redrawing would just be
     // wasted work on every frame of a drag or two-finger twist.
+    // A zoom changes what fits without changing anything worth re-rendering.
+    map.on("zoomend", () => updateRoomLabelFit());
+
     map.on("rotate", () => {
         const bearing = map.getBearing();
         // Also fires for the load-time setBearing() that restores a saved
@@ -1845,6 +1896,9 @@ function boot(): void {
         const targets: SelectionItem[] = state.multi.length ? state.multi : state.selection ? [state.selection] : [];
         if (!targets.length) return;
         checkpoint();
+        // Captured before anything is removed: afterwards there is no way to
+        // tell a seed that just lost its room from one that never had one.
+        const boundBefore = boundSeeds(current);
         const walls = new Set(targets.filter((t): t is Extract<SelectionItem, { kind: "wall" }> => t.kind === "wall").map((t) => t.wall));
         const rooms = new Set(targets.filter((t): t is Extract<SelectionItem, { kind: "room" }> => t.kind === "room").map((t) => t.room));
         const markers = new Set(targets.filter((t): t is Extract<SelectionItem, { kind: "marker" }> => t.kind === "marker").map((t) => t.marker));
@@ -1854,27 +1908,43 @@ function boot(): void {
         for (const target of targets) {
             if (target.kind === "opening") target.wall.openings = target.wall.openings.filter((o) => o !== target.opening);
         }
-        if (walls.size) pruneOrphanedSeeds(current);
+        if (walls.size) pruneOrphanedSeeds(current, boundBefore);
         clearSelection();
         renderSidebar();
         markDirty();
     }
 
     /**
-     * Drop room seeds that deleting walls has left with nothing to bind to.
+     * Drop the room seeds a deletion has just orphaned.
      *
-     * A seed reports itself as "not enclosed" while there is still geometry
-     * it could plausibly be closed against, which is a recoverable state
-     * worth keeping. With no walls left on the floor at all there is nothing
-     * to recover toward, so the seed is only a dot in the user's way.
+     * Two seeds can both be unbound and mean opposite things. One was placed
+     * in a region the author has not closed yet: that is a promise to finish,
+     * and it is shown as a hint. The other belonged to a room that existed
+     * until its walls were deleted a moment ago: nothing is coming back for
+     * it, and leaving it behind puts a dot on the map labelled with a room
+     * that is gone.
+     *
+     * The difference is not visible in the seed - only in what just happened -
+     * so it has to be decided here, against the set that was bound before the
+     * deletion.
      *
      * Args:
      *     current: The floor whose seeds should be reconsidered.
+     *     boundBefore: The seeds that were part of an enclosed room when the
+     *         gesture started.
      */
-    function pruneOrphanedSeeds(current: Floor): void {
-        if (current.walls.length || !current.rooms.length) return;
-        current.rooms = [];
-        if (state.selection?.kind === "room") clearSelection();
+    function pruneOrphanedSeeds(current: Floor, boundBefore: ReadonlySet<RoomSeed>): void {
+        if (!current.rooms.length) return;
+        const faces = deriveFaces(wallSegments(current)).faces;
+        const orphaned = current.rooms.filter((room) => boundBefore.has(room) && !faceForSeed({ x: room.x, y: room.y }, faces));
+        if (!orphaned.length) return;
+        current.rooms = current.rooms.filter((room) => !orphaned.includes(room));
+        if (state.selection?.kind === "room" && orphaned.includes(state.selection.room)) clearSelection();
+    }
+
+    /** The seeds currently sitting inside a derived room, before an edit. */
+    function boundSeeds(current: Floor): Set<RoomSeed> {
+        return new Set(current.rooms.filter((room) => faceForSeed({ x: room.x, y: room.y }, state.faces)));
     }
 
     function setTool(tool: Tool): void {
@@ -2178,12 +2248,18 @@ function boot(): void {
             );
         }
 
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "btn btn--sm btn--danger";
-        remove.textContent = "Delete";
-        remove.addEventListener("click", deleteSelection);
-        host.appendChild(remove);
+        // Not for a room: a room seed is a name attached to a region, so
+        // deleting it removes the name and leaves every wall standing, which
+        // reads as a delete that did not work. Removing a room for real is
+        // renderRoomDeleteControl's job, and it says what it will take.
+        if (selection.kind !== "room") {
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "btn btn--sm btn--danger";
+            remove.textContent = "Delete";
+            remove.addEventListener("click", deleteSelection);
+            host.appendChild(remove);
+        }
     }
 
     /**
@@ -2195,38 +2271,50 @@ function boot(): void {
      * proximity would be wrong exactly when it mattered.
      */
     /**
-     * A room's boundary walls, split into what is actually its own versus
-     * what it merely borders.
+     * A room's boundary walls, split three ways.
      *
-     * "Unique" excludes a wall that is either the building's own exterior or
-     * still bounds some *other* face - a corner room's boundary is partly the
-     * exterior shell, and an interior partition can be shared with the room
-     * on its other side. Bulk-deleting or moving used to take those with it
-     * wholesale, which looked like the room had torn a hole in the building.
+     * ``unique`` is every wall that bounds this room and no other, whatever
+     * kind it is; ``shared`` is the rest, which some neighbouring room also
+     * relies on. That split is about *topology*, and it is what a move reads:
+     * a room's own walls travel with it and a shared partition stretches to
+     * keep up.
+     *
+     * ``deletable`` is a narrower thing - the unique walls minus the
+     * building's exterior - and only deletion reads it, because removing a
+     * room should never tear a hole in the shell around it.
+     *
+     * Folding those two questions into one list is what made a room whose
+     * boundary happens to be entirely exterior wall stop behaving like a room
+     * at all: it had no unique walls, so it could not be dragged (the gesture
+     * ran, moved nothing, and blocked panning while it did) and offered no
+     * delete control.
      *
      * Returns null for an unbound seed (no face, so no boundary to gather).
      */
-    function roomBoundaryWalls(room: RoomSeed): { face: Face; unique: Wall[]; shared: Wall[] } | null {
+    function roomBoundaryWalls(room: RoomSeed): { face: Face; unique: Wall[]; shared: Wall[]; deletable: Wall[] } | null {
         const face = faceForSeed({ x: room.x, y: room.y }, state.faces);
         if (!face) return null;
         const boundary = floor().walls.filter((wall) => face.wallIds.includes(wallId(wall)));
-        const unique = boundary.filter((wall) => wall.kind !== "exterior" && !state.faces.some((other) => other !== face && other.wallIds.includes(wallId(wall))));
+        const unique = boundary.filter((wall) => !state.faces.some((other) => other !== face && other.wallIds.includes(wallId(wall))));
         const shared = boundary.filter((wall) => !unique.includes(wall));
-        return { face, unique, shared };
+        const deletable = unique.filter((wall) => wall.kind !== "exterior");
+        return { face, unique, shared, deletable };
     }
 
     /**
-     * Select (and offer to delete) a whole room at once - its seed and every
-     * wall unique to its boundary - rather than one wall at a time.
+     * Offer to delete a whole room at once - its seed and the walls that are
+     * only ever this room's - rather than one wall at a time.
      *
-     * Only offered for an enclosed room: an unbound seed has no face, so
-     * there is no wall boundary to gather - the generic Delete button at the
-     * bottom of the sidebar already covers removing the seed alone.
+     * Nothing is offered when the room has no walls of its own to lose (it
+     * sits inside the shell, or every side is shared with a neighbour). The
+     * room is still a room; there is simply no destructive action that would
+     * mean anything, and a button that only cleared its name was read as a
+     * delete that had failed.
      */
     function renderRoomDeleteControl(host: HTMLElement, room: RoomSeed): void {
         const boundary = roomBoundaryWalls(room);
         if (!boundary) return;
-        const walls = boundary.unique;
+        const walls = boundary.deletable;
         if (!walls.length) return;
         const button = document.createElement("button");
         button.type = "button";
@@ -2238,13 +2326,6 @@ function boot(): void {
             deleteSelection();
         });
         host.appendChild(button);
-        // The generic Delete button below only ever removes the seed (this
-        // room's name) - worth spelling out once this more drastic option is
-        // also on screen, so the two don't read as the same action.
-        const note = document.createElement("p");
-        note.className = "floorplan-hint";
-        note.textContent = "The Delete button below only clears this room's name, keeping its walls.";
-        host.appendChild(note);
     }
 
     function renderConnectorControls(host: HTMLElement, marker: Marker): void {
