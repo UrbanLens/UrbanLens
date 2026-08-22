@@ -82,8 +82,16 @@
                 </button>
                 <div class="map-buttons-content">
                     <button type="button" class="map-btn-icon is-active" data-tool="select" aria-pressed="true" aria-label="Select"
-                            data-tooltip="Select (V) · ctrl+click or shift+drag to select several" data-tooltip-float="true">
-                        <i class="material-symbols-outlined">check_box</i>
+                            data-tooltip="Select (V) · drag to pan · ctrl+click for several" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">arrow_selector_tool</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="box" aria-pressed="false" aria-label="Box select"
+                            data-tooltip="Box select (B) · drag a region" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">highlight_alt</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="rotate" aria-pressed="false" aria-label="Turn the plan"
+                            data-tooltip="Turn (T) · drag anywhere" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">rotate_90_degrees_ccw</i>
                     </button>
                     <button type="button" class="map-btn-icon" data-tool="wall" aria-pressed="false" aria-label="Draw walls"
                             data-tooltip="Wall (W)" data-tooltip-float="true">

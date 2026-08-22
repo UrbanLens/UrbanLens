@@ -396,6 +396,20 @@
 
 // Joints are drawn on every corner so the gesture is discoverable at all, so
 // they have to stay quiet until aimed at.
+// The cursor is what says a modal tool is armed, on a canvas where the tool
+// buttons are off in a corner.
+.floorplan-map.is-boxing {
+    cursor: crosshair;
+}
+
+.floorplan-map.is-rotating {
+    cursor: grab;
+
+    &:active {
+        cursor: grabbing;
+    }
+}
+
 .floorplan-swatches {
     display: flex;
     flex-wrap: wrap;

@@ -64,7 +64,7 @@ declare module "leaflet" {
     }
 }
 
-type Tool = "select" | "wall" | "room" | "marker";
+type Tool = "select" | "box" | "rotate" | "wall" | "room" | "marker";
 
 type SelectionItem =
     | { kind: "wall"; wall: Wall }
@@ -190,14 +190,13 @@ function boot(): void {
         rotateControl: { position: "topright", closeOnZeroBearing: false },
     }).setView([lat, lng], 20);
 
-    // leaflet-rotate's own control renders in Leaflet's standard top-right
-    // corner, which visually overlapped #floorplan-tools sitting in that same
-    // corner. Moving its actual DOM node into the toolbar (rather than
-    // rebuilding the drag-to-rotate gesture) keeps its tested behavior intact
-    // while making it read as one more tool alongside the others.
-    const rotateControlEl = map.getContainer().querySelector(".leaflet-control-rotate");
-    const toolbarContentEl = document.querySelector("#floorplan-tools .map-buttons-content");
-    if (rotateControlEl && toolbarContentEl) toolbarContentEl.appendChild(rotateControlEl);
+    // leaflet-rotate's own control is removed rather than re-homed. Reparenting
+    // it into the toolbar made it *look* like one more tool while still
+    // behaving like nothing else on the page: you had to press and drag on the
+    // little arrow itself. Rotating is now a tool like the others - arm it, drag
+    // anywhere, press Escape to leave - and the wheel gesture (shift+wheel,
+    // untouched) stays as the shortcut for people who know it.
+    map.getContainer().querySelector(".leaflet-control-rotate")?.remove();
 
     // Declared before createMapLayers below: its "underlay" custom toggle
     // reads state.showUnderlay synchronously while the panel builds its
@@ -1650,7 +1649,15 @@ function boot(): void {
     // (boxZoom above frees it) and is the same modifier most drawing tools
     // already use for exactly this.
     map.getContainer().addEventListener("mousedown", (event: MouseEvent) => {
-        if (state.tool !== "select" || event.button !== 0 || !event.shiftKey) return;
+        // Two ways in, which is the point. The Box select tool makes a plain
+        // drag draw a region, the way it does in every drawing application;
+        // Shift+drag does the same thing without leaving Select, for someone
+        // who already knows the shortcut. Under Select alone a drag still pans,
+        // because the basemap here is the document being traced and taking
+        // one-finger pan away from a map is not a trade worth making.
+        const viaTool = state.tool === "box";
+        const viaModifier = state.tool === "select" && event.shiftKey;
+        if ((!viaTool && !viaModifier) || event.button !== 0) return;
         const target = event.target as HTMLElement;
         // Ordinary wall/room/marker shapes are NOT excluded here - only
         // things with their own competing drag behavior are: draggable
@@ -2213,6 +2220,46 @@ function boot(): void {
     // fighting the other. No render() here: leaflet-rotate already
     // repositions every existing layer itself; redrawing would just be
     // wasted work on every frame of a drag or two-finger twist.
+    // Dragging anywhere while the rotate tool is armed turns the view. Bound on
+    // the container rather than a layer: the whole canvas is the handle, which
+    // is the entire difference from the control this replaced.
+    map.getContainer().addEventListener("pointerdown", (raw) => {
+        const event = raw as PointerEvent;
+        if (state.tool !== "rotate") return;
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        const centre = map.getSize().divideBy(2);
+        const angleAt = (source: PointerEvent): number => {
+            const point = map.mouseEventToContainerPoint(source);
+            return (Math.atan2(point.y - centre.y, point.x - centre.x) * 180) / Math.PI;
+        };
+        const startAngle = angleAt(event);
+        const startBearing = map.getBearing();
+        map.dragging.disable();
+        const surface = map.getContainer();
+        try {
+            surface.setPointerCapture(event.pointerId);
+        } catch {
+            // Best effort; the window listeners below carry the gesture anyway.
+        }
+        const onMove = (moveRaw: Event): void => {
+            const moveEvent = moveRaw as PointerEvent;
+            if (moveEvent.pointerId !== event.pointerId) return;
+            map.setBearing(startBearing + (angleAt(moveEvent) - startAngle));
+        };
+        let done = false;
+        const onFinish = (): void => {
+            if (done) return;
+            done = true;
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onFinish);
+            window.removeEventListener("pointercancel", onFinish);
+            map.dragging.enable();
+        };
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onFinish);
+        window.addEventListener("pointercancel", onFinish);
+    });
+
     // A zoom changes what fits without changing anything worth re-rendering.
     map.on("zoomend", () => scheduleRoomLabelFit());
 
@@ -2247,6 +2294,10 @@ function boot(): void {
         if (event.key === "Escape") {
             closeContextMenu();
             if (state.drawing.length) commitChain();
+            // Escape leaves a tool before it clears a selection: an armed tool
+            // is the more surprising state to be stuck in, and it is the one a
+            // user reaches for Escape to get out of.
+            else if (state.tool !== "select") setTool("select");
             else {
                 clearSelection();
                 renderSidebar();
@@ -2272,6 +2323,8 @@ function boot(): void {
             return;
         }
         if (key === "1" || key === "v") setTool("select");
+        if (key === "b") setTool("box");
+        if (key === "t") setTool("rotate");
         if (key === "2" || key === "w") setTool("wall");
         if (key === "r") setTool("room");
         if (key === "3" || key === "m") setTool("marker");
@@ -2355,19 +2408,25 @@ function boot(): void {
             button.classList.toggle("is-active", button.dataset.tool === tool);
             button.setAttribute("aria-pressed", String(button.dataset.tool === tool));
         }
-        mapEl.classList.toggle("is-drawing", tool !== "select");
+        mapEl.classList.toggle("is-drawing", tool !== "select" && tool !== "box" && tool !== "rotate");
+        mapEl.classList.toggle("is-boxing", tool === "box");
+        mapEl.classList.toggle("is-rotating", tool === "rotate");
         const hint = document.getElementById("floorplan-hint");
         if (hint) {
             // Select needs no hint - the interaction is the ordinary "click a
             // thing to work on it" every other tool on the site already uses.
             hint.textContent =
-                tool === "wall"
+                tool === "box"
+                    ? "Drag a region to select everything inside it · Esc returns to Select"
+                    : tool === "rotate"
+                      ? "Drag anywhere to turn the plan · Esc returns to Select"
+                      : tool === "wall"
                     ? "Click to place corners · click the first corner to close · Esc finishes · hold ` to ignore snapping"
                     : tool === "room"
                       ? "Click to generate a rectangular room, sized and joined from what's already drawn"
-                      : tool === "marker"
-                        ? "Click to drop a marker"
-                        : "";
+                        : tool === "marker"
+                          ? "Click to drop a marker"
+                          : "";
         }
         renderSidebar();
     }
