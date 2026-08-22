@@ -80,6 +80,13 @@ export function confirmDialog(options: ConfirmOptions | string): Promise<Confirm
     // which would leave the click looking like it did nothing.
     if (!found) return Promise.resolve(false);
 
+    // The dialog is a page-wide singleton. A second call while it's already
+    // open would otherwise overwrite resolveCurrent below - leaving the
+    // first call's promise unresolved forever - and showModal() throws on a
+    // <dialog> that's already open. Settle the earlier one as cancelled
+    // first, the same as a backdrop click or Escape would.
+    if (found.dialog.open) settle(false);
+
     found.title.textContent = opts.title || "Are you sure?";
     found.message.innerHTML = (opts.message || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>");
     found.ok.textContent = opts.confirmLabel || "Confirm";

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
-import { installGlobalScrollToHash, scrollToHash } from "./scroll-to-hash";
+import { installGlobalScrollToHash, resetScrollToHashForTests, scrollToHash } from "./scroll-to-hash";
 
 /** Give the target an observable scrollIntoView - happy-dom's is a no-op. */
 function target(id: string): ReturnType<typeof mock> {
@@ -23,6 +23,7 @@ installGlobalScrollToHash();
 beforeEach(() => {
     setHash("");
     document.body.innerHTML = "";
+    resetScrollToHashForTests();
 });
 
 describe("after an HTMX swap", () => {
@@ -54,6 +55,32 @@ describe("after an HTMX swap", () => {
         settle(); // nothing to find yet
 
         const spy = target("comment-42");
+        settle();
+        expect(spy).toHaveBeenCalled();
+    });
+
+    test("does not scroll again on a later, unrelated swap once it already landed", () => {
+        // A page reached via a hash link keeps that hash in the URL for as long
+        // as the reader stays on it - every other HTMX interaction afterwards
+        // (pagination, a like, an unrelated form) used to yank the reader back
+        // to the original anchor.
+        const spy = target("comment-42");
+        setHash("#comment-42");
+        settle();
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        settle();
+        settle();
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    test("scrolls again if the hash changes to a different anchor", () => {
+        target("comment-42");
+        setHash("#comment-42");
+        settle();
+
+        const spy = target("comment-99");
+        setHash("#comment-99");
         settle();
         expect(spy).toHaveBeenCalled();
     });

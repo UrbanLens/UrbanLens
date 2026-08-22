@@ -2271,8 +2271,15 @@ function init(): void {
                 const editableLayer = layer as L.Layer & { editing?: { _markerGroup?: L.LayerGroup } };
                 if (editableLayer.editing?._markerGroup) {
                     editableLayer.editing._markerGroup.eachLayer((m) => {
-                        m.off("contextmenu.rcdelete" as never);
-                        m.on("contextmenu.rcdelete" as never, (e: L.LeafletMouseEvent) => {
+                        // Leaflet's event system has no jQuery-style dot
+                        // namespacing - "contextmenu.rcdelete" was a distinct
+                        // event type nothing ever fires, so right-click
+                        // delete never worked despite the toast advertising
+                        // it. .off() with no listener removes every
+                        // "contextmenu" handler, which is what keeps repeat
+                        // calls (this runs on every EDITSTART) from stacking.
+                        m.off("contextmenu");
+                        m.on("contextmenu", (e: L.LeafletMouseEvent) => {
                             L.DomEvent.stopPropagation(e);
                             m.fire("click");
                         });
