@@ -946,8 +946,11 @@ raw `Response` semantics (201-vs-200, `redirected`).
   hash it already scrolled to and only re-arms if the hash itself changes.
 - `shared/onboarding-tour.ts:87` - auto-dismiss hooks bind only to elements present at init; HTMX
   swaps orphan them, so dismissed cards reappear.
-- `shared/organize-header.ts:113` - a transient window resize below 768px *permanently* overwrites
-  the stored gallery view preference.
+- ~~`shared/organize-header.ts:113` - a transient window resize below 768px *permanently* overwrites
+  the stored gallery view preference.~~ Fixed 2026-08-22: the mobile fallback is now purely a
+  display-time computation (`effectiveView()`) layered over the stored preference rather than a
+  call to `setSharedView()` that persisted "list" over it - widening back past the breakpoint
+  restores "gallery" automatically since the stored value was never actually touched.
 - `entries/article-wysiwyg.ts:532` - the first WYSIWYG keystroke re-serializes the whole article
   through a lossy `tiptap-markdown` parse (`html: false`), rewriting content document-wide, not
   just at the edit point. Needs round-trip tests over real saved articles before it is trusted.
