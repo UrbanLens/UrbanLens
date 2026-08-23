@@ -206,6 +206,39 @@ function closetPlan(): unknown {
     };
 }
 
+/** A square building with a free-standing box inside it, touching nothing. */
+function islandPlan(): unknown {
+    const wall = (kind: string, ax: number, ay: number, bx: number, by: number) => ({ kind, thickness: "normal", ax, ay, bx, by, openings: [] });
+    return {
+        uuid: "plan-island",
+        name: "island",
+        valid_from: null,
+        origin: "local",
+        plan_origin: { lat: 41.733, lng: -73.928 },
+        rotation_degrees: 0,
+        floors: [
+            {
+                uuid: "floor-1",
+                level: 0,
+                designation: "",
+                name: "Ground",
+                walls: [
+                    wall("exterior", 0, 0, 10, 0),
+                    wall("exterior", 10, 0, 10, 10),
+                    wall("exterior", 10, 10, 0, 10),
+                    wall("exterior", 0, 10, 0, 0),
+                    wall("interior", 3, 3, 6, 3),
+                    wall("interior", 6, 3, 6, 6),
+                    wall("interior", 6, 6, 3, 6),
+                    wall("interior", 3, 6, 3, 3),
+                ],
+                rooms: [{ name: "Island", x: 4.5, y: 4.5 }],
+                markers: [],
+            },
+        ],
+    };
+}
+
 function squarePlan(): unknown {
     const corners = [
         [0, 0],
@@ -255,7 +288,7 @@ let server: ReturnType<typeof Bun.serve>;
  * Served over HTTP rather than injected: the bundle is a module that imports a
  * chunk by relative URL, which cannot resolve without a real origin.
  */
-async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false, plan: "square" | "grid" | "closet" = "square"): Promise<void> {
+async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false, plan: "square" | "grid" | "closet" | "island" = "square"): Promise<void> {
     page = await browser.newPage({ viewport, hasTouch });
     page.on("pageerror", (error) => console.error("PAGEERROR", String(error).slice(0, 300)));
     page.on("console", (message) => {
@@ -362,6 +395,7 @@ beforeAll(async () => {
             if (path === "/json") return Response.json(squarePlan());
             if (path === "/json-grid") return Response.json(gridPlan());
             if (path === "/json-closet") return Response.json(closetPlan());
+            if (path === "/json-island") return Response.json(islandPlan());
             if (path === "/save") return Response.json({ ok: true, floorplan: squarePlan() });
             return new Response(Bun.file(join(STATIC_DIR, path.replace(/^\//, ""))));
         },
@@ -855,22 +889,29 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // Exactly one label per face, not "some". The old drag path left a
         // stale generation of tooltips behind and read 288 for 144 rooms, and
         // an at-least assertion cannot tell a duplicate from a redraw.
-        const labels = () => page.locator(".floorplan-room-label").count();
+        //
+        // Waited for rather than sampled: 144 tooltips do not all arrive in the
+        // same frame on a loaded machine, and a count read too early is a
+        // flake, not a finding. A count stuck at the wrong number still fails,
+        // which is the whole point of the exact figure.
         const ROOMS = 144;
-        expect(await labels()).toBe(ROOMS);
+        const settleLabels = async (want: number): Promise<void> => {
+            await page.waitForFunction((n) => document.querySelectorAll(".floorplan-room-label").length === n, want, { timeout: 10000 });
+        };
+        await settleLabels(ROOMS);
 
         const before = await planExtent();
         await page.mouse.move(before.grab.x, before.grab.y);
         await page.mouse.down();
         for (let step = 1; step <= 4; step++) await page.mouse.move(before.grab.x, before.grab.y - step * 6);
-        expect(await labels()).toBe(0);
+        await settleLabels(0);
 
         await page.mouse.up();
         await settle();
         // And come back on release, which needs a frame after the drag ends.
         // Back, and not doubled: a render that left the previous frame's
         // tooltips behind would show here as 288.
-        expect(await labels()).toBe(ROOMS);
+        await settleLabels(ROOMS);
         await page.close();
     });
 
@@ -1082,6 +1123,42 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // a pan, and the closet "moved" only because the whole plan slid under
         // it - which is what this reads as when it is checked on its own.
         expect(await shell(), "the whole plan moved, so that was a pan").toBe(before);
+        await page.close();
+    });
+
+    test("a free-standing room moves rigidly and can snap to the shell", async () => {
+        // Two things at once, because they are the same drag: a room touching
+        // nothing translates as a block, and the shell is a snap target for it.
+        // The shell used to be excluded on the grounds that this drag stretched
+        // it, which it no longer does - it stays exactly where it is, which is
+        // what makes it worth lining up against.
+        await openEditor({ width: 1200, height: 800 }, false, "island");
+        const island = async (): Promise<{ x: number; y: number; w: number; h: number } | null> =>
+            page.evaluate(() => {
+                const fills = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"));
+                const smallest = fills.map((n) => n.getBoundingClientRect()).sort((a, b) => a.width * a.height - b.width * b.height)[0];
+                return smallest ? { x: Math.round(smallest.left), y: Math.round(smallest.top), w: Math.round(smallest.width), h: Math.round(smallest.height) } : null;
+            });
+        const before = await island();
+        expect(before, "no island").not.toBeNull();
+
+        const grab = { x: before!.x + before!.w / 2, y: before!.y + before!.h / 2 };
+        await page.mouse.click(grab.x, grab.y);
+        await settle();
+        await page.mouse.move(grab.x, grab.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 10; step++) await page.mouse.move(grab.x - step * 6, grab.y);
+        await page.mouse.up();
+        await settle();
+
+        const after = await island();
+        expect(after, "the island vanished").not.toBeNull();
+        // It went somewhere...
+        expect(before!.x - after!.x).toBeGreaterThan(20);
+        // ...as a block: a room that deformed would not keep its size. Within a
+        // pixel, since the box is measured off a rendered path.
+        expect(Math.abs(after!.w - before!.w)).toBeLessThanOrEqual(1);
+        expect(Math.abs(after!.h - before!.h)).toBeLessThanOrEqual(1);
         await page.close();
     });
 

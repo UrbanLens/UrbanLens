@@ -42,13 +42,11 @@ export interface RoomBoundary {
  * Args:
  *     face: The region the room sits in.
  *     walls: Every wall on the floor.
- *     faces: Every derived face on the floor.
  *
  * Returns:
  *     The boundary, split.
  */
-export function splitRoomBoundary(face: Face, walls: readonly Wall[], faces: readonly Face[]): RoomBoundary {
-    void faces;
+export function splitRoomBoundary(face: Face, walls: readonly Wall[]): RoomBoundary {
     const boundary = walls.filter((wall) => face.wallIds.includes(wallId(wall)));
     const standalone = boundary.length > 0 && boundary.every((wall) => wall.kind === "exterior");
     const unique = boundary.filter((wall) => standalone || wall.kind !== "exterior");

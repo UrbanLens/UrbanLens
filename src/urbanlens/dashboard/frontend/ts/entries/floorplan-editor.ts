@@ -895,9 +895,13 @@ function boot(): void {
                         dx = squared.x;
                         dy = squared.y;
                     }
-                    // Shared walls are stretched by this drag too, so they
-                    // cannot be its snap targets - see the wall-body drag.
-                    const carried = new Set([...boundary.unique, ...boundary.shared].map((item) => wallId(item)));
+                    // Only the room's own walls are excluded, because only they
+                    // move. The shell stays put, which makes it exactly what
+                    // this drag wants to snap against - lining a closet up with
+                    // the wall it sits against is most of what moving one is
+                    // for. (A wall the drag rewrites cannot be its own snap
+                    // target; see the wall-body drag for what that costs.)
+                    const carried = new Set(boundary.unique.map((item) => wallId(item)));
                     const corners: Pt[] = [];
                     for (const item of boundary.unique) {
                         const origin = origins.get(item) as { ax: number; ay: number; bx: number; by: number };
@@ -3667,7 +3671,7 @@ function boot(): void {
     function roomBoundaryWalls(room: RoomSeed): RoomBoundary | null {
         const face = faceForSeed({ x: room.x, y: room.y }, state.faces);
         if (!face) return null;
-        return splitRoomBoundary(face, floor().walls, state.faces);
+        return splitRoomBoundary(face, floor().walls);
     }
 
     /**

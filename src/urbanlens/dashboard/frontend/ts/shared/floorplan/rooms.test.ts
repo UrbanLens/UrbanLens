@@ -33,7 +33,7 @@ describe("splitRoomBoundary", () => {
         // the side off the building.
         const { walls, west, faces } = splitShell();
 
-        const boundary = splitRoomBoundary(west, walls, faces);
+        const boundary = splitRoomBoundary(west, walls);
 
         expect(boundary.shared.map((w) => w.uuid)).toEqual(["north", "south", "west"]);
         expect(boundary.unique.map((w) => w.uuid)).not.toContain("west");
@@ -46,7 +46,7 @@ describe("splitRoomBoundary", () => {
         // to be moved, turned or deleted.
         const { walls, west, faces } = splitShell();
 
-        const boundary = splitRoomBoundary(west, walls, faces);
+        const boundary = splitRoomBoundary(west, walls);
 
         expect(boundary.unique.map((w) => w.uuid)).toEqual(["partition"]);
     });
@@ -56,8 +56,8 @@ describe("splitRoomBoundary", () => {
         // gets smaller.
         const { walls, west, east, faces } = splitShell();
 
-        expect(splitRoomBoundary(west, walls, faces).unique.map((w) => w.uuid)).toContain("partition");
-        expect(splitRoomBoundary(east, walls, faces).unique.map((w) => w.uuid)).toContain("partition");
+        expect(splitRoomBoundary(west, walls).unique.map((w) => w.uuid)).toContain("partition");
+        expect(splitRoomBoundary(east, walls).unique.map((w) => w.uuid)).toContain("partition");
     });
 
     test("a closet built into a corner owns its two partitions", () => {
@@ -65,7 +65,7 @@ describe("splitRoomBoundary", () => {
         const closet = face(["north", "west", "p1", "p2"]);
         const rest = face(["north", "west", "p1", "p2"]);
 
-        const boundary = splitRoomBoundary(closet, walls, [closet, rest]);
+        const boundary = splitRoomBoundary(closet, walls);
 
         expect(boundary.unique.map((w) => w.uuid)).toEqual(["p1", "p2"]);
         expect(boundary.shared.map((w) => w.uuid)).toEqual(["north", "west"]);
@@ -75,7 +75,7 @@ describe("splitRoomBoundary", () => {
         const walls = [wall("north", "exterior"), wall("paddock", "fence")];
         const yard = face(["north", "paddock"]);
 
-        expect(splitRoomBoundary(yard, walls, [yard]).unique.map((w) => w.uuid)).toEqual(["paddock"]);
+        expect(splitRoomBoundary(yard, walls).unique.map((w) => w.uuid)).toEqual(["paddock"]);
     });
 
     test("a structure bounded only by exterior wall owns all of it", () => {
@@ -85,7 +85,7 @@ describe("splitRoomBoundary", () => {
         const walls = [wall("n", "exterior"), wall("s", "exterior"), wall("e", "exterior"), wall("w", "exterior")];
         const shed = face(["n", "s", "e", "w"]);
 
-        const boundary = splitRoomBoundary(shed, walls, [shed]);
+        const boundary = splitRoomBoundary(shed, walls);
 
         expect(boundary.unique.map((w) => w.uuid)).toEqual(["n", "s", "e", "w"]);
         expect(boundary.shared).toEqual([]);
@@ -97,11 +97,11 @@ describe("splitRoomBoundary", () => {
         for (const id of shedWalls) walls.push(wall(id, "exterior"));
         const shed = face(shedWalls);
 
-        expect(splitRoomBoundary(shed, walls, [...faces, shed]).unique.map((w) => w.uuid)).toEqual(shedWalls);
-        expect(splitRoomBoundary(east, walls, [...faces, shed]).shared.map((w) => w.uuid)).toEqual(["north", "south", "east"]);
+        expect(splitRoomBoundary(shed, walls).unique.map((w) => w.uuid)).toEqual(shedWalls);
+        expect(splitRoomBoundary(east, walls).shared.map((w) => w.uuid)).toEqual(["north", "south", "east"]);
     });
 
     test("a face with no walls on this floor splits to nothing", () => {
-        expect(splitRoomBoundary(face(["gone"]), [], [])).toMatchObject({ unique: [], shared: [] });
+        expect(splitRoomBoundary(face(["gone"]), [])).toMatchObject({ unique: [], shared: [] });
     });
 });
