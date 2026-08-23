@@ -3964,6 +3964,19 @@ instead of attempted alongside the measurement.
 `bun run test:browser` holds both guards: the behavioural one (no room labels
 mid-drag, labels back on release) and a deliberately loose timing bound.
 
+**Priority, measured rather than assumed.** Editor cost per move, with the
+harness's own per-move overhead subtracted:
+
+| grid  | walls | rooms | ms/move | fps |
+|-------|-------|-------|---------|-----|
+| 4x4   | 40    | 16    | ~13     | 77  |
+| 6x6   | 84    | 36    | ~18     | 55  |
+| 12x12 | 312   | 144   | ~33     | 30  |
+
+Linear in plan size, and a real floor is 20-40 rooms, so the refactor buys most
+of its value on plans larger than anyone is likely to draw. Worth doing, not
+worth doing ahead of anything that is actually wrong.
+
 ## The building shell is a room, but a room bounded only by shell cannot be moved (2026-08-22)
 
 Jess reported two things that turn out to be the same case, pulling in opposite

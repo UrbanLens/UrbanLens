@@ -39,6 +39,7 @@ import {
 } from "../shared/floorplan/document";
 import { installGlobalColorPicker } from "../shared/color-picker";
 import { CONNECTOR_KINDS, connectorCandidates } from "../shared/floorplan/connectors";
+import { rehostOpening } from "../shared/floorplan/openings";
 import { type RoomBoundary, splitRoomBoundary } from "../shared/floorplan/rooms";
 import { type SentSnapshot, applyServerIds, snapshotForSend } from "../shared/floorplan/sync";
 import { contiguousLevels, deriveDesignations } from "../shared/floorplan/designations";
@@ -1243,33 +1244,6 @@ function boot(): void {
         return best;
     }
 
-    /**
-     * Move an opening onto a different wall, keeping the width it was given.
-     *
-     * An opening is stored as a fraction of the wall it sits in, so carrying
-     * those two numbers across unchanged would make a door narrower on a long
-     * wall and wider on a short one. The metre width is what the author
-     * actually chose, so that is what survives the move.
-     *
-     * Args:
-     *     opening: The opening to move.
-     *     from: The wall it currently belongs to.
-     *     to: The wall it should belong to.
-     *     centreMeters: Where its middle should sit along the new wall.
-     */
-    function rehostOpening(opening: Opening, from: Wall, to: Wall, centreMeters: number): void {
-        const widthMeters = (opening.t_end - opening.t_start) * wallLength(from);
-        const length = wallLength(to);
-        if (length < 1e-6) return;
-        from.openings = from.openings.filter((item) => item !== opening);
-        const halfWidth = Math.min(widthMeters, length) / 2;
-        const centre = Math.min(Math.max(centreMeters, halfWidth), length - halfWidth);
-        const [start, end] = clampOpening((centre - halfWidth) / length, (centre + halfWidth) / length);
-        opening.t_start = start;
-        opening.t_end = end;
-        to.openings.push(opening);
-    }
-
     function wallSolidIntervals(wall: Wall): Array<[number, number]> {
         const gaps = wall.openings
             // A window is the exception: you cannot walk through one, so it
@@ -1361,14 +1335,21 @@ function boot(): void {
                         const targetA = { x: target.ax, y: target.ay };
                         const targetB = { x: target.bx, y: target.by };
                         const along = projectOnSegment(local, targetA, targetB).t;
-                        rehostOpening(opening, host, target, along * wallLength(target));
-                        slide = { startT: along, width: opening.t_end - opening.t_start, originalStart: opening.t_start, host: target };
-                        if (isSelected({ kind: "opening", wall: host, opening })) {
-                            state.selection = { kind: "opening", wall: target, opening };
-                            state.multi = [state.selection];
+                        // A wall with no length refuses the move. Taking the
+                        // answer rather than assuming it: the branch below
+                        // re-points the selection and the slide's host at the
+                        // target, which for a refused move would leave both
+                        // naming a wall the opening is not in. It falls through
+                        // to the ordinary same-wall slide instead.
+                        if (rehostOpening(opening, host, target, along * wallLength(target))) {
+                            slide = { startT: along, width: opening.t_end - opening.t_start, originalStart: opening.t_start, host: target };
+                            if (isSelected({ kind: "opening", wall: host, opening })) {
+                                state.selection = { kind: "opening", wall: target, opening };
+                                state.multi = [state.selection];
+                            }
+                            renderSoon();
+                            return;
                         }
-                        renderSoon();
-                        return;
                     }
                     const hostA = { x: host.ax, y: host.ay };
                     const hostB = { x: host.bx, y: host.by };

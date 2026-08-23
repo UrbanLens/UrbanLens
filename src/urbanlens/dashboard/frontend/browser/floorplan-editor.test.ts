@@ -868,8 +868,12 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             return elapsed / MOVES;
         };
 
-        const small = await dragTime("square");
-        const large = await dragTime("grid");
+        // Best of two, per plan. A single pass picks up whatever else the
+        // machine was doing, and a timing test that fails for that reason gets
+        // ignored, which is worse than not having one.
+        const best = async (plan: "square" | "grid"): Promise<number> => Math.min(await dragTime(plan), await dragTime(plan));
+        const small = await best("square");
+        const large = await best("grid");
         console.log(`drag: 4 walls ${small.toFixed(1)}ms/move, 312 walls ${large.toFixed(1)}ms/move`);
 
         expect(large - small).toBeLessThan(80);
@@ -925,6 +929,41 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
 
         const readout = await page.evaluate(() => document.querySelector(".floorplan-measure")?.textContent ?? "");
         expect(readout).toContain("·");
+        await page.close();
+    });
+
+    test("a door can be dragged from one wall onto another", async () => {
+        await openEditor();
+        const plan = await planExtent();
+
+        // Cut a door into the top wall, then drag it down onto the left one.
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        const doorMidpoint = async (): Promise<{ x: number; y: number } | null> =>
+            page.evaluate(() => {
+                const node = document.querySelector("#floorplan-map path.floorplan-opening");
+                if (!node) return null;
+                const rect = node.getBoundingClientRect();
+                return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            });
+        const before = await doorMidpoint();
+        expect(before, "no opening was cut").not.toBeNull();
+
+        await page.locator('[data-tool="select"]').click();
+        await page.mouse.move(before!.x, before!.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 12; step++) {
+            await page.mouse.move(before!.x - ((before!.x - plan.left) * step) / 12, before!.y + ((plan.height / 2) * step) / 12);
+        }
+        await page.mouse.up();
+        await settle();
+
+        const after = await doorMidpoint();
+        expect(after, "the opening vanished").not.toBeNull();
+        // It left the top wall: it is now down the left-hand side.
+        expect(after!.y - before!.y).toBeGreaterThan(50);
+        expect(Math.abs(after!.x - plan.left)).toBeLessThan(30);
         await page.close();
     });
 
