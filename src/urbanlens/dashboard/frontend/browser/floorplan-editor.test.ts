@@ -967,6 +967,38 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("a door's swing is offered where it applies, and drawn once set", async () => {
+        // The field was modelled, persisted and round-tripped, and no control
+        // ever set it and nothing ever drew it.
+        await openEditor();
+        const plan = await planExtent();
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        // Cutting an opening selects it, so the form is already showing it.
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+
+        const swing = page.locator("#floorplan-form select").nth(1);
+        expect(await swing.count()).toBe(1);
+        expect(await page.locator("#floorplan-map path.floorplan-door-swing").count()).toBe(0);
+
+        await swing.selectOption("left");
+        await settle();
+        expect(await page.locator("#floorplan-map path.floorplan-door-swing").count()).toBe(1);
+
+        await swing.selectOption("double");
+        await settle();
+        expect(await page.locator("#floorplan-map path.floorplan-door-swing").count()).toBe(2);
+
+        // A window has nothing that sweeps, so the question goes away with it.
+        await page.locator("#floorplan-form select").first().selectOption("window");
+        await settle();
+        expect(await page.locator("#floorplan-form select").count()).toBe(1);
+        expect(await page.locator("#floorplan-map path.floorplan-door-swing").count()).toBe(0);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

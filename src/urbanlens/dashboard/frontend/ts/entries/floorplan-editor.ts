@@ -39,7 +39,7 @@ import {
 } from "../shared/floorplan/document";
 import { installGlobalColorPicker } from "../shared/color-picker";
 import { CONNECTOR_KINDS, connectorCandidates } from "../shared/floorplan/connectors";
-import { rehostOpening } from "../shared/floorplan/openings";
+import { OPENING_SWINGS, doorLeaves, rehostOpening, swings } from "../shared/floorplan/openings";
 import { type RoomBoundary, splitRoomBoundary } from "../shared/floorplan/rooms";
 import { type SentSnapshot, applyServerIds, snapshotForSend } from "../shared/floorplan/sync";
 import { contiguousLevels, deriveDesignations } from "../shared/floorplan/designations";
@@ -1282,6 +1282,18 @@ function boot(): void {
             // opacity alone, not weight, so the actual hit/drag target stays
             // just as easy to grab as before.
             const isWindow = opening.kind === "window";
+            // The plan symbol for a door: the leaf at its open position and the
+            // quarter it sweeps. Drawn before the opening's own line so the
+            // draggable target stays on top of it.
+            for (const leaf of doorLeaves(wall, opening)) {
+                L.polyline(leaf.map(toLatLng), {
+                    className: "floorplan-door-swing",
+                    color: openingSelected ? "#00838f" : "#fb8c00",
+                    weight: 1.5,
+                    opacity: openingSelected ? 0.9 : 0.5,
+                    interactive: false,
+                }).addTo(wallLayer);
+            }
             const line = L.polyline([toLatLng(at(opening.t_start)), toLatLng(at(opening.t_end))], {
                 className: "floorplan-opening",
                 color: openingSelected ? "#00838f" : isWindow ? "#1e88e5" : "#fb8c00",
@@ -3552,10 +3564,26 @@ function boot(): void {
                     "Type",
                     select(OPENING_KINDS, opening.kind, (v) => {
                         opening.kind = v as Opening["kind"];
+                        // The swing question only applies to some kinds, so the
+                        // form has to be rebuilt when the answer changes.
+                        renderSidebar();
                         markDirty();
                     }),
                 ),
             );
+            // Only where it means something: a doorway is the hole with no door
+            // in it, and a window has nothing that sweeps across the floor.
+            if (swings(opening.kind)) {
+                host.appendChild(
+                    field(
+                        "Swing",
+                        select(OPENING_SWINGS, opening.swing, (v) => {
+                            opening.swing = v as Opening["swing"];
+                            markDirty();
+                        }),
+                    ),
+                );
+            }
         }
 
         // Not for a room: a room seed is a name attached to a region, so

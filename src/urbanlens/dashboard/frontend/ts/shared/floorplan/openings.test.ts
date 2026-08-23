@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Opening, Wall } from "./document";
-import { rehostOpening } from "./openings";
+import { doorLeaves, rehostOpening, swings } from "./openings";
 
 function wall(uuid: string, length: number, openings: Opening[] = []): Wall {
     return { uuid, kind: "interior", thickness: "normal", ax: 0, ay: 0, bx: length, by: 0, openings };
@@ -116,5 +116,91 @@ describe("rehostOpening", () => {
         rehostOpening(opening, from, to, 5);
 
         expect(to.openings).toEqual([sitting, opening]);
+    });
+});
+
+describe("swings", () => {
+    test("only a door and a gate have a leaf", () => {
+        expect(swings("door")).toBe(true);
+        expect(swings("gate")).toBe(true);
+        // A doorway is the hole with no door in it.
+        expect(swings("doorway")).toBe(false);
+        expect(swings("window")).toBe(false);
+        expect(swings("hatch")).toBe(false);
+    });
+});
+
+describe("doorLeaves", () => {
+    /** A 10m wall running east from the origin, with a 1m door at its middle. */
+    function eastWall(swing: Opening["swing"], kind: Opening["kind"] = "door"): { wall: Wall; opening: Opening } {
+        const opening = { uuid: "d", kind, t_start: 0.45, t_end: 0.55, swing } as Opening;
+        return { wall: wall("east", 10, [opening]), opening };
+    }
+
+    test("an unknown swing draws nothing", () => {
+        const { wall: host, opening } = eastWall("none");
+        expect(doorLeaves(host, opening)).toEqual([]);
+    });
+
+    test("a kind with no leaf draws nothing even if a swing was stored", () => {
+        const { wall: host, opening } = eastWall("left", "window");
+        expect(doorLeaves(host, opening)).toEqual([]);
+    });
+
+    test("a single door gives one leaf, a double gives two", () => {
+        const single = eastWall("left");
+        expect(doorLeaves(single.wall, single.opening)).toHaveLength(1);
+        const dbl = eastWall("double");
+        expect(doorLeaves(dbl.wall, dbl.opening)).toHaveLength(2);
+    });
+
+    test("the leaf starts and ends at its hinge", () => {
+        const { wall: host, opening } = eastWall("left");
+        const leaf = doorLeaves(host, opening)[0] as { x: number; y: number }[];
+
+        const hinge = { x: 4.5, y: 0 };
+        expect(leaf[0]?.x).toBeCloseTo(hinge.x + 1, 5); // flat along the wall
+        expect(leaf[0]?.y).toBeCloseTo(0, 5);
+        expect(leaf[leaf.length - 1]).toEqual(hinge);
+    });
+
+    test("the leaf is as long as the door is wide", () => {
+        const { wall: host, opening } = eastWall("left");
+        const leaf = doorLeaves(host, opening)[0] as { x: number; y: number }[];
+        const hinge = { x: 4.5, y: 0 };
+
+        for (const point of leaf.slice(0, -1)) {
+            expect(Math.hypot(point.x - hinge.x, point.y - hinge.y)).toBeCloseTo(1, 5);
+        }
+    });
+
+    test("hinged at the end swings from the other side", () => {
+        const { wall: host, opening } = eastWall("right");
+        const leaf = doorLeaves(host, opening)[0] as { x: number; y: number }[];
+
+        expect(leaf[leaf.length - 1]).toEqual({ x: 5.5, y: 0 });
+        // Flat along the wall means back towards the door's other end.
+        expect(leaf[0]?.x).toBeCloseTo(4.5, 5);
+    });
+
+    test("both leaves of a double door are half the width", () => {
+        const { wall: host, opening } = eastWall("double");
+        const [first, second] = doorLeaves(host, opening) as Array<{ x: number; y: number }[]>;
+
+        expect(Math.hypot((first?.[0]?.x ?? 0) - 4.5, first?.[0]?.y ?? 0)).toBeCloseTo(0.5, 5);
+        expect(Math.hypot((second?.[0]?.x ?? 0) - 5.5, second?.[0]?.y ?? 0)).toBeCloseTo(0.5, 5);
+    });
+
+    test("a wall with no length draws nothing rather than dividing by zero", () => {
+        const opening = { uuid: "d", kind: "door", t_start: 0.4, t_end: 0.6, swing: "left" } as Opening;
+        expect(doorLeaves(wall("degenerate", 0, [opening]), opening)).toEqual([]);
+    });
+
+    test("the arc sweeps off the wall, not along it", () => {
+        const { wall: host, opening } = eastWall("left");
+        const leaf = doorLeaves(host, opening)[0] as { x: number; y: number }[];
+        const midpoint = leaf[Math.floor((leaf.length - 1) / 2)] as { x: number; y: number };
+
+        expect(Math.abs(midpoint.y)).toBeGreaterThan(0.5);
     });
 });
