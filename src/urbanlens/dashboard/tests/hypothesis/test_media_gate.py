@@ -100,7 +100,8 @@ class MediaGateTests(TestCase):
         response = self.client.get("/media/pin_images/owned.png")
         self.assertEqual(response.status_code, 404)
 
-    def test_friend_passing_visibility_can_fetch(self):
+    def _befriend(self):
+        """An accepted friendship from the owner to a new user."""
         friend_user = _new_user()
         Friendship.objects.create(
             from_profile=self.owner,
@@ -109,8 +110,33 @@ class MediaGateTests(TestCase):
             relationship_type=FriendshipType.FRIEND,
             permissions=Permission.VIEW_PROFILE,
         )
-        self.client.force_login(friend_user)
+        return friend_user
+
+    def test_a_friend_cannot_fetch_a_photo_that_was_never_shared(self):
+        """A photo is private until its owner shares it, and being someone's
+        friend is not the same as being shown their photo.
+
+        Visibility is two gates: the photo has to have been shared to a wiki, and
+        then the uploader's setting decides which of the people who can reach
+        that wiki may see it. This test used to assert the friendship alone was
+        enough, which was the first gate missing entirely.
+        """
+        self.client.force_login(self._befriend())
+
         response = self.client.get("/media/pin_images/owned.png")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_a_friend_can_fetch_a_photo_that_was_shared(self):
+        """And with both gates open, they can - which is the point of sharing."""
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        wiki = baker.make(Wiki)
+        Image.objects.filter(pk=self.image.pk).update(wiki=wiki)
+        self.client.force_login(self._befriend())
+
+        response = self.client.get("/media/pin_images/owned.png")
+
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._get_bytes(response), _IMAGE_BYTES)
 

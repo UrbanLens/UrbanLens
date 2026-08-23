@@ -86,7 +86,17 @@ class PhotoSearchRespectsUploaderVisibilityTests(TestCase):
         self.assertTrue(any(_NONCE in (r.title or "") for r in results), "the uploader lost their own photo from search")
 
     def test_a_photo_shared_widely_is_still_found_by_a_neighbour(self) -> None:
-        """The positive control: this suite must not pass by breaking search."""
+        """The positive control: this suite must not pass by breaking search.
+
+        Both gates open - contributed to the wiki, and a setting that admits
+        anyone. Setting the visibility alone is not enough and should not be:
+        a photo nobody shared is nobody else's to find.
+        """
+        from urbanlens.dashboard.models.images.model import Image as ImageModel
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        wiki = baker.make(Wiki, location=self.location)
+        ImageModel.objects.filter(pk=self.photo.pk).update(wiki=wiki)
         self.owner.photo_upload_visibility = VisibilityChoice.ANYONE
         self.owner.save(update_fields=["photo_upload_visibility"])
 

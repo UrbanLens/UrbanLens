@@ -169,15 +169,26 @@ class PrivatePhotoBytesTests(WikiNeighbourTestCase):
     def _fetch_bytes(self, image: Image) -> int:
         return self.client.get(f"/media/{image.image.name}").status_code
 
-    def test_the_uploaders_setting_decides_who_may_fetch_the_file(self) -> None:
-        """Parameterised over every setting, so each outcome is a recorded
-        decision rather than whatever the default happens to produce.
+    def test_an_unshared_pin_photo_is_refused_whatever_the_setting_says(self) -> None:
+        """A photo on your pin is your record of a place, not a publication.
 
-        A neighbour holds a pin at the same location, so they satisfy
-        "common pin" - a case the existing media-gate tests never exercise,
-        because those use a stranger.
+        `photo_upload_visibility` decides who may see a photo you have *shared*.
+        It used to decide who may see an unshared one too, and its default
+        (`ANYTHING_IN_COMMON`) accepts `common_pin` - so pinning the same place
+        as somebody was enough to read their pin photos.
         """
         private = self._private_photo()
+        self._as_neighbour()
+
+        for setting in (VisibilityChoice.NO_ONE, VisibilityChoice.ANYONE, VisibilityChoice.ANYTHING_IN_COMMON):
+            with self.subTest(setting=setting):
+                self.owner.photo_upload_visibility = setting
+                self.owner.save(update_fields=["photo_upload_visibility"])
+                self.assertEqual(self._fetch_bytes(private), 404, f"a co-pinner fetched an unshared pin photo under {setting}")
+
+    def test_once_shared_the_setting_decides_again(self) -> None:
+        """The other half: sharing is what hands the setting its job back."""
+        shared = self._shared_photo()
         self._as_neighbour()
 
         for setting, allowed in (
@@ -188,11 +199,9 @@ class PrivatePhotoBytesTests(WikiNeighbourTestCase):
             with self.subTest(setting=setting):
                 self.owner.photo_upload_visibility = setting
                 self.owner.save(update_fields=["photo_upload_visibility"])
-                status = self._fetch_bytes(private)
-                if allowed:
-                    self.assertEqual(status, 200, f"{setting} should let a co-pinner fetch the bytes")
-                else:
-                    self.assertEqual(status, 404, f"{setting} let a co-pinner fetch the bytes")
+                status = self._fetch_bytes(shared)
+                expected = 200 if allowed else 404
+                self.assertEqual(status, expected, f"a shared photo under {setting} returned {status}")
 
     def test_the_owner_can_always_fetch_their_own_file(self) -> None:
         private = self._private_photo()

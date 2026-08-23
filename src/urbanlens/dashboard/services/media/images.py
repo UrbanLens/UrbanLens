@@ -699,13 +699,17 @@ def _visible_uploader_name(img: Image, viewer_profile: Profile | None) -> str:
         The username, or the masked placeholder when the viewer may not see the
         uploader's identity. Empty string when the photo has no uploader.
     """
-    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+    from urbanlens.dashboard.services.profile.identity_visibility import DEFAULT_MASKED_PLACEHOLDER
 
     if img.profile is None:
         return ""
     if viewer_profile is not None and img.profile_id == viewer_profile.pk:
         return img.profile.username
-    return str(resolve_visible_identity(viewer_profile, img.profile)["display_name"])
+    # `can_view_profile` rather than the fuller `resolve_visible_identity`: the
+    # answer wanted here is only the name, and that helper also builds an avatar
+    # and a profile URL, which is work this caller throws away - and a reverse()
+    # a caller holding an unsaved profile cannot satisfy.
+    return img.profile.username if img.profile.can_view_profile(viewer_profile) else DEFAULT_MASKED_PLACEHOLDER
 
 
 def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None) -> dict:

@@ -13,6 +13,16 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
 
+#: A photo is private until its owner shares it. Being on a wiki is that act -
+#: somebody put it there deliberately - and it is the *first* of two gates, not
+#: the only one: `photo_upload_visibility` then decides which of the people who
+#: can reach that wiki may actually see it. Both have to say yes.
+#:
+#: Filing a photo under a pin is not sharing. An explicit pin share hands the
+#: recipient their own row, which they see as its owner rather than through here.
+_SHARED = Q(wiki__isnull=False)
+
+
 class ImageQuerySet(abstract.FrontendDashboardQuerySet):
     def visible_to(self, viewer_profile: Profile | None) -> Self:
         """Filter to images the given viewer is allowed to see.
@@ -35,7 +45,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         from urbanlens.dashboard.models.profile.model import VisibilityChoice
 
         if viewer_profile is None:
-            return self.filter(profile__photo_upload_visibility=VisibilityChoice.ANYONE)
+            return self.filter(_SHARED, profile__photo_upload_visibility=VisibilityChoice.ANYONE)
 
         # 1. Determine which uploader profiles this viewer is allowed to see photos from,
         #    based on the VIEWER's own photo filter preference.
@@ -52,8 +62,14 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         #    For scalability we pre-compute the set of allowed uploader IDs.
         allowed_uploader_ids = self._allowed_uploader_ids(viewer_profile, viewer_filter)
 
+        # Both gates, and in this order: the photo must have been shared, and the
+        # uploader's setting must admit this viewer. Sharing alone is not enough -
+        # that is what the setting is for - and a permissive setting alone is not
+        # enough either, which is the half that was missing: a photo filed under a
+        # pin was reachable by anyone the setting happened to admit, and the
+        # default admits whoever pinned the same place.
         return self.filter(
-            Q(profile=viewer_profile) | Q(profile_id__in=allowed_uploader_ids),
+            Q(profile=viewer_profile) | (Q(profile_id__in=allowed_uploader_ids) & _SHARED),
         )
 
     def _allowed_uploader_ids(self, viewer_profile: Profile, viewer_filter: str) -> set[int]:
