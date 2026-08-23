@@ -2201,6 +2201,7 @@ class FloorplanResponseOrderTests(TestCase):
                             "condition": "seized, rusted shut",
                             "description": "on the yard side",
                             "attributes": {"material": "brass"},
+                            "key_attributes": {"note": "brass yale, on the office ring"},
                         },
                     ],
                 },
@@ -2213,6 +2214,7 @@ class FloorplanResponseOrderTests(TestCase):
         self.assertEqual(lock["description"], "on the yard side")
         self.assertEqual(lock["attributes"], {"material": "brass"})
         self.assertEqual(lock["state"], "locked")
+        self.assertEqual(lock["key_attributes"], {"note": "brass yale, on the office ring"})
 
     def test_a_doors_locks_come_back_in_the_order_they_were_sent(self) -> None:
         """The editor matches locks to rows by position, same as everything else."""

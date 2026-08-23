@@ -1423,6 +1423,12 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await condition.blur();
         await settle();
 
+        // What opens it, free-form: the model keeps this shapeless on purpose,
+        // and the FEATURES entry promised it before there was anywhere to type
+        // it.
+        await page.locator(".floorplan-lock-entry").first().locator(".floorplan-lock__key").fill("brass yale, on the office ring");
+        await settle();
+
         // Removing the other one rebuilds the whole panel, so a value that
         // survives that was written to the lock and not just to the input.
         await page.locator(".floorplan-lock").nth(1).locator("button").click();
@@ -1430,6 +1436,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         expect(await locks()).toBe(1);
         const survived = page.locator(".floorplan-lock-entry").first().locator("details input.form-input").nth(1);
         expect(await survived.inputValue()).toBe("seized, rusted shut");
+        expect(await page.locator(".floorplan-lock-entry").first().locator(".floorplan-lock__key").inputValue()).toBe("brass yale, on the office ring");
         expect(await page.locator(".floorplan-lock").first().locator("input.form-input").inputValue()).toBe("padlock");
 
         // A window has no lock worth recording for getting in, so it is not

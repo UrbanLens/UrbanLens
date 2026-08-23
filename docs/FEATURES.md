@@ -220,15 +220,29 @@ floorplan alongside a building; they answer only through their own endpoints
   by `frontend/ts/shared/floorplan/coords.ts`)
 - **Visual editor** (`/map/pin/<slug>/floorplan/`, `frontend/ts/entries/floorplan-editor.ts`) — draw
   walls over satellite imagery or a georeferenced blueprint overlay, with leaflet-rotate squaring
-  the view (and the snap grid) to a building that isn't north-facing. Three tools - select, wall,
-  marker - plus a one-click room tool that generates and subdivides rectangles sized from the plan's
-  own rooms. Rooms are *derived*, not vertex-edited: dragging a wall's corner, a corner it shares
-  with other walls, or its whole body (propagate / rigid-move / detach modifiers) is how geometry
-  changes, and enclosed regions recompute from that. Openings drag along their wall's length; a
-  marker links stairs/elevators across floors by connector. No manual Save button - autosave
-  debounces every edit, backed by an undo stack. A new floor seeds its exterior walls from the
-  building's real footprint when one is known. Versions are switchable in-page, and "Save as new
-  version" forks rather than overwrites
+  the view (and the snap grid) to a building that isn't north-facing. Seven tools - select, box
+  select, rotate, wall, opening, room, marker - each with its own options panel beside the toolbar
+  rather than behind a modifier key, since a modifier cannot be seen and does not exist on a phone.
+  Rooms are *derived*, not vertex-edited: dragging a wall's corner, a corner it shares with other
+  walls, its whole body, or a room by its fill (propagate / rigid-move / detach modifiers) is how
+  geometry changes, and enclosed regions recompute from that. A room owns the partitions on its
+  boundary but never the building's shell, and a corner resting on a wall the room does not own
+  slides along it rather than dragging it. An outline nothing subdivides is the building, not a
+  room, and is captioned only if someone names it deliberately.
+- **What an opening is, in detail** — kind (door / doorway / gate / window / hatch), which way a
+  door swings, drawn as the plan symbol; how high its sill sits; and the locks fitted to it, each
+  with its own type, engagement state and the description/condition/material every item carries.
+  Openings drag along their wall and onto a different wall, keeping the metre width they were given
+  rather than the fraction. Storeys carry their own floor-to-ceiling height and height above sea
+  level
+- **Floors as a stack** — add above or below (so a basement is drawable), duplicate a storey
+  directly above the one it came from, delete from the middle and have the rest renumber, and name
+  a floor without losing the number that says which storey it is. No manual Save button - autosave
+  debounces every edit, backed by an undo stack that takes a typed name back whole and a drag back
+  on its own. A plan saved from another tab stops autosaving and offers a reload rather than
+  overwriting it. A new floor seeds its exterior walls from the storey nearest it, or the building's
+  real footprint when there is none. Versions are switchable in-page, and "Save as new version"
+  forks rather than overwrites
 - **Personal by default, shared on purpose** — a plan records where the doors are, what locks them
   and what opens those locks, so local plans are scoped to their author. "Publish to wiki" copies a
   version onto the place's community wiki (the author keeps their own), after which anyone who can
@@ -240,9 +254,12 @@ floorplan alongside a building; they answer only through their own endpoints
   cutting off. The bbox filter runs in the database on the spatial index, so a renderer asks for a
   viewport's worth of one storey instead of ten storeys of every wall. Every feature carries the
   uuid it can be edited by, so anything clicked on a map is findable in the document
-- **References come from the pin's own photos** — the reference pool attaches to every item, so
-  the editor offers this pin's existing photos as thumbnails to attach to a wall, a door or its
-  lock (one pool row per photo however many items cite it), alongside adding one by URL
+- **Reference pool, stored but not yet editable** — every item can cite per-plan **source** and
+  **reference** rows by uuid, so one photo can be attached to a wall, a door and its lock while
+  existing once. The document carries them and the serializer round-trips them; the editor has no
+  UI for attaching one, and deliberately so for now: a photo's coordinates and heading cannot yet be
+  set without overwriting what its EXIF reported, and that provenance question wants answering
+  before anything starts writing to it (see the KNOWN OMISSION in `models/images/model.py`)
 - **Historical aerial captures in the satellite carousel** — REData's `/imagery/timeline/`
   contributes dated frames alongside current imagery, so a site that has been demolished,
   re-roofed or cleared can be seen as it was. Continuous satellite ranges are deliberately not

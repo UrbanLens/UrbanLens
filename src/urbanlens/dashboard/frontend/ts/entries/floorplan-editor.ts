@@ -3898,9 +3898,30 @@ function boot(): void {
             });
             row.appendChild(remove);
 
+            // What opens it, in whatever shape the recorder used - the model
+            // keeps this free-form on purpose, because what identifies a key
+            // (bitting, keyway, brand, "the one on the ring in the office")
+            // differs per building and per person recording it. One note field
+            // rather than a schema, for the same reason.
+            const key = document.createElement("input");
+            key.className = "form-input floorplan-lock__key";
+            key.value = String((lock.key_attributes as Record<string, unknown> | undefined)?.note ?? "");
+            key.placeholder = "What opens it";
+            key.setAttribute("aria-label", "What opens this lock");
+            key.addEventListener("input", () => {
+                checkpoint(`lock-key:${lock.uuid || index}`);
+                const note = key.value.trim();
+                const rest = { ...(lock.key_attributes ?? {}) };
+                if (note) rest.note = note;
+                else delete rest.note;
+                lock.key_attributes = rest;
+                markDirtyQuiet();
+            });
+
             const entry = document.createElement("div");
             entry.className = "floorplan-lock-entry";
             entry.appendChild(row);
+            entry.appendChild(key);
             // A lock is a floorplan item like any other, so it gets the same
             // description/condition/material block everything else does. Whether
             // one is broken, seized or missing belongs in its condition rather
