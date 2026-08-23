@@ -145,7 +145,7 @@
             {# it could not be reached by keyboard at all.                      #}
             <div id="floorplan-map" class="floorplan-map"
                  tabindex="0" role="application"
-                 aria-label="Floorplan canvas. Tab and Shift+Tab move between walls, rooms and markers; arrow keys nudge what is selected; Escape leaves."
+                 aria-label="Floorplan canvas. Tab and Shift+Tab move between walls, openings, rooms and markers; arrow keys nudge what is selected; Escape leaves."
                  data-json-url="{% url 'pin.floorplan.json' pin.slug %}"
                  data-save-url="{% url 'pin.floorplan.save' pin.slug %}"
                  data-publish-url="{% url 'pin.floorplan.publish' pin.slug %}"

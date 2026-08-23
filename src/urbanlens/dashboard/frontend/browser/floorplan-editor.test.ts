@@ -651,6 +651,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // One wall moved east, so the plan reaches further east than it did.
         const after = await planExtent();
         expect(after.width).toBeGreaterThan(before.width + 10);
+
         await page.close();
     });
 
@@ -2061,6 +2062,32 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             return pressed.map((node) => node.textContent?.trim());
         });
         expect(armed).toContain("Stair");
+        await page.close();
+    });
+
+    test("tabbing reaches an opening, which the canvas label promises it does", async () => {
+        // A promise in an aria-label is the only documentation a screen reader
+        // gets, and this one listed walls, rooms and markers while the walk
+        // itself included openings - so the label was both wrong and short.
+        await openEditor();
+        const plan = await planExtent();
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await page.keyboard.press("Escape");
+        await page.locator("#floorplan-map").focus();
+
+        let sawOpening = false;
+        for (let press = 0; press < 12 && !sawOpening; press++) {
+            await page.keyboard.press("Tab");
+            sawOpening = ((await page.locator("#floorplan-form h3").first().textContent()) ?? "").includes("Opening");
+        }
+        expect(sawOpening, "tabbing never reached an opening").toBe(true);
+
+        // And the label says so, in the words a screen reader will read out.
+        const label = await page.evaluate(() => document.getElementById("floorplan-map")?.getAttribute("aria-label") ?? "");
+        expect(label).toContain("openings");
         await page.close();
     });
 
