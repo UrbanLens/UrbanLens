@@ -1162,6 +1162,74 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("undo takes back a typed name in one press, and the drag before it in the next", async () => {
+        // "Undo sometimes undoes one thing, sometimes a group" is the report.
+        // Both are right, and the rule is what has to be predictable: a run of
+        // keystrokes in one field is one step, and anything else is its own.
+        await openEditor({ width: 1200, height: 800 }, false, "island");
+        // Waited for, not read: renaming rebuilds the room layer, so for a
+        // moment the outgoing tooltip is still in the pane beside the incoming
+        // one and whichever is read first is a coin toss.
+        const expectRoomNamed = async (want: string): Promise<void> => {
+            await page.waitForFunction(
+                (expected) => {
+                    const named = Array.from(document.querySelectorAll(".floorplan-room-label__name"))
+                        .map((n) => (n.textContent ?? "").trim())
+                        .filter((text) => text !== "Unnamed room");
+                    return named.length === 1 && named[0] === expected;
+                },
+                want,
+                { timeout: 10000 },
+            );
+        };
+        const island = await page.evaluate(() => {
+            const fills = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"));
+            const smallest = fills.map((n) => n.getBoundingClientRect()).sort((a, b) => a.width * a.height - b.width * b.height)[0];
+            return smallest ? { x: smallest.left + smallest.width / 2, y: smallest.top + smallest.height / 2 } : null;
+        });
+        expect(island).not.toBeNull();
+        await expectRoomNamed("Island");
+
+        // One drag...
+        await page.mouse.click(island!.x, island!.y);
+        await settle();
+        await page.mouse.move(island!.x, island!.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(island!.x - step * 5, island!.y);
+        await page.mouse.up();
+        await settle();
+        const moved = await page.evaluate(() => {
+            const fills = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"));
+            const smallest = fills.map((n) => n.getBoundingClientRect()).sort((a, b) => a.width * a.height - b.width * b.height)[0];
+            return smallest ? Math.round(smallest.left) : -1;
+        });
+
+        // ...then a name, typed a character at a time.
+        const field = page.locator("#floorplan-form input.form-input").first();
+        await field.click();
+        await field.fill("");
+        await page.keyboard.type("Plant room", { delay: 15 });
+        await field.blur();
+        await settle();
+        await expectRoomNamed("Plant room");
+
+        // One press takes back the whole name, not one letter of it.
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        await expectRoomNamed("Island");
+
+        // The next takes back the drag, which was never part of that group.
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        const back = await page.evaluate(() => {
+            const fills = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"));
+            const smallest = fills.map((n) => n.getBoundingClientRect()).sort((a, b) => a.width * a.height - b.width * b.height)[0];
+            return smallest ? Math.round(smallest.left) : -1;
+        });
+        expect(back).toBeGreaterThan(moved);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();
