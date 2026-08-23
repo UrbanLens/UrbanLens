@@ -70,6 +70,33 @@ export interface ItemDetails {
     attributes?: Record<string, unknown>;
 }
 
+/** Whether a lock is presently securing its opening. */
+export type LockState = "unknown" | "locked" | "unlocked";
+
+/** Every lock state, in the order they are offered, with what to call it. */
+export const LOCK_STATES: ReadonlyArray<{ value: LockState; label: string }> = [
+    { value: "unknown", label: "Not known" },
+    { value: "locked", label: "Locked" },
+    { value: "unlocked", label: "Unlocked" },
+];
+
+/**
+ * One lock on an opening; a door may carry several, or none.
+ *
+ * Only the engagement axis, deliberately. Whether the lock is broken, seized or
+ * missing is what every item's ``condition`` already records - and a broken lock
+ * may be hanging open or rusted shut, which is the distinction that matters on
+ * site and the one "broken" alone does not make.
+ */
+export interface Lock extends ItemDetails {
+    uuid?: string;
+    /** Free-form type or label: "padlock", "deadbolt", "chain". */
+    name?: string;
+    state: LockState;
+    /** What opens it, in whatever shape the recorder used. */
+    key_attributes?: Record<string, unknown>;
+}
+
 export interface Opening extends ItemDetails {
     uuid?: string;
     kind: OpeningKind;
@@ -77,6 +104,7 @@ export interface Opening extends ItemDetails {
     t_end: number;
     swing: OpeningSwing;
     sill_meters?: number | null;
+    locks?: Lock[];
 }
 
 export interface Wall extends ItemDetails {
@@ -278,7 +306,15 @@ export function copyFloorContents(source: Floor, options: CopyFloorOptions = {})
     const walls: Wall[] = source.walls.map((wall) => ({
         ...wall,
         uuid: nextLocalId(),
-        openings: wall.openings.map((opening) => ({ ...opening, uuid: nextLocalId() })),
+        openings: wall.openings.map((opening) => ({
+            ...opening,
+            uuid: nextLocalId(),
+            // Locks come across as their own new rows. Spreading the opening
+            // carries them, and carrying their uuids with them would hand the
+            // copy the originals' identities - the same mistake this function
+            // exists to avoid one level up.
+            ...(opening.locks ? { locks: opening.locks.map((lock) => ({ ...lock, uuid: nextLocalId() })) } : {}),
+        })),
     }));
 
     const copiedRooms: RoomSeed[] = rooms ? source.rooms.map((room) => ({ ...room, uuid: nextLocalId() })) : [];

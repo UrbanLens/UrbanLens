@@ -16,7 +16,16 @@ function floorWithContents(): Floor {
                 ay: 0,
                 bx: 4,
                 by: 0,
-                openings: [{ uuid: "opening-1", kind: "door", t_start: 0.4, t_end: 0.6, swing: "left" }],
+                openings: [
+                    {
+                        uuid: "opening-1",
+                        kind: "door",
+                        t_start: 0.4,
+                        t_end: 0.6,
+                        swing: "left",
+                        locks: [{ uuid: "lock-1", name: "padlock", state: "locked" }],
+                    },
+                ],
             },
             { uuid: "wall-2", kind: "interior", thickness: "thin", ax: 4, ay: 0, bx: 4, by: 3, openings: [] },
         ],
@@ -33,7 +42,10 @@ function uuidsOf(copy: ReturnType<typeof copyFloorContents>): string[] {
     const ids: string[] = [];
     for (const wall of copy.walls) {
         ids.push(wall.uuid as string);
-        for (const opening of wall.openings) ids.push(opening.uuid as string);
+        for (const opening of wall.openings) {
+            ids.push(opening.uuid as string);
+            for (const lock of opening.locks ?? []) ids.push(lock.uuid as string);
+        }
     }
     for (const room of copy.rooms) ids.push(room.uuid as string);
     for (const marker of copy.markers) ids.push(marker.uuid as string);
@@ -58,7 +70,7 @@ describe("copyFloorContents", () => {
         const source = floorWithContents();
         const copy = copyFloorContents(source, { rooms: true, markers: true, connectors: true });
 
-        const sourceIds = new Set(["floor-1", "wall-1", "wall-2", "opening-1", "room-1", "marker-1", "marker-2"]);
+        const sourceIds = new Set(["floor-1", "wall-1", "wall-2", "opening-1", "lock-1", "room-1", "marker-1", "marker-2"]);
         for (const id of uuidsOf(copy)) {
             expect(sourceIds.has(id)).toBe(false);
         }
@@ -89,6 +101,16 @@ describe("copyFloorContents", () => {
 
         expect(source.walls[0]?.ax).toBe(0);
         expect(source.walls[0]?.openings).toHaveLength(1);
+    });
+
+    test("a door's locks come across as new rows of their own", () => {
+        const copy = copyFloorContents(floorWithContents());
+
+        const locks = copy.walls[0]?.openings[0]?.locks ?? [];
+        expect(locks).toHaveLength(1);
+        expect(locks[0]?.name).toBe("padlock");
+        expect(locks[0]?.state).toBe("locked");
+        expect(locks[0]?.uuid).not.toBe("lock-1");
     });
 
     test("room names come across by default", () => {

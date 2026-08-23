@@ -7,7 +7,7 @@
  * overwrites.
  */
 
-import type { Floor, FloorplanDocument, Marker, Opening, RoomSeed, Wall } from "./document";
+import type { Floor, FloorplanDocument, Lock, Marker, Opening, RoomSeed, Wall } from "./document";
 
 /**
  * A frozen-order, same-object record of what a save's payload actually held,
@@ -24,6 +24,8 @@ export interface SentSnapshot {
     level: number;
     walls: Wall[];
     wallOpenings: Opening[][];
+    /** Each opening's locks, in the order sent. Indexed [wall][opening]. */
+    openingLocks: Lock[][][];
     rooms: RoomSeed[];
     markers: Marker[];
 }
@@ -49,6 +51,7 @@ export function snapshotForSend(doc: FloorplanDocument): SentSnapshot[] {
         level: floor.level,
         walls: [...floor.walls],
         wallOpenings: floor.walls.map((wall) => [...wall.openings]),
+        openingLocks: floor.walls.map((wall) => wall.openings.map((opening) => [...(opening.locks ?? [])])),
         rooms: [...floor.rooms],
         markers: [...floor.markers],
     }));
@@ -73,7 +76,7 @@ export function snapshotForSend(doc: FloorplanDocument): SentSnapshot[] {
  *
  * Items *within* a floor are matched positionally, which is sound: ``_sync``
  * assigns ``sort_order`` from the payload's array index, and walls, openings,
- * rooms and markers all order by ``sort_order`` first. Only orphans - items
+ * locks, rooms and markers all order by ``sort_order`` first. Only orphans - items
  * already absent from the payload - are missing from the response.
  *
  * Args:
@@ -95,6 +98,14 @@ export function applyServerIds(sent: SentSnapshot[], saved: FloorplanDocument): 
             (savedWall.openings || []).forEach((savedOpening, openingIndex) => {
                 const opening = entry.wallOpenings[wallIndex]?.[openingIndex];
                 if (opening) opening.uuid = savedOpening.uuid;
+                // Locks are rows too, matched by uuid within their own opening.
+                // One left holding a client-only id is deleted as an orphan on
+                // the next save and recreated under a new one, taking whatever
+                // had been attached to it along with it.
+                (savedOpening.locks || []).forEach((savedLock, lockIndex) => {
+                    const lock = entry.openingLocks[wallIndex]?.[openingIndex]?.[lockIndex];
+                    if (lock) lock.uuid = savedLock.uuid;
+                });
             });
         });
         (savedFloor.rooms || []).forEach((savedRoom, roomIndex) => {

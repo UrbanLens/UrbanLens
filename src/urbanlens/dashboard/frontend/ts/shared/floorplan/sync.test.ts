@@ -95,6 +95,34 @@ describe("applyServerIds", () => {
         expect(doc.floors.map((floor) => floor.uuid)).toEqual(["srv-ground", "srv-first"]);
     });
 
+    test("a door's locks get their real ids back too", () => {
+        // A lock left holding a client-only id is deleted as an orphan on the
+        // next save and recreated under a new one, taking anything attached to
+        // it with it - and the whole point of a lock record is that it
+        // accumulates notes about the same physical lock.
+        const doc = unsortedDoc();
+        const ground = doc.floors[0];
+        if (!ground) throw new Error("no floor");
+        const wall = ground.walls[0];
+        if (!wall) throw new Error("no wall");
+        wall.openings.push({ kind: "door", t_start: 0.4, t_end: 0.6, swing: "left", locks: [{ state: "locked", name: "padlock" }] });
+
+        const saved = savedInStoreyOrder();
+        const savedGround = saved.floors[1];
+        if (!savedGround) throw new Error("no saved floor");
+        savedGround.walls = [{ uuid: "srv-wall", openings: [{ uuid: "srv-door", locks: [{ uuid: "srv-lock" }] }] }] as unknown as typeof savedGround.walls;
+
+        applyServerIds(snapshotForSend(doc), saved);
+
+        expect(wall.openings[0]?.uuid).toBe("srv-door");
+        expect(wall.openings[0]?.locks?.[0]?.uuid).toBe("srv-lock");
+    });
+
+    test("an opening with no locks is not a problem", () => {
+        const doc = unsortedDoc();
+        expect(() => applyServerIds(snapshotForSend(doc), savedInStoreyOrder())).not.toThrow();
+    });
+
     test("a snapshot is immune to edits made while the save is in flight", () => {
         // The whole reason the snapshot exists: deleting the first wall before
         // the response lands must not shift every uuid onto its neighbour.

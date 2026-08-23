@@ -1391,7 +1391,10 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
                 await page.keyboard.press("ArrowRight");
                 await settle();
             }
-            await page.waitForTimeout(1500);
+            // Comfortably past queueAutosave's 1200ms debounce: at 1500 a timer
+            // running late would land after the assertion and the test would
+            // pass for the wrong reason.
+            await page.waitForTimeout(2500);
             expect(saves.attempts, "kept trying after the conflict").toBe(after);
             await page.close();
         } finally {
