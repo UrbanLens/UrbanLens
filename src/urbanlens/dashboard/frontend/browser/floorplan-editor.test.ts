@@ -2024,6 +2024,33 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("a marker kind's shortcut works and says so", async () => {
+        // The keys that arm a kind directly were handled and advertised
+        // nowhere, which helps whoever already knows them and nobody else. They
+        // come from one table now, read by the handler and shown by the panel,
+        // so the two cannot disagree.
+        await openEditor();
+        await page.locator('[data-tool="marker"]').click();
+        await settle();
+
+        const options = page.locator("#floorplan-tool-options button");
+        const titles = await options.evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).title));
+        expect(titles).toContain("Hazard (H)");
+        expect(titles).toContain("Stair (S)");
+        expect(titles).toContain("Elevator (E)");
+
+        // And the key it advertises does what it says.
+        await page.locator("#floorplan-map").click({ position: { x: 5, y: 5 } });
+        await page.keyboard.press("s");
+        await settle();
+        const armed = await page.evaluate(() => {
+            const pressed = Array.from(document.querySelectorAll('#floorplan-tool-options button[aria-pressed="true"]'));
+            return pressed.map((node) => node.textContent?.trim());
+        });
+        expect(armed).toContain("Stair");
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

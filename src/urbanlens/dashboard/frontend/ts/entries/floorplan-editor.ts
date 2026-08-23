@@ -96,6 +96,15 @@ const WALL_STYLE: Record<string, { color: string; weight: number; dashArray?: st
     collapsed: { color: "#a1887f", weight: 3, dashArray: "2 6" },
 };
 
+/**
+ * The key that arms the marker tool with each kind already chosen.
+ *
+ * Declared beside the kinds rather than only inside the keydown handler, so the
+ * options panel can say which key does what instead of leaving it to whoever
+ * already knows.
+ */
+const MARKER_KEYS: Record<MarkerKind, string> = { hazard: "h", stair: "s", elevator: "e" };
+
 const MARKER_ICON: Record<MarkerKind, string> = {
     hazard: "warning",
     stair: "stairs",
@@ -2784,16 +2793,11 @@ function boot(): void {
         if (key === "w") setTool("wall");
         if (key === "r") setTool("room");
         if (key === "m") setTool("marker");
-        if (key === "h") {
-            state.markerKind = "hazard";
-            setTool("marker");
-        }
-        if (key === "s") {
-            state.markerKind = "stair";
-            setTool("marker");
-        }
-        if (key === "e") {
-            state.markerKind = "elevator";
+        // One table, read here and shown in the options panel, so the key that
+        // arms a kind and the key the panel advertises cannot disagree.
+        for (const [kind, shortcut] of Object.entries(MARKER_KEYS) as Array<[MarkerKind, string]>) {
+            if (key !== shortcut) continue;
+            state.markerKind = kind;
             setTool("marker");
         }
     });
@@ -3012,7 +3016,21 @@ function boot(): void {
         if (!host) return;
         host.replaceChildren();
 
-        const group = <T extends string>(label: string, options: ReadonlyArray<{ value: T; label: string }>, current: T, onPick: (value: T) => void): void => {
+        /**
+         * One row of mutually exclusive choices for the armed tool.
+         *
+         * Args:
+         *     label: What the row is choosing.
+         *     options: The choices, optionally each naming a shortcut key.
+         *     current: Which one is in force.
+         *     onPick: Called with the chosen value.
+         */
+        const group = <T extends string>(
+            label: string,
+            options: ReadonlyArray<{ value: T; label: string; key?: string }>,
+            current: T,
+            onPick: (value: T) => void,
+        ): void => {
             const wrap = document.createElement("div");
             wrap.className = "floorplan-tool-options__group";
             const title = document.createElement("span");
@@ -3025,6 +3043,10 @@ function boot(): void {
                 button.className = `btn btn--sm${option.value === current ? " btn--primary" : " btn--ghost"}`;
                 button.textContent = option.label;
                 button.setAttribute("aria-pressed", String(option.value === current));
+                // Where a choice has an accelerator, it says so - the same way
+                // each tool's own tooltip names its letter. An unadvertised
+                // shortcut helps whoever already knows it and nobody else.
+                if (option.key) button.title = `${option.label} (${option.key.toUpperCase()})`;
                 button.addEventListener("click", () => {
                     onPick(option.value);
                     renderToolOptions();
@@ -3047,7 +3069,7 @@ function boot(): void {
         if (state.tool === "marker") {
             group(
                 "Marker",
-                (Object.keys(MARKER_ICON) as MarkerKind[]).map((kind) => ({ value: kind, label: titleCase(kind) })),
+                (Object.keys(MARKER_ICON) as MarkerKind[]).map((kind) => ({ value: kind, label: titleCase(kind), key: MARKER_KEYS[kind] })),
                 state.markerKind,
                 (value) => {
                     state.markerKind = value;
