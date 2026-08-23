@@ -3262,8 +3262,12 @@ function boot(): void {
         });
         // Re-rendered on commit, not per keystroke: every other floor's derived
         // label can change as a result of this one, and rebuilding the strip
-        // under the cursor would take the focus with it.
-        code.addEventListener("change", () => renderSidebar());
+        // under the cursor would take the focus with it. On commit the focus has
+        // already left, which is the whole reason for waiting. renderSidebar()
+        // rebuilds the selected item's form and nothing else, so the strip these
+        // two fields are about went on showing the old labels until an unrelated
+        // edit happened to call render().
+        code.addEventListener("change", () => renderFloorTabs());
         row.appendChild(code);
 
         const nickname = document.createElement("input");
@@ -3276,7 +3280,7 @@ function boot(): void {
             item.name = nickname.value;
             markDirtyQuiet();
         });
-        nickname.addEventListener("change", () => renderSidebar());
+        nickname.addEventListener("change", () => renderFloorTabs());
         row.appendChild(nickname);
 
         host.appendChild(row);

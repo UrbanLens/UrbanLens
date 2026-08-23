@@ -1804,6 +1804,78 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("naming a storey, or renumbering it, shows on the strip when you leave the field", async () => {
+        // Both fields defer their redraw to the commit rather than the keystroke,
+        // because rebuilding the strip under the cursor would take the focus with
+        // it - and on commit the focus has already gone, which is the whole point
+        // of waiting. The commit called renderSidebar(), which rebuilds the
+        // selected item's form and touches neither the strip nor these fields, so
+        // a storey stayed unlabelled until some unrelated edit called render().
+        await openEditor();
+        const strip = "#floorplan-floors";
+        const tab = () => page.locator(`${strip} .floorplan-floor-tab`).first();
+
+        await page.locator(".floorplan-floor-fields__name").fill("Attic");
+        await page.locator(".floorplan-floor-fields__name").blur();
+        await settle();
+        expect(await tab().textContent(), "the nickname did not reach the strip").toContain("Attic");
+
+        // The code relabels the storey itself, and every derived label above it.
+        await page.locator(".floorplan-floor-fields__code").fill("M");
+        await page.locator(".floorplan-floor-fields__code").blur();
+        await settle();
+        expect(await tab().locator(".floorplan-floor-tab__chip").textContent(), "the renumbered storey kept its old label").toBe("M");
+        await page.close();
+    });
+
+    test("deleting a storey from the middle renumbers the rest without moving their contents", async () => {
+        // The destructive one, and the only floor operation the editor's own path
+        // to it was never driven for. The stack has to close up behind a deletion:
+        // a storey above a deleted one keeps a level with nothing underneath, so
+        // "the floor below" quietly starts meaning two down. deriveDesignations is
+        // unit-tested, but nothing checked that renumbering relabels the storeys
+        // rather than shuffling what is drawn on them.
+        await openEditor();
+        const strip = "#floorplan-floors";
+        const chips = () => page.evaluate((sel) => [...document.querySelectorAll(`${sel} .floorplan-floor-tab__chip`)].map((n) => (n.textContent ?? "").trim()), strip);
+        const named = () => page.evaluate((sel) => [...document.querySelectorAll(`${sel} .floorplan-floor-tab`)].map((tab) => `${(tab.querySelector(".floorplan-floor-tab__chip")?.textContent ?? "").trim()}:${(tab.querySelector(".floorplan-floor-tab__name")?.textContent ?? "").trim()}`), strip);
+
+        await page.locator(`${strip} [aria-label="Add floor above"]`).click();
+        await settle();
+        await page.locator(`${strip} [aria-label="Add floor above"]`).click();
+        await settle();
+        expect(await chips()).toEqual(["2", "1", "G"]);
+
+        // Name the top storey, so the assertion after the delete is about which
+        // storey survived rather than about how many did.
+        await page.locator(`${strip} .floorplan-floor-tab`).first().locator("button").first().click();
+        await settle();
+        await page.locator(".floorplan-floor-fields__name").fill("Attic");
+        await page.locator(".floorplan-floor-fields__name").blur();
+        await settle();
+        expect(await named()).toEqual(["2:Attic", "1:", "G:"]);
+
+        // Delete the middle one. Its control only appears on the storey being
+        // viewed, which is deliberate - so select it first.
+        await page.locator(`${strip} .floorplan-floor-tab`).nth(1).locator("button").first().click();
+        await settle();
+        page.once("dialog", (dialog) => {
+            expect(dialog.message()).toContain("removes everything drawn on it");
+            void dialog.accept();
+        });
+        await page.locator(`${strip} .floorplan-floor-tab`).nth(1).locator(".floorplan-floor-tab__delete").click();
+        await settle();
+
+        // The attic is still the attic; it is simply the first storey up now.
+        expect(await named(), "renumbering moved the storeys' contents rather than their labels").toEqual(["1:Attic", "G:"]);
+
+        // And it is undoable, like every other edit here.
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        expect(await named(), "undo did not put the deleted storey back").toEqual(["2:Attic", "1:", "G:"]);
+        await page.close();
+    });
+
     test("a plan turned to face its building keeps its angle, plugin or no plugin", async () => {
         // rotation_degrees is the plan's own north, and every other fixture leaves
         // it at 0 - so nothing exercised a turned plan at all. It matters most in
