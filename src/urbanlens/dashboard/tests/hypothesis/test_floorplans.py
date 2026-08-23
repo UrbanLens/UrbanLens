@@ -34,6 +34,7 @@ from django.db.utils import IntegrityError
 from model_bakery import baker
 import pytest
 
+from urbanlens.core.tests.query_scaling import QueryScalingMixin
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.floorplans.model import (
     Floorplan,
@@ -917,6 +918,48 @@ class FloorplanFeatureCollectionTests(TestCase):
         body = self._collection()
 
         self.assertTrue(all(feature["properties"]["uuid"] for feature in body["features"]))
+
+    def _with_locks(self, *states: str) -> dict:
+        """Replace the plan with one whose first wall has a door carrying *states*."""
+        walls = _square_walls()
+        walls[0] = {
+            **walls[0],
+            "openings": [
+                {
+                    "kind": "door",
+                    "t_start": 0.4,
+                    "t_end": 0.6,
+                    "swing": "none",
+                    "sill_meters": 0.0,
+                    "locks": [{"name": f"lock {index}", "state": state} for index, state in enumerate(states)],
+                },
+            ],
+        }
+        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile)
+        wall = next(f for f in self._collection()["features"] if f["properties"]["item_type"] == "wall" and f["properties"]["openings"])
+        return wall["properties"]["openings"][0]
+
+    def test_a_door_reports_whether_it_opens(self) -> None:
+        """The first thing a map wants to say about a door, in one word.
+
+        A lock's type, condition and what opens it are the document's business;
+        a renderer wants to colour the door.
+        """
+        self.assertEqual(self._with_locks("locked")["locked"], "locked")
+        self.assertEqual(self._with_locks("unlocked")["locked"], "unlocked")
+        self.assertEqual(self._with_locks("unknown")["locked"], "unknown")
+
+    def test_one_locked_lock_locks_the_door(self) -> None:
+        """A padlock on and a deadbolt off still means the door does not open."""
+        self.assertEqual(self._with_locks("unlocked", "locked")["locked"], "locked")
+
+    def test_a_door_with_no_locks_recorded_says_nobody_knows(self) -> None:
+        """Rather than "unlocked", which claims something nobody wrote down."""
+        self.assertEqual(self._with_locks()["locked"], "unknown")
+
+    def test_a_windows_sill_height_reaches_the_map(self) -> None:
+        """Whether anyone can climb through it is the question it answers."""
+        self.assertEqual(self._with_locks("locked")["sill_meters"], 0.0)
 
     def test_walls_project_to_coordinates_near_the_origin(self) -> None:
         """Local metres become degrees here, and nowhere else. A wall ten
@@ -2249,3 +2292,42 @@ class FloorplanResponseOrderTests(TestCase):
                 {"floors": [{"level": 1, "walls": [], "rooms": [], "markers": []}, {"level": 1, "walls": [], "rooms": [], "markers": []}]},
                 profile=self.profile,
             )
+
+
+class FloorplanFeatureScalingTests(QueryScalingMixin, TestCase):
+    """More doors on a plan must not mean more queries to draw it.
+
+    Every opening carries a one-word answer to "does this door open", derived
+    from its locks. Asking that per opening is a query per opening, and the
+    endpoint exists to hand a renderer a viewport's worth at a time.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        parcel = baker.make(Place, kind=PlaceKind.PARCEL)
+        place = baker.make(Place, kind=PlaceKind.BUILDING, parent=parcel)
+        location = baker.make(Location, latitude=41.733, longitude=-73.928, place=place)
+        self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None, slug="scaling-plan")
+        self.floorplan = Floorplan.objects.create(place=place, profile=self.user.profile, origin_lat=41.733, origin_lng=-73.928)
+        self.floor = FloorplanFloor.objects.create(floorplan=self.floorplan, level=0)
+        self.walls = 0
+
+    def seed_rows(self, count: int) -> None:
+        for _ in range(count):
+            self.walls += 1
+            offset = float(self.walls)
+            wall = FloorplanWall.objects.create(floor=self.floor, kind="interior", ax=0.0, ay=offset, bx=5.0, by=offset)
+            opening = FloorplanOpening.objects.create(wall=wall, kind="door", t_start=0.4, t_end=0.6)
+            # Two locks each, so a per-lock query would show up as steeply as a
+            # per-opening one.
+            FloorplanLock.objects.create(opening=opening, state="locked")
+            FloorplanLock.objects.create(opening=opening, state="unlocked")
+
+    def test_the_feature_endpoint_costs_the_same_however_many_doors(self) -> None:
+        self.assert_flat(f"/dashboard/map/pin/{self.pin.slug}/floorplan/features/")
