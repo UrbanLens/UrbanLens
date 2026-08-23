@@ -273,14 +273,14 @@ let server: ReturnType<typeof Bun.serve>;
  * Served over HTTP rather than injected: the bundle is a module that imports a
  * chunk by relative URL, which cannot resolve without a real origin.
  */
-async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false, plan: "square" | "grid" | "closet" | "island" | "empty" | "community" = "square"): Promise<void> {
+async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false, plan: "square" | "grid" | "closet" | "island" | "empty" | "community" | "empty-unsaved" = "square"): Promise<void> {
     page = await browser.newPage({ viewport, hasTouch });
     page.on("pageerror", (error) => console.error("PAGEERROR", String(error).slice(0, 300)));
     page.on("console", (message) => {
         if (message.type() === "error") console.error("browser console:", message.text().slice(0, 200));
     });
-    await page.goto(`http://127.0.0.1:${server.port}/${plan === "square" ? "" : `?plan=${plan}`}`, { waitUntil: "load" });
-    if (plan === "empty") {
+    await page.goto(`http://127.0.0.1:${server.port}/${plan === "square" ? "" : `?plan=${plan === "empty-unsaved" ? "unsaved" : plan}`}`, { waitUntil: "load" });
+    if (plan === "empty" || plan === "empty-unsaved") {
         // Nothing is drawn on it, so there is no wall to wait for - wait for the
         // prompt that stands in for one.
         await page.waitForSelector("#floorplan-empty", { state: "attached", timeout: 20000 });
@@ -398,6 +398,12 @@ beforeAll(async () => {
             if (path === "/json-closet") return Response.json(closetPlan());
             if (path === "/json-island") return Response.json(islandPlan());
             if (path === "/json-empty") return Response.json(emptyPlan());
+            // Never saved: no uuid, so nothing to fork or publish yet.
+            if (path === "/json-unsaved") {
+                const { uuid, ...rest } = emptyPlan() as Record<string, unknown>;
+                void uuid;
+                return Response.json(rest);
+            }
             if (path === "/json-community") return Response.json({ ...(squarePlan() as Record<string, unknown>), origin: "community", versions: [] });
             if (path === "/save") {
                 saves.attempts += 1;
@@ -2323,6 +2329,29 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // Within a quarter of the island's area: the learned size is 3m square,
         // the default 4 by 3.5, and those are 9 and 14 square metres.
         expect(Math.abs(made.w * made.h - island.w * island.h), `generated ${made.w}x${made.h} against ${island.w}x${island.h}`).toBeLessThan(island.w * island.h * 0.25);
+        await page.close();
+    });
+
+    test("save as a new version forks, and is offered only once there is one to fork", async () => {
+        // The one deliberate save in an editor that otherwise saves itself. It
+        // has to leave the uuid off - a fork that overwrote the version it
+        // forked from would be a rename - and it makes no sense on a plan that
+        // has never been saved, where it would mean the same thing as Save.
+        saves.lastHadUuid = true;
+        await openEditor();
+
+        // A saved plan: the action is live.
+        expect(await page.evaluate(() => (document.getElementById("floorplan-save-version") as HTMLButtonElement).disabled)).toBe(false);
+
+        await page.locator("#floorplan-more-toggle").click();
+        await page.locator("#floorplan-save-version").click();
+        for (let waited = 0; waited < 60 && saves.lastHadUuid; waited++) await page.waitForTimeout(250);
+        expect(saves.lastHadUuid, "the fork carried the uuid of the version it forked from").toBe(false);
+        await page.close();
+
+        // A plan with nothing saved yet has nothing to fork.
+        await openEditor({ width: 1200, height: 800 }, false, "empty-unsaved");
+        expect(await page.evaluate(() => (document.getElementById("floorplan-save-version") as HTMLButtonElement).disabled), "offered a fork of a plan that does not exist yet").toBe(true);
         await page.close();
     });
 
