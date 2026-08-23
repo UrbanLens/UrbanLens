@@ -2295,9 +2295,22 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
 
         const after = await boxes();
         expect(after.length, "no room was generated").toBeGreaterThan(before.length);
-        // The new one is whichever box is not the island and not the remainder.
-        const made = after.filter((box) => Math.abs(box.w * box.h - island.w * island.h) < island.w * island.h * 0.35).filter((box) => box.w !== island.w || box.h !== island.h);
-        expect(made.length, "the generated room is not sized like the one already there").toBeGreaterThan(0);
+
+        // Which box is new, by removing one match per box that was there
+        // before. Identifying it by "not the same size as the island" would be
+        // exactly wrong here: a room learned from a 3m room *is* 3m, so the
+        // right answer would disqualify itself and the test would pass only on
+        // the rounding between them.
+        const remaining = [...after];
+        for (const was of before) {
+            const at = remaining.findIndex((box) => Math.abs(box.w - was.w) <= 2 && Math.abs(box.h - was.h) <= 2);
+            if (at >= 0) remaining.splice(at, 1);
+        }
+        expect(remaining.length, "could not tell which room was generated").toBeGreaterThan(0);
+        const made = remaining[0] as { w: number; h: number };
+        // Within a quarter of the island's area: the learned size is 3m square,
+        // the default 4 by 3.5, and those are 9 and 14 square metres.
+        expect(Math.abs(made.w * made.h - island.w * island.h), `generated ${made.w}x${made.h} against ${island.w}x${island.h}`).toBeLessThan(island.w * island.h * 0.25);
         await page.close();
     });
 
