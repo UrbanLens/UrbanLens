@@ -675,6 +675,21 @@ class FloorplanEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "floorplan-map")
 
+    def test_a_markers_icon_and_colour_use_the_shared_pickers(self) -> None:
+        """Not controls of this editor's own, so the two cannot drift apart.
+
+        A marker is a pin by another name, and picking its icon or colour should
+        be the same act in both places. The colour swatches here were this
+        editor's own until they were replaced by the partial the label and pin
+        dialogs use.
+        """
+        response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")
+
+        self.assertContains(response, 'id="color-picker-floorplan-marker"')
+        self.assertContains(response, 'class="color-swatch')
+        self.assertContains(response, 'id="icon-value-floorplan-marker"')
+        self.assertNotContains(response, "floorplan-swatch")
+
 
 class FloorplanVersionSafetyTests(TestCase):
     """A save must never destroy a plan it was not editing.

@@ -539,32 +539,6 @@
     }
 }
 
-.floorplan-swatches {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-}
-
-.floorplan-swatch {
-    width: 1.35rem;
-    height: 1.35rem;
-    border: 2px solid transparent;
-    border-radius: 50%;
-    cursor: pointer;
-    padding: 0;
-
-    &.is-active {
-        border-color: var(--ul-text-color, #222);
-    }
-
-    &--none {
-        background:
-            linear-gradient(45deg, transparent 45%, currentcolor 45%, currentcolor 55%, transparent 55%),
-            var(--ul-surface-bg, #fff);
-        border: 1px solid var(--ul-surface-border);
-    }
-}
-
 .floorplan-details {
     margin-top: 0.75rem;
     border-top: 1px solid var(--ul-surface-border);

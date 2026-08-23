@@ -37,6 +37,7 @@ import {
     wallLength,
     wallSegments,
 } from "../shared/floorplan/document";
+import { installGlobalColorPicker } from "../shared/color-picker";
 import { CONNECTOR_KINDS, connectorCandidates } from "../shared/floorplan/connectors";
 import { type SentSnapshot, applyServerIds, snapshotForSend } from "../shared/floorplan/sync";
 import { contiguousLevels, deriveDesignations } from "../shared/floorplan/designations";
@@ -161,6 +162,9 @@ function boot(): void {
     // The shared picker's markup calls IconPicker.* from inline onclick, so the
     // global has to exist before any of it is clicked.
     installGlobalIconPicker();
+    // Both pickers are server-rendered markup calling a window global from an
+    // inline onclick, so the page that uses them has to install them.
+    installGlobalColorPicker();
     const mapElement = document.getElementById("floorplan-map");
     if (!mapElement) return;
     // Rebound so the null check survives into the closures below.
@@ -3347,14 +3351,21 @@ function boot(): void {
             };
         }
 
-        for (const swatch of host.querySelectorAll<HTMLButtonElement>(".floorplan-swatch")) {
-            const colour = swatch.dataset.color || "";
-            swatch.classList.toggle("is-active", (marker.color || "") === colour);
-            swatch.onclick = () => {
+        // The site's shared colour picker, same as the labels and pin dialogs
+        // use, rather than a set of swatches of this editor's own: its onclick
+        // handlers are the global pickColor(), so all this does is show which
+        // one is current and listen for the change it now announces.
+        const colourInput = document.getElementById("color-value-floorplan-marker") as HTMLInputElement | null;
+        if (colourInput) {
+            const current = marker.color || "";
+            colourInput.value = current;
+            for (const swatch of host.querySelectorAll<HTMLButtonElement>(".color-swatch")) {
+                swatch.classList.toggle("selected", (swatch.dataset.color || "") === current);
+            }
+            colourInput.onchange = () => {
                 checkpoint();
-                marker.color = colour || null;
+                marker.color = colourInput.value || null;
                 markDirty();
-                renderSidebar();
             };
         }
     }

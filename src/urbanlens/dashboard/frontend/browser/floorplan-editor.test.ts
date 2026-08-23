@@ -105,7 +105,16 @@ html,body{margin:0}
   <button id="floorplan-more-toggle"></button><div id="floorplan-more-list" hidden>
     <button id="floorplan-save-version"></button><button id="floorplan-publish"></button></div>
   <div id="floorplan-form"></div>
-  <div id="floorplan-marker-appearance" hidden><input id="icon-value-floorplan-marker"></div>
+  <div id="floorplan-marker-appearance" hidden>
+    <input id="icon-value-floorplan-marker">
+    <div class="color-picker" id="color-picker-floorplan-marker">
+      <input type="hidden" id="color-value-floorplan-marker" value="">
+      <button type="button" class="color-swatch" data-color="#e53935" style="background-color:#e53935"
+              onclick="pickColor('color-picker-floorplan-marker','color-value-floorplan-marker','#e53935',this)"></button>
+      <button type="button" class="color-swatch color-clear selected" data-color=""
+              onclick="pickColor('color-picker-floorplan-marker','color-value-floorplan-marker','',this)"></button>
+    </div>
+  </div>
   <input id="floorplan-name"><input id="floorplan-valid-from" type="date">
   <div id="floorplan-versions" hidden></div>
 </aside></div>
@@ -740,6 +749,32 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         }, strip);
         expect(order.above).toBeLessThan(order.top);
         expect(order.below).toBeGreaterThan(order.bottom);
+        await page.close();
+    });
+
+    test("a marker's colour is picked with the site's own colour picker", async () => {
+        // Not a set of swatches this editor grew for itself: the same markup,
+        // classes and pickColor() call as the label and pin dialogs, so the
+        // control cannot drift from the rest of the site. That means the page
+        // has to install the window global those inline handlers call - which
+        // only two other entries did.
+        await openEditor();
+        await page.locator('[data-tool="marker"]').click();
+        const frame = await page.locator("#floorplan-map").boundingBox();
+        if (!frame) throw new Error("no map");
+        await page.mouse.click(frame.x + 300, frame.y + frame.height - 100);
+        await settle();
+
+        const panel = page.locator("#floorplan-marker-appearance");
+        expect(await page.evaluate(() => (document.getElementById("floorplan-marker-appearance") as HTMLElement).hidden)).toBe(false);
+        await panel.locator('.color-swatch[data-color="#e53935"]').click();
+        await settle();
+
+        // The swatch shows as picked, and the marker actually took the colour.
+        expect(await panel.locator(".color-swatch.selected").getAttribute("data-color")).toBe("#e53935");
+        const saved = await page.evaluate(() => (document.getElementById("color-value-floorplan-marker") as HTMLInputElement).value);
+        expect(saved).toBe("#e53935");
+        expect(await page.locator('#floorplan-map .leaflet-marker-icon [style*="e53935"], #floorplan-map [style*="#e53935"]').count()).toBeGreaterThan(0);
         await page.close();
     });
 
