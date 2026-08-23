@@ -183,7 +183,8 @@ def _reparent_children(survivor: Pin, loser: Pin) -> list[int]:
         if child.pk == survivor.pk:
             survivor.parent_pin = loser.parent_pin
             try:
-                survivor.save(update_fields=["parent_pin", "updated"])
+                with transaction.atomic():
+                    survivor.save(update_fields=["parent_pin", "updated"])
             except IntegrityError:
                 logger.info("Pin merge: temporarily self-parenting survivor pin %s until loser pin %s is deleted.", survivor.pk, loser.pk)
                 _defer_root_promotion(survivor)
@@ -193,7 +194,8 @@ def _reparent_children(survivor: Pin, loser: Pin) -> list[int]:
             logger.warning("Pin merge: detaching child pin %s to root - re-parenting under the survivor would create a cycle.", child.pk)
             child.parent_pin = None
             try:
-                child.save(update_fields=["parent_pin", "updated"])
+                with transaction.atomic():
+                    child.save(update_fields=["parent_pin", "updated"])
             except IntegrityError:
                 logger.info("Pin merge: temporarily self-parenting child pin %s until loser pin %s is deleted.", child.pk, loser.pk)
                 _defer_root_promotion(child)
