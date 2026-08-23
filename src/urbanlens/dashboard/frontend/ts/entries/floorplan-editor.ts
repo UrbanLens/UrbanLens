@@ -777,6 +777,12 @@ function boot(): void {
         // hall wearing the name of a cupboard inside it - but asked the other
         // way round it is a face-squared scan, re-run on every frame of every
         // drag, since render() is what a drag calls.
+        //
+        // First seed wins where two land in the same face, which happens when
+        // the partition between two named rooms is deleted and they become one
+        // region. The other name is dormant rather than lost - it comes back
+        // with the wall, or with an undo - and one label on one region is the
+        // right thing to draw meanwhile.
         const seedForFace = new Map<Face, RoomSeed>();
         for (const room of current.rooms) {
             const bound = faceForSeed({ x: room.x, y: room.y }, derived.faces);
@@ -2780,6 +2786,11 @@ function boot(): void {
      * The difference is not visible in the seed - only in what just happened -
      * so it has to be decided here, against the set that was bound before the
      * deletion.
+     *
+     * Landing in a *different* face is not orphaned. Deleting one wall of a
+     * room inside a building merges it with its surroundings, and the seed then
+     * names the merged region: still a room, still somewhere, so the name
+     * stays. Only a seed that lands in no face at all has nothing left to name.
      *
      * Args:
      *     current: The floor whose seeds should be reconsidered.

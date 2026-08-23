@@ -1302,6 +1302,50 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("a room whose enclosure is gone takes its name with it", async () => {
+        // Otherwise the seed stays behind as a dot labelled "Room - not
+        // enclosed", sitting in the middle of nothing: the name belonged to a
+        // region that no longer exists.
+        //
+        // Deleting one wall of a room *inside* a building is a different case
+        // and deliberately behaves differently - the region merges with its
+        // surroundings and the name goes with it, because the seed still lands
+        // in a face. This is the case where it lands in none.
+        await openEditor();
+        const centre = await planCentre();
+        await page.mouse.click(centre.x, centre.y, { button: "right" });
+        await page.waitForSelector("text=Name this space", { timeout: 10000 });
+        await page.locator("text=Name this space").click();
+        await settle();
+        const field = page.locator("#floorplan-form input.form-input").first();
+        await field.fill("The shed");
+        await field.blur();
+        await settle();
+        await page.waitForFunction(
+            () => Array.from(document.querySelectorAll(".floorplan-room-label__name")).some((n) => (n.textContent ?? "").trim() === "The shed"),
+            undefined,
+            { timeout: 10000 },
+        );
+
+        // One wall of the only enclosure, so nothing encloses anything after it.
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        const walls = await page.locator(".floorplan-wall").count();
+        await page.keyboard.press("Delete");
+        await settle();
+        expect(await page.locator(".floorplan-wall").count()).toBeLessThan(walls);
+
+        await page.waitForFunction(
+            () => !Array.from(document.querySelectorAll(".floorplan-room-label__name")).some((n) => (n.textContent ?? "").trim() === "The shed"),
+            undefined,
+            { timeout: 10000 },
+        );
+        // And no dot where the room used to be.
+        expect(await page.evaluate(() => document.querySelectorAll('#floorplan-map path[stroke="#ef6c00"]').length)).toBe(0);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();
