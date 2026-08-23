@@ -2270,6 +2270,37 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("the room tool builds a room the size of the ones already drawn", async () => {
+        // One click generates a whole rectangular room rather than four walls
+        // drawn by hand, and it takes its size from the rooms already on the
+        // plan - the alternative being a fixed default that is wrong in every
+        // building. The island fixture's room is 3m square against a 4 by 3.5
+        // default, so a learned size and a default one are told apart.
+        await openEditor({ width: 1200, height: 800 }, false, "island");
+        const boxes = () =>
+            page.evaluate(() =>
+                Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"))
+                    .map((node) => node.getBoundingClientRect())
+                    .map((rect) => ({ w: Math.round(rect.width), h: Math.round(rect.height) })),
+            );
+        const before = await boxes();
+        expect(before.length).toBe(2);
+        const island = before.reduce((small, box) => (box.w * box.h < small.w * small.h ? box : small));
+
+        // Somewhere in the big room, well clear of the island in the middle.
+        const plan = await planExtent();
+        await page.locator('[data-tool="room"]').click();
+        await page.mouse.click(plan.left + plan.width * 0.18, plan.top + plan.height * 0.82);
+        await settle();
+
+        const after = await boxes();
+        expect(after.length, "no room was generated").toBeGreaterThan(before.length);
+        // The new one is whichever box is not the island and not the remainder.
+        const made = after.filter((box) => Math.abs(box.w * box.h - island.w * island.h) < island.w * island.h * 0.35).filter((box) => box.w !== island.w || box.h !== island.h);
+        expect(made.length, "the generated room is not sized like the one already there").toBeGreaterThan(0);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();
