@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
 from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
@@ -25,6 +24,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,9 +43,16 @@ class UploadRejection:
 def _owner_fields(owner: Pin | Wiki) -> dict:
     """Return the Image ownership FKs for *owner*.
 
-    A pin photo is also attached to the location's wiki when one exists, which
-    is what makes "send to wiki" a no-op for photos uploaded after the wiki was
-    created; a wiki photo has no pin.
+    A pin photo belongs to the pin and to its location. It is **not** attached to
+    the location's wiki: everything on a wiki is there because somebody put it
+    there. This used to stamp the wiki as well, which made "send to wiki" a no-op
+    for anything uploaded after the wiki existed - and meant a photo of your own
+    house appeared in that place's community Photos panel, and became votable
+    there, without you choosing to share it. The visibility gate narrowed who saw
+    it (``photo_upload_visibility`` defaults to "anything in common", and having a
+    pin at the same place is a thing in common); it did not make it deliberate.
+
+    A wiki photo has no pin.
 
     Args:
         owner: The Pin or Wiki the photo is being uploaded to.
@@ -54,8 +61,7 @@ def _owner_fields(owner: Pin | Wiki) -> dict:
         Kwargs for ``Image.objects.create``.
     """
     if isinstance(owner, Pin):
-        location: Location | None = owner.location
-        return {"pin": owner, "wiki": Wiki.objects.get_for_location(location), "location": location}
+        return {"pin": owner, "location": owner.location}
     return {"wiki": owner, "location": owner.location}
 
 

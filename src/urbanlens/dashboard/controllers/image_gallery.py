@@ -209,7 +209,16 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
             wiki = _wiki_for_location(pin.location)
             if wiki is None:
                 return JsonResponse({"error": "Create a community wiki for this location first."}, status=400)
-            count = images.exclude(wiki=wiki).update(wiki=wiki)
+            # The deliberate act. Uploading to a pin no longer puts a photo on the
+            # location's wiki, so this is the only way one gets there - and it is
+            # recorded as an attachment as well as an FK, because the attachment is
+            # what says a person chose to contribute this.
+            from urbanlens.dashboard.services.photos.attachment import attach_to_wiki
+
+            sending = list(images.exclude(wiki=wiki))
+            for image in sending:
+                attach_to_wiki(image, wiki, added_by=profile)
+            count = images.filter(pk__in=[image.pk for image in sending]).update(wiki=wiki)
             return JsonResponse({"updated": count})
 
         return JsonResponse({"error": "Unknown action."}, status=400)
