@@ -330,7 +330,10 @@ class FloorplanReference(abstract.FrontendDashboardModel):
     kind = CharField(max_length=16, choices=FloorplanReferenceKind.choices, default=FloorplanReferenceKind.OTHER)
     title = CharField(max_length=255, blank=True, default="")
     url = URLField(max_length=1000, blank=True, default="")
-    image = ForeignKey("dashboard.Image", on_delete=CASCADE, null=True, blank=True, related_name="floorplan_references")
+    # SET_NULL, not CASCADE: deleting a photo from someone's media must not reach
+    # into a floorplan and delete the citation that referred to it. The reference
+    # keeps its url and caption and goes on describing what it described.
+    image = ForeignKey("dashboard.Image", on_delete=SET_NULL, null=True, blank=True, related_name="floorplan_references")
     description = TextField(blank=True, default="")
     attributes = JSONField(default=dict, blank=True)
 

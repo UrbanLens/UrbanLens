@@ -58,6 +58,9 @@ class ImageSource(TextChoices):
     """
 
     UPLOAD = "upload", "Upload"
+    #: A URL somebody pasted, whose bytes were then fetched and stored like any
+    #: upload. The address itself is kept in ``source_url``.
+    LINKED_URL = "linked_url", "Linked URL"
     YELP = "yelp", "Yelp"
     GOOGLE_IMAGES = "google_images", "Google Images"
     GOOGLE_MAPS = "google_maps", "Google Maps"
@@ -198,6 +201,14 @@ class Image(abstract.FrontendDashboardModel):
     # left blank rather than guessed at.
     author = CharField(max_length=255, null=True, blank=True)
     source_url = URLField(max_length=500, null=True, blank=True)
+    #: The address the bytes themselves came from, when that differs from the page
+    #: above. Both are kept because they rot independently: a provider's landing
+    #: page can be reorganised - or be a feed that simply moves on, as a "recent
+    #: photos" page does - while the file stays exactly where it was, and the file
+    #: can be replaced while the page still describes the picture. Storing one
+    #: threw the other away; materialize_media_item was handed both and persisted
+    #: only the page.
+    source_media_url = URLField(max_length=500, null=True, blank=True)
     copyright = CharField(max_length=255, null=True, blank=True)
     # Set only on rows materialized from the Media gallery's transient provider
     # results (see services.media.media_materialize) - the *raw* provider panel key
@@ -330,6 +341,24 @@ class Image(abstract.FrontendDashboardModel):
         pin_suggestion_id: int | None
 
     objects = ImageManager()
+
+    @property
+    def attribution_url(self) -> str:
+        """Where to send a person to see this photo in its original context.
+
+        Prefers the provider's page, which is the one meant to be read by a
+        human, and falls back to the file itself when there is no page.
+        """
+        return self.source_url or self.source_media_url or ""
+
+    @property
+    def origin_media_url(self) -> str:
+        """Where the bytes came from, for re-fetching or comparison.
+
+        The opposite preference to :attr:`attribution_url`: a landing page is no
+        use for fetching an image, so the direct address wins when there is one.
+        """
+        return self.source_media_url or self.source_url or ""
 
     @property
     def display_url(self) -> str:

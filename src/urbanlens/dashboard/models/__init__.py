@@ -81,7 +81,7 @@ from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.google_photos import GooglePhotosAccount
 from urbanlens.dashboard.models.google_place import GooglePlace
 from urbanlens.dashboard.models.group_chats import GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
-from urbanlens.dashboard.models.images import Image, ImageKeyword, ImageSource, MediaKind, MediaRelevance
+from urbanlens.dashboard.models.images import Image, ImageAttachment, ImageKeyword, ImageSource, MediaKind, MediaRelevance
 from urbanlens.dashboard.models.immich import ImmichAccount
 from urbanlens.dashboard.models.labels import COLOR_CHOICES, ICON_CHOICES, Label, LabelCustomization, LabelSerializer
 from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
