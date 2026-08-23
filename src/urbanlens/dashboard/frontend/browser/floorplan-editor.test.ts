@@ -379,8 +379,13 @@ beforeAll(async () => {
             if (path === "/") {
                 // The plan url is substituted rather than fixed, so a test can
                 // ask for a big one without a second copy of the harness.
-                const which = new URL(request.url).searchParams.get("plan");
-                const page = which ? HARNESS.replace('data-json-url="/json"', `data-json-url="/json-${which}"`) : HARNESS;
+                const params = new URL(request.url).searchParams;
+                const which = params.get("plan");
+                let page = which ? HARNESS.replace('data-json-url="/json"', `data-json-url="/json-${which}"`) : HARNESS;
+                // Leaflet and leaflet-rotate come from unpkg on the real page too.
+                // Dropping the tags is what an unreachable CDN looks like: the
+                // scripts are simply not there and `L` is undefined.
+                if (params.get("nomap")) page = page.replace(/<script src="https:\/\/unpkg\.com[^"]*"><\/script>/g, "");
                 return new Response(page, { headers: { "content-type": "text/html" } });
             }
             if (path === "/publish") {
@@ -1689,6 +1694,50 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("a map library that never loaded says so, rather than showing a blank rectangle", async () => {
+        // Leaflet and leaflet-rotate are CDN scripts, so an unreachable CDN leaves
+        // `L` undefined and every line of the editor is built on L.map(). Unguarded,
+        // the entry threw on the first call: a blank rectangle, no message, and no
+        // sign that the plan on the server was untouched. Which it must be - nothing
+        // is wired at that point, so nothing can save the empty screen over it.
+        saves.attempts = 0;
+        page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+        await page.goto(`http://127.0.0.1:${server.port}/?nomap=1`, { waitUntil: "load" });
+
+        await page.waitForSelector("#floorplan-unavailable:not([hidden])", { state: "attached", timeout: 20000 });
+        // The "Draw the walls" prompt is server-rendered visible and normally hidden
+        // by the editor, so without hiding it here the two would stack.
+        expect(await page.evaluate(() => (document.getElementById("floorplan-empty") as HTMLElement).hidden), "the empty-plan prompt showed underneath the failure notice").toBe(true);
+        expect(saves.attempts, "saved a blank document over the stored plan").toBe(0);
+        await page.close();
+    });
+
+    test("a failed save keeps retrying when the toast library never loaded", async () => {
+        // toastr is fetched from a CDN, so window.toastr is simply absent when
+        // that request does not land - and the network that loses the script is
+        // the same network that loses the save. The warning toast sits directly
+        // above the call that arms the retry, so a throw on the missing library
+        // strands the document: dirty, unsaved, nothing scheduled to try again.
+        // The harness never loads toastr, so this is that machine.
+        saves.fail = true;
+        saves.attempts = 0;
+        try {
+            await openEditor();
+            const plan = await planExtent();
+            await page.mouse.click(plan.grab.x, plan.grab.y);
+            await settle();
+            await page.keyboard.press("ArrowRight");
+
+            // The first attempt is the debounced autosave; the backoff arms the
+            // second 2s later. Waiting to 12s covers both with room to spare.
+            for (let waited = 0; waited < 48 && saves.attempts < 2; waited++) await page.waitForTimeout(250);
+            expect(saves.attempts, "a failed save was never retried").toBeGreaterThanOrEqual(2);
+            await page.close();
+        } finally {
+            saves.fail = false;
+        }
+    });
+
     test("publishing says what it will publish, and taking it back publishes nothing", async () => {
         // Publishing decides what other people see, and it publishes the last
         // *saved* version - so doing it with unsaved work in front of you means
@@ -2349,9 +2398,18 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         expect(saves.lastHadUuid, "the fork carried the uuid of the version it forked from").toBe(false);
         await page.close();
 
-        // A plan with nothing saved yet has nothing to fork.
+        // A plan with nothing saved yet has nothing to fork or publish.
         await openEditor({ width: 1200, height: 800 }, false, "empty-unsaved");
-        expect(await page.evaluate(() => (document.getElementById("floorplan-save-version") as HTMLButtonElement).disabled), "offered a fork of a plan that does not exist yet").toBe(true);
+        const moreDisabled = () =>
+            page.evaluate(() => ["floorplan-save-version", "floorplan-publish"].map((id) => (document.getElementById(id) as HTMLButtonElement).disabled));
+        expect(await moreDisabled(), "offered a fork or a publish of a plan that does not exist yet").toEqual([true, true]);
+
+        // The disabled state means "not yet", not "not on this plan": the first
+        // autosave gives the plan an identity, and both actions come alive.
+        await page.locator("#floorplan-start-rectangle").click();
+        await settle();
+        for (let waited = 0; waited < 60 && (await moreDisabled())[0]; waited++) await page.waitForTimeout(250);
+        expect(await moreDisabled(), "left disabled on a plan that has since been saved").toEqual([false, false]);
         await page.close();
     });
 

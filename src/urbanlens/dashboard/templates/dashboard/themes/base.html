@@ -75,7 +75,11 @@
         document.body.addEventListener('htmx:configRequest', function (evt) {
             evt.detail.headers['X-CSRFToken'] = csrftoken;
         });
-        toastr.options = {
+        // Guarded because toastr is a CDN script: unguarded, a failed load threw here
+        // and took out the rest of this block - including the showToast and
+        // htmx:responseError listeners below, whose own window.toastr guards then
+        // never ran at all.
+        if (window.toastr) toastr.options = {
             positionClass: 'toast-bottom-right',
             progressBar: true,
             timeOut: 4500,
@@ -95,7 +99,7 @@
             (function () {
                 var tag = '{{ message.tags|escapejs }}';
                 var fn = _valid[tag] ? tag : 'info';
-                toastr[fn]('{{ message.message|escapejs }}');
+                if (window.toastr) toastr[fn]('{{ message.message|escapejs }}');
             }());
             {% endfor %}
         }());
@@ -107,7 +111,7 @@
             if (!d) return;
             var level = d.level;
             var fn = (level === 'success' || level === 'info' || level === 'warning' || level === 'error') ? level : 'info';
-            toastr[fn](d.message || '');
+            if (window.toastr) toastr[fn](d.message || '');
         });
 
         // Global request error notifications for HTMX and fetch/AJAX calls.
@@ -580,7 +584,9 @@
         // has for them.
         window._openCommentMapComposer = function (formOrOptions) {
             if (typeof L === 'undefined') {
-                toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
+                // Leaflet is a CDN script too, so the load failure this reports is
+                // exactly when toastr is likely missing as well.
+                if (window.toastr) toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
                 return;
             }
             var opts = (formOrOptions instanceof HTMLElement) ? { form: formOrOptions } : (formOrOptions || {});
@@ -826,10 +832,10 @@
                             layers: _composerLayers,
                             getShapes: function () { return _composerShapes; },
                             filename: 'map-screenshot.jpg',
-                        }).catch(function () { toastr.error('Map saved, but the JPEG download failed.'); });
+                        }).catch(function () { if (window.toastr) toastr.error('Map saved, but the JPEG download failed.'); });
                     })
                     .then(function () { _closeComposer(); })
-                    .catch(function () { toastr.error('Failed to save map.'); })
+                    .catch(function () { if (window.toastr) toastr.error('Failed to save map.'); })
                     .finally(function () { _saveBtn.disabled = false; });
                 return;
             }
@@ -855,7 +861,7 @@
                 getShapes: function () { return _composerShapes; },
                 filename: 'map-screenshot.jpg',
             })
-                .catch(function () { toastr.error('Failed to download the map image.'); })
+                .catch(function () { if (window.toastr) toastr.error('Failed to download the map image.'); })
                 .finally(function () { btn.disabled = false; });
         });
 
@@ -881,7 +887,7 @@
                 getShapes: function () { return cached.shapes; },
                 filename: 'map-' + downloadBtn.dataset.mapId + '.jpg',
             })
-                .catch(function () { toastr.error('Failed to download the map image.'); })
+                .catch(function () { if (window.toastr) toastr.error('Failed to download the map image.'); })
                 .finally(function () {
                     downloadBtn.classList.remove('is-loading');
                     downloadBtn.disabled = false;
@@ -900,7 +906,7 @@
             var script = document.getElementById('comment-map-data-' + mapId);
             var data = null;
             if (script) { try { data = JSON.parse(script.textContent); } catch (_) {} }
-            if (!data) { toastr.error("Couldn't load this map to edit."); return; }
+            if (!data) { if (window.toastr) toastr.error("Couldn't load this map to edit."); return; }
             var dlg = document.getElementById('comment-map-dialog-' + mapId);
             if (dlg && dlg.open) dlg.close();
             window._openCommentMapComposer({ existingData: data });
@@ -931,7 +937,7 @@
         // -- Pin my location: drop a marker instantly, no multi-click draw session needed --
         document.getElementById('cmc-pin-location').addEventListener('click', function () {
             if (!navigator.geolocation) {
-                toastr.warning('Geolocation is not available in this browser.');
+                if (window.toastr) toastr.warning('Geolocation is not available in this browser.');
                 return;
             }
             navigator.geolocation.getCurrentPosition(
@@ -945,7 +951,7 @@
                     if (_composerMap) _composerMap.panTo([pos.coords.latitude, pos.coords.longitude]);
                 },
                 function () {
-                    toastr.warning("Couldn't get your location. Check your browser's location permission.");
+                    if (window.toastr) toastr.warning("Couldn't get your location. Check your browser's location permission.");
                 },
                 { enableHighAccuracy: true, timeout: 10000 },
             );

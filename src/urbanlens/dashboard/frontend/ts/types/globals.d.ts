@@ -53,7 +53,10 @@ interface CommentMapComposerOptions {
 
 declare global {
     interface Window {
-        toastr: Toastr;
+        // A CDN <script> in dashboard/themes/base.html, so it is absent whenever that
+        // request does not land. shared/dialogs.ts's toast falls back; reach for it
+        // rather than window.toastr directly.
+        toastr?: Toastr;
         // Resolves "alt" when the caller offered altLabel and the user picked it - the
         // pin-delete "keep child pins" path depends on that third outcome. This was
         // declared as Promise<boolean> while the implementation could already return

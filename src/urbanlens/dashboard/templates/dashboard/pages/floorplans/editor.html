@@ -161,6 +161,19 @@
                 {% map_layers_panel "satellite,street,underlay" panel_id="floorplan-layers" extra_class="map-layers-panel--inline" manage_overlays_url=manage_overlays_url %}
             </div>
 
+            {# Revealed by floorplan-editor.ts when Leaflet did not load. It is a CDN #}
+            {# script, so without this the editor is a blank rectangle and a silent #}
+            {# ReferenceError, with nothing to say the saved plan is still intact. #}
+            <div id="floorplan-unavailable" class="floorplan-empty" hidden>
+                <h2>The map didn't load.</h2>
+                <p>Check your connection and try again. Your saved plan hasn't changed.</p>
+                <div class="floorplan-empty__actions">
+                    <button type="button" class="btn btn--primary" id="floorplan-retry-load">
+                        <i class="material-symbols-outlined">refresh</i> Try again
+                    </button>
+                </div>
+            </div>
+
             <div id="floorplan-empty" class="floorplan-empty">
                 <h2>Draw the walls; the rooms appear on their own.</h2>
                 <p>Close a loop of walls and it becomes a room you can name.</p>

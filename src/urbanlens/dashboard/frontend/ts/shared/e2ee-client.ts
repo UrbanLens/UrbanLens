@@ -589,7 +589,7 @@ export async function enrollOauthIfNeeded(): Promise<boolean> {
 }
 
 function notifyEnrolled(): void {
-    window.toastr.info("Your direct messages are now end-to-end encrypted. Save your recovery key from Settings → Direct Messages.", "Encryption enabled");
+    toast.info("Your direct messages are now end-to-end encrypted. Save your recovery key from Settings → Direct Messages.", "Encryption enabled");
 }
 
 // ---------------------------------------------------------------------------

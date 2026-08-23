@@ -4152,3 +4152,38 @@ version of it as unshippable until that rehost test passes.
 The related idea - skipping the twin `Pin` save when nothing changed - was
 reverted with it, untested on its own. It is probably safe and should be
 attempted separately, with `FloorplanMarkerLinkedPinTests` as the guard.
+
+## Three third-party CDNs are single points of failure (2026-08-23)
+
+toastr (cdnjs), Leaflet and leaflet-rotate (unpkg) are `<script>` tags, not
+bundled. Each is absent whenever that request does not land: offline, a blocked
+CDN, a corporate proxy, an SRI mismatch, or a CDN outage. This is not a rare
+state for a field app whose users are on bad mobile data by definition.
+
+The immediate damage is fixed. `shared/dialogs.ts`'s `toast` no longer throws
+when toastr is missing (it falls back to toastr's own markup, which
+`sass/_toastr.scss` already styles, since only the script is remote), and the
+floorplan editor now says the map did not load instead of leaving a blank
+rectangle. Both are regression-tested. The *class* of problem is not fixed:
+
+- Anything reached only through a CDN global still needs its own guard, and
+  nothing enforces that. `window.toastr` is now typed optional, so TypeScript
+  catches new unguarded uses of that one - Leaflet's `declare const L` is not,
+  and cannot easily be, since the editor is built on it top to bottom.
+- Templates are not typechecked at all. `themes/base.html` had eight unguarded
+  `toastr.*` calls; the one at the top of its main inline `<script>`
+  (`toastr.options = {...}`) threw before the `showToast` and
+  `htmx:responseError` listeners below it were ever registered - so those
+  listeners' own careful `if (window.toastr)` guards were dead code. All eight
+  are guarded now, but a ninth can be added tomorrow with nothing to object.
+- Guarding degrades gracefully; it does not restore the feature. A blocked
+  unpkg still means no map.
+
+Self-hosting all three would remove the class rather than the instances, and is
+the actual fix. It is not free: Leaflet is loaded by several pages, not just the
+floorplan editor, and `leaflet-rotate` patches `L` in place and must keep
+loading after it.
+
+Worth knowing while that stands: **`bun run test:browser` fetches Leaflet from
+unpkg on every run**, so the browser suite needs working outbound network to a
+third party and fails offline for reasons unrelated to the code under test.

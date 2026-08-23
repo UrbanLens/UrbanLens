@@ -174,7 +174,31 @@ function markerPopupContent(marker: Marker): HTMLElement {
     return wrap;
 }
 
+/** Reveals the "map didn't load" state and stands the editor down.
+ *
+ * Nothing below boot()'s guard has run at this point, so no handler is wired and
+ * no autosave can fire - the plan on the server cannot be overwritten by the blank
+ * document on screen.
+ */
+function showMapUnavailable(): void {
+    // Otherwise the "Draw the walls" prompt, which the server renders visible and
+    // the editor normally hides, sits underneath this one.
+    const prompt = document.getElementById("floorplan-empty");
+    if (prompt) prompt.hidden = true;
+    const notice = document.getElementById("floorplan-unavailable");
+    if (notice) notice.hidden = false;
+    document.getElementById("floorplan-retry-load")?.addEventListener("click", () => window.location.reload());
+}
+
 function boot(): void {
+    // Leaflet and leaflet-rotate are CDN scripts (see editor.html), so they are
+    // absent whenever that request does not land - and every line below is built on
+    // L.map(). Unguarded, the entry threw on the first Leaflet call and left a blank
+    // rectangle: no map, no message, and no sign that the saved plan was fine.
+    if (typeof L === "undefined") {
+        showMapUnavailable();
+        return;
+    }
     // The shared picker's markup calls IconPicker.* from inline onclick, so the
     // global has to exist before any of it is clicked.
     installGlobalIconPicker();
