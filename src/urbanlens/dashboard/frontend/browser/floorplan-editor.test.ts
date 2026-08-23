@@ -56,7 +56,7 @@ const BUILT = existsSync(BUNDLE);
  * reach it is for the server to answer the way a real one would when another
  * tab has saved first.
  */
-const saves = { conflict: false, fail: false, attempts: 0 };
+const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1 };
 
 /** Publish requests the fixture has been asked for. */
 const publishes = { attempts: 0 };
@@ -343,7 +343,7 @@ beforeAll(async () => {
         // route that fails to match is indistinguishable from a 404, and the
         // editor is right to refuse to render a plan it could not fetch - which
         // makes a mis-typed glob look exactly like a broken editor.
-        fetch(request) {
+        async fetch(request) {
             const path = new URL(request.url).pathname;
             if (path === "/") {
                 // The plan url is substituted rather than fixed, so a test can
@@ -363,6 +363,16 @@ beforeAll(async () => {
             if (path === "/json-empty") return Response.json(emptyPlan());
             if (path === "/save") {
                 saves.attempts += 1;
+                // What the editor actually sent, so a test can ask about the
+                // payload rather than about the screen. Awaited rather than
+                // left to settle: once the response goes out the request body
+                // is gone, and a fire-and-forget read of it never resolves.
+                try {
+                    const body = (await request.json()) as { reference_pool?: unknown[] };
+                    saves.lastPool = (body.reference_pool ?? []).length;
+                } catch {
+                    saves.lastPool = -1;
+                }
                 if (saves.fail) return Response.json({ ok: false, error: "nope" }, { status: 500 });
                 if (saves.conflict) {
                     return Response.json({ ok: false, error: "Someone else saved this plan while you were editing it.", stale: true }, { status: 409 });
@@ -1780,10 +1790,17 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         expect(await reopened.locator(".floorplan-photo").first().getAttribute("aria-pressed")).toBe("true");
         expect(await reopened.locator(".floorplan-photo").nth(1).getAttribute("aria-pressed")).toBe("false");
 
-        // Off again, and the plan is back where it started.
+        // Off again, and the plan is back where it started - including the
+        // pool, which the last citation takes with it. The server deletes by
+        // omission, so a row left in the payload lives forever, and every
+        // attach-then-detach would leave one behind.
         await reopened.locator(".floorplan-photo").first().click();
         await settle();
         expect(await page.locator("#floorplan-form .floorplan-photo").first().getAttribute("aria-pressed")).toBe("false");
+
+        // Read from what the editor actually sent. The route records it.
+        for (let waited = 0; waited < 60 && saves.lastPool !== 0; waited++) await page.waitForTimeout(250);
+        expect(saves.lastPool, "a pool row outlived its last citation").toBe(0);
         await page.close();
     });
 

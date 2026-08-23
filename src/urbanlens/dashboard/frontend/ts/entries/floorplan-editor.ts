@@ -3457,6 +3457,39 @@ function boot(): void {
      *     host: The details block to append to.
      *     item: The wall, opening, room, marker or lock being edited.
      */
+    /**
+     * Every reference-pool uuid some item on the plan still cites.
+     *
+     * Returns:
+     *     The uuids in use, across every floor.
+     */
+    function citedReferences(): Set<string> {
+        const cited = new Set<string>();
+        const take = (details: ItemDetails): void => {
+            for (const uuid of details.references ?? []) cited.add(uuid);
+        };
+        for (const floorItem of state.doc.floors) {
+            for (const wall of floorItem.walls) {
+                take(wall);
+                for (const opening of wall.openings) {
+                    take(opening);
+                    for (const lock of opening.locks ?? []) take(lock);
+                }
+            }
+            for (const room of floorItem.rooms) take(room);
+            for (const marker of floorItem.markers) take(marker);
+        }
+        return cited;
+    }
+
+    /** Drop pool rows nothing cites, so the pool cannot silt up. */
+    function pruneUnusedReferences(): void {
+        const pool = state.doc.reference_pool;
+        if (!pool?.length) return;
+        const cited = citedReferences();
+        state.doc.reference_pool = pool.filter((entry) => !entry.uuid || cited.has(entry.uuid));
+    }
+
     function renderReferences(host: HTMLElement, item: ItemDetails): void {
         if (!pinPhotos.length) return;
         const pool = (state.doc.reference_pool ??= []);
@@ -3492,6 +3525,11 @@ function boot(): void {
                 const existing = rowFor(photo.uuid);
                 if (attached && existing?.uuid) {
                     item.references = (item.references ?? []).filter((uuid) => uuid !== existing.uuid);
+                    // A pool row nothing cites any more goes with the last
+                    // citation. The server deletes by omission, so leaving it
+                    // in the payload keeps it alive forever - every attach and
+                    // detach would silt the pool up with rows no item mentions.
+                    pruneUnusedReferences();
                 } else {
                     const target = existing ?? { uuid: nextLocalId(), kind: "photo", title: photo.caption || "", image_uuid: photo.uuid };
                     if (!existing) pool.push(target);
