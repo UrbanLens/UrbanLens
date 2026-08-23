@@ -1998,6 +1998,32 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("every tool is armed by the letter its own tooltip names", async () => {
+        // The letters are advertised one place and handled another, and drifted
+        // once already: digits 1, 2 and 3 armed select, wall and marker, from
+        // when those were the only tools, and by seven tools they picked the
+        // wrong ones in an order the toolbar no longer had.
+        await openEditor();
+        const advertised = await page.evaluate(() =>
+            Array.from(document.querySelectorAll("#floorplan-tools [data-tool]")).map((node) => ({
+                tool: node.getAttribute("data-tool") ?? "",
+                key: (node.getAttribute("data-tooltip") ?? "").match(/\(([A-Z])\)/)?.[1]?.toLowerCase() ?? "",
+            })),
+        );
+        expect(advertised.length).toBe(7);
+        expect(advertised.every((entry) => entry.key), "a tool's tooltip names no key").toBe(true);
+        expect(new Set(advertised.map((entry) => entry.key)).size, "two tools claim one letter").toBe(7);
+
+        for (const { tool, key } of advertised) {
+            await page.locator("#floorplan-map").click({ position: { x: 5, y: 5 } });
+            await page.keyboard.press(key);
+            await settle();
+            const armed = await page.evaluate(() => document.querySelector("#floorplan-tools [data-tool].is-active")?.getAttribute("data-tool") ?? "");
+            expect(armed, `${key} should arm ${tool}`).toBe(tool);
+        }
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

@@ -2770,13 +2770,20 @@ function boot(): void {
             redo();
             return;
         }
-        if (key === "1" || key === "v") setTool("select");
+        // One letter per tool, and the letter each tool's own tooltip names.
+        // There used to be digits alongside - 1 select, 2 wall, 3 marker - from
+        // when those were the only three tools. Seven tools later they covered
+        // three of them, in an order the toolbar no longer had: 2 armed the
+        // wall while the second button was box select, and 4 through 7 did
+        // nothing. A partial scheme that contradicts what is on screen is worse
+        // than no scheme.
+        if (key === "v") setTool("select");
         if (key === "b") setTool("box");
         if (key === "d") setTool("opening");
         if (key === "t") setTool("rotate");
-        if (key === "2" || key === "w") setTool("wall");
+        if (key === "w") setTool("wall");
         if (key === "r") setTool("room");
-        if (key === "3" || key === "m") setTool("marker");
+        if (key === "m") setTool("marker");
         if (key === "h") {
             state.markerKind = "hazard";
             setTool("marker");
