@@ -311,7 +311,13 @@ class OverlayMediaPickerView(LoginRequiredMixin, View):
         """List this owner's images, most recent first."""
         owner, _qs = _resolve_owner(request, pin_slug, location_slug)
         owner_filter = {"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}
-        images = Image.objects.filter(**owner_filter).exclude(image="").order_by("-created")[:60]
+        # visible_to for the same reason the wiki gallery uses it: contributing a
+        # photo to a wiki does not withdraw what its uploader said about who may
+        # see their photos, and this picker was the one wiki photo surface that
+        # did not ask. On the pin branch it costs nothing - _resolve_owner has
+        # already scoped that to the viewer's own pin, and visible_to always
+        # includes the viewer's own images.
+        images = Image.objects.filter(**owner_filter).exclude(image="").visible_to(request.user.profile).order_by("-created")[:60]
         return JsonResponse({"images": [{"id": image.pk, "url": request.build_absolute_uri(image.image.url), "caption": image.caption or ""} for image in images]})
 
 
