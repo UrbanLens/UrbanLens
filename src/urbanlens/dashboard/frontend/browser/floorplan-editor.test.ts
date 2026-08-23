@@ -819,8 +819,12 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // frame of every drag. This is the behaviour behind the timing below,
         // asserted directly because a threshold alone would not say what broke.
         await openEditor({ width: 1200, height: 800 }, false, "grid");
+        // Exactly one label per face, not "some". The old drag path left a
+        // stale generation of tooltips behind and read 288 for 144 rooms, and
+        // an at-least assertion cannot tell a duplicate from a redraw.
         const labels = () => page.locator(".floorplan-room-label").count();
-        expect(await labels()).toBeGreaterThan(50);
+        const ROOMS = 144;
+        expect(await labels()).toBe(ROOMS);
 
         const before = await planExtent();
         await page.mouse.move(before.grab.x, before.grab.y);
@@ -831,7 +835,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.mouse.up();
         await settle();
         // And come back on release, which needs a frame after the drag ends.
-        expect(await labels()).toBeGreaterThan(50);
+        // Back, and not doubled: a render that left the previous frame's
+        // tooltips behind would show here as 288.
+        expect(await labels()).toBe(ROOMS);
         await page.close();
     });
 
@@ -867,6 +873,59 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         console.log(`drag: 4 walls ${small.toFixed(1)}ms/move, 312 walls ${large.toFixed(1)}ms/move`);
 
         expect(large - small).toBeLessThan(80);
+    });
+
+    test("holding the snap-off key suspends snapping, and letting go restores it", async () => {
+        // The wall tool's readout names the snap it found ("1.20 m - corner"),
+        // so what the tool would do is legible without drawing anything.
+        await openEditor();
+        const wall = await planExtent();
+        await page.locator('[data-tool="wall"]').click();
+        const readout = async (x: number, y: number): Promise<string> => {
+            await page.mouse.move(x, y);
+            await settle();
+            return page.evaluate(() => document.querySelector(".floorplan-measure")?.textContent ?? "");
+        };
+
+        // Start a chain, then aim at an existing corner, which is snappable.
+        await page.mouse.click(wall.left + 40, wall.top + 40);
+        const snapped = await readout(wall.left, wall.top);
+        expect(snapped).toContain("·");
+
+        await page.keyboard.down("`");
+        const free = await readout(wall.left + 1, wall.top + 1);
+        expect(free).not.toContain("·");
+
+        await page.keyboard.up("`");
+        const again = await readout(wall.left, wall.top);
+        expect(again).toContain("·");
+        await page.close();
+    });
+
+    test("the snap-off key does not stick when the window loses focus", async () => {
+        // A held key whose keyup lands on somebody else - alt-tab, a system
+        // shortcut, the browser's own find bar - leaves the mode latched, and
+        // the editor goes on silently not snapping until the key is pressed and
+        // released again. The user's report of that is "snapping stopped
+        // working", with nothing to reproduce it from.
+        await openEditor();
+        const wall = await planExtent();
+        await page.locator('[data-tool="wall"]').click();
+        await page.mouse.click(wall.left + 40, wall.top + 40);
+
+        await page.keyboard.down("`");
+        await page.mouse.move(wall.left, wall.top);
+        await settle();
+        // Focus goes elsewhere while the key is still down, so no keyup ever
+        // arrives for it.
+        await page.evaluate(() => window.dispatchEvent(new FocusEvent("blur")));
+        await page.mouse.move(wall.left + 1, wall.top + 1);
+        await page.mouse.move(wall.left, wall.top);
+        await settle();
+
+        const readout = await page.evaluate(() => document.querySelector(".floorplan-measure")?.textContent ?? "");
+        expect(readout).toContain("·");
+        await page.close();
     });
 
     test("the tool options panel shows the armed tool's choices", async () => {

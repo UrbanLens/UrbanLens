@@ -465,12 +465,14 @@ function boot(): void {
                     // or deselect the thing that was just moved.
                     suppressNextClick = true;
                 }
-                handlers.end?.(moved);
-                // Whatever the gesture's own end handler does or does not do,
-                // one frame has to follow it: the drag suppressed the room
-                // labels and the joint handles, and only a render with
-                // activeDrags back at zero puts them back.
+                // Queued before the handler runs, not after: the drag
+                // suppressed the room labels and the joint handles, and only a
+                // render with activeDrags back at zero puts them back - but
+                // most end handlers already render synchronously, and render()
+                // cancels a pending frame as its first act. Scheduling first
+                // means whichever happens is the only one that happens.
                 if (moved) renderSoon();
+                handlers.end?.(moved);
             };
             // On window rather than the map: a pointer released outside the map
             // still has to end the gesture, or the listeners stay and panning
@@ -2705,6 +2707,14 @@ function boot(): void {
     });
     document.addEventListener("keyup", (event) => {
         if (event.key === "`") state.suspendSnap = false;
+    });
+    // A held key whose keyup lands on somebody else - alt-tab, a system
+    // shortcut, the browser's own find bar - never reaches the keyup above, and
+    // the mode stays latched. The editor then quietly stops snapping with
+    // nothing on screen to say why, which reaches anyone else as "snapping
+    // stopped working" and nothing to reproduce it from.
+    window.addEventListener("blur", () => {
+        state.suspendSnap = false;
     });
 
     function deleteSelection(): void {
