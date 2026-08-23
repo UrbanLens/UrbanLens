@@ -255,6 +255,19 @@ class CreateGroupMessageTests(TestCase):
         create_group_message(self.creator, self.group, "hello")
         self.assertEqual(unread_group_conversation_count(self.member), 1)
 
+    def test_client_uuid_reuse_for_another_group_is_rejected(self) -> None:
+        other_member = _profile()
+        other_group = create_group_chat(self.creator, "Other chat", [other_member])
+        client_uuid = uuid_module.uuid4()
+
+        original = create_group_message(self.creator, self.group, "first", client_uuid=client_uuid)
+
+        with self.assertRaises(ValueError):
+            create_group_message(self.creator, other_group, "second", client_uuid=client_uuid)
+
+        self.assertEqual(GroupMessage.objects.count(), 1)
+        self.assertEqual(GroupMessage.objects.get(), original)
+
     def test_delete_tombstones_for_others(self) -> None:
         message = create_group_message(self.creator, self.group, "oops")
         with self.assertRaises(PermissionError):
@@ -331,6 +344,24 @@ class GroupPinShareTests(TestCase):
         self.assertIsNotNone(own)
         self.assertEqual(own.recipient_id, self.friend_a.pk)
         self.assertIsNone(message.share_for(self.stranger.pk))
+
+    def test_share_rejects_client_uuid_reused_in_another_group_before_fanout(self) -> None:
+        other_friend = _profile()
+        _befriend(self.creator, other_friend)
+        other_group = create_group_chat(self.creator, "Other explorers", [other_friend])
+        client_uuid = uuid_module.uuid4()
+        original = share_pin_in_group_message(self.creator, self.group, self.pin, "first", client_uuid=client_uuid)
+        share_count = GroupMessageShare.objects.count()
+        pin_share_count = PinShare.objects.count()
+
+        with self.assertRaises(ValueError):
+            share_pin_in_group_message(self.creator, other_group, self.pin, "second", client_uuid=client_uuid)
+
+        self.assertEqual(GroupMessage.objects.count(), 1)
+        self.assertEqual(GroupMessage.objects.get(), original)
+        self.assertEqual(GroupMessageShare.objects.count(), share_count)
+        self.assertEqual(PinShare.objects.count(), pin_share_count)
+        self.assertFalse(GroupMessageShare.objects.filter(message=original, recipient=other_friend).exists())
 
 
 class ConversationMergeTests(TestCase):

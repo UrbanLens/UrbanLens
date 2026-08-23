@@ -560,10 +560,14 @@ def create_group_message(
     from urbanlens.dashboard.services.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
 
     # Idempotent replay - see create_direct_message for why this precedes both
-    # validation and the membership check.
+    # validation and the membership check. The UUID is unique per sender at the
+    # database layer, so a reuse aimed at a different group must fail before
+    # callers such as share_pin_in_group_message perform non-idempotent fan-out.
     if client_uuid is not None:
         replayed = GroupMessage.objects.filter(sender=sender, client_uuid=client_uuid).first()
         if replayed is not None:
+            if replayed.group_id != group.pk:
+                raise GroupChatValidationError("client_uuid was already used for another group message.")
             return replayed
 
     membership = group.membership_for(sender)
@@ -600,6 +604,8 @@ def create_group_message(
         replayed = GroupMessage.objects.filter(sender=sender, client_uuid=client_uuid).first() if client_uuid is not None else None
         if replayed is None:
             raise
+        if replayed.group_id != group.pk:
+            raise GroupChatValidationError("client_uuid was already used for another group message.")
         return replayed
     # Sending is reading: the sender's own read mark advances with their message.
     GroupMessage.objects.mark_read(membership)
