@@ -9,6 +9,7 @@ defaults to ``UPLOAD`` and ``media_type`` defaults to ``PHOTO``.
 from __future__ import annotations
 
 from django.contrib.auth.models import User
+from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
@@ -79,3 +80,64 @@ class SharedImageCopyFidelityTests(TestCase):
         original = Image.objects.get(profile=self.sender)
         self.assertEqual(original.source, ImageSource.WIKIMEDIA)
         self.assertEqual(original.pin_id, self.pin.pk)
+
+
+class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
+    """Accepting a share gives you the place, not the person's account of it.
+
+    A share carries what is true about the site - its dates, and what was
+    observed there. It does not carry how somebody chose to decorate their own
+    pin, and it does not carry their labels: a Label belongs to one profile, so
+    copying them hung the sharer's rows off the recipient's pin, showing one
+    person's private organising scheme to another and leaving the recipient
+    holding references they cannot manage.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.sender = baker.make(User).profile
+        self.recipient = baker.make(User).profile
+        self.location = baker.make(Location, latitude=41.7361, longitude=-73.9361)
+        self.pin = baker.make(
+            Pin,
+            profile=self.sender,
+            location=self.location,
+            parent_pin=None,
+            detail_bg_color="#123456",
+            cameras=True,
+            locked=True,
+            date_abandoned="1994-06-15",
+        )
+
+    def _accept(self) -> Pin:
+        from urbanlens.dashboard.models.pin_share.model import PinShare
+        from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
+
+        share = PinShare.objects.create(pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient)
+        return create_pin_from_share(share)
+
+    def test_what_was_observed_at_the_site_travels(self) -> None:
+        """The positive control - this must not pass by copying nothing."""
+        new_pin = self._accept()
+
+        self.assertTrue(new_pin.cameras)
+        self.assertTrue(new_pin.locked)
+        self.assertEqual(str(new_pin.date_abandoned), "1994-06-15")
+
+    def test_the_senders_styling_does_not_travel(self) -> None:
+        new_pin = self._accept()
+
+        self.assertNotEqual(new_pin.detail_bg_color, "#123456", "the recipient inherited the sender's pin styling")
+
+    def test_the_senders_labels_do_not_travel(self) -> None:
+        """Labels are per-profile; the recipient must not end up holding the
+        sender's rows."""
+        from urbanlens.dashboard.models.labels.model import Label
+
+        label = baker.make(Label, profile=self.sender, name="zzq-senders-private-label")
+        self.pin.labels.add(label)
+
+        new_pin = self._accept()
+
+        self.assertEqual(list(new_pin.labels.all()), [], "the sender's labels were attached to the recipient's pin")

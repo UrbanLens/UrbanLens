@@ -201,10 +201,6 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         custom_icon=source.custom_icon.name or None,
         indoor_outdoor=source.indoor_outdoor,
         color=source.color,
-        detail_bg_color=source.detail_bg_color,
-        detail_bg_opacity=source.detail_bg_opacity,
-        detail_border_color=source.detail_border_color,
-        detail_border_opacity=source.detail_border_opacity,
         date_built=source.date_built,
         date_abandoned=source.date_abandoned,
         date_last_active=source.date_last_active,
@@ -217,7 +213,16 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         plywood=source.plywood,
         locked=source.locked,
     )
-    new_pin.labels.set(source.labels.all())
+    # Not the sharer's labels. A Label belongs to one profile, so setting them
+    # here hung the *sharer's* rows off the *recipient's* pin - which shows one
+    # person's private organising scheme to another and leaves the recipient
+    # holding references they cannot manage. Labels are per-user by design;
+    # copying them is not a privacy question so much as a category error.
+    #
+    # The pin's own styling is not copied either: how somebody chose to colour
+    # their pin is theirs, not part of the place. What travels is what is true
+    # about the site - its dates, and what was observed there (fences, alarms,
+    # cameras, security, signs, vps, plywood, locked).
     shared_images = list(share.images.all())
     copied_images = Image.objects.bulk_create(
         [
