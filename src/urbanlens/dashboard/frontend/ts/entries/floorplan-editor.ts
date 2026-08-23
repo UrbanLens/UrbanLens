@@ -2326,8 +2326,7 @@ function boot(): void {
     //
     // A finger has no hover, so pointermove only arrives while it is down -
     // which turns out to be the useful gesture anyway: press near a corner,
-    // slide to aim while watching the length, lift to place it. The lift still
-    // becomes a click, because nothing here calls preventDefault.
+    // slide to aim while watching the length, lift to place it.
     for (const type of ["pointerdown", "pointermove"] as const) {
         map.getContainer().addEventListener(type, (raw) => {
             const event = raw as PointerEvent;
@@ -2336,21 +2335,55 @@ function boot(): void {
         });
     }
 
-    map.on("click", (event: L.LeafletMouseEvent) => {
-        // A box-select drag ends in a mouseup that Leaflet still reads as a
-        // click (map.dragging was never engaged, so its usual after-a-drag
-        // click suppression never kicks in) - without this the box-select
-        // result would be immediately wiped by the "click empty space
-        // deselects" branch below.
-        if (suppressNextClick) {
-            suppressNextClick = false;
+    // ...but that lift has to place the corner itself. A finger that slides
+    // before it lifts is a pan gesture as far as the browser is concerned, so
+    // it fires no click at all - verified in the browser test, where an
+    // aim-then-lift added no wall. One finger aims and draws while the wall
+    // tool is armed; a second finger cancels the placement and hands the
+    // gesture to Leaflet's pinch handler, which is how the map is panned and
+    // zoomed mid-drawing.
+    let touchAim: { id: number; cancelled: boolean; wasDraggable: boolean } | null = null;
+
+    map.getContainer().addEventListener("pointerdown", (raw) => {
+        const event = raw as PointerEvent;
+        // A suppression only ever applies to the click of the gesture that
+        // asked for it. Without this reset, a touch placement that fires no
+        // click leaves the flag standing and eats the next real one.
+        suppressNextClick = false;
+        if (event.pointerType === "mouse" || state.tool !== "wall") return;
+        if (touchAim) {
+            touchAim.cancelled = true;
             return;
         }
-        if (popupOpenAtMousedown) {
-            popupOpenAtMousedown = false;
-            return;
-        }
-        const raw = toLocal(event.latlng);
+        touchAim = { id: event.pointerId, cancelled: false, wasDraggable: map.dragging.enabled() };
+        // One finger aims instead of panning while the wall tool is armed.
+        map.dragging.disable();
+    });
+
+    const endTouchAim = (event: PointerEvent, place: boolean): void => {
+        if (!touchAim || event.pointerId !== touchAim.id) return;
+        const { cancelled, wasDraggable } = touchAim;
+        touchAim = null;
+        if (wasDraggable) map.dragging.enable();
+        if (cancelled || !place) return;
+        // A lift that did not move still fires a click, and that click would
+        // place the same corner a second time.
+        suppressNextClick = true;
+        tapMap(map.mouseEventToLatLng(event));
+    };
+    // On window, not the container: a finger that slides off the map still has
+    // to finish the corner it was aiming.
+    window.addEventListener("pointerup", (raw) => endTouchAim(raw as PointerEvent, true));
+    window.addEventListener("pointercancel", (raw) => endTouchAim(raw as PointerEvent, false));
+
+    /**
+     * Act on a tap at a map position: place, cut, or select, per the armed tool.
+     *
+     * Args:
+     *     latlng: Where the tap landed on the map.
+     */
+    function tapMap(latlng: L.LatLng): void {
+        const raw = toLocal(latlng);
         if (state.tool === "wall") {
             const from = state.drawing.length ? (state.drawing[state.drawing.length - 1] as Pt) : null;
             const snapped = snapPoint(raw, wallSegments(floor()), tolerances(), {
@@ -2426,6 +2459,23 @@ function boot(): void {
         clearSelection();
         renderSidebar();
         render();
+    }
+
+    map.on("click", (event: L.LeafletMouseEvent) => {
+        // A box-select drag ends in a mouseup that Leaflet still reads as a
+        // click (map.dragging was never engaged, so its usual after-a-drag
+        // click suppression never kicks in) - without this the box-select
+        // result would be immediately wiped by the "click empty space
+        // deselects" branch inside tapMap.
+        if (suppressNextClick) {
+            suppressNextClick = false;
+            return;
+        }
+        if (popupOpenAtMousedown) {
+            popupOpenAtMousedown = false;
+            return;
+        }
+        tapMap(event.latlng);
     });
 
     map.on("dblclick", () => {

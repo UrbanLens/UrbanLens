@@ -59,6 +59,11 @@ const HARNESS = `<!doctype html>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 <style>
+/* This block is the harness's own layout, not the site's - a test that asks
+   where something sits at a given viewport width is answered by these rules
+   rather than by _floorplans.scss. Ask structural questions here (what is
+   inside what), and treat any measurement that disagrees with the real page
+   as this fixture talking. */
 html,body{margin:0}
 #floorplan-map{width:900px;height:640px}
 /* Out of flow and fixed: in the real page the sidebar is a fixed-width flex
@@ -178,8 +183,8 @@ let server: ReturnType<typeof Bun.serve>;
  * Served over HTTP rather than injected: the bundle is a module that imports a
  * chunk by relative URL, which cannot resolve without a real origin.
  */
-async function openEditor(viewport = { width: 1200, height: 800 }): Promise<void> {
-    page = await browser.newPage({ viewport });
+async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false): Promise<void> {
+    page = await browser.newPage({ viewport, hasTouch });
     page.on("pageerror", (error) => console.error("PAGEERROR", String(error).slice(0, 300)));
     page.on("console", (message) => {
         if (message.type() === "error") console.error("browser console:", message.text().slice(0, 200));
@@ -601,6 +606,43 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         const afterTouch = await ghostPath();
         expect(beforeTouch).not.toBe("");
         expect(afterTouch).not.toBe(beforeTouch);
+        await page.close();
+    });
+
+    test("a slide-and-lift finger gesture actually places the corner", async () => {
+        // Driven through CDP rather than synthetic DOM events, because the
+        // question is exactly what the browser's own touch pipeline does with a
+        // finger that moves before it lifts. A hand-dispatched MouseEvent would
+        // be assuming the answer.
+        //
+        // Desktop viewport deliberately: this asks about touch semantics, not
+        // layout, and the harness pins the map to 900px (see HARNESS), so at
+        // phone width its own CSS - not the site's - decides what is where.
+        await openEditor({ width: 1200, height: 800 }, true);
+        const before = await page.locator(".floorplan-wall").count();
+        await page.locator('[data-tool="wall"]').click();
+        const frame = await page.locator("#floorplan-map").boundingBox();
+        if (!frame) throw new Error("no map");
+        const at = { x: frame.x + 200, y: frame.y + frame.height - 80 };
+
+        const cdp = await page.context().newCDPSession(page);
+        const stroke = async (x0: number, y0: number, x1: number, y1: number): Promise<void> => {
+            await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: x0, y: y0 }] });
+            for (let step = 1; step <= 5; step++) {
+                await cdp.send("Input.dispatchTouchEvent", {
+                    type: "touchMove",
+                    touchPoints: [{ x: x0 + ((x1 - x0) * step) / 5, y: y0 + ((y1 - y0) * step) / 5 }],
+                });
+            }
+            await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        };
+        await stroke(at.x, at.y, at.x + 30, at.y);
+        await stroke(at.x + 30, at.y, at.x + 160, at.y);
+        // Tapping the last corner again finishes the chain open-ended.
+        await stroke(at.x + 160, at.y, at.x + 160, at.y);
+        await settle();
+
+        expect(await page.locator(".floorplan-wall").count()).toBe(before + 1);
         await page.close();
     });
 
