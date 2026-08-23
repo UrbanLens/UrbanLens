@@ -2178,6 +2178,42 @@ class FloorplanResponseOrderTests(TestCase):
         self.assertEqual([wall["name"] for wall in floor["walls"][:3]], ["first", "second", "third"])
         self.assertEqual([marker["name"] for marker in floor["markers"]], ["alpha", "beta"])
 
+    def test_a_locks_own_notes_survive_the_round_trip(self) -> None:
+        """A lock is a floorplan item, so it carries the same fields as one.
+
+        The editor writes "broken, seized, rusted shut" into a lock's condition
+        rather than into its state, which asks only whether the door is
+        presently secured - so losing the condition would lose the distinction.
+        """
+        walls = _square_walls()
+        walls[0] = {
+            **walls[0],
+            "openings": [
+                {
+                    "kind": "door",
+                    "t_start": 0.4,
+                    "t_end": 0.6,
+                    "swing": "none",
+                    "locks": [
+                        {
+                            "name": "padlock",
+                            "state": "locked",
+                            "condition": "seized, rusted shut",
+                            "description": "on the yard side",
+                            "attributes": {"material": "brass"},
+                        },
+                    ],
+                },
+            ],
+        }
+        save_document(self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}]}, profile=self.profile)
+
+        lock = document_for(self.floorplan)["floors"][0]["walls"][0]["openings"][0]["locks"][0]
+        self.assertEqual(lock["condition"], "seized, rusted shut")
+        self.assertEqual(lock["description"], "on the yard side")
+        self.assertEqual(lock["attributes"], {"material": "brass"})
+        self.assertEqual(lock["state"], "locked")
+
     def test_a_doors_locks_come_back_in_the_order_they_were_sent(self) -> None:
         """The editor matches locks to rows by position, same as everything else."""
         walls = _square_walls()

@@ -3099,6 +3099,33 @@ function boot(): void {
         row.appendChild(nickname);
 
         host.appendChild(row);
+
+        // Floor-to-ceiling, and the walking surface's height above sea level.
+        // Both are stored per storey and neither was ever asked for; the first
+        // is what makes a section drawing possible at all, and the second is
+        // what ties a basement to the ground outside it.
+        const measure = (label: string, value: number | null | undefined, placeholder: string, apply: (next: number | null) => void): void => {
+            const input = document.createElement("input");
+            input.type = "number";
+            input.className = "form-input";
+            input.step = "0.05";
+            input.value = value === null || value === undefined ? "" : String(value);
+            input.placeholder = placeholder;
+            input.setAttribute("aria-label", label);
+            input.addEventListener("input", () => {
+                checkpoint(`floor-${label}:${item.uuid || item.level}`);
+                const parsed = Number.parseFloat(input.value);
+                apply(input.value.trim() === "" || !Number.isFinite(parsed) ? null : parsed);
+                markDirtyQuiet();
+            });
+            host.appendChild(field(label, input));
+        };
+        measure("Ceiling height", item.height_meters, "Metres, floor to ceiling", (next) => {
+            item.height_meters = next;
+        });
+        measure("Ground level", item.elevation_meters, "Metres above sea level", (next) => {
+            item.elevation_meters = next;
+        });
     }
 
     /**
@@ -3368,10 +3395,48 @@ function boot(): void {
             box.appendChild(field(label, input));
         };
 
+        /**
+         * A metre measurement. Empty means "not known", which is not the same
+         * as zero and has to survive as null rather than becoming one.
+         */
+        const metres = (label: string, value: number | null | undefined, placeholder: string, onInput: (next: number | null) => void): void => {
+            const input = document.createElement("input");
+            input.type = "number";
+            input.className = "form-input";
+            input.min = "0";
+            input.step = "0.01";
+            input.value = value === null || value === undefined ? "" : String(value);
+            input.placeholder = placeholder;
+            input.addEventListener("input", () => {
+                checkpoint(`${key}:${label}`);
+                const parsed = Number.parseFloat(input.value);
+                onInput(input.value.trim() === "" || !Number.isFinite(parsed) ? null : parsed);
+                markDirtyQuiet();
+            });
+            box.appendChild(field(label, input));
+        };
+
         text("Material", attribute(item, "material"), "Brick, timber, breeze block", (next) => setAttribute(item, "material", next));
         text("Condition", item.condition || "", "Sound, rotten, part-collapsed", (next) => {
             item.condition = next;
         });
+
+        // Stored on every item and never asked for until now. A date input
+        // rather than free text because the column is a DateField and the
+        // serializer parses it strictly: "1897" would not be stored as a fuzzy
+        // date, it would refuse the whole save. A year on its own - which is
+        // usually all anyone knows about a derelict building - belongs in the
+        // notes below until the column can hold one.
+        const built = document.createElement("input");
+        built.type = "date";
+        built.className = "form-input";
+        built.value = item.built_date || "";
+        built.addEventListener("input", () => {
+            checkpoint(`${key}:built`);
+            item.built_date = built.value || null;
+            markDirtyQuiet();
+        });
+        box.appendChild(field("Built", built));
 
         const notes = document.createElement("textarea");
         notes.className = "form-input";
@@ -3622,6 +3687,24 @@ function boot(): void {
                     }),
                 ),
             );
+            // How high its bottom edge sits above the floor. The practical
+            // question a plan of a derelict building is asked about a window is
+            // whether anyone can get through it, and that is this number.
+            const sill = document.createElement("input");
+            sill.type = "number";
+            sill.className = "form-input";
+            sill.min = "0";
+            sill.step = "0.05";
+            sill.value = opening.sill_meters === null || opening.sill_meters === undefined ? "" : String(opening.sill_meters);
+            sill.placeholder = "Metres above the floor";
+            sill.addEventListener("input", () => {
+                checkpoint(`opening-sill:${opening.uuid}`);
+                const parsed = Number.parseFloat(sill.value);
+                opening.sill_meters = sill.value.trim() === "" || !Number.isFinite(parsed) ? null : parsed;
+                markDirtyQuiet();
+            });
+            host.appendChild(field("Sill height", sill));
+
             renderLockControls(host, opening);
             // Only where it means something: a doorway is the hole with no door
             // in it, and a window has nothing that sweeps across the floor.

@@ -114,6 +114,7 @@ html,body{margin:0}
   <button id="floorplan-reload" hidden></button>
   <button id="floorplan-more-toggle"></button><div id="floorplan-more-list" hidden>
     <button id="floorplan-save-version"></button><button id="floorplan-publish"></button></div>
+  <div id="floorplan-floor-fields"></div>
   <div id="floorplan-form"></div>
   <div id="floorplan-marker-appearance" hidden>
     <input id="icon-value-floorplan-marker">
@@ -1459,6 +1460,48 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.locator("#floorplan-form select").first().selectOption("window");
         await settle();
         expect(await page.locator(".floorplan-locks").count()).toBe(0);
+        await page.close();
+    });
+
+    test("the measurements the model stores can actually be entered", async () => {
+        // built_date, sill_meters, height_meters and elevation_meters are all
+        // declared client-side, sent, parsed and stored, and none of them had
+        // any way to be filled in.
+        await openEditor();
+        const plan = await planExtent();
+
+        // A storey's own dimensions, on the floor panel.
+        const ceiling = page.locator('#floorplan-floor-fields input[aria-label="Ceiling height"]');
+        await ceiling.fill("2.4");
+        await page.locator('#floorplan-floor-fields input[aria-label="Ground level"]').fill("41.5");
+        await settle();
+
+        // A window's sill, on the opening panel.
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+        const sill = page.locator("#floorplan-form input[type=number]").first();
+        await sill.fill("1.2");
+        await settle();
+
+        // And a date on the item itself, which is a date input rather than free
+        // text: the column is a DateField and the serializer parses it
+        // strictly, so "1897" would refuse the whole save rather than be stored
+        // as a fuzzy year.
+        const details = page.locator("#floorplan-form details.floorplan-details").first();
+        await details.locator("summary").click();
+        const built = details.locator("input[type=date]");
+        expect(await built.count()).toBe(1);
+        await built.fill("1897-06-01");
+        await settle();
+
+        // Everything survives a rebuild of the panel, so it went to the model.
+        await page.keyboard.press("Escape");
+        await settle();
+        expect(await ceiling.inputValue()).toBe("2.4");
+        expect(await page.locator('#floorplan-floor-fields input[aria-label="Ground level"]').inputValue()).toBe("41.5");
         await page.close();
     });
 
