@@ -3824,3 +3824,37 @@ Until then, updating a `dev_env.py` environment means the documented
 `STATIC_ROOT` is a *separate* collected tree (`src/urbanlens/frontend/static`,
 not `dashboard/frontend/static`) served by whitenoise even with `DEBUG=True`,
 so a copied-in JS bundle is not served until `collectstatic` runs.
+
+## A community quota bonus survives un-sharing the photo that earned it (2026-08-23)
+
+`services/media/quota_rewards.py` stamps `QuotaExemption.COMMUNITY_CONTRIBUTION`
+on an image once it is on a wiki, has an owner, is not cached external media, and
+has collected `SiteSettings.community_photo_quota_bonus_votes` relevance votes.
+Nothing anywhere clears `quota_exempt_reason` afterwards - grep finds no writer
+outside that grant and the 0033 backfill.
+
+So: contribute a photo to a wiki, collect the votes, then remove it from the
+wiki. The photo is private again and permanently exempt from your quota. Repeat
+for as much free storage as you care to earn.
+
+**The permanence is deliberate and the reason is good**, which is why this needs
+a careful fix rather than a revert. The module's own docstring: the reward is
+one-way "so a user who is comfortably inside their quota can't be pushed over it
+retroactively by other people changing their votes". That protects against *other
+people's* later actions. It was never meant to cover the owner withdrawing the
+contribution themselves, and those two cases are distinguishable:
+
+- votes fall below the threshold, or a voter leaves -> keep the bonus, exactly as
+  now
+- the image's own `wiki` link is removed by its owner -> the contribution that
+  earned the bonus no longer exists, so neither should the bonus
+
+Not trivially exploitable: step two needs genuine relevance votes from other
+people, so this cannot be self-served in a loop. It is a way to convert community
+goodwill into permanent private storage, not a way to mint quota from nothing.
+
+Worth deciding alongside it: the exemption is currently a boolean-ish flag on the
+row, so a photo either costs its owner nothing or costs full price. Recording the
+bonus as an amount tied to the wiki relationship (rather than a flag on the image)
+would make withdrawal a cascade rather than a sweep, and would let the UI show a
+contributor what their contributions have earned them.
