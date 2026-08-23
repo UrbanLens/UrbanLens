@@ -24,6 +24,7 @@ function floorWithContents(): Floor {
                         t_end: 0.6,
                         swing: "left",
                         locks: [{ uuid: "lock-1", name: "padlock", state: "locked" }],
+                        references: ["ref-1"],
                     },
                 ],
             },
@@ -101,6 +102,19 @@ describe("copyFloorContents", () => {
 
         expect(source.walls[0]?.ax).toBe(0);
         expect(source.walls[0]?.openings).toHaveLength(1);
+    });
+
+    test("a copied item cites the same photos through a list of its own", () => {
+        // The pool is per-plan, so a copy citing the same rows is right. The
+        // list holding those citations is not shared: spreading the item hands
+        // both copies the same array, and a push on one would reach the other.
+        const source = floorWithContents();
+        const copy = copyFloorContents(source);
+
+        const copied = copy.walls[0]?.openings[0];
+        expect(copied?.references).toEqual(["ref-1"]);
+        copied?.references?.push("ref-2");
+        expect(source.walls[0]?.openings[0]?.references).toEqual(["ref-1"]);
     });
 
     test("a door's locks come across as new rows of their own", () => {

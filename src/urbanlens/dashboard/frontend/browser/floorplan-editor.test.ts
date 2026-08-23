@@ -1804,6 +1804,31 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("deleting the thing a photo was attached to clears the pool too", async () => {
+        // Detaching by hand is not the only way a citation disappears. Deleting
+        // the wall it was on drops it just as surely, and a pool row nothing
+        // cites is a row the server keeps forever.
+        saves.lastPool = -1;
+        await openEditor();
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+
+        const details = page.locator("#floorplan-form details.floorplan-details").first();
+        await details.locator("summary").click();
+        await details.locator(".floorplan-photo").first().click();
+        await settle();
+        for (let waited = 0; waited < 60 && saves.lastPool !== 1; waited++) await page.waitForTimeout(250);
+        expect(saves.lastPool, "the photo never reached the pool").toBe(1);
+
+        // Delete the wall it is on, from the canvas control.
+        await page.locator("#floorplan-delete").click();
+        await settle();
+        for (let waited = 0; waited < 60 && saves.lastPool !== 0; waited++) await page.waitForTimeout(250);
+        expect(saves.lastPool, "a pool row outlived the wall citing it").toBe(0);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

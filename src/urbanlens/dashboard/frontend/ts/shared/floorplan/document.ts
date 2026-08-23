@@ -324,9 +324,13 @@ export function copyFloorContents(source: Floor, options: CopyFloorOptions = {})
     const walls: Wall[] = source.walls.map((wall) => ({
         ...wall,
         uuid: nextLocalId(),
+        // Its own list, citing the same pool rows. Spreading shares the array
+        // itself, so a later push on the copy would reach into the original.
+        ...(wall.references ? { references: [...wall.references] } : {}),
         openings: wall.openings.map((opening) => ({
             ...opening,
             uuid: nextLocalId(),
+            ...(opening.references ? { references: [...opening.references] } : {}),
             // Locks come across as their own new rows. Spreading the opening
             // carries them, and carrying their uuids with them would hand the
             // copy the originals' identities - the same mistake this function

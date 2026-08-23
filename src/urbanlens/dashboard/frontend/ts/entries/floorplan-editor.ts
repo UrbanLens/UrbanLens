@@ -2815,6 +2815,10 @@ function boot(): void {
             if (target.kind === "opening") target.wall.openings = target.wall.openings.filter((o) => o !== target.opening);
         }
         if (walls.size) pruneOrphanedSeeds(current, boundBefore);
+        // Whatever went took its citations with it, and a pool row nothing
+        // cites any more has to go too - the same rule as detaching a photo by
+        // hand, applied to the larger way citations disappear.
+        pruneUnusedReferences();
         clearSelection();
         renderSidebar();
         markDirty();
@@ -3215,6 +3219,8 @@ function boot(): void {
         if (!isEmpty && !window.confirm(`Delete "${item.name || floorLabels().get(item) || `Level ${item.level}`}"? This removes everything drawn on it.`)) return;
         checkpoint();
         state.doc.floors.splice(index, 1);
+        // A whole storey's worth of citations just went.
+        pruneUnusedReferences();
         state.floorIndex = Math.min(state.floorIndex, state.doc.floors.length - 1);
         // Otherwise the stack reads "1, 2, 4": the storey above a deleted one
         // keeps a level nothing sits below any more, and "the floor below"
