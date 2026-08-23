@@ -56,7 +56,10 @@ const BUILT = existsSync(BUNDLE);
  * reach it is for the server to answer the way a real one would when another
  * tab has saved first.
  */
-const saves = { conflict: false, attempts: 0 };
+const saves = { conflict: false, fail: false, attempts: 0 };
+
+/** Publish requests the fixture has been asked for. */
+const publishes = { attempts: 0 };
 
 /** A minimal page carrying every element boot() reaches for. */
 /** The fixture page, kept beside this file so harness-parity.test.ts can read
@@ -349,6 +352,10 @@ beforeAll(async () => {
                 const page = which ? HARNESS.replace('data-json-url="/json"', `data-json-url="/json-${which}"`) : HARNESS;
                 return new Response(page, { headers: { "content-type": "text/html" } });
             }
+            if (path === "/publish") {
+                publishes.attempts += 1;
+                return Response.json({ ok: true });
+            }
             if (path === "/json") return Response.json(squarePlan());
             if (path === "/json-grid") return Response.json(gridPlan());
             if (path === "/json-closet") return Response.json(closetPlan());
@@ -356,6 +363,7 @@ beforeAll(async () => {
             if (path === "/json-empty") return Response.json(emptyPlan());
             if (path === "/save") {
                 saves.attempts += 1;
+                if (saves.fail) return Response.json({ ok: false, error: "nope" }, { status: 500 });
                 if (saves.conflict) {
                     return Response.json({ ok: false, error: "Someone else saved this plan while you were editing it.", stale: true }, { status: 409 });
                 }
@@ -1613,6 +1621,52 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await settle();
         expect(await span()).toBeLessThan(before);
         await page.close();
+    });
+
+    test("publishing says what it will publish, and taking it back publishes nothing", async () => {
+        // Publishing decides what other people see, and it publishes the last
+        // *saved* version - so doing it with unsaved work in front of you means
+        // sharing something other than what is on screen.
+        saves.fail = true;
+        publishes.attempts = 0;
+        try {
+            await openEditor();
+            const plan = await planExtent();
+
+            // An edit that cannot be saved, so the document stays dirty.
+            await page.mouse.click(plan.grab.x, plan.grab.y);
+            await settle();
+            await page.keyboard.press("ArrowRight");
+            // Either wording means the same thing here - the document has
+            // changes the server does not have. Which one shows depends on
+            // whether a retry is in flight at the moment it is read.
+            await page.waitForFunction(
+                () => ["Unsaved changes", "Not saved"].includes(document.getElementById("floorplan-save-status")?.textContent ?? ""),
+                undefined,
+                { timeout: 15000 },
+            );
+
+            // Turned down: nothing is published.
+            page.once("dialog", (dialog) => {
+                expect(dialog.message()).toContain("Unsaved changes are not included");
+                void dialog.dismiss();
+            });
+            await page.locator("#floorplan-more-toggle").click();
+            await page.locator("#floorplan-publish").click();
+            await settle();
+            expect(publishes.attempts, "published despite being told not to").toBe(0);
+
+            // Accepted: it goes.
+            page.once("dialog", (dialog) => void dialog.accept());
+            await page.locator("#floorplan-more-toggle").click();
+            await page.locator("#floorplan-publish").click();
+            await page.waitForFunction(() => true);
+            await settle();
+            expect(publishes.attempts).toBe(1);
+            await page.close();
+        } finally {
+            saves.fail = false;
+        }
     });
 
     test("the tool options panel shows the armed tool's choices", async () => {
