@@ -508,8 +508,14 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // 900px - so for the whole time anyone was drawing on a phone, the one
         // control you reach for after a mistake was off the bottom of the page.
         await openEditor({ width: 375, height: 812 });
+        // Delete only appears with a selection, and it is on this list for the
+        // same reason as the other two: the sidebar it also lives in is below a
+        // 72vh map, and a phone has no Delete key.
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
 
-        for (const selector of ["#floorplan-undo", "#floorplan-floors"]) {
+        for (const selector of ["#floorplan-undo", "#floorplan-floors", "#floorplan-delete"]) {
             const placement = await page.evaluate((which) => {
                 const node = document.querySelector(which as string);
                 if (!node) return null;
@@ -1545,6 +1551,31 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // And goes away again with the selection it acted on.
         expect(await hidden()).toBe(true);
         await page.close();
+    });
+
+    test("a phone gets no sideways scroll and a map it can reach", async () => {
+        // Askable at last. This was "found" early on, chased, and turned out to
+        // be the fixture's own 900px map - the site was never measured. With
+        // the fixture laid out by the site's stylesheet alone, it is.
+        for (const width of [320, 375, 414]) {
+            await openEditor({ width, height: 812 });
+
+            const page_ = await page.evaluate(() => ({
+                docWidth: document.documentElement.scrollWidth,
+                bodyWidth: document.body.scrollWidth,
+                viewport: window.innerWidth,
+                map: Math.round((document.getElementById("floorplan-map") as HTMLElement).getBoundingClientRect().width),
+                shell: Math.round((document.querySelector(".floorplan-map-shell") as HTMLElement).getBoundingClientRect().width),
+            }));
+
+            // A page wider than the screen means a plan you have to scroll the
+            // whole document sideways to see the rest of.
+            expect(page_.docWidth, `document at ${width}px`).toBeLessThanOrEqual(page_.viewport);
+            expect(page_.bodyWidth, `body at ${width}px`).toBeLessThanOrEqual(page_.viewport);
+            // And the canvas should be most of what is on screen, not a sliver.
+            expect(page_.map, `map at ${width}px`).toBeGreaterThan(width * 0.8);
+            await page.close();
+        }
     });
 
     test("the tool options panel shows the armed tool's choices", async () => {
