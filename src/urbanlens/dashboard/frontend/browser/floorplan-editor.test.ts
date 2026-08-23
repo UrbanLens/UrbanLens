@@ -447,6 +447,43 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("the floating controls do not sit on top of each other", async () => {
+        // Five things float over this canvas - the tool pill, the tool options,
+        // undo, the floor strip, the layers panel - and they are positioned in
+        // three different stylesheets. Overlap is the failure mode nobody
+        // notices until a button cannot be pressed.
+        for (const viewport of [
+            { width: 375, height: 812 },
+            { width: 1200, height: 800 },
+        ]) {
+            await openEditor(viewport);
+            await page.locator('[data-tool="wall"]').click(); // give the options panel content
+            await settle();
+
+            const overlaps = await page.evaluate(() => {
+                const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls"];
+                const boxes = selectors
+                    .map((selector) => ({ selector, node: document.querySelector(selector) }))
+                    .filter((entry) => entry.node && !(entry.node as HTMLElement).hidden)
+                    .map((entry) => ({ selector: entry.selector, rect: (entry.node as HTMLElement).getBoundingClientRect() }))
+                    .filter((entry) => entry.rect.width > 0 && entry.rect.height > 0);
+                const clashes: string[] = [];
+                for (let i = 0; i < boxes.length; i++) {
+                    for (let j = i + 1; j < boxes.length; j++) {
+                        const a = boxes[i]!;
+                        const b = boxes[j]!;
+                        const gap = a.rect.right <= b.rect.left || b.rect.right <= a.rect.left || a.rect.bottom <= b.rect.top || b.rect.bottom <= a.rect.top;
+                        if (!gap) clashes.push(`${a.selector} over ${b.selector}`);
+                    }
+                }
+                return clashes;
+            });
+
+            expect(overlaps, `at ${viewport.width}px`).toEqual([]);
+            await page.close();
+        }
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

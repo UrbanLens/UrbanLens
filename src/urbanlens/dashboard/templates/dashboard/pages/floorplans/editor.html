@@ -199,6 +199,10 @@
         </div>
 
         <div class="floorplan-sidebar__section">
+            {# The strip itself is on the canvas; naming a floor is editing, and #}
+            {# belongs with the other editing rather than in a column sized for  #}
+            {# buttons.                                                          #}
+            <div id="floorplan-floor-fields"></div>
             <div id="floorplan-form" class="floorplan-form"></div>
             {# The site's shared icon picker, rendered once and shown only while #}
             {# a marker is selected. Server-rendered because the icon set lives  #}

@@ -2869,7 +2869,11 @@ function boot(): void {
         duplicate.addEventListener("click", () => duplicateFloor(floor()));
         host.appendChild(duplicate);
 
-        renderFloorFields(host, floor());
+        const fieldsHost = document.getElementById("floorplan-floor-fields");
+        if (fieldsHost) {
+            fieldsHost.replaceChildren();
+            renderFloorFields(fieldsHost, floor());
+        }
     }
 
     function field(labelText: string, input: HTMLElement): HTMLLabelElement {

@@ -403,7 +403,11 @@
     position: absolute;
     z-index: 500;
     top: 10px;
-    right: 10px;
+    // Centred, because both corners are spoken for: the floor strip holds the
+    // left, and the tool pill holds the right at wide widths (_layout.scss
+    // moves it from bottom-right to top-right above the small breakpoint).
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     gap: 0.25rem;
 }
