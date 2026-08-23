@@ -3093,6 +3093,11 @@ function boot(): void {
             toggle.type = "button";
             toggle.className = `btn btn--sm${state.snapEnabled ? " btn--primary" : " btn--ghost"}`;
             toggle.setAttribute("aria-pressed", String(state.snapEnabled));
+            // The toggle is the setting; the backtick is a momentary suspend
+            // for one drag. Two related things, and the tooltip on the setting
+            // is where somebody goes looking for the other one.
+            toggle.setAttribute("data-tooltip", "Snap to walls and angles \u00b7 hold ` to suspend for one drag");
+            toggle.setAttribute("data-tooltip-float", "true");
             toggle.innerHTML = '<i class="material-symbols-outlined">grid_on</i> Snap';
             toggle.addEventListener("click", () => {
                 state.snapEnabled = !state.snapEnabled;

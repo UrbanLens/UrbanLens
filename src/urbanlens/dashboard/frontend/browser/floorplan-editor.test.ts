@@ -2041,6 +2041,17 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         expect(titles).toContain("Stair (S)");
         expect(titles).toContain("Elevator (E)");
 
+        // The snap toggle names its own accelerator too - the backtick is a
+        // momentary suspend rather than a second toggle, and the setting is
+        // where anyone would go looking for it.
+        const snapTip = await page.evaluate(
+            () =>
+                Array.from(document.querySelectorAll("#floorplan-tool-options button"))
+                    .map((node) => node.getAttribute("data-tooltip") ?? "")
+                    .find((tip) => tip.startsWith("Snap")) ?? "",
+        );
+        expect(snapTip).toContain("hold `");
+
         // And the key it advertises does what it says.
         await page.locator("#floorplan-map").click({ position: { x: 5, y: 5 } });
         await page.keyboard.press("s");
