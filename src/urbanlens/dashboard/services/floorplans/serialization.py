@@ -400,9 +400,10 @@ class _Pools:
         from urbanlens.dashboard.models.images.model import Image
 
         stale_sources = {str(row.uuid): row for row in self.floorplan.source_pool.all()}
-        for payload in document.get("source_pool") or []:
+        for index, payload in enumerate(document.get("source_pool") or []):
             source = stale_sources.pop(str(payload.get("uuid") or ""), None) or FloorplanSource(floorplan=self.floorplan)
             source.floorplan = self.floorplan
+            source.sort_order = index
             source.title = _text_in(payload.get("title"), "source.title", 255)
             source.url = _text_in(payload.get("url"), "source.url", 1000)
             source.note = payload.get("note") or ""
@@ -416,9 +417,10 @@ class _Pools:
             stale_source.delete()
 
         stale_references = {str(row.uuid): row for row in self.floorplan.reference_pool.all()}
-        for payload in document.get("reference_pool") or []:
+        for index, payload in enumerate(document.get("reference_pool") or []):
             reference = stale_references.pop(str(payload.get("uuid") or ""), None) or FloorplanReference(floorplan=self.floorplan)
             reference.floorplan = self.floorplan
+            reference.sort_order = index
             reference.kind = payload.get("kind") if payload.get("kind") in FloorplanReferenceKind.values else FloorplanReferenceKind.OTHER
             reference.title = _text_in(payload.get("title"), "reference.title", 255)
             reference.url = _text_in(payload.get("url"), "reference.url", 1000)

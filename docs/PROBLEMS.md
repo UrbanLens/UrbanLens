@@ -3942,28 +3942,21 @@ than the plain `str` the field should behave as); worth a look next time this fi
 
 ## A pool reference with no image cannot keep its identity (2026-08-23)
 
-`applyServerIds` gives a reference-pool row its real uuid by matching on the
-image it stands for. A row with no image — a reference added by URL, or a
-`source_pool` row — has no key to match on, so it keeps its client-side uuid,
-and the next save recreates it: `_Pools` looks the existing pool up by real
-uuid, finds nothing, creates a second row and deletes the first as stale.
+**RESOLVED the same day.** `applyServerIds` matched a reference-pool row to the
+server's by the image it stood for, so a row with no image - a reference added by
+URL, or a `source_pool` row - had no key, kept its client-side uuid, and was
+destroyed and recreated on every save.
 
-Harmless today, because the editor cannot create one: every row it makes stands
-for one of the pin's photos. It stops being harmless the moment a "reference by
-URL" control exists, or an importer writes `source_pool` rows.
+The note here said the obvious fix did not work, and it did not: `FloorplanSource`
+and `FloorplanReference` extend `FrontendDashboardModel` rather than
+`FloorplanItem`, so they had no `sort_order`, and `ordering = ("id",)` would have
+made the order deterministic without making it match the payload - new rows are
+created after the existing ones.
 
-**The obvious fix does not work.** `FloorplanReference` and `FloorplanSource`
-extend `FrontendDashboardModel` directly rather than `FloorplanItem`, so unlike
-walls, openings, locks, rooms and markers they have no `sort_order`, and declare
-no ordering at all. Adding `ordering = ("id",)` makes the order *deterministic*
-without making it match the payload: `_Pools.sync` creates new rows after the
-existing ones, so a save carrying [new, existing] comes back [existing, new] and
-positional matching is wrong in a new way.
-
-What it actually needs is a `sort_order` column on both models, written from the
-payload index the way `_sync` already does for every other collection, and then
-the same positional match as everything else. That is a real migration, and it
-is the shape of the fix rather than a patch.
+So they have a `sort_order` now, written from the payload index the way `_sync`
+already does for every other collection (0064_floorplan_pool_sort_order), and
+both models order by it. The pool comes back in the order it went out, the client
+matches positionally like everything else, and the image special case is gone.
 
 ## Five mypy errors outside the floorplan work (2026-08-23)
 

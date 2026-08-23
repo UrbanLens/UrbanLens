@@ -299,8 +299,15 @@ class FloorplanSource(abstract.FrontendDashboardModel):
     author = CharField(max_length=255, blank=True, default="")
     attributes = JSONField(default=dict, blank=True)
 
+    #: Position in the plan's own list. Written from the payload index on every
+    #: save, so the order a document is sent in is the order it comes back in -
+    #: which is what lets the editor match a pool row it has just created to the
+    #: row the server made for it.
+    sort_order = PositiveIntegerField(default=0)
+
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_sources"
+        ordering = ("sort_order", "id")
 
     def __str__(self) -> str:
         return self.title or self.author or self.url or f"source {self.pk}"
@@ -327,8 +334,12 @@ class FloorplanReference(abstract.FrontendDashboardModel):
     description = TextField(blank=True, default="")
     attributes = JSONField(default=dict, blank=True)
 
+    #: As FloorplanSource.sort_order: the payload's own order, preserved.
+    sort_order = PositiveIntegerField(default=0)
+
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_references"
+        ordering = ("sort_order", "id")
 
     def __str__(self) -> str:
         return self.title or self.url or f"reference {self.pk}"

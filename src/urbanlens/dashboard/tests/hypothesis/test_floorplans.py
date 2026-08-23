@@ -2337,6 +2337,43 @@ class FloorplanResponseOrderTests(TestCase):
 
         self.assertEqual(FloorplanReference.objects.get(floorplan=self.floorplan).pk, first)
 
+    def test_the_pool_comes_back_in_the_order_it_was_sent(self) -> None:
+        """Which is what lets the editor match its rows to the server's by position.
+
+        Both pool models order by sort_order, written from the payload index, so
+        a save carrying new rows and existing ones together still answers in the
+        order it was given rather than in whatever order the rows were created.
+        """
+        from urbanlens.dashboard.models.images.model import Image
+
+        first = baker.make(Image, profile=self.profile)
+        second = baker.make(Image, profile=self.profile)
+        save_document(
+            self.floorplan,
+            {
+                "reference_pool": [{"uuid": "local-a", "title": "a", "image_uuid": str(first.uuid)}],
+                "floors": [{"level": 0, "walls": _square_walls(), "rooms": [], "markers": []}],
+            },
+            profile=self.profile,
+        )
+        existing = document_for(self.floorplan)["reference_pool"][0]
+
+        # The new row first, the existing one second - the opposite of the order
+        # the rows were created in.
+        save_document(
+            self.floorplan,
+            {
+                "reference_pool": [
+                    {"uuid": "local-b", "title": "b", "image_uuid": str(second.uuid)},
+                    {**existing, "title": "a"},
+                ],
+                "floors": [{"level": 0, "walls": _square_walls(), "rooms": [], "markers": []}],
+            },
+            profile=self.profile,
+        )
+
+        self.assertEqual([row["title"] for row in document_for(self.floorplan)["reference_pool"]], ["b", "a"])
+
     def test_a_photo_nothing_cites_any_more_leaves_the_pool(self) -> None:
         """Deleting by omission applies to the pool as much as to the items."""
         from urbanlens.dashboard.models.images.model import Image

@@ -82,32 +82,30 @@ function itemsOf(entry: SentSnapshot): ItemDetails[] {
 /**
  * Give the pool's rows their real uuids, and repoint what cites them.
  *
- * Matched on the image each row stands for rather than by position: the pool
- * has no declared ordering, so the order it comes back in is whatever the
- * database felt like. A row with no image - a reference added by URL - has no
- * key to match on and keeps whatever it had.
+ * Matched by position, which the server's own ordering makes safe: `_Pools`
+ * writes each row's ``sort_order`` from the payload's index and both pool
+ * models order by it, so the list comes back in the order it went out. It used
+ * to be matched on the image a row stood for, because those models declared no
+ * ordering at all - which left a reference added by URL, with no image to match
+ * on, unable to keep its identity.
  *
- * This matters because _Pools looks the existing pool up by real uuid: a second
- * save still carrying "local-3" matches nothing, creates a second row and
- * deletes the first as stale. The citation follows, so nothing visible breaks -
- * the row is simply destroyed and rebuilt on every autosave.
+ * This matters because ``_Pools`` looks the existing pool up by real uuid: a
+ * second save still carrying "local-3" matches nothing, creates a second row
+ * and deletes the first as stale. The citation follows, so nothing visible
+ * breaks - the row is simply destroyed and rebuilt on every autosave.
  *
  * Args:
  *     sent: What snapshotForSend recorded.
  *     saved: The document the server returned.
  */
 function applyPoolIds(sent: SentDocument, saved: FloorplanDocument): void {
-    const savedByImage = new Map<string, string>();
-    for (const row of saved.reference_pool ?? []) {
-        if (row.image_uuid && row.uuid) savedByImage.set(row.image_uuid, row.uuid);
-    }
     const renamed = new Map<string, string>();
-    for (const row of sent.pool) {
-        const real = row.image_uuid ? savedByImage.get(row.image_uuid) : undefined;
-        if (!real || !row.uuid || row.uuid === real) continue;
-        renamed.set(row.uuid, real);
-        row.uuid = real;
-    }
+    (saved.reference_pool ?? []).forEach((row, index) => {
+        const was = sent.pool[index];
+        if (!was?.uuid || !row.uuid || was.uuid === row.uuid) return;
+        renamed.set(was.uuid, row.uuid);
+        was.uuid = row.uuid;
+    });
     if (!renamed.size) return;
     for (const entry of sent.floors) {
         for (const item of itemsOf(entry)) {

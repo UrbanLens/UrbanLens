@@ -143,9 +143,9 @@ describe("applyServerIds", () => {
         expect((ground.walls[0] as { references?: string[] }).references).toEqual(["srv-ref"]);
     });
 
-    test("the pool is matched on its image, not on its position", () => {
-        // FloorplanReference declares no ordering, so the order it comes back
-        // in is whatever the database felt like.
+    test("the pool is matched by position, in the order it was sent", () => {
+        // Safe because _Pools writes sort_order from the payload index and both
+        // pool models order by it, so the list comes back as it went out.
         const doc = unsortedDoc();
         doc.reference_pool = [
             { uuid: "local-1", image_uuid: "image-a" },
@@ -153,8 +153,8 @@ describe("applyServerIds", () => {
         ];
         const saved = savedInStoreyOrder();
         saved.reference_pool = [
-            { uuid: "srv-b", image_uuid: "image-b" },
             { uuid: "srv-a", image_uuid: "image-a" },
+            { uuid: "srv-b", image_uuid: "image-b" },
         ];
 
         applyServerIds(snapshotForSend(doc), saved);
@@ -162,8 +162,10 @@ describe("applyServerIds", () => {
         expect(doc.reference_pool?.map((row) => row.uuid)).toEqual(["srv-a", "srv-b"]);
     });
 
-    test("a reference with no image keeps what it had", () => {
-        // Added by URL: nothing to match it on, so renaming it would be a guess.
+    test("a reference with no image gets its real id too", () => {
+        // Added by URL rather than from a photo. Matching on the image it stood
+        // for could not name this one at all, so it kept a client-side id and
+        // was destroyed and rebuilt on every save.
         const doc = unsortedDoc();
         doc.reference_pool = [{ uuid: "local-1", url: "https://example.test/plan.pdf" }];
         const saved = savedInStoreyOrder();
@@ -171,7 +173,7 @@ describe("applyServerIds", () => {
 
         applyServerIds(snapshotForSend(doc), saved);
 
-        expect(doc.reference_pool?.[0]?.uuid).toBe("local-1");
+        expect(doc.reference_pool?.[0]?.uuid).toBe("srv-1");
     });
 
     test("a lock's citation is repointed too", () => {
