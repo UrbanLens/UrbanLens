@@ -945,17 +945,17 @@ class FloorplanFeatureCollectionTests(TestCase):
         A lock's type, condition and what opens it are the document's business;
         a renderer wants to colour the door.
         """
-        self.assertEqual(self._with_locks("locked")["locked"], "locked")
-        self.assertEqual(self._with_locks("unlocked")["locked"], "unlocked")
-        self.assertEqual(self._with_locks("unknown")["locked"], "unknown")
+        self.assertEqual(self._with_locks("locked")["lock_state"], "locked")
+        self.assertEqual(self._with_locks("unlocked")["lock_state"], "unlocked")
+        self.assertEqual(self._with_locks("unknown")["lock_state"], "unknown")
 
     def test_one_locked_lock_locks_the_door(self) -> None:
         """A padlock on and a deadbolt off still means the door does not open."""
-        self.assertEqual(self._with_locks("unlocked", "locked")["locked"], "locked")
+        self.assertEqual(self._with_locks("unlocked", "locked")["lock_state"], "locked")
 
     def test_a_door_with_no_locks_recorded_says_nobody_knows(self) -> None:
         """Rather than "unlocked", which claims something nobody wrote down."""
-        self.assertEqual(self._with_locks()["locked"], "unknown")
+        self.assertEqual(self._with_locks()["lock_state"], "unknown")
 
     def test_a_windows_sill_height_reaches_the_map(self) -> None:
         """Whether anyone can climb through it is the question it answers."""

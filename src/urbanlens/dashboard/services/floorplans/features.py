@@ -28,7 +28,7 @@ import math
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.floorplans.model import Floorplan
+    from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanOpening
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ def _overlaps(points: list[list[float]], bbox: tuple[float, float, float, float]
     return not (max(lngs) < min_lng or min(lngs) > max_lng or max(lats) < min_lat or min(lats) > max_lat)
 
 
-def _opening_state(opening) -> str:
+def _opening_state(opening: FloorplanOpening) -> str:
     """Whether this opening is presently secured, as one word.
 
     A door may carry several locks, and the useful answer is about the door
@@ -195,7 +195,7 @@ def feature_collection(
                             # document's business, and a map wants to colour a
                             # door. Locked if any lock on it is - a door with a
                             # padlock on and a deadbolt off is locked.
-                            "locked": _opening_state(opening),
+                            "lock_state": _opening_state(opening),
                         }
                         for opening in wall.openings.all()
                     ],
