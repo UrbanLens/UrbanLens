@@ -21,21 +21,6 @@
     }
 }
 
-// Leaflet's zoom buttons sit bottom-left, which is clear at desktop widths and
-// is not below the editor's single-column breakpoint: there the tool pill moves
-// to the bottom of the canvas, and at 320px it wraps to two rows spanning
-// almost the full width, straight through them. Top-right is the corner nothing
-// claims at those widths - the floor strip holds the left, undo and delete the
-// middle, and the pill has gone to the bottom.
-@media (max-width: 900px) {
-    .floorplan-map .leaflet-bottom.leaflet-left {
-        top: 10px;
-        right: 10px;
-        bottom: auto;
-        left: auto;
-    }
-}
-
 .floorplan-map-shell {
     position: relative;
 }
@@ -467,11 +452,38 @@
     display: flex;
     gap: 0.25rem;
 
+    // Under 768px the tool pill drops to the bottom of the canvas, which frees
+    // the right - and centring a row that now carries zoom as well puts it
+    // through the floor strip on a narrow screen. Corners beat a centre here:
+    // left is the strip, right is this, bottom is the pill. 768 because that is
+    // where the pill actually moves, measured rather than guessed - the
+    // editor's own single-column breakpoint is 900, and using that put this row
+    // under the pill for the whole range between them.
+    @media (max-width: 767px) {
+        left: auto;
+        right: 10px;
+        transform: none;
+    }
+
     // Appears only with a selection, so it must not shove undo and redo
     // sideways when it does - the two controls anyone reaches for blind.
     &__delete {
         margin-left: 0.25rem;
         color: var(--color-danger, #e53);
+    }
+
+    // Leaflet's own zoom control, moved in here by the editor. Its stylesheet
+    // gives it a stacked pair with its own border and shadow; this makes it one
+    // more thing in the row instead.
+    .leaflet-control-zoom {
+        display: flex;
+        margin: 0 0 0 0.25rem;
+        border: 0;
+        box-shadow: none;
+
+        a {
+            border-radius: $radius-sm;
+        }
     }
 }
 

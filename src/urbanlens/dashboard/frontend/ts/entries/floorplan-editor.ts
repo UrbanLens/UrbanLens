@@ -212,7 +212,14 @@ function boot(): void {
     // untouched) stays as the shortcut for people who know it.
     map.getContainer().querySelector(".leaflet-control-rotate")?.remove();
 
-    L.control.zoom({ position: "bottomleft" }).addTo(map);
+    // Rehomed into the canvas controls rather than left in one of Leaflet's
+    // corners. Every corner is spoken for by something whose position changes
+    // with width - the floor strip, the tool pill, the layers panel - and each
+    // width where they rearrange is another chance for two of them to land on
+    // each other. Two already did. Inside a flex row that lays them out, zoom
+    // cannot collide with anything at any width.
+    const zoom = L.control.zoom({ position: "bottomleft" }).addTo(map);
+    document.querySelector(".floorplan-canvas-controls")?.appendChild(zoom.getContainer() as HTMLElement);
 
     // Declared before createMapLayers below: its "underlay" custom toggle
     // reads state.showUnderlay synchronously while the panel builds its

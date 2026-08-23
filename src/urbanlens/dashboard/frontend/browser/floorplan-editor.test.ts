@@ -538,17 +538,26 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("the floating controls do not sit on top of each other", async () => {
-        // Six things float over this canvas - the tool pill, the tool options,
-        // undo, the floor strip, the layers panel, and Leaflet's own zoom
-        // buttons - positioned across three stylesheets, one of which is
-        // Leaflet's. Overlap is the failure mode nobody notices until a button
-        // cannot be pressed.
+        // Five things float over this canvas - the tool pill, the tool options,
+        // the undo/zoom/delete row, the floor strip, the layers panel -
+        // positioned across two stylesheets. Overlap is the failure mode nobody
+        // notices until a button cannot be pressed, and it turns up at whatever
+        // width the pieces happen to rearrange, which is why this runs at four
+        // of them rather than one.
         for (const viewport of [
             // 320 is the narrowest phone still in use, and the width where the
             // tool pill wraps to a second row - which makes it taller, which is
             // exactly when a floating control starts reaching something else.
             { width: 320, height: 568 },
             { width: 375, height: 812 },
+            // 700 and 768 straddle the width where the tool pill moves from
+            // the bottom of the canvas to the top right, which is the
+            // rearrangement that has produced two collisions so far.
+            { width: 700, height: 800 },
+            // Inside the single-column range but nothing like a phone: the pill
+            // is at the bottom and unwrapped, which is a different arrangement
+            // again from either neighbour.
+            { width: 768, height: 1024 },
             { width: 1200, height: 800 },
         ]) {
             await openEditor(viewport);
@@ -556,7 +565,11 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             await settle();
 
             const overlaps = await page.evaluate(() => {
-                const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls", ".leaflet-control-zoom"];
+                // The zoom control is not on this list any more because it is
+                // not a free-floating control any more - it lives inside
+                // .floorplan-canvas-controls, which is, and a child always
+                // "overlaps" its parent.
+                const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls"];
                 const boxes = selectors
                     .map((selector) => ({ selector, node: document.querySelector(selector) }))
                     .filter((entry) => entry.node && !(entry.node as HTMLElement).hidden)
@@ -1580,6 +1593,26 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             expect(page_.map, `map at ${width}px`).toBeGreaterThan(width * 0.8);
             await page.close();
         }
+    });
+
+    test("the zoom buttons live with the other canvas controls", async () => {
+        // Not in one of Leaflet's corners. Every corner belongs to something
+        // whose position changes with width, and each width where they
+        // rearrange is another chance for two of them to land on each other -
+        // which happened twice, at 320 and then at 768, chasing a free corner
+        // that does not exist at every size.
+        await openEditor();
+        expect(await page.evaluate(() => Boolean(document.querySelector(".floorplan-canvas-controls .leaflet-control-zoom")))).toBe(true);
+
+        // And it still zooms, which is the thing reparenting could break.
+        // Zoom out rather than in: the plan is fitted on load, which can leave
+        // zoom-in already at the maximum and disabled.
+        const span = async (): Promise<number> => (await planExtent()).width;
+        const before = await span();
+        await page.locator(".leaflet-control-zoom-out").click();
+        await settle();
+        expect(await span()).toBeLessThan(before);
+        await page.close();
     });
 
     test("the tool options panel shows the armed tool's choices", async () => {
