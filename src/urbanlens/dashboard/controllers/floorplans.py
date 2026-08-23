@@ -17,6 +17,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.gis.geos import MultiPolygon
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -131,8 +132,11 @@ def _building_outline(pin: Pin) -> list[list[float]]:
         if polygon is None:
             continue
         # A MultiPolygon here means several detached structures; the largest is
-        # the one a floorplan is most likely about.
-        if polygon.geom_type == "MultiPolygon":
+        # the one a floorplan is most likely about. isinstance rather than
+        # geom_type, so this narrows for a reader and for the type checker
+        # instead of only for the runtime - a Polygon is not iterable, and
+        # nothing but the string said so.
+        if isinstance(polygon, MultiPolygon):
             parts = sorted(polygon, key=lambda part: part.area, reverse=True)
             if not parts:
                 continue

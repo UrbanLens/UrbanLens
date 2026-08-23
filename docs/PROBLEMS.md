@@ -3940,6 +3940,29 @@ same file; not investigated or fixed - out of scope for that change. `SavedFilte
 Django-stubs-inferred field type looks like the actual mismatch (an F-expression-shaped type rather
 than the plain `str` the field should behave as); worth a look next time this file is touched.
 
+## Five mypy errors outside the floorplan work (2026-08-23)
+
+`mypy src/urbanlens` reports five errors in four files, none of them in code
+this floorplan pass touched:
+
+- `conftest.py:50` — an unused `type: ignore` *and*, on the same line, a real
+  `setdefault` argument mismatch. The ignore is presumably why the mismatch went
+  unnoticed.
+- `services/core/text_limits.py:52` — a `"type"` attribute error
+- `plugins/builtin/property_records.py:201`
+- `external_api/views.py:2119` — `clean_color(...)` returns `str | None` into a
+  field typed `str | int | Combinable`
+
+Left alone deliberately: `external_api/views.py` has uncommitted changes from
+other work, and the rest are unrelated to this pass. Recorded here rather than
+fixed in passing, because a change to a file someone else is mid-edit on is how
+two people's work collides.
+
+The one that *was* in scope is fixed: `controllers/floorplans.py` narrowed a
+geometry with `polygon.geom_type == "MultiPolygon"`, a string comparison neither
+mypy nor a reader can use, before iterating it - and a `Polygon` is not
+iterable. It is an `isinstance` check now.
+
 ## Every drag frame rebuilds every Leaflet layer (2026-08-23)
 
 `render()` in floorplan-editor.ts clears all four layer groups and recreates
