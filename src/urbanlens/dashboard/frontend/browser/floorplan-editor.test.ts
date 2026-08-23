@@ -56,7 +56,7 @@ const BUILT = existsSync(BUNDLE);
  * reach it is for the server to answer the way a real one would when another
  * tab has saved first.
  */
-const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "" };
+const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "", lastHadUuid: true };
 
 /**
  * Answer a save the way the server does: with the document it was given, every
@@ -267,7 +267,7 @@ let server: ReturnType<typeof Bun.serve>;
  * Served over HTTP rather than injected: the bundle is a module that imports a
  * chunk by relative URL, which cannot resolve without a real origin.
  */
-async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false, plan: "square" | "grid" | "closet" | "island" | "empty" = "square"): Promise<void> {
+async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false, plan: "square" | "grid" | "closet" | "island" | "empty" | "community" = "square"): Promise<void> {
     page = await browser.newPage({ viewport, hasTouch });
     page.on("pageerror", (error) => console.error("PAGEERROR", String(error).slice(0, 300)));
     page.on("console", (message) => {
@@ -392,6 +392,7 @@ beforeAll(async () => {
             if (path === "/json-closet") return Response.json(closetPlan());
             if (path === "/json-island") return Response.json(islandPlan());
             if (path === "/json-empty") return Response.json(emptyPlan());
+            if (path === "/json-community") return Response.json({ ...(squarePlan() as Record<string, unknown>), origin: "community", versions: [] });
             if (path === "/save") {
                 saves.attempts += 1;
                 // What the editor actually sent, so a test can ask about the
@@ -403,6 +404,7 @@ beforeAll(async () => {
                     const body = (await request.json()) as { reference_pool?: Array<{ uuid?: string }> };
                     saves.lastPool = (body.reference_pool ?? []).length;
                     saves.lastPoolUuid = body.reference_pool?.[0]?.uuid ?? "";
+                    saves.lastHadUuid = "uuid" in (body as Record<string, unknown>);
                     echoed = echoSaved(body);
                 } catch {
                     saves.lastPool = -1;
@@ -2221,6 +2223,33 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await settle();
 
         expect(await page.evaluate(() => (document.getElementById("floorplan-undo") as HTMLButtonElement).disabled), "undo still points at the version that was left").toBe(true);
+        await page.close();
+    });
+
+    test("editing someone else's plan forks rather than overwriting it", async () => {
+        // A plan that arrived from the community wiki or from REData is not
+        // this user's to change. Saving has to leave the uuid off so the server
+        // creates their own version, and the banner has to say so before they
+        // have typed anything - an autosave a second after the page opens is
+        // nobody's decision to edit someone else's work in place.
+        saves.lastHadUuid = true;
+        await openEditor({ width: 1200, height: 800 }, false, "community");
+
+        const banner = await page.evaluate(() => {
+            const node = document.getElementById("floorplan-origin-banner") as HTMLElement;
+            return { hidden: node.hidden, text: node.textContent ?? "" };
+        });
+        expect(banner.hidden, "nothing warned that this plan is not theirs").toBe(false);
+        expect(banner.text).toContain("Saving creates your own version");
+
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        await page.locator("#floorplan-map").focus();
+        await page.keyboard.press("ArrowRight");
+        for (let waited = 0; waited < 60 && saves.lastHadUuid; waited++) await page.waitForTimeout(250);
+
+        expect(saves.lastHadUuid, "the save carried the other plan's uuid, so it overwrote it").toBe(false);
         await page.close();
     });
 
