@@ -544,6 +544,10 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // Leaflet's. Overlap is the failure mode nobody notices until a button
         // cannot be pressed.
         for (const viewport of [
+            // 320 is the narrowest phone still in use, and the width where the
+            // tool pill wraps to a second row - which makes it taller, which is
+            // exactly when a floating control starts reaching something else.
+            { width: 320, height: 568 },
             { width: 375, height: 812 },
             { width: 1200, height: 800 },
         ]) {

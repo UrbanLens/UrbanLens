@@ -21,6 +21,21 @@
     }
 }
 
+// Leaflet's zoom buttons sit bottom-left, which is clear at desktop widths and
+// is not below the editor's single-column breakpoint: there the tool pill moves
+// to the bottom of the canvas, and at 320px it wraps to two rows spanning
+// almost the full width, straight through them. Top-right is the corner nothing
+// claims at those widths - the floor strip holds the left, undo and delete the
+// middle, and the pill has gone to the bottom.
+@media (max-width: 900px) {
+    .floorplan-map .leaflet-bottom.leaflet-left {
+        top: 10px;
+        right: 10px;
+        bottom: auto;
+        left: auto;
+    }
+}
+
 .floorplan-map-shell {
     position: relative;
 }
