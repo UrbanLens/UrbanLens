@@ -694,9 +694,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // finger that moves before it lifts. A hand-dispatched MouseEvent would
         // be assuming the answer.
         //
-        // Desktop viewport deliberately: this asks about touch semantics, not
-        // layout, and the harness pins the map to 900px (see HARNESS), so at
-        // phone width its own CSS - not the site's - decides what is where.
+        // Desktop viewport deliberately: this asks about touch semantics rather
+        // than layout, and a full-width map gives the gesture room to run.
         await openEditor({ width: 1200, height: 800 }, true);
         const before = await page.locator(".floorplan-wall").count();
         await page.locator('[data-tool="wall"]').click();
@@ -1467,23 +1466,16 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         expect(await page.locator(".floorplan-wall").count()).toBe(4);
         // The shell itself gets no label, which is the whole point of the rule:
         // an outline nobody has divided up is the building, not a room in it.
+        // (Subdividing one is what makes rooms; the closet, island and grid
+        // fixtures cover that, and doing it here only made this test depend on
+        // where a fitted plan happens to land.)
         expect(await page.locator(".floorplan-room-label").count()).toBe(0);
-        // But it is a closed region, so a wall drawn across it makes two rooms.
-        await page.locator('[data-tool="wall"]').click();
-        const frame = await planExtent();
-        await page.mouse.click(frame.left, frame.top + frame.height / 2);
-        await page.mouse.click(frame.left + frame.width, frame.top + frame.height / 2);
-        await page.keyboard.press("Escape");
-        await settle();
-        expect(await page.locator(".floorplan-room-label").count()).toBe(2);
 
         // And the prompt gets out of the way once there is something to edit.
         expect(await page.evaluate(() => (document.getElementById("floorplan-empty") as HTMLElement).hidden)).toBe(true);
 
-        // Undo, twice, puts the blank canvas back rather than leaving a plan
-        // nobody asked for.
-        await page.locator("#floorplan-undo").click();
-        await settle();
+        // Undo puts the blank canvas back rather than leaving a plan nobody
+        // asked for.
         await page.locator("#floorplan-undo").click();
         await settle();
         expect(await page.locator(".floorplan-wall").count()).toBe(0);
@@ -1530,10 +1522,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // anyone is drawing - and a phone has no Delete key either. Same
         // reasoning that put undo and the floor strip on the canvas.
         //
-        // Structural, not positional, and at a desktop viewport: the fixture
-        // pins the map to 900px, so where anything sits at 375px is the
-        // fixture's answer rather than the site's. What is checkable here is
-        // which container the control belongs to, which is the claim.
+        // Structural rather than positional: which container the control
+        // belongs to is the claim, and it holds at every width.
         await openEditor();
         const button = page.locator("#floorplan-delete");
         const hidden = () => page.evaluate(() => (document.getElementById("floorplan-delete") as HTMLElement).hidden);

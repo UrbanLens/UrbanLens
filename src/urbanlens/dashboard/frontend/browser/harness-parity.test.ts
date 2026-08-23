@@ -10,11 +10,11 @@
  * None of those were caught by a test failing. They were caught by a test
  * *passing* and the result looking wrong, which is the expensive way.
  *
- * This catches the third kind - an element the editor reaches for that the
- * fixture does not have. It does not catch the other two: a missing *class*
- * still leaves the id present, and the fixture's own stylesheet block is
- * deliberate. Those remain a matter of reading HARNESS's comment before
- * believing a measurement taken through it.
+ * This catches ids. It does not catch a missing *class*, which is what the
+ * second one was - and that one turned out to be the cause of the first: the
+ * map element had no .floorplan-map class, so the site's height rule never
+ * applied, so the fixture pinned a size to compensate. Both overrides are gone
+ * now and the site's stylesheet lays the fixture out alone.
  */
 
 import { describe, expect, test } from "bun:test";

@@ -7,18 +7,13 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 <style>
-/* This block is the harness's own layout, not the site's - a test that asks
-   where something sits at a given viewport width is answered by these rules
-   rather than by _floorplans.scss. Ask structural questions here (what is
-   inside what), and treat any measurement that disagrees with the real page
-   as this fixture talking. */
+/* The site's own stylesheet lays this page out, and nothing here overrides it.
+   It used to: the map was pinned to 900x640 and the sidebar taken out of flow,
+   which meant a test asking where anything sat got this block's answer instead
+   of _floorplans.scss's. Both turned out to be workarounds for the map element
+   missing its own class, so the height rule never applied. Keep it that way -
+   a rule added here is a rule the site does not have. */
 html,body{margin:0}
-#floorplan-map{width:900px;height:640px}
-/* Out of flow and fixed: in the real page the sidebar is a fixed-width flex
-   column, but in bare markup it grows as the editor fills it, reflowing the
-   page and making Leaflet re-project the plan at a different scale. That reads
-   as geometry moving when nothing has moved at all. */
-.floorplan-sidebar{position:fixed;top:0;right:0;width:320px;height:100vh;overflow:auto}
 </style>
 </head><body>
 <div id="floorplan-origin-banner" hidden></div>
@@ -32,7 +27,7 @@ html,body{margin:0}
     <button class="map-btn-icon" data-tool="room"></button>
     <button class="map-btn-icon" data-tool="marker"></button>
   </div></div>
-  <div id="floorplan-map" tabindex="0" role="application" aria-label="Floorplan canvas"
+  <div id="floorplan-map" class="floorplan-map" tabindex="0" role="application" aria-label="Floorplan canvas"
        data-json-url="/json" data-save-url="/save" data-publish-url="/publish"
        data-lat="41.733" data-lng="-73.928"></div>
   <div id="floorplan-tool-options" hidden></div>
