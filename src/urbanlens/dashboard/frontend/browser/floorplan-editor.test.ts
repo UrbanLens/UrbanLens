@@ -2106,6 +2106,18 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // And the label says so, in the words a screen reader will read out.
         const label = await page.evaluate(() => document.getElementById("floorplan-map")?.getAttribute("aria-label") ?? "");
         expect(label).toContain("openings");
+
+        // Each step announces something different. Four sides of a square are
+        // four identical sentences - "Exterior wall, 10.00 metres" each time -
+        // so the announcement carries a position, and without it tabbing round
+        // a plan would tell a screen reader nothing had happened.
+        const announced: string[] = [];
+        for (let press = 0; press < 4; press++) {
+            await page.keyboard.press("Tab");
+            await settle();
+            announced.push((await page.locator("#floorplan-live").textContent()) ?? "");
+        }
+        expect(new Set(announced).size, `four steps announced ${new Set(announced).size} distinct things`).toBe(4);
         await page.close();
     });
 
