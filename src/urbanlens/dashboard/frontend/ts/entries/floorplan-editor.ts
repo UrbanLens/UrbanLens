@@ -1200,7 +1200,11 @@ function boot(): void {
             const selected = isSelected({ kind: "marker", marker });
             const node = L.marker(toLatLng({ x: marker.x, y: marker.y }), { icon: markerIcon(marker, selected), draggable: state.tool === "select" }).addTo(markerLayer);
             markerNodes.set(marker, node);
-            node.bindPopup(markerPopupContent(marker), { closeButton: true });
+            // Built when the popup opens, not when the marker is drawn. render()
+            // runs on every frame of a drag, and markerPopupContent assembles a
+            // real DOM subtree - so an eager call is one subtree per marker per
+            // frame, for a panel almost none of them will be asked to show.
+            node.bindPopup(() => markerPopupContent(marker), { closeButton: true });
             node.on("popupopen", () => {
                 node.getPopup()?.getElement()?.querySelector(".floorplan-marker-popup__delete")?.addEventListener("click", () => {
                     state.selection = { kind: "marker", marker };

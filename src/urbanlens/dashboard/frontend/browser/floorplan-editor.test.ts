@@ -141,6 +141,30 @@ async function planCentre(): Promise<{ x: number; y: number }> {
  * Args:
  *     cells: Rooms per side. 12 gives 312 walls and 144 faces.
  */
+/** Markers scattered over a grid plan.
+ *
+ * A survey-sized plan is not only walls: a hazard or a stairwell per few rooms is
+ * ordinary, and every one of them is a Leaflet marker rebuilt on each drag frame.
+ * The perf fixture carried `markers: []`, so the measured cost of a drag excluded
+ * markers entirely - and with them the most expensive thing render() does per
+ * marker, which is assembling the popup's DOM.
+ */
+function gridMarkers(cells: number, step: number): unknown[] {
+    const out: unknown[] = [];
+    const kinds = ["hazard", "stair", "elevator"];
+    for (let index = 0; index < 30; index++) {
+        const cell = (index * 7) % (cells * cells);
+        out.push({
+            uuid: `marker-${index}`,
+            kind: kinds[index % kinds.length],
+            name: `Marker ${index}`,
+            x: ((cell % cells) + 0.5) * step,
+            y: (Math.floor(cell / cells) + 0.5) * step,
+        });
+    }
+    return out;
+}
+
 function gridPlan(cells = 12): unknown {
     const step = 3;
     const walls: unknown[] = [];
@@ -159,7 +183,7 @@ function gridPlan(cells = 12): unknown {
         origin: "local",
         plan_origin: { lat: 41.733, lng: -73.928 },
         rotation_degrees: 0,
-        floors: [{ uuid: "floor-1", level: 0, designation: "", name: "Ground", walls, rooms: [], markers: [] }],
+        floors: [{ uuid: "floor-1", level: 0, designation: "", name: "Ground", walls, rooms: [], markers: gridMarkers(cells, step) }],
     };
 }
 

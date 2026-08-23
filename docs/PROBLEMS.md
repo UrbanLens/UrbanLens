@@ -3695,43 +3695,68 @@ geometry with `polygon.geom_type == "MultiPolygon"`, a string comparison neither
 mypy nor a reader can use, before iterating it - and a `Polygon` is not
 iterable. It is an `isinstance` check now.
 
-## Every drag frame rebuilds every Leaflet layer (2026-08-23)
+## Every drag frame rebuilds every Leaflet layer - measured, and deliberately not refactored (2026-08-23)
 
-`render()` in floorplan-editor.ts clears all four layer groups and recreates
-every polyline, polygon, marker and handle, and a drag calls it synchronously on
-each pointermove. Measured in the browser on a 12x12 grid of rooms - 312 walls,
-smaller than a real survey - that cost **229ms per move**, about four frames a
-second.
+`render()` clears all four layer groups and recreates every polyline, polygon,
+marker and handle, and a drag calls it on each pointermove. The obvious answer is
+to reuse layers - `setLatLngs` on the ones that exist, create and destroy only
+what changed. **That was designed in full, adversarially reviewed, and rejected on
+the evidence.** What shipped instead was one line.
 
-Most of it was the room labels: a label is a *permanent* Leaflet tooltip, so
-every one is a DOM node Leaflet creates and positions itself. Suppressing them
-while `activeDrags` is non-zero, the way the joint handles already were, brought
-it to **49ms** and they return on release.
+**Where a 312-wall drag frame actually goes** (22.1 ms of JS): `deriveFaces` 7.7,
+wall polylines 6.0, the four `clearLayers` 4.1, room polygons 3.9, floor tabs 0.4,
+joint handles 0.00, markers 0.00.
 
-What is left is the rebuild itself: ~312 `L.polyline` plus ~144 `L.polygon`
-constructions per frame, against ~7ms for `deriveFaces` on the same plan (so the
-planar geometry is not the problem). The fix is to reuse layers - `setLatLngs`
-on the ones that already exist, create and destroy only what actually appeared
-or went away - rather than clearing and rebuilding. That is a real refactor of
-`render()` and its callers, not a patch, which is why it is written down here
-instead of attempted alongside the measurement.
+That last figure is the interesting one, and it was a lie of omission: the perf
+fixture carried `markers: []`, so every published number for this editor excluded
+markers entirely - and `markerPopupContent()` was called *eagerly* at bind time,
+building a real DOM subtree per marker per frame for a panel almost no marker is
+ever asked to show.
 
-`bun run test:browser` holds both guards: the behavioural one (no room labels
-mid-drag, labels back on release) and a deliberately loose timing bound.
+Binding the popup lazily (`bindPopup(() => markerPopupContent(marker), ...)`) is
+one line. Measured on the same gesture with 30 markers now in the fixture:
 
-**Priority, measured rather than assumed.** Editor cost per move, with the
-harness's own per-move overhead subtracted:
+| | 4 walls | 312 walls |
+|---|---|---|
+| eager popups | 41.5 ms/move | 73.6 ms/move |
+| lazy popups | 35.7 ms/move | 58.3 ms/move |
 
-| grid  | walls | rooms | ms/move | fps |
-|-------|-------|-------|---------|-----|
-| 4x4   | 40    | 16    | ~13     | 77  |
-| 6x6   | 84    | 36    | ~18     | 55  |
-| 12x12 | 312   | 144   | ~33     | 30  |
+Roughly what the entire layer-reuse refactor was projected to buy, for one line
+and no new failure modes.
 
-Linear in plan size, and a real floor is 20-40 rooms, so the refactor buys most
-of its value on plans larger than anyone is likely to draw. Worth doing, not
-worth doing ahead of anything that is actually wrong.
+Read those as a *pair*, not as absolutes. They were taken back to back on an
+otherwise idle machine; the same gesture inside a full `bun run test:browser`
+measures 45.1 / 67.1 because the numbers include Playwright's own per-move pipe
+cost and whatever else the machine is doing. The gap between the two rows is the
+finding, not either row on its own.
 
+**Why the refactor is not being done.** Three independent adversarial reviews of
+the design each returned *fatal*, and each on the same step:
+
+- `wallLayer` is not the wall-bodies layer. `renderOpenings()` adds door-swing
+  leaves and the opening line to it as well, and `wallLayer.clearLayers()` is the
+  only thing that ever removes those. Dropping that clear - which reuse requires -
+  leaks a set of opening paths every frame.
+- Reuse cannot extend to room fills: `deriveFaces` allocates a fresh `Face` per
+  call, whose `wallIds` are traversal-ordered and collide between the two halves
+  of a partitioned rectangle, so there is no identity to key a polygon on.
+- `handleLayer` measures 0.00 ms during a wall drag because joint handles are
+  already gated off, so reuse there buys nothing.
+- `setStyle` *merges*, so translating the current conditional style spreads into
+  it leaves a once-selected wall permanently teal; `Path.onAdd` reallocates
+  `layer._path`, so remove-and-re-add silently drops the DOM `pointerdown` and the
+  drag dies with no error.
+
+And the payoff does not justify that surface: a 40-wall plan - larger than most
+real floors - already sits inside frame budget. Reuse would recover construction
+only; `setLatLngs` still reprojects and rewrites the `d` attribute for every path
+every frame.
+
+If this is picked up again, the entry conditions are: a realistic plan (markers
+and openings included, not the walls-only fixture) measurably missing frame
+budget, and a first step that splits openings out of `wallLayer` into their own
+group **before** any clear is removed. Anything that begins by deleting
+`wallLayer.clearLayers()` is wrong.
 ## Three third-party CDNs are single points of failure (2026-08-23)
 
 toastr (cdnjs), Leaflet and leaflet-rotate (unpkg) are `<script>` tags, not
