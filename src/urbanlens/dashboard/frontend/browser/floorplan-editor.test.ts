@@ -1167,9 +1167,12 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // Both are right, and the rule is what has to be predictable: a run of
         // keystrokes in one field is one step, and anything else is its own.
         await openEditor({ width: 1200, height: 800 }, false, "island");
-        // Waited for, not read: renaming rebuilds the room layer, so for a
-        // moment the outgoing tooltip is still in the pane beside the incoming
-        // one and whichever is read first is a coin toss.
+        // Waited for, not read: renaming rebuilds the room layer, and Leaflet
+        // fades a tooltip out over 200ms rather than removing it, so for that
+        // long the outgoing label is still in the pane beside the incoming one
+        // and whichever is read first is a coin toss. Nobody sees two labels -
+        // the outgoing one is at opacity 0 throughout - but a test reading the
+        // DOM does.
         const expectRoomNamed = async (want: string): Promise<void> => {
             await page.waitForFunction(
                 (expected) => {
@@ -1227,6 +1230,36 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             return smallest ? Math.round(smallest.left) : -1;
         });
         expect(back).toBeGreaterThan(moved);
+        await page.close();
+    });
+
+    test("duplicating a floor copies the plan and leaves the original alone", async () => {
+        // Re-tracing an exterior by hand for every storey is the bulk of the
+        // work in a multi-floor plan, and the copy must not carry the source's
+        // uuids: the server matches items to rows by uuid and deletes by
+        // omission, so a carried-over one would move the source floor's rows
+        // rather than duplicate them - emptying the floor that was copied from.
+        await openEditor({ width: 1200, height: 800 }, false, "closet");
+        const chips = () => page.evaluate(() => Array.from(document.querySelectorAll("#floorplan-floors .floorplan-floor-tab__chip")).map((n) => (n.textContent ?? "").trim()));
+        const wallCount = () => page.locator(".floorplan-wall").count();
+        expect(await chips()).toEqual(["G"]);
+        const before = await wallCount();
+        expect(before).toBeGreaterThan(4);
+
+        await page.locator('#floorplan-floors [aria-label="Duplicate this floor"]').click();
+        await settle();
+
+        // A new storey above, and it is the one being shown - without checking
+        // which tab is active, an empty copy would pass on the source's walls.
+        expect(await chips()).toEqual(["1", "G"]);
+        const active = () => page.evaluate(() => document.querySelector("#floorplan-floors .btn--primary .floorplan-floor-tab__chip")?.textContent?.trim() ?? "");
+        expect(await active()).toBe("1");
+        expect(await wallCount()).toBe(before);
+
+        // The floor it was copied from still has everything it had.
+        await page.locator('#floorplan-floors button:has(.floorplan-floor-tab__chip:text-is("G"))').click();
+        await settle();
+        expect(await wallCount()).toBe(before);
         await page.close();
     });
 
