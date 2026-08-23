@@ -3940,6 +3940,31 @@ same file; not investigated or fixed - out of scope for that change. `SavedFilte
 Django-stubs-inferred field type looks like the actual mismatch (an F-expression-shaped type rather
 than the plain `str` the field should behave as); worth a look next time this file is touched.
 
+## A pool reference with no image cannot keep its identity (2026-08-23)
+
+`applyServerIds` gives a reference-pool row its real uuid by matching on the
+image it stands for. A row with no image — a reference added by URL, or a
+`source_pool` row — has no key to match on, so it keeps its client-side uuid,
+and the next save recreates it: `_Pools` looks the existing pool up by real
+uuid, finds nothing, creates a second row and deletes the first as stale.
+
+Harmless today, because the editor cannot create one: every row it makes stands
+for one of the pin's photos. It stops being harmless the moment a "reference by
+URL" control exists, or an importer writes `source_pool` rows.
+
+**The obvious fix does not work.** `FloorplanReference` and `FloorplanSource`
+extend `FrontendDashboardModel` directly rather than `FloorplanItem`, so unlike
+walls, openings, locks, rooms and markers they have no `sort_order`, and declare
+no ordering at all. Adding `ordering = ("id",)` makes the order *deterministic*
+without making it match the payload: `_Pools.sync` creates new rows after the
+existing ones, so a save carrying [new, existing] comes back [existing, new] and
+positional matching is wrong in a new way.
+
+What it actually needs is a `sort_order` column on both models, written from the
+payload index the way `_sync` already does for every other collection, and then
+the same positional match as everything else. That is a real migration, and it
+is the shape of the fix rather than a patch.
+
 ## Five mypy errors outside the floorplan work (2026-08-23)
 
 `mypy src/urbanlens` reports five errors in four files, none of them in code

@@ -56,7 +56,28 @@ const BUILT = existsSync(BUNDLE);
  * reach it is for the server to answer the way a real one would when another
  * tab has saved first.
  */
-const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1 };
+const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "" };
+
+/**
+ * Answer a save the way the server does: with the document it was given, every
+ * client-side id replaced by a real one.
+ *
+ * The fixture used to answer with a fixed plan whatever it was sent, which
+ * meant applyServerIds never had anything to apply and the whole
+ * local-id-to-real-id cycle went unexercised in the browser.
+ */
+function echoSaved(document: unknown): unknown {
+    let issued = 0;
+    const rename = (value: unknown): unknown => {
+        if (Array.isArray(value)) return value.map(rename);
+        if (!value || typeof value !== "object") return value;
+        const entry: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+        for (const [key, held] of Object.entries(entry)) entry[key] = rename(held);
+        if (typeof entry.uuid === "string" && entry.uuid.startsWith("local-")) entry.uuid = `srv-${++issued}`;
+        return entry;
+    };
+    return rename(document);
+}
 
 /** Publish requests the fixture has been asked for. */
 const publishes = { attempts: 0 };
@@ -367,9 +388,12 @@ beforeAll(async () => {
                 // payload rather than about the screen. Awaited rather than
                 // left to settle: once the response goes out the request body
                 // is gone, and a fire-and-forget read of it never resolves.
+                let echoed: unknown = squarePlan();
                 try {
-                    const body = (await request.json()) as { reference_pool?: unknown[] };
+                    const body = (await request.json()) as { reference_pool?: Array<{ uuid?: string }> };
                     saves.lastPool = (body.reference_pool ?? []).length;
+                    saves.lastPoolUuid = body.reference_pool?.[0]?.uuid ?? "";
+                    echoed = echoSaved(body);
                 } catch {
                     saves.lastPool = -1;
                 }
@@ -377,7 +401,7 @@ beforeAll(async () => {
                 if (saves.conflict) {
                     return Response.json({ ok: false, error: "Someone else saved this plan while you were editing it.", stale: true }, { status: 409 });
                 }
-                return Response.json({ ok: true, floorplan: squarePlan() });
+                return Response.json({ ok: true, floorplan: echoed });
             }
             return new Response(Bun.file(join(STATIC_DIR, path.replace(/^\//, ""))));
         },
@@ -1826,6 +1850,37 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await settle();
         for (let waited = 0; waited < 60 && saves.lastPool !== 0; waited++) await page.waitForTimeout(250);
         expect(saves.lastPool, "a pool row outlived the wall citing it").toBe(0);
+        await page.close();
+    });
+
+    test("a saved photo keeps the id the server gave it", async () => {
+        // The whole cycle, through the editor rather than through the matcher:
+        // attach a photo, let it save, edit again, and look at what the second
+        // save carries. A client-side id sent twice makes the server create a
+        // second row and delete the first as stale, on every autosave.
+        saves.lastPool = -1;
+        saves.lastPoolUuid = "";
+        await openEditor();
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        const details = page.locator("#floorplan-form details.floorplan-details").first();
+        await details.locator("summary").click();
+        await details.locator(".floorplan-photo").first().click();
+
+        for (let waited = 0; waited < 60 && saves.lastPool !== 1; waited++) await page.waitForTimeout(250);
+        expect(saves.lastPool).toBe(1);
+        // The first save is the one that mints it, so a client-side id here is
+        // correct - there is nothing else it could be.
+        expect(saves.lastPoolUuid.startsWith("local-"), "the first save should mint a local id").toBe(true);
+
+        // Any further edit, made through the sidebar rather than the keyboard:
+        // the nudge shortcut needs the canvas focused, and focus is in the
+        // photo strip. What matters is the id the next save carries.
+        await page.locator("#floorplan-form select").first().selectOption("fence");
+        for (let waited = 0; waited < 60 && saves.lastPoolUuid.startsWith("local-"); waited++) await page.waitForTimeout(250);
+        expect(saves.lastPoolUuid, "the pool row was still carrying a client-side id").not.toContain("local-");
+        expect(saves.lastPool, "the pool lost its row").toBe(1);
         await page.close();
     });
 
