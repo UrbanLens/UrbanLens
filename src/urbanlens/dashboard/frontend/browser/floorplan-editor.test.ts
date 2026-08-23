@@ -1402,6 +1402,50 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         }
     });
 
+    test("a door's locks can be recorded, and a window is not asked", async () => {
+        // "Is this door locked" is close to the most useful thing a plan of a
+        // derelict building can say, and it was modelled, stored and served
+        // without ever being reachable from the editor.
+        await openEditor();
+        const plan = await planExtent();
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+
+        const locks = () => page.locator(".floorplan-lock").count();
+        expect(await locks()).toBe(0);
+        await page.locator("#floorplan-form .floorplan-locks button", { hasText: "Lock" }).click();
+        await settle();
+        expect(await locks()).toBe(1);
+
+        // A door can carry several: a padlock and a chain are two answers.
+        const row = page.locator(".floorplan-lock").first();
+        await row.locator("input.form-input").fill("padlock");
+        await row.locator("select").selectOption("locked");
+        await settle();
+        await page.locator("#floorplan-form .floorplan-locks button", { hasText: "Another lock" }).click();
+        await settle();
+        expect(await locks()).toBe(2);
+
+        // The first one kept what it was given.
+        expect(await page.locator(".floorplan-lock").first().locator("input.form-input").inputValue()).toBe("padlock");
+        expect(await page.locator(".floorplan-lock").first().locator("select").inputValue()).toBe("locked");
+
+        // Removing one leaves the other.
+        await page.locator(".floorplan-lock").nth(1).locator("button").click();
+        await settle();
+        expect(await locks()).toBe(1);
+
+        // A window has no lock worth recording for getting in, so it is not
+        // asked - the question goes away with the type.
+        await page.locator("#floorplan-form select").first().selectOption("window");
+        await settle();
+        expect(await page.locator(".floorplan-locks").count()).toBe(0);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

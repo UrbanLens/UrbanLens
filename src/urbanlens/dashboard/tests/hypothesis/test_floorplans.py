@@ -2178,6 +2178,31 @@ class FloorplanResponseOrderTests(TestCase):
         self.assertEqual([wall["name"] for wall in floor["walls"][:3]], ["first", "second", "third"])
         self.assertEqual([marker["name"] for marker in floor["markers"]], ["alpha", "beta"])
 
+    def test_a_doors_locks_come_back_in_the_order_they_were_sent(self) -> None:
+        """The editor matches locks to rows by position, same as everything else."""
+        walls = _square_walls()
+        walls[0] = {
+            **walls[0],
+            "openings": [
+                {
+                    "kind": "door",
+                    "t_start": 0.4,
+                    "t_end": 0.6,
+                    "swing": "none",
+                    "locks": [
+                        {"name": "padlock", "state": "locked"},
+                        {"name": "deadbolt", "state": "unlocked"},
+                        {"name": "chain", "state": "unknown"},
+                    ],
+                },
+            ],
+        }
+        save_document(self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}]}, profile=self.profile)
+
+        locks = document_for(self.floorplan)["floors"][0]["walls"][0]["openings"][0]["locks"]
+        self.assertEqual([lock["name"] for lock in locks], ["padlock", "deadbolt", "chain"])
+        self.assertEqual([lock["state"] for lock in locks], ["locked", "unlocked", "unknown"])
+
     def test_a_floors_level_is_unique_so_it_can_serve_as_the_key(self) -> None:
         """Matching floors by level is only valid because two cannot share one."""
         with pytest.raises(ValueError, match="share level"):

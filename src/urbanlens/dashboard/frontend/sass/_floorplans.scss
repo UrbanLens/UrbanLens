@@ -733,6 +733,35 @@
     gap: .35rem;
 }
 
+// A door may carry several locks - a padlock, a deadbolt and a chain are three
+// separate answers - so each row is "what kind" and "is it locked", with the
+// remove control kept small enough not to read as the row's main action.
+.floorplan-locks {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.floorplan-lock {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+
+    .form-input {
+        min-width: 0;
+    }
+
+    &__remove {
+        flex: 0 0 auto;
+        opacity: .7;
+
+        &:hover,
+        &:focus-visible {
+            opacity: 1;
+        }
+    }
+}
+
 .floorplan-connector {
     display: flex;
     flex-direction: column;

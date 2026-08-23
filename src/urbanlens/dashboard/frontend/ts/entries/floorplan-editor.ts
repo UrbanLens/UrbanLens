@@ -17,6 +17,7 @@ import { toast } from "../shared/dialogs";
 import { PlanProjection, type Pt, distance, interiorPoint, projectOnSegment, rotate } from "../shared/floorplan/coords";
 import {
     type Floor,
+    type Lock,
     type Opening,
     type FloorplanDocument,
     type Marker,
@@ -26,6 +27,7 @@ import {
     type Wall,
     emptyDocument,
     type ItemDetails,
+    LOCK_STATES,
     OPENING_KINDS,
     WALL_KINDS,
     attribute,
@@ -3620,6 +3622,7 @@ function boot(): void {
                     }),
                 ),
             );
+            renderLockControls(host, opening);
             // Only where it means something: a doorway is the hole with no door
             // in it, and a window has nothing that sweeps across the floor.
             if (swings(opening.kind)) {
@@ -3713,6 +3716,88 @@ function boot(): void {
             deleteSelection();
         });
         host.appendChild(button);
+    }
+
+    /**
+     * The locks fitted to one opening.
+     *
+     * "Is this door locked" is close to the most useful thing a plan of a
+     * derelict building can tell anyone, and it was modelled, stored and served
+     * without ever being reachable. A door may carry several - a padlock, a
+     * deadbolt and a chain are three separate answers - so this is a list
+     * rather than a field.
+     *
+     * Only the engagement axis is asked here. Whether a lock is broken, seized
+     * or missing belongs in its condition, which the shared item fields already
+     * offer: a broken lock may be hanging open or rusted shut, and "broken"
+     * alone does not say whether the door opens.
+     *
+     * Args:
+     *     host: The sidebar element to append to.
+     *     opening: The opening whose locks these are.
+     */
+    function renderLockControls(host: HTMLElement, opening: Opening): void {
+        // A window does not have a lock worth recording for getting in, and a
+        // doorway is the hole where a door used to be.
+        if (!swings(opening.kind) && opening.kind !== "hatch") return;
+        const wrap = document.createElement("div");
+        wrap.className = "floorplan-locks";
+        const title = document.createElement("span");
+        title.className = "floorplan-field__label";
+        title.textContent = "Locks";
+        wrap.appendChild(title);
+
+        const locks = opening.locks ?? [];
+        locks.forEach((lock, index) => {
+            const row = document.createElement("div");
+            row.className = "floorplan-lock";
+
+            const name = document.createElement("input");
+            name.className = "form-input";
+            name.value = lock.name || "";
+            name.placeholder = "Padlock, deadbolt, chain";
+            name.setAttribute("aria-label", "What kind of lock");
+            name.addEventListener("input", () => {
+                checkpoint(`lock-name:${lock.uuid || index}`);
+                lock.name = name.value;
+                markDirtyQuiet();
+            });
+            row.appendChild(name);
+
+            row.appendChild(
+                select(LOCK_STATES, lock.state, (value) => {
+                    lock.state = value as Lock["state"];
+                    markDirty();
+                }),
+            );
+
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "btn btn--icon-sm floorplan-lock__remove";
+            remove.innerHTML = '<i class="material-symbols-outlined">close</i>';
+            remove.setAttribute("aria-label", `Remove ${lock.name || "this lock"}`);
+            remove.addEventListener("click", () => {
+                checkpoint();
+                opening.locks = (opening.locks ?? []).filter((item) => item !== lock);
+                renderSidebar();
+                markDirty();
+            });
+            row.appendChild(remove);
+            wrap.appendChild(row);
+        });
+
+        const add = document.createElement("button");
+        add.type = "button";
+        add.className = "btn btn--sm btn--ghost";
+        add.textContent = locks.length ? "+ Another lock" : "+ Lock";
+        add.addEventListener("click", () => {
+            checkpoint();
+            opening.locks = [...(opening.locks ?? []), { uuid: nextLocalId(), name: "", state: "unknown" }];
+            renderSidebar();
+            markDirty();
+        });
+        wrap.appendChild(add);
+        host.appendChild(wrap);
     }
 
     function renderConnectorControls(host: HTMLElement, marker: Marker): void {
