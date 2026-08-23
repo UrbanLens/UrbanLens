@@ -409,6 +409,37 @@ class MergePinsTests(TestCase):
         self.assertIsNone(child.parent_pin_id)
         self.assertTrue(Pin.objects.filter(pk=self.survivor.pk).exists())
 
+    def test_survivor_child_is_promoted_before_loser_delete_cascades(self) -> None:
+        self.survivor.parent_pin = self.loser
+        self.survivor.location = self.loser.location
+        self.survivor.save(update_fields=["parent_pin", "location", "updated"])
+        loser_pk = self.loser.pk
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        self.survivor.refresh_from_db()
+        self.assertIsNone(self.survivor.parent_pin_id)
+        self.assertFalse(Pin.objects.filter(pk=loser_pk).exists())
+
+    def test_child_detach_failure_rolls_back_instead_of_cascading_descendants(self) -> None:
+        child = baker.make_recipe("dashboard.pin", profile=self.profile, parent_pin=self.loser)
+        self.survivor.parent_pin = child
+        self.survivor.save(update_fields=["parent_pin"])
+        baker.make_recipe("dashboard.pin", profile=self.profile, location=child.location)
+        loser_pk = self.loser.pk
+        child_pk = child.pk
+        survivor_pk = self.survivor.pk
+
+        with self.assertRaises(ValueError):
+            merge_pins(self.survivor, self.loser, self.profile)
+
+        self.assertTrue(Pin.objects.filter(pk=loser_pk).exists())
+        child.refresh_from_db()
+        self.survivor.refresh_from_db()
+        self.assertEqual(child.parent_pin_id, loser_pk)
+        self.assertEqual(self.survivor.parent_pin_id, child_pk)
+        self.assertTrue(Pin.objects.filter(pk=survivor_pk).exists())
+
     def test_lineage_gap_filled_from_loser_when_survivor_has_none(self) -> None:
         recipient = baker.make(User).profile
         share = PinShare.objects.create(pin=None, from_profile=self.profile, to_profile=recipient, status=PinShareStatus.ACCEPTED)

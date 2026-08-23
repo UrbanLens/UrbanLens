@@ -539,6 +539,19 @@ class ConversationMuteTests(GroupControlsBaseTestCase):
         url = reverse("external_api:messages.mute", kwargs={"peer_slug": "nobody-at-all"})
         self.assertEqual(self.client.get(url, **self.creator_auth).status_code, 404)
 
+    def test_hidden_stranger_is_404_for_all_mute_verbs(self) -> None:
+        """A real but unreachable profile must look the same as an unknown slug."""
+        stranger = _profile()
+        stranger.ensure_slug()
+        Profile.objects.filter(pk=stranger.pk).update(direct_message_visibility=VisibilityChoice.NO_ONE)
+        stranger.refresh_from_db()
+        url = reverse("external_api:messages.mute", kwargs={"peer_slug": stranger.slug})
+
+        self.assertEqual(self.client.get(url, **self.creator_auth).status_code, 404)
+        self.assertEqual(self.client.put(url, **self.creator_auth).status_code, 404)
+        self.assertEqual(self.client.delete(url, **self.creator_auth).status_code, 404)
+        self.assertFalse(DirectMessageMute.objects.filter(viewer=self.creator, sender=stranger).exists())
+
     def test_muted_conversation_stays_in_the_conversation_list(self) -> None:
         """Muting is notification-only for one-to-one threads too."""
         from urbanlens.dashboard.services.direct_messages import create_direct_message

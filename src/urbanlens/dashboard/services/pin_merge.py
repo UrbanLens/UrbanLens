@@ -162,7 +162,13 @@ def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
     return conflicts
 
 
-def _reparent_children(survivor: Pin, loser: Pin) -> None:
+def _defer_root_promotion(pin: Pin) -> None:
+    """Detach *pin* from the loser without making it root until the loser is gone."""
+    PinModel = type(pin)
+    PinModel.objects.filter(pk=pin.pk).update(parent_pin_id=pin.pk)
+
+
+def _reparent_children(survivor: Pin, loser: Pin) -> list[int]:
     """Re-parent loser's child pins onto survivor, skipping any that would create a cycle.
 
     Mirrors ``services.pin_restructure.nest_root_pins`` for the normal case. A
@@ -172,8 +178,16 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
     ``parent_pin`` destroy that child, and everything nested beneath it,
     survivor included.
     """
+    deferred_root_ids: list[int] = []
     for child in list(loser.detail_pins.all()):
         if child.pk == survivor.pk:
+            survivor.parent_pin = loser.parent_pin
+            try:
+                survivor.save(update_fields=["parent_pin", "updated"])
+            except IntegrityError:
+                logger.info("Pin merge: temporarily self-parenting survivor pin %s until loser pin %s is deleted.", survivor.pk, loser.pk)
+                _defer_root_promotion(survivor)
+                deferred_root_ids.append(survivor.pk)
             continue
         if child.would_create_cycle(survivor):
             logger.warning("Pin merge: detaching child pin %s to root - re-parenting under the survivor would create a cycle.", child.pk)
@@ -181,13 +195,27 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
             try:
                 child.save(update_fields=["parent_pin", "updated"])
             except IntegrityError:
-                logger.exception(
-                    "Pin merge: could not detach child pin %s (a root pin already occupies its location) - it remains parented to the pin about to be deleted.",
-                    child.pk,
-                )
+                logger.info("Pin merge: temporarily self-parenting child pin %s until loser pin %s is deleted.", child.pk, loser.pk)
+                _defer_root_promotion(child)
+                deferred_root_ids.append(child.pk)
             continue
         child.parent_pin = survivor
         child.save(update_fields=["parent_pin", "updated"])
+    return deferred_root_ids
+
+
+def _finish_deferred_root_promotions(pin_ids: list[int]) -> None:
+    """Make temporarily self-parented pins root after the loser has been deleted."""
+    if not pin_ids:
+        return
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    for pin in Pin.objects.filter(pk__in=pin_ids):
+        pin.parent_pin = None
+        try:
+            pin.save(update_fields=["parent_pin", "updated"])
+        except IntegrityError as exc:
+            raise ValueError("Cannot safely merge pins because a child pin could not be detached from the deleted pin.") from exc
 
 
 def _merge_aliases(survivor: Pin, loser: Pin) -> None:
@@ -418,7 +446,7 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         raise UnresolvedMergeConflictError(missing)
 
     with transaction.atomic():
-        _reparent_children(survivor, loser)
+        deferred_root_ids = _reparent_children(survivor, loser)
         _merge_aliases(survivor, loser)
         _merge_owners(survivor, loser)
         _merge_reviews(survivor, loser)
@@ -450,6 +478,7 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
             markup_map.inferred_pins.add(survivor)
 
         loser.delete()
+        _finish_deferred_root_promotions(deferred_root_ids)
 
     survivor.refresh_from_db()
     return survivor

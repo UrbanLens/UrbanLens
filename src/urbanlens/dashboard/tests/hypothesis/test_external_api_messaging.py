@@ -115,6 +115,13 @@ class MessagingBaseTestCase(TestCase):
     def _thread_url(self, peer: Profile | None = None) -> str:
         return reverse("external_api:messages.thread", kwargs={"peer_slug": (peer or self.partner).ensure_slug()})
 
+    def _hidden_stranger(self) -> Profile:
+        stranger = _profile()
+        stranger.ensure_slug()
+        Profile.objects.filter(pk=stranger.pk).update(direct_message_visibility=VisibilityChoice.NO_ONE)
+        stranger.refresh_from_db()
+        return stranger
+
     def _post_json(self, url: str, payload: dict, **extra):
         return self.client.post(url, data=json.dumps(payload), content_type="application/json", **{**self.auth, **extra})
 
@@ -148,6 +155,25 @@ class SendMessageTests(MessagingBaseTestCase):
 
     def test_unknown_peer_is_404(self) -> None:
         self.assertEqual(self._post_json(reverse("external_api:messages.thread", kwargs={"peer_slug": "nobody-here"}), {"body": "x"}).status_code, 404)
+
+
+class PeerVisibilityOracleTests(MessagingBaseTestCase):
+    """Peer-scoped messaging routes hide real profiles that cannot be messaged."""
+
+    def test_hidden_stranger_thread_routes_match_unknown_peer_404(self) -> None:
+        stranger = self._hidden_stranger()
+
+        self.assertEqual(self.client.get(self._thread_url(stranger), **self.auth).status_code, 404)
+        self.assertEqual(self._post_json(self._thread_url(stranger), {"body": "x"}).status_code, 404)
+        self.assertEqual(self.client.post(reverse("external_api:messages.read", kwargs={"peer_slug": stranger.slug}), **self.auth).status_code, 404)
+
+    def test_hidden_stranger_reaction_route_rejects_before_payload_validation(self) -> None:
+        stranger = self._hidden_stranger()
+        url = reverse("external_api:messages.react", kwargs={"peer_slug": stranger.slug, "message_id": 1})
+
+        response = self._post_json(url, {"emoji": "<script>"})
+
+        self.assertEqual(response.status_code, 404)
 
 
 def _make_image(profile: Profile, **kwargs) -> Image:

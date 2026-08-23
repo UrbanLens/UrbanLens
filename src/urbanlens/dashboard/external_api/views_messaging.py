@@ -184,6 +184,22 @@ def _thread_visible(profile: Profile, partner: Profile) -> bool:
     return DirectMessage.objects.between(profile, partner).exists() or can_direct_message(profile, partner)
 
 
+def _resolve_thread_peer(profile: Profile, peer_slug: str) -> Profile | None:
+    """Resolve a peer slug only when the caller may address the thread.
+
+    Args:
+        profile: The requesting profile.
+        peer_slug: The peer slug from the URL.
+
+    Returns:
+        The peer profile when a thread exists or can currently be started, otherwise None.
+    """
+    partner = _resolve_peer(peer_slug)
+    if partner is None or not _thread_visible(profile, partner):
+        return None
+    return partner
+
+
 def _resolve_membership(request: Request, group_uuid: UUID) -> tuple[Profile, GroupChat, GroupChatMembership] | None:
     """Resolve the caller, the group, and the caller's active membership in it.
 
@@ -310,7 +326,7 @@ class MessageThreadView(ExternalApiView):
     def get(self, request: Request, peer_slug: str) -> Response:
         """Return one page of the caller's conversation with ``peer_slug``."""
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_thread_peer(profile, peer_slug)
         # The same gate controllers.direct_messages.ConversationView applies:
         # a thread exists for this caller only if they have history with the
         # partner or are currently permitted to message them. Without it a
@@ -318,7 +334,7 @@ class MessageThreadView(ExternalApiView):
         # while an invented slug answered 404, which made this endpoint a
         # profile-existence oracle for exactly the accounts whose DM settings
         # were meant to hide them.
-        if partner is None or not _thread_visible(profile, partner):
+        if partner is None:
             return Response({"error": "No such conversation."}, status=404)
 
         messages, has_more_older = thread_page(profile, partner, before_id=_before_id(request), limit=_thread_limit(request, THREAD_PAGE_SIZE))
@@ -337,7 +353,7 @@ class MessageThreadView(ExternalApiView):
     def post(self, request: Request, peer_slug: str) -> Response:
         """Send one message to ``peer_slug``, optionally carrying a share."""
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_thread_peer(profile, peer_slug)
         if partner is None:
             return Response({"error": "No such conversation."}, status=404)
 
@@ -391,7 +407,7 @@ class MessageThreadReadView(ExternalApiView):
     def post(self, request: Request, peer_slug: str) -> Response:
         """Mark the conversation with ``peer_slug`` read."""
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_thread_peer(profile, peer_slug)
         if partner is None:
             return Response({"error": "No such conversation."}, status=404)
 
@@ -414,7 +430,7 @@ class MessageReactionView(ExternalApiView):
     def post(self, request: Request, peer_slug: str, message_id: int) -> Response:
         """Add or remove the caller's reaction on one message in this thread."""
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_thread_peer(profile, peer_slug)
         if partner is None:
             return Response({"error": "No such conversation."}, status=404)
 
@@ -455,7 +471,7 @@ class MessageDetailView(ExternalApiView):
     def delete(self, request: Request, peer_slug: str, message_id: int) -> Response:
         """Delete one message in this thread."""
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_thread_peer(profile, peer_slug)
         if partner is None:
             return Response({"error": "No such conversation."}, status=404)
 
@@ -1083,7 +1099,7 @@ class ConversationMuteView(ExternalApiView):
             slug.
         """
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_thread_peer(profile, peer_slug)
         if partner is None:
             return Response({"error": "No such conversation."}, status=404)
         return Response({"is_muted": is_conversation_muted(profile, partner)})
@@ -1139,7 +1155,7 @@ class ConversationMuteView(ExternalApiView):
             slug.
         """
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_thread_peer(profile, peer_slug)
         if partner is None:
             return Response({"error": "No such conversation."}, status=404)
         return Response({"is_muted": set_conversation_muted(profile, partner, muted=muted)})
