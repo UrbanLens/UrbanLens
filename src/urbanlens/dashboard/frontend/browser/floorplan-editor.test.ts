@@ -447,6 +447,16 @@ beforeAll(async () => {
                 if (wanted === "plan-2") return servePlan({ ...(closetPlan() as Record<string, unknown>), uuid: "plan-2", versions: (squarePlan() as { versions: unknown[] }).versions });
                 return servePlan(squarePlan());
             }
+            // A wall citing a reference whose image is gone: the photo was deleted
+            // from its owner's media and FloorplanReference.image is SET_NULL, so
+            // the citation survives with nothing to draw.
+            if (path === "/json-lostphoto") {
+                const plan = squarePlan() as Record<string, unknown>;
+                const floors = plan.floors as Array<{ walls: Array<Record<string, unknown>> }>;
+                for (const wall of floors[0].walls) wall.references = ["ref-gone"];
+                plan.reference_pool = [{ uuid: "ref-gone", kind: "photo", title: "South elevation", url: "https://example.test/south.jpg", image_uuid: null }];
+                return servePlan(plan);
+            }
             // Turned to face its building, which every other fixture leaves at 0.
             if (path === "/json-rotated") return servePlan({ ...(squarePlan() as Record<string, unknown>), rotation_degrees: 30 });
             if (path === "/json-grid") return servePlan(gridPlan());
@@ -1912,6 +1922,31 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.locator("#floorplan-undo").click();
         await settle();
         expect(await named(), "undo did not put the deleted storey back").toEqual(["2:Attic", "1:", "G:"]);
+        await page.close();
+    });
+
+    test("a citation whose photo is gone can be seen and let go of", async () => {
+        // FloorplanReference.image is SET_NULL precisely so deleting a photo from
+        // somebody's media does not delete the plan's note about it. That leaves a
+        // citation with nothing to draw, and the photo strip is built from photos
+        // that still exist - so without a form of its own it is attached, invisible
+        // and impossible to remove.
+        page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+        await page.goto(`http://127.0.0.1:${server.port}/?plan=lostphoto`, { waitUntil: "load" });
+        await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
+
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+
+        const chip = page.locator(".floorplan-photo-missing");
+        await chip.waitFor({ state: "attached", timeout: 10000 });
+        // Named by whatever the reference still knows, rather than a bare "missing".
+        expect(await chip.textContent()).toContain("South elevation");
+
+        await chip.locator("button").click();
+        await settle();
+        expect(await page.locator(".floorplan-photo-missing").count(), "the citation could not be let go of").toBe(0);
         await page.close();
     });
 

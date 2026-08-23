@@ -3650,8 +3650,15 @@ function boot(): void {
     }
 
     function renderReferences(host: HTMLElement, item: ItemDetails): void {
-        if (!pinPhotos.length) return;
         const pool = (state.doc.reference_pool ??= []);
+        const citedRows = (item.references ?? []).map((uuid) => pool.find((entry) => entry.uuid === uuid)).filter((entry): entry is Reference => Boolean(entry));
+        // A citation whose photo is gone: the image was deleted from the owner's
+        // media, and the reference deliberately survived it (FloorplanReference.image
+        // is SET_NULL). Nothing in the strip below can draw it, because the strip is
+        // built from photos that still exist - so without this it is attached,
+        // invisible, and impossible to remove.
+        const orphans = citedRows.filter((entry) => !entry.image_uuid || !pinPhotos.some((photo) => photo.uuid === entry.image_uuid));
+        if (!pinPhotos.length && !orphans.length) return;
         const cited = new Set(item.references ?? []);
         /** The pool row standing for one image, if the plan has one. */
         const rowFor = (imageUuid: string): Reference | undefined => pool.find((entry) => entry.image_uuid === imageUuid);
@@ -3700,7 +3707,31 @@ function boot(): void {
             });
             strip.appendChild(button);
         }
-        wrap.appendChild(strip);
+        if (pinPhotos.length) wrap.appendChild(strip);
+
+        for (const orphan of orphans) {
+            const chip = document.createElement("div");
+            chip.className = "floorplan-photo-missing";
+            const label = document.createElement("span");
+            // Whatever the reference still knows about the picture it stood for.
+            label.textContent = orphan.title || orphan.url || "Photo no longer available";
+            chip.appendChild(label);
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "btn btn--icon-sm";
+            remove.setAttribute("aria-label", `Remove ${orphan.title || "missing photo"}`);
+            remove.innerHTML = '<i class="material-symbols-outlined">close</i>';
+            remove.addEventListener("click", () => {
+                checkpoint();
+                item.references = (item.references ?? []).filter((uuid) => uuid !== orphan.uuid);
+                pruneUnusedReferences();
+                renderSidebar();
+                markDirty();
+            });
+            chip.appendChild(remove);
+            wrap.appendChild(chip);
+        }
+
         host.appendChild(wrap);
     }
 
