@@ -1710,6 +1710,54 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("every control on the canvas can be named", async () => {
+        // An icon-only button with no accessible name is a button a screen
+        // reader announces as "button", and this editor is almost entirely
+        // icon-only buttons. Checked with a selection and a tool armed, so the
+        // controls that only exist in those states are included.
+        //
+        // Only what the editor *builds* is in scope here. The toolbar and the
+        // undo row are static template markup, and the fixture's copies of them
+        // are deliberately bare - checking those through here would be checking
+        // the fixture's attributes, not the site's. harness-parity.test.ts
+        // reads the template itself for those.
+        await openEditor();
+        await page.locator('[data-tool="marker"]').click();
+        const frame = await planExtent();
+        await page.mouse.click(frame.grab.x, frame.grab.y);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+
+        const unnamed = await page.evaluate(() => {
+            const named = (node: Element): boolean => {
+                const label = (node.getAttribute("aria-label") ?? node.getAttribute("title") ?? node.textContent ?? "").trim();
+                if (label) return true;
+                // A control can borrow its name from a <label> wrapping it, or
+                // from the element aria-labelledby points at.
+                const labelled = node.getAttribute("aria-labelledby");
+                if (labelled && document.getElementById(labelled)?.textContent?.trim()) return true;
+                return Boolean(node.closest("label")?.textContent?.trim());
+            };
+            const scopes = [".floorplan-canvas-floors", ".floorplan-tool-options", "#floorplan-form", "#floorplan-marker-appearance"];
+            const found: string[] = [];
+            for (const scope of scopes) {
+                const host = document.querySelector(scope);
+                if (!host) continue;
+                for (const node of Array.from(host.querySelectorAll("button, a[href], input, select, textarea"))) {
+                    if ((node as HTMLElement).hidden) continue;
+                    // A hidden field is not announced and has nothing to name.
+                    if (node instanceof HTMLInputElement && node.type === "hidden") continue;
+                    if (!named(node)) found.push(`${scope} ${node.tagName}.${String(node.className).split(" ")[0]}`);
+                }
+            }
+            return found;
+        });
+
+        expect(unnamed).toEqual([]);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

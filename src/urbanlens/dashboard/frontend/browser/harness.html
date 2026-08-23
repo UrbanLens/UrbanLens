@@ -52,12 +52,12 @@ html,body{margin:0}
   <div id="floorplan-floor-fields"></div>
   <div id="floorplan-form"></div>
   <div id="floorplan-marker-appearance" hidden>
-    <input id="icon-value-floorplan-marker">
+    <input type="hidden" id="icon-value-floorplan-marker">
     <div class="color-picker" id="color-picker-floorplan-marker">
       <input type="hidden" id="color-value-floorplan-marker" value="">
-      <button type="button" class="color-swatch" data-color="#e53935" style="background-color:#e53935"
+      <button type="button" class="color-swatch" data-color="#e53935" style="background-color:#e53935" aria-label="Red"
               onclick="pickColor('color-picker-floorplan-marker','color-value-floorplan-marker','#e53935',this)"></button>
-      <button type="button" class="color-swatch color-clear selected" data-color=""
+      <button type="button" class="color-swatch color-clear selected" data-color="" aria-label="No color"
               onclick="pickColor('color-picker-floorplan-marker','color-value-floorplan-marker','',this)"><i class="material-symbols-outlined">block</i></button>
     </div>
   </div>

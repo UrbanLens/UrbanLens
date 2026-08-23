@@ -25,6 +25,7 @@ const ROOT = join(import.meta.dir, "../../../../..");
 const EDITOR = join(ROOT, "src/urbanlens/dashboard/frontend/ts/entries/floorplan-editor.ts");
 const TEMPLATES = join(ROOT, "src/urbanlens/dashboard/templates/dashboard");
 const HARNESS = join(import.meta.dir, "harness.html");
+const EDITOR_TEMPLATE = join(TEMPLATES, "pages/floorplans/editor.html");
 
 /** Every element id the editor looks up by name. */
 function idsTheEditorNeeds(): string[] {
@@ -83,6 +84,30 @@ function declared(id: string, templates: string): boolean {
     }
     return false;
 }
+
+describe("the editor template's own markup", () => {
+    test("every icon-only control names itself", () => {
+        // The toolbar is seven buttons containing nothing but an icon glyph, so
+        // without an aria-label each one announces as "button". This is read
+        // from the template rather than the rendered fixture: the fixture's
+        // copies of these controls are deliberately bare, and asking it would
+        // be asking about the wrong markup.
+        const template = readFileSync(EDITOR_TEMPLATE, "utf8");
+        const buttons = template.match(/<button\b[\s\S]*?<\/button>/g) ?? [];
+        expect(buttons.length).toBeGreaterThan(5);
+
+        const unnamed = buttons
+            .filter((button) => !/aria-label=/.test(button))
+            // A button with its own words needs no label - but an icon's
+            // ligature is not words. <i>undo</i> is how Material Symbols names
+            // a glyph, and counting it as text makes this check pass for every
+            // icon-only button in the file, which is all of them.
+            .filter((button) => !button.replace(/<i\b[\s\S]*?<\/i>/g, "").replace(/<[^>]*>/g, "").trim())
+            .map((button) => (button.match(/id="([^"]+)"|data-tool="([^"]+)"/) ?? ["(anonymous)"])[0]);
+
+        expect(unnamed).toEqual([]);
+    });
+});
 
 describe("the browser harness and the real page", () => {
     test("every id the editor reaches for exists in the templates", () => {
