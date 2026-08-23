@@ -3858,3 +3858,38 @@ row, so a photo either costs its owner nothing or costs full price. Recording th
 bonus as an amount tied to the wiki relationship (rather than a flag on the image)
 would make withdrawal a cascade rather than a sweep, and would let the UI show a
 contributor what their contributions have earned them.
+
+## Consensus photo rounds do not honour the uploader's photo visibility (2026-08-23)
+
+`services/consensus/fields.py`'s `_photo_build_round` and `_photo_build_check_round`
+pick a photo with `wiki.images.filter(...).order_by("?").first()` and never call
+`ImageQuerySet.visible_to`. So a photo whose uploader restricted who may see it
+can still be handed to a stranger as a consensus round to place on the map.
+
+This is the same class as two defects fixed the same day - `PhotoSearchProvider`
+and `OverlayMediaPickerView` - and one already recorded for
+`services.spotguessr.photos.pick_photo`. Four surfaces, one omission: a queryset
+that reaches other people's photos without asking the filter.
+
+**Its exposure shrank considerably on the same day and is worth stating.** Until
+`_owner_fields` stopped stamping the location's wiki onto every pin upload, this
+population was "every photo at this location". It is now "photos somebody
+deliberately contributed to this wiki", which is a much smaller and much more
+defensible set - the residual is that contributing a photo does not withdraw what
+its uploader said about who may see it, which the wiki gallery honours and this
+does not.
+
+**Why it is written down rather than fixed.** `build_round` is a protocol -
+`Callable[[Wiki], RoundContent | None]` on `ConsensusFieldStrategy` - so the
+viewer is not in scope at the point the photo is chosen. Honouring visibility
+means threading a viewer profile through the strategy protocol and every
+implementation of it, which is a real refactor rather than adding a call, and one
+that deserves its own change with the consensus tests watched rather than being
+folded into a privacy sweep at the end of a long session.
+
+Related, smaller, and found alongside it: `WikiMediaVoteView` scopes a submitted
+`image_id` to the location (`Image.objects.filter(pk=image_id, location=location)`)
+rather than to photos on the wiki, so a caller can record a relevance vote against
+a pin-owned photo at that location. No data comes back and no bonus can be earned
+(`refresh_community_quota_bonus` requires `wiki_id`, which a pin upload no longer
+has), so this writes a row a stranger should not be able to write and nothing more.

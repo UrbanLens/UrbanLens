@@ -26,6 +26,7 @@ class DashboardConfig(AppConfig):
         import urbanlens.dashboard.models.cache.signals
         import urbanlens.dashboard.models.comments.signals
         import urbanlens.dashboard.models.floorplans.signals
+        import urbanlens.dashboard.models.images.signals
         from urbanlens.dashboard.models.labels.signals import create_default_tags
         import urbanlens.dashboard.models.links.signals
         import urbanlens.dashboard.models.location.signals

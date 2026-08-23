@@ -114,5 +114,14 @@ def collect_if_unreferenced(image: Image) -> bool:
     if reference_count(image) > 0:
         return False
     logger.info("Collecting unreferenced fetched image %s (%s)", image.pk, image.source_url or "no source url")
+    # The file first, and through delete_stored_file rather than by hand: sharing
+    # a pin reuses the same storage key for several rows, so the bytes go only
+    # when nothing else points at them. Django has not deleted a FileField's file
+    # on row delete since 1.3, and there is no pre_delete receiver for Image, so
+    # dropping the row alone leaves an orphan - which the media gate serves to any
+    # authenticated user.
+    from urbanlens.dashboard.services.media.images import delete_stored_file
+
+    delete_stored_file(image)
     image.delete()
     return True
