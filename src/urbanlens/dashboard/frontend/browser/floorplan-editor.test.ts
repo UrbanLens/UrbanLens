@@ -56,7 +56,7 @@ const BUILT = existsSync(BUNDLE);
  * reach it is for the server to answer the way a real one would when another
  * tab has saved first.
  */
-const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "", lastHadUuid: true };
+const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "", lastHadUuid: true, lastName: "", lastValidFrom: "" as string | null };
 
 /**
  * Answer a save the way the server does: with the document it was given, every
@@ -425,6 +425,9 @@ beforeAll(async () => {
                     saves.lastPool = (body.reference_pool ?? []).length;
                     saves.lastPoolUuid = body.reference_pool?.[0]?.uuid ?? "";
                     saves.lastHadUuid = "uuid" in (body as Record<string, unknown>);
+                    const doc = body as { name?: string; valid_from?: string | null };
+                    saves.lastName = doc.name ?? "";
+                    saves.lastValidFrom = doc.valid_from ?? null;
                     echoed = echoSaved(body);
                 } catch {
                     saves.lastPool = -1;
@@ -1694,6 +1697,29 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.locator(".leaflet-control-zoom-out").click();
         await settle();
         expect(await span()).toBeLessThan(before);
+        await page.close();
+    });
+
+    test("naming the plan, or dating it, is enough on its own to save it", async () => {
+        // Both fields are read at save time rather than when they change, so they
+        // only ever reached the server when something *else* had already marked the
+        // document dirty. Typing a name and leaving lost it - and beforeunload
+        // stayed quiet on the way out, because state.dirty was never set.
+        saves.attempts = 0;
+        saves.lastName = "";
+        saves.lastValidFrom = null;
+        await openEditor();
+
+        await page.locator("#floorplan-name").fill("Boiler house");
+        for (let waited = 0; waited < 40 && saves.attempts === 0; waited++) await page.waitForTimeout(250);
+        expect(saves.attempts, "typing a plan name never saved it").toBeGreaterThan(0);
+        expect(saves.lastName).toBe("Boiler house");
+
+        const after = saves.attempts;
+        await page.locator("#floorplan-valid-from").fill("1994-06-15");
+        for (let waited = 0; waited < 40 && saves.attempts === after; waited++) await page.waitForTimeout(250);
+        expect(saves.attempts, "dating the plan never saved it").toBeGreaterThan(after);
+        expect(saves.lastValidFrom).toBe("1994-06-15");
         await page.close();
     });
 

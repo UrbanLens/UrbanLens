@@ -4219,3 +4219,22 @@ Until then, updating a `dev_env.py` environment means the documented
 `STATIC_ROOT` is a *separate* collected tree (`src/urbanlens/frontend/static`,
 not `dashboard/frontend/static`) served by whitenoise even with `DEBUG=True`,
 so a copied-in JS bundle is not served until `collectstatic` runs.
+
+## An unnamed plan freezes the floor's name into stored data (2026-08-23)
+
+`save()` sends `state.doc.name = nameInput?.value || floor().name || ""`, and
+the server stores whatever it is given (`serialization.py`, no default of its
+own). So leaving the plan name blank does not store "blank" - it stores a copy
+of the floor's name at that moment.
+
+Two consequences, both small and both real. The `placeholder="Ground floor"`
+stops applying after the first save, because the field now has a real value; and
+renaming the floor afterwards leaves the plan carrying the old name, a derived
+default that has quietly become stale data.
+
+The reason the default exists at all is that `controllers/floorplans.py:210`
+puts `plan.name` in the versions list, which needs a label. That is the only
+consumer, so the fix is contained: let the client store `""` when the field is
+empty and have the version list fall back at *display* time (floor name, then
+something like "Untitled"). It is a change to what is in the column, though, so
+existing rows carry the frozen names until something rewrites them.

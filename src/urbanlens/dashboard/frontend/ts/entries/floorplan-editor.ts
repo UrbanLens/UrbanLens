@@ -4622,6 +4622,15 @@ function boot(): void {
         if (event.key === "Escape") closeMoreMenu();
     });
 
+    // Both fields are read inside save() rather than written through on change,
+    // so without something to mark the document dirty they only reached the
+    // server when an unrelated edit had already queued a save. A plan named and
+    // then left lost the name, and beforeunload stayed quiet on the way out.
+    // Quiet because neither changes the geometry, so there is nothing to redraw.
+    for (const id of ["floorplan-name", "floorplan-valid-from"]) {
+        document.getElementById(id)?.addEventListener("input", () => markDirtyQuiet());
+    }
+
     document.getElementById("floorplan-save-version")?.addEventListener("click", () => {
         closeMoreMenu();
         void save(true);
