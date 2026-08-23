@@ -1660,13 +1660,47 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             page.once("dialog", (dialog) => void dialog.accept());
             await page.locator("#floorplan-more-toggle").click();
             await page.locator("#floorplan-publish").click();
-            await page.waitForFunction(() => true);
             await settle();
             expect(publishes.attempts).toBe(1);
             await page.close();
         } finally {
             saves.fail = false;
         }
+    });
+
+    test("dragging a corner moves the walls that meet there and no others", async () => {
+        // A corner shared by three walls is three coordinate pairs that happen
+        // to be equal, so "grab the corner" has to gather them - and gather
+        // only them, or dragging one corner drags the building.
+        await openEditor();
+        const before = await planExtent();
+
+        const corner = await page.evaluate(() => {
+            const joints = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-joint"));
+            const boxes = joints.map((n) => n.getBoundingClientRect());
+            // The top-left one: nearest the origin of the plan's own box.
+            const best = boxes.sort((a, b) => a.left + a.top - (b.left + b.top))[0];
+            return best ? { x: best.left + best.width / 2, y: best.top + best.height / 2, count: joints.length } : null;
+        });
+        expect(corner, "no joint handles").not.toBeNull();
+        // A square has four corners, however many walls meet at each.
+        expect(corner!.count).toBe(4);
+
+        await page.mouse.move(corner!.x, corner!.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(corner!.x - step * 5, corner!.y - step * 5);
+        await page.mouse.up();
+        await settle();
+
+        const after = await planExtent();
+        // The two walls meeting at that corner followed it up and left...
+        expect(before.left - after.left).toBeGreaterThan(20);
+        expect(before.top - after.top).toBeGreaterThan(20);
+        // ...and the far corner stayed exactly where it was, which is the half
+        // that says only the connected walls moved.
+        expect(Math.abs(after.left + after.width - (before.left + before.width))).toBeLessThanOrEqual(2);
+        expect(Math.abs(after.top + after.height - (before.top + before.height))).toBeLessThanOrEqual(2);
+        await page.close();
     });
 
     test("the tool options panel shows the armed tool's choices", async () => {
