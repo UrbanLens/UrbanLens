@@ -22,6 +22,7 @@ import {
     type FloorplanDocument,
     type Marker,
     type MarkerKind,
+    type Reference,
     type RoomSeed,
     type VersionSummary,
     type Wall,
@@ -295,6 +296,15 @@ function boot(): void {
     });
 
     const outline = readJson<Array<[number, number]>>("floorplan-outline") || [];
+    /**
+     * This pin's own photos, offered for attaching to walls, doors and locks.
+     *
+     * Attaching one cites an existing image; it does not move it, geotag it or
+     * read its EXIF. The open question about a photo's coordinates - whether a
+     * position someone sets can coexist with what the EXIF reported - is about
+     * *writing* to an image, and nothing here writes to one.
+     */
+    const pinPhotos = readJson<Array<{ uuid: string; url: string; caption: string }>>("floorplan-photos") || [];
     // Always created, even with zero overlays at load time: the manage-overlays
     // dialog can add the pin's first one later, and without a live control to
     // sync() against, it would need a full page reload to actually appear.
@@ -3430,8 +3440,74 @@ function boot(): void {
      *     key: Stable identity for the item, so a run of keystrokes in one
      *         field collapses into a single undo step.
      */
+    /**
+     * The pin's photos, offered as attachments for one item.
+     *
+     * The plan keeps a reference pool so one photo exists once however many
+     * walls, doors and locks cite it, and an item holds pool uuids rather than
+     * images. A photo the plan has not cited before joins the pool here; the
+     * server creates the row and resolves the client-side id in the same save,
+     * which is what the pool's payload `uuid` is for.
+     *
+     * Nothing here writes to an image. Attaching cites one - it does not
+     * geotag it, move it or read its EXIF, which is the open question this was
+     * mistakenly parked behind.
+     *
+     * Args:
+     *     host: The details block to append to.
+     *     item: The wall, opening, room, marker or lock being edited.
+     */
+    function renderReferences(host: HTMLElement, item: ItemDetails): void {
+        if (!pinPhotos.length) return;
+        const pool = (state.doc.reference_pool ??= []);
+        const cited = new Set(item.references ?? []);
+        /** The pool row standing for one image, if the plan has one. */
+        const rowFor = (imageUuid: string): Reference | undefined => pool.find((entry) => entry.image_uuid === imageUuid);
+
+        const wrap = document.createElement("div");
+        wrap.className = "floorplan-photos";
+        const title = document.createElement("span");
+        title.className = "floorplan-field__label";
+        title.textContent = "Photos";
+        wrap.appendChild(title);
+
+        const strip = document.createElement("div");
+        strip.className = "floorplan-photos__strip";
+        for (const photo of pinPhotos) {
+            const row = rowFor(photo.uuid);
+            const attached = Boolean(row?.uuid && cited.has(row.uuid));
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `floorplan-photo${attached ? " is-attached" : ""}`;
+            button.setAttribute("aria-pressed", attached ? "true" : "false");
+            button.setAttribute("aria-label", photo.caption || "Photo");
+            button.title = photo.caption || "Photo";
+            const image = document.createElement("img");
+            image.src = photo.url;
+            image.alt = "";
+            image.loading = "lazy";
+            button.appendChild(image);
+            button.addEventListener("click", () => {
+                checkpoint();
+                const existing = rowFor(photo.uuid);
+                if (attached && existing?.uuid) {
+                    item.references = (item.references ?? []).filter((uuid) => uuid !== existing.uuid);
+                } else {
+                    const target = existing ?? { uuid: nextLocalId(), kind: "photo", title: photo.caption || "", image_uuid: photo.uuid };
+                    if (!existing) pool.push(target);
+                    item.references = [...(item.references ?? []), target.uuid as string];
+                }
+                renderSidebar();
+                markDirty();
+            });
+            strip.appendChild(button);
+        }
+        wrap.appendChild(strip);
+        host.appendChild(wrap);
+    }
+
     function renderItemDetails(host: HTMLElement, item: ItemDetails, key: string): void {
-        const filled = Boolean(item.description || item.condition || attribute(item, "material"));
+        const filled = Boolean(item.description || item.condition || attribute(item, "material") || item.built_date || item.references?.length);
         const box = document.createElement("details");
         box.className = "floorplan-details";
         // Already-annotated items open on selection: the disclosure is there to
@@ -3476,6 +3552,8 @@ function boot(): void {
             markDirtyQuiet();
         });
         box.appendChild(field("Built", built));
+
+        renderReferences(box, item);
 
         const notes = document.createElement("textarea");
         notes.className = "form-input";

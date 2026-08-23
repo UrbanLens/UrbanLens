@@ -1758,6 +1758,35 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("a photo can be attached to a wall, and to more than one thing", async () => {
+        // The plan keeps one pool row per photo however many items cite it, so
+        // attaching the same picture to a wall and to a door does not duplicate
+        // it. Attaching cites an image; it does not write to one, which is why
+        // this is not waiting on the question about photo coordinates.
+        await openEditor();
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+
+        const details = page.locator("#floorplan-form details.floorplan-details").first();
+        await details.locator("summary").click();
+        const photos = details.locator(".floorplan-photo");
+        expect(await photos.count()).toBe(2);
+        expect(await photos.first().getAttribute("aria-pressed")).toBe("false");
+
+        await photos.first().click();
+        await settle();
+        const reopened = page.locator("#floorplan-form details.floorplan-details").first();
+        expect(await reopened.locator(".floorplan-photo").first().getAttribute("aria-pressed")).toBe("true");
+        expect(await reopened.locator(".floorplan-photo").nth(1).getAttribute("aria-pressed")).toBe("false");
+
+        // Off again, and the plan is back where it started.
+        await reopened.locator(".floorplan-photo").first().click();
+        await settle();
+        expect(await page.locator("#floorplan-form .floorplan-photo").first().getAttribute("aria-pressed")).toBe("false");
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

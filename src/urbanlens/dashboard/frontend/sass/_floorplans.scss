@@ -770,6 +770,52 @@
 // A door may carry several locks - a padlock, a deadbolt and a chain are three
 // separate answers - so each row is "what kind" and "is it locked", with the
 // remove control kept small enough not to read as the row's main action.
+// The pin's own photos, offered for attaching. A strip rather than a picker
+// dialog: there are rarely more than a handful, and seeing them is most of
+// deciding which one shows the wall you are looking at.
+.floorplan-photos {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+
+    &__strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .3rem;
+    }
+}
+
+.floorplan-photo {
+    width: 3rem;
+    height: 3rem;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: $radius-sm;
+    overflow: hidden;
+    cursor: pointer;
+    opacity: .55;
+    background: none;
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    // Attached reads as "in", not as "selected": the dimmed ones are the
+    // choices, and the lit one is part of this item now.
+    &.is-attached {
+        opacity: 1;
+        border-color: var(--primary-color, #00838f);
+    }
+
+    &:hover,
+    &:focus-visible {
+        opacity: 1;
+    }
+}
+
 .floorplan-locks {
     display: flex;
     flex-direction: column;

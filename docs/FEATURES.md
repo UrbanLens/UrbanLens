@@ -254,12 +254,13 @@ floorplan alongside a building; they answer only through their own endpoints
   cutting off. The bbox filter runs in the database on the spatial index, so a renderer asks for a
   viewport's worth of one storey instead of ten storeys of every wall. Every feature carries the
   uuid it can be edited by, so anything clicked on a map is findable in the document
-- **Reference pool, stored but not yet editable** — every item can cite per-plan **source** and
-  **reference** rows by uuid, so one photo can be attached to a wall, a door and its lock while
-  existing once. The document carries them and the serializer round-trips them; the editor has no
-  UI for attaching one, and deliberately so for now: a photo's coordinates and heading cannot yet be
-  set without overwriting what its EXIF reported, and that provenance question wants answering
-  before anything starts writing to it (see the KNOWN OMISSION in `models/images/model.py`)
+- **Photos attach to anything, and pool once** — the item details block offers this pin's own
+  photos as thumbnails, and attaching cites a per-plan **reference** row rather than the image, so
+  one photo attached to a wall, a door and its lock exists once and a photo nothing cites any more
+  leaves the pool. Attaching never writes to the image: what is *not* offered is setting a photo's
+  own coordinates or heading, because those cannot yet be set without overwriting what its EXIF
+  reported, and that provenance question wants answering first (see the KNOWN OMISSION in
+  `models/images/model.py`). **Source** rows work the same way for where a plan came from
 - **Historical aerial captures in the satellite carousel** — REData's `/imagery/timeline/`
   contributes dated frames alongside current imagery, so a site that has been demolished,
   re-roofed or cleared can be seen as it was. Continuous satellite ranges are deliberately not

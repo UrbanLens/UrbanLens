@@ -2259,6 +2259,58 @@ class FloorplanResponseOrderTests(TestCase):
         self.assertEqual(lock["state"], "locked")
         self.assertEqual(lock["key_attributes"], {"note": "brass yale, on the office ring"})
 
+    def test_a_photo_attached_to_two_items_is_pooled_once(self) -> None:
+        """The pool holds each photo once however many things cite it.
+
+        The editor sends a pool entry carrying a client-side uuid and the same
+        uuid in each item's references; the server has to create one row and
+        resolve both citations to it within the one save.
+        """
+        from urbanlens.dashboard.models.images.model import Image
+
+        image = baker.make(Image, profile=self.profile)
+        walls = _square_walls()
+        walls[0] = {**walls[0], "references": ["local-ref-1"]}
+        walls[1] = {**walls[1], "references": ["local-ref-1"]}
+        save_document(
+            self.floorplan,
+            {
+                "reference_pool": [{"uuid": "local-ref-1", "kind": "photo", "title": "South elevation", "image_uuid": str(image.uuid)}],
+                "floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}],
+            },
+            profile=self.profile,
+        )
+
+        document = document_for(self.floorplan)
+        self.assertEqual(len(document["reference_pool"]), 1)
+        pooled = document["reference_pool"][0]["uuid"]
+        self.assertEqual(document["reference_pool"][0]["image_uuid"], str(image.uuid))
+        self.assertEqual(document["floors"][0]["walls"][0]["references"], [pooled])
+        self.assertEqual(document["floors"][0]["walls"][1]["references"], [pooled])
+
+    def test_a_photo_nothing_cites_any_more_leaves_the_pool(self) -> None:
+        """Deleting by omission applies to the pool as much as to the items."""
+        from urbanlens.dashboard.models.images.model import Image
+
+        image = baker.make(Image, profile=self.profile)
+        walls = _square_walls()
+        walls[0] = {**walls[0], "references": ["local-ref-1"]}
+        save_document(
+            self.floorplan,
+            {
+                "reference_pool": [{"uuid": "local-ref-1", "kind": "photo", "image_uuid": str(image.uuid)}],
+                "floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}],
+            },
+            profile=self.profile,
+        )
+        save_document(self.floorplan, {"reference_pool": [], "floors": [{"level": 0, "walls": _square_walls(), "rooms": [], "markers": []}]}, profile=self.profile)
+
+        document = document_for(self.floorplan)
+        self.assertEqual(document["reference_pool"], [])
+        self.assertEqual(document["floors"][0]["walls"][0]["references"], [])
+        # The image itself is untouched - the plan cited it, it did not own it.
+        self.assertTrue(Image.objects.filter(pk=image.pk).exists())
+
     def test_a_doors_locks_come_back_in_the_order_they_were_sent(self) -> None:
         """The editor matches locks to rows by position, same as everything else."""
         walls = _square_walls()

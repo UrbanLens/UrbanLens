@@ -55,6 +55,18 @@ export type MarkerKind = "hazard" | "stair" | "elevator";
  * every one of these from the payload on save. Declaring them is what lets the
  * editor *show* them.
  */
+/** One entry in a plan's reference pool: a photo, a scan, a page. */
+export interface Reference {
+    uuid?: string;
+    kind?: string;
+    title?: string;
+    url?: string;
+    description?: string;
+    attributes?: Record<string, unknown>;
+    /** The site Image this stands for, when it stands for one. */
+    image_uuid?: string | null;
+}
+
 export interface ItemDetails {
     /** Free text about the thing itself. */
     description?: string;
@@ -68,6 +80,12 @@ export interface ItemDetails {
      * record, and every one of those would otherwise be a migration.
      */
     attributes?: Record<string, unknown>;
+    /**
+     * Reference-pool uuids this item cites. The pool holds each photo once
+     * however many walls, doors and locks point at it, so this is a list of
+     * pool entries rather than of images.
+     */
+    references?: string[];
 }
 
 /** Whether a lock is presently securing its opening. */
@@ -188,7 +206,7 @@ export interface FloorplanDocument {
     rotation_degrees: number;
     floors: Floor[];
     source_pool?: unknown[];
-    reference_pool?: unknown[];
+    reference_pool?: Reference[];
     /**
      * Which version of the plan this document was read at. Sent back on save
      * so the server can tell that another tab has replaced it since; see
