@@ -3783,7 +3783,18 @@ function boot(): void {
                 markDirty();
             });
             row.appendChild(remove);
-            wrap.appendChild(row);
+
+            const entry = document.createElement("div");
+            entry.className = "floorplan-lock-entry";
+            entry.appendChild(row);
+            // A lock is a floorplan item like any other, so it gets the same
+            // description/condition/material block everything else does. Whether
+            // one is broken, seized or missing belongs in its condition rather
+            // than in the state above, which asks only whether the door is
+            // presently secured - and that distinction is worth nothing if the
+            // field it points at has nowhere to be written.
+            renderItemDetails(entry, lock, `lock:${lock.uuid || index}`);
+            wrap.appendChild(entry);
         });
 
         const add = document.createElement("button");

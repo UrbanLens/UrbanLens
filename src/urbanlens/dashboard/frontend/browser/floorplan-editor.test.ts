@@ -1433,10 +1433,26 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         expect(await page.locator(".floorplan-lock").first().locator("input.form-input").inputValue()).toBe("padlock");
         expect(await page.locator(".floorplan-lock").first().locator("select").inputValue()).toBe("locked");
 
-        // Removing one leaves the other.
+        // A lock is a floorplan item like any other, so it carries the same
+        // details block - which is where "broken" belongs, as opposed to the
+        // state above, which asks only whether the door is presently secured.
+        const details = page.locator(".floorplan-lock-entry").first().locator("details.floorplan-details");
+        expect(await details.count()).toBe(1);
+        await details.locator("summary").click();
+        // Material, then Condition - the same block every other item gets.
+        const condition = details.locator("input.form-input").nth(1);
+        await condition.fill("seized, rusted shut");
+        await condition.blur();
+        await settle();
+
+        // Removing the other one rebuilds the whole panel, so a value that
+        // survives that was written to the lock and not just to the input.
         await page.locator(".floorplan-lock").nth(1).locator("button").click();
         await settle();
         expect(await locks()).toBe(1);
+        const survived = page.locator(".floorplan-lock-entry").first().locator("details input.form-input").nth(1);
+        expect(await survived.inputValue()).toBe("seized, rusted shut");
+        expect(await page.locator(".floorplan-lock").first().locator("input.form-input").inputValue()).toBe("padlock");
 
         // A window has no lock worth recording for getting in, so it is not
         // asked - the question goes away with the type.

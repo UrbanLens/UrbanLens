@@ -742,6 +742,12 @@
     gap: .35rem;
 }
 
+.floorplan-lock-entry {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+}
+
 .floorplan-lock {
     display: flex;
     align-items: center;
