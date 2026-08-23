@@ -3757,41 +3757,42 @@ and openings included, not the walls-only fixture) measurably missing frame
 budget, and a first step that splits openings out of `wallLayer` into their own
 group **before** any clear is removed. Anything that begins by deleting
 `wallLayer.clearLayers()` is wrong.
-## Three third-party CDNs are single points of failure (2026-08-23)
+## Third-party CDNs: one table, and an operator switch (2026-08-23)
 
-toastr (cdnjs), Leaflet and leaflet-rotate (unpkg) are `<script>` tags, not
-bundled. Each is absent whenever that request does not land: offline, a blocked
-CDN, a corporate proxy, an SRI mismatch, or a CDN outage. This is not a rare
-state for a field app whose users are on bad mobile data by definition.
+Every third-party script and stylesheet was written out inline in whichever
+template wanted it - 77 references across 27 templates, five CDNs. Absent, each
+is a feature that silently does not work, and the guards for that were being
+added one instance at a time (toastr's missing-library fallback, the floorplan
+editor's "the map didn't load" notice).
 
-The immediate damage is fixed. `shared/dialogs.ts`'s `toast` no longer throws
-when toastr is missing (it falls back to toastr's own markup, which
-`sass/_toastr.scss` already styles, since only the script is remote), and the
-floorplan editor now says the map did not load instead of leaving a blank
-rectangle. Both are regression-tested. The *class* of problem is not fixed:
+`services/core/vendor_assets.py` is now the single table, and
+`{% vendor_asset "leaflet_js" %}` the only way a template names one. Set
+`UL_VENDOR_ASSET_BASE_URL` and every asset resolves to that mirror; leave it
+unset and they resolve to the same public CDNs as before. The decision is made
+when the page is rendered, so nothing branches per call and nothing waits for a
+request to fail before trying elsewhere - a failover would mean the page has
+already paid for the timeout.
 
-- Anything reached only through a CDN global still needs its own guard, and
-  nothing enforces that. `window.toastr` is now typed optional, so TypeScript
-  catches new unguarded uses of that one - Leaflet's `declare const L` is not,
-  and cannot easily be, since the editor is built on it top to bottom.
-- Templates are not typechecked at all. `themes/base.html` had eight unguarded
-  `toastr.*` calls; the one at the top of its main inline `<script>`
-  (`toastr.options = {...}`) threw before the `showToast` and
-  `htmx:responseError` listeners below it were ever registered - so those
-  listeners' own careful `if (window.toastr)` guards were dead code. All eight
-  are guarded now, but a ninth can be added tomorrow with nothing to object.
-- Guarding degrades gracefully; it does not restore the feature. A blocked
-  unpkg still means no map.
+Making it a table immediately surfaced three things that inline URLs had hidden:
 
-Self-hosting all three would remove the class rather than the instances, and is
-the actual fix. It is not free: Leaflet is loaded by several pages, not just the
-floorplan editor, and `leaflet-rotate` patches `L` in place and must keep
-loading after it.
+- One template asked unpkg for `leaflet/dist/leaflet.js` with **no version**,
+  which is a different library on any day the CDN publishes one.
+- Leaflet's default marker artwork was fetched from **1.7.1** while the library
+  was 1.9.4.
+- leaflet-draw was requested from **cdnjs in some templates and unpkg in
+  others** - two CDNs, one library.
 
-Worth knowing while that stands: **`bun run test:browser` fetches Leaflet from
-unpkg on every run**, so the browser suite needs working outbound network to a
-third party and fails offline for reasons unrelated to the code under test.
+All three are asserted against now (`test_vendor_assets.py`), along with a
+structural check that no template names a CDN host directly, so the pattern
+cannot quietly come back.
 
+**Still outstanding, and it is deliberately not a code change.** The mirrored
+files are other projects' releases with their own licences, so they are not
+vendored into this repository; hosting them is an operator step, and until an
+instance sets `UL_VENDOR_ASSET_BASE_URL` it is still loading from public CDNs
+with the same exposure as before. What has changed is that pointing an instance
+somewhere else is now one environment variable rather than an edit to 27
+templates.
 ## docker-compose.hot-reload.yml crash-loops when the checkout is not the container's uid (2026-08-23)
 
 Bringing an agent dev environment up with the hot-reload overlay puts `app` into

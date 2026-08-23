@@ -1,5 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% load vendor_assets %}
 {% block hero %}
 {% include "dashboard/partials/ui/_page_hero.html" with modifier="top" icon="payments" title="Cost Tracking" subtitle="Define hardware/infrastructure components and recurring operating costs to see what UrbanLens actually costs to run." %}
 {% endblock %}
@@ -19,7 +20,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% vendor_asset "chartjs_js" %}
 <script>
 (function () {
     function chartTheme() {

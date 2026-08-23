@@ -1,3 +1,4 @@
+{% load vendor_assets %}
 <!DOCTYPE html>
 <html id="html-root"{% if request.user.is_authenticated %}{% with tm=request.user.profile.theme_mode %}{% if tm == "dark" %} data-theme="dark"{% elif tm == "light" %} data-theme="light"{% endif %}{% endwith %}{% if not request.user.profile.show_hover_tooltips %} class="tooltips-disabled"{% endif %}{% endif %}>
 
@@ -11,11 +12,11 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />
     <!-- Compiled and minified CSS -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    {% vendor_asset "fontawesome_css" %}
 
-    <script src="https://code.jquery.com/jquery-4.0.0-beta.min.js" integrity="sha384-Cm3jMWwIyV0dazzpp3V+n5HmonAQ2uoNpQCYQzGrAK1ZBIKjGgaiHq2N8ItUlBcJ" crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.js" integrity="sha384-VDls8ImYGI8SwVxpmjX2Bn27U2TcNodzTNROTusVEWO55+lmL+H9NczoQJk6mwZR" crossorigin="anonymous"></script>
+    {% vendor_asset "jquery_js" %}
+    {% vendor_asset "toastr_css" %}
+    {% vendor_asset "toastr_js" %}
 
     {% load static map_components %}
     <script src="{% static 'dashboard/js/core.js' %}"></script>
@@ -24,7 +25,7 @@
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}" />
 
     <!-- Compiled and minified JavaScript -->
-    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    {% vendor_asset "htmx_js" %}
 
     <!--Let browser know website is optimized for mobile-->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

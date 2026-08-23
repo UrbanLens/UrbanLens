@@ -248,6 +248,18 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     static_root: Path = Field(default=Path("frontend/static"), description="The name of the static directory")
 
     # APIs
+    #: Root of a mirror of the third-party scripts and stylesheets in
+    #: dashboard/services/core/vendor_assets.py. Unset, every one of them is
+    #: fetched from its public CDN, which is the historical behaviour and still
+    #: the default. Set, every tag points at the mirror instead - decided when
+    #: the page is rendered, so nothing branches at call time and nothing waits
+    #: for a CDN request to fail first.
+    #:
+    #: The mirrored files are deliberately not in this repository: they are other
+    #: projects' releases with their own licences, and vendoring them into an
+    #: open-source application is a redistribution decision this project has not
+    #: made. Point this at wherever they are served from.
+    vendor_asset_base_url: Url | None = Field(default=None, description="Root of a mirror of the third-party JS/CSS assets; unset uses the public CDNs")
     cloudflare_ai_endpoint: Url | None = Field(default=None, description="The cloudflare ai endpoint")
     cloudflare_worker_ai_endpoint: Url | None = Field(default=None, description="The cloudflare worker ai endpoint")
     cloudflare_ai_api_key: str | None = Field(default=None, description="The cloudflare ai key")

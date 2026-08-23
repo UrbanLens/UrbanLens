@@ -190,16 +190,30 @@ class CspMatchesTheTemplatesTests(SimpleTestCase):
     still need a host fails here instead of in production.
     """
 
-    def test_every_cdn_script_host_in_the_base_template_is_allowed(self) -> None:
-        """A missing host here is a blank page once the policy is enforced."""
-        html = BASE_TEMPLATE.read_text(encoding="utf-8")
-        hosts = set(re.findall(r"""<script[^>]+src=["'](https://[^/"']+)""", html, re.IGNORECASE))
-        self.assertTrue(hosts, f"expected remote <script> tags in {BASE_TEMPLATE}")
+    def test_every_third_party_asset_host_is_allowed(self) -> None:
+        """A missing host here is a blank page once the policy is enforced.
 
-        allowed = settings.CONTENT_SECURITY_POLICY_REPORT_ONLY["DIRECTIVES"]["script-src"]
+        Read from the asset table rather than scraped out of base.html, which is
+        where these URLs used to be written: the table is what the templates
+        resolve through now, and it covers every page rather than the one this
+        test happened to open.
+        """
+        from urllib.parse import urlparse
 
-        for host in hosts:
-            self.assertIn(host, allowed, f"{host} is loaded by base.html but missing from script-src")
+        from urbanlens.dashboard.services.core.vendor_assets import VENDOR_ASSETS
+
+        directives = settings.CONTENT_SECURITY_POLICY_REPORT_ONLY["DIRECTIVES"]
+        wanted = {"script": "script-src", "style": "style-src"}
+        seen = 0
+        for key, asset in VENDOR_ASSETS.items():
+            directive = wanted.get(asset.kind)
+            if directive is None:  # images are covered by img-src's blanket https:
+                continue
+            seen += 1
+            parsed = urlparse(asset.fallback)
+            host = f"{parsed.scheme}://{parsed.netloc}"
+            self.assertIn(host, directives[directive], f"{key} loads from {host}, missing from {directive}")
+        self.assertTrue(seen, "expected third-party scripts and stylesheets in VENDOR_ASSETS")
 
     def test_unsafe_inline_is_kept_while_inline_scripts_remain(self) -> None:
         """The caveat, pinned to the thing that causes it.
