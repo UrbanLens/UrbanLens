@@ -36,11 +36,11 @@ from urbanlens.dashboard.models.pin_share.model import PinShare
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.direct_messages import all_conversations_for
 from urbanlens.dashboard.services.group_chats import (
+    GroupChatValidationError,
     add_group_members,
     create_group_chat,
     create_group_message,
     delete_group_message,
-    GroupChatValidationError,
     group_conversations_for,
     group_e2ee_ready,
     group_thread_page,
