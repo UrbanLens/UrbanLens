@@ -398,6 +398,19 @@ class PhotoSearchProvider(SearchProvider):
             location_path="location",
         ).distinct()
 
+        # Applied here, and applied at all. This queryset reaches other people's
+        # photos deliberately - the third disjunct above is "any image at a location
+        # I have a pin at", which is how you find pictures of a place you follow -
+        # but it returned them whatever the uploader had said about who may see
+        # their photos. A result carries the caption, the owning pin's name and a
+        # link to that pin, so what leaked was not only the picture.
+        #
+        # Last, because visible_to is eager (see ImageQuerySet.visible_to): it
+        # resolves the allowed-uploader set from whatever the queryset already
+        # narrows to, so narrowing first is what stops it inspecting every uploader
+        # on the site.
+        queryset = queryset.visible_to(profile)
+
         results = []
         for image in queryset[:limit]:
             title = image.caption or (image.pin.effective_name if image.pin else None) or (image.location.display_name if image.location else None) or "Photo"
