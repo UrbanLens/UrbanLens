@@ -2481,8 +2481,47 @@ function boot(): void {
         // nobody can predict. Bare, so it works mid-drag - snapping is not
         // latched, only the mode is.
         if (event.key === "`") state.suspendSnap = true;
+        const onCanvas = document.activeElement === mapEl || mapEl.contains(document.activeElement);
+
+        // Tab steps through the plan while the canvas has focus. Taking Tab is
+        // only defensible because Escape gives it straight back: it blurs the
+        // canvas, so the page's own focus order is never a trap.
+        if (event.key === "Tab" && onCanvas && !typing) {
+            const items = selectableItems();
+            if (items.length) {
+                event.preventDefault();
+                stepSelection(event.shiftKey ? -1 : 1);
+                return;
+            }
+        }
+
+        // Arrows nudge the selection. With nothing selected they fall through
+        // to Leaflet, which pans the map with them.
+        if (onCanvas && !typing && state.selection && event.key.startsWith("Arrow")) {
+            // A tenth of a metre by default and a whole one with Shift: fine
+            // enough to close a gap, coarse enough to cross a room.
+            const step = event.shiftKey ? 1 : 0.1;
+            const moves: Record<string, [number, number]> = {
+                ArrowLeft: [-step, 0],
+                ArrowRight: [step, 0],
+                ArrowUp: [0, step],
+                ArrowDown: [0, -step],
+            };
+            const move = moves[event.key];
+            if (move && nudgeSelection(move[0], move[1])) {
+                event.preventDefault();
+                return;
+            }
+        }
+
         if (event.key === "Escape") {
             closeContextMenu();
+            // Blurring last, once there is nothing left to clear, so Escape
+            // reads as "back out one level" rather than "leave immediately".
+            if (onCanvas && !state.drawing.length && state.tool === "select" && !state.selection) {
+                mapEl.blur();
+                return;
+            }
             if (state.drawing.length) commitChain();
             // Escape leaves a tool before it clears a selection: an armed tool
             // is the more surprising state to be stuck in, and it is the one a
@@ -2600,6 +2639,127 @@ function boot(): void {
      * visible control first; the keyboard shortcuts are accelerators for these,
      * not the only way to reach them.
      */
+    /**
+     * Everything on this floor that can be selected, in a stable order.
+     *
+     * Walls first, then the rooms they enclose, then markers - the order
+     * someone would read the plan in, and one that does not reshuffle as
+     * geometry moves, so stepping through it twice visits things twice in the
+     * same order.
+     */
+    function selectableItems(): SelectionItem[] {
+        const current = floor();
+        const items: SelectionItem[] = [];
+        for (const wall of current.walls) {
+            items.push({ kind: "wall", wall });
+            for (const opening of wall.openings) items.push({ kind: "opening", wall, opening });
+        }
+        for (const room of current.rooms) items.push({ kind: "room", room });
+        for (const marker of current.markers) items.push({ kind: "marker", marker });
+        return items;
+    }
+
+    /**
+     * Move the selection one step, in reading order.
+     *
+     * The canvas had no keyboard path to anything at all: geometry could be
+     * drawn, moved and deleted only with a pointer, so the whole editor was
+     * unusable without one.
+     *
+     * Args:
+     *     step: 1 to go forward, -1 to go back.
+     */
+    function stepSelection(step: number): void {
+        const items = selectableItems();
+        if (!items.length) return;
+        const current = state.selection ? items.findIndex((item) => itemKey(item) === itemKey(state.selection as SelectionItem)) : -1;
+        const next = items[(current + step + items.length * 2) % items.length] as SelectionItem;
+        state.selection = next;
+        state.multi = [next];
+        renderSidebar();
+        render();
+        announceSelection();
+    }
+
+    /**
+     * Say what is selected, for anyone who cannot see the highlight.
+     *
+     * The sidebar already describes the selection, but it is somewhere else on
+     * the page and nothing directs attention to it when the selection changes
+     * from the keyboard.
+     */
+    function announceSelection(): void {
+        const live = document.getElementById("floorplan-live");
+        if (!live) return;
+        const item = state.selection;
+        if (!item) {
+            live.textContent = "Nothing selected";
+            return;
+        }
+        const labels = floorLabels();
+        const where = labels.get(floor()) || String(floor().level);
+        // Position in the list, because the description on its own does not
+        // identify anything: four sides of a square are four identical
+        // sentences, and stepping between them would announce no change at all.
+        const items = selectableItems();
+        const at = items.findIndex((candidate) => itemKey(candidate) === itemKey(item)) + 1;
+        const place = at > 0 ? `${at} of ${items.length}` : "";
+        const what =
+            item.kind === "wall"
+                ? `${titleCase(item.wall.kind)} wall, ${wallLength(item.wall).toFixed(2)} metres`
+                : item.kind === "opening"
+                  ? titleCase(item.opening.kind)
+                  : item.kind === "room"
+                    ? `Room ${item.room.name || "unnamed"}`
+                    : `${titleCase(item.marker.kind)} marker ${item.marker.name || ""}`.trim();
+        live.textContent = `${what}, ${place}, floor ${where}`;
+    }
+
+    /**
+     * Nudge whatever is selected.
+     *
+     * Args:
+     *     dx: Steps east, in metres.
+     *     dy: Steps north, in metres.
+     */
+    function nudgeSelection(dx: number, dy: number): boolean {
+        const item = state.selection;
+        if (!item) return false;
+        checkpoint(`nudge:${itemKey(item)}`);
+        if (item.kind === "wall") {
+            item.wall.ax += dx;
+            item.wall.ay += dy;
+            item.wall.bx += dx;
+            item.wall.by += dy;
+        } else if (item.kind === "marker") {
+            item.marker.x += dx;
+            item.marker.y += dy;
+        } else if (item.kind === "room") {
+            const boundary = roomBoundaryWalls(item.room);
+            if (!boundary || !boundary.unique.length) return false;
+            for (const wall of boundary.unique) {
+                wall.ax += dx;
+                wall.ay += dy;
+                wall.bx += dx;
+                wall.by += dy;
+            }
+            item.room.x += dx;
+            item.room.y += dy;
+        } else {
+            // An opening lives along its wall, so a nudge slides it rather than
+            // moving it off into space.
+            const length = wallLength(item.wall) || 1;
+            const along = (dx + dy) / length;
+            const width = item.opening.t_end - item.opening.t_start;
+            const start = Math.max(0, Math.min(item.opening.t_start + along, 1 - width));
+            item.opening.t_start = start;
+            item.opening.t_end = start + width;
+        }
+        markDirty();
+        announceSelection();
+        return true;
+    }
+
     function renderToolOptions(): void {
         const host = document.getElementById("floorplan-tool-options");
         if (!host) return;

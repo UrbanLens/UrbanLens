@@ -79,7 +79,8 @@ html,body{margin:0}
     <button class="map-btn-icon" data-tool="room"></button>
     <button class="map-btn-icon" data-tool="marker"></button>
   </div></div>
-  <div id="floorplan-map" data-json-url="/json" data-save-url="/save" data-publish-url="/publish"
+  <div id="floorplan-map" tabindex="0" role="application" aria-label="Floorplan canvas"
+       data-json-url="/json" data-save-url="/save" data-publish-url="/publish"
        data-lat="41.733" data-lng="-73.928"></div>
   <div id="floorplan-tool-options" hidden></div>
   <div class="floorplan-canvas-controls">
@@ -89,7 +90,7 @@ html,body{margin:0}
   <div class="floorplan-canvas-floors"><div id="floorplan-floors"></div></div>
   <div class="map-bottom-controls"><div id="floorplan-layers"></div></div>
   <div id="floorplan-empty"><button id="floorplan-start-outline"></button><button id="floorplan-start-rectangle"></button></div>
-</div><p id="floorplan-hint"></p></div>
+</div><p id="floorplan-hint"></p><p id="floorplan-live"></p></div>
 <aside class="floorplan-sidebar">
   <span id="floorplan-save-status"></span>
   <button id="floorplan-retry-save" hidden></button>
@@ -482,6 +483,45 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             expect(overlaps, `at ${viewport.width}px`).toEqual([]);
             await page.close();
         }
+    });
+
+    test("the plan can be reached and moved with the keyboard alone", async () => {
+        // The canvas had no keyboard path to anything: geometry could be drawn,
+        // selected, moved and deleted only with a pointer.
+        await openEditor();
+        await page.locator("#floorplan-map").focus();
+
+        await page.keyboard.press("Tab");
+        expect(await page.locator("#floorplan-form h3").count()).toBe(1);
+        expect(await page.locator("#floorplan-live").textContent()).toContain("wall");
+
+        const before = await planExtent();
+        for (let press = 0; press < 12; press++) await page.keyboard.press("Shift+ArrowRight");
+        await settle();
+
+        // One wall moved east, so the plan reaches further east than it did.
+        const after = await planExtent();
+        expect(after.width).toBeGreaterThan(before.width + 10);
+        await page.close();
+    });
+
+    test("Shift+Tab steps back, and Escape gives focus up rather than trapping it", async () => {
+        await openEditor();
+        await page.locator("#floorplan-map").focus();
+        await page.keyboard.press("Tab");
+        const first = await page.locator("#floorplan-live").textContent();
+        await page.keyboard.press("Tab");
+        expect(await page.locator("#floorplan-live").textContent()).not.toBe(first);
+
+        await page.keyboard.press("Shift+Tab");
+        expect(await page.locator("#floorplan-live").textContent()).toBe(first);
+
+        // Once for the selection, once to leave. Taking Tab is only defensible
+        // because this gives it back.
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("Escape");
+        expect(await page.evaluate(() => document.activeElement?.id)).not.toBe("floorplan-map");
+        await page.close();
     });
 
     test("the tool options panel shows the armed tool's choices", async () => {

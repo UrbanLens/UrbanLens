@@ -137,7 +137,11 @@
                 <div id="floorplan-floors" class="floorplan-floors"></div>
             </div>
 
+            {# Focusable and labelled: the canvas is the editor, and until now #}
+            {# it could not be reached by keyboard at all.                      #}
             <div id="floorplan-map" class="floorplan-map"
+                 tabindex="0" role="application"
+                 aria-label="Floorplan canvas. Tab and Shift+Tab move between walls, rooms and markers; arrow keys nudge what is selected; Escape leaves."
                  data-json-url="{% url 'pin.floorplan.json' pin.slug %}"
                  data-save-url="{% url 'pin.floorplan.save' pin.slug %}"
                  data-publish-url="{% url 'pin.floorplan.publish' pin.slug %}"
@@ -173,6 +177,9 @@
         </div>
 
         <p id="floorplan-hint" class="floorplan-hint" aria-live="polite"></p>
+        {# Announces the selection, which is otherwise only visible as a #}
+        {# highlight on the canvas.                                      #}
+        <p id="floorplan-live" class="sr-only" aria-live="polite"></p>
     </div>
 
     <aside class="floorplan-sidebar">
