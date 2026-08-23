@@ -910,7 +910,6 @@ function boot(): void {
             bindDrag(polygon.getElement(), {
                 start: (event) => {
                     if (state.tool !== "select" || !seed) return false;
-                    if (event.shiftKey) return false;
                     // A plain press only selects; dragging a room you have not
                     // selected yet would move the building out from under a
                     // gesture that meant to pan.
@@ -1034,7 +1033,6 @@ function boot(): void {
                 bindDrag(line.getElement(), {
                     start: (event) => {
                         if (state.tool !== "select") return false;
-                        if (event.shiftKey) return false; // box-select's own gesture
                         return true;
                     },
                     move: ({ local, modifiers }) => {
@@ -1913,26 +1911,21 @@ function boot(): void {
         render();
     }
 
-    // Native DOM listeners rather than Leaflet's own mouse events: this needs
-    // to run *instead of* map panning (not after it), so it has to see the
-    // gesture before Leaflet's drag handler decides what to do with it.
+    // Box select is the Box tool's gesture, and only its gesture.
     //
-    // Gated on shift, not a plain drag: a plain click-drag is already the
-    // map's own pan gesture, and once an exterior is drawn, room fill covers
-    // most of the visible map - a box-select startable only from genuinely
-    // empty background would rarely be reachable. Shift+drag is unclaimed
-    // (boxZoom above frees it) and is the same modifier most drawing tools
-    // already use for exactly this.
+    // Shift+drag used to start one from the Select tool as well, over anything
+    // including a wall - which is why the wall-body and room drags declined
+    // whenever shift was held at the press. Modifiers are latched at the press
+    // (see DragGesture), so between them those two facts made `constrain`
+    // unreachable on the two drags whose own comments advertised it: holding
+    // shift meant the drag never started, and pressing shift afterwards was
+    // never read.
+    //
+    // One meaning per modifier is worth more than a second way in to a tool
+    // that already has its own button. Shift constrains a drag to an axis,
+    // everywhere; box select is a tool you arm.
     map.getContainer().addEventListener("mousedown", (event: MouseEvent) => {
-        // Two ways in, which is the point. The Box select tool makes a plain
-        // drag draw a region, the way it does in every drawing application;
-        // Shift+drag does the same thing without leaving Select, for someone
-        // who already knows the shortcut. Under Select alone a drag still pans,
-        // because the basemap here is the document being traced and taking
-        // one-finger pan away from a map is not a trade worth making.
-        const viaTool = state.tool === "box";
-        const viaModifier = state.tool === "select" && event.shiftKey;
-        if ((!viaTool && !viaModifier) || event.button !== 0) return;
+        if (state.tool !== "box" || event.button !== 0) return;
         const target = event.target as HTMLElement;
         // Ordinary wall/room/marker shapes are NOT excluded here - only
         // things with their own competing drag behavior are: draggable

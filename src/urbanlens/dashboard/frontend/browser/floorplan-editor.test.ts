@@ -1971,6 +1971,33 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("shift keeps a wall drag square too, not only a corner", async () => {
+        // The modifier was unreachable here. Shift at the press started a box
+        // select even over a wall, so the wall drag declined outright - and
+        // modifiers are latched at the press, so pressing shift afterwards was
+        // never read either. The branch honouring it could not run.
+        await openEditor();
+        const before = await planExtent();
+
+        await page.keyboard.down("Shift");
+        await page.mouse.move(before.grab.x, before.grab.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(before.grab.x + step * 6, before.grab.y - step * 6);
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+        await settle();
+
+        const after = await planExtent();
+        // Dragging the *top* wall never moves the plan's left edge, whatever
+        // the modifier does - the axes it can move are the top and the right,
+        // and unconstrained this gesture moves both by the same amount.
+        const vertical = Math.abs(after.top - before.top);
+        const sideways = Math.abs(after.left + after.width - (before.left + before.width));
+        expect(Math.max(sideways, vertical), "the drag did not happen at all").toBeGreaterThan(20);
+        expect(Math.min(sideways, vertical), "both axes moved, so nothing was constrained").toBeLessThan(3);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();
