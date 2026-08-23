@@ -40,6 +40,7 @@ from urbanlens.dashboard.services.group_chats import (
     create_group_chat,
     create_group_message,
     delete_group_message,
+    GroupChatValidationError,
     group_conversations_for,
     group_e2ee_ready,
     group_thread_page,
@@ -263,7 +264,7 @@ class CreateGroupMessageTests(TestCase):
 
         original = create_group_message(self.creator, self.group, "first", client_uuid=client_uuid)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(GroupChatValidationError, match="client_uuid"):
             create_group_message(self.creator, other_group, "second", client_uuid=client_uuid)
 
         self.assertEqual(GroupMessage.objects.count(), 1)
@@ -355,7 +356,7 @@ class GroupPinShareTests(TestCase):
         share_count = GroupMessageShare.objects.count()
         pin_share_count = PinShare.objects.count()
 
-        with pytest.raises(ValueError):
+        with pytest.raises(GroupChatValidationError, match="client_uuid"):
             share_pin_in_group_message(self.creator, other_group, self.pin, "second", client_uuid=client_uuid)
 
         self.assertEqual(GroupMessage.objects.count(), 1)
