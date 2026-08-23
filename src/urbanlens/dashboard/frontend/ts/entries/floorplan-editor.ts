@@ -3848,16 +3848,6 @@ function boot(): void {
                     }),
                 ),
             );
-            // How high its bottom edge sits above the floor. The practical
-            // question a plan of a derelict building is asked about a window is
-            // whether anyone can get through it, and that is this number.
-            host.appendChild(
-                metresField("Sill height", opening.sill_meters, "Metres above the floor", `opening:${opening.uuid}`, (next) => {
-                    opening.sill_meters = next;
-                }),
-            );
-
-            renderLockControls(host, opening);
             // Only where it means something: a doorway is the hole with no door
             // in it, and a window has nothing that sweeps across the floor.
             if (swings(opening.kind)) {
@@ -3871,6 +3861,16 @@ function boot(): void {
                     ),
                 );
             }
+            // How high its bottom edge sits above the floor. The practical
+            // question a plan of a derelict building is asked about a window is
+            // whether anyone can get through it, and that is this number.
+            host.appendChild(
+                metresField("Sill height", opening.sill_meters, "Metres above the floor", `opening:${opening.uuid}`, (next) => {
+                    opening.sill_meters = next;
+                }),
+            );
+
+            renderLockControls(host, opening);
         }
 
         // Not for a room: a room seed is a name attached to a region, so

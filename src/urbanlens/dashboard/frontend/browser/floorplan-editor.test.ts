@@ -1884,6 +1884,30 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("an opening's panel reads as the thing, then what is attached to it", async () => {
+        // Type and swing describe the door; the sill describes the hole; the
+        // locks are things hung on it. They arrived in the order they were
+        // built rather than that order, which put the swing question below the
+        // list of locks.
+        await openEditor();
+        const plan = await planExtent();
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+        await page.locator("#floorplan-form .floorplan-locks button").first().click();
+        await settle();
+
+        const order = await page.evaluate(() =>
+            Array.from(document.querySelectorAll("#floorplan-form > *"))
+                .map((node) => (node.querySelector("span")?.textContent ?? "").trim())
+                .filter(Boolean),
+        );
+        expect(order.slice(0, 4)).toEqual(["Type", "Swing", "Sill height", "Locks"]);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();
