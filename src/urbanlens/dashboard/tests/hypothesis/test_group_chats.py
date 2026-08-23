@@ -24,6 +24,7 @@ import uuid as uuid_module
 
 from django.urls import reverse
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import AccountKdf
@@ -262,7 +263,7 @@ class CreateGroupMessageTests(TestCase):
 
         original = create_group_message(self.creator, self.group, "first", client_uuid=client_uuid)
 
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             create_group_message(self.creator, other_group, "second", client_uuid=client_uuid)
 
         self.assertEqual(GroupMessage.objects.count(), 1)
@@ -354,7 +355,7 @@ class GroupPinShareTests(TestCase):
         share_count = GroupMessageShare.objects.count()
         pin_share_count = PinShare.objects.count()
 
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             share_pin_in_group_message(self.creator, other_group, self.pin, "second", client_uuid=client_uuid)
 
         self.assertEqual(GroupMessage.objects.count(), 1)

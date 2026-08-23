@@ -600,12 +600,12 @@ def create_group_message(
                 key_version=key_version,
                 client_uuid=client_uuid,
             )
-    except IntegrityError:
+    except IntegrityError as exc:
         replayed = GroupMessage.objects.filter(sender=sender, client_uuid=client_uuid).first() if client_uuid is not None else None
         if replayed is None:
             raise
         if replayed.group_id != group.pk:
-            raise GroupChatValidationError("client_uuid was already used for another group message.")
+            raise GroupChatValidationError("client_uuid was already used for another group message.") from exc
         return replayed
     # Sending is reading: the sender's own read mark advances with their message.
     GroupMessage.objects.mark_read(membership)
