@@ -435,7 +435,19 @@ class _Pools:
             stale_reference.delete()
 
 
-def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, profile: Profile | None) -> None:
+def _stored_values(row: FloorplanItem) -> dict[str, Any] | None:
+    """Every concrete column's current value, or None for a row not yet in the database.
+
+    Read by attname, so a foreign key is compared as its id rather than by fetching
+    the object it points at.
+    """
+    if row.pk is None:
+        return None
+    # _meta is Django's documented model API, underscore notwithstanding.
+    return {field.attname: getattr(row, field.attname) for field in row._meta.concrete_fields}  # noqa: SLF001
+
+
+def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, profile: Profile | None, before: dict[str, Any] | None = None) -> None:
     """Write the shared item surface from a payload; saves the row."""
     from urbanlens.dashboard.models.labels.model import Label
 
@@ -454,7 +466,12 @@ def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, prof
         attributes.pop(LOCAL_NAMESPACE, None)
     row.attributes = attributes
     row.source = pools.sources.get(str(payload.get("source") or ""))
-    row.save()
+    after = _stored_values(row)
+    # An unchanged row is left alone: the editor autosaves on a debounce after
+    # every edit, so a whole-document save that rewrites every row turns one
+    # keystroke into a write across the plan.
+    if before is None or after is None or before != after:
+        row.save()
     row.references.set([pools.references[key] for key in (payload.get("references") or []) if key in pools.references])
     if profile is not None:
         # Scoped to the saver's own labels: a document cannot attach somebody
@@ -586,11 +603,14 @@ def _sync(existing_by_uuid: dict, payloads: list[dict] | None, build, pools: _Po
     kept: list[tuple[dict, Any]] = []
     for index, payload in enumerate(payloads or []):
         row = existing_by_uuid.pop(str(payload.get("uuid") or ""), None)
+        # Read before the builder touches it: the builder mutates the row in
+        # place, so afterwards there is nothing left to compare against.
+        before = _stored_values(row) if row is not None else None
         row = build(payload, row)
         # Position in the document is the stored order, so re-arranging items
         # in an editor survives the round-trip.
         row.sort_order = index
-        _apply_item(row, payload, pools, profile)
+        _apply_item(row, payload, pools, profile, before)
         kept.append((payload, row))
     for orphan in existing_by_uuid.values():
         orphan.delete()
@@ -716,7 +736,24 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
                 existing_openings[str(existing_opening.uuid)] = existing_opening
     surviving_openings: set[str] = set()
 
-    floors = _sync({str(f.uuid): f for f in existing_floors}, document.get("floors"), build_floor, pools, profile)
+    # A floor payload that names no uuid means the storey at that level, not a
+    # replacement for it. Matched only by uuid, such a payload built a second
+    # floor and swept the first away as an orphan - taking its walls, openings,
+    # locks and rooms with it by cascade. Levels are unique within a plan
+    # (_reject_duplicate_levels, above), so the level identifies the storey
+    # exactly as well as its uuid does.
+    existing_by_level = {existing_floor.level: existing_floor for existing_floor in existing_floors}
+    floor_payloads = document.get("floors")
+    if isinstance(floor_payloads, list):
+        keyed: list[Any] = []
+        for floor_payload in floor_payloads:
+            match = None
+            if isinstance(floor_payload, dict) and not floor_payload.get("uuid"):
+                match = existing_by_level.get(_int_in(floor_payload.get("level"), "level") or 0)
+            keyed.append({**floor_payload, "uuid": str(match.uuid)} if match is not None else floor_payload)
+        floor_payloads = keyed
+
+    floors = _sync({str(f.uuid): f for f in existing_floors}, floor_payloads, build_floor, pools, profile)
 
     for floor_payload, floor in floors:
 

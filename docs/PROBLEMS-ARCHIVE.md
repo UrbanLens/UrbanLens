@@ -7457,3 +7457,58 @@ does end up working as a committed project skill, so the next session doesn't re
 libraries unpack under `~/browserlibs` and are reached through `LD_LIBRARY_PATH` - see `bin/browser_libs.sh`, which is a one-time per-machine step. `bun run test:browser`
 drives the real built bundle through real pointer and touch gestures. Read the advice above as history: this host *can* run a browser, and the floorplan
 editor's drag behaviour is verified in one.
+
+## ~~2026-08-23: autosave rewrites every row, and the obvious fix loses data~~ - RESOLVED 2026-08-23
+
+~~`save_document` replaces the whole document, so every wall, opening, room seed~~
+~~and marker row is written on every autosave tick - which fires on a debounce~~
+~~after each edit. A four-wall plan with one room and one marker costs 33 queries~~
+~~for a save that changes nothing (`FloorplanAutosaveCostTests` pins that as a~~
+~~ceiling); a 400-wall plan costs proportionally more. Each marker's twin `Pin`~~
+~~and its `Location` are also re-resolved and re-saved every time, firing the full~~
+~~Pin signal chain.~~
+
+~~**An attempt at the obvious fix was reverted, and anyone retrying it should read~~
+~~this first.** Skipping `row.save()` when a row's stored values are unchanged -~~
+~~snapshotting the concrete fields before the builder touches the row, comparing~~
+~~after - measurably works (33 -> 27 queries) and **silently destroys~~
+~~`FloorplanLock` rows when an opening moves between walls**~~
+~~(`FloorplanOpeningRehostTests::test_a_moved_opening_keeps_its_locks` fails).~~
+
+~~What was ruled out while chasing it, so it need not be re-done:~~
+
+~~- The lock sync itself is fine: it was instrumented, and receives~~
+~~  `existing=[<uuid>] payload=[<same uuid>]`, so the lock is matched and kept.~~
+~~- The orphan-opening sweep is fine: `existing == surviving`, nothing deleted.~~
+~~- Bisected to the single line - restoring an unconditional `row.save()` makes~~
+~~  the test pass with every other part of the change still in place.~~
+
+~~So the mechanism is somewhere between "the opening's FK change is not persisted"~~
+~~and the cascade from `FloorplanOpening` to `FloorplanLock`, and it was not worth~~
+~~shipping a data-loss risk to find out. If this is picked up again, start by~~
+~~asserting the opening's `wall_id` actually reaches the database, and treat any~~
+~~version of it as unshippable until that rehost test passes.~~
+
+~~The related idea - skipping the twin `Pin` save when nothing changed - was~~
+~~reverted with it, untested on its own. It is probably safe and should be~~
+~~attempted separately, with `FloorplanMarkerLinkedPinTests` as the guard.~~
+
+**The diagnosis above is wrong, and that is the useful part of this entry.** It sends the
+next reader after the opening's `wall_id` not reaching the database. It reaches it - the
+comparison sees `wall_id: (5783, 5788)` and saves the row.
+
+What actually happened: a floor payload naming no uuid did not match the storey it meant, so
+`_sync` built a second floor and swept the first away as an orphan - cascading through its
+walls, openings and locks. Almost nothing appeared to be lost because `save()` on a row still
+carrying its pk re-inserts it, so the blanket re-save was quietly resurrecting the subtree it
+had just destroyed. A lock nobody had edited was the one row with no reason to be saved, so it
+was the only one that stayed dead - which is why this read as "skipping saves destroys locks".
+
+Fixed by matching a floor on its level when the payload carries no uuid (levels are unique
+within a plan, `_reject_duplicate_levels`). No cascade, nothing to resurrect, and the
+row-level skip is safe: an unchanged resave costs 27 queries rather than 33, and the document
+the editor actually posts costs 29. `FloorplanAutosaveCostTests` pins both, and a new
+`test_a_floor_payload_with_no_uuid_updates_that_storey_rather_than_replacing_it` covers the
+floor behaviour directly rather than through the rehost test that found it.
+
+The twin-`Pin` half named at the end was done first and separately, as suggested.

@@ -1319,6 +1319,39 @@ class FloorplanOpeningRehostTests(TestCase):
         self.assertEqual(len(after[2]["openings"]), 1)
         self.assertEqual(str(after[2]["openings"][0]["uuid"]), str(first["uuid"]), "the opening was recreated instead of moved")
 
+    def test_a_floor_payload_with_no_uuid_updates_that_storey_rather_than_replacing_it(self) -> None:
+        """Everything on a storey hangs off its row, so building a second floor and
+        sweeping the first away as an orphan takes its walls, openings, locks and
+        rooms with it by cascade. Levels are unique within a plan, so a payload that
+        names a level and no uuid names the storey already at that level.
+
+        This was invisible for a long time because `_apply_item` re-saved every row
+        unconditionally, and a save on a row still carrying its pk re-inserts it -
+        so cascade-deleted rows came back and only a row that needed no save (a
+        lock nobody had touched) stayed gone.
+        """
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(0, {"kind": "door", "t_start": 0.4, "t_end": 0.6, "locks": [{"name": "Padlock", "state": "locked"}]})}]},
+            profile=self.profile,
+        )
+        before = document_for(self.floorplan)["floors"][0]
+        floor_pk = FloorplanFloor.objects.get(floorplan=self.floorplan).pk
+
+        # Exactly what the first save sent: a level, and no floor uuid.
+        save_document(
+            self.floorplan,
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": self._walls_with(0, {"uuid": str(before["walls"][0]["openings"][0]["uuid"]), "kind": "door", "t_start": 0.4, "t_end": 0.6, "locks": [{"uuid": str(before["walls"][0]["openings"][0]["locks"][0]["uuid"]), "name": "Padlock", "state": "locked"}]})}]},
+            profile=self.profile,
+        )
+
+        self.assertEqual(FloorplanFloor.objects.filter(floorplan=self.floorplan).count(), 1, "the storey was replaced rather than updated")
+        self.assertEqual(FloorplanFloor.objects.get(floorplan=self.floorplan).pk, floor_pk, "the storey is a different row than it was")
+        after = document_for(self.floorplan)["floors"][0]
+        self.assertEqual(str(after["uuid"]), str(before["uuid"]))
+        self.assertEqual([str(w["uuid"]) for w in after["walls"]], [str(w["uuid"]) for w in before["walls"]], "the walls were rebuilt under new identities")
+        self.assertEqual(len(after["walls"][0]["openings"][0]["locks"]), 1, "the lock went with the replaced storey")
+
     def test_a_moved_opening_keeps_its_locks(self) -> None:
         """FloorplanLock cascades from the opening, so a delete-and-recreate
         would destroy the lock silently."""
@@ -1566,19 +1599,16 @@ class FloorplanAutosaveCostTests(TestCase):
         return len(captured)
 
     def test_an_unchanged_resave_stays_within_its_current_cost(self) -> None:
-        """A ceiling on today's behaviour, not an endorsement of it.
+        """A save that changes nothing writes nothing, and this is the ceiling.
 
-        A whole-document save rewrites every row whether or not it changed, so a
-        four-wall plan costs about 33 queries and a 400-wall one costs
-        proportionally more - on a debounce, after every edit. Making that
-        cheaper is recorded in docs/PROBLEMS.md; an attempt at it is what this
-        test was written alongside, and it lost data (see the same entry).
-
-        Until then this exists so the number cannot quietly grow.
+        `_apply_item` skips a row whose stored columns are unchanged, so a
+        four-wall plan resaved as-is costs about 27 queries rather than the 33 it
+        cost when every row was rewritten regardless. The headroom here is for
+        ordinary variation, not for the old behaviour to creep back.
         """
         cost = self._resave_unchanged()
 
-        self.assertLess(cost, 45, f"an unchanged resave took {cost} queries")
+        self.assertLess(cost, 32, f"an unchanged resave took {cost} queries")
 
     def test_the_document_the_client_actually_posts_costs_no_more(self) -> None:
         """The ceiling above is measured on `document_for` output, which carries no
@@ -1591,7 +1621,7 @@ class FloorplanAutosaveCostTests(TestCase):
         with CaptureQueriesContext(connection) as captured:
             save_document(self.floorplan, document, profile=self.user.profile)
 
-        self.assertLess(len(captured), 45, f"the posted document took {len(captured)} queries")
+        self.assertLess(len(captured), 34, f"the posted document took {len(captured)} queries")
 
     def test_an_unchanged_resave_leaves_every_row_alone(self) -> None:
         """Identity is the part that matters: rewriting a row it did not need to
