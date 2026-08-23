@@ -177,6 +177,19 @@ function islandPlan(): unknown {
     };
 }
 
+/** A plan with nothing drawn on it yet - what a new building starts as. */
+function emptyPlan(): unknown {
+    return {
+        uuid: "plan-empty",
+        name: "",
+        valid_from: null,
+        origin: "local",
+        plan_origin: { lat: 41.733, lng: -73.928 },
+        rotation_degrees: 0,
+        floors: [{ uuid: "floor-1", level: 0, designation: "", name: "", walls: [], rooms: [], markers: [] }],
+    };
+}
+
 function squarePlan(): unknown {
     const corners = [
         [0, 0],
@@ -226,16 +239,22 @@ let server: ReturnType<typeof Bun.serve>;
  * Served over HTTP rather than injected: the bundle is a module that imports a
  * chunk by relative URL, which cannot resolve without a real origin.
  */
-async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false, plan: "square" | "grid" | "closet" | "island" = "square"): Promise<void> {
+async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false, plan: "square" | "grid" | "closet" | "island" | "empty" = "square"): Promise<void> {
     page = await browser.newPage({ viewport, hasTouch });
     page.on("pageerror", (error) => console.error("PAGEERROR", String(error).slice(0, 300)));
     page.on("console", (message) => {
         if (message.type() === "error") console.error("browser console:", message.text().slice(0, 200));
     });
     await page.goto(`http://127.0.0.1:${server.port}/${plan === "square" ? "" : `?plan=${plan}`}`, { waitUntil: "load" });
-    // "attached", not the default "visible": a straight wall is an SVG line
-    // whose bounding box has zero height, which Playwright reads as invisible.
-    await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
+    if (plan === "empty") {
+        // Nothing is drawn on it, so there is no wall to wait for - wait for the
+        // prompt that stands in for one.
+        await page.waitForSelector("#floorplan-empty", { state: "attached", timeout: 20000 });
+    } else {
+        // "attached", not the default "visible": a straight wall is an SVG line
+        // whose bounding box has zero height, which Playwright reads as invisible.
+        await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
+    }
     // Walls existing is not the same as the page having settled - Leaflet is
     // still placing panes on the frame they appear, and a measurement taken
     // then reads the layout moving as the plan moving.
@@ -334,6 +353,7 @@ beforeAll(async () => {
             if (path === "/json-grid") return Response.json(gridPlan());
             if (path === "/json-closet") return Response.json(closetPlan());
             if (path === "/json-island") return Response.json(islandPlan());
+            if (path === "/json-empty") return Response.json(emptyPlan());
             if (path === "/save") {
                 saves.attempts += 1;
                 if (saves.conflict) {
@@ -1429,6 +1449,45 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await settle();
         expect(await ceiling.inputValue()).toBe("2.4");
         expect(await page.locator('#floorplan-floor-fields input[aria-label="Ground level"]').inputValue()).toBe("41.5");
+        await page.close();
+    });
+
+    test("an empty plan offers a way in, and taking it produces a room", async () => {
+        // The first thing anyone sees. A wall-first editor is not self-evident
+        // from a blank canvas, so the way in draws the building's outline for
+        // them - four exterior walls, which is the shell and deliberately not
+        // captioned as a room. Subdividing it is what produces rooms.
+        await openEditor({ width: 1200, height: 800 }, false, "empty");
+        expect(await page.evaluate(() => (document.getElementById("floorplan-empty") as HTMLElement).hidden)).toBe(false);
+        expect(await page.locator(".floorplan-wall").count()).toBe(0);
+
+        await page.locator("#floorplan-start-rectangle").click();
+        await settle();
+
+        expect(await page.locator(".floorplan-wall").count()).toBe(4);
+        // The shell itself gets no label, which is the whole point of the rule:
+        // an outline nobody has divided up is the building, not a room in it.
+        expect(await page.locator(".floorplan-room-label").count()).toBe(0);
+        // But it is a closed region, so a wall drawn across it makes two rooms.
+        await page.locator('[data-tool="wall"]').click();
+        const frame = await planExtent();
+        await page.mouse.click(frame.left, frame.top + frame.height / 2);
+        await page.mouse.click(frame.left + frame.width, frame.top + frame.height / 2);
+        await page.keyboard.press("Escape");
+        await settle();
+        expect(await page.locator(".floorplan-room-label").count()).toBe(2);
+
+        // And the prompt gets out of the way once there is something to edit.
+        expect(await page.evaluate(() => (document.getElementById("floorplan-empty") as HTMLElement).hidden)).toBe(true);
+
+        // Undo, twice, puts the blank canvas back rather than leaving a plan
+        // nobody asked for.
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        expect(await page.locator(".floorplan-wall").count()).toBe(0);
+        expect(await page.evaluate(() => (document.getElementById("floorplan-empty") as HTMLElement).hidden)).toBe(false);
         await page.close();
     });
 

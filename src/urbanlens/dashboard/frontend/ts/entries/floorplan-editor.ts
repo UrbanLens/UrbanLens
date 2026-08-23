@@ -4374,8 +4374,11 @@ function boot(): void {
         else toast.info("No building outline is known for this place yet.");
     });
     document.getElementById("floorplan-start-rectangle")?.addEventListener("click", () => {
-        // Four walls around the current view's middle third: the fastest way to
-        // show that closing a loop produces a room.
+        // Four exterior walls around the current view's middle third. This draws
+        // the *building*, not a room: an outline nothing subdivides is the
+        // shell, and the editor deliberately does not caption it as a room
+        // (see isBuildingShell). Subdividing it is the next step, and the one
+        // that does produce rooms.
         checkpoint();
         const bounds = map.getBounds();
         const a = toLocal(bounds.getSouthWest());

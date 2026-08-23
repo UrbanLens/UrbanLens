@@ -73,8 +73,13 @@ const SITE_CHROME = new Set(["map-overlays-dialog", "page-footer-attribution-tex
  */
 function declared(id: string, templates: string): boolean {
     if (templates.includes(`"${id}"`) || templates.includes(`'${id}'`)) return true;
-    for (let cut = id.length; cut > 0; cut--) {
-        if (templates.includes(`${id.slice(0, cut)}{{`)) return true;
+    // Only at a segment boundary, and only a real one. Walking every prefix
+    // down to a single character would let "f{{" vouch for any id starting
+    // with an f, which is a check that passes for the wrong reason - the exact
+    // failure this file exists to stop.
+    for (let cut = id.length; cut >= 4; cut--) {
+        const prefix = id.slice(0, cut);
+        if (prefix.endsWith("-") && templates.includes(`${prefix}{{`)) return true;
     }
     return false;
 }
