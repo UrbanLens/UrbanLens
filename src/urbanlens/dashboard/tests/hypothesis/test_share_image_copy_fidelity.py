@@ -125,6 +125,16 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         self.assertTrue(new_pin.locked)
         self.assertEqual(str(new_pin.date_abandoned), "1994-06-15")
 
+    def test_the_senders_personal_notes_never_travel(self) -> None:
+        """The description is the owner's own account of the place, and nothing in
+        the product lets somebody agree to pass it on. Absent a way to ask, no."""
+        self.pin.description = "zzq-my-private-notes-about-this-place"
+        self.pin.save(update_fields=["description"])
+
+        new_pin = self._accept()
+
+        self.assertNotIn("zzq-my-private-notes", new_pin.description or "", "the recipient received the sender's personal notes")
+
     def test_the_senders_styling_does_not_travel(self) -> None:
         new_pin = self._accept()
 

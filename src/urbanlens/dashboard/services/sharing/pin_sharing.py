@@ -187,7 +187,6 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         name=share.shared_name or source.name,
         name_is_user_provided=bool(share.shared_name) or source.name_is_user_provided,
         icon=source.icon,
-        description=source.description,
         priority=source.priority,
         vulnerability=source.vulnerability,
         danger=source.danger,
@@ -213,6 +212,11 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         plywood=source.plywood,
         locked=source.locked,
     )
+    # The description never travels. It is the owner's personal notes about the
+    # place - what they thought, what they saw, what they mean to do about it -
+    # and there is no way in the product for somebody to consent to passing that
+    # on. Absent a way to ask, the answer is no.
+    #
     # Not the sharer's labels. A Label belongs to one profile, so setting them
     # here hung the *sharer's* rows off the *recipient's* pin - which shows one
     # person's private organising scheme to another and leaves the recipient
