@@ -2082,3 +2082,58 @@ class PlacelessFloorplanTests(TestCase):
 
         with pytest.raises(ValueError, match="place or a pin"):
             floorplan_for_editing(None, self.user.profile)
+
+
+class FloorplanResponseOrderTests(TestCase):
+    """The order a saved document comes back in, which the editor relies on.
+
+    After a save the editor copies the returned uuids back onto the objects it
+    sent, so that a newly drawn wall keeps its identity instead of being created
+    again on the next save. Floors are matched by level and items within a floor
+    by position, and both of those are claims about this ordering.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        self.floorplan = Floorplan.objects.create(place=_building(), profile=self.profile)
+
+    def test_floors_come_back_in_storey_order_whatever_order_they_were_sent(self) -> None:
+        """Which is why the editor cannot match floors positionally."""
+        sent = {
+            "floors": [
+                {"level": 0, "name": "Ground", "walls": _square_walls(), "rooms": [], "markers": []},
+                {"level": 2, "name": "Second", "walls": [], "rooms": [], "markers": []},
+                {"level": -1, "name": "Basement", "walls": [], "rooms": [], "markers": []},
+            ],
+        }
+        save_document(self.floorplan, sent, profile=self.profile)
+
+        levels = [floor["level"] for floor in document_for(self.floorplan)["floors"]]
+        self.assertEqual(levels, [-1, 0, 2])
+
+    def test_items_within_a_floor_come_back_in_the_order_they_were_sent(self) -> None:
+        """Which is why matching them positionally is sound."""
+        walls = _square_walls()
+        walls[0] = {**walls[0], "name": "first"}
+        walls[1] = {**walls[1], "name": "second"}
+        walls[2] = {**walls[2], "name": "third"}
+        markers = [
+            {"kind": "stair", "x": 1.0, "y": 1.0, "name": "alpha"},
+            {"kind": "hazard", "x": 2.0, "y": 2.0, "name": "beta"},
+        ]
+        save_document(self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": markers}]}, profile=self.profile)
+
+        floor = document_for(self.floorplan)["floors"][0]
+        self.assertEqual([wall["name"] for wall in floor["walls"][:3]], ["first", "second", "third"])
+        self.assertEqual([marker["name"] for marker in floor["markers"]], ["alpha", "beta"])
+
+    def test_a_floors_level_is_unique_so_it_can_serve_as_the_key(self) -> None:
+        """Matching floors by level is only valid because two cannot share one."""
+        with pytest.raises(ValueError, match="share level"):
+            save_document(
+                self.floorplan,
+                {"floors": [{"level": 1, "walls": [], "rooms": [], "markers": []}, {"level": 1, "walls": [], "rooms": [], "markers": []}]},
+                profile=self.profile,
+            )

@@ -37,6 +37,8 @@ import {
     wallLength,
     wallSegments,
 } from "../shared/floorplan/document";
+import { CONNECTOR_KINDS, connectorCandidates } from "../shared/floorplan/connectors";
+import { type SentSnapshot, applyServerIds, snapshotForSend } from "../shared/floorplan/sync";
 import { contiguousLevels, deriveDesignations } from "../shared/floorplan/designations";
 import { type DragModifiers, DragGesture, constrainToAxis, modifiersOf, snapRotation } from "../shared/floorplan/drag";
 import { installGlobalIconPicker } from "../shared/icon-picker";
@@ -74,7 +76,6 @@ type SelectionItem =
     | { kind: "opening"; wall: Wall; opening: Opening };
 
 /** Marker kinds that can join floors together. */
-const CONNECTOR_KINDS = new Set<MarkerKind>(["stair", "elevator"]);
 
 const WALL_STYLE: Record<string, { color: string; weight: number; dashArray?: string }> = {
     exterior: { color: "#263238", weight: 5 },
@@ -222,6 +223,8 @@ function boot(): void {
         openingKind: "door" as Opening["kind"],
         /** Snapping, as a setting. The backtick key suspends it momentarily. */
         snapEnabled: true,
+        /** Whether the connector picker is showing every floor or just the near ones. */
+        connectorsExpanded: false,
         dirty: false,
         suspendSnap: false,
         faces: [] as Face[],
@@ -3606,13 +3609,7 @@ function boot(): void {
 
     function renderConnectorControls(host: HTMLElement, marker: Marker): void {
         const current = floor();
-        const candidates: Array<{ floor: Floor; marker: Marker }> = [];
-        for (const other of state.doc.floors) {
-            if (Math.abs(other.level - current.level) !== 1) continue;
-            for (const candidate of other.markers) {
-                if (CONNECTOR_KINDS.has(candidate.kind)) candidates.push({ floor: other, marker: candidate });
-            }
-        }
+        const candidates = connectorCandidates(state.doc.floors, current, marker);
 
         const wrap = document.createElement("div");
         wrap.className = "floorplan-connector";
@@ -3643,10 +3640,16 @@ function boot(): void {
         } else if (!candidates.length) {
             const none = document.createElement("p");
             none.className = "floorplan-hint";
-            none.textContent = "Add a stair or lift on the floor above or below to link them.";
+            none.textContent = "Add a stair or lift on another floor to link them.";
             wrap.appendChild(none);
         } else {
-            for (const candidate of candidates) {
+            // Nearest storey first, so in the ordinary case the right one is
+            // the first button. The rest are a click away rather than a wall
+            // of them: a tall building can hold a lot of stairs, and only the
+            // near ones are plausibly the same shaft.
+            const NEAR = 4;
+            const shown = state.connectorsExpanded ? candidates : candidates.slice(0, NEAR);
+            for (const candidate of shown) {
                 const button = document.createElement("button");
                 button.type = "button";
                 button.className = "btn btn--sm btn--ghost";
@@ -3663,6 +3666,17 @@ function boot(): void {
                     markDirty();
                 });
                 wrap.appendChild(button);
+            }
+            if (candidates.length > shown.length) {
+                const more = document.createElement("button");
+                more.type = "button";
+                more.className = "btn btn--sm btn--ghost";
+                more.textContent = `Show ${candidates.length - shown.length} more`;
+                more.addEventListener("click", () => {
+                    state.connectorsExpanded = true;
+                    renderSidebar();
+                });
+                wrap.appendChild(more);
             }
         }
         host.appendChild(wrap);
@@ -3853,71 +3867,6 @@ function boot(): void {
             return;
         }
         finishLoadingDocument();
-    }
-
-    /** A frozen-order, same-object record of what a save's payload actually
-     * held, taken at the moment it was sent - see snapshotForSend(). */
-    interface SentSnapshot {
-        floor: Floor;
-        walls: Wall[];
-        wallOpenings: Opening[][];
-        rooms: RoomSeed[];
-        markers: Marker[];
-    }
-
-    /**
-     * Record each floor's item arrays *in the order sent*, without copying
-     * the items themselves - editing (including deleting something) can
-     * continue on `state.doc` while this save's request is in flight, and
-     * applyServerIds() must still land each returned uuid on the exact
-     * object that was actually sent, not on whatever a live array index
-     * happens to point at once the response arrives.
-     */
-    function snapshotForSend(doc: FloorplanDocument): SentSnapshot[] {
-        return doc.floors.map((floor) => ({
-            floor,
-            walls: [...floor.walls],
-            wallOpenings: floor.walls.map((wall) => [...wall.openings]),
-            rooms: [...floor.rooms],
-            markers: [...floor.markers],
-        }));
-    }
-
-    /**
-     * Copy the server's real per-item uuids back onto the objects a save
-     * actually sent, matched positionally against `sent` rather than by uuid
-     * (the client's own new items don't have a real one yet) and rather than
-     * by live array position (see snapshotForSend()). This is safe because
-     * `_sync` on the server assigns `sort_order` from the payload's array
-     * index and every item's `Meta.ordering` starts with `sort_order`, so
-     * `saved.floors[i]` is exactly the row that came from `sent[i]` in the
-     * same request - whatever was created keeps its position, and only
-     * orphaned items (already absent from the payload) are missing from
-     * `saved`.
-     */
-    function applyServerIds(sent: SentSnapshot[], saved: FloorplanDocument): void {
-        (saved.floors || []).forEach((savedFloor, floorIndex) => {
-            const entry = sent[floorIndex];
-            if (!entry) return;
-            entry.floor.uuid = savedFloor.uuid;
-            (savedFloor.walls || []).forEach((savedWall, wallIndex) => {
-                const wall = entry.walls[wallIndex];
-                if (!wall) return;
-                wall.uuid = savedWall.uuid;
-                (savedWall.openings || []).forEach((savedOpening, openingIndex) => {
-                    const opening = entry.wallOpenings[wallIndex]?.[openingIndex];
-                    if (opening) opening.uuid = savedOpening.uuid;
-                });
-            });
-            (savedFloor.rooms || []).forEach((savedRoom, roomIndex) => {
-                const room = entry.rooms[roomIndex];
-                if (room) room.uuid = savedRoom.uuid;
-            });
-            (savedFloor.markers || []).forEach((savedMarker, markerIndex) => {
-                const marker = entry.markers[markerIndex];
-                if (marker) marker.uuid = savedMarker.uuid;
-            });
-        });
     }
 
     /**

@@ -1,0 +1,95 @@
+import { describe, expect, test } from "bun:test";
+
+import type { FloorplanDocument } from "./document";
+import { applyServerIds, snapshotForSend } from "./sync";
+
+/** A document whose floors are deliberately not in storey order. */
+function unsortedDoc(): FloorplanDocument {
+    return {
+        rotation_degrees: 0,
+        floors: [
+            { level: 0, name: "Ground", walls: [{ kind: "exterior", thickness: "normal", ax: 0, ay: 0, bx: 4, by: 0, openings: [] }], rooms: [], markers: [] },
+            { level: 1, name: "First", walls: [], rooms: [{ name: "Landing", x: 1, y: 1 }], markers: [] },
+            { level: -1, name: "Basement", walls: [], rooms: [], markers: [{ kind: "stair", x: 2, y: 2 }] },
+        ],
+    } as unknown as FloorplanDocument;
+}
+
+/** What the server sends back: storey order, per FloorplanFloor.Meta.ordering. */
+function savedInStoreyOrder(): FloorplanDocument {
+    return {
+        rotation_degrees: 0,
+        floors: [
+            { uuid: "srv-basement", level: -1, walls: [], rooms: [], markers: [{ uuid: "srv-stair" }] },
+            { uuid: "srv-ground", level: 0, walls: [{ uuid: "srv-wall", openings: [] }], rooms: [], markers: [] },
+            { uuid: "srv-first", level: 1, walls: [], rooms: [{ uuid: "srv-landing" }], markers: [] },
+        ],
+    } as unknown as FloorplanDocument;
+}
+
+describe("applyServerIds", () => {
+    test("floors keep their own uuid when the response is in a different order", () => {
+        // FloorplanFloor orders by level, so the server always answers in
+        // storey order however the payload was arranged. Matching positionally
+        // handed each floor its neighbour's uuid, and the next save then
+        // overwrote the wrong row.
+        const doc = unsortedDoc();
+        applyServerIds(snapshotForSend(doc), savedInStoreyOrder());
+
+        expect(doc.floors.map((floor) => floor.uuid)).toEqual(["srv-ground", "srv-first", "srv-basement"]);
+    });
+
+    test("items land on the floor they belong to", () => {
+        const doc = unsortedDoc();
+        applyServerIds(snapshotForSend(doc), savedInStoreyOrder());
+
+        expect(doc.floors[0]?.walls[0]?.uuid).toBe("srv-wall");
+        expect(doc.floors[1]?.rooms[0]?.uuid).toBe("srv-landing");
+        expect(doc.floors[2]?.markers[0]?.uuid).toBe("srv-stair");
+    });
+
+    test("a floor the server did not return is left alone", () => {
+        const doc = unsortedDoc();
+        const saved = savedInStoreyOrder();
+        saved.floors = saved.floors.filter((floor) => floor.level !== 1);
+        applyServerIds(snapshotForSend(doc), saved);
+
+        expect(doc.floors[1]?.uuid).toBeUndefined();
+        expect(doc.floors[0]?.uuid).toBe("srv-ground");
+    });
+
+    test("openings land on their own wall", () => {
+        const doc = unsortedDoc();
+        const ground = doc.floors[0];
+        if (!ground) throw new Error("no floor");
+        ground.walls[0]?.openings.push({ kind: "door", t_start: 0.4, t_end: 0.6, swing: "left" });
+        ground.walls.push({ kind: "interior", thickness: "thin", ax: 4, ay: 0, bx: 4, by: 3, openings: [{ kind: "window", t_start: 0.1, t_end: 0.3, swing: "none" }] });
+
+        const saved = savedInStoreyOrder();
+        const savedGround = saved.floors[1];
+        if (!savedGround) throw new Error("no saved floor");
+        savedGround.walls = [
+            { uuid: "srv-wall", openings: [{ uuid: "srv-door" }] },
+            { uuid: "srv-wall-2", openings: [{ uuid: "srv-window" }] },
+        ] as unknown as typeof savedGround.walls;
+        applyServerIds(snapshotForSend(doc), saved);
+
+        expect(ground.walls[0]?.openings[0]?.uuid).toBe("srv-door");
+        expect(ground.walls[1]?.openings[0]?.uuid).toBe("srv-window");
+    });
+
+    test("a snapshot is immune to edits made while the save is in flight", () => {
+        // The whole reason the snapshot exists: deleting the first wall before
+        // the response lands must not shift every uuid onto its neighbour.
+        const doc = unsortedDoc();
+        const ground = doc.floors[0];
+        if (!ground) throw new Error("no floor");
+        const original = ground.walls[0];
+        const sent = snapshotForSend(doc);
+        ground.walls.splice(0, 1);
+
+        applyServerIds(sent, savedInStoreyOrder());
+
+        expect(original?.uuid).toBe("srv-wall");
+    });
+});
