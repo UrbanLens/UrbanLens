@@ -1524,6 +1524,39 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("delete is on the canvas, not only in the sidebar", async () => {
+        // Under 900px the sidebar stacks below a map that is 72vh tall, so the
+        // Delete button living there is below the fold for the whole time
+        // anyone is drawing - and a phone has no Delete key either. Same
+        // reasoning that put undo and the floor strip on the canvas.
+        //
+        // Structural, not positional, and at a desktop viewport: the fixture
+        // pins the map to 900px, so where anything sits at 375px is the
+        // fixture's answer rather than the site's. What is checkable here is
+        // which container the control belongs to, which is the claim.
+        await openEditor();
+        const button = page.locator("#floorplan-delete");
+        const hidden = () => page.evaluate(() => (document.getElementById("floorplan-delete") as HTMLElement).hidden);
+
+        // Nothing selected, nothing to offer.
+        expect(await hidden()).toBe(true);
+
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        expect(await hidden()).toBe(false);
+        // It lives with undo, on the canvas, not in a panel that scrolls away.
+        expect(await page.evaluate(() => Boolean(document.getElementById("floorplan-delete")?.closest(".floorplan-canvas-controls")))).toBe(true);
+
+        const before = await page.locator(".floorplan-wall").count();
+        await button.click();
+        await settle();
+        expect(await page.locator(".floorplan-wall").count()).toBeLessThan(before);
+        // And goes away again with the selection it acted on.
+        expect(await hidden()).toBe(true);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

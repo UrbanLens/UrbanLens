@@ -451,6 +451,13 @@
     transform: translateX(-50%);
     display: flex;
     gap: 0.25rem;
+
+    // Appears only with a selection, so it must not shove undo and redo
+    // sideways when it does - the two controls anyone reaches for blind.
+    &__delete {
+        margin-left: 0.25rem;
+        color: var(--color-danger, #e53);
+    }
 }
 
 .floorplan-canvas-floors {

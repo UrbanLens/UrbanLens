@@ -633,6 +633,22 @@ function boot(): void {
         updateHistoryButtons();
     }
 
+    /**
+     * Show a delete control on the canvas whenever something is selected.
+     *
+     * There is one in the sidebar already, and under 900px the sidebar stacks
+     * below a map that is 72vh tall - so on a phone the commonest correction
+     * there is sits below the fold, and the keyboard's Delete key does not
+     * exist. Same reasoning that put undo and the floor strip here.
+     */
+    function updateDeleteButton(): void {
+        const button = document.getElementById("floorplan-delete") as HTMLButtonElement | null;
+        if (!button) return;
+        const count = state.multi.length;
+        button.hidden = count === 0;
+        button.setAttribute("aria-label", count > 1 ? `Delete ${count} items` : "Delete selection");
+    }
+
     function updateHistoryButtons(): void {
         const undoButton = document.getElementById("floorplan-undo") as HTMLButtonElement | null;
         if (undoButton) undoButton.disabled = !history.canUndo;
@@ -1122,6 +1138,7 @@ function boot(): void {
 
         renderUnderlay();
         renderFloorTabs();
+        updateDeleteButton();
         updateEmptyState(current);
         scheduleRoomLabelFit();
     }
@@ -4375,6 +4392,8 @@ function boot(): void {
             setTool("marker");
         });
     }
+    document.getElementById("floorplan-delete")?.addEventListener("click", () => deleteSelection());
+
     document.getElementById("floorplan-start-outline")?.addEventListener("click", () => {
         checkpoint();
         if (seedFromOutline(floor())) markDirty();
