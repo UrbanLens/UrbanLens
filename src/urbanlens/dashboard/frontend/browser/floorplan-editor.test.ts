@@ -1939,6 +1939,38 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("shift locks a corner drag to one axis, as it does everywhere else", async () => {
+        // Item 12 of the list: the modifiers have to mean the same thing on
+        // every drag. Shift constrained a wall body and a room and did nothing
+        // to a corner, which is worse than a modifier that works nowhere -
+        // it works until the one time you need it.
+        await openEditor();
+        const corner = await page.evaluate(() => {
+            const joints = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-joint"));
+            const best = joints.map((n) => n.getBoundingClientRect()).sort((a, b) => a.left + a.top - (b.left + b.top))[0];
+            return best ? { x: best.left + best.width / 2, y: best.top + best.height / 2 } : null;
+        });
+        expect(corner).not.toBeNull();
+        const before = await planExtent();
+
+        // Diagonally away, with shift held: only one axis should follow.
+        await page.keyboard.down("Shift");
+        await page.mouse.move(corner!.x, corner!.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(corner!.x - step * 6, corner!.y - step * 6);
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+        await settle();
+
+        const after = await planExtent();
+        const movedLeft = before.left - after.left;
+        const movedUp = before.top - after.top;
+        // One of them went; the other did not. Without the constraint both do.
+        expect(Math.max(movedLeft, movedUp)).toBeGreaterThan(20);
+        expect(Math.min(movedLeft, movedUp)).toBeLessThan(3);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

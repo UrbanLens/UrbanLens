@@ -1780,7 +1780,7 @@ function boot(): void {
             let moving: Array<{ wall: Wall; end: "a" | "b" }> | null = null;
             bindDrag(handle.getElement(), {
                 start: () => state.tool === "select",
-                move: ({ local }) => {
+                move: ({ local, modifiers }) => {
                     if (!moving) {
                         moving = joint.ends;
                         checkpoint();
@@ -1789,7 +1789,16 @@ function boot(): void {
                     // can be what it snaps to.
                     const carried = new Set(moving.map((entry) => wallId(entry.wall)));
                     const others = wallSegments(current).filter((segment) => !carried.has(segment.wallId));
-                    const snapped = snapPoint(local, others, tolerances(), { suspended: snapOff() });
+                    // Shift locks the corner to one axis of the plan, the same
+                    // thing it does to a wall body and to a room. A modifier
+                    // that works on two of the three drags is worse than one
+                    // that works on none.
+                    let aimed = local;
+                    if (modifiers.constrain) {
+                        const squared = constrainToAxis({ x: local.x - joint.point.x, y: local.y - joint.point.y }, (state.doc.rotation_degrees * Math.PI) / 180);
+                        aimed = { x: joint.point.x + squared.x, y: joint.point.y + squared.y };
+                    }
+                    const snapped = snapPoint(aimed, others, tolerances(), { suspended: snapOff() });
                     for (const entry of moving) {
                         if (entry.end === "a") {
                             entry.wall.ax = snapped.point.x;
