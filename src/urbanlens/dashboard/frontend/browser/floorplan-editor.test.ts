@@ -68,6 +68,11 @@ const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoo
  */
 function echoSaved(document: unknown): unknown {
     let issued = 0;
+    // The real save view answers with the row's actual provenance and the uuid
+    // it was stored under - "local" once the save has forked a community plan
+    // into the viewer's own, which is what stops the next autosave forking it
+    // again. Echoing the payload alone would leave both fields absent and the
+    // fixture would fork forever.
     const rename = (value: unknown): unknown => {
         if (Array.isArray(value)) return value.map(rename);
         if (!value || typeof value !== "object") return value;
@@ -76,7 +81,8 @@ function echoSaved(document: unknown): unknown {
         if (typeof entry.uuid === "string" && entry.uuid.startsWith("local-")) entry.uuid = `srv-${++issued}`;
         return entry;
     };
-    return rename(document);
+    const saved = rename(document) as Record<string, unknown>;
+    return { ...saved, origin: "local", uuid: saved.uuid ?? "srv-plan" };
 }
 
 /** Publish requests the fixture has been asked for. */
@@ -2250,6 +2256,17 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         for (let waited = 0; waited < 60 && saves.lastHadUuid; waited++) await page.waitForTimeout(250);
 
         expect(saves.lastHadUuid, "the save carried the other plan's uuid, so it overwrote it").toBe(false);
+
+        // And it forks once, not on every autosave: the response says the saved
+        // row is the viewer's own now, so the next save updates that fork
+        // rather than making a second one. Ten minutes of editing would
+        // otherwise leave a version per edit.
+        await page.keyboard.press("ArrowRight");
+        for (let waited = 0; waited < 60 && !saves.lastHadUuid; waited++) await page.waitForTimeout(250);
+        expect(saves.lastHadUuid, "every save forked again instead of updating the fork").toBe(true);
+
+        // ...and the banner goes, because the plan being edited is theirs now.
+        expect(await page.evaluate(() => (document.getElementById("floorplan-origin-banner") as HTMLElement).hidden)).toBe(true);
         await page.close();
     });
 
