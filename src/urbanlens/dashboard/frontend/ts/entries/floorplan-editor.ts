@@ -737,6 +737,7 @@ function boot(): void {
         }
 
         // Rooms first so walls draw on top of their fills.
+        const wallsById = wallIndex(current);
         roomLabels.length = 0;
         for (const face of derived.faces) {
             const seed = seedForFace.get(face);
@@ -753,7 +754,7 @@ function boot(): void {
             // An un-subdivided outline gets no label. It is the building, and
             // captioning it "Unnamed room" is the same wrong claim as letting a
             // click turn it into one - it just makes the claim unprompted.
-            if (seed || !isBuildingShell(face)) {
+            if (seed || !isBuildingShell(face, wallsById)) {
                 const label = seed ? seed.name || "Unnamed" : "Unnamed room";
                 // Permanent, not on hover: a room appearing and naming its own
                 // area the instant a loop closes is what teaches the wall-first
@@ -1549,9 +1550,26 @@ function boot(): void {
      * Returns:
      *     True when every wall bounding it is exterior.
      */
-    function isBuildingShell(face: Face): boolean {
-        const walls = floor().walls.filter((wall) => face.wallIds.includes(wallId(wall)));
-        return walls.length > 0 && walls.every((wall) => wall.kind === "exterior");
+    /** This floor's walls by id, so a per-face lookup is not a per-face scan. */
+    function wallIndex(current: Floor = floor()): Map<string, Wall> {
+        return new Map(current.walls.map((wall) => [wallId(wall), wall] as const));
+    }
+
+    /**
+     * Args:
+     *     face: The derived region.
+     *     byId: This floor's walls by id. Built once by the caller when this
+     *         runs per face - render() does, on every frame of a drag.
+     */
+    function isBuildingShell(face: Face, byId: Map<string, Wall> = wallIndex()): boolean {
+        let seen = 0;
+        for (const id of face.wallIds) {
+            const wall = byId.get(id);
+            if (!wall) continue;
+            if (wall.kind !== "exterior") return false;
+            seen += 1;
+        }
+        return seen > 0;
     }
 
     /**

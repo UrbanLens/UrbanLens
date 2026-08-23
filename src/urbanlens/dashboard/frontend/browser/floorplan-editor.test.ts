@@ -53,6 +53,9 @@ const BUILT = existsSync(BUNDLE);
 const HARNESS = `<!doctype html>
 <html><head>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<!-- The site's own compiled stylesheet, so layout questions can be asked here
+     at all: without it every class in the markup is inert. -->
+<link rel="stylesheet" href="/dashboard/style.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 <style>
@@ -79,17 +82,19 @@ html,body{margin:0}
   <div id="floorplan-map" data-json-url="/json" data-save-url="/save" data-publish-url="/publish"
        data-lat="41.733" data-lng="-73.928"></div>
   <div id="floorplan-tool-options" hidden></div>
+  <div class="floorplan-canvas-controls">
+    <button id="floorplan-undo" disabled></button>
+    <button id="floorplan-redo" disabled></button>
+  </div>
+  <div class="floorplan-canvas-floors"><div id="floorplan-floors"></div></div>
   <div class="map-bottom-controls"><div id="floorplan-layers"></div></div>
   <div id="floorplan-empty"><button id="floorplan-start-outline"></button><button id="floorplan-start-rectangle"></button></div>
 </div><p id="floorplan-hint"></p></div>
 <aside class="floorplan-sidebar">
   <span id="floorplan-save-status"></span>
   <button id="floorplan-retry-save" hidden></button>
-  <button id="floorplan-undo" disabled></button>
-  <button id="floorplan-redo" disabled></button>
   <button id="floorplan-more-toggle"></button><div id="floorplan-more-list" hidden>
     <button id="floorplan-save-version"></button><button id="floorplan-publish"></button></div>
-  <div id="floorplan-floors"></div>
   <div id="floorplan-form"></div>
   <div id="floorplan-marker-appearance" hidden><input id="icon-value-floorplan-marker"></div>
   <input id="floorplan-name"><input id="floorplan-valid-from" type="date">
@@ -172,8 +177,8 @@ let server: ReturnType<typeof Bun.serve>;
  * Served over HTTP rather than injected: the bundle is a module that imports a
  * chunk by relative URL, which cannot resolve without a real origin.
  */
-async function openEditor(): Promise<void> {
-    page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+async function openEditor(viewport = { width: 1200, height: 800 }): Promise<void> {
+    page = await browser.newPage({ viewport });
     page.on("pageerror", (error) => console.error("PAGEERROR", String(error).slice(0, 300)));
     page.on("console", (message) => {
         if (message.type() === "error") console.error("browser console:", message.text().slice(0, 200));
@@ -411,6 +416,34 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await settle();
 
         expect(await page.locator("#floorplan-form h3").first().textContent()).toBe("Room");
+        await page.close();
+    });
+
+    test("on a phone, undo and the floor switcher stay on the canvas", async () => {
+        // They used to live in the sidebar, which stacks below the map under
+        // 900px - so for the whole time anyone was drawing on a phone, the one
+        // control you reach for after a mistake was off the bottom of the page.
+        await openEditor({ width: 375, height: 812 });
+
+        for (const selector of ["#floorplan-undo", "#floorplan-floors"]) {
+            const placement = await page.evaluate((which) => {
+                const node = document.querySelector(which as string);
+                if (!node) return null;
+                const rect = node.getBoundingClientRect();
+                return {
+                    // Structural, not positional: a control can be made to
+                    // overlap the map with CSS while still living in a panel
+                    // that scrolls away, which is what this is guarding against.
+                    inShell: Boolean(node.closest(".floorplan-map-shell")),
+                    rendered: rect.width > 0 && rect.height > 0,
+                    onScreen: rect.top >= 0 && rect.bottom <= window.innerHeight,
+                };
+            }, selector);
+            expect(placement, `${selector} is missing`).not.toBeNull();
+            expect(placement!.inShell, `${selector} should live in the map shell`).toBe(true);
+            expect(placement!.rendered, `${selector} should be rendered`).toBe(true);
+            expect(placement!.onScreen, `${selector} should be reachable without scrolling`).toBe(true);
+        }
         await page.close();
     });
 

@@ -118,6 +118,25 @@
             {# floorplan-editor.ts, which knows which tool is armed.             #}
             <div id="floorplan-tool-options" class="floorplan-tool-options" role="group" aria-label="Tool options" hidden></div>
 
+            {# Undo and the floor strip live over the canvas, not in the sidebar. #}
+            {# The sidebar stacks below the map under 900px, so on a phone both  #}
+            {# were off-screen for the whole time anyone was drawing - undo in   #}
+            {# particular being the one control you need exactly when you cannot #}
+            {# scroll to find it.                                                #}
+            <div class="floorplan-canvas-controls">
+                <button type="button" id="floorplan-undo" class="btn btn--icon" disabled aria-label="Undo" title="Undo (Ctrl+Z)">
+                    <i class="material-symbols-outlined">undo</i>
+                </button>
+                <button type="button" id="floorplan-redo" class="btn btn--icon" disabled aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+                    <i class="material-symbols-outlined">redo</i>
+                </button>
+            </div>
+
+            <div class="floorplan-canvas-floors">
+                <span class="floorplan-field__label">Floors</span>
+                <div id="floorplan-floors" class="floorplan-floors"></div>
+            </div>
+
             <div id="floorplan-map" class="floorplan-map"
                  data-json-url="{% url 'pin.floorplan.json' pin.slug %}"
                  data-save-url="{% url 'pin.floorplan.save' pin.slug %}"
@@ -167,12 +186,6 @@
                 <i class="material-symbols-outlined">refresh</i> Retry
             </button>
             <div class="floorplan-sidebar__header-actions">
-                <button type="button" id="floorplan-undo" class="btn btn--icon" disabled aria-label="Undo" title="Undo (Ctrl+Z)">
-                    <i class="material-symbols-outlined">undo</i>
-                </button>
-                <button type="button" id="floorplan-redo" class="btn btn--icon" disabled aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
-                    <i class="material-symbols-outlined">redo</i>
-                </button>
                 <div class="floorplan-more-menu">
                     <button type="button" id="floorplan-more-toggle" class="btn btn--icon" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="More">
                         <i class="material-symbols-outlined">more_vert</i>
@@ -183,11 +196,6 @@
                     </div>
                 </div>
             </div>
-        </div>
-
-        <div class="floorplan-sidebar__section">
-            <span class="floorplan-field__label">Floors</span>
-            <div id="floorplan-floors" class="floorplan-floors"></div>
         </div>
 
         <div class="floorplan-sidebar__section">

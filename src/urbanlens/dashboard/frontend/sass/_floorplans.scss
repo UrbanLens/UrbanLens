@@ -396,6 +396,51 @@
 
 // Joints are drawn on every corner so the gesture is discoverable at all, so
 // they have to stay quiet until aimed at.
+// Over the canvas, not in the sidebar. Below 900px the sidebar stacks under
+// the map, so anything living in it is off-screen for the whole time someone is
+// drawing - which is exactly when undo and the floor switcher are wanted.
+.floorplan-canvas-controls {
+    position: absolute;
+    z-index: 500;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 0.25rem;
+}
+
+.floorplan-canvas-floors {
+    position: absolute;
+    z-index: 500;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    max-height: calc(100% - 90px);
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--ul-surface-border);
+    border-radius: 6px;
+    background: var(--ul-surface-bg, #fff);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+
+    > .floorplan-field__label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        opacity: 0.7;
+    }
+
+    // Bottom of the building at the bottom of the strip, and scrollable rather
+    // than unbounded: a tower has more storeys than a phone has screen.
+    .floorplan-floors {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        overflow-y: auto;
+        min-height: 0;
+    }
+}
+
 // Sits under the tool pill, on the same side, so a tool's settings are beside
 // the tool rather than in the sidebar - which stacks below the map on a phone,
 // exactly where you cannot reach it while drawing.
