@@ -26,7 +26,7 @@
 
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { type Browser, type Page, chromium } from "playwright";
@@ -59,82 +59,9 @@ const BUILT = existsSync(BUNDLE);
 const saves = { conflict: false, attempts: 0 };
 
 /** A minimal page carrying every element boot() reaches for. */
-const HARNESS = `<!doctype html>
-<html><head>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<!-- The site's own compiled stylesheet, so layout questions can be asked here
-     at all: without it every class in the markup is inert. -->
-<link rel="stylesheet" href="/dashboard/style.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
-<style>
-/* This block is the harness's own layout, not the site's - a test that asks
-   where something sits at a given viewport width is answered by these rules
-   rather than by _floorplans.scss. Ask structural questions here (what is
-   inside what), and treat any measurement that disagrees with the real page
-   as this fixture talking. */
-html,body{margin:0}
-#floorplan-map{width:900px;height:640px}
-/* Out of flow and fixed: in the real page the sidebar is a fixed-width flex
-   column, but in bare markup it grows as the editor fills it, reflowing the
-   page and making Leaflet re-project the plan at a different scale. That reads
-   as geometry moving when nothing has moved at all. */
-.floorplan-sidebar{position:fixed;top:0;right:0;width:320px;height:100vh;overflow:auto}
-</style>
-</head><body>
-<div id="floorplan-origin-banner" hidden></div>
-<div class="floorplan-editor"><div class="floorplan-editor__stage"><div class="floorplan-map-shell">
-  <div id="floorplan-tools" class="map-buttons"><div class="map-buttons-content">
-    <button class="map-btn-icon is-active" data-tool="select"></button>
-    <button class="map-btn-icon" data-tool="box"></button>
-    <button class="map-btn-icon" data-tool="rotate"></button>
-    <button class="map-btn-icon" data-tool="wall"></button>
-    <button class="map-btn-icon" data-tool="opening"></button>
-    <button class="map-btn-icon" data-tool="room"></button>
-    <button class="map-btn-icon" data-tool="marker"></button>
-  </div></div>
-  <div id="floorplan-map" tabindex="0" role="application" aria-label="Floorplan canvas"
-       data-json-url="/json" data-save-url="/save" data-publish-url="/publish"
-       data-lat="41.733" data-lng="-73.928"></div>
-  <div id="floorplan-tool-options" hidden></div>
-  <div class="floorplan-canvas-controls">
-    <button id="floorplan-undo" disabled></button>
-    <button id="floorplan-redo" disabled></button>
-  </div>
-  <div class="floorplan-canvas-floors">
-    <span class="floorplan-field__label">Floors</span>
-    <div id="floorplan-floors" class="floorplan-floors"></div>
-  </div>
-  <div class="map-bottom-controls"><div id="floorplan-layers"></div></div>
-  <div id="floorplan-empty"><button id="floorplan-start-outline"></button><button id="floorplan-start-rectangle"></button></div>
-</div><p id="floorplan-hint"></p><p id="floorplan-live"></p></div>
-<aside class="floorplan-sidebar">
-  <span id="floorplan-save-status"></span>
-  <button id="floorplan-retry-save" hidden></button>
-  <button id="floorplan-reload" hidden></button>
-  <button id="floorplan-more-toggle"></button><div id="floorplan-more-list" hidden>
-    <button id="floorplan-save-version"></button><button id="floorplan-publish"></button></div>
-  <div id="floorplan-floor-fields"></div>
-  <div id="floorplan-form"></div>
-  <div id="floorplan-marker-appearance" hidden>
-    <input id="icon-value-floorplan-marker">
-    <div class="color-picker" id="color-picker-floorplan-marker">
-      <input type="hidden" id="color-value-floorplan-marker" value="">
-      <button type="button" class="color-swatch" data-color="#e53935" style="background-color:#e53935"
-              onclick="pickColor('color-picker-floorplan-marker','color-value-floorplan-marker','#e53935',this)"></button>
-      <button type="button" class="color-swatch color-clear selected" data-color=""
-              onclick="pickColor('color-picker-floorplan-marker','color-value-floorplan-marker','',this)"><i class="material-symbols-outlined">block</i></button>
-    </div>
-  </div>
-  <input id="floorplan-name"><input id="floorplan-valid-from" type="date">
-  <div id="floorplan-versions" hidden></div>
-</aside></div>
-<script id="floorplan-outline" type="application/json">[]</script>
-<script id="floorplan-overlays" type="application/json">[]</script>
-<script id="floorplan-labels" type="application/json">[]</script>
-<script id="floorplan-photos" type="application/json">[]</script>
-<script type="module" src="/dashboard/js/floorplan-editor.js"></script>
-</body></html>`;
+/** The fixture page, kept beside this file so harness-parity.test.ts can read
+ * the same bytes the browser does. */
+const HARNESS = readFileSync(join(import.meta.dir, "harness.html"), "utf8");
 
 /** Where the middle of the plan sits on screen. */
 async function planCentre(): Promise<{ x: number; y: number }> {
