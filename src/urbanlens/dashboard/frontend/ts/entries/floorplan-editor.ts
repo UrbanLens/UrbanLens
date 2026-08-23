@@ -2717,24 +2717,6 @@ function boot(): void {
         }
 
         // Arrows nudge the selection. With nothing selected they fall through
-        // to Leaflet, which pans the map with them.
-        if (onCanvas && !typing && state.selection && event.key.startsWith("Arrow")) {
-            // A tenth of a metre by default and a whole one with Shift: fine
-            // enough to close a gap, coarse enough to cross a room.
-            const step = event.shiftKey ? 1 : 0.1;
-            const moves: Record<string, [number, number]> = {
-                ArrowLeft: [-step, 0],
-                ArrowRight: [step, 0],
-                ArrowUp: [0, step],
-                ArrowDown: [0, -step],
-            };
-            const move = moves[event.key];
-            if (move && nudgeSelection(move[0], move[1])) {
-                event.preventDefault();
-                return;
-            }
-        }
-
         if (event.key === "Escape") {
             closeContextMenu();
             // Blurring last, once there is nothing left to clear, so Escape
@@ -2801,6 +2783,43 @@ function boot(): void {
             setTool("marker");
         }
     });
+    // Arrow keys, taken on the canvas in the capture phase so this runs before
+    // Leaflet's own keydown listener on the same element.
+    //
+    // Leaflet pans the map with the arrows. This used to be handled on the
+    // document, which bubbles - so Leaflet had already panned by the time the
+    // nudge ran, and its preventDefault() was far too late. Both happened: a
+    // tenth of a metre of nudge and 80px of map sliding out from under it.
+    //
+    // Stopping propagation here rather than disabling Leaflet's handler,
+    // because that handler only listens while it believes the container is
+    // focused, and re-enabling it does not restore that belief until the
+    // element is focused again. With nothing selected this declines and the
+    // arrows pan, which is what they should do when there is nothing to nudge.
+    mapEl.addEventListener(
+        "keydown",
+        (raw) => {
+            const event = raw as KeyboardEvent;
+            if (!event.key.startsWith("Arrow") || !state.selection) return;
+            const target = event.target as HTMLElement | null;
+            if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+            // A tenth of a metre by default and a whole one with Shift: fine
+            // enough to close a gap, coarse enough to cross a room.
+            const step = event.shiftKey ? 1 : 0.1;
+            const moves: Record<string, [number, number]> = {
+                ArrowLeft: [-step, 0],
+                ArrowRight: [step, 0],
+                ArrowUp: [0, step],
+                ArrowDown: [0, -step],
+            };
+            const move = moves[event.key];
+            if (!move || !nudgeSelection(move[0], move[1])) return;
+            event.preventDefault();
+            event.stopPropagation();
+        },
+        true,
+    );
+
     document.addEventListener("keyup", (event) => {
         if (event.key === "`") state.suspendSnap = false;
     });

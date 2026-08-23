@@ -2126,6 +2126,41 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("nudging something does not also pan the map out from under it", async () => {
+        // Leaflet pans with the arrow keys from a listener on the map
+        // container; this editor nudges with them from one on the document,
+        // which bubbles and so runs second. Both fired: a tenth of a metre of
+        // nudge, and 80px of map sliding away per press.
+        await openEditor({ width: 1200, height: 800 }, false, "island");
+        await page.locator('[data-tool="marker"]').click();
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x + 40, plan.grab.y + 60);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+
+        // A marker moving does not move any wall, so the plan's own bounds are
+        // a fixed reference: if they shift, the map panned.
+        const before = await planExtent();
+        await page.locator("#floorplan-map").focus();
+        for (let press = 0; press < 4; press++) await page.keyboard.press("ArrowRight");
+        await settle();
+        const after = await planExtent();
+
+        expect(Math.abs(after.left - before.left), "the map panned as well as nudging").toBeLessThan(3);
+        expect(Math.abs(after.top - before.top), "the map panned as well as nudging").toBeLessThan(3);
+
+        // And with nothing selected the arrows are Leaflet's again, which is
+        // what they should be when there is nothing to nudge.
+        await page.keyboard.press("Escape");
+        await settle();
+        const parked = await planExtent();
+        await page.keyboard.press("ArrowRight");
+        await settle();
+        expect(Math.abs((await planExtent()).left - parked.left), "the arrows stopped panning entirely").toBeGreaterThan(10);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();
