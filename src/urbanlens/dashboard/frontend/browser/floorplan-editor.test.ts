@@ -66,7 +66,7 @@ const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoo
  * meant applyServerIds never had anything to apply and the whole
  * local-id-to-real-id cycle went unexercised in the browser.
  */
-function echoSaved(document: unknown): unknown {
+function echoSaved(document: unknown, versions: unknown): unknown {
     let issued = 0;
     // The real save view answers with the row's actual provenance and the uuid
     // it was stored under - "local" once the save has forked a community plan
@@ -82,11 +82,32 @@ function echoSaved(document: unknown): unknown {
         return entry;
     };
     const saved = rename(document) as Record<string, unknown>;
-    return { ...saved, origin: "local", uuid: saved.uuid ?? "srv-plan" };
+    const uuid = saved.uuid ?? "srv-plan";
+    // save() strips `versions` before sending and the real view answers with the
+    // list rebuilt from rows, so echoing only what arrived emptied the version
+    // list on every save - which hid it, and left everything past the first save
+    // unexercised. The entry just written carries the name it was written with.
+    const list = Array.isArray(versions)
+        ? (versions as Array<Record<string, unknown>>).map((entry) =>
+              entry.uuid === uuid ? { ...entry, name: saved.name, valid_from: saved.valid_from ?? null } : entry,
+          )
+        : [];
+    return { ...saved, versions: list, origin: "local", uuid };
 }
 
 /** Publish requests the fixture has been asked for. */
 const publishes = { attempts: 0 };
+
+/** The version list of whichever plan was served last, so /save can answer with
+ * it the way the real view does - rebuilt from rows rather than from the
+ * payload, which never carries it. */
+let servedVersions: unknown = [];
+
+/** Serve a plan, remembering its version list. */
+function servePlan(plan: unknown): Response {
+    servedVersions = (plan as { versions?: unknown }).versions ?? [];
+    return Response.json(plan);
+}
 
 /** A minimal page carrying every element boot() reaches for. */
 /** The fixture page, kept beside this file so harness-parity.test.ts can read
@@ -399,20 +420,20 @@ beforeAll(async () => {
                 // A different plan for the other version, so a switch is
                 // visible as more than a redraw of the same thing.
                 const wanted = new URL(request.url).searchParams.get("version");
-                if (wanted === "plan-2") return Response.json({ ...(closetPlan() as Record<string, unknown>), uuid: "plan-2", versions: (squarePlan() as { versions: unknown[] }).versions });
-                return Response.json(squarePlan());
+                if (wanted === "plan-2") return servePlan({ ...(closetPlan() as Record<string, unknown>), uuid: "plan-2", versions: (squarePlan() as { versions: unknown[] }).versions });
+                return servePlan(squarePlan());
             }
-            if (path === "/json-grid") return Response.json(gridPlan());
-            if (path === "/json-closet") return Response.json(closetPlan());
-            if (path === "/json-island") return Response.json(islandPlan());
-            if (path === "/json-empty") return Response.json(emptyPlan());
+            if (path === "/json-grid") return servePlan(gridPlan());
+            if (path === "/json-closet") return servePlan(closetPlan());
+            if (path === "/json-island") return servePlan(islandPlan());
+            if (path === "/json-empty") return servePlan(emptyPlan());
             // Never saved: no uuid, so nothing to fork or publish yet.
             if (path === "/json-unsaved") {
                 const { uuid, ...rest } = emptyPlan() as Record<string, unknown>;
                 void uuid;
-                return Response.json(rest);
+                return servePlan(rest);
             }
-            if (path === "/json-community") return Response.json({ ...(squarePlan() as Record<string, unknown>), origin: "community", versions: [] });
+            if (path === "/json-community") return servePlan({ ...(squarePlan() as Record<string, unknown>), origin: "community", versions: [] });
             if (path === "/save") {
                 saves.attempts += 1;
                 // What the editor actually sent, so a test can ask about the
@@ -428,7 +449,7 @@ beforeAll(async () => {
                     const doc = body as { name?: string; valid_from?: string | null };
                     saves.lastName = doc.name ?? "";
                     saves.lastValidFrom = doc.valid_from ?? null;
-                    echoed = echoSaved(body);
+                    echoed = echoSaved(body, servedVersions);
                 } catch {
                     saves.lastPool = -1;
                 }
@@ -1720,6 +1741,36 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         for (let waited = 0; waited < 40 && saves.attempts === after; waited++) await page.waitForTimeout(250);
         expect(saves.attempts, "dating the plan never saved it").toBeGreaterThan(after);
         expect(saves.lastValidFrom).toBe("1994-06-15");
+        await page.close();
+    });
+
+    test("clearing the plan name leaves it unnamed, and the list still labels it", async () => {
+        // The default used to be applied inside save(), so "no name" was stored as
+        // a copy of whatever the floor happened to be called at that moment: the
+        // placeholder stopped applying once saved, and renaming the floor left the
+        // plan carrying the old name. The version list has always had a fallback of
+        // its own, which is where a derived default belongs.
+        saves.attempts = 0;
+        await openEditor();
+
+        // Give the floor a nickname first: the default that used to be frozen in
+        // was the floor's name, so without one the two behaviours agree and this
+        // test would pass against the bug it exists for.
+        await page.locator(".floorplan-floor-fields__name").fill("Boiler floor");
+        for (let waited = 0; waited < 40 && saves.attempts === 0; waited++) await page.waitForTimeout(250);
+
+        saves.lastName = "unset";
+        await page.locator("#floorplan-name").fill("");
+        for (let waited = 0; waited < 40 && saves.lastName === "unset"; waited++) await page.waitForTimeout(250);
+        expect(saves.lastName, "stored the floor's name instead of leaving the plan unnamed").toBe("");
+
+        // Still labelled on screen, and still told apart from its siblings, which
+        // is the only thing this list has to do.
+        const current = page.locator("#floorplan-versions button", { hasText: "(current)" });
+        await current.waitFor({ state: "attached", timeout: 10000 });
+        const labels = (await page.locator("#floorplan-versions button").allTextContents()).map((text) => text.trim());
+        expect(labels.length, "the version list emptied itself on save").toBeGreaterThan(1);
+        expect(new Set(labels).size, `two versions labelled the same: ${labels.join(" / ")}`).toBe(labels.length);
         await page.close();
     });
 

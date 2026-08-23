@@ -7042,3 +7042,28 @@ missing five by AST scan.
 Merged into that entry to keep one record. Kept as a pointer rather than deleted, because the
 duplication is the finding: two days of prior analysis were sitting in this file, in a section the
 audit had been appending to for dozens of chunks, and were not read before acting.
+
+## ~~2026-08-23: an unnamed plan freezes the floor's name into stored data~~ - RESOLVED 2026-08-23
+
+~~`save()` sends `state.doc.name = nameInput?.value || floor().name || ""`, and~~
+~~the server stores whatever it is given (`serialization.py`, no default of its~~
+~~own). So leaving the plan name blank does not store "blank" - it stores a copy~~
+~~of the floor's name at that moment.~~
+
+~~Two consequences, both small and both real. The `placeholder="Ground floor"`~~
+~~stops applying after the first save, because the field now has a real value; and~~
+~~renaming the floor afterwards leaves the plan carrying the old name, a derived~~
+~~default that has quietly become stale data.~~
+
+~~The reason the default exists at all is that `controllers/floorplans.py:210`~~
+~~puts `plan.name` in the versions list, which needs a label. That is the only~~
+~~consumer, so the fix is contained: let the client store `""` when the field is~~
+~~empty and have the version list fall back at *display* time (floor name, then~~
+~~something like "Untitled"). It is a change to what is in the column, though, so~~
+~~existing rows carry the frozen names until something rewrites them.~~
+
+Fixed the same day. `save()` stores the field exactly as typed, blank included, and
+`renderVersions()` labels an unnamed version by its `valid_from` date rather than by
+anything derived from the floor: the floor's designation reads the same for every
+version of the same plan, which defeats the one job that list has. Rows written before
+this still carry the frozen names until something rewrites them.

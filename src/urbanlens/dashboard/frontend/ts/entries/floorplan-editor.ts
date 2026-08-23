@@ -4353,7 +4353,12 @@ function boot(): void {
             const button = document.createElement("button");
             button.type = "button";
             button.className = "btn btn--ghost";
-            button.textContent = isCurrent ? `${version.name || "Untitled"} (current)` : version.name || "Untitled";
+            // An unnamed version is labelled by the thing that actually tells it
+            // apart from its siblings - the date it came into force. The floor's
+            // designation would read the same for every version of the same plan,
+            // which is the one job this list has to do.
+            const shown = version.name || version.valid_from || "Original";
+            button.textContent = isCurrent ? `${shown} (current)` : shown;
             button.setAttribute("data-tooltip", version.valid_from ? `In force from ${version.valid_from}` : "The original baseline");
             button.setAttribute("data-tooltip-float", "true");
             button.disabled = isCurrent;
@@ -4476,10 +4481,12 @@ function boot(): void {
         await waitForSaveSlot();
         const nameInput = document.getElementById("floorplan-name") as HTMLInputElement | null;
         const validFrom = document.getElementById("floorplan-valid-from") as HTMLInputElement | null;
-        // A plan name is rarely worth asking for up front - the floor it is
-        // on already has one ("Ground floor"), and that is a fine default a
-        // user can override in "Add more details" when it matters.
-        state.doc.name = nameInput?.value || floor().name || "";
+        // Stored exactly as typed, blank included. Defaulting here to the floor's
+        // name wrote a derived value into the column: the placeholder stopped
+        // applying once it had been saved, and renaming the floor afterwards left
+        // the plan carrying the old one. renderVersions() applies the same default
+        // at display time, where it stays live.
+        state.doc.name = nameInput?.value || "";
         state.doc.valid_from = validFrom?.value || null;
         // Every marker's WGS-84 position, freshly computed here rather than
         // kept live at each edit site (placement, drag) - x/y is the single
