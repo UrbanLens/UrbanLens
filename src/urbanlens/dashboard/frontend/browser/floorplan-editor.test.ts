@@ -646,6 +646,64 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("tapping the zoom control does not drop a corner underneath it", async () => {
+        // Leaflet's controls live inside the map container and stop their own
+        // click from reaching the map - but they stop "click", not
+        // "pointerdown", so a handler listening for pointers sees every tap on
+        // every control. The mouse path is protected by Leaflet; the touch one
+        // has to exclude them itself, which is what the two drag handlers
+        // above already do.
+        await openEditor({ width: 1200, height: 800 }, true);
+        await page.locator('[data-tool="wall"]').click();
+        const dashed = () => page.evaluate(() => document.querySelectorAll('#floorplan-map path[stroke-dasharray="5 5"]').length);
+        expect(await dashed()).toBe(0);
+
+        const zoomIn = await page.locator(".leaflet-control-zoom-in").boundingBox();
+        if (!zoomIn) throw new Error("no zoom control");
+        const at = { x: zoomIn.x + zoomIn.width / 2, y: zoomIn.y + zoomIn.height / 2 };
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: at.x, y: at.y }] });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        await settle();
+
+        // No rubber band means no corner was placed.
+        expect(await dashed()).toBe(0);
+        await page.close();
+    });
+
+    test("a tap that dismisses a popup does not also draw", async () => {
+        // The click path has always known this: a click whose only job was to
+        // close an open popup should not also act on the map. The flag it
+        // consults was set on mousedown, which a finger never fires.
+        await openEditor({ width: 1200, height: 800 }, true);
+        await page.locator('[data-tool="marker"]').click();
+        const frame = await page.locator("#floorplan-map").boundingBox();
+        if (!frame) throw new Error("no map");
+        await page.mouse.click(frame.x + 260, frame.y + frame.height - 90);
+        await settle();
+        // Placing selects it; clicking it in select mode is what opens the popup.
+        await page.locator('[data-tool="select"]').click();
+        await page.locator(".leaflet-marker-icon").first().click();
+        await settle();
+        // Waited for, not asserted outright: the marker layer is rebuilt on
+        // select, so for a moment the outgoing popup is still fading out
+        // alongside the incoming one.
+        await page.waitForFunction(() => document.querySelectorAll(".leaflet-popup").length === 1, undefined, { timeout: 5000 });
+
+        await page.locator('[data-tool="wall"]').click();
+        const dashed = () => page.evaluate(() => document.querySelectorAll('#floorplan-map path[stroke-dasharray="5 5"]').length);
+        expect(await dashed()).toBe(0);
+
+        const at = { x: frame.x + 480, y: frame.y + frame.height - 90 };
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: at.x, y: at.y }] });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        await settle();
+
+        expect(await dashed()).toBe(0);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

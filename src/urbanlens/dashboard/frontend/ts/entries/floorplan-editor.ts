@@ -1723,11 +1723,14 @@ function boot(): void {
     map.on("popupclose", () => {
         popupOpenCount = Math.max(0, popupOpenCount - 1);
     });
-    let popupOpenAtMousedown = false;
+    // pointerdown, not mousedown: a finger never fires mousedown, so on touch
+    // this read false and a tap whose only job was to dismiss a popup went on
+    // to act on the map underneath it as well.
+    let popupOpenAtPointerDown = false;
     map.getContainer().addEventListener(
-        "mousedown",
+        "pointerdown",
         () => {
-            popupOpenAtMousedown = popupOpenCount > 0;
+            popupOpenAtPointerDown = popupOpenCount > 0;
         },
         true,
     );
@@ -2351,6 +2354,11 @@ function boot(): void {
         // click leaves the flag standing and eats the next real one.
         suppressNextClick = false;
         if (event.pointerType === "mouse" || state.tool !== "wall") return;
+        // Leaflet's controls sit inside the map container and stop their own
+        // click from reaching the map - but they stop "click", not
+        // "pointerdown", so without this a tap on zoom-in placed a corner
+        // underneath the button. Same exclusion list as the drag handlers.
+        if ((event.target as Element | null)?.closest?.(".leaflet-marker-icon, .floorplan-handle, .leaflet-popup, .leaflet-control, .floorplan-context-menu")) return;
         if (touchAim) {
             touchAim.cancelled = true;
             return;
@@ -2367,8 +2375,13 @@ function boot(): void {
         if (wasDraggable) map.dragging.enable();
         if (cancelled || !place) return;
         // A lift that did not move still fires a click, and that click would
-        // place the same corner a second time.
+        // otherwise run the whole thing a second time - set before the popup
+        // branch below, so it holds whichever way this ends.
         suppressNextClick = true;
+        if (popupOpenAtPointerDown) {
+            popupOpenAtPointerDown = false;
+            return;
+        }
         tapMap(map.mouseEventToLatLng(event));
     };
     // On window, not the container: a finger that slides off the map still has
@@ -2471,8 +2484,8 @@ function boot(): void {
             suppressNextClick = false;
             return;
         }
-        if (popupOpenAtMousedown) {
-            popupOpenAtMousedown = false;
+        if (popupOpenAtPointerDown) {
+            popupOpenAtPointerDown = false;
             return;
         }
         tapMap(event.latlng);
