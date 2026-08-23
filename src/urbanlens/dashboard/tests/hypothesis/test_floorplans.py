@@ -1304,6 +1304,110 @@ class FloorplanFenceAndGateTests(TestCase):
         self.assertEqual(kinds.count("virtual"), 1)
 
 
+class FloorplanConcurrencyTests(TestCase):
+    """Two tabs on one plan must not silently overwrite each other."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        self.place = _building()
+        self.floorplan = Floorplan.objects.create(place=self.place, profile=self.profile, name="plan")
+        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]}, profile=self.profile)
+
+    def test_a_save_carrying_the_current_token_is_accepted(self) -> None:
+        document = document_for(self.floorplan)
+        self.assertTrue(document["version_token"])
+
+        save_document(self.floorplan, document, profile=self.profile)
+
+    def test_a_save_built_on_a_replaced_version_is_refused(self) -> None:
+        """The second tab's document is valid; it is just no longer current, and
+        a whole-document save deletes by omission."""
+        from urbanlens.dashboard.services.floorplans.serialization import StaleDocumentError
+
+        first_tab = document_for(self.floorplan)
+        second_tab = document_for(self.floorplan)
+        save_document(self.floorplan, first_tab, profile=self.profile)
+        self.floorplan.refresh_from_db()
+
+        with self.assertRaises(StaleDocumentError):
+            save_document(self.floorplan, second_tab, profile=self.profile)
+
+    def test_a_document_with_no_token_still_saves(self) -> None:
+        """An older client, and a deliberate fork, both send none - refusing
+        those to catch a rarer problem is the wrong trade."""
+        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]}, profile=self.profile)
+
+    def test_the_endpoint_answers_409_rather_than_400(self) -> None:
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        user = baker.make(User)
+        location = baker.make(Location, latitude=41.7351, longitude=-73.9351, place=self.place)
+        pin = baker.make(Pin, profile=user.profile, location=location, parent_pin=None, slug="concurrent-pin")
+        self.client.force_login(user)
+        own = Floorplan.objects.create(place=self.place, profile=user.profile, pin=pin)
+        save_document(own, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]}, profile=user.profile)
+        stale = document_for(own)
+        save_document(own, document_for(own), profile=user.profile)
+
+        response = self.client.post(
+            f"/dashboard/map/pin/{pin.slug}/floorplan/save/",
+            data=jsonlib.dumps(stale),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertTrue(response.json()["stale"])
+
+
+class FloorplanDocumentLimitsTests(TestCase):
+    """A malformed or hostile document is a 400, not a 500."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        self.place = _building()
+        self.floorplan = Floorplan.objects.create(place=self.place, profile=self.profile)
+
+    def test_an_over_long_name_is_refused_rather_than_reaching_postgres(self) -> None:
+        """Django does not enforce max_length on save, so this used to surface
+        as a DataError - a 500 saying nothing about which field was wrong."""
+        with self.assertRaises(ValueError):
+            save_document(self.floorplan, {"plan_origin": _ORIGIN, "name": "x" * 300, "floors": []}, profile=self.profile)
+
+    def test_an_over_long_wall_name_is_refused(self) -> None:
+        walls = _square_walls()
+        walls[0]["name"] = "y" * 300
+        with self.assertRaises(ValueError):
+            save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile)
+
+    def test_too_many_floors_is_refused_before_anything_is_written(self) -> None:
+        document = {"plan_origin": _ORIGIN, "floors": [{"level": index} for index in range(400)]}
+
+        with self.assertRaises(ValueError):
+            save_document(self.floorplan, document, profile=self.profile)
+
+        self.assertEqual(self.floorplan.floors.count(), 0)
+
+    def test_too_many_walls_on_one_floor_is_refused(self) -> None:
+        walls = [{"kind": "interior", "ax": float(i), "ay": 0.0, "bx": float(i), "by": 1.0} for i in range(2100)]
+
+        with self.assertRaises(ValueError):
+            save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile)
+
+    def test_a_normal_plan_is_nowhere_near_the_ceilings(self) -> None:
+        """The limits exist to stop one request writing a million rows, not to
+        constrain anybody's building."""
+        floors = [{"level": level, "walls": _square_walls()} for level in range(20)]
+
+        save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": floors}, profile=self.profile)
+
+        self.assertEqual(self.floorplan.floors.count(), 20)
+
+
 class FloorplanMarkerTests(TestCase):
     """Markers collapse five old tools into one table with a kind."""
 

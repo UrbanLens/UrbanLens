@@ -228,6 +228,11 @@ function boot(): void {
         showUnderlay: false,
         /** The plan could not be fetched, so what is on screen is not it. */
         loadFailed: false,
+        /**
+         * Another tab has saved over the version this one is editing. Saving
+         * again would delete their work, so nothing here saves any more.
+         */
+        superseded: false,
     };
 
     /**
@@ -530,8 +535,10 @@ function boot(): void {
     function queueAutosave(delay = 1200): void {
         // The single funnel every edit reaches, so one guard here is enough:
         // what is on screen after a failed load is a blank document, not the
-        // plan, and persisting it would replace the real one.
-        if (state.loadFailed) return;
+        // plan, and persisting it would replace the real one. The same applies
+        // once another tab has saved over this version - a retry is exactly how
+        // their work would get destroyed.
+        if (state.loadFailed || state.superseded) return;
         updateSaveStatus();
         if (autosaveTimer !== null) clearTimeout(autosaveTimer);
         const attempt = (): void => {
@@ -552,7 +559,12 @@ function boot(): void {
         const el = document.getElementById("floorplan-save-status");
         if (!el) return;
         const retry = document.getElementById("floorplan-retry-save");
-        if (retry) retry.hidden = !saveFailed || saving;
+        if (retry) retry.hidden = !saveFailed || saving || state.superseded;
+        if (state.superseded) {
+            el.textContent = "Changed elsewhere - reload";
+            el.className = "floorplan-save-status is-error";
+            return;
+        }
         if (saving) {
             el.textContent = "Saving…";
             el.className = "floorplan-save-status";
@@ -702,6 +714,13 @@ function boot(): void {
     // ---------------------------------------------------------------- render
 
     function render(): void {
+        // A coalesced frame may still be queued - a drag's final markDirty()
+        // renders synchronously, and letting the pending one land afterwards
+        // would rebuild every layer a second time for no change.
+        if (renderFrame !== null) {
+            cancelAnimationFrame(renderFrame);
+            renderFrame = null;
+        }
         wallLayer.clearLayers();
         roomLayer.clearLayers();
         markerLayer.clearLayers();
@@ -3695,6 +3714,15 @@ function boot(): void {
                 } catch {
                     // Not JSON - keep the generic, status-coded message above.
                 }
+                if (response.status === 409) {
+                    // Not retried and not backed off: the other tab is not going
+                    // to un-save, so every attempt from here would either fail
+                    // the same way or overwrite them.
+                    state.superseded = true;
+                    toast.warning(message);
+                    updateSaveStatus();
+                    return;
+                }
                 toast.warning(message);
                 noteSaveFailure();
                 return;
@@ -3718,6 +3746,7 @@ function boot(): void {
                 state.doc.origin = body.floorplan.origin;
                 state.versions = body.floorplan.versions || [];
             }
+            state.doc.version_token = body.floorplan?.version_token;
             state.dirty = false;
             saveFailed = false;
             retryAttempt = 0;

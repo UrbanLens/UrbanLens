@@ -161,6 +161,12 @@ export interface FloorplanDocument {
     floors: Floor[];
     source_pool?: unknown[];
     reference_pool?: unknown[];
+    /**
+     * Which version of the plan this document was read at. Sent back on save
+     * so the server can tell that another tab has replaced it since; see
+     * services/floorplans/serialization.py.
+     */
+    version_token?: string;
     /** Server-supplied, read-only here. */
     origin?: string;
     versions?: VersionSummary[];

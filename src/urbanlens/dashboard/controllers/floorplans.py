@@ -286,7 +286,7 @@ class FloorplanSaveView(LoginRequiredMixin, View):
             JsonResponse with the saved document, or a 400 naming the defect.
         """
         from urbanlens.dashboard.services.floorplans.resolution import floorplan_for_editing
-        from urbanlens.dashboard.services.floorplans.serialization import document_for, save_document
+        from urbanlens.dashboard.services.floorplans.serialization import StaleDocumentError, document_for, save_document
 
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
         # A plan may be placeless: not every pin resolves to a known building
@@ -323,6 +323,12 @@ class FloorplanSaveView(LoginRequiredMixin, View):
             document.setdefault("plan_origin", {"lat": float(pin.effective_latitude), "lng": float(pin.effective_longitude)})
         try:
             save_document(floorplan, document, profile=pin.profile)
+        except StaleDocumentError as exc:
+            # 409, not 400: the document is valid, it is just built on a version
+            # someone else has already replaced. The editor stops autosaving on
+            # this rather than retrying, since retrying is how the other tab's
+            # work gets destroyed.
+            return JsonResponse({"ok": False, "error": str(exc), "stale": True}, status=409)
         except ValueError as exc:
             return JsonResponse({"ok": False, "error": str(exc)}, status=400)
         # A placeless plan has no sibling versions to list: for_place(None)
