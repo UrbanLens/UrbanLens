@@ -3260,14 +3260,16 @@ function boot(): void {
             item.designation = code.value.trim().slice(0, 8);
             markDirtyQuiet();
         });
-        // Re-rendered on commit, not per keystroke: every other floor's derived
-        // label can change as a result of this one, and rebuilding the strip
-        // under the cursor would take the focus with it. On commit the focus has
-        // already left, which is the whole reason for waiting. renderSidebar()
-        // rebuilds the selected item's form and nothing else, so the strip these
-        // two fields are about went on showing the old labels until an unrelated
-        // edit happened to call render().
-        code.addEventListener("change", () => renderFloorTabs());
+        // The strip carries this storey's label and every label derived above it,
+        // so it redraws on commit rather than per keystroke - rebuilding it under
+        // the cursor would take the focus along. keepFields, because the commit
+        // fires on the way out of one of these fields and into the next.
+        code.addEventListener("change", () => {
+            renderFloorTabs(true);
+            // Left out of that redraw, and this placeholder is the derived label,
+            // which clearing the designation hands back control of.
+            code.placeholder = floorLabels().get(item) || "";
+        });
         row.appendChild(code);
 
         const nickname = document.createElement("input");
@@ -3280,7 +3282,7 @@ function boot(): void {
             item.name = nickname.value;
             markDirtyQuiet();
         });
-        nickname.addEventListener("change", () => renderFloorTabs());
+        nickname.addEventListener("change", () => renderFloorTabs(true));
         row.appendChild(nickname);
 
         host.appendChild(row);
@@ -3412,7 +3414,14 @@ function boot(): void {
         return copied.walls.length > 0;
     }
 
-    function renderFloorTabs(): void {
+    /**
+     * Redraw the floor strip, and the current floor's fields beneath it.
+     *
+     * Args:
+     *     keepFields: Leave the fields alone. Set by the fields' own commit
+     *         handlers, which fire as the focus leaves one for the next.
+     */
+    function renderFloorTabs(keepFields = false): void {
         const host = document.getElementById("floorplan-floors");
         if (!host) return;
         host.replaceChildren();
@@ -3494,7 +3503,11 @@ function boot(): void {
         duplicate.addEventListener("click", () => duplicateFloor(floor()));
         host.appendChild(duplicate);
 
-        const fieldsHost = document.getElementById("floorplan-floor-fields");
+        // Left alone when the redraw was asked for by one of these fields: the
+        // commit fires on the way out of one and into the next, so replacing them
+        // here throws away the element the user is moving to. Their own values are
+        // already current - it is the strip above that was stale.
+        const fieldsHost = keepFields ? null : document.getElementById("floorplan-floor-fields");
         if (fieldsHost) {
             fieldsHost.replaceChildren();
             renderFloorFields(fieldsHost, floor());

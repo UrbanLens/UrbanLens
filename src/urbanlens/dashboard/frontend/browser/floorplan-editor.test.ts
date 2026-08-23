@@ -1828,6 +1828,21 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("tabbing from the floor code to its nickname keeps the focus", async () => {
+        // The commit redraws the strip, and the strip's own render rebuilds these
+        // two fields at the end of it. Tab is what fires that commit, and by then
+        // the focus has already moved to the next field - the very element about
+        // to be replaced. Redrawing has to not cost the user their place.
+        await openEditor();
+        await page.locator(".floorplan-floor-fields__code").focus();
+        await page.keyboard.type("M");
+        await page.keyboard.press("Tab");
+        await settle();
+
+        expect(await page.evaluate(() => document.activeElement?.className ?? ""), "tabbing between the floor fields dropped the focus").toContain("floorplan-floor-fields__name");
+        await page.close();
+    });
+
     test("deleting a storey from the middle renumbers the rest without moving their contents", async () => {
         // The destructive one, and the only floor operation the editor's own path
         // to it was never driven for. The stack has to close up behind a deletion:
