@@ -49,6 +49,15 @@ const BUNDLE = join(STATIC_DIR, "dashboard/js/floorplan-editor.js");
  */
 const BUILT = existsSync(BUNDLE);
 
+/**
+ * Test-controlled save behaviour.
+ *
+ * A conflict is a server state, not a client one, so the only honest way to
+ * reach it is for the server to answer the way a real one would when another
+ * tab has saved first.
+ */
+const saves = { conflict: false, attempts: 0 };
+
 /** A minimal page carrying every element boot() reaches for. */
 const HARNESS = `<!doctype html>
 <html><head>
@@ -102,6 +111,7 @@ html,body{margin:0}
 <aside class="floorplan-sidebar">
   <span id="floorplan-save-status"></span>
   <button id="floorplan-retry-save" hidden></button>
+  <button id="floorplan-reload" hidden></button>
   <button id="floorplan-more-toggle"></button><div id="floorplan-more-list" hidden>
     <button id="floorplan-save-version"></button><button id="floorplan-publish"></button></div>
   <div id="floorplan-form"></div>
@@ -396,7 +406,13 @@ beforeAll(async () => {
             if (path === "/json-grid") return Response.json(gridPlan());
             if (path === "/json-closet") return Response.json(closetPlan());
             if (path === "/json-island") return Response.json(islandPlan());
-            if (path === "/save") return Response.json({ ok: true, floorplan: squarePlan() });
+            if (path === "/save") {
+                saves.attempts += 1;
+                if (saves.conflict) {
+                    return Response.json({ ok: false, error: "Someone else saved this plan while you were editing it.", stale: true }, { status: 409 });
+                }
+                return Response.json({ ok: true, floorplan: squarePlan() });
+            }
             return new Response(Bun.file(join(STATIC_DIR, path.replace(/^\//, ""))));
         },
     });
@@ -1344,6 +1360,43 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // And no dot where the room used to be.
         expect(await page.evaluate(() => document.querySelectorAll('#floorplan-map path[stroke="#ef6c00"]').length)).toBe(0);
         await page.close();
+    });
+
+    test("a plan saved elsewhere stops autosaving and says so", async () => {
+        // The one failure that must never be retried into: the other tab is not
+        // going to un-save, so every further attempt either fails the same way
+        // or overwrites their work.
+        saves.conflict = true;
+        saves.attempts = 0;
+        try {
+            await openEditor();
+            const plan = await planExtent();
+
+            // An edit, which schedules an autosave.
+            await page.mouse.click(plan.grab.x, plan.grab.y);
+            await settle();
+            await page.keyboard.press("ArrowRight");
+            await page.waitForFunction(() => document.getElementById("floorplan-save-status")?.textContent === "Changed elsewhere", undefined, { timeout: 15000 });
+
+            const after = saves.attempts;
+            expect(after).toBeGreaterThan(0);
+
+            // Reload is offered: told to reload and given nothing to press is a
+            // dead end.
+            expect(await page.evaluate(() => (document.getElementById("floorplan-reload") as HTMLElement).hidden)).toBe(false);
+            expect(await page.evaluate(() => (document.getElementById("floorplan-retry-save") as HTMLElement).hidden)).toBe(true);
+
+            // And further edits do not go on hammering it.
+            for (let nudge = 0; nudge < 3; nudge++) {
+                await page.keyboard.press("ArrowRight");
+                await settle();
+            }
+            await page.waitForTimeout(1500);
+            expect(saves.attempts, "kept trying after the conflict").toBe(after);
+            await page.close();
+        } finally {
+            saves.conflict = false;
+        }
     });
 
     test("the tool options panel shows the armed tool's choices", async () => {
