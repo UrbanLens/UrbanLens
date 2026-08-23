@@ -1754,18 +1754,31 @@ function boot(): void {
 
     /** Items fully enclosed by the box, in plan-space regardless of screen rotation. */
     function itemsInBox(from: L.Point, to: L.Point): SelectionItem[] {
-        const bounds = L.latLngBounds(map.containerPointToLatLng(from), map.containerPointToLatLng(to));
+        // Tested in screen pixels, not in latitude and longitude. The user drew
+        // a rectangle on the screen, and a lat/lng box built from its corners is
+        // only the same shape while the map faces north - which is exactly what
+        // this editor does not do, since turning the plan to face its building
+        // is the first thing anyone does. Rotated, the two diverge and the
+        // selection quietly takes in things outside the rectangle and misses
+        // things inside it.
+        const minX = Math.min(from.x, to.x);
+        const maxX = Math.max(from.x, to.x);
+        const minY = Math.min(from.y, to.y);
+        const maxY = Math.max(from.y, to.y);
+        const inside = (point: Pt): boolean => {
+            const pixel = map.latLngToContainerPoint(toLatLng(point));
+            return pixel.x >= minX && pixel.x <= maxX && pixel.y >= minY && pixel.y <= maxY;
+        };
+
         const matches: SelectionItem[] = [];
         for (const wall of floor().walls) {
-            const a = toLatLng({ x: wall.ax, y: wall.ay });
-            const b = toLatLng({ x: wall.bx, y: wall.by });
-            if (bounds.contains(a) && bounds.contains(b)) matches.push({ kind: "wall", wall });
+            if (inside({ x: wall.ax, y: wall.ay }) && inside({ x: wall.bx, y: wall.by })) matches.push({ kind: "wall", wall });
         }
         for (const marker of floor().markers) {
-            if (bounds.contains(toLatLng({ x: marker.x, y: marker.y }))) matches.push({ kind: "marker", marker });
+            if (inside({ x: marker.x, y: marker.y })) matches.push({ kind: "marker", marker });
         }
         for (const room of floor().rooms) {
-            if (bounds.contains(toLatLng({ x: room.x, y: room.y }))) matches.push({ kind: "room", room });
+            if (inside({ x: room.x, y: room.y })) matches.push({ kind: "room", room });
         }
         return matches;
     }
@@ -1814,7 +1827,13 @@ function boot(): void {
         boxStart = map.mouseEventToContainerPoint(event);
         boxActive = false;
     });
-    map.getContainer().addEventListener("mousemove", (event: MouseEvent) => {
+    // On window, not the container. A rectangle dragged to the edge is released
+    // over whatever floats above the canvas - the tool pill, the options panel -
+    // or outside the map altogether, and those are siblings of the map rather
+    // than children, so the container never hears the release. The gesture then
+    // never finishes: nothing is selected, the rectangle stays on screen, and
+    // panning is left disabled.
+    window.addEventListener("mousemove", (event: MouseEvent) => {
         if (!boxStart) return;
         const current = map.mouseEventToContainerPoint(event);
         if (!boxActive) {
@@ -1830,7 +1849,7 @@ function boot(): void {
         }
         drawBoxRect(boxStart, current);
     });
-    map.getContainer().addEventListener("mouseup", (event: MouseEvent) => {
+    window.addEventListener("mouseup", (event: MouseEvent) => {
         if (!boxStart) return;
         if (boxActive) {
             finishBoxSelect(boxStart, map.mouseEventToContainerPoint(event), event.ctrlKey || event.metaKey);
@@ -2725,6 +2744,11 @@ function boot(): void {
     function nudgeSelection(dx: number, dy: number): boolean {
         const item = state.selection;
         if (!item) return false;
+        // Whether this can move at all is decided before anything is recorded:
+        // a room bounded entirely by shell has nothing to nudge, and taking a
+        // checkpoint for it leaves an undo step that undoes nothing.
+        const roomBoundary = item.kind === "room" ? roomBoundaryWalls(item.room) : null;
+        if (item.kind === "room" && (!roomBoundary || !roomBoundary.unique.length)) return false;
         checkpoint(`nudge:${itemKey(item)}`);
         if (item.kind === "wall") {
             item.wall.ax += dx;
@@ -2735,8 +2759,7 @@ function boot(): void {
             item.marker.x += dx;
             item.marker.y += dy;
         } else if (item.kind === "room") {
-            const boundary = roomBoundaryWalls(item.room);
-            if (!boundary || !boundary.unique.length) return false;
+            const boundary = roomBoundary as NonNullable<typeof roomBoundary>;
             for (const wall of boundary.unique) {
                 wall.ax += dx;
                 wall.ay += dy;

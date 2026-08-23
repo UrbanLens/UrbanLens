@@ -524,6 +524,51 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("box select follows the rectangle on screen, even when the plan is turned", async () => {
+        // The selection used to be tested against a latitude/longitude box built
+        // from the rectangle's corners, which is only the same shape while the
+        // map faces north. Turning the plan to face its building is the first
+        // thing anyone does here.
+        await openEditor();
+        await page.locator('[data-tool="box"]').click();
+
+        const selectAll = async (): Promise<number> => {
+            const frame = await page.locator("#floorplan-map").boundingBox();
+            if (!frame) throw new Error("no map");
+            await page.mouse.move(frame.x + 4, frame.y + 4);
+            await page.mouse.down();
+            await page.mouse.move(frame.x + frame.width - 4, frame.y + frame.height - 4, { steps: 8 });
+            await page.mouse.up();
+            await settle();
+            const heading = await page.locator("#floorplan-form h3").first().textContent();
+            const match = /^(\d+) items/.exec(heading || "");
+            return match ? Number(match[1]) : 0;
+        };
+
+        const facingNorth = await selectAll();
+        expect(facingNorth).toBeGreaterThanOrEqual(4);
+
+        // Turn the plan with the tool that does it, rather than reaching into
+        // the map from the test - the rotation path is worth exercising too.
+        await page.keyboard.press("Escape");
+        await page.locator('[data-tool="rotate"]').click();
+        const frame = await page.locator("#floorplan-map").boundingBox();
+        if (!frame) throw new Error("no map");
+        const centre = { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
+        await page.mouse.move(centre.x + 160, centre.y);
+        await page.mouse.down();
+        await page.mouse.move(centre.x + 130, centre.y + 90, { steps: 10 });
+        await page.mouse.up();
+        await settle();
+
+        await page.keyboard.press("Escape");
+        await page.locator('[data-tool="box"]').click();
+        const turned = await selectAll();
+
+        expect(turned).toBe(facingNorth);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();
