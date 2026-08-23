@@ -3591,7 +3591,8 @@ function boot(): void {
             button.className = `floorplan-photo${attached ? " is-attached" : ""}`;
             button.setAttribute("aria-pressed", attached ? "true" : "false");
             button.setAttribute("aria-label", photo.caption || "Photo");
-            button.title = photo.caption || "Photo";
+            button.setAttribute("data-tooltip", photo.caption || "Photo");
+            button.setAttribute("data-tooltip-float", "true");
             const image = document.createElement("img");
             image.src = photo.url;
             image.alt = "";
@@ -4317,7 +4318,8 @@ function boot(): void {
             button.type = "button";
             button.className = "btn btn--ghost";
             button.textContent = isCurrent ? `${version.name || "Untitled"} (current)` : version.name || "Untitled";
-            button.title = version.valid_from ? `In force from ${version.valid_from}` : "The original baseline";
+            button.setAttribute("data-tooltip", version.valid_from ? `In force from ${version.valid_from}` : "The original baseline");
+            button.setAttribute("data-tooltip-float", "true");
             button.disabled = isCurrent;
             button.addEventListener("click", () => void switchVersion(version.uuid));
             container.appendChild(button);

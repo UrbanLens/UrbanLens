@@ -91,10 +91,15 @@ describe("the editor template's own markup", () => {
         // everything else. A native title beside it renders as browser chrome -
         // different shape, different delay, no styling - so one control using
         // one and its neighbour the other is visible.
+        //
+        // Both halves, because controls are declared in one file and built in
+        // the other: reading only the template missed two the editor created
+        // itself, one of them written after this check existed.
         const template = readFileSync(EDITOR_TEMPLATE, "utf8");
-        const withTitle = (template.match(/<button\b[^>]*\btitle="/g) ?? []).length;
+        const declared = (template.match(/<button\b[^>]*\btitle="/g) ?? []).length;
+        const built = (readFileSync(EDITOR, "utf8").match(/\.title\s*=/g) ?? []).length;
 
-        expect(withTitle).toBe(0);
+        expect({ declared, built }).toEqual({ declared: 0, built: 0 });
     });
 
     test("every icon-only control names itself", () => {
