@@ -723,6 +723,30 @@ function boot(): void {
     }
 
     /** Adopt a document restored from either direction of the history. */
+    /** The plan name and date, which live in static markup rather than in a panel
+     * renderSidebar() rebuilds - so every path that changes the document has to
+     * reach them here instead of getting it for free. */
+    function planFields(): { name: HTMLInputElement | null; validFrom: HTMLInputElement | null } {
+        return {
+            name: document.getElementById("floorplan-name") as HTMLInputElement | null,
+            validFrom: document.getElementById("floorplan-valid-from") as HTMLInputElement | null,
+        };
+    }
+
+    /** Document <- inputs, on edit. */
+    function readPlanFields(): void {
+        const { name, validFrom } = planFields();
+        state.doc.name = name?.value || "";
+        state.doc.valid_from = validFrom?.value || null;
+    }
+
+    /** Inputs <- document, after a load or an undo. */
+    function showPlanFields(): void {
+        const { name, validFrom } = planFields();
+        if (name) name.value = state.doc.name || "";
+        if (validFrom) validFrom.value = state.doc.valid_from || "";
+    }
+
     function applyHistoryState(doc: FloorplanDocument): void {
         state.doc = doc;
         clearSelection();
@@ -730,6 +754,7 @@ function boot(): void {
         // (undoing a floor deletion's own inverse: adding one back works the
         // same way, via floorIndex clamping in floor() below).
         state.floorIndex = Math.min(state.floorIndex, Math.max(state.doc.floors.length - 1, 0));
+        showPlanFields();
         renderSidebar();
         render();
         updateHistoryButtons();
@@ -4377,10 +4402,7 @@ function boot(): void {
         // fitToContent() below then fits bounds against the rotated view,
         // not the unrotated one.
         if (canRotateView) map.setBearing(state.doc.rotation_degrees || 0);
-        const nameInput = document.getElementById("floorplan-name") as HTMLInputElement | null;
-        if (nameInput) nameInput.value = state.doc.name || "";
-        const validFrom = document.getElementById("floorplan-valid-from") as HTMLInputElement | null;
-        if (validFrom) validFrom.value = state.doc.valid_from || "";
+        showPlanFields();
         // A brand-new plan starts from the real footprint when one is known, so
         // the first thing on screen is the building rather than a blank map.
         const fresh = !state.loadFailed && state.doc.floors.length === 1 && !(state.doc.floors[0] as Floor).walls.length;
@@ -4479,15 +4501,11 @@ function boot(): void {
         // was sent first - whichever *resolves* last wins, which can silently
         // revert a just-forked "new version" back to the one it forked from.
         await waitForSaveSlot();
-        const nameInput = document.getElementById("floorplan-name") as HTMLInputElement | null;
-        const validFrom = document.getElementById("floorplan-valid-from") as HTMLInputElement | null;
-        // Stored exactly as typed, blank included. Defaulting here to the floor's
-        // name wrote a derived value into the column: the placeholder stopped
-        // applying once it had been saved, and renaming the floor afterwards left
-        // the plan carrying the old one. renderVersions() applies the same default
-        // at display time, where it stays live.
-        state.doc.name = nameInput?.value || "";
-        state.doc.valid_from = validFrom?.value || null;
+        // Both fields are already on state.doc, written there as they were typed.
+        // Stored exactly as typed, blank included: defaulting a blank name to the
+        // floor's wrote a derived value into the column, so the placeholder stopped
+        // applying once saved and renaming the floor left the plan on the old name.
+        // renderVersions() applies a default at display time, where it stays live.
         // Every marker's WGS-84 position, freshly computed here rather than
         // kept live at each edit site (placement, drag) - x/y is the single
         // source of truth, and this is the one place that has to convert it
@@ -4629,13 +4647,18 @@ function boot(): void {
         if (event.key === "Escape") closeMoreMenu();
     });
 
-    // Both fields are read inside save() rather than written through on change,
-    // so without something to mark the document dirty they only reached the
-    // server when an unrelated edit had already queued a save. A plan named and
-    // then left lost the name, and beforeunload stayed quiet on the way out.
-    // Quiet because neither changes the geometry, so there is nothing to redraw.
+    // Written through on edit like every other field, rather than read out of the
+    // DOM at save time: that left them outside both autosave (nothing marked the
+    // document dirty, so a plan named and then left lost the name) and undo, which
+    // restores state.doc and cannot restore what was never in it. Grouped per
+    // field so a typed name is one undo entry rather than one per keystroke, and
+    // quiet because neither changes the geometry.
     for (const id of ["floorplan-name", "floorplan-valid-from"]) {
-        document.getElementById(id)?.addEventListener("input", () => markDirtyQuiet());
+        document.getElementById(id)?.addEventListener("input", () => {
+            checkpoint(`plan-${id}`);
+            readPlanFields();
+            markDirtyQuiet();
+        });
     }
 
     document.getElementById("floorplan-save-version")?.addEventListener("click", () => {

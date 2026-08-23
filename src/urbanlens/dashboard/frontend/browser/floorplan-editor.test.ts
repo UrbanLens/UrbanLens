@@ -56,7 +56,7 @@ const BUILT = existsSync(BUNDLE);
  * reach it is for the server to answer the way a real one would when another
  * tab has saved first.
  */
-const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "", lastHadUuid: true, lastName: "", lastValidFrom: "" as string | null };
+const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "", lastHadUuid: true, lastName: "", lastValidFrom: "" as string | null, lastRotation: -1 };
 
 /**
  * Answer a save the way the server does: with the document it was given, every
@@ -423,6 +423,8 @@ beforeAll(async () => {
                 if (wanted === "plan-2") return servePlan({ ...(closetPlan() as Record<string, unknown>), uuid: "plan-2", versions: (squarePlan() as { versions: unknown[] }).versions });
                 return servePlan(squarePlan());
             }
+            // Turned to face its building, which every other fixture leaves at 0.
+            if (path === "/json-rotated") return servePlan({ ...(squarePlan() as Record<string, unknown>), rotation_degrees: 30 });
             if (path === "/json-grid") return servePlan(gridPlan());
             if (path === "/json-closet") return servePlan(closetPlan());
             if (path === "/json-island") return servePlan(islandPlan());
@@ -449,6 +451,7 @@ beforeAll(async () => {
                     const doc = body as { name?: string; valid_from?: string | null };
                     saves.lastName = doc.name ?? "";
                     saves.lastValidFrom = doc.valid_from ?? null;
+                    saves.lastRotation = (body as { rotation_degrees?: number }).rotation_degrees ?? -1;
                     echoed = echoSaved(body, servedVersions);
                 } catch {
                     saves.lastPool = -1;
@@ -1772,6 +1775,53 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         expect(labels.length, "the version list emptied itself on save").toBeGreaterThan(1);
         expect(new Set(labels).size, `two versions labelled the same: ${labels.join(" / ")}`).toBe(labels.length);
         await page.close();
+    });
+
+    test("undo takes back a renamed plan the way it takes back a moved wall", async () => {
+        // The plan name and date are the only fields in static markup rather than a
+        // panel renderSidebar() rebuilds, which is how they came to sit outside the
+        // undo framework: undo restores state.doc, and these were read out of the
+        // DOM at save time instead of ever being written into it.
+        saves.lastName = "unset";
+        await openEditor();
+        const nameField = page.locator("#floorplan-name");
+        const before = await nameField.inputValue();
+
+        await nameField.fill("Boiler house");
+        for (let waited = 0; waited < 40 && saves.lastName !== "Boiler house"; waited++) await page.waitForTimeout(250);
+        expect(saves.lastName).toBe("Boiler house");
+
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        expect(await nameField.inputValue(), "undo left the renamed plan on screen").toBe(before);
+
+        // And the name that undo restored is the one that gets saved, rather than
+        // the field quietly re-supplying the typed one on the next save.
+        saves.lastName = "unset";
+        await page.locator("#floorplan-valid-from").fill("1994-06-15");
+        for (let waited = 0; waited < 40 && saves.lastName === "unset"; waited++) await page.waitForTimeout(250);
+        expect(saves.lastName, "the undone name came back on the next save").toBe(before);
+        await page.close();
+    });
+
+    test("a plan turned to face its building keeps its angle, plugin or no plugin", async () => {
+        // rotation_degrees is the plan's own north, and every other fixture leaves
+        // it at 0 - so nothing exercised a turned plan at all. It matters most in
+        // the degraded case: without leaflet-rotate the view cannot be turned, and
+        // an editor that answered by saving 0 would flatten the building's angle
+        // on the first autosave after opening it on a bad connection.
+        for (const query of ["plan=rotated", "plan=rotated&norotate=1"]) {
+            saves.lastRotation = -1;
+            page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+            await page.goto(`http://127.0.0.1:${server.port}/?${query}`, { waitUntil: "load" });
+            await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
+
+            // Any edit at all; the plan name is the cheapest one that saves.
+            await page.locator("#floorplan-name").fill("turned");
+            for (let waited = 0; waited < 40 && saves.lastRotation === -1; waited++) await page.waitForTimeout(250);
+            expect(saves.lastRotation, `saved a different angle than it opened with (${query})`).toBeCloseTo(30, 6);
+            await page.close();
+        }
     });
 
     test("losing only the rotate plugin costs rotation, not the editor", async () => {
