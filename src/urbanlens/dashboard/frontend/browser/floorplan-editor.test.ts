@@ -112,7 +112,7 @@ html,body{margin:0}
       <button type="button" class="color-swatch" data-color="#e53935" style="background-color:#e53935"
               onclick="pickColor('color-picker-floorplan-marker','color-value-floorplan-marker','#e53935',this)"></button>
       <button type="button" class="color-swatch color-clear selected" data-color=""
-              onclick="pickColor('color-picker-floorplan-marker','color-value-floorplan-marker','',this)"></button>
+              onclick="pickColor('color-picker-floorplan-marker','color-value-floorplan-marker','',this)"><i class="material-symbols-outlined">block</i></button>
     </div>
   </div>
   <input id="floorplan-name"><input id="floorplan-valid-from" type="date">

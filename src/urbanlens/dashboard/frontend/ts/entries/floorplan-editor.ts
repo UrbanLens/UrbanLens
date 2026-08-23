@@ -39,6 +39,7 @@ import {
 } from "../shared/floorplan/document";
 import { installGlobalColorPicker } from "../shared/color-picker";
 import { CONNECTOR_KINDS, connectorCandidates } from "../shared/floorplan/connectors";
+import { type RoomBoundary, splitRoomBoundary } from "../shared/floorplan/rooms";
 import { type SentSnapshot, applyServerIds, snapshotForSend } from "../shared/floorplan/sync";
 import { contiguousLevels, deriveDesignations } from "../shared/floorplan/designations";
 import { type DragModifiers, DragGesture, constrainToAxis, modifiersOf, snapRotation } from "../shared/floorplan/drag";
@@ -3593,33 +3594,18 @@ function boot(): void {
      * proximity would be wrong exactly when it mattered.
      */
     /**
-     * A room's boundary walls, split three ways.
+     * A room's boundary walls, split into the room's own and the rest.
      *
-     * ``unique`` is a wall this room alone relies on: it bounds no other face
-     * *and* is not part of the building's shell. Those travel with the room.
-     * ``shared`` is everything else on the boundary, which stretches to keep
-     * up rather than moving wholesale.
-     *
-     * The exterior exclusion is load-bearing and easy to talk yourself out of.
-     * Topologically an exterior wall usually does bound exactly one room - in
-     * a shell split by a single partition, the west wall bounds only the west
-     * room - so a purely topological "unique" hands that wall to the room and
-     * dragging the room tears the side off the building.
-     *
-     * A room with no unique walls at all is therefore one whose every side is
-     * shell or shared. There is nothing for a move or a delete to act on, and
-     * both callers check for it rather than running a gesture that does
-     * nothing.
+     * A room with no unique walls at all is one whose every side is shared with
+     * a neighbour. There is nothing for a move or a delete to act on, and both
+     * callers check for it rather than running a gesture that does nothing.
      *
      * Returns null for an unbound seed (no face, so no boundary to gather).
      */
-    function roomBoundaryWalls(room: RoomSeed): { face: Face; unique: Wall[]; shared: Wall[] } | null {
+    function roomBoundaryWalls(room: RoomSeed): RoomBoundary | null {
         const face = faceForSeed({ x: room.x, y: room.y }, state.faces);
         if (!face) return null;
-        const boundary = floor().walls.filter((wall) => face.wallIds.includes(wallId(wall)));
-        const unique = boundary.filter((wall) => wall.kind !== "exterior" && !state.faces.some((other) => other !== face && other.wallIds.includes(wallId(wall))));
-        const shared = boundary.filter((wall) => !unique.includes(wall));
-        return { face, unique, shared };
+        return splitRoomBoundary(face, floor().walls, state.faces);
     }
 
     /**

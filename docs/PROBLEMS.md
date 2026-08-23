@@ -3960,15 +3960,24 @@ an 8x4 shell split by one partition, `west` bounds only the west face, so a
 purely topological "unique" would translate the building's west wall whenever
 that room is dragged. That was tried and reverted.
 
-So the open design question is (a), not (b): should a face bounded entirely by
-exterior wall be nameable as a room at all? Naming a single-room structure (a
-shed) is legitimate; treating the shell of a building someone has not
-subdivided yet as "a room" is what Jess objected to. Both are the same face and
-nothing in the geometry distinguishes them. Needs a product decision, not a fix.
+**RESOLVED 2026-08-23.** Jess left the call here ("low risk to choose an
+implementation that makes sense and is consistent with other apps; I can give
+feedback after testing"), so:
 
-Meanwhile the symptom is gone: such a room no longer runs a drag that disables
-panning and moves nothing, and no longer offers a delete control that only
-cleared its name.
+Nothing in the geometry separates a shed from a shell nobody has subdivided,
+and no rule was going to invent the difference - so *intent* draws the line,
+which is what other floorplan tools do too. An un-subdivided outline is not
+captioned as a room and a stray click will not mint one; right-clicking it
+offers to name it, and once named it is a room like any other. A studio flat and
+a shed are single rooms; a building you have not got round to dividing is not.
+
+"Like any other" now includes moving and deleting it, which it did not. The
+exterior exclusion in `splitRoomBoundary` (shared/floorplan/rooms.ts) lifts when
+a face's *entire* boundary is exterior: such a face is a closed structure in its
+own right, so its walls bound it and nothing else and there is no side of
+anything else to tear off. The exclusion still applies to mixed faces, which is
+where the reverted bug lived - `rooms.test.ts` holds both cases, including two
+sheds sharing a party wall, which stays nobody's to drag.
 
 ## Floorplan drags converted to Pointer Events without browser verification (2026-08-22)
 
