@@ -56,7 +56,7 @@ ENV LANG=en_US.UTF-8 \
 
 # Install Bun (JS runtime + package manager) via the official Docker image.
 # This avoids the curl-to-bash NVM install and gives a reproducible binary.
-COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
 
 # Install uv (Python package/dependency manager) the same way.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
