@@ -3940,6 +3940,30 @@ same file; not investigated or fixed - out of scope for that change. `SavedFilte
 Django-stubs-inferred field type looks like the actual mismatch (an F-expression-shaped type rather
 than the plain `str` the field should behave as); worth a look next time this file is touched.
 
+## Every drag frame rebuilds every Leaflet layer (2026-08-23)
+
+`render()` in floorplan-editor.ts clears all four layer groups and recreates
+every polyline, polygon, marker and handle, and a drag calls it synchronously on
+each pointermove. Measured in the browser on a 12x12 grid of rooms - 312 walls,
+smaller than a real survey - that cost **229ms per move**, about four frames a
+second.
+
+Most of it was the room labels: a label is a *permanent* Leaflet tooltip, so
+every one is a DOM node Leaflet creates and positions itself. Suppressing them
+while `activeDrags` is non-zero, the way the joint handles already were, brought
+it to **49ms** and they return on release.
+
+What is left is the rebuild itself: ~312 `L.polyline` plus ~144 `L.polygon`
+constructions per frame, against ~7ms for `deriveFaces` on the same plan (so the
+planar geometry is not the problem). The fix is to reuse layers - `setLatLngs`
+on the ones that already exist, create and destroy only what actually appeared
+or went away - rather than clearing and rebuilding. That is a real refactor of
+`render()` and its callers, not a patch, which is why it is written down here
+instead of attempted alongside the measurement.
+
+`bun run test:browser` holds both guards: the behavioural one (no room labels
+mid-drag, labels back on release) and a deliberately loose timing bound.
+
 ## The building shell is a room, but a room bounded only by shell cannot be moved (2026-08-22)
 
 Jess reported two things that turn out to be the same case, pulling in opposite

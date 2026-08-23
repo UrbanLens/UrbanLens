@@ -466,6 +466,11 @@ function boot(): void {
                     suppressNextClick = true;
                 }
                 handlers.end?.(moved);
+                // Whatever the gesture's own end handler does or does not do,
+                // one frame has to follow it: the drag suppressed the room
+                // labels and the joint handles, and only a render with
+                // activeDrags back at zero puts them back.
+                if (moved) renderSoon();
             };
             // On window rather than the map: a pointer released outside the map
             // still has to end the gesture, or the listeners stay and panning
@@ -793,7 +798,15 @@ function boot(): void {
             // An un-subdivided outline gets no label. It is the building, and
             // captioning it "Unnamed room" is the same wrong claim as letting a
             // click turn it into one - it just makes the claim unprompted.
-            if (seed || !isBuildingShell(face, wallsById)) {
+            //
+            // Nor does anything while a drag is running. A label is a permanent
+            // Leaflet tooltip, which is a DOM node Leaflet positions itself,
+            // and render() rebuilds every one of them on every frame: measured
+            // on a 12x12 grid of rooms, that is 229ms per move against 58ms
+            // without them - four frames a second, on a plan smaller than a
+            // real survey. They come back on release, which is the same bargain
+            // the joint handles already make a few lines below.
+            if (!activeDrags && (seed || !isBuildingShell(face, wallsById))) {
                 const label = seed ? seed.name || "Unnamed" : "Unnamed room";
                 // Permanent, not on hover: a room appearing and naming its own
                 // area the instant a loop closes is what teaches the wall-first
@@ -3612,11 +3625,10 @@ function boot(): void {
      * Offer to delete a whole room at once - its seed and the walls that are
      * only ever this room's - rather than one wall at a time.
      *
-     * Nothing is offered when the room has no walls of its own to lose (it
-     * sits inside the shell, or every side is shared with a neighbour). The
-     * room is still a room; there is simply no destructive action that would
-     * mean anything, and a button that only cleared its name was read as a
-     * delete that had failed.
+     * Nothing is offered when the room has no walls of its own to lose - every
+     * side shared with a neighbour, or the building's own. The room is still a
+     * room; there is simply no destructive action that would mean anything, and
+     * a button that only cleared its name was read as a delete that had failed.
      */
     function renderRoomDeleteControl(host: HTMLElement, room: RoomSeed): void {
         const boundary = roomBoundaryWalls(room);

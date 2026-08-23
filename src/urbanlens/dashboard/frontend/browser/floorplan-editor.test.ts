@@ -146,6 +146,34 @@ async function planCentre(): Promise<{ x: number; y: number }> {
 }
 
 /** A four-wall square, 10m on a side, as the editor's own document shape. */
+/**
+ * A grid of rooms, for asking what a real survey costs to redraw.
+ *
+ * Args:
+ *     cells: Rooms per side. 12 gives 312 walls and 144 faces.
+ */
+function gridPlan(cells = 12): unknown {
+    const step = 3;
+    const walls: unknown[] = [];
+    for (let line = 0; line <= cells; line++) {
+        for (let span = 0; span < cells; span++) {
+            const edge = line === 0 || line === cells;
+            const kind = edge ? "exterior" : "interior";
+            walls.push({ kind, thickness: "normal", ax: line * step, ay: span * step, bx: line * step, by: (span + 1) * step, openings: [] });
+            walls.push({ kind, thickness: "normal", ax: span * step, ay: line * step, bx: (span + 1) * step, by: line * step, openings: [] });
+        }
+    }
+    return {
+        uuid: "plan-big",
+        name: "grid",
+        valid_from: null,
+        origin: "local",
+        plan_origin: { lat: 41.733, lng: -73.928 },
+        rotation_degrees: 0,
+        floors: [{ uuid: "floor-1", level: 0, designation: "", name: "Ground", walls, rooms: [], markers: [] }],
+    };
+}
+
 function squarePlan(): unknown {
     const corners = [
         [0, 0],
@@ -195,13 +223,13 @@ let server: ReturnType<typeof Bun.serve>;
  * Served over HTTP rather than injected: the bundle is a module that imports a
  * chunk by relative URL, which cannot resolve without a real origin.
  */
-async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false): Promise<void> {
+async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false, plan: "square" | "grid" = "square"): Promise<void> {
     page = await browser.newPage({ viewport, hasTouch });
     page.on("pageerror", (error) => console.error("PAGEERROR", String(error).slice(0, 300)));
     page.on("console", (message) => {
         if (message.type() === "error") console.error("browser console:", message.text().slice(0, 200));
     });
-    await page.goto(`http://127.0.0.1:${server.port}/`, { waitUntil: "load" });
+    await page.goto(`http://127.0.0.1:${server.port}/${plan === "grid" ? "?plan=grid" : ""}`, { waitUntil: "load" });
     // "attached", not the default "visible": a straight wall is an SVG line
     // whose bounding box has zero height, which Playwright reads as invisible.
     await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
@@ -292,8 +320,15 @@ beforeAll(async () => {
         // makes a mis-typed glob look exactly like a broken editor.
         fetch(request) {
             const path = new URL(request.url).pathname;
-            if (path === "/") return new Response(HARNESS, { headers: { "content-type": "text/html" } });
+            if (path === "/") {
+                // The plan url is substituted rather than fixed, so a test can
+                // ask for a big one without a second copy of the harness.
+                const big = new URL(request.url).searchParams.get("plan") === "grid";
+                const page = big ? HARNESS.replace('data-json-url="/json"', 'data-json-url="/json-grid"') : HARNESS;
+                return new Response(page, { headers: { "content-type": "text/html" } });
+            }
             if (path === "/json") return Response.json(squarePlan());
+            if (path === "/json-grid") return Response.json(gridPlan());
             if (path === "/save") return Response.json({ ok: true, floorplan: squarePlan() });
             return new Response(Bun.file(join(STATIC_DIR, path.replace(/^\//, ""))));
         },
@@ -776,6 +811,62 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         expect(saved).toBe("#e53935");
         expect(await page.locator('#floorplan-map .leaflet-marker-icon [style*="e53935"], #floorplan-map [style*="#e53935"]').count()).toBeGreaterThan(0);
         await page.close();
+    });
+
+    test("room labels stand down while a drag is running", async () => {
+        // A room label is a permanent Leaflet tooltip - a DOM node Leaflet
+        // positions itself - and render() rebuilt every one of them on every
+        // frame of every drag. This is the behaviour behind the timing below,
+        // asserted directly because a threshold alone would not say what broke.
+        await openEditor({ width: 1200, height: 800 }, false, "grid");
+        const labels = () => page.locator(".floorplan-room-label").count();
+        expect(await labels()).toBeGreaterThan(50);
+
+        const before = await planExtent();
+        await page.mouse.move(before.grab.x, before.grab.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 4; step++) await page.mouse.move(before.grab.x, before.grab.y - step * 6);
+        expect(await labels()).toBe(0);
+
+        await page.mouse.up();
+        await settle();
+        // And come back on release, which needs a frame after the drag ends.
+        expect(await labels()).toBeGreaterThan(50);
+        await page.close();
+    });
+
+    test("a survey-sized plan still drags at a usable frame rate", async () => {
+        // The same gesture is run on the four-wall plan first and subtracted.
+        // Playwright dispatches each move over a pipe, which costs about as
+        // much as a small redraw; timing one plan alone measures that pipe as
+        // much as the editor. The difference is the editor.
+        //
+        // The bound is deliberately loose. This runs on whatever machine is
+        // free, so a tight one would be flaky - but the regression it exists to
+        // catch (rebuilding every room label per frame) cost 205ms, so there is
+        // still a wide margin between "slower than we would like" and "broken".
+        const MOVES = 10;
+        const dragTime = async (plan: "square" | "grid"): Promise<number> => {
+            await openEditor({ width: 1200, height: 800 }, false, plan);
+            const before = await planExtent();
+            await page.mouse.move(before.grab.x, before.grab.y);
+            await page.mouse.down();
+            const started = Date.now();
+            for (let step = 1; step <= MOVES; step++) await page.mouse.move(before.grab.x, before.grab.y - step * 6);
+            const elapsed = Date.now() - started;
+            await page.mouse.up();
+            // A run where nothing moved would be fast and meaningless.
+            const after = await planExtent();
+            expect(before.top - after.top, `${plan} plan did not move`).toBeGreaterThan(30);
+            await page.close();
+            return elapsed / MOVES;
+        };
+
+        const small = await dragTime("square");
+        const large = await dragTime("grid");
+        console.log(`drag: 4 walls ${small.toFixed(1)}ms/move, 312 walls ${large.toFixed(1)}ms/move`);
+
+        expect(large - small).toBeLessThan(80);
     });
 
     test("the tool options panel shows the armed tool's choices", async () => {
