@@ -2288,6 +2288,55 @@ class FloorplanResponseOrderTests(TestCase):
         self.assertEqual(document["floors"][0]["walls"][0]["references"], [pooled])
         self.assertEqual(document["floors"][0]["walls"][1]["references"], [pooled])
 
+    def test_resending_a_client_side_pool_id_recreates_the_row(self) -> None:
+        """Which is why the editor has to take the real uuid back.
+
+        _Pools keys the existing pool by its real uuids, so a second save still
+        carrying "local-ref-1" matches nothing, creates a second row and deletes
+        the first as stale. The citation follows, so nothing visible breaks -
+        the row's identity churns on every autosave, which is the part that
+        does.
+        """
+        from urbanlens.dashboard.models.floorplans.model import FloorplanReference
+        from urbanlens.dashboard.models.images.model import Image
+
+        image = baker.make(Image, profile=self.profile)
+        walls = _square_walls()
+        walls[0] = {**walls[0], "references": ["local-ref-1"]}
+        payload = {
+            "reference_pool": [{"uuid": "local-ref-1", "kind": "photo", "image_uuid": str(image.uuid)}],
+            "floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}],
+        }
+        save_document(self.floorplan, payload, profile=self.profile)
+        first = FloorplanReference.objects.get(floorplan=self.floorplan).pk
+
+        save_document(self.floorplan, payload, profile=self.profile)
+
+        self.assertNotEqual(FloorplanReference.objects.get(floorplan=self.floorplan).pk, first)
+
+    def test_resending_the_real_pool_id_keeps_the_row(self) -> None:
+        """The same save, with the uuid the first one gave back."""
+        from urbanlens.dashboard.models.floorplans.model import FloorplanReference
+        from urbanlens.dashboard.models.images.model import Image
+
+        image = baker.make(Image, profile=self.profile)
+        walls = _square_walls()
+        walls[0] = {**walls[0], "references": ["local-ref-1"]}
+        save_document(
+            self.floorplan,
+            {
+                "reference_pool": [{"uuid": "local-ref-1", "kind": "photo", "image_uuid": str(image.uuid)}],
+                "floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}],
+            },
+            profile=self.profile,
+        )
+        saved = document_for(self.floorplan)
+        first = FloorplanReference.objects.get(floorplan=self.floorplan).pk
+
+        save_document(self.floorplan, {"reference_pool": saved["reference_pool"], "floors": saved["floors"]}, profile=self.profile)
+
+        self.assertEqual(FloorplanReference.objects.get(floorplan=self.floorplan).pk, first)
+
     def test_a_photo_nothing_cites_any_more_leaves_the_pool(self) -> None:
         """Deleting by omission applies to the pool as much as to the items."""
         from urbanlens.dashboard.models.images.model import Image

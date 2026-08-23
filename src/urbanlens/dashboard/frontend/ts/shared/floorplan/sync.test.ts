@@ -123,6 +123,73 @@ describe("applyServerIds", () => {
         expect(() => applyServerIds(snapshotForSend(doc), savedInStoreyOrder())).not.toThrow();
     });
 
+    test("a pool row takes its real uuid, and what cites it follows", () => {
+        // _Pools looks the existing pool up by real uuid, so a second save
+        // still carrying "local-1" matches nothing, creates a second row and
+        // deletes the first as stale - the row destroyed and rebuilt on every
+        // autosave, with nothing visible to show for it.
+        const doc = unsortedDoc();
+        const ground = doc.floors[0];
+        if (!ground) throw new Error("no floor");
+        (ground.walls[0] as { references?: string[] }).references = ["local-1"];
+        doc.reference_pool = [{ uuid: "local-1", kind: "photo", image_uuid: "image-a" }];
+
+        const saved = savedInStoreyOrder();
+        saved.reference_pool = [{ uuid: "srv-ref", kind: "photo", image_uuid: "image-a" }];
+
+        applyServerIds(snapshotForSend(doc), saved);
+
+        expect(doc.reference_pool?.[0]?.uuid).toBe("srv-ref");
+        expect((ground.walls[0] as { references?: string[] }).references).toEqual(["srv-ref"]);
+    });
+
+    test("the pool is matched on its image, not on its position", () => {
+        // FloorplanReference declares no ordering, so the order it comes back
+        // in is whatever the database felt like.
+        const doc = unsortedDoc();
+        doc.reference_pool = [
+            { uuid: "local-1", image_uuid: "image-a" },
+            { uuid: "local-2", image_uuid: "image-b" },
+        ];
+        const saved = savedInStoreyOrder();
+        saved.reference_pool = [
+            { uuid: "srv-b", image_uuid: "image-b" },
+            { uuid: "srv-a", image_uuid: "image-a" },
+        ];
+
+        applyServerIds(snapshotForSend(doc), saved);
+
+        expect(doc.reference_pool?.map((row) => row.uuid)).toEqual(["srv-a", "srv-b"]);
+    });
+
+    test("a reference with no image keeps what it had", () => {
+        // Added by URL: nothing to match it on, so renaming it would be a guess.
+        const doc = unsortedDoc();
+        doc.reference_pool = [{ uuid: "local-1", url: "https://example.test/plan.pdf" }];
+        const saved = savedInStoreyOrder();
+        saved.reference_pool = [{ uuid: "srv-1", url: "https://example.test/plan.pdf" }];
+
+        applyServerIds(snapshotForSend(doc), saved);
+
+        expect(doc.reference_pool?.[0]?.uuid).toBe("local-1");
+    });
+
+    test("a lock's citation is repointed too", () => {
+        const doc = unsortedDoc();
+        const ground = doc.floors[0];
+        if (!ground) throw new Error("no floor");
+        const wall = ground.walls[0];
+        if (!wall) throw new Error("no wall");
+        wall.openings.push({ kind: "door", t_start: 0.4, t_end: 0.6, swing: "none", locks: [{ state: "locked", references: ["local-1"] }] });
+        doc.reference_pool = [{ uuid: "local-1", image_uuid: "image-a" }];
+        const saved = savedInStoreyOrder();
+        saved.reference_pool = [{ uuid: "srv-ref", image_uuid: "image-a" }];
+
+        applyServerIds(snapshotForSend(doc), saved);
+
+        expect(wall.openings[0]?.locks?.[0]?.references).toEqual(["srv-ref"]);
+    });
+
     test("a snapshot is immune to edits made while the save is in flight", () => {
         // The whole reason the snapshot exists: deleting the first wall before
         // the response lands must not shift every uuid onto its neighbour.

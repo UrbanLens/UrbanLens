@@ -7,7 +7,7 @@
  * overwrites.
  */
 
-import type { Floor, FloorplanDocument, Lock, Marker, Opening, RoomSeed, Wall } from "./document";
+import type { Floor, FloorplanDocument, ItemDetails, Lock, Marker, Opening, Reference, RoomSeed, Wall } from "./document";
 
 /**
  * A frozen-order, same-object record of what a save's payload actually held,
@@ -30,6 +30,13 @@ export interface SentSnapshot {
     markers: Marker[];
 }
 
+/** Everything one save sent, frozen at the moment it went. */
+export interface SentDocument {
+    floors: SentSnapshot[];
+    /** The reference pool as sent, so its rows can be renamed on the way back. */
+    pool: Reference[];
+}
+
 /**
  * Record each floor's item arrays *in the order sent*, without copying the
  * items themselves.
@@ -45,8 +52,8 @@ export interface SentSnapshot {
  * Returns:
  *     One entry per floor, holding that floor's arrays as they were.
  */
-export function snapshotForSend(doc: FloorplanDocument): SentSnapshot[] {
-    return doc.floors.map((floor) => ({
+export function snapshotForSend(doc: FloorplanDocument): SentDocument {
+    const floors = doc.floors.map((floor) => ({
         floor,
         level: floor.level,
         walls: [...floor.walls],
@@ -55,6 +62,59 @@ export function snapshotForSend(doc: FloorplanDocument): SentSnapshot[] {
         rooms: [...floor.rooms],
         markers: [...floor.markers],
     }));
+    return { floors, pool: [...(doc.reference_pool ?? [])] };
+}
+
+/** Every item on a floor that can carry details, the floor itself included. */
+function itemsOf(entry: SentSnapshot): ItemDetails[] {
+    const items: ItemDetails[] = [entry.floor];
+    for (let wallIndex = 0; wallIndex < entry.walls.length; wallIndex++) {
+        items.push(entry.walls[wallIndex] as ItemDetails);
+        for (let openingIndex = 0; openingIndex < (entry.wallOpenings[wallIndex]?.length ?? 0); openingIndex++) {
+            items.push(entry.wallOpenings[wallIndex]?.[openingIndex] as ItemDetails);
+            for (const lock of entry.openingLocks[wallIndex]?.[openingIndex] ?? []) items.push(lock);
+        }
+    }
+    items.push(...entry.rooms, ...entry.markers);
+    return items;
+}
+
+/**
+ * Give the pool's rows their real uuids, and repoint what cites them.
+ *
+ * Matched on the image each row stands for rather than by position: the pool
+ * has no declared ordering, so the order it comes back in is whatever the
+ * database felt like. A row with no image - a reference added by URL - has no
+ * key to match on and keeps whatever it had.
+ *
+ * This matters because _Pools looks the existing pool up by real uuid: a second
+ * save still carrying "local-3" matches nothing, creates a second row and
+ * deletes the first as stale. The citation follows, so nothing visible breaks -
+ * the row is simply destroyed and rebuilt on every autosave.
+ *
+ * Args:
+ *     sent: What snapshotForSend recorded.
+ *     saved: The document the server returned.
+ */
+function applyPoolIds(sent: SentDocument, saved: FloorplanDocument): void {
+    const savedByImage = new Map<string, string>();
+    for (const row of saved.reference_pool ?? []) {
+        if (row.image_uuid && row.uuid) savedByImage.set(row.image_uuid, row.uuid);
+    }
+    const renamed = new Map<string, string>();
+    for (const row of sent.pool) {
+        const real = row.image_uuid ? savedByImage.get(row.image_uuid) : undefined;
+        if (!real || !row.uuid || row.uuid === real) continue;
+        renamed.set(row.uuid, real);
+        row.uuid = real;
+    }
+    if (!renamed.size) return;
+    for (const entry of sent.floors) {
+        for (const item of itemsOf(entry)) {
+            if (!item.references?.length) continue;
+            item.references = item.references.map((uuid) => renamed.get(uuid) ?? uuid);
+        }
+    }
 }
 
 /**
@@ -83,9 +143,10 @@ export function snapshotForSend(doc: FloorplanDocument): SentSnapshot[] {
  *     sent: What snapshotForSend() recorded for this request.
  *     saved: The document the server returned for it.
  */
-export function applyServerIds(sent: SentSnapshot[], saved: FloorplanDocument): void {
+export function applyServerIds(sent: SentDocument, saved: FloorplanDocument): void {
+    applyPoolIds(sent, saved);
     const byLevel = new Map<number, SentSnapshot>();
-    for (const entry of sent) byLevel.set(entry.level, entry);
+    for (const entry of sent.floors) byLevel.set(entry.level, entry);
 
     for (const savedFloor of saved.floors || []) {
         const entry = byLevel.get(savedFloor.level);
