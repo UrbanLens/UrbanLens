@@ -472,6 +472,11 @@ _MARKER_KIND_TO_PIN_TYPE = {
 }
 
 
+#: The twin fields :func:`_sync_linked_pin` sets, and therefore the only ones it
+#: has to compare to know whether saving would change anything.
+_TWIN_FIELDS = ("name", "name_is_user_provided", "pin_type", "pin_type_is_user_provided", "location_id", "icon", "color")
+
+
 def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan: Floorplan) -> None:
     """Create, move, or restyle a marker's detail-pin twin to match it.
 
@@ -512,8 +517,14 @@ def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan
     location, _created = Location.objects.get_exact_or_create(lat, lng)
 
     linked = marker.linked_pin
+    creating = linked is None
     if linked is None:
         linked = Pin(parent_pin=parent_pin, profile=parent_pin.profile)
+    # Every field this function writes, read before it writes them. A Pin save is
+    # not a row write: it runs the whole Pin signal chain, and the editor saves on
+    # a debounce after every edit, so a plan with markers ran that chain per marker
+    # per keystroke-batch whether or not anything about the twin had changed.
+    before = None if creating else [getattr(linked, name) for name in _TWIN_FIELDS]
     linked.name = marker.name or None
     # Not an explicit rename any more than DetailPinPanelView's own creation
     # is - the name is prefilled from the marker kind, and should stay
@@ -534,7 +545,8 @@ def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan
         linked.icon = (payload.get("icon") or "").strip() or None
     if "color" in payload:
         linked.color = (payload.get("color") or "").strip() or None
-    linked.save()
+    if creating or [getattr(linked, name) for name in _TWIN_FIELDS] != before:
+        linked.save()
     if marker.linked_pin_id != linked.pk:
         marker.linked_pin = linked
         marker.save(update_fields=["linked_pin"])

@@ -1540,6 +1540,21 @@ class FloorplanAutosaveCostTests(TestCase):
             profile=self.user.profile,
         )
 
+    def _as_the_client_sends_it(self) -> dict:
+        """`document_for` as the editor would post it back.
+
+        The server never emits a marker's lat/lng - only the client knows the
+        projection from plan-local metres (see `_sync_linked_pin`). So a document
+        round-tripped through `document_for` alone skips the twin-pin path
+        entirely at its `lat is None` guard, and any measurement or assertion
+        made on it is blind to the most expensive thing an autosave does.
+        """
+        document = document_for(self.floorplan)
+        for marker in document["floors"][0]["markers"]:
+            marker["lat"] = 41.7361
+            marker["lng"] = -73.9361
+        return document
+
     def _resave_unchanged(self) -> int:
         """Save the plan exactly as it stands, and count the queries."""
         from django.test.utils import CaptureQueriesContext
@@ -1565,6 +1580,19 @@ class FloorplanAutosaveCostTests(TestCase):
 
         self.assertLess(cost, 45, f"an unchanged resave took {cost} queries")
 
+    def test_the_document_the_client_actually_posts_costs_no_more(self) -> None:
+        """The ceiling above is measured on `document_for` output, which carries no
+        marker lat/lng and so never reaches the twin-pin path at all. What the editor
+        posts does carry them, and that is the document whose cost matters."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        document = self._as_the_client_sends_it()
+        with CaptureQueriesContext(connection) as captured:
+            save_document(self.floorplan, document, profile=self.user.profile)
+
+        self.assertLess(len(captured), 45, f"the posted document took {len(captured)} queries")
+
     def test_an_unchanged_resave_leaves_every_row_alone(self) -> None:
         """Identity is the part that matters: rewriting a row it did not need to
         touch is wasted work, but *replacing* one loses whatever pointed at it."""
@@ -1574,6 +1602,36 @@ class FloorplanAutosaveCostTests(TestCase):
 
         after = {str(wall["uuid"]) for wall in document_for(self.floorplan)["floors"][0]["walls"]}
         self.assertEqual(before, after)
+
+    def test_an_unchanged_resave_leaves_a_marker_s_twin_pin_alone(self) -> None:
+        """The twin is the most expensive row in an unchanged save and the one with
+        least reason to move: a Pin save is not a row write, it runs the whole Pin
+        signal chain, once per marker per debounced autosave."""
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        marker = FloorplanMarker.objects.get(floor__floorplan=self.floorplan)
+        self.assertIsNotNone(marker.linked_pin_id, "fixture no longer grows a twin; this test proves nothing")
+        before = Pin.objects.get(pk=marker.linked_pin_id).updated
+
+        save_document(self.floorplan, self._as_the_client_sends_it(), profile=self.user.profile)
+
+        after = Pin.objects.get(pk=marker.linked_pin_id).updated
+        self.assertEqual(before, after, "an unchanged resave rewrote the marker's twin pin")
+
+    def test_a_moved_marker_still_moves_its_twin(self) -> None:
+        """The other half: skipping the save must not skip a real change."""
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        marker = FloorplanMarker.objects.get(floor__floorplan=self.floorplan)
+        document = self._as_the_client_sends_it()
+        document["floors"][0]["markers"][0]["lat"] = 41.7400
+        document["floors"][0]["markers"][0]["lng"] = -73.9400
+
+        save_document(self.floorplan, document, profile=self.user.profile)
+
+        twin = Pin.objects.get(pk=marker.linked_pin_id)
+        self.assertAlmostEqual(float(twin.location.latitude), 41.7400, places=4)
+        self.assertAlmostEqual(float(twin.location.longitude), -73.9400, places=4)
 
     def test_a_real_edit_still_lands(self) -> None:
         document = document_for(self.floorplan)
