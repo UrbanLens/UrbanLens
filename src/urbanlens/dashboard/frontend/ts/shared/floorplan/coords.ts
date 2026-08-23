@@ -28,7 +28,6 @@ export interface LatLng {
 const EARTH_RADIUS_M = 6371008.8;
 
 const toRad = (deg: number): number => (deg * Math.PI) / 180;
-const toDeg = (rad: number): number => (rad * 180) / Math.PI;
 
 /**
  * Converter between plan-local metres and WGS-84 for one plan origin.

@@ -31,7 +31,7 @@ describe("splitRoomBoundary", () => {
         // The reverted bug: topologically `west` bounds only the west room, so
         // a purely topological rule hands it over and dragging the room tears
         // the side off the building.
-        const { walls, west, faces } = splitShell();
+        const { walls, west } = splitShell();
 
         const boundary = splitRoomBoundary(west, walls);
 
@@ -44,7 +44,7 @@ describe("splitRoomBoundary", () => {
         // so requiring "borders nothing else" left a closet inside a building
         // owning nothing at all - and a room with no walls of its own declines
         // to be moved, turned or deleted.
-        const { walls, west, faces } = splitShell();
+        const { walls, west } = splitShell();
 
         const boundary = splitRoomBoundary(west, walls);
 
@@ -54,7 +54,7 @@ describe("splitRoomBoundary", () => {
     test("a partition between two rooms belongs to both", () => {
         // Moving one room into its neighbour is an ordinary edit; the neighbour
         // gets smaller.
-        const { walls, west, east, faces } = splitShell();
+        const { walls, west, east } = splitShell();
 
         expect(splitRoomBoundary(west, walls).unique.map((w) => w.uuid)).toContain("partition");
         expect(splitRoomBoundary(east, walls).unique.map((w) => w.uuid)).toContain("partition");
@@ -63,7 +63,6 @@ describe("splitRoomBoundary", () => {
     test("a closet built into a corner owns its two partitions", () => {
         const walls = [wall("north", "exterior"), wall("west", "exterior"), wall("p1", "interior"), wall("p2", "interior")];
         const closet = face(["north", "west", "p1", "p2"]);
-        const rest = face(["north", "west", "p1", "p2"]);
 
         const boundary = splitRoomBoundary(closet, walls);
 
@@ -92,7 +91,7 @@ describe("splitRoomBoundary", () => {
     });
 
     test("a shed beside a building leaves the building's sides alone", () => {
-        const { walls, east, faces } = splitShell();
+        const { walls, east } = splitShell();
         const shedWalls = ["shed-n", "shed-s", "shed-e", "shed-w"];
         for (const id of shedWalls) walls.push(wall(id, "exterior"));
         const shed = face(shedWalls);

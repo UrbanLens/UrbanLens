@@ -43,7 +43,7 @@ import { installGlobalColorPicker } from "../shared/color-picker";
 import { CONNECTOR_KINDS, connectorCandidates } from "../shared/floorplan/connectors";
 import { OPENING_SWINGS, doorLeaves, rehostOpening, swings } from "../shared/floorplan/openings";
 import { type RoomBoundary, splitRoomBoundary } from "../shared/floorplan/rooms";
-import { type SentSnapshot, applyServerIds, snapshotForSend } from "../shared/floorplan/sync";
+import { applyServerIds, snapshotForSend } from "../shared/floorplan/sync";
 import { contiguousLevels, deriveDesignations } from "../shared/floorplan/designations";
 import { type DragModifiers, DragGesture, constrainToAxis, modifiersOf, snapRotation } from "../shared/floorplan/drag";
 import { installGlobalIconPicker } from "../shared/icon-picker";
@@ -272,7 +272,9 @@ function boot(): void {
      * renders on top - overlays live in Leaflet's overlayPane, not the
      * tilePane the desaturation below dims, so a traced blueprint stays crisp.
      */
-    const mapLayers = createMapLayers(map, {
+    // Created for its side effect - it registers the basemap and overlay
+    // layers on the map - and nothing here holds on to the result.
+    createMapLayers(map, {
         root: document.getElementById("floorplan-layers"),
         defaultBase: "satellite",
         onAttribution: (text) => {
@@ -3135,28 +3137,17 @@ function boot(): void {
         // Both are stored per storey and neither was ever asked for; the first
         // is what makes a section drawing possible at all, and the second is
         // what ties a basement to the ground outside it.
-        const measure = (label: string, value: number | null | undefined, placeholder: string, apply: (next: number | null) => void): void => {
-            const input = document.createElement("input");
-            input.type = "number";
-            input.className = "form-input";
-            input.step = "0.05";
-            input.value = value === null || value === undefined ? "" : String(value);
-            input.placeholder = placeholder;
-            input.setAttribute("aria-label", label);
-            input.addEventListener("input", () => {
-                checkpoint(`floor-${label}:${item.uuid || item.level}`);
-                const parsed = Number.parseFloat(input.value);
-                apply(input.value.trim() === "" || !Number.isFinite(parsed) ? null : parsed);
-                markDirtyQuiet();
-            });
-            host.appendChild(field(label, input));
-        };
-        measure("Ceiling height", item.height_meters, "Metres, floor to ceiling", (next) => {
-            item.height_meters = next;
-        });
-        measure("Ground level", item.elevation_meters, "Metres above sea level", (next) => {
-            item.elevation_meters = next;
-        });
+        const key = `floor:${item.uuid || item.level}`;
+        host.appendChild(
+            metresField("Ceiling height", item.height_meters, "Metres, floor to ceiling", key, (next) => {
+                item.height_meters = next;
+            }),
+        );
+        host.appendChild(
+            metresField("Ground level", item.elevation_meters, "Metres above sea level", key, (next) => {
+                item.elevation_meters = next;
+            }),
+        );
     }
 
     /**
@@ -3365,6 +3356,42 @@ function boot(): void {
         return label;
     }
 
+    /**
+     * A labelled metres input.
+     *
+     * Blank means "not known", which is not the same as zero and has to stay
+     * null rather than becoming one: "not known" and "at floor level" are
+     * different answers about a window's sill.
+     *
+     * Args:
+     *     label: Shown beside the input, and part of the undo group so a run of
+     *         keystrokes in one field collapses to a single step.
+     *     value: What is stored now.
+     *     placeholder: What the number means, in words.
+     *     key: Identifies the item being edited, for that undo group.
+     *     apply: Given the parsed value, or null when the field is cleared.
+     *
+     * Returns:
+     *     The label element, ready to append.
+     */
+    function metresField(label: string, value: number | null | undefined, placeholder: string, key: string, apply: (next: number | null) => void): HTMLLabelElement {
+        const input = document.createElement("input");
+        input.type = "number";
+        input.className = "form-input";
+        input.min = "0";
+        input.step = "0.05";
+        input.value = value === null || value === undefined ? "" : String(value);
+        input.placeholder = placeholder;
+        input.setAttribute("aria-label", label);
+        input.addEventListener("input", () => {
+            checkpoint(`${key}:${label}`);
+            const parsed = Number.parseFloat(input.value);
+            apply(input.value.trim() === "" || !Number.isFinite(parsed) ? null : parsed);
+            markDirtyQuiet();
+        });
+        return field(label, input);
+    }
+
     function select(options: ReadonlyArray<{ value: string; label: string }>, value: string, onChange: (v: string) => void): HTMLSelectElement {
         const node = document.createElement("select");
         node.className = "form-input";
@@ -3421,27 +3448,6 @@ function boot(): void {
             input.addEventListener("input", () => {
                 checkpoint(`${key}:${label}`);
                 onInput(input.value);
-                markDirtyQuiet();
-            });
-            box.appendChild(field(label, input));
-        };
-
-        /**
-         * A metre measurement. Empty means "not known", which is not the same
-         * as zero and has to survive as null rather than becoming one.
-         */
-        const metres = (label: string, value: number | null | undefined, placeholder: string, onInput: (next: number | null) => void): void => {
-            const input = document.createElement("input");
-            input.type = "number";
-            input.className = "form-input";
-            input.min = "0";
-            input.step = "0.01";
-            input.value = value === null || value === undefined ? "" : String(value);
-            input.placeholder = placeholder;
-            input.addEventListener("input", () => {
-                checkpoint(`${key}:${label}`);
-                const parsed = Number.parseFloat(input.value);
-                onInput(input.value.trim() === "" || !Number.isFinite(parsed) ? null : parsed);
                 markDirtyQuiet();
             });
             box.appendChild(field(label, input));
@@ -3721,20 +3727,11 @@ function boot(): void {
             // How high its bottom edge sits above the floor. The practical
             // question a plan of a derelict building is asked about a window is
             // whether anyone can get through it, and that is this number.
-            const sill = document.createElement("input");
-            sill.type = "number";
-            sill.className = "form-input";
-            sill.min = "0";
-            sill.step = "0.05";
-            sill.value = opening.sill_meters === null || opening.sill_meters === undefined ? "" : String(opening.sill_meters);
-            sill.placeholder = "Metres above the floor";
-            sill.addEventListener("input", () => {
-                checkpoint(`opening-sill:${opening.uuid}`);
-                const parsed = Number.parseFloat(sill.value);
-                opening.sill_meters = sill.value.trim() === "" || !Number.isFinite(parsed) ? null : parsed;
-                markDirtyQuiet();
-            });
-            host.appendChild(field("Sill height", sill));
+            host.appendChild(
+                metresField("Sill height", opening.sill_meters, "Metres above the floor", `opening:${opening.uuid}`, (next) => {
+                    opening.sill_meters = next;
+                }),
+            );
 
             renderLockControls(host, opening);
             // Only where it means something: a doorway is the hole with no door
