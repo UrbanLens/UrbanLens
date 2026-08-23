@@ -3116,8 +3116,12 @@ function boot(): void {
     /** Copy one floor's walls (and optionally its room names) onto another. */
     function duplicateFloor(source: Floor): void {
         checkpoint();
-        const level = Math.max(...state.doc.floors.map((item) => item.level)) + 1;
-        const added: Floor = { level, name: source.name, designation: "", walls: [], rooms: [], markers: [] };
+        // Directly above the floor it came from, not on top of the building.
+        // Half a storey, because normaliseFloors renumbers the whole stack
+        // contiguously by sorted level straight afterwards: the copy lands
+        // between its source and whatever used to sit above it, and everything
+        // from there up moves one storey higher.
+        const added: Floor = { level: source.level + 0.5, name: source.name, designation: "", walls: [], rooms: [], markers: [] };
         const copied = copyFloorContents(source, { rooms: true, markers: false });
         added.walls = copied.walls;
         added.rooms = copied.rooms;

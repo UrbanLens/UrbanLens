@@ -1263,6 +1263,45 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("a duplicate lands above the floor it was copied from, not on top of the building", async () => {
+        // On a one-storey plan those are the same place, which is why this went
+        // unnoticed: duplicating the ground floor of a three-storey building
+        // put the copy on the roof.
+        await openEditor({ width: 1200, height: 800 }, false, "closet");
+        const strip = () =>
+            page.evaluate(() =>
+                Array.from(document.querySelectorAll("#floorplan-floors .floorplan-floor-tab")).map((tab) => [
+                    (tab.querySelector(".floorplan-floor-tab__chip")?.textContent ?? "").trim(),
+                    (tab.querySelector(".floorplan-floor-tab__name")?.textContent ?? "").trim(),
+                ]),
+            );
+        // Two empty storeys on top of the named ground floor.
+        await page.locator('#floorplan-floors [aria-label="Add floor above"]').click();
+        await settle();
+        await page.locator('#floorplan-floors [aria-label="Add floor above"]').click();
+        await settle();
+        expect(await strip()).toEqual([
+            ["2", ""],
+            ["1", ""],
+            ["G", "Ground"],
+        ]);
+
+        await page.locator('#floorplan-floors button:has(.floorplan-floor-tab__chip:text-is("G"))').click();
+        await settle();
+        await page.locator('#floorplan-floors [aria-label="Duplicate this floor"]').click();
+        await settle();
+
+        // The copy carries the source's nickname, so it is the one sitting
+        // directly above it - everything else having been pushed up a storey.
+        expect(await strip()).toEqual([
+            ["3", ""],
+            ["2", ""],
+            ["1", "Ground"],
+            ["G", "Ground"],
+        ]);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

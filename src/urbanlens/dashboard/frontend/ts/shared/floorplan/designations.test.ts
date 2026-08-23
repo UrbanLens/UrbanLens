@@ -162,3 +162,37 @@ describe("contiguousLevels", () => {
         expect(labelsOf(repaired)).toEqual(["G", "1", "2", "3"]);
     });
 });
+
+describe("contiguousLevels renumbering an inserted half-storey", () => {
+    /** How duplicateFloor places a copy: half a storey above its source. */
+    const stack = (levels: number[]): Array<{ level: number; tag: string }> => levels.map((level) => ({ level, tag: String(level) }));
+
+    test("a copy half a storey up lands directly above its source", () => {
+        const repaired = contiguousLevels(stack([0, 0.5, 1, 2]));
+
+        expect(repaired.map((entry) => [entry.floor.tag, entry.level])).toEqual([
+            ["0", 0],
+            ["0.5", 1],
+            ["1", 2],
+            ["2", 3],
+        ]);
+    });
+
+    test("duplicating a basement keeps the ground floor the ground floor", () => {
+        // The datum is whichever storey is nearest zero, so inserting below it
+        // must not promote a cellar to the entrance.
+        const repaired = contiguousLevels(stack([-1, -0.5, 0]));
+
+        expect(repaired.map((entry) => [entry.floor.tag, entry.level])).toEqual([
+            ["-1", -2],
+            ["-0.5", -1],
+            ["0", 0],
+        ]);
+    });
+
+    test("duplicating the top storey still puts the copy on top", () => {
+        const repaired = contiguousLevels(stack([0, 1, 1.5]));
+
+        expect(repaired.map((entry) => entry.level)).toEqual([0, 1, 2]);
+    });
+});
