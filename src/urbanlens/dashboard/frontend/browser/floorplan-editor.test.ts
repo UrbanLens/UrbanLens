@@ -2034,7 +2034,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await settle();
 
         const options = page.locator("#floorplan-tool-options button");
-        const titles = await options.evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).title));
+        // data-tooltip rather than title: the site's own delegated tooltip,
+        // which is what every other control in this editor uses.
+        const titles = await options.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-tooltip") ?? ""));
         expect(titles).toContain("Hazard (H)");
         expect(titles).toContain("Stair (S)");
         expect(titles).toContain("Elevator (E)");

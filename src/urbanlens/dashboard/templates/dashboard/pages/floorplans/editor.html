@@ -124,14 +124,14 @@
             {# particular being the one control you need exactly when you cannot #}
             {# scroll to find it.                                                #}
             <div class="floorplan-canvas-controls">
-                <button type="button" id="floorplan-undo" class="btn btn--icon" disabled aria-label="Undo" title="Undo (Ctrl+Z)">
+                <button type="button" id="floorplan-undo" class="btn btn--icon" disabled aria-label="Undo" data-tooltip="Undo (Ctrl+Z)" data-tooltip-float="true">
                     <i class="material-symbols-outlined">undo</i>
                 </button>
-                <button type="button" id="floorplan-redo" class="btn btn--icon" disabled aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+                <button type="button" id="floorplan-redo" class="btn btn--icon" disabled aria-label="Redo" data-tooltip="Redo (Ctrl+Shift+Z)" data-tooltip-float="true">
                     <i class="material-symbols-outlined">redo</i>
                 </button>
                 <button type="button" id="floorplan-delete" class="btn btn--icon floorplan-canvas-controls__delete" hidden
-                        aria-label="Delete selection" title="Delete (Del)">
+                        aria-label="Delete selection" data-tooltip="Delete (Del)" data-tooltip-float="true">
                     <i class="material-symbols-outlined">delete</i>
                 </button>
             </div>
@@ -201,7 +201,7 @@
             </button>
             <div class="floorplan-sidebar__header-actions">
                 <div class="floorplan-more-menu">
-                    <button type="button" id="floorplan-more-toggle" class="btn btn--icon" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="More">
+                    <button type="button" id="floorplan-more-toggle" class="btn btn--icon" aria-haspopup="true" aria-expanded="false" aria-label="More actions" data-tooltip="More actions" data-tooltip-float="true">
                         <i class="material-symbols-outlined">more_vert</i>
                     </button>
                     <div id="floorplan-more-list" class="floorplan-more-menu__list" hidden>

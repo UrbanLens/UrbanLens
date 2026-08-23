@@ -86,6 +86,17 @@ function declared(id: string, templates: string): boolean {
 }
 
 describe("the editor template's own markup", () => {
+    test("no control in the editor uses a native title tooltip", () => {
+        // The site has a delegated [data-tooltip] tooltip, styled to match
+        // everything else. A native title beside it renders as browser chrome -
+        // different shape, different delay, no styling - so one control using
+        // one and its neighbour the other is visible.
+        const template = readFileSync(EDITOR_TEMPLATE, "utf8");
+        const withTitle = (template.match(/<button\b[^>]*\btitle="/g) ?? []).length;
+
+        expect(withTitle).toBe(0);
+    });
+
     test("every icon-only control names itself", () => {
         // The toolbar is seven buttons containing nothing but an icon glyph, so
         // without an aria-label each one announces as "button". This is read

@@ -3046,7 +3046,14 @@ function boot(): void {
                 // Where a choice has an accelerator, it says so - the same way
                 // each tool's own tooltip names its letter. An unadvertised
                 // shortcut helps whoever already knows it and nobody else.
-                if (option.key) button.title = `${option.label} (${option.key.toUpperCase()})`;
+                //
+                // data-tooltip, not title: the site's tooltip is delegated from
+                // the document, so it reaches buttons built here, and a native
+                // title beside it would be the only unstyled tip in the editor.
+                if (option.key) {
+                    button.setAttribute("data-tooltip", `${option.label} (${option.key.toUpperCase()})`);
+                    button.setAttribute("data-tooltip-float", "true");
+                }
                 button.addEventListener("click", () => {
                     onPick(option.value);
                     renderToolOptions();
