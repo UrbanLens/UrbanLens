@@ -2691,6 +2691,13 @@ function boot(): void {
                 mapEl.blur();
                 return;
             }
+            // Finishes the chain rather than throwing it away. Drawing tools
+            // are split on this - AutoCAD and SketchUp cancel, Illustrator's pen
+            // ends the path and keeps it - and keeping it is the recoverable
+            // direction: a wall nobody wanted is one Ctrl+Z away, and there is a
+            // checkpoint before the chain for exactly that, whereas a discarded
+            // chain is gone. Two presses is "finish the wall, then leave the
+            // tool", which is what "back out one level" means here.
             if (state.drawing.length) commitChain();
             // Escape leaves a tool before it clears a selection: an armed tool
             // is the more surprising state to be stuck in, and it is the one a

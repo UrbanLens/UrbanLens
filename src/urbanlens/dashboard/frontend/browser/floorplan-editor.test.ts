@@ -1491,6 +1491,39 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("the right-click menu cuts an opening and deletes a wall", async () => {
+        // The two actions on the menu that were never exercised. Both are
+        // reachable no other way for someone who does not know the toolbar.
+        await openEditor();
+        const plan = await planExtent();
+        const walls = () => page.locator(".floorplan-wall").count();
+        const openings = () => page.locator("#floorplan-map path.floorplan-opening").count();
+        expect(await openings()).toBe(0);
+        const before = await walls();
+
+        await page.mouse.click(plan.grab.x, plan.grab.y, { button: "right" });
+        await page.waitForSelector("text=Add opening", { timeout: 10000 });
+        await page.locator("text=Add opening").click();
+        await settle();
+        expect(await openings()).toBe(1);
+
+        // The menu is gone once it has been used.
+        expect(await page.locator(".floorplan-context-menu").count()).toBe(0);
+
+        // Away from the opening just cut: it is drawn over the wall, so the
+        // same point now belongs to it and Delete would take the opening.
+        // Deleting the *wall* takes the opening with it, which is the point of
+        // storing an opening as an interval along its wall rather than as
+        // geometry of its own.
+        await page.mouse.click(plan.grab.x - 80, plan.grab.y, { button: "right" });
+        await page.waitForSelector("text=Delete", { timeout: 10000 });
+        await page.locator(".floorplan-context-menu >> text=Delete").click();
+        await settle();
+        expect(await walls()).toBeLessThan(before);
+        expect(await openings()).toBe(0);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();
