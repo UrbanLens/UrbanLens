@@ -258,6 +258,40 @@ class FloorplanDocumentTests(TestCase):
 
         self.assertIn("bx", str(caught.exception))
 
+    def test_a_doors_swing_survives_the_round_trip(self) -> None:
+        """It is drawn from this value, so losing it silently loses the symbol.
+
+        The field had a column, choices and a serializer long before anything
+        set it, which is exactly the situation where nobody would notice it
+        failing to come back.
+        """
+        walls = _square_walls()
+        walls[0] = {**walls[0], "openings": [{"kind": "door", "t_start": 0.4, "t_end": 0.6, "swing": "double"}]}
+        save_document(self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}]}, profile=self.profile)
+
+        opening = document_for(self.floorplan)["floors"][0]["walls"][0]["openings"][0]
+        self.assertEqual(opening["swing"], "double")
+
+    def test_an_unknown_swing_is_refused_without_writing_half_a_plan(self) -> None:
+        """A whole plan is one document: a bad field late in it must lose none of it.
+
+        The value is rejected rather than coerced, which is the same thing every
+        other choice field here does - but the save is a wholesale replacement,
+        so the interesting question is what survives the refusal.
+        """
+        walls = _square_walls()
+        walls[0] = {**walls[0], "name": "the original south wall"}
+        save_document(self.floorplan, {"floors": [{"level": 0, "walls": walls, "rooms": [], "markers": []}]}, profile=self.profile)
+
+        replacement = _square_walls()
+        replacement[0] = {**replacement[0], "name": "a replacement"}
+        replacement[2] = {**replacement[2], "openings": [{"kind": "door", "t_start": 0.4, "t_end": 0.6, "swing": "sideways"}]}
+        with pytest.raises(ValueError, match="opening swing"):
+            save_document(self.floorplan, {"floors": [{"level": 0, "walls": replacement, "rooms": [], "markers": []}]}, profile=self.profile)
+
+        document = document_for(self.floorplan)
+        self.assertEqual(len(document["floors"][0]["walls"]), 4)
+        self.assertEqual(document["floors"][0]["walls"][0]["name"], "the original south wall")
 
 class FloorplanRoomSeedTests(TestCase):
     """Room identity is a point, so wall edits cannot destroy it."""
