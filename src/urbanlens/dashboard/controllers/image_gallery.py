@@ -13,6 +13,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from urbanlens.dashboard.models.images.attachment import ImageAttachment
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -346,7 +347,7 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
-        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         try:
             data = json.loads(request.body)
             image_id = data.get("image_id")
@@ -361,7 +362,17 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
         # Scoped to the one row before `visible_to`, whose per-uploader pass
         # would otherwise walk every uploader on the site to answer about one image.
         image = get_object_or_404(Image.objects.filter(pk=image_id).visible_to(profile))
-        if image.wiki_id != wiki.pk and image.location_id != location.pk:
+        # On the wiki, not merely at the place. Accepting any photo whose location
+        # matched let one person publish another's: a pin photo carries the
+        # location but no wiki, and being able to *see* somebody's photo - which a
+        # neighbour with a pin at the same place generally can - is not permission
+        # to put it on the front of a page everyone reads. The wiki cover is
+        # rendered with no visibility gate of its own, so this is the gate.
+        #
+        # The pin twin (PinCoverPhotoView) keeps the wider rule deliberately: its
+        # consequence is confined to the setter's own page.
+        on_this_wiki = image.wiki_id == wiki.pk or ImageAttachment.objects.filter(image=image, wiki=wiki).exists()
+        if not on_this_wiki:
             raise Http404
         wiki.cover_photo = image
         wiki.save(update_fields=["cover_photo", "updated"])

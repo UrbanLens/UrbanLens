@@ -683,6 +683,31 @@ def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *
     return None
 
 
+def _visible_uploader_name(img: Image, viewer_profile: Profile | None) -> str:
+    """The uploader's name as this viewer is allowed to see it.
+
+    A photo can be visible while the identity behind it is not: a profile that
+    has restricted who may see it is masked everywhere else it is named - the
+    external API's ``owner_slug``, wiki edit attribution - and this gallery was
+    printing ``profile.username`` straight off the row.
+
+    Args:
+        img: The photo.
+        viewer_profile: Who is looking, or None for an anonymous request.
+
+    Returns:
+        The username, or the masked placeholder when the viewer may not see the
+        uploader's identity. Empty string when the photo has no uploader.
+    """
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+
+    if img.profile is None:
+        return ""
+    if viewer_profile is not None and img.profile_id == viewer_profile.pk:
+        return img.profile.username
+    return str(resolve_visible_identity(viewer_profile, img.profile)["display_name"])
+
+
 def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None) -> dict:
     """Serialize an Image to a dict suitable for a photo gallery/map layer.
 
@@ -705,7 +730,7 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         "caption": img.caption or "",
         "latitude": float(img.latitude) if img.latitude is not None else None,
         "longitude": float(img.longitude) if img.longitude is not None else None,
-        "uploader": img.profile.username if img.profile else "",
+        "uploader": _visible_uploader_name(img, viewer_profile),
         "is_mine": viewer_profile is not None and img.profile_id == viewer_profile.pk,
         "author": img.author or "",
         "source_url": img.source_url or "",
