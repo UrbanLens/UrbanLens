@@ -4016,3 +4016,38 @@ What to exercise first in a real browser, desktop and phone:
 Known gap left in place: the wall tool's rubber-band preview still follows
 map.on("mousemove"), so on touch there is no live preview line while drawing -
 taps still place corners, because Leaflet synthesises click from a tap.
+
+## Autosave rewrites every row, and the obvious fix loses data (2026-08-23)
+
+`save_document` replaces the whole document, so every wall, opening, room seed
+and marker row is written on every autosave tick - which fires on a debounce
+after each edit. A four-wall plan with one room and one marker costs 33 queries
+for a save that changes nothing (`FloorplanAutosaveCostTests` pins that as a
+ceiling); a 400-wall plan costs proportionally more. Each marker's twin `Pin`
+and its `Location` are also re-resolved and re-saved every time, firing the full
+Pin signal chain.
+
+**An attempt at the obvious fix was reverted, and anyone retrying it should read
+this first.** Skipping `row.save()` when a row's stored values are unchanged -
+snapshotting the concrete fields before the builder touches the row, comparing
+after - measurably works (33 -> 27 queries) and **silently destroys
+`FloorplanLock` rows when an opening moves between walls**
+(`FloorplanOpeningRehostTests::test_a_moved_opening_keeps_its_locks` fails).
+
+What was ruled out while chasing it, so it need not be re-done:
+
+- The lock sync itself is fine: it was instrumented, and receives
+  `existing=[<uuid>] payload=[<same uuid>]`, so the lock is matched and kept.
+- The orphan-opening sweep is fine: `existing == surviving`, nothing deleted.
+- Bisected to the single line - restoring an unconditional `row.save()` makes
+  the test pass with every other part of the change still in place.
+
+So the mechanism is somewhere between "the opening's FK change is not persisted"
+and the cascade from `FloorplanOpening` to `FloorplanLock`, and it was not worth
+shipping a data-loss risk to find out. If this is picked up again, start by
+asserting the opening's `wall_id` actually reaches the database, and treat any
+version of it as unshippable until that rehost test passes.
+
+The related idea - skipping the twin `Pin` save when nothing changed - was
+reverted with it, untested on its own. It is probably safe and should be
+attempted separately, with `FloorplanMarkerLinkedPinTests` as the guard.

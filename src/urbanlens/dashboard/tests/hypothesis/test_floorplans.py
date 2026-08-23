@@ -1328,6 +1328,8 @@ class FloorplanConcurrencyTests(TestCase):
 
         first_tab = document_for(self.floorplan)
         second_tab = document_for(self.floorplan)
+        # A real edit, not a re-send: the token moves when the plan does.
+        first_tab["name"] = "renamed by the other tab"
         save_document(self.floorplan, first_tab, profile=self.profile)
         self.floorplan.refresh_from_db()
 
@@ -1350,7 +1352,10 @@ class FloorplanConcurrencyTests(TestCase):
         own = Floorplan.objects.create(place=self.place, profile=user.profile, pin=pin)
         save_document(own, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": _square_walls()}]}, profile=user.profile)
         stale = document_for(own)
-        save_document(own, document_for(own), profile=user.profile)
+        newer = document_for(own)
+        newer["name"] = "renamed by the other tab"
+        save_document(own, newer, profile=user.profile)
+        own.refresh_from_db()
 
         response = self.client.post(
             f"/dashboard/map/pin/{pin.slug}/floorplan/save/",
@@ -1406,6 +1411,85 @@ class FloorplanDocumentLimitsTests(TestCase):
         save_document(self.floorplan, {"plan_origin": _ORIGIN, "floors": floors}, profile=self.profile)
 
         self.assertEqual(self.floorplan.floors.count(), 20)
+
+
+class FloorplanAutosaveCostTests(TestCase):
+    """An autosave that changes nothing should cost almost nothing.
+
+    The editor saves on a debounce after every edit, so this runs constantly.
+    A whole-document save that rewrites every row regardless turns a
+    one-character rename into a write across the entire plan.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        self.place = _building()
+        location = baker.make(Location, latitude=41.7361, longitude=-73.9361, place=self.place)
+        self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None)
+        self.floorplan = Floorplan.objects.create(place=self.place, profile=self.user.profile, pin=self.pin)
+        save_document(
+            self.floorplan,
+            {
+                "plan_origin": _ORIGIN,
+                "floors": [
+                    {
+                        "level": 0,
+                        "walls": _square_walls(),
+                        "rooms": [{"name": "Boiler room", "x": 5.0, "y": 5.0}],
+                        "markers": [{"kind": "hazard", "x": 1.0, "y": 1.0, "lat": 41.7361, "lng": -73.9361}],
+                    },
+                ],
+            },
+            profile=self.user.profile,
+        )
+
+    def _resave_unchanged(self) -> int:
+        """Save the plan exactly as it stands, and count the queries."""
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        document = document_for(self.floorplan)
+        with CaptureQueriesContext(connection) as captured:
+            save_document(self.floorplan, document, profile=self.user.profile)
+        return len(captured)
+
+    def test_an_unchanged_resave_stays_within_its_current_cost(self) -> None:
+        """A ceiling on today's behaviour, not an endorsement of it.
+
+        A whole-document save rewrites every row whether or not it changed, so a
+        four-wall plan costs about 33 queries and a 400-wall one costs
+        proportionally more - on a debounce, after every edit. Making that
+        cheaper is recorded in docs/PROBLEMS.md; an attempt at it is what this
+        test was written alongside, and it lost data (see the same entry).
+
+        Until then this exists so the number cannot quietly grow.
+        """
+        cost = self._resave_unchanged()
+
+        self.assertLess(cost, 45, f"an unchanged resave took {cost} queries")
+
+    def test_an_unchanged_resave_leaves_every_row_alone(self) -> None:
+        """Identity is the part that matters: rewriting a row it did not need to
+        touch is wasted work, but *replacing* one loses whatever pointed at it."""
+        before = {str(wall["uuid"]) for wall in document_for(self.floorplan)["floors"][0]["walls"]}
+
+        self._resave_unchanged()
+
+        after = {str(wall["uuid"]) for wall in document_for(self.floorplan)["floors"][0]["walls"]}
+        self.assertEqual(before, after)
+
+    def test_a_real_edit_still_lands(self) -> None:
+        document = document_for(self.floorplan)
+        document["floors"][0]["rooms"][0]["name"] = "Plant room"
+
+        save_document(self.floorplan, document, profile=self.user.profile)
+
+        self.assertEqual(document_for(self.floorplan)["floors"][0]["rooms"][0]["name"], "Plant room")
 
 
 class FloorplanMarkerTests(TestCase):

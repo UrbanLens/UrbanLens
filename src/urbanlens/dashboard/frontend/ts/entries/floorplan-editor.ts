@@ -561,8 +561,12 @@ function boot(): void {
         const retry = document.getElementById("floorplan-retry-save");
         if (retry) retry.hidden = !saveFailed || saving || state.superseded;
         if (state.superseded) {
-            el.textContent = "Changed elsewhere - reload";
+            el.textContent = "Changed elsewhere";
             el.className = "floorplan-save-status is-error";
+            // Told to reload and given nothing to press is a dead end, and the
+            // one thing that resolves this is exactly one action.
+            const reload = document.getElementById("floorplan-reload");
+            if (reload) reload.hidden = false;
             return;
         }
         if (saving) {
@@ -650,6 +654,7 @@ function boot(): void {
         retryAttempt = 0;
         void save(false);
     });
+    document.getElementById("floorplan-reload")?.addEventListener("click", () => window.location.reload());
     document.getElementById("floorplan-undo")?.addEventListener("click", undo);
     document.getElementById("floorplan-redo")?.addEventListener("click", redo);
     updateHistoryButtons();
