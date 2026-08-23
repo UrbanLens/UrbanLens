@@ -222,6 +222,16 @@ function boot(): void {
     // this editor, and Leaflet's default zoom-to-rectangle would fire on the
     // same press. Zoom-to-rectangle has no use on a plan you have fitted to the
     // screen anyway.
+    // leaflet-rotate is a second CDN request, so it can be missing on its own
+    // while Leaflet itself loaded - one request succeeding and the other not is
+    // an ordinary outcome, not a corner case. It patches L.Map in place, so its
+    // own method is the honest test for it. View rotation is a convenience;
+    // losing it degrades, while calling setBearing() without it threw partway
+    // through loading the document and took the rest of the editor with it.
+    const canRotateView = typeof (L.Map.prototype as { setBearing?: unknown }).setBearing === "function";
+    // A tool that cannot do anything should not be on the toolbar offering to.
+    if (!canRotateView) (document.querySelector('[data-tool="rotate"]') as HTMLElement | null)?.remove();
+
     // rotate/touchRotate/shiftKeyRotate/rotateControl (leaflet-rotate, loaded
     // in editor.html): lets a building that isn't square to true north be
     // turned to face the screen - two-finger twist on mobile, shift+wheel or
@@ -236,10 +246,10 @@ function boot(): void {
         doubleClickZoom: false,
         attributionControl: false,
         boxZoom: false,
-        rotate: true,
-        touchRotate: true,
-        shiftKeyRotate: true,
-        rotateControl: { position: "topright", closeOnZeroBearing: false },
+        rotate: canRotateView,
+        touchRotate: canRotateView,
+        shiftKeyRotate: canRotateView,
+        rotateControl: canRotateView && { position: "topright", closeOnZeroBearing: false },
     }).setView([lat, lng], 20);
 
     // leaflet-rotate's own control is removed rather than re-homed. Reparenting
@@ -2654,7 +2664,7 @@ function boot(): void {
     // is the entire difference from the control this replaced.
     map.getContainer().addEventListener("pointerdown", (raw) => {
         const event = raw as PointerEvent;
-        if (state.tool !== "rotate") return;
+        if (state.tool !== "rotate" || !canRotateView) return;
         if (event.pointerType === "mouse" && event.button !== 0) return;
         const centre = map.getSize().divideBy(2);
         const angleAt = (source: PointerEvent): number => {
@@ -2795,7 +2805,9 @@ function boot(): void {
         if (key === "v") setTool("select");
         if (key === "b") setTool("box");
         if (key === "d") setTool("opening");
-        if (key === "t") setTool("rotate");
+        // Its button is removed when leaflet-rotate is missing; the shortcut has to
+        // go with it, or the key arms a tool nothing on screen shows or acts on.
+        if (key === "t" && canRotateView) setTool("rotate");
         if (key === "w") setTool("wall");
         if (key === "r") setTool("room");
         if (key === "m") setTool("marker");
@@ -4359,7 +4371,7 @@ function boot(): void {
         // Restores a saved plan already turned to face its building -
         // fitToContent() below then fits bounds against the rotated view,
         // not the unrotated one.
-        map.setBearing(state.doc.rotation_degrees || 0);
+        if (canRotateView) map.setBearing(state.doc.rotation_degrees || 0);
         const nameInput = document.getElementById("floorplan-name") as HTMLInputElement | null;
         if (nameInput) nameInput.value = state.doc.name || "";
         const validFrom = document.getElementById("floorplan-valid-from") as HTMLInputElement | null;

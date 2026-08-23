@@ -386,6 +386,9 @@ beforeAll(async () => {
                 // Dropping the tags is what an unreachable CDN looks like: the
                 // scripts are simply not there and `L` is undefined.
                 if (params.get("nomap")) page = page.replace(/<script src="https:\/\/unpkg\.com[^"]*"><\/script>/g, "");
+                // Two separate requests, so one can land without the other. This is
+                // the half that leaves Leaflet working and view rotation gone.
+                if (params.get("norotate")) page = page.replace(/<script src="[^"]*leaflet-rotate[^"]*"><\/script>/g, "");
                 return new Response(page, { headers: { "content-type": "text/html" } });
             }
             if (path === "/publish") {
@@ -1691,6 +1694,32 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.locator(".leaflet-control-zoom-out").click();
         await settle();
         expect(await span()).toBeLessThan(before);
+        await page.close();
+    });
+
+    test("losing only the rotate plugin costs rotation, not the editor", async () => {
+        // Leaflet and leaflet-rotate are two requests, so one can land without the
+        // other. leaflet-rotate patches L.Map in place, and setBearing() is called
+        // partway through loading the document - so its absence used to throw there
+        // and take the rest of the load with it, blanking an editor whose only
+        // missing piece was a convenience.
+        page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+        await page.goto(`http://127.0.0.1:${server.port}/?norotate=1`, { waitUntil: "load" });
+        await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
+
+        // The plan is there, and the rest of the load ran: the name field is filled
+        // from the document, which happens on the line after the setBearing() call.
+        expect(await page.locator(".floorplan-wall").count()).toBe(4);
+        expect(await page.evaluate(() => (document.getElementById("floorplan-name") as HTMLInputElement).value)).toBeTruthy();
+        // Not the whole-editor failure notice - that is for Leaflet itself.
+        expect(await page.evaluate(() => (document.getElementById("floorplan-unavailable") as HTMLElement).hidden)).toBe(true);
+        // And neither route to the tool is left open: not the toolbar button,
+        // and not the shortcut, which would otherwise arm a tool with nothing on
+        // screen to show for it and nothing behind it when dragged.
+        expect(await page.locator('[data-tool="rotate"]').count(), "offered a rotate tool with no rotation behind it").toBe(0);
+        await page.locator("#floorplan-map").click();
+        await page.keyboard.press("t");
+        expect(await page.evaluate(() => document.getElementById("floorplan-map")?.classList.contains("is-rotating")), "the T shortcut armed a tool that was removed").toBe(false);
         await page.close();
     });
 

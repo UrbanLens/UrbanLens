@@ -4187,3 +4187,35 @@ loading after it.
 Worth knowing while that stands: **`bun run test:browser` fetches Leaflet from
 unpkg on every run**, so the browser suite needs working outbound network to a
 third party and fails offline for reasons unrelated to the code under test.
+
+## docker-compose.hot-reload.yml crash-loops when the checkout is not the container's uid (2026-08-23)
+
+Bringing an agent dev environment up with the hot-reload overlay puts `app` into
+a restart loop and the site answers 502:
+
+```
+File "/app/src/bin/init.py", line 335, in build_frontend
+    frontend_dir.mkdir(parents=True, exist_ok=True)
+PermissionError: [Errno 13] Permission denied:
+    '/app/src/urbanlens/dashboard/frontend/static/dashboard/css'
+```
+
+`docker cp` preserves source ownership and a bind mount exposes it directly, so
+the container's `appuser` cannot write anywhere inside the mounted tree. The
+overlay already knows this - it redirects `UL_LOG_DIR` out of the tree for
+exactly this reason, and its header explains why - but `init.py`'s
+`build_frontend()` also writes into the mounted tree on every start, and that
+was not accounted for. It only shows up where the checkout belongs to a
+different uid than the image's `appuser`, which is every environment
+`dev_env.py` creates.
+
+The overlay delegates SCSS to a `sass-watch` sidecar already, so the app
+container's own frontend build is redundant under hot reload. Teaching `init.py`
+to skip it (an env var the overlay sets) looks like the fix, rather than
+loosening permissions on the checkout.
+
+Until then, updating a `dev_env.py` environment means the documented
+`docker cp` + `chown` route rather than hot reload - and note that
+`STATIC_ROOT` is a *separate* collected tree (`src/urbanlens/frontend/static`,
+not `dashboard/frontend/static`) served by whitenoise even with `DEBUG=True`,
+so a copied-in JS bundle is not served until `collectstatic` runs.
