@@ -2161,6 +2161,37 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("a long editing session does not silt the page up", async () => {
+        // render() tears down and rebuilds every layer, and a rebuild that
+        // leaves anything behind leaves it behind on every edit. An editor is
+        // used for an hour at a time; a leak of one node per render is a leak
+        // of thousands.
+        await openEditor({ width: 1200, height: 800 }, false, "closet");
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        await page.locator("#floorplan-map").focus();
+
+        const nodes = () => page.evaluate(() => document.getElementsByTagName("*").length);
+        // Warm up first: the first few renders legitimately add things - the
+        // sidebar form, the handles that appear with a selection.
+        for (let press = 0; press < 5; press++) await page.keyboard.press("ArrowRight");
+        await settle();
+        const before = await nodes();
+
+        for (let press = 0; press < 40; press++) await page.keyboard.press(press % 2 ? "ArrowLeft" : "ArrowRight");
+        await settle();
+        // Leaflet fades a removed tooltip out over 200ms rather than removing
+        // it at once, so forty renders in a burst leave dozens of them mid-fade
+        // - counting before they land measures the burst, not a leak. Read at
+        // 1, 66 and 36 across three runs before this wait was added.
+        await page.waitForTimeout(600);
+        const after = await nodes();
+
+        expect(after - before, `${after - before} nodes survived 40 renders`).toBeLessThan(10);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();
