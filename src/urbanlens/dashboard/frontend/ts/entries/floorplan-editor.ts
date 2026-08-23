@@ -2998,9 +2998,15 @@ function boot(): void {
             item.room.y += dy;
         } else {
             // An opening lives along its wall, so a nudge slides it rather than
-            // moving it off into space.
+            // moving it off into space - and which way along it is the arrow's
+            // own direction projected onto the wall, not dx plus dy. Adding the
+            // two ignores which way the wall was drawn, so on a wall running
+            // right-to-left the right arrow slid the door left. A wall square
+            // to the arrow does not move, which is the honest answer: the
+            // arrow points somewhere the door cannot go.
             const length = wallLength(item.wall) || 1;
-            const along = (dx + dy) / length;
+            const forward = { x: (item.wall.bx - item.wall.ax) / length, y: (item.wall.by - item.wall.ay) / length };
+            const along = (dx * forward.x + dy * forward.y) / length;
             const width = item.opening.t_end - item.opening.t_start;
             const start = Math.max(0, Math.min(item.opening.t_start + along, 1 - width));
             item.opening.t_start = start;

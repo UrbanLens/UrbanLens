@@ -2091,6 +2091,41 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("an arrow key slides a door the way the arrow points", async () => {
+        // The slide is along the wall, which is right - but which way along it
+        // was decided by adding dx and dy and ignoring the wall's own
+        // direction. The square plan's top wall is drawn right-to-left, so on
+        // that wall the right arrow moved the door left.
+        await openEditor();
+        const plan = await planExtent();
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+
+        // Where the door sits *along the plan*, not on the screen: the map can
+        // pan between presses, and an absolute position would report that.
+        const doorX = async (): Promise<number> => {
+            const box = await page.locator("#floorplan-map path.floorplan-opening").first().boundingBox();
+            if (!box) throw new Error("no opening");
+            const extent = await planExtent();
+            return (box.x + box.width / 2 - extent.left) / extent.width;
+        };
+        const before = await doorX();
+        console.log("DOOR before", before, "walls", JSON.stringify(await page.evaluate(() => Array.from(document.querySelectorAll("#floorplan-map path.floorplan-wall")).map((n) => n.getAttribute("d")?.slice(0, 24)))));
+        await page.locator("#floorplan-map").focus();
+        // Four presses, not more: the door reaching the wall's end changes
+        // which segments the wall renders as, which moves the plan's own bounds
+        // and so the fraction this is measured against. A reading taken across
+        // that jump reports the jump.
+        for (let press = 0; press < 4; press++) await page.keyboard.press("ArrowRight");
+        await settle();
+
+        expect(await doorX(), "the right arrow moved the door left").toBeGreaterThan(before + 0.02);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();
