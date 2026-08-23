@@ -185,13 +185,15 @@ function boot(): void {
 
     // attributionControl: false - required attribution renders in the page
     // footer instead (show_map_footer=True; see createMapLayers' onAttribution below).
-    // boxZoom: false - shift+drag is repurposed below for box-select instead
-    // of Leaflet's default zoom-to-rectangle, which has no use here.
+    // boxZoom: false - shift+drag is the constrain modifier for every drag in
+    // this editor, and Leaflet's default zoom-to-rectangle would fire on the
+    // same press. Zoom-to-rectangle has no use on a plan you have fitted to the
+    // screen anyway.
     // rotate/touchRotate/shiftKeyRotate/rotateControl (leaflet-rotate, loaded
     // in editor.html): lets a building that isn't square to true north be
     // turned to face the screen - two-finger twist on mobile, shift+wheel or
     // the rotate control's arrow on desktop. shiftKeyRotate is shift+*wheel*,
-    // not shift+drag, so it does not collide with box-select above.
+    // not shift+drag, so it does not collide with the constrain modifier.
     const map = L.map("floorplan-map", {
         // Not Leaflet's default top-left: that corner holds the floor strip,
         // and Leaflet's control z-index beats it, so the zoom buttons sat on
@@ -904,8 +906,9 @@ function boot(): void {
             // the corner it shares with this room while its own far end - not
             // part of this room at all - stays put. A plain click still only
             // selects first; this only engages on an actual drag of a room
-            // that's already the selection, and never for a shift-drag (box-
-            // select's own gesture, which starts from the same mousedown).
+            // that's already the selection. Shift no longer excuses it: that
+            // used to hand the press to a shift+drag box-select, which is what
+            // made the constrain modifier unreachable here.
             let roomDrag: { local: Pt; boundary: NonNullable<ReturnType<typeof roomBoundaryWalls>>; origins: Map<Wall, { ax: number; ay: number; bx: number; by: number }>; anchors: CornerAnchors; seedOrigin: Pt } | null = null;
             bindDrag(polygon.getElement(), {
                 start: (event) => {
