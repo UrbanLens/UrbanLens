@@ -569,6 +569,41 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("drawing a wall with a finger shows the rubber band", async () => {
+        // The preview was driven by Leaflet's mousemove, which a finger never
+        // emits, so on a phone every corner was placed blind: no rubber band,
+        // no length, no snap readout.
+        await openEditor();
+        await page.locator('[data-tool="wall"]').click();
+        const frame = await page.locator("#floorplan-map").boundingBox();
+        if (!frame) throw new Error("no map");
+        const start = { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
+
+        // Place the first corner, then aim for the second with a finger down.
+        await page.mouse.click(start.x, start.y);
+        await settle();
+        // Captured after the mouse has already drawn one: the question is not
+        // whether a rubber band exists, it is whether it follows the finger.
+        const ghostPath = () => page.evaluate(() => document.querySelector('#floorplan-map path[stroke-dasharray="5 5"]')?.getAttribute("d") ?? "");
+        const beforeTouch = await ghostPath();
+
+        await page.evaluate((from) => {
+            const at = from as { x: number; y: number };
+            const map = document.getElementById("floorplan-map") as HTMLElement;
+            const fire = (type: string, x: number, y: number): void => {
+                map.dispatchEvent(new PointerEvent(type, { pointerId: 9, pointerType: "touch", isPrimary: true, bubbles: true, cancelable: true, clientX: x, clientY: y, buttons: type === "pointerup" ? 0 : 1 }));
+            };
+            fire("pointerdown", at.x + 20, at.y);
+            for (let step = 1; step <= 6; step++) fire("pointermove", at.x + 20 + step * 10, at.y);
+        }, start);
+        await settle();
+
+        const afterTouch = await ghostPath();
+        expect(beforeTouch).not.toBe("");
+        expect(afterTouch).not.toBe(beforeTouch);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

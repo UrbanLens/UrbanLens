@@ -30,6 +30,7 @@ import {
     WALL_KINDS,
     attribute,
     copyFloorContents,
+    newConnectorId,
     nextLocalId,
     setAttribute,
     wallId,
@@ -2299,9 +2300,15 @@ function boot(): void {
         }
     }
 
-    map.on("mousemove", (event: L.LeafletMouseEvent) => {
+    /**
+     * Move the wall tool's preview to wherever the pointer is.
+     *
+     * Args:
+     *     latlng: The pointer position on the map.
+     */
+    function aimWallPreview(latlng: L.LatLng): void {
         if (state.tool !== "wall") return;
-        const raw = toLocal(event.latlng);
+        const raw = toLocal(latlng);
         const from = state.drawing.length ? (state.drawing[state.drawing.length - 1] as Pt) : null;
         const snapped = snapPoint(raw, wallSegments(floor()), tolerances(), {
             from,
@@ -2311,7 +2318,23 @@ function boot(): void {
         state.cursor = snapped.point;
         state.snapKind = snapped.label;
         drawGhost();
-    });
+    }
+
+    // Pointer events rather than Leaflet's mousemove, which a finger never
+    // emits: drawing on a phone showed no rubber band, no snap readout and no
+    // length at all, so every corner was placed blind.
+    //
+    // A finger has no hover, so pointermove only arrives while it is down -
+    // which turns out to be the useful gesture anyway: press near a corner,
+    // slide to aim while watching the length, lift to place it. The lift still
+    // becomes a click, because nothing here calls preventDefault.
+    for (const type of ["pointerdown", "pointermove"] as const) {
+        map.getContainer().addEventListener(type, (raw) => {
+            const event = raw as PointerEvent;
+            if (state.tool !== "wall") return;
+            aimWallPreview(map.mouseEventToLatLng(event));
+        });
+    }
 
     map.on("click", (event: L.LeafletMouseEvent) => {
         // A box-select drag ends in a mouseup that Leaflet still reads as a
@@ -3570,7 +3593,7 @@ function boot(): void {
                     // Adopt the counterpart's id when it already has one, so a
                     // third floor joins the same shaft rather than starting a
                     // parallel one.
-                    const shared = candidate.marker.connector_id || nextLocalId();
+                    const shared = candidate.marker.connector_id || newConnectorId();
                     candidate.marker.connector_id = shared;
                     marker.connector_id = shared;
                     renderSidebar();

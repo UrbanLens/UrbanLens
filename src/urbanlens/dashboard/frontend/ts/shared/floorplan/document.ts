@@ -197,6 +197,27 @@ let localIdCounter = 0;
  */
 export const nextLocalId = (): string => `local-${++localIdCounter}`;
 
+/**
+ * An id for a stair or lift shaft, unique everywhere.
+ *
+ * Not ``nextLocalId``: that is a counter that restarts at one on every page
+ * load, which is harmless for item uuids because the server replaces those on
+ * save, and is not harmless here because ``connector_id`` is free text and is
+ * stored exactly as sent. Two shafts drawn in two sessions both came out as
+ * ``local-3``, and the editor then reported two unrelated staircases as the
+ * same one running through the building.
+ *
+ * Returns:
+ *     A fresh identifier, safe to compare across sessions and devices.
+ */
+export function newConnectorId(): string {
+    const globalCrypto = globalThis.crypto as Crypto | undefined;
+    if (globalCrypto?.randomUUID) return globalCrypto.randomUUID();
+    // randomUUID needs a secure context. Anywhere it is missing, a timestamp
+    // and some randomness still beats a per-session counter by a wide margin.
+    return `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /** Stable identity for a wall, saved or not. */
 export function wallId(wall: Wall): string {
     if (!wall.uuid) wall.uuid = nextLocalId();

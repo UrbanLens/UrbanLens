@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { type Floor, copyFloorContents } from "./document";
+import { type Floor, copyFloorContents, newConnectorId, nextLocalId } from "./document";
 
 function floorWithContents(): Floor {
     return {
@@ -128,5 +128,30 @@ describe("copyFloorContents", () => {
         const copy = copyFloorContents({ level: 1, name: "First", walls: [], rooms: [], markers: [] }, { rooms: true, markers: true });
 
         expect(copy).toEqual({ walls: [], rooms: [], markers: [] });
+    });
+});
+
+describe("newConnectorId", () => {
+    test("two ids from the same session differ", () => {
+        expect(newConnectorId()).not.toBe(newConnectorId());
+    });
+
+    test("ids are not the per-session counter", () => {
+        // The counter restarts at one on every page load. That is fine for item
+        // uuids, which the server replaces on save, and wrong for a connector
+        // id, which is stored exactly as sent - two shafts drawn in two sessions
+        // both came out "local-3" and read as one staircase.
+        expect(newConnectorId()).not.toMatch(/^local-\d+$/);
+        expect(nextLocalId()).toMatch(/^local-\d+$/);
+    });
+
+    test("an id fits the column that stores it", () => {
+        // FloorplanMarker.connector_id is CharField(max_length=64).
+        expect(newConnectorId().length).toBeLessThanOrEqual(64);
+    });
+
+    test("a run of ids is all distinct", () => {
+        const ids = new Set(Array.from({ length: 500 }, () => newConnectorId()));
+        expect(ids.size).toBe(500);
     });
 });
