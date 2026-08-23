@@ -380,15 +380,13 @@ function boot(): void {
             // Left button only for a mouse; any contact for touch or pen.
             if (event.pointerType === "mouse" && event.button !== 0) return;
             if (handlers.start?.(event) === false) return;
-            // Stopped so Leaflet's own map-drag does not run this gesture too.
-            // Propagation only, never preventDefault: suppressing the default
-            // action here would also suppress the click that follows, and a
-            // press that does not move is how everything gets selected.
-            L.DomEvent.stopPropagation(event);
-            // Disabled at the press rather than once the drag is live: on
-            // touch, Leaflet starts panning from the same contact, and two
-            // handlers would move the same finger's worth of distance.
-            map.dragging.disable();
+            // Nothing is done to this press until it has travelled far enough
+            // to be a drag. Stopping propagation or disabling the map's own
+            // dragging here - on a press that may well turn out to be a click -
+            // stops Leaflet delivering the click at all, and clicking a wall to
+            // select it is most of what anyone does with this editor. The cost
+            // is that Leaflet may pan by up to the slop distance before the
+            // drag takes over, which is what the mouse-event version did too.
             activeDrags += 1;
 
             // The press identifies *what* was grabbed, but the rest of the
@@ -402,19 +400,29 @@ function boot(): void {
             const gesture = new DragGesture({ x: event.clientX, y: event.clientY }, modifiersOf(event), handlers.slopPx);
             let moved = false;
             let finished = false;
-            try {
-                surface.setPointerCapture(event.pointerId);
-            } catch {
-                // Capture is an optimisation: it keeps a pointer that wanders
-                // off the map reporting here. The listeners below still fire
-                // without it.
-            }
 
             const onMove = (rawMove: Event): void => {
                 const moveEvent = rawMove as PointerEvent;
                 if (moveEvent.pointerId !== event.pointerId) return;
                 if (!gesture.advance({ x: moveEvent.clientX, y: moveEvent.clientY })) return;
-                moved = true;
+                if (!moved) {
+                    moved = true;
+                    // Everything that interferes waits for this moment, when
+                    // the gesture is certainly a drag and not a click.
+                    map.dragging.disable();
+                    try {
+                        // Capture retargets pointerup to whatever holds it, and
+                        // the browser fires click at the common ancestor of the
+                        // press and the release - so capturing on the press
+                        // moves the click off the wall and selection stops
+                        // working entirely. Taken here, the click is already
+                        // moot because this is a drag.
+                        surface.setPointerCapture(event.pointerId);
+                    } catch {
+                        // Best effort: it keeps a pointer that wanders off the
+                        // map reporting here. The window listeners work without it.
+                    }
+                }
                 const pixel = map.mouseEventToContainerPoint(moveEvent);
                 handlers.move({ local: toLocal(map.containerPointToLatLng(pixel)), pixel, modifiers: gesture.modifiers });
             };
@@ -430,7 +438,13 @@ function boot(): void {
                 window.removeEventListener("pointercancel", onFinish);
                 window.removeEventListener("lostpointercapture", onFinish);
                 activeDrags = Math.max(0, activeDrags - 1);
-                map.dragging.enable();
+                if (moved) {
+                    map.dragging.enable();
+                    // The release of a real drag still reads as a click on
+                    // whatever lies underneath, which would otherwise re-select
+                    // or deselect the thing that was just moved.
+                    suppressNextClick = true;
+                }
                 handlers.end?.(moved);
             };
             // On window rather than the map: a pointer released outside the map

@@ -3978,12 +3978,20 @@ bound on each layer's own element, so that they work with a finger. Before
 this, a touch drag emitted no mouse events at all and only the Leaflet-native
 marker drag worked on a phone.
 
-**This could not be verified here.** There is no usable browser on this host:
-the Playwright chromium under ~/.cache/ms-playwright fails with `error while
-loading shared libraries: libatk-1.0.so.0`, and there is no passwordless sudo
-to install the GTK/ATK stack it wants. So the conversion is reasoned, typed and
-unit-tested at the logic layer (shared/floorplan/drag.ts), but the binding layer
-has never actually run.
+**RESOLVED 2026-08-23: there is now a browser, and the conversion is verified.**
+`apt-get download` plus `dpkg-deb -x` needs no root, so the missing GTK/ATK/ALSA
+libraries are unpacked under ~/browserlibs and reached via LD_LIBRARY_PATH - see
+`bin/browser_libs.sh`. Playwright is a dev dependency, and
+`bun run test:browser` drives the real built bundle through real gestures,
+including a synthetic touch drag.
+
+That immediately paid for itself: it caught a regression the conversion had
+introduced. Pointer capture retargets `pointerup` to whatever holds it, and the
+browser fires `click` at the common ancestor of press and release - so capturing
+on the press moved the click off the wall, and **clicking a wall to select it
+had stopped working entirely** for mouse and touch alike. Capture, disabling the
+map's own dragging, and stopping propagation now all wait until the gesture has
+travelled far enough to be a drag rather than a click.
 
 One defect was caught by review before it could ship further: the first version
 bound the move/up phase to the *layer's* element. render() clears every layer
