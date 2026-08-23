@@ -35,8 +35,10 @@ import {
     newConnectorId,
     nextLocalId,
     setAttribute,
+    wallEnd,
     wallId,
     wallLength,
+    wallStart,
     wallSegments,
 } from "../shared/floorplan/document";
 import { installGlobalColorPicker } from "../shared/color-picker";
@@ -982,8 +984,8 @@ function boot(): void {
             } | null = null;
             const style = WALL_STYLE[wall.kind] || WALL_STYLE.interior;
             const selected = isSelected({ kind: "wall", wall });
-            const a = { x: wall.ax, y: wall.ay };
-            const b = { x: wall.bx, y: wall.by };
+            const a = wallStart(wall);
+            const b = wallEnd(wall);
             const along = (t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
             // A door/doorway/hatch renders as an actual break in the wall -
             // one solid segment per interval left once its openings are cut
@@ -1027,7 +1029,7 @@ function boot(): void {
                     },
                     move: ({ local, modifiers }) => {
                         if (!dragOrigin) {
-                            dragOrigin = { local, a: { x: wall.ax, y: wall.ay }, b: { x: wall.bx, y: wall.by } };
+                            dragOrigin = { local, a: wallStart(wall), b: wallEnd(wall) };
                             const current = floor();
                             dragLinks = {
                                 stretchToA: wallsTouchingPoint(current, dragOrigin.a, wall),
@@ -1291,8 +1293,8 @@ function boot(): void {
     }
 
     function renderOpenings(wall: Wall, selected: boolean): void {
-        const a = { x: wall.ax, y: wall.ay };
-        const b = { x: wall.bx, y: wall.by };
+        const a = wallStart(wall);
+        const b = wallEnd(wall);
         const at = (t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
         for (const opening of wall.openings) {
             const openingSelected = isSelected({ kind: "opening", wall, opening });
@@ -1434,7 +1436,7 @@ function boot(): void {
                         editing = true;
                         checkpoint();
                     }
-                    const along = projectOnSegment(local, { x: wall.ax, y: wall.ay }, { x: wall.bx, y: wall.by }).t;
+                    const along = projectOnSegment(local, wallStart(wall), wallEnd(wall)).t;
                     if (end === "t_start") opening.t_start = Math.min(along, opening.t_end - MIN_WIDTH);
                     else opening.t_end = Math.max(along, opening.t_start + MIN_WIDTH);
                     opening.t_start = Math.max(0, opening.t_start);
@@ -1467,7 +1469,7 @@ function boot(): void {
         document.querySelector<HTMLElement>('#floorplan-layers [data-map-layer="underlay"]')?.toggleAttribute("hidden", !below);
         if (!state.showUnderlay || !below) return;
         for (const wall of below.walls) {
-            L.polyline([toLatLng({ x: wall.ax, y: wall.ay }), toLatLng({ x: wall.bx, y: wall.by })], {
+            L.polyline([toLatLng(wallStart(wall)), toLatLng(wallEnd(wall))], {
                 color: "#90a4ae",
                 weight: 2,
                 opacity: 0.45,
@@ -1518,7 +1520,7 @@ function boot(): void {
             move: ({ local }) => {
                 if (!turning) {
                     const walls = new Map<Wall, { a: Pt; b: Pt }>();
-                    for (const wall of [...boundary.unique, ...boundary.shared]) walls.set(wall, { a: { x: wall.ax, y: wall.ay }, b: { x: wall.bx, y: wall.by } });
+                    for (const wall of [...boundary.unique, ...boundary.shared]) walls.set(wall, { a: wallStart(wall), b: wallEnd(wall) });
                     turning = { start: Math.atan2(local.y - pivot.y, local.x - pivot.x), walls, seedAt: { x: seed.x, y: seed.y }, anchors: cornerAnchors(boundary) };
                     checkpoint();
                 }
@@ -1535,7 +1537,7 @@ function boot(): void {
                     const moved = rotate(corner, angle, pivot);
                     const resting = (turning as NonNullable<typeof turning>).anchors.get(cornerKey(corner));
                     if (!resting) return moved;
-                    return projectOnSegment(moved, { x: resting.ax, y: resting.ay }, { x: resting.bx, y: resting.by }).point;
+                    return projectOnSegment(moved, wallStart(resting), wallEnd(resting)).point;
                 };
                 for (const wall of boundary.unique) {
                     const origin = turning.walls.get(wall) as { a: Pt; b: Pt };
@@ -1601,11 +1603,11 @@ function boot(): void {
             for (const wall of current.walls) {
                 if (wall.ax === point.x && wall.ay === point.y) {
                     result.push({ wall, end: "a", origX: wall.ax, origY: wall.ay });
-                    queue.push({ x: wall.bx, y: wall.by });
+                    queue.push(wallEnd(wall));
                 }
                 if (wall.bx === point.x && wall.by === point.y) {
                     result.push({ wall, end: "b", origX: wall.bx, origY: wall.by });
-                    queue.push({ x: wall.ax, y: wall.ay });
+                    queue.push(wallStart(wall));
                 }
             }
         }
@@ -1681,9 +1683,9 @@ function boot(): void {
         if (!boundary.shared.length) return anchors;
         const tolerance = 1e-6;
         for (const wall of boundary.unique) {
-            for (const corner of [{ x: wall.ax, y: wall.ay }, { x: wall.bx, y: wall.by }]) {
+            for (const corner of [wallStart(wall), wallEnd(wall)]) {
                 const resting = boundary.shared.find(
-                    (other) => projectOnSegment(corner, { x: other.ax, y: other.ay }, { x: other.bx, y: other.by }).distance <= tolerance,
+                    (other) => projectOnSegment(corner, wallStart(other), wallEnd(other)).distance <= tolerance,
                 );
                 if (resting) anchors.set(cornerKey(corner), resting);
             }
@@ -1707,7 +1709,7 @@ function boot(): void {
         const moved = { x: corner.x + dx, y: corner.y + dy };
         const resting = held.anchors.get(cornerKey(corner));
         if (!resting) return moved;
-        return projectOnSegment(moved, { x: resting.ax, y: resting.ay }, { x: resting.bx, y: resting.by }).point;
+        return projectOnSegment(moved, wallStart(resting), wallEnd(resting)).point;
     }
 
     /**
@@ -1733,8 +1735,8 @@ function boot(): void {
             else joints.set(key, { point, ends: [{ wall, end }] });
         };
         for (const wall of current.walls) {
-            add({ x: wall.ax, y: wall.ay }, wall, "a");
-            add({ x: wall.bx, y: wall.by }, wall, "b");
+            add(wallStart(wall), wall, "a");
+            add(wallEnd(wall), wall, "b");
         }
         return joints;
     }
@@ -1866,7 +1868,7 @@ function boot(): void {
 
         const matches: SelectionItem[] = [];
         for (const wall of floor().walls) {
-            if (inside({ x: wall.ax, y: wall.ay }) && inside({ x: wall.bx, y: wall.by })) matches.push({ kind: "wall", wall });
+            if (inside(wallStart(wall)) && inside(wallEnd(wall))) matches.push({ kind: "wall", wall });
         }
         for (const marker of floor().markers) {
             if (inside({ x: marker.x, y: marker.y })) matches.push({ kind: "marker", marker });
@@ -2120,7 +2122,7 @@ function boot(): void {
     function fitToContent(): void {
         const current = floor();
         const points: Pt[] = [];
-        for (const wall of current.walls) points.push({ x: wall.ax, y: wall.ay }, { x: wall.bx, y: wall.by });
+        for (const wall of current.walls) points.push(wallStart(wall), wallEnd(wall));
         if (!points.length) for (const room of current.rooms) points.push({ x: room.x, y: room.y });
         if (!points.length) for (const marker of current.markers) points.push({ x: marker.x, y: marker.y });
         const latLngs = points.length ? points.map(toLatLng) : outline.length ? outline.map(([outlineLat, outlineLng]): [number, number] => [outlineLat, outlineLng]) : null;

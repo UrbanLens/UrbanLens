@@ -140,6 +140,22 @@ sentence rather than the number, and a CI job should not be making that call.
 Note its one blind spot: it cannot tell a specimen from a claim, so prose that
 *quotes* a broken citation as an example will be flagged.
 
+### `noUnusedLocals` (`tsconfig.json`)
+
+On because nothing else catches dead TypeScript. `tsc` did not mind, ruff does
+not read TypeScript at all, and a full green suite says nothing about code that
+is never reached — a helper is written, the caller it was written for changes
+shape, and twenty lines stay behind looking load-bearing.
+
+That is not hypothetical: a metres-input helper sat unused in the floorplan
+editor for a day while three near-copies of it were written around it, because
+its intended caller had become a date input. Turning the flag on found nine
+across the whole frontend, including a type import left by a signature change
+and a value assigned only so the call that produced it looked used.
+
+Note the flag's own blind spot: it sees locals, not exports. A module-level
+`export function` nothing imports is invisible to it, and to everything else.
+
 ## Test helpers
 
 ### `QueryScalingMixin` (`core/tests/query_scaling.py`)

@@ -7,10 +7,6 @@
         "types": ["bun-types", "wicg-file-system-access", "google.maps"],
         "strict": true,
         "noUncheckedIndexedAccess": true,
-        // On because a helper written and then not used is invisible otherwise:
-        // one sat in the floorplan editor for a day, twenty lines of number
-        // input nothing called, while three near-copies of it were written
-        // elsewhere. Nine across the whole frontend when this was turned on.
         "noUnusedLocals": true,
         "skipLibCheck": true,
         "noEmit": true,
