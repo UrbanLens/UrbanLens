@@ -1908,6 +1908,37 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("a marker's pickers sit with its label, and survive being deselected", async () => {
+        // The icon and colour pickers are static template markup, because the
+        // icon set lives in Python - and they sat wherever the template put
+        // them, which was after the details block. Moving them into the form
+        // means the form's own replaceChildren() detaches them, so the editor
+        // has to hold the node rather than look it up.
+        await openEditor();
+        await page.locator('[data-tool="marker"]').click();
+        const frame = await planExtent();
+        await page.mouse.click(frame.grab.x, frame.grab.y - 40);
+        await settle();
+
+        expect(await page.evaluate(() => Boolean(document.querySelector("#floorplan-form #floorplan-marker-appearance")))).toBe(true);
+        const order = await page.evaluate(() =>
+            Array.from(document.querySelectorAll("#floorplan-form > *")).map((node) =>
+                node.id === "floorplan-marker-appearance" ? "appearance" : (node.querySelector("span")?.textContent ?? node.textContent ?? node.tagName).trim(),
+            ),
+        );
+        expect(order.slice(0, 4)).toEqual(["Marker", "Label", "Type", "appearance"]);
+
+        // Deselect, then select again: the node has to come back, which it
+        // cannot if the only handle on it was getElementById.
+        await page.locator('[data-tool="select"]').click();
+        await page.keyboard.press("Escape");
+        await settle();
+        await page.mouse.click(frame.grab.x, frame.grab.y - 40);
+        await settle();
+        expect(await page.evaluate(() => Boolean(document.getElementById("floorplan-marker-appearance")))).toBe(true);
+        await page.close();
+    });
+
     test("the tool options panel shows the armed tool's choices", async () => {
         await openEditor();
         await page.locator('[data-tool="opening"]').click();

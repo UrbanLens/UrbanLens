@@ -3630,7 +3630,7 @@ function boot(): void {
      *     marker: The selected marker, or null to hide the controls.
      */
     function renderMarkerAppearance(marker: Marker | null): void {
-        const host = document.getElementById("floorplan-marker-appearance");
+        const host = markerAppearance;
         if (!host) return;
         host.hidden = marker === null;
         if (!marker) return;
@@ -3664,9 +3664,26 @@ function boot(): void {
         }
     }
 
+    /**
+     * The icon and colour pickers, server-rendered once and shown per marker.
+     *
+     * This node lives in two places: its slot in the template, and inside the
+     * form when a marker is selected, so it reads beside the label it
+     * describes. Both the node and the slot are held because the form is
+     * rebuilt with replaceChildren() - putting it back first is what keeps it
+     * in the document at all times, so anything looking it up by id still
+     * finds it.
+     */
+    const markerAppearance = document.getElementById("floorplan-marker-appearance");
+    /** Where it lives when no marker is selected. */
+    const markerAppearanceHome = markerAppearance?.parentElement ?? null;
+
     function renderSidebar(): void {
         const host = document.getElementById("floorplan-form");
         if (!host) return;
+        // Home before the clear: without this the pickers are among the
+        // children being replaced, and leave the document with them.
+        if (markerAppearance && markerAppearanceHome) markerAppearanceHome.appendChild(markerAppearance);
         host.replaceChildren();
         const selection = state.selection;
         renderMarkerAppearance(selection && selection.kind === "marker" && state.multi.length === 1 ? selection.marker : null);
@@ -3828,6 +3845,11 @@ function boot(): void {
                     ),
                 ),
             );
+            // What it looks like, beside what it is. The pickers are static
+            // template markup because the icon set lives in Python, and they
+            // sat after the details block by accident of where the template put
+            // them - several fields below the label they describe.
+            if (markerAppearance) host.appendChild(markerAppearance);
             if (CONNECTOR_KINDS.has(marker.kind)) renderConnectorControls(host, marker);
         }
 
