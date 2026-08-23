@@ -78,6 +78,23 @@ describe("applyServerIds", () => {
         expect(ground.walls[1]?.openings[0]?.uuid).toBe("srv-window");
     });
 
+    test("renumbering the stack mid-save does not misfile the uuids", () => {
+        // Deleting a floor renumbers every floor above it, and the editor does
+        // that the moment the button is pressed - which can land while a save
+        // is still in flight. The level a floor has when the response arrives
+        // is then not the level it was sent under, so the key has to be the one
+        // recorded at send time, not read back off the live object.
+        const doc = unsortedDoc();
+        const sent = snapshotForSend(doc);
+        // The basement is deleted; ground becomes the new basement, and so on.
+        doc.floors = doc.floors.filter((floor) => floor.level !== -1);
+        for (const floor of doc.floors) floor.level -= 1;
+
+        applyServerIds(sent, savedInStoreyOrder());
+
+        expect(doc.floors.map((floor) => floor.uuid)).toEqual(["srv-ground", "srv-first"]);
+    });
+
     test("a snapshot is immune to edits made while the save is in flight", () => {
         // The whole reason the snapshot exists: deleting the first wall before
         // the response lands must not shift every uuid onto its neighbour.

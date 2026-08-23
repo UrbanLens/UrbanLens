@@ -15,6 +15,13 @@ import type { Floor, FloorplanDocument, Marker, Opening, RoomSeed, Wall } from "
  */
 export interface SentSnapshot {
     floor: Floor;
+    /**
+     * The floor's level *as sent*. Deleting a floor renumbers every floor above
+     * it, and the editor does that immediately - so by the time a response
+     * arrives the live object's level may no longer be the one it was saved
+     * under, and reading it back off the object would misfile the uuid.
+     */
+    level: number;
     walls: Wall[];
     wallOpenings: Opening[][];
     rooms: RoomSeed[];
@@ -39,6 +46,7 @@ export interface SentSnapshot {
 export function snapshotForSend(doc: FloorplanDocument): SentSnapshot[] {
     return doc.floors.map((floor) => ({
         floor,
+        level: floor.level,
         walls: [...floor.walls],
         wallOpenings: floor.walls.map((wall) => [...wall.openings]),
         rooms: [...floor.rooms],
@@ -53,9 +61,10 @@ export function snapshotForSend(doc: FloorplanDocument): SentSnapshot[] {
  * one yet, and not by live array position, because the document may have moved
  * on (see snapshotForSend()).
  *
- * Floors are matched by ``level``. A document cannot hold two floors at the
- * same storey - the server rejects that outright - so level is a real key, and
- * it is the only one both sides agree on before the uuids exist. Position would
+ * Floors are matched by the ``level`` each was *sent* under. A document cannot
+ * hold two floors at the same storey - the server rejects that outright - so
+ * level is a real key, and it is the only one both sides agree on before the
+ * uuids exist. Position would
  * not do: ``FloorplanFloor.Meta.ordering`` is ``("level", "sort_order", "id")``,
  * so the server returns floors in storey order regardless of the order they
  * were sent in. That happens to match today only because the editor sorts its
@@ -73,7 +82,7 @@ export function snapshotForSend(doc: FloorplanDocument): SentSnapshot[] {
  */
 export function applyServerIds(sent: SentSnapshot[], saved: FloorplanDocument): void {
     const byLevel = new Map<number, SentSnapshot>();
-    for (const entry of sent) byLevel.set(entry.floor.level, entry);
+    for (const entry of sent) byLevel.set(entry.level, entry);
 
     for (const savedFloor of saved.floors || []) {
         const entry = byLevel.get(savedFloor.level);

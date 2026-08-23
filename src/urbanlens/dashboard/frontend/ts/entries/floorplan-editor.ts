@@ -182,7 +182,11 @@ function boot(): void {
     // the rotate control's arrow on desktop. shiftKeyRotate is shift+*wheel*,
     // not shift+drag, so it does not collide with box-select above.
     const map = L.map("floorplan-map", {
-        zoomControl: true,
+        // Not Leaflet's default top-left: that corner holds the floor strip,
+        // and Leaflet's control z-index beats it, so the zoom buttons sat on
+        // top of the highest floor's tab and swallowed its clicks. Bottom-left
+        // is the one corner nothing else in this editor claims at either width.
+        zoomControl: false,
         doubleClickZoom: false,
         attributionControl: false,
         boxZoom: false,
@@ -199,6 +203,8 @@ function boot(): void {
     // anywhere, press Escape to leave - and the wheel gesture (shift+wheel,
     // untouched) stays as the shortcut for people who know it.
     map.getContainer().querySelector(".leaflet-control-rotate")?.remove();
+
+    L.control.zoom({ position: "bottomleft" }).addTo(map);
 
     // Declared before createMapLayers below: its "underlay" custom toggle
     // reads state.showUnderlay synchronously while the panel builds its
@@ -3027,6 +3033,31 @@ function boot(): void {
         host.appendChild(row);
     }
 
+    /**
+     * Add a storey at the top or the bottom of the stack.
+     *
+     * Args:
+     *     where: "above" puts it over the highest floor, "below" makes a
+     *         basement under the lowest.
+     */
+    function addFloor(where: "above" | "below"): void {
+        checkpoint();
+        const levels = state.doc.floors.map((item) => item.level);
+        const level = where === "above" ? (levels.length ? Math.max(...levels) : -1) + 1 : (levels.length ? Math.min(...levels) : 1) - 1;
+        const added: Floor = { level, name: "", walls: [], rooms: [], markers: [] };
+        state.doc.floors.push(added);
+        // Renumbers the stack and makes the new floor the active one. A
+        // basement does not shift the storey anyone calls the ground: the datum
+        // is whichever floor is nearest it, which the new one is not.
+        normaliseFloors(added);
+        // The nearest drawn storey's shell first, the building outline only
+        // when there is none to copy - a plan's other floors follow its own
+        // exterior, not the provider's footprint.
+        if (!seedShellFrom(added)) seedFromOutline(added);
+        markDirty();
+        renderSidebar();
+    }
+
     /** Copy one floor's walls (and optionally its room names) onto another. */
     function duplicateFloor(source: Floor): void {
         checkpoint();
@@ -3160,25 +3191,25 @@ function boot(): void {
             }
             host.appendChild(tab);
         });
-        const add = document.createElement("button");
-        add.type = "button";
-        add.className = "btn btn--sm btn--ghost";
-        add.textContent = "+ Floor";
-        add.addEventListener("click", () => {
-            checkpoint();
-            const levels = state.doc.floors.map((item) => item.level);
-            const level = (levels.length ? Math.max(...levels) : -1) + 1;
-            const added: Floor = { level, name: "", walls: [], rooms: [], markers: [] };
-            state.doc.floors.push(added);
-            normaliseFloors(added);
-            // The storey below's shell first, the building outline only when
-            // there is no storey below to copy - a plan's upper floors follow
-            // its own exterior, not the provider's footprint.
-            if (!seedShellFrom(added)) seedFromOutline(added);
-            markDirty();
-            renderSidebar();
-        });
-        host.appendChild(add);
+        // One at each end of the strip, because the strip is the building seen
+        // from the side: the button above the top floor adds a floor above, the
+        // one below the bottom floor adds a basement. There was only ever one,
+        // it sat at the bottom, and it added to the top - so the strip said the
+        // opposite of what it did, and a basement could not be made at all.
+        const addButton = (where: "above" | "below"): HTMLButtonElement => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "btn btn--sm btn--ghost floorplan-floor-tab__add";
+            button.innerHTML = '<i class="material-symbols-outlined">add</i>';
+            const label = where === "above" ? "Add floor above" : "Add floor below";
+            button.setAttribute("aria-label", label);
+            button.setAttribute("data-tooltip", label);
+            button.setAttribute("data-tooltip-pos", "right");
+            button.addEventListener("click", () => addFloor(where));
+            return button;
+        };
+        host.prepend(addButton("above"));
+        host.appendChild(addButton("below"));
 
         const duplicate = document.createElement("button");
         duplicate.type = "button";

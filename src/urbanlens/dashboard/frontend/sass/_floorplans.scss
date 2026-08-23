@@ -231,12 +231,33 @@
     align-items: flex-start;
     gap: .25rem;
 
-    // The "+ Floor" button - a plain child, not wrapped in .floorplan-floor-tab
-    // like the others - matches their height so it doesn't stand out as
-    // bigger for having no delete button next to it.
+    // The add buttons - plain children, not wrapped in .floorplan-floor-tab
+    // like the others - match their height so they don't stand out as bigger
+    // for having no delete button next to them.
     > .btn {
         height: 2rem;
         white-space: nowrap;
+    }
+}
+
+// One at each end of the strip: the strip is the building in section, so the
+// button above the top floor adds a storey above and the one below the bottom
+// floor adds a basement. Square, and icon-only, so neither reads as a floor.
+.floorplan-floor-tab__add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    padding: 0;
+    opacity: .75;
+
+    &:hover,
+    &:focus-visible {
+        opacity: 1;
+    }
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
     }
 }
 

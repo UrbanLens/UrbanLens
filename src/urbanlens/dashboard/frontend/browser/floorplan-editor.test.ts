@@ -92,7 +92,10 @@ html,body{margin:0}
     <button id="floorplan-undo" disabled></button>
     <button id="floorplan-redo" disabled></button>
   </div>
-  <div class="floorplan-canvas-floors"><div id="floorplan-floors"></div></div>
+  <div class="floorplan-canvas-floors">
+    <span class="floorplan-field__label">Floors</span>
+    <div id="floorplan-floors" class="floorplan-floors"></div>
+  </div>
   <div class="map-bottom-controls"><div id="floorplan-layers"></div></div>
   <div id="floorplan-empty"><button id="floorplan-start-outline"></button><button id="floorplan-start-rectangle"></button></div>
 </div><p id="floorplan-hint"></p><p id="floorplan-live"></p></div>
@@ -454,10 +457,11 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
     });
 
     test("the floating controls do not sit on top of each other", async () => {
-        // Five things float over this canvas - the tool pill, the tool options,
-        // undo, the floor strip, the layers panel - and they are positioned in
-        // three different stylesheets. Overlap is the failure mode nobody
-        // notices until a button cannot be pressed.
+        // Six things float over this canvas - the tool pill, the tool options,
+        // undo, the floor strip, the layers panel, and Leaflet's own zoom
+        // buttons - positioned across three stylesheets, one of which is
+        // Leaflet's. Overlap is the failure mode nobody notices until a button
+        // cannot be pressed.
         for (const viewport of [
             { width: 375, height: 812 },
             { width: 1200, height: 800 },
@@ -467,7 +471,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             await settle();
 
             const overlaps = await page.evaluate(() => {
-                const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls"];
+                const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls", ".leaflet-control-zoom"];
                 const boxes = selectors
                     .map((selector) => ({ selector, node: document.querySelector(selector) }))
                     .filter((entry) => entry.node && !(entry.node as HTMLElement).hidden)
@@ -701,6 +705,41 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await settle();
 
         expect(await dashed()).toBe(0);
+        await page.close();
+    });
+
+    test("the floor strip adds where it says it will, basements included", async () => {
+        // The strip is the building seen from the side. There used to be one
+        // "+ Floor" button, at the bottom, which added a floor at the top - and
+        // no way to make a basement at all, which is half of what a plan of a
+        // derelict building needs.
+        await openEditor();
+        const strip = "#floorplan-floors";
+        const chips = () => page.evaluate((sel) => Array.from(document.querySelectorAll(`${sel} .floorplan-floor-tab__chip`)).map((n) => (n.textContent ?? "").trim()), strip);
+        expect(await chips()).toEqual(["G"]);
+
+        await page.locator(`${strip} [aria-label="Add floor above"]`).click();
+        await settle();
+        // Highest first: the strip reads top-of-building downwards.
+        expect(await chips()).toEqual(["1", "G"]);
+
+        await page.locator(`${strip} [aria-label="Add floor below"]`).click();
+        await settle();
+        expect(await chips()).toEqual(["1", "G", "B1"]);
+
+        // And each button sits at the end of the strip it acts on.
+        const order = await page.evaluate((sel) => {
+            const host = document.querySelector(sel as string) as HTMLElement;
+            const y = (node: Element | null) => (node ? node.getBoundingClientRect().top : Number.NaN);
+            return {
+                above: y(host.querySelector('[aria-label="Add floor above"]')),
+                top: y(host.querySelector(".floorplan-floor-tab")),
+                bottom: y(host.querySelectorAll(".floorplan-floor-tab")[2] ?? null),
+                below: y(host.querySelector('[aria-label="Add floor below"]')),
+            };
+        }, strip);
+        expect(order.above).toBeLessThan(order.top);
+        expect(order.below).toBeGreaterThan(order.bottom);
         await page.close();
     });
 
