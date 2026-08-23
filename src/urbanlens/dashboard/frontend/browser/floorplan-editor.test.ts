@@ -224,6 +224,10 @@ function squarePlan(): unknown {
     return {
         uuid: "plan-1",
         name: "harness",
+        versions: [
+            { uuid: "plan-1", name: "harness", valid_from: null },
+            { uuid: "plan-2", name: "after the fire", valid_from: "2019-04-01" },
+        ],
         valid_from: null,
         origin: "local",
         plan_origin: { lat: 41.733, lng: -73.928 },
@@ -377,7 +381,13 @@ beforeAll(async () => {
                 publishes.attempts += 1;
                 return Response.json({ ok: true });
             }
-            if (path === "/json") return Response.json(squarePlan());
+            if (path === "/json") {
+                // A different plan for the other version, so a switch is
+                // visible as more than a redraw of the same thing.
+                const wanted = new URL(request.url).searchParams.get("version");
+                if (wanted === "plan-2") return Response.json({ ...(closetPlan() as Record<string, unknown>), uuid: "plan-2", versions: (squarePlan() as { versions: unknown[] }).versions });
+                return Response.json(squarePlan());
+            }
             if (path === "/json-grid") return Response.json(gridPlan());
             if (path === "/json-closet") return Response.json(closetPlan());
             if (path === "/json-island") return Response.json(islandPlan());
@@ -2189,6 +2199,28 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         const after = await nodes();
 
         expect(after - before, `${after - before} nodes survived 40 renders`).toBeLessThan(10);
+        await page.close();
+    });
+
+    test("switching version forgets the undo history of the one left behind", async () => {
+        // The stacks describe a document that is no longer loaded. Undoing into
+        // them applies one version's snapshot to another, which is not an edit
+        // anybody made.
+        await openEditor();
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        await page.locator("#floorplan-map").focus();
+        await page.keyboard.press("ArrowRight");
+        await settle();
+        expect(await page.evaluate(() => (document.getElementById("floorplan-undo") as HTMLButtonElement).disabled), "nothing to undo before switching").toBe(false);
+        const wallsBefore = await page.locator(".floorplan-wall").count();
+
+        await page.locator("#floorplan-versions button").filter({ hasText: "after the fire" }).click();
+        await page.waitForFunction((was) => document.querySelectorAll(".floorplan-wall").length !== was, wallsBefore, { timeout: 15000 });
+        await settle();
+
+        expect(await page.evaluate(() => (document.getElementById("floorplan-undo") as HTMLButtonElement).disabled), "undo still points at the version that was left").toBe(true);
         await page.close();
     });
 
