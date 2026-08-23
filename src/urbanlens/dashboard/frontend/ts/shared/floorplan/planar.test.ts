@@ -203,6 +203,32 @@ describe("deriveFaces", () => {
         expect(areas(walls)).toEqual([18]); // 6x2 bottom bar + 2x3 column above it
     });
 
+    test("a corridor of rooms derives the right count at scale", () => {
+        // The spatial index in planarize prunes pairs that cannot meet; this
+        // pins that it prunes only those. A corridor is the shape real floors
+        // take, and the one the index actually helps.
+        const walls: Segment[] = [];
+        const rooms = 40;
+        const depth = 6;
+        const corridorWidth = 2;
+        const pitch = 4;
+        const length = rooms * pitch;
+        const height = depth * 2 + corridorWidth;
+        walls.push({ wallId: "outer-n", a: { x: 0, y: height }, b: { x: length, y: height } });
+        walls.push({ wallId: "outer-s", a: { x: 0, y: 0 }, b: { x: length, y: 0 } });
+        walls.push({ wallId: "outer-w", a: { x: 0, y: 0 }, b: { x: 0, y: height } });
+        walls.push({ wallId: "outer-e", a: { x: length, y: 0 }, b: { x: length, y: height } });
+        walls.push({ wallId: "corr-s", a: { x: 0, y: depth }, b: { x: length, y: depth } });
+        walls.push({ wallId: "corr-n", a: { x: 0, y: depth + corridorWidth }, b: { x: length, y: depth + corridorWidth } });
+        for (let i = 1; i < rooms; i++) {
+            walls.push({ wallId: `s${i}`, a: { x: i * pitch, y: 0 }, b: { x: i * pitch, y: depth } });
+            walls.push({ wallId: `n${i}`, a: { x: i * pitch, y: depth + corridorWidth }, b: { x: i * pitch, y: height } });
+        }
+
+        // Rooms down each side, plus the corridor itself.
+        expect(deriveFaces(walls).faces).toHaveLength(rooms * 2 + 1);
+    });
+
     test("scales to a realistic floor without pathological slowdown", () => {
         // 10x10 grid of rooms: 220 wall segments, 100 derived faces.
         const walls: Segment[] = [];

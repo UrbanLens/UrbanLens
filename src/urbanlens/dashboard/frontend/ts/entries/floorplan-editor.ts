@@ -878,7 +878,7 @@ function boot(): void {
                     }
                     bound.x = seedOrigin.x + dx;
                     bound.y = seedOrigin.y + dy;
-                    render();
+                    renderSoon();
                 },
                 end: (moved) => {
                     roomDrag = null;
@@ -1021,7 +1021,7 @@ function boot(): void {
                                 }
                             }
                         }
-                        render();
+                        renderSoon();
                     },
                     end: (moved) => {
                         dragOrigin = null;
@@ -1073,6 +1073,29 @@ function boot(): void {
         renderFloorTabs();
         updateEmptyState(current);
         scheduleRoomLabelFit();
+    }
+
+    let renderFrame: number | null = null;
+
+    /**
+     * Render at most once per displayed frame.
+     *
+     * A drag re-derives the whole planar subdivision on every render, and
+     * pointermove fires as fast as the device reports - which on a high-rate
+     * pointer is well past the refresh rate. Rendering per event therefore
+     * spends most of its work on frames nobody sees, and on a large plan the
+     * events queue faster than they can be served, so the drag lags further
+     * behind the finger the longer it goes on.
+     *
+     * The cost is that geometry is at most one frame stale, which is not
+     * visible; the alternative was work that was entirely invisible.
+     */
+    function renderSoon(): void {
+        if (renderFrame !== null) return;
+        renderFrame = requestAnimationFrame(() => {
+            renderFrame = null;
+            render();
+        });
     }
 
     let labelFitFrame: number | null = null;
@@ -1290,7 +1313,7 @@ function boot(): void {
                             state.selection = { kind: "opening", wall: target, opening };
                             state.multi = [state.selection];
                         }
-                        render();
+                        renderSoon();
                         return;
                     }
                     const hostA = { x: host.ax, y: host.ay };
@@ -1299,7 +1322,7 @@ function boot(): void {
                     const start = Math.max(0, Math.min(slide.originalStart + (currentT - slide.startT), 1 - slide.width));
                     opening.t_start = start;
                     opening.t_end = start + slide.width;
-                    render();
+                    renderSoon();
                 },
                 end: (moved) => {
                     slide = null;
@@ -1347,7 +1370,7 @@ function boot(): void {
                     else opening.t_end = Math.max(along, opening.t_start + MIN_WIDTH);
                     opening.t_start = Math.max(0, opening.t_start);
                     opening.t_end = Math.min(1, opening.t_end);
-                    render();
+                    renderSoon();
                 },
                 end: (moved) => {
                     editing = false;
@@ -1471,7 +1494,7 @@ function boot(): void {
                 seed.y = movedSeed.y;
                 const readout = document.getElementById("floorplan-hint");
                 if (readout) readout.textContent = `${Math.round((angle * 180) / Math.PI)}°`;
-                render();
+                renderSoon();
             },
             end: (moved) => {
                 turning = null;
@@ -1649,7 +1672,7 @@ function boot(): void {
                             entry.wall.by = snapped.point.y;
                         }
                     }
-                    render();
+                    renderSoon();
                 },
                 end: (moved) => {
                     moving = null;
