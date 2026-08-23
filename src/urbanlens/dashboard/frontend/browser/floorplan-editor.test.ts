@@ -102,6 +102,26 @@ html,body{margin:0}
 <script type="module" src="/dashboard/js/floorplan-editor.js"></script>
 </body></html>`;
 
+/** Where the middle of the plan sits on screen. */
+async function planCentre(): Promise<{ x: number; y: number }> {
+    const point = await page.evaluate(() => {
+        const nodes = [...document.querySelectorAll(".floorplan-wall")];
+        let top = Infinity;
+        let left = Infinity;
+        let bottom = -Infinity;
+        let right = -Infinity;
+        for (const node of nodes) {
+            const rect = node.getBoundingClientRect();
+            top = Math.min(top, rect.top);
+            left = Math.min(left, rect.left);
+            bottom = Math.max(bottom, rect.bottom);
+            right = Math.max(right, rect.right);
+        }
+        return { x: (left + right) / 2, y: (top + bottom) / 2 };
+    });
+    return point;
+}
+
 /** A four-wall square, 10m on a side, as the editor's own document shape. */
 function squarePlan(): unknown {
     const corners = [
@@ -125,7 +145,9 @@ function squarePlan(): unknown {
                 name: "",
                 walls: corners.map((corner, index) => ({
                     uuid: `wall-${index}`,
-                    kind: index === 0 ? "exterior" : "interior",
+                    // All exterior: this is a building outline, which is what
+                    // makes it a shell rather than a room.
+                    kind: "exterior",
                     thickness: "normal",
                     ax: corner[0],
                     ay: corner[1],
@@ -362,6 +384,33 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.keyboard.press("Escape");
 
         expect(await page.locator('[data-tool="select"]').getAttribute("aria-pressed")).toBe("true");
+        await page.close();
+    });
+
+    test("clicking inside a bare outline does not turn the building into a room", async () => {
+        // A region is derived from whatever encloses it, so an un-subdivided
+        // outline encloses exactly as validly as a room - and used to become
+        // one the moment anybody clicked the middle of the plan to look at
+        // something.
+        await openEditor();
+        const centre = await planCentre();
+        await page.mouse.click(centre.x, centre.y);
+        await settle();
+
+        expect(await page.locator(".floorplan-room-label").count()).toBe(0);
+        expect(await page.locator("#floorplan-form h3").count()).toBe(0);
+        await page.close();
+    });
+
+    test("the outline can still be named deliberately", async () => {
+        await openEditor();
+        const centre = await planCentre();
+        await page.mouse.click(centre.x, centre.y, { button: "right" });
+        await page.waitForSelector("text=Name this space", { timeout: 10000 });
+        await page.locator("text=Name this space").click();
+        await settle();
+
+        expect(await page.locator("#floorplan-form h3").first().textContent()).toBe("Room");
         await page.close();
     });
 

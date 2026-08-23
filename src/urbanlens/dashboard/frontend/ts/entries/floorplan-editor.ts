@@ -669,8 +669,14 @@ function boot(): void {
      * click toggles it in place, so building up (or trimming) a multi-select
      * one item at a time works the same way it does everywhere else.
      */
-    function selectItem(item: SelectionItem, event: L.LeafletMouseEvent): void {
-        const original = event.originalEvent as MouseEvent | undefined;
+    /**
+     * Args:
+     *     item: What to select.
+     *     event: The click that did it, when there was one. Null for a menu
+     *         action, which is never additive.
+     */
+    function selectItem(item: SelectionItem, event: L.LeafletMouseEvent | null): void {
+        const original = event?.originalEvent as MouseEvent | undefined;
         const additive = Boolean(original && (original.ctrlKey || original.metaKey));
         if (additive) {
             const key = itemKey(item);
@@ -744,18 +750,23 @@ function boot(): void {
                 ...(seed ? ROOM_FILL : UNBOUND_FILL),
                 ...(roomSelected ? { color: "#00838f", weight: 4, fillColor: "#00838f", fillOpacity: 0.28 } : {}),
             }).addTo(roomLayer);
-            const label = seed ? seed.name || "Unnamed" : "Unnamed room";
-            // Permanent, not on hover: a room appearing and naming its own area
-            // the instant a loop closes is what teaches the wall-first model,
-            // and a badge nobody sees teaches nothing.
-            // The area reads as secondary metadata, not part of the name
-            // itself - a subtler line underneath rather than run in beside it.
-            polygon.bindTooltip(`<span class="floorplan-room-label__name">${escHtml(label)}</span><span class="floorplan-room-label__area">${face.area.toFixed(1)} m²</span>`, {
-                direction: "center",
-                className: "floorplan-room-label",
-                permanent: true,
-            });
-            roomLabels.push({ polygon, ring: face.ring });
+            // An un-subdivided outline gets no label. It is the building, and
+            // captioning it "Unnamed room" is the same wrong claim as letting a
+            // click turn it into one - it just makes the claim unprompted.
+            if (seed || !isBuildingShell(face)) {
+                const label = seed ? seed.name || "Unnamed" : "Unnamed room";
+                // Permanent, not on hover: a room appearing and naming its own
+                // area the instant a loop closes is what teaches the wall-first
+                // model, and a badge nobody sees teaches nothing.
+                // The area reads as secondary metadata, not part of the name
+                // itself - a subtler line underneath rather than run in beside it.
+                polygon.bindTooltip(`<span class="floorplan-room-label__name">${escHtml(label)}</span><span class="floorplan-room-label__area">${face.area.toFixed(1)} m²</span>`, {
+                    direction: "center",
+                    className: "floorplan-room-label",
+                    permanent: true,
+                });
+                roomLabels.push({ polygon, ring: face.ring });
+            }
             if (seed && roomSelected && state.multi.length === 1) renderRoomRotateGrip(seed, face);
             polygon.on("click", (event) => {
                 // Checked before stopping propagation: a room fill covers a
@@ -763,12 +774,26 @@ function boot(): void {
                 // swallowed every wall/marker click landing inside a room -
                 // exactly where someone is likeliest to want to add one.
                 if (state.tool !== "select") return;
+                // An un-subdivided outline is the building, not a room inside
+                // it. Clicking one used to mint a room seed, which is how a plan
+                // came to contain a room that was the whole building.
+                if (!seed && isBuildingShell(face)) return;
                 L.DomEvent.stop(event);
                 const bound = seed || addSeedAt(interiorPoint(face.ring));
                 selectItem({ kind: "room", room: bound }, event);
             });
             polygon.on("contextmenu", (event) => {
                 if (state.tool !== "select") return;
+                if (!seed && isBuildingShell(face)) {
+                    // Still nameable, but deliberately: the context menu offers
+                    // it rather than a stray click doing it. Stopped, or the
+                    // map's own contextmenu handler runs next and rebuilds the
+                    // menu without the offer.
+                    L.DomEvent.stop(event);
+                    pendingShellFace = face;
+                    showContextMenu(event, null);
+                    return;
+                }
                 const bound = seed || addSeedAt(interiorPoint(face.ring));
                 showContextMenu(event, { kind: "room", room: bound });
             });
@@ -1504,6 +1529,32 @@ function boot(): void {
     }
 
     /**
+     * Whether a region is the building's own shell rather than a room in it.
+     *
+     * A region is derived from whatever walls enclose it, so an outline nobody
+     * has subdivided yet encloses exactly as validly as a room does - there is
+     * no geometric difference between "a shed, which really is one room" and
+     * "a building I have not put partitions in yet". What separates them is
+     * that a room has at least one wall which is not the outside of the
+     * building.
+     *
+     * It matters because clicking a region is how one gets named, and a plan
+     * whose only region is its own outline should not acquire a room because
+     * someone clicked the middle of it to look at something. Naming the shell
+     * stays possible; it just has to be meant.
+     *
+     * Args:
+     *     face: The derived region.
+     *
+     * Returns:
+     *     True when every wall bounding it is exterior.
+     */
+    function isBuildingShell(face: Face): boolean {
+        const walls = floor().walls.filter((wall) => face.wallIds.includes(wallId(wall)));
+        return walls.length > 0 && walls.every((wall) => wall.kind === "exterior");
+    }
+
+    /**
      * Every distinct corner on a floor, with the wall ends that meet there.
      *
      * Walls store their own endpoints, so a corner shared by three walls is
@@ -1791,6 +1842,8 @@ function boot(): void {
     // ---------------------------------------------------------- context menu
 
     let pendingContextPoint: Pt | null = null;
+    /** The un-subdivided outline a context menu was opened over, if any. */
+    let pendingShellFace: Face | null = null;
     let contextMenuEl: HTMLUListElement | null = null;
 
     function closeContextMenu(): void {
@@ -1815,6 +1868,14 @@ function boot(): void {
         };
 
         if (!item) {
+            if (pendingShellFace) {
+                const face = pendingShellFace;
+                addAction("Name this space", () => {
+                    const seed = addSeedAt(interiorPoint(face.ring));
+                    selectItem({ kind: "room", room: seed }, null);
+                    render();
+                });
+            }
             addAction(`Add ${titleCase(state.markerKind)} marker here`, () => {
                 if (!pendingContextPoint) return;
                 checkpoint();
@@ -2267,6 +2328,7 @@ function boot(): void {
     map.on("contextmenu", (event: L.LeafletMouseEvent) => {
         if (state.tool !== "select") return;
         pendingContextPoint = toLocal(event.latlng);
+        pendingShellFace = null;
         showContextMenu(event, null);
     });
 
