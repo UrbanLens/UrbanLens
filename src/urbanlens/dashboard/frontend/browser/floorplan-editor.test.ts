@@ -174,6 +174,38 @@ function gridPlan(cells = 12): unknown {
     };
 }
 
+/** A square building with a closet partitioned off its north-west corner. */
+function closetPlan(): unknown {
+    const wall = (kind: string, ax: number, ay: number, bx: number, by: number) => ({ kind, thickness: "normal", ax, ay, bx, by, openings: [] });
+    return {
+        uuid: "plan-closet",
+        name: "closet",
+        valid_from: null,
+        origin: "local",
+        plan_origin: { lat: 41.733, lng: -73.928 },
+        rotation_degrees: 0,
+        floors: [
+            {
+                uuid: "floor-1",
+                level: 0,
+                designation: "",
+                name: "Ground",
+                walls: [
+                    wall("exterior", 0, 0, 10, 0),
+                    wall("exterior", 10, 0, 10, 10),
+                    wall("exterior", 10, 10, 0, 10),
+                    wall("exterior", 0, 10, 0, 0),
+                    // The closet: a partition across, and one down to meet it.
+                    wall("interior", 0, 4, 4, 4),
+                    wall("interior", 4, 4, 4, 0),
+                ],
+                rooms: [{ name: "Closet", x: 2, y: 2 }],
+                markers: [],
+            },
+        ],
+    };
+}
+
 function squarePlan(): unknown {
     const corners = [
         [0, 0],
@@ -223,13 +255,13 @@ let server: ReturnType<typeof Bun.serve>;
  * Served over HTTP rather than injected: the bundle is a module that imports a
  * chunk by relative URL, which cannot resolve without a real origin.
  */
-async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false, plan: "square" | "grid" = "square"): Promise<void> {
+async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false, plan: "square" | "grid" | "closet" = "square"): Promise<void> {
     page = await browser.newPage({ viewport, hasTouch });
     page.on("pageerror", (error) => console.error("PAGEERROR", String(error).slice(0, 300)));
     page.on("console", (message) => {
         if (message.type() === "error") console.error("browser console:", message.text().slice(0, 200));
     });
-    await page.goto(`http://127.0.0.1:${server.port}/${plan === "grid" ? "?plan=grid" : ""}`, { waitUntil: "load" });
+    await page.goto(`http://127.0.0.1:${server.port}/${plan === "square" ? "" : `?plan=${plan}`}`, { waitUntil: "load" });
     // "attached", not the default "visible": a straight wall is an SVG line
     // whose bounding box has zero height, which Playwright reads as invisible.
     await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
@@ -323,12 +355,13 @@ beforeAll(async () => {
             if (path === "/") {
                 // The plan url is substituted rather than fixed, so a test can
                 // ask for a big one without a second copy of the harness.
-                const big = new URL(request.url).searchParams.get("plan") === "grid";
-                const page = big ? HARNESS.replace('data-json-url="/json"', 'data-json-url="/json-grid"') : HARNESS;
+                const which = new URL(request.url).searchParams.get("plan");
+                const page = which ? HARNESS.replace('data-json-url="/json"', `data-json-url="/json-${which}"`) : HARNESS;
                 return new Response(page, { headers: { "content-type": "text/html" } });
             }
             if (path === "/json") return Response.json(squarePlan());
             if (path === "/json-grid") return Response.json(gridPlan());
+            if (path === "/json-closet") return Response.json(closetPlan());
             if (path === "/save") return Response.json({ ok: true, floorplan: squarePlan() });
             return new Response(Bun.file(join(STATIC_DIR, path.replace(/^\//, ""))));
         },
@@ -996,6 +1029,59 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await settle();
         expect(await page.locator("#floorplan-form select").count()).toBe(1);
         expect(await page.locator("#floorplan-map path.floorplan-door-swing").count()).toBe(0);
+        await page.close();
+    });
+
+    test("a room inside a building can be moved, and leaves the shell alone", async () => {
+        // It could not. A wall counted as the room's own only if it bordered no
+        // other face, and in a planar subdivision every partition borders two -
+        // so a closet inside a building owned nothing, and the drag, the turn
+        // and the delete all declined on the grounds that there was nothing to
+        // act on.
+        await openEditor({ width: 1200, height: 800 }, false, "closet");
+        const shell = async (): Promise<string> =>
+            page.evaluate(() => {
+                const walls = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-wall"));
+                // The building's outline is whatever the walls span overall.
+                const boxes = walls.map((n) => n.getBoundingClientRect());
+                const left = Math.min(...boxes.map((b) => b.left));
+                const top = Math.min(...boxes.map((b) => b.top));
+                const right = Math.max(...boxes.map((b) => b.right));
+                const bottom = Math.max(...boxes.map((b) => b.bottom));
+                return [left, top, right, bottom].map(Math.round).join(",");
+            });
+        const before = await shell();
+
+        // Select the closet, then drag it.
+        const closet = async (): Promise<{ x: number; y: number; w: number } | null> =>
+            page.evaluate(() => {
+                const fills = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"));
+                const smallest = fills.map((n) => n.getBoundingClientRect()).sort((a, b) => a.width * a.height - b.width * b.height)[0];
+                return smallest ? { x: smallest.left + smallest.width / 2, y: smallest.top + smallest.height / 2, w: Math.round(smallest.width) } : null;
+            });
+        const room = await closet();
+        expect(room, "no room fill").not.toBeNull();
+        await page.mouse.click(room!.x, room!.y);
+        await settle();
+
+        await page.mouse.move(room!.x, room!.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(room!.x + step * 5, room!.y + step * 2);
+        await page.mouse.up();
+        await settle();
+
+        // The closet actually went somewhere - without this the test passes
+        // just as well when the drag is declined, which is what it is here to
+        // catch.
+        const moved = await closet();
+        expect(moved, "the closet vanished").not.toBeNull();
+        expect(Math.abs(moved!.x - room!.x) + Math.abs(moved!.y - room!.y), "the closet did not move").toBeGreaterThan(10);
+
+        // ...and the building is exactly where it was. Both halves are needed:
+        // with the old rule the drag was declined, Leaflet took the gesture as
+        // a pan, and the closet "moved" only because the whole plan slid under
+        // it - which is what this reads as when it is checked on its own.
+        expect(await shell(), "the whole plan moved, so that was a pan").toBe(before);
         await page.close();
     });
 

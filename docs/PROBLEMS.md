@@ -3984,13 +3984,18 @@ directions: "the base floorplan is considered a room in some cases", and "when a
 room shares walls with the exterior floorplan, it is sometimes not considered a
 room for some things (like being deleted, moved, etc)."
 
-What the code actually does: `roomBoundaryWalls` (floorplan-editor.ts) treats a
-wall as the room's own only when it bounds no other face *and* is not exterior.
-A corner room in a subdivided building still has its partitions, so it moves and
-deletes normally - that half already worked. The only room with no walls of its
-own is one whose entire boundary is shell, which is precisely the "the whole
-building is a room" case: clicking inside a bare exterior outline seeds it, and
-face extraction is right to call it a face because nothing subdivides it.
+What the code did: `roomBoundaryWalls` treated a wall as the room's own only
+when it bounded no other face *and* was not exterior.
+
+The claim originally written here - "a corner room in a subdivided building
+still has its partitions, so it moves and deletes normally, that half already
+worked" - was **wrong**, and checking it rather than repeating it is what turned
+it up. In a planar subdivision *every* interior partition borders two faces, so
+"bounds no other face" is never true of one. A closet inside a building owned
+nothing at all, and the move, the turn and the delete each declined on the
+grounds that there was nothing to act on. Worse than declining, in the case of
+the drag: `start` returning false hands the gesture to Leaflet, so trying to
+move a room panned the map instead.
 
 The exterior exclusion cannot simply be dropped. Verified against planar.ts: in
 an 8x4 shell split by one partition, `west` bounds only the west face, so a
@@ -4008,13 +4013,22 @@ captioned as a room and a stray click will not mint one; right-clicking it
 offers to name it, and once named it is a room like any other. A studio flat and
 a shed are single rooms; a building you have not got round to dividing is not.
 
-"Like any other" now includes moving and deleting it, which it did not. The
-exterior exclusion in `splitRoomBoundary` (shared/floorplan/rooms.ts) lifts when
-a face's *entire* boundary is exterior: such a face is a closed structure in its
-own right, so its walls bound it and nothing else and there is no side of
-anything else to tear off. The exclusion still applies to mixed faces, which is
-where the reverted bug lived - `rooms.test.ts` holds both cases, including two
-sheds sharing a party wall, which stays nobody's to drag.
+"Like any other" now includes moving and deleting it, which it did not.
+`splitRoomBoundary` (shared/floorplan/rooms.ts) hands a room the partitions on
+its boundary regardless of what else they border, plus - for a face that is
+entirely exterior - the shell itself, since a closed structure's walls bound it
+and nothing else.
+
+What it never hands over is the shell of a building the room merely sits inside.
+That is the reverted bug's territory: topologically the west wall of a shell
+split by one partition bounds only the west room, and letting the room have it
+tears the side off the building.
+
+So a room's own walls move and its neighbours' reshape, and the shell stays put
+- but a partition that met the shell has to stay met, or moving a room would
+leave it unenclosed. Corners resting on a wall the room does not own slide along
+it instead of dragging it (`cornerAnchors`/`anchoredMove`), for the turn as well
+as the move.
 
 ## Floorplan drags converted to Pointer Events without browser verification (2026-08-22)
 

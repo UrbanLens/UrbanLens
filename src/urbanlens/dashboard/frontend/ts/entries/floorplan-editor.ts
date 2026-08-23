@@ -861,7 +861,7 @@ function boot(): void {
             // selects first; this only engages on an actual drag of a room
             // that's already the selection, and never for a shift-drag (box-
             // select's own gesture, which starts from the same mousedown).
-            let roomDrag: { local: Pt; boundary: NonNullable<ReturnType<typeof roomBoundaryWalls>>; origins: Map<Wall, { ax: number; ay: number; bx: number; by: number }>; ownPoints: Set<string>; seedOrigin: Pt } | null = null;
+            let roomDrag: { local: Pt; boundary: NonNullable<ReturnType<typeof roomBoundaryWalls>>; origins: Map<Wall, { ax: number; ay: number; bx: number; by: number }>; anchors: CornerAnchors; seedOrigin: Pt } | null = null;
             bindDrag(polygon.getElement(), {
                 start: (event) => {
                     if (state.tool !== "select" || !seed) return false;
@@ -882,19 +882,12 @@ function boot(): void {
                     if (!roomDrag) {
                         const boundary = roomBoundaryWalls(bound);
                         if (!boundary) return;
-                        const key = (p: Pt): string => `${p.x},${p.y}`;
-                        const ownPoints = new Set<string>();
-                        for (const wall of boundary.unique) {
-                            ownPoints.add(key({ x: wall.ax, y: wall.ay }));
-                            ownPoints.add(key({ x: wall.bx, y: wall.by }));
-                        }
                         const origins = new Map<Wall, { ax: number; ay: number; bx: number; by: number }>();
                         for (const wall of [...boundary.unique, ...boundary.shared]) origins.set(wall, { ax: wall.ax, ay: wall.ay, bx: wall.bx, by: wall.by });
-                        roomDrag = { local, boundary, origins, ownPoints, seedOrigin: { x: bound.x, y: bound.y } };
+                        roomDrag = { local, boundary, origins, anchors: cornerAnchors(boundary), seedOrigin: { x: bound.x, y: bound.y } };
                         checkpoint();
                     }
-                    const { boundary, origins, ownPoints, seedOrigin } = roomDrag;
-                    const key = (p: Pt): string => `${p.x},${p.y}`;
+                    const { boundary, origins, seedOrigin } = roomDrag;
                     let dx = local.x - roomDrag.local.x;
                     let dy = local.y - roomDrag.local.y;
                     if (modifiers.constrain) {
@@ -915,21 +908,12 @@ function boot(): void {
                     dy = snapped.y;
                     for (const wall of boundary.unique) {
                         const orig = origins.get(wall) as { ax: number; ay: number; bx: number; by: number };
-                        wall.ax = orig.ax + dx;
-                        wall.ay = orig.ay + dy;
-                        wall.bx = orig.bx + dx;
-                        wall.by = orig.by + dy;
-                    }
-                    for (const wall of boundary.shared) {
-                        const orig = origins.get(wall) as { ax: number; ay: number; bx: number; by: number };
-                        if (ownPoints.has(key({ x: orig.ax, y: orig.ay }))) {
-                            wall.ax = orig.ax + dx;
-                            wall.ay = orig.ay + dy;
-                        }
-                        if (ownPoints.has(key({ x: orig.bx, y: orig.by }))) {
-                            wall.bx = orig.bx + dx;
-                            wall.by = orig.by + dy;
-                        }
+                        const a = anchoredMove({ x: orig.ax, y: orig.ay }, dx, dy, roomDrag);
+                        const b = anchoredMove({ x: orig.bx, y: orig.by }, dx, dy, roomDrag);
+                        wall.ax = a.x;
+                        wall.ay = a.y;
+                        wall.bx = b.x;
+                        wall.by = b.y;
                     }
                     bound.x = seedOrigin.x + dx;
                     bound.y = seedOrigin.y + dy;
@@ -1491,19 +1475,13 @@ function boot(): void {
         L.polyline([toLatLng(pivot), toLatLng(gripAt)], { color: "#00838f", weight: 1, dashArray: "3 3", interactive: false }).addTo(handleLayer);
         const grip = L.circleMarker(toLatLng(gripAt), { radius: 7, color: "#00838f", fillColor: "#fff", fillOpacity: 1, weight: 2, className: "floorplan-handle floorplan-rotate-grip" }).addTo(handleLayer);
 
-        const key = (p: Pt): string => `${p.x},${p.y}`;
-        let turning: { start: number; walls: Map<Wall, { a: Pt; b: Pt }>; seedAt: Pt; ownPoints: Set<string> } | null = null;
+        let turning: { start: number; walls: Map<Wall, { a: Pt; b: Pt }>; seedAt: Pt; anchors: CornerAnchors } | null = null;
         bindDrag(grip.getElement(), {
             move: ({ local }) => {
                 if (!turning) {
-                    const ownPoints = new Set<string>();
-                    for (const wall of boundary.unique) {
-                        ownPoints.add(key({ x: wall.ax, y: wall.ay }));
-                        ownPoints.add(key({ x: wall.bx, y: wall.by }));
-                    }
                     const walls = new Map<Wall, { a: Pt; b: Pt }>();
                     for (const wall of [...boundary.unique, ...boundary.shared]) walls.set(wall, { a: { x: wall.ax, y: wall.ay }, b: { x: wall.bx, y: wall.by } });
-                    turning = { start: Math.atan2(local.y - pivot.y, local.x - pivot.x), walls, seedAt: { x: seed.x, y: seed.y }, ownPoints };
+                    turning = { start: Math.atan2(local.y - pivot.y, local.x - pivot.x), walls, seedAt: { x: seed.x, y: seed.y }, anchors: cornerAnchors(boundary) };
                     checkpoint();
                 }
                 const now = Math.atan2(local.y - pivot.y, local.x - pivot.x);
@@ -1511,27 +1489,24 @@ function boot(): void {
                 // turning a room by hand is an attempt to line it up with
                 // something and the last half-degree is unhittable freehand.
                 const angle = snapOff() ? now - turning.start : snapRotation(now - turning.start);
+                // A corner resting on a wall the room does not own stays on it,
+                // sliding rather than dragging: the shell is the building's,
+                // and a partition that simply detached from it would leave the
+                // room unenclosed the moment it was turned.
+                const turned = (corner: Pt): Pt => {
+                    const moved = rotate(corner, angle, pivot);
+                    const resting = (turning as NonNullable<typeof turning>).anchors.get(cornerKey(corner));
+                    if (!resting) return moved;
+                    return projectOnSegment(moved, { x: resting.ax, y: resting.ay }, { x: resting.bx, y: resting.by }).point;
+                };
                 for (const wall of boundary.unique) {
                     const origin = turning.walls.get(wall) as { a: Pt; b: Pt };
-                    const a = rotate(origin.a, angle, pivot);
-                    const b = rotate(origin.b, angle, pivot);
+                    const a = turned(origin.a);
+                    const b = turned(origin.b);
                     wall.ax = a.x;
                     wall.ay = a.y;
                     wall.bx = b.x;
                     wall.by = b.y;
-                }
-                for (const wall of boundary.shared) {
-                    const origin = turning.walls.get(wall) as { a: Pt; b: Pt };
-                    if (turning.ownPoints.has(key(origin.a))) {
-                        const moved = rotate(origin.a, angle, pivot);
-                        wall.ax = moved.x;
-                        wall.ay = moved.y;
-                    }
-                    if (turning.ownPoints.has(key(origin.b))) {
-                        const moved = rotate(origin.b, angle, pivot);
-                        wall.bx = moved.x;
-                        wall.by = moved.y;
-                    }
                 }
                 // The seed turns with the room, so the region keeps the name it
                 // was given rather than rebinding to whatever now sits over the
@@ -1640,6 +1615,61 @@ function boot(): void {
             seen += 1;
         }
         return seen > 0;
+    }
+
+    /** Which wall, if any, each of a room's own corners is resting against. */
+    type CornerAnchors = Map<string, Wall>;
+
+    /** A corner's key, exact rather than rounded - these are the authored values. */
+    const cornerKey = (p: Pt): string => `${p.x},${p.y}`;
+
+    /**
+     * Find, for each of the room's own corners, the wall it is sitting on.
+     *
+     * A room's partitions meet the building's shell somewhere, and that meeting
+     * point is the thing a move or a turn has to preserve: the shell is not the
+     * room's to reshape, but a partition that simply detaches from it leaves
+     * the room unenclosed. The corner slides along the wall instead.
+     *
+     * Args:
+     *     boundary: The room's split boundary.
+     *
+     * Returns:
+     *     Corner key to the wall it rests against. Corners resting on nothing
+     *     are absent.
+     */
+    function cornerAnchors(boundary: RoomBoundary): CornerAnchors {
+        const anchors: CornerAnchors = new Map();
+        if (!boundary.shared.length) return anchors;
+        const tolerance = 1e-6;
+        for (const wall of boundary.unique) {
+            for (const corner of [{ x: wall.ax, y: wall.ay }, { x: wall.bx, y: wall.by }]) {
+                const resting = boundary.shared.find(
+                    (other) => projectOnSegment(corner, { x: other.ax, y: other.ay }, { x: other.bx, y: other.by }).distance <= tolerance,
+                );
+                if (resting) anchors.set(cornerKey(corner), resting);
+            }
+        }
+        return anchors;
+    }
+
+    /**
+     * Translate one of the room's corners, keeping it on whatever it rests on.
+     *
+     * Args:
+     *     corner: Where the corner was when the gesture started.
+     *     dx: Horizontal translation.
+     *     dy: Vertical translation.
+     *     held: The gesture's state, for the anchors it recorded.
+     *
+     * Returns:
+     *     Where the corner should now be.
+     */
+    function anchoredMove(corner: Pt, dx: number, dy: number, held: { anchors: CornerAnchors }): Pt {
+        const moved = { x: corner.x + dx, y: corner.y + dy };
+        const resting = held.anchors.get(cornerKey(corner));
+        if (!resting) return moved;
+        return projectOnSegment(moved, { x: resting.ax, y: resting.ay }, { x: resting.bx, y: resting.by }).point;
     }
 
     /**
