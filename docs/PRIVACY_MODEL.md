@@ -181,19 +181,50 @@ the sharer's own label.
 7. **Nit:** `pin_sharing.py:217` sets `name_is_user_provided=True` when the name actually
    came from an official alias rather than from the sharer.
 
+### The reputation ledger (new, 2026-08-24)
+
+`ReputationEvent` is a new dataset with a privacy weight of its own, and it did not
+exist before this date. Each row records **who contributed what, to which wiki, and
+when** — so the table as a whole is a per-user map of which places, including
+sensitive ones, a person has engaged with. Nothing like it existed previously;
+`WikiEdit` comes closest but is per-wiki rather than per-person, and carries no
+aggregate.
+
+Rules it inherits, and the ones it needs of its own:
+
+- **Never user-visible.** The score is hidden by design — a visible score is a score
+  people optimise, which defeats what it is for. There is no user-facing surface and
+  none should be added.
+- **`inputs` must stay boring.** The scorer snapshots the target's state into the row
+  for auditability. It must not accumulate anything that would be a problem to keep:
+  no free text, no coordinates, no names. Today it holds base values, a need tier, and
+  boolean metadata flags.
+- **The admin surface, when built, defaults to aggregates.** Per-activity and
+  per-period breakdowns are the point of it. A per-user drill-down that *names the
+  targets* is a different thing — it would let a site admin read off which sensitive
+  locations a named user has visited — and is deliberately out of v1. See R10 in
+  `designs/reputation-and-gating.md`.
+- **`lifetime_earned` never decreases.** Not a privacy rule but a safety one, recorded
+  here because it constrains any future consumer: anything granting durable standing
+  must read it rather than `total`, so that reverting somebody's contributions cannot
+  be used to strip access they already had.
+
 ### Not a divergence — designed, not yet built
 
-The hidden reputation gate that scales how much wiki detail a new account sees —
-defeating "pin a random address and check whether a wiki exists" probing — is **designed
-in full and not implemented**. See `docs/designs/reputation-and-gating.md` (494 lines,
-written 2026-08-21 from the 2026-08-20 voice memo; tickets UL-397/UL-398/UL-399). Its
-status line: *DRAFT — needs Jess's input on the open questions in "Decisions needed"
-before any code lands.* Decisions 1–2 are resolved; **3–6 are open and block the build**:
-coefficient tunability, the v1 list of "sensitive", whether "earn your way in locally"
-ships in v1, and anti-gaming scope.
+The hidden reputation gate — defeating "pin a random address and check whether a wiki
+exists" probing — is **still not implemented, and the ledger that would feed it now is.**
+See `docs/designs/reputation-and-gating.md`, whose Design review section supersedes the
+rest of it.
 
-Nothing in the codebase implements it today, so **no read path currently consults any
-reputation signal.** Four things use adjacent vocabulary and are not it:
+What changed 2026-08-24: the gate's original shape (withhold community content from the
+existing wiki) was found not to work here. The camouflage has to be the *empty state* —
+a gated place must look like one nobody has documented — and an audit of every observable
+channel (`designs/reputation-gating-tells.md`, 82 verified findings) established that
+filtering cannot reproduce it, because the empty state is a row the viewer *owns*. The
+gate architecture is deliberately deferred until there is real score data.
+
+**No read path consults any reputation signal today**, and that remains true with the
+ledger built — it has no consumer. Four things use adjacent vocabulary and are not it:
 `wiki_access.py`'s "earned access" (the place-domain rule, binary);
 `ConsensusProfile.trust_score` (a Beta posterior that weights *fact evidence at
 submission* — all 28 references are confined to consensus/facts, none on a read path);
