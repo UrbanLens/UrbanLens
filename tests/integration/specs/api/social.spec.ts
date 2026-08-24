@@ -47,6 +47,19 @@ interface FriendFeed {
  */
 const UNSETTLED = ["Pending", "Requested"] as const;
 
+/**
+ * Every status the feed will filter by, from the schema's enum.
+ *
+ * Used when *proving* a relationship is gone, which is a different question
+ * from finding a live one. An earlier version of the reset checked the settled
+ * feed plus the two unsettled labels and called that clean - so a row sitting
+ * in `Declined`, `Ignored`, `Blocked` or `Removed` was invisible to it, and the
+ * next request in the file inherited whatever that row implied. That is the
+ * shape of the remaining failure: the *first* test in this file is the one that
+ * fails, which is exactly the test that meets the previous run's leftovers.
+ */
+const ALL_STATUSES = ["Pending", "Requested", "Accepted", "Declined", "Removed", "Muted", "Blocked", "Ignored"] as const;
+
 /** The calling credential's own profile. */
 async function whoami(api: ApiClient): Promise<{ uuid: string; slug: string }> {
     return api.json<{ uuid: string; slug: string }>("get", "whoami/");
@@ -104,14 +117,26 @@ async function resetFriendship(api: ApiClient, secondaryApi: ApiClient, meUuid: 
     // Reported from both seats: which side the surviving row belongs to is the
     // difference between "delete does not cover requests" and "delete is
     // one-directional", and the failure message should not make somebody guess.
-    const mine = await findRelationship(api, themUuid);
-    const theirs = await findRelationship(secondaryApi, meUuid);
+    const survivors: string[] = [];
+    for (const [label, client, otherUuid] of [
+        ["requester", api, themUuid],
+        ["recipient", secondaryApi, meUuid],
+    ] as const) {
+        for (const status of ALL_STATUSES) {
+            const entry = entryFor(await friends(client, status), otherUuid);
+            if (entry) {
+                survivors.push(`${label} still sees status="${entry.status}" direction="${entry.direction}" under ?status=${status}`);
+            }
+        }
+    }
+
     expect(
-        { mine, theirs },
-        "a relationship survived being deleted from both sides, so the tests below would run against leftover state:\n" +
-            `  requester still sees: ${JSON.stringify(mine) || "nothing"}\n` +
-            `  recipient still sees: ${JSON.stringify(theirs) || "nothing"}`,
-    ).toEqual({ mine: undefined, theirs: undefined });
+        survivors,
+        "a relationship survived being deleted from both sides, so every test below runs against leftover state:\n  " +
+            survivors.join("\n  ") +
+            "\nIf this is a status DELETE does not clear, that is the finding - `remove_friend` is documented as removing a friendship, " +
+            "and a request or a block is not one.",
+    ).toHaveLength(0);
 }
 
 // Serial, because every test in this file manipulates the *one* relationship
