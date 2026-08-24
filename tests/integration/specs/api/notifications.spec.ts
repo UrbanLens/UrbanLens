@@ -20,7 +20,7 @@ import type { ApiClient } from "../../lib/api-client.js";
 interface NotificationFeed {
     next_cursor: string | null;
     unread_count: number;
-    results: Array<{ uuid?: string; read?: boolean; is_read?: boolean }>;
+    results: Array<{ uuid?: string; read?: boolean; is_read?: boolean; status?: string }>;
 }
 
 /** The calling credential's own profile. */
@@ -28,8 +28,21 @@ async function whoami(api: ApiClient): Promise<{ uuid: string; slug: string }> {
     return api.json<{ uuid: string; slug: string }>("get", "whoami/");
 }
 
-/** Whether an entry reads as already seen, under either spelling. */
-function isRead(entry: { read?: boolean; is_read?: boolean }): boolean {
+/**
+ * Whether an entry reads as already seen.
+ *
+ * Three spellings, because the entry carries a `status` string rather than a
+ * boolean and an earlier version of this checked only for booleans. That made
+ * `isRead` return false for *every* entry, so "still unread after marking read"
+ * failed against a perfectly working endpoint - and the endpoint answers 204
+ * whether or not a row matched (deliberately, so a uuid cannot be used to
+ * probe whose notification it is), which meant there was no second signal to
+ * catch the mistake.
+ */
+function isRead(entry: { read?: boolean; is_read?: boolean; status?: string }): boolean {
+    if (typeof entry.status === "string") {
+        return entry.status.toLowerCase() !== "unread";
+    }
     return Boolean(entry.read ?? entry.is_read);
 }
 

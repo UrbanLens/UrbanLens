@@ -114,8 +114,22 @@ test.describe.serial("friendships", () => {
             const inbound = await findRelationship(secondaryApi, me.uuid);
             expect(inbound, "the recipient cannot see the request in any feed - settled or unsettled - so it was sent to nobody").toBeTruthy();
 
-            const accepted = await secondaryApi.post(`friends/${me.uuid}/accept/`);
-            expect(accepted.status(), `accepting answered ${accepted.status()}: ${(await accepted.text()).slice(0, 200)}`).toBeLessThan(300);
+            // `request_or_accept_friendship` accepts outright when the other
+            // party already had a request pending in reverse - two people who
+            // clearly want to be friends should not need a second round trip.
+            // So the request may already be settled here, and calling accept on
+            // a friendship with nothing pending is a 404 rather than a no-op.
+            // The outcome is what this test is about, not which of the two
+            // routes reached it.
+            const alreadyAccepted = String(inbound?.status ?? "").toLowerCase().includes("accept");
+            if (!alreadyAccepted) {
+                const accepted = await secondaryApi.post(`friends/${me.uuid}/accept/`);
+                expect(
+                    accepted.status(),
+                    `accepting answered ${accepted.status()}: ${(await accepted.text()).slice(0, 200)}. ` +
+                        `Immediately before, the recipient saw status="${inbound?.status}" direction="${inbound?.direction}".`,
+                ).toBeLessThan(300);
+            }
 
             // And now from the requester's seat, which is the half that a
             // one-sided implementation gets wrong.
@@ -254,6 +268,50 @@ test.describe.serial("friendships", () => {
             if (theirNotes.status() === 200) {
                 expect(await theirNotes.text(), "a private note about somebody is readable by that person").not.toContain(content);
             }
+        } finally {
+            await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
+        }
+    });
+
+    ifSecondaryAccount()("friends can exchange direct messages", async ({ api, secondaryApi }) => {
+        // Here rather than in `api/messages.spec.ts` because messaging somebody
+        // requires a relationship with them - a stranger is refused - and this
+        // file owns the one relationship the two fixed accounts share.
+        const me = await whoami(api);
+        const them = await whoami(secondaryApi);
+        await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
+        await api.post("friends/", { profile_uuid: them.uuid });
+        await secondaryApi.post(`friends/${me.uuid}/accept/`);
+
+        try {
+            const body = resourceName("hello from the suite");
+            const sent = await api.post(`messages/${them.slug}/`, { body });
+            expect(sent.status(), `sending answered ${sent.status()}: ${(await sent.text()).slice(0, 250)}`).toBeLessThan(300);
+
+            // The recipient's copy of the same thread, addressed by *their*
+            // peer - which is the sender. Getting this wrong is how a thread
+            // ends up one-directional: it looks sent and arrives nowhere.
+            const inbox = await secondaryApi.json<{ results: Array<{ body?: string }> }>("get", `messages/${me.slug}/`);
+            expect(
+                inbox.results.some((message) => message.body === body),
+                `the recipient's thread does not contain the message. Last few: ${JSON.stringify(inbox.results.slice(0, 3)).slice(0, 250)}`,
+            ).toBeTruthy();
+
+            // And the sender keeps their own copy, or the thread reads as empty
+            // to the person who just typed into it.
+            const outbox = await api.json<{ results: Array<{ body?: string }> }>("get", `messages/${them.slug}/`);
+            expect(outbox.results.some((message) => message.body === body), "the sender's own thread does not contain what they sent").toBeTruthy();
+
+            // The offline-outbox problem pins have too: a client stamps an id
+            // at compose time and retries until acknowledged.
+            const clientUuid = crypto.randomUUID();
+            const retried = resourceName("sent twice");
+            await api.post(`messages/${them.slug}/`, { body: retried, client_uuid: clientUuid });
+            await api.post(`messages/${them.slug}/`, { body: retried, client_uuid: clientUuid });
+
+            const thread = await api.json<{ results: Array<{ body?: string }> }>("get", `messages/${them.slug}/`);
+            const copies = thread.results.filter((message) => message.body === retried);
+            expect(copies.length, `a retried send with one client_uuid produced ${copies.length} copies`).toBe(1);
         } finally {
             await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
         }
