@@ -30,9 +30,9 @@ application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
         # ApiKeyAuthMiddlewareStack wraps channels.auth.AuthMiddlewareStack: a
-        # session always wins, with a ``?key=<PAT or OAuth2 token>`` query-string
-        # credential as the fallback for native clients that have no session
-        # cookie (see websocket_auth.py).
+        # session always wins, with an Authorization bearer credential as the
+        # fallback for native clients that have no session cookie. ``?key=`` is
+        # still accepted for older clients; see websocket_auth.py.
         "websocket": AllowedHostsOriginValidator(ApiKeyAuthMiddlewareStack(URLRouter(websocket_urlpatterns))),
     },
 )

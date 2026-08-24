@@ -31,6 +31,7 @@ def _ok_response(content: bytes = b"fake-jpeg-bytes") -> mock.Mock:
     response = mock.Mock()
     response.raise_for_status = mock.Mock()
     response.raw.read.return_value = content
+    response.raw.connection.sock.getpeername.return_value = ("93.184.216.34", 443)
     response.is_redirect = False
     return response
 
@@ -213,12 +214,26 @@ class MaterializeMediaItemSsrfTests(TestCase):
 
     def test_a_redirect_to_a_private_ip_is_rejected(self) -> None:
         redirect_response = mock.Mock(status_code=302, headers={"Location": "http://127.0.0.1/internal"}, is_redirect=True)
+        redirect_response.raw.connection.sock.getpeername.return_value = ("93.184.216.34", 443)
         with (
             mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
             mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=redirect_response),
             pytest.raises(MaterializeError),
         ):
             materialize_media_item(location=self.location, profile=self.profile, source="wikimedia", url="https://example.test/photo.jpg")
+        self.assertFalse(Image.objects.filter(location=self.location).exists())
+
+    def test_a_rebound_private_peer_is_rejected_before_body_is_read(self) -> None:
+        response = _ok_response()
+        response.raw.connection.sock.getpeername.return_value = ("169.254.169.254", 80)
+        with (
+            mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
+            mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=response),
+            pytest.raises(MaterializeError),
+        ):
+            materialize_media_item(location=self.location, profile=self.profile, source="wikimedia", url="https://example.test/photo.jpg")
+
+        response.raw.read.assert_not_called()
         self.assertFalse(Image.objects.filter(location=self.location).exists())
 
 

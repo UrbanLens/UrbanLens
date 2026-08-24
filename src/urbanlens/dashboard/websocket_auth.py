@@ -13,9 +13,10 @@ token itself, inside the consumer, independent of ``scope["user"]``.
 :class:`ApiKeyAuthMiddleware` closes that gap without touching any consumer:
 nested *inside* ``AuthMiddlewareStack`` (see :func:`ApiKeyAuthMiddlewareStack`),
 it only runs once the session has already left the connection anonymous, and
-resolves a ``?key=<token>`` query-string credential using the exact same
-lookups ``external_api.authentication.ApiKeyAuthentication``/
-``OAuth2Authentication`` use over HTTP. A session, when present, always wins.
+resolves an Authorization bearer credential (or legacy ``?key=<token>`` query
+parameter) using the exact same lookups
+``external_api.authentication.ApiKeyAuthentication``/``OAuth2Authentication``
+use over HTTP. A session, when present, always wins.
 
 Authenticating is only half the job, though. Over HTTP, resolving a credential
 is immediately followed by ``external_api.permissions.HasApiKeyScope``, which
@@ -59,7 +60,7 @@ CREDENTIAL_SCOPE_KEY = "api_credential"
 
 
 class ApiKeyAuthMiddleware:
-    """ASGI middleware: fall back to a ``?key=`` query param when the session is anonymous."""
+    """ASGI middleware: fall back to a bearer token when the session is anonymous."""
 
     def __init__(self, inner) -> None:
         self.inner = inner
@@ -92,7 +93,14 @@ class ApiKeyAuthMiddleware:
 
     @staticmethod
     def _extract_token(scope) -> str | None:
-        """The ``key`` query-string parameter, if the connection URL carried one."""
+        """The bearer credential from headers, or the legacy ``key`` query parameter."""
+        for name, value in scope.get("headers", ()):
+            if name.lower() != b"authorization":
+                continue
+            header = value.decode("utf-8", errors="ignore").strip()
+            scheme, _, token = header.partition(" ")
+            if scheme.lower() == "bearer" and token.strip():
+                return token.strip()
         query_string = scope.get("query_string", b"").decode("utf-8", errors="ignore")
         values = parse_qs(query_string).get("key")
         return values[0] if values else None

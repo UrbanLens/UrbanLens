@@ -79,6 +79,28 @@ class ApiKeyWebSocketAuthTests(TransactionTestCase):
 
         _run(_test())
 
+    def test_authorization_header_is_preferred_over_query_string(self) -> None:
+        token = ApiKeyAuthMiddleware._extract_token(
+            {
+                "headers": [(b"authorization", b"Bearer header-token")],
+                "query_string": b"key=query-token",
+            },
+        )
+
+        self.assertEqual(token, "header-token")
+
+    def test_valid_api_key_authenticates_from_authorization_header(self) -> None:
+        _api_key, raw_key = _notification_key(self.user)
+
+        async def _test():
+            comm = self._communicator("/ws/notifications/")
+            comm.scope["headers"] = [(b"authorization", f"Bearer {raw_key}".encode())]
+            connected, _ = await comm.connect()
+            self.assertTrue(connected)
+            await comm.disconnect()
+
+        _run(_test())
+
     def test_no_key_and_no_session_is_rejected(self) -> None:
         async def _test():
             comm = self._communicator("/ws/notifications/")

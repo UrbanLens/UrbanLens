@@ -23,7 +23,7 @@ from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.images.relevance import media_item_key
 from urbanlens.dashboard.services.images import compute_checksum
 from urbanlens.dashboard.services.storage import quota_error_for_upload
-from urbanlens.dashboard.services.url_safety import UnsafeUrlError, ensure_public_http_url
+from urbanlens.dashboard.services.url_safety import UnsafeUrlError, ensure_public_http_url, is_blocked_address
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -67,6 +67,40 @@ def _filename_from_url(url: str) -> str:
     """Best-effort filename for the downloaded content, defaulting when unclear."""
     name = urlparse(url).path.rsplit("/", 1)[-1]
     return name[:100] if name and "." in name else _DEFAULT_FILENAME
+
+
+def _response_peer_address(response: requests.Response) -> str | None:
+    """Best-effort remote socket IP for a streamed ``requests`` response."""
+    connection = getattr(response.raw, "connection", None) or getattr(response.raw, "_connection", None)
+    sock = getattr(connection, "sock", None)
+    if sock is None:
+        original_response = getattr(response.raw, "_original_response", None)
+        sock = getattr(getattr(getattr(original_response, "fp", None), "raw", None), "_sock", None)
+    if sock is None:
+        return None
+    try:
+        peer = sock.getpeername()
+    except OSError:
+        return None
+    return peer[0] if peer else None
+
+
+def _ensure_response_peer_is_public(response: requests.Response, url: str) -> None:
+    """Reject a streamed response whose actual peer address is internal."""
+    import ipaddress
+
+    address = _response_peer_address(response)
+    if address is None:
+        response.close()
+        raise UnsafeUrlError(f"{url} connected to an unverifiable address.")
+    try:
+        peer_ip = ipaddress.ip_address(address)
+    except ValueError as exc:
+        response.close()
+        raise UnsafeUrlError(f"{url} connected to an unverifiable address.") from exc
+    if is_blocked_address(peer_ip):
+        response.close()
+        raise UnsafeUrlError(f"{url} connected to a blocked address.")
 
 
 def fetch_with_revalidated_redirects(
@@ -121,6 +155,7 @@ def fetch_with_revalidated_redirects(
             allow_redirects=False,
             headers=headers,
         )
+        _ensure_response_peer_is_public(response, fetch_url)
         if response.is_redirect:
             redirect_target = response.headers.get("Location")
             response.close()
