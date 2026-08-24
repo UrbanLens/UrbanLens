@@ -382,6 +382,16 @@ Recorded so they do not have to be rediscovered:
 - **No lockfile.** Direct dependencies are pinned exactly, so runs are
   reproducible to the version; transitive ones float. Committing the
   `package-lock.json` from a first `npm install` closes that.
+- **Messaging behaviour cannot be exercised at all.**
+  `permissions.OAUTH2_ONLY_SCOPES` restricts `messages:read`/`messages:write` to
+  user-consented OAuth2 tokens, so a PAT-style API key is refused across the
+  entire messaging surface - by design, so that a bearer key in a CI config is
+  never a way into somebody's conversations. The suite authenticates with API
+  keys and has no way to drive an authorization-code flow, so
+  `api/messages.spec.ts` asserts the *closure* instead: every messaging
+  endpoint must answer 403 to a key whose own scope list names those scopes.
+  Testing what messaging actually does needs an OAuth2 client added to the
+  provisioning command first.
 - **The wiki specs skip on a fresh deployment.** A wiki is promoted through the
   web UI and the published API has no endpoint that creates one, so the suite
   cannot make the precondition it needs through the surface it is testing. They

@@ -1,82 +1,102 @@
 /**
- * Direct messaging: who is allowed to start a conversation.
+ * An API key must not be a way into anybody's conversations.
  *
- * The *round trip* - send, both threads, idempotency - lives in
- * `api/social.spec.ts`, and not for tidiness. Messaging somebody requires a
- * relationship with them (a stranger is refused 403), so exercising it means
- * creating the one friendship the suite's two fixed accounts share, and that
- * file owns it. Two spec files creating and deleting the same relationship in
- * parallel is what made an earlier run fail on "Friend request not found".
+ * This file does not test messaging. It tests that messaging is *unreachable*,
+ * which is the whole of what an API key is entitled to know about it.
  *
- * What is left here is everything that needs *no* relationship, which turns out
- * to be the more security-relevant half: who is refused, and how.
+ * `permissions.OAUTH2_ONLY_SCOPES` restricts `messages:read`/`messages:write`
+ * to user-consented OAuth2 tokens, so a PAT-style key is refused across the
+ * entire surface **even when its own `scopes` list names those scopes** - and
+ * the suite's provisioned keys do name them, which makes this account exactly
+ * the adversary the rule exists for. The reasoning in `views_messaging` is
+ * worth repeating: a bearer key that ends up in a CI config or a screenshot
+ * must not read somebody's direct messages.
+ *
+ * That is a property with no natural place to fail loudly. A scope added to the
+ * wrong list, or a new messaging view that forgets the restriction, opens the
+ * whole surface silently - nothing breaks, a door just opens. So every endpoint
+ * is asked, rather than a representative one: the risk is precisely that
+ * *one* of them is different.
+ *
+ * The consequence for coverage is recorded in docs/INTEGRATION_TESTS.md: real
+ * messaging behaviour cannot be exercised by this suite at all, because doing
+ * so needs an OAuth2 authorization-code flow the harness has no way to drive.
  */
 
-import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
+import { expect, test } from "../../lib/fixtures.js";
 import type { ApiClient } from "../../lib/api-client.js";
-
-interface Page<T> {
-    count: number;
-    results: T[];
-}
 
 /** The calling credential's own profile. */
 async function whoami(api: ApiClient): Promise<{ uuid: string; slug: string }> {
     return api.json<{ uuid: string; slug: string }>("get", "whoami/");
 }
 
-test.describe("direct messages", () => {
-    ifSecondaryAccount()("a stranger cannot be messaged", async ({ api, secondaryApi }) => {
-        // The rule that makes this feature safe to have. Without it, an API key
-        // is a licence to message every account on the instance, and a slug is
-        // all you need to find one.
-        const them = await whoami(secondaryApi);
+/**
+ * Every messaging endpoint reachable without knowing another account.
+ *
+ * `{self}` is substituted with the caller's own slug - messaging yourself is
+ * still messaging, and if the restriction were missing this is the request that
+ * would prove it without needing a second account to point at.
+ */
+const READ_ENDPOINTS = ["messages/settings/", "messages/conversations/", "messages/groups/", "messages/{self}/"] as const;
 
-        const response = await api.post(`messages/${them.slug}/`, { body: "we have never met" });
-        expect(
-            [403, 404],
-            `messaging an account with no relationship answered ${response.status()}, so any key can message any account`,
-        ).toContain(response.status());
-    });
+const WRITE_ENDPOINTS = [
+    { path: "messages/{self}/", body: { body: "an API key should not be able to send this" } },
+    { path: "messages/groups/", body: { name: "an API key should not be able to create this" } },
+    { path: "messages/{self}/read/", body: {} },
+] as const;
 
-    test("a peer who does not exist is refused", async ({ api }) => {
-        const response = await api.post("messages/definitely-not-a-real-profile-91b2c/", { body: "nobody will read this" });
-        expect([400, 403, 404], `messaging an unknown profile answered ${response.status()}`).toContain(response.status());
-    });
-
-    test("a reserved word is not mistaken for a person", async ({ api }) => {
-        // `messages/settings/`, `messages/groups/` and `messages/conversations/`
-        // are endpoints, and `messages/{peer_slug}/` is a wildcard over the same
-        // space. Both the URL specificity sort and `RESERVED_PEER_SLUGS` exist
-        // to stop one shadowing the other, so both would have to fail before a
-        // request is misrouted - which is exactly the kind of thing that works
-        // locally and behaves differently once a proxy normalises the path.
-        const settings = await api.get("messages/settings/");
-        expect(settings.status(), `messages/settings/ answered ${settings.status()} - it may have been routed as a peer slug`).toBe(200);
-
-        const conversations = await api.get("messages/conversations/");
-        expect(conversations.status(), `messages/conversations/ answered ${conversations.status()}`).toBe(200);
-    });
-
-    test("the conversation list uses the documented envelope", async ({ api }) => {
-        const response = await api.get("messages/conversations/");
-        expect(response.status()).toBe(200);
-
-        const body = (await response.json()) as Record<string, unknown>;
-        for (const key of ["count", "next", "previous", "results"]) {
-            expect(body, `the conversation list envelope is missing "${key}"`).toHaveProperty(key);
-        }
-        expect(Array.isArray((body as unknown as Page<unknown>).results)).toBeTruthy();
-    });
-
-    test("messaging settings round-trip", async ({ api }) => {
-        const before = await api.get("messages/settings/");
-        expect(before.status(), `reading messaging settings answered ${before.status()}`).toBe(200);
-    });
-
-    test("a key without the messages scope cannot send", async ({ api, restrictedApi }) => {
+test.describe("messaging is closed to API keys", () => {
+    test("every messaging read endpoint refuses an API key", async ({ api }) => {
         const me = await whoami(api);
-        const response = await restrictedApi.post(`messages/${me.slug}/`, { body: "should not be accepted" });
-        expect(response.status(), "a profile:read key sent a direct message").toBe(403);
+
+        const reachable: string[] = [];
+        for (const endpoint of READ_ENDPOINTS) {
+            const path = endpoint.replace("{self}", me.slug);
+            const response = await api.get(path);
+            if (response.status() !== 403) {
+                reachable.push(`GET ${path} -> ${response.status()}`);
+            }
+        }
+
+        expect(
+            reachable,
+            `an API key reached messaging endpoints that OAUTH2_ONLY_SCOPES is supposed to close to it:\n  ${reachable.join("\n  ")}`,
+        ).toHaveLength(0);
+    });
+
+    test("every messaging write endpoint refuses an API key", async ({ api }) => {
+        const me = await whoami(api);
+
+        const reachable: string[] = [];
+        for (const endpoint of WRITE_ENDPOINTS) {
+            const path = endpoint.path.replace("{self}", me.slug);
+            const response = await api.post(path, endpoint.body);
+            if (response.status() !== 403) {
+                reachable.push(`POST ${path} -> ${response.status()}: ${(await response.text()).slice(0, 120)}`);
+            }
+        }
+
+        expect(reachable, `an API key wrote through messaging endpoints it should not reach:\n  ${reachable.join("\n  ")}`).toHaveLength(0);
+    });
+
+    test("the refusal does not depend on the peer existing", async ({ api }) => {
+        // A 404 here instead of a 403 would leak whether a slug belongs to
+        // somebody, to a caller who is not allowed into messaging at all. The
+        // authorization check has to come first.
+        const unknown = await api.post("messages/definitely-not-a-real-profile-91b2c/", { body: "nobody will read this" });
+        expect(
+            unknown.status(),
+            `messaging an unknown profile answered ${unknown.status()} - a caller refused messaging entirely should not be able to tell a real slug from a fake one`,
+        ).toBe(403);
+    });
+
+    test("a restricted key is refused too", async ({ api, restrictedApi }) => {
+        // The same answer from a key that does not even name the scopes, so a
+        // regression cannot be masked by the restricted key being refused for a
+        // different reason than the full one.
+        const me = await whoami(api);
+        const response = await restrictedApi.get(`messages/${me.slug}/`);
+        expect(response.status(), "a profile:read key reached a message thread").toBe(403);
     });
 });

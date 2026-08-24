@@ -101,9 +101,21 @@ test.describe.serial("notifications", () => {
         expect(feed.results.filter((entry) => !isRead(entry)), "after read-all some entries still read as unread").toHaveLength(0);
     });
 
-    test("marking a notification that does not exist is refused rather than a crash", async ({ api }) => {
+    test("marking a notification that does not exist answers exactly as marking a real one", async ({ api }) => {
+        // 204, not 404, and deliberately so: a 404 for "no such notification"
+        // would double as an oracle, letting a caller learn whether a uuid
+        // belongs to somebody by whether the acknowledgement succeeded. The
+        // operation is idempotent and returns nothing either way, so one status
+        // covers both.
+        //
+        // The corollary is worth knowing when writing tests here: a 204 is *not*
+        // evidence that anything was marked. The only way to observe the effect
+        // is to read the entry back, which is what the test above does.
         const response = await api.post("notifications/00000000-0000-4000-8000-000000000000/", {});
-        expect([400, 404], `an unknown notification uuid answered ${response.status()}`).toContain(response.status());
+        expect(
+            response.status(),
+            `an unknown notification uuid answered ${response.status()} - if that differs from the answer for a real one, a uuid becomes a way to probe whose notification it is`,
+        ).toBe(204);
     });
 
     test("a key without the notifications scope cannot read the feed", async ({ restrictedApi }) => {
