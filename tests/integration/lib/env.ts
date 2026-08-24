@@ -197,6 +197,16 @@ export const env = {
     /** Opt-in project switches - see playwright.config.ts. */
     runVisual: readBoolean("UL_E2E_VISUAL", false),
     runCrossBrowser: readBoolean("UL_E2E_CROSS_BROWSER", false),
+    /**
+     * Run the live location-data specs (`specs/location/`).
+     *
+     * Off by default, and this one is not merely about run time. Those specs
+     * wait minutes on background enrichment and they cause real, billable calls
+     * to REData, county GIS, EPA ECHO and Wikipedia - so they must be asked for
+     * rather than inherited. The account also needs `--external-apis` at
+     * provisioning time or every one of them is a no-op.
+     */
+    runLocationData: readBoolean("UL_E2E_LOCATION_DATA", false),
 
     /** Runner tuning. Defaults are chosen for a shared staging box, not a laptop. */
     workers: readInteger("UL_E2E_WORKERS", 4),

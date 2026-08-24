@@ -3891,6 +3891,78 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
+## OPEN 2026-08-24: a new pin never gets its parcel, because creation marks the lookup as already done
+
+**Confirmed live on a clean database with production REData reachable**, not
+inferred. This is the root cause of most of what looks broken about place data
+for a newly pinned location: no parcel boundary, no shared-property resolution,
+no building child pins, no floorplan footprint, and a wiki with no geometry.
+
+**What happens.** `create_pin_for_profile` calls `resolve_location_place` when
+`place_resolved_at` is NULL (`services/pins/pin_creation.py:256-257`). That
+function is explicitly a cache read - its own docstring says "Never calls a
+provider - it only asks what is already known" - but it stamps the timestamp
+regardless of whether it found anything:
+
+```python
+# services/places/resolution.py:44-46
+place = Place.objects.resolve_for_point(location.latitude, location.longitude)   # may be None
+if save and (location.place_id != (place.pk if place else None) or location.place_resolved_at is None):
+    Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=timezone.now())
+```
+
+Every trigger for the provider chain reads exactly that field as "the chain has
+run":
+
+```python
+# services/locations/boundaries.py:208, in generation_status
+if location.place_resolved_at is None:
+    return False, False
+```
+
+So immediately after creation `generation_status` returns `(ran=True,
+stale=False)`, and therefore:
+
+- `schedule_location_boundary_generation` returns False - "already fresh"
+- `BoundaryPanelSource.is_ready` returns True, so the lazy panel never fetches
+- `enrich_wiki_location` skips `generate_location_boundaries`
+
+Nothing is left to run it. `Location.save()` at `models/location/model.py:462-465`
+deliberately leaves `place_resolved_at` unset *for this exact reason*, and
+`pin_creation` then sets it.
+
+**Measured**, on an empty database, pin at 41.733181, -73.928493 (Hudson River
+State Hospital):
+
+```
+AFTER CREATE: place_id=None  place_resolved_at=2026-08-24 20:14:05+00:00
+AFTER CREATE: generation_status ran=True stale=False
+AFTER CREATE: schedule_location_boundary_generation -> False
+```
+
+The data is not the problem: production REData answers this coordinate with
+parcel `c912a64b-7b07-45d4-9e51-89e80a25067f` and **33 buildings** from NY SHPO's
+CRIS inventory, complete with building numbers. Forcing
+`generate_location_boundaries(location)` by hand does produce geometry.
+
+**How long the pin stays wrong.** `generation_status` also computes staleness
+against `SiteSettings.boundary_cache_days`, which is **60**. So the chain becomes
+eligible again 60 days after the pin was created - which is indistinguishable
+from never for anyone looking at the pin they just made.
+
+**Fix, and the thing to be careful about.** The stamp should mean "a provider ran
+and this is what it found", which is what `BoundaryPanelSource.is_ready`'s own
+comment assumes ("stamped even when nothing was found, so a fruitless run
+doesn't retrigger the chain on every page view"). The narrow change is for
+`resolve_location_place` not to stamp - it is a cache read, and the field is a
+provider-run marker - leaving the stamp to `generate_location_boundaries`. The
+care needed is that `resolve_location_place` is also called from
+`resolve_locations_in` on every geometry change, so whatever replaces this must
+not make a busy parcel re-run the chain per re-resolution.
+
+Guarded by `tests/integration/specs/location/hrsh-boundary.spec.ts`, which is
+written to fail on exactly this and to say so.
+
 ## OPEN 2026-08-24: concurrent requests to `schema/` can 500
 
 Two overlapping fetches of `/dashboard/api/external/v1/schema/` can produce a

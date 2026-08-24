@@ -33,6 +33,13 @@ whether the deployed pieces work together. Read it before adding a test there -
 particularly the rules about waiting for HTMX and never signing out on the shared
 session.
 
+`docs/LOCATION_DATA_TESTS.md` - the opt-in `location` project inside that suite,
+which exercises one real place (Hudson River State Hospital) through the parcel,
+building, wiki, media and property-record pipelines. Read it before asserting
+anything about place data: it records which numbers are invariants, which are
+bounds, and which are questions for a human - and the root-cause defect that
+currently stops a new pin ever getting its parcel.
+
 `CLAUDE.local.md` at the repo root contains environment-specific info.
 
 ## Quick Start

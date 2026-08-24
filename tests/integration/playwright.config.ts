@@ -89,6 +89,29 @@ const projects: Project[] = [
     },
 ];
 
+if (env.runLocationData) {
+    projects.push({
+        // Live third-party location data for one real place. Registered only
+        // when asked for: these wait minutes on background enrichment and spend
+        // real money at REData, county GIS and EPA ECHO.
+        //
+        // One worker, deliberately. The specs share a single pin on a single
+        // property, and the application enforces one root pin per property per
+        // profile - so a second worker racing to create it would be refused, and
+        // a worker tearing it down would pull it out from under the other.
+        // Parallelism would buy nothing anyway: the cost here is waiting on
+        // other people's APIs.
+        name: "location",
+        testDir: "./specs/location",
+        dependencies: ["setup"],
+        workers: 1,
+        // The enrichment chain is minutes long end to end, and a wait that times
+        // out here is meant to mean "it is not coming" rather than "it was slow".
+        timeout: 900_000,
+        use: { ...devices["Desktop Chrome"], ...signedIn },
+    });
+}
+
 if (env.runCrossBrowser) {
     projects.push(
         { name: "ui-firefox", testDir: "./specs/ui", dependencies: ["setup"], use: { ...devices["Desktop Firefox"], ...signedIn } },

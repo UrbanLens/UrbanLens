@@ -71,6 +71,7 @@ they tell you when they fail.
 | `ui` | Do the real user journeys work in a real browser? |
 | `a11y` | Does anything on the main pages fail a WCAG AA check at serious or above? |
 | `visual` | Opt-in screenshot comparison (`UL_E2E_VISUAL=1`). |
+| `location` | Opt-in live location-data specs for one real place (`UL_E2E_LOCATION_DATA=1`). Slow, and they spend real money at REData, EPA ECHO and Wikipedia - see `docs/LOCATION_DATA_TESTS.md`. |
 
 A run with no `--project` does everything except `visual` and the non-Chromium
 browsers.
