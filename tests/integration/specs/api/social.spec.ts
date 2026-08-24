@@ -15,6 +15,7 @@
  */
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
+import { resourceName } from "../../lib/env.js";
 import type { ApiClient } from "../../lib/api-client.js";
 
 /** One entry in the friend feed. The other party is nested, not flattened. */
@@ -127,6 +128,42 @@ test.describe.serial("friendships", () => {
         }
     });
 
+    ifSecondaryAccount()("a friend request notifies the person it was sent to", async ({ api, secondaryApi }) => {
+        // Lives here rather than in the notifications spec because it needs the
+        // friendship, and this file is the one that owns it. Files run in
+        // parallel, so two specs both creating and deleting the single
+        // relationship between the suite's two fixed accounts race, and the
+        // failures that produces look like endpoint faults.
+        const me = await whoami(api);
+        const them = await whoami(secondaryApi);
+        await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
+
+        const before = await api.json<{ unread_count: number }>("get", "notifications/");
+        const sent = await secondaryApi.post("friends/", { profile_uuid: me.uuid, message: "Sent by the integration suite." });
+        expect(sent.status(), `sending answered ${sent.status()}: ${(await sent.text()).slice(0, 200)}`).toBeLessThan(300);
+
+        try {
+            // The notification is written in the request that created the
+            // friendship, but a deployment may route it through the channel
+            // layer or a task - so this polls rather than reading once and
+            // calling the timing of this machine a result.
+            await expect
+                .poll(async () => (await api.json<{ unread_count: number }>("get", "notifications/")).unread_count, {
+                    message: `a friend request from the other account never raised this account's unread count (was ${before.unread_count})`,
+                    timeout: 20_000,
+                })
+                .toBeGreaterThan(before.unread_count);
+
+            const feed = await api.json<{ results: Array<{ notification_type?: string; message?: string }> }>("get", "notifications/");
+            expect(
+                JSON.stringify(feed.results.slice(0, 5)),
+                "the unread count went up but no friend-request notification is in the feed",
+            ).toContain("friend");
+        } finally {
+            await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
+        }
+    });
+
     ifSecondaryAccount()("a rejected request does not become a friendship", async ({ api, secondaryApi }) => {
         const me = await whoami(api);
         const them = await whoami(secondaryApi);
@@ -167,6 +204,56 @@ test.describe.serial("friendships", () => {
             const outbound = await friends(api);
             const matches = outbound.results.filter((entry) => entry.profile?.uuid === them.uuid);
             expect(matches.length, `the same person appears ${matches.length} times in the friend feed`).toBeLessThanOrEqual(1);
+        } finally {
+            await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
+        }
+    });
+
+    ifSecondaryAccount()("becoming friends makes the profile visible, and private annotations stay private", async ({ api, secondaryApi }) => {
+        // These annotations live here rather than in `profiles.spec.ts` for two
+        // reasons. They need a *visible* profile - a stranger's answers 404, by
+        // design - and creating the friendship that grants visibility writes to
+        // the one relationship this file owns. Somewhere else doing the same
+        // thing in parallel is what made an earlier run fail on "Friend request
+        // not found".
+        const me = await whoami(api);
+        const them = await whoami(secondaryApi);
+        await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
+
+        await api.post("friends/", { profile_uuid: them.uuid });
+        const accepted = await secondaryApi.post(`friends/${me.uuid}/accept/`);
+        expect(accepted.status(), `accepting answered ${accepted.status()}: ${(await accepted.text()).slice(0, 200)}`).toBeLessThan(300);
+
+        try {
+            const profile = await api.get(`profiles/${them.slug}/`);
+            expect(profile.status(), "a friend's profile is still not visible after the friendship was accepted").toBe(200);
+            const body = (await profile.json()) as { is_self?: boolean };
+            expect(body.is_self, "a friend's profile came back flagged as your own").toBeFalsy();
+
+            const nickname = resourceName("nickname");
+            const set = await api.put(`profiles/${them.slug}/nickname/`, { nickname });
+            expect(set.status(), `setting a nickname answered ${set.status()}: ${(await set.text()).slice(0, 200)}`).toBeLessThan(300);
+
+            try {
+                const mine = await api.json<Record<string, unknown>>("get", `profiles/${them.slug}/`);
+                expect(JSON.stringify(mine), "the nickname just set is not visible to the person who set it").toContain(nickname);
+
+                // The half that matters. A nickname is a private annotation; if
+                // the subject can read what you call them, it is not one.
+                const theirOwnView = await secondaryApi.json<Record<string, unknown>>("get", `profiles/${them.slug}/`);
+                expect(JSON.stringify(theirOwnView), "the nickname one account set for another is visible to the person it describes").not.toContain(nickname);
+            } finally {
+                await api.delete(`profiles/${them.slug}/nickname/`);
+            }
+
+            const content = resourceName("private note");
+            const noted = await api.post(`profiles/${them.slug}/notes/`, { content });
+            expect(noted.status(), `creating a note answered ${noted.status()}: ${(await noted.text()).slice(0, 200)}`).toBeLessThan(300);
+
+            const theirNotes = await secondaryApi.get(`profiles/${them.slug}/notes/`);
+            if (theirNotes.status() === 200) {
+                expect(await theirNotes.text(), "a private note about somebody is readable by that person").not.toContain(content);
+            }
         } finally {
             await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
         }

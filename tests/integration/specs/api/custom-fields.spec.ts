@@ -37,6 +37,23 @@ function fieldId(field: CustomField): string | number | undefined {
 /** A 1x1 transparent PNG - a real one, because the upload path checks. */
 const ONE_PIXEL_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 
+/**
+ * The same pixel, with unique trailing bytes.
+ *
+ * The store detects duplicates by content, so uploading the identical PNG twice
+ * answers 409 the second time - and a 409 arriving where a test expected a
+ * refusal reads as the refusal working. That is the trap documented in
+ * docs/PROBLEMS.md, and it bit this file: two tests here upload a photo, and
+ * the second one failed for a reason that had nothing to do with what it was
+ * checking.
+ *
+ * Bytes after `IEND` are ignored by every PNG decoder, so this stays a valid
+ * image while hashing differently.
+ */
+function uniquePng(marker: string): Buffer {
+    return Buffer.concat([ONE_PIXEL_PNG, Buffer.from(`\n${marker}`, "utf-8")]);
+}
+
 test.describe("custom fields", () => {
     test("a field definition can be created, listed, renamed and deleted", async ({ api }) => {
         const name = resourceName("field");
@@ -83,7 +100,7 @@ test.describe("custom fields", () => {
         const upload = await apiRequestContext.post(apiUrl("photos/"), {
             headers: { Authorization: `Bearer ${account.apiKey ?? ""}` },
             multipart: {
-                file: { name: "e2e-field-host.png", mimeType: "image/png", buffer: ONE_PIXEL_PNG },
+                file: { name: "e2e-field-host.png", mimeType: "image/png", buffer: uniquePng(resourceName("field host bytes")) },
                 caption: resourceName("field host"),
             },
         });
@@ -117,7 +134,7 @@ test.describe("custom fields", () => {
 
         const upload = await apiRequestContext.post(apiUrl("photos/"), {
             headers: { Authorization: `Bearer ${account.apiKey ?? ""}` },
-            multipart: { file: { name: "e2e-mismatch.png", mimeType: "image/png", buffer: ONE_PIXEL_PNG }, caption: resourceName("mismatch host") },
+            multipart: { file: { name: "e2e-mismatch.png", mimeType: "image/png", buffer: uniquePng(resourceName("mismatch bytes")) }, caption: resourceName("mismatch host") },
         });
         expect(upload.status()).toBeLessThan(300);
         const photo = (await upload.json()) as { uuid: string };

@@ -41,77 +41,29 @@ test.describe("profiles", () => {
         expect(profile.is_self, "a profile fetched by its owner does not report is_self").toBe(true);
     });
 
-    ifSecondaryAccount()("somebody else's profile is rendered as somebody else's", async ({ api, secondaryApi }) => {
+    ifSecondaryAccount()("a stranger's profile is indistinguishable from one that does not exist", async ({ api, secondaryApi }) => {
+        // Not a 403. A profile you have no relationship with answers exactly
+        // as a profile that was never created does, which is what stops a slug
+        // being an oracle for who has an account here. Asserted as the two
+        // answers being *identical* rather than against any particular
+        // wording, for the same reason the pin suite does.
         const them = await whoami(secondaryApi);
 
-        const profile = await api.json<Profile>("get", `profiles/${them.slug}/`);
-        expect(profile.is_self, "another account's profile came back flagged as your own").toBeFalsy();
-        // Present, even when null - a client needs to distinguish "not friends"
-        // from "the server did not say".
-        expect(profile, "another account's profile carries no friendship_status, so a client cannot tell what it is looking at").toHaveProperty("friendship_status");
+        const stranger = await api.get(`profiles/${them.slug}/`);
+        const nonexistent = await api.get("profiles/definitely-not-a-real-profile-91b2c/");
+
+        expect(stranger.status(), `a stranger's profile answered ${stranger.status()}`).toBe(404);
+        expect(nonexistent.status()).toBe(404);
+        expect(
+            await stranger.text(),
+            "the answer for a real account you are not connected to differs from the one for an account that does not exist, which makes a slug an oracle for who has signed up",
+        ).toBe(await nonexistent.text());
     });
 
     test("a profile slug that belongs to nobody is refused with the standard envelope", async ({ api }) => {
         const response = await api.get("profiles/definitely-not-a-real-profile-91b2c/");
         expect(response.status()).toBe(404);
         expect(await response.json()).toHaveProperty("error");
-    });
-
-    ifSecondaryAccount()("a private nickname for somebody else round-trips and is yours alone", async ({ api, secondaryApi }) => {
-        const me = await whoami(api);
-        const them = await whoami(secondaryApi);
-        const nickname = resourceName("nickname");
-
-        const set = await api.put(`profiles/${them.slug}/nickname/`, { nickname });
-        expect(set.status(), `setting a nickname answered ${set.status()}: ${(await set.text()).slice(0, 200)}`).toBeLessThan(300);
-
-        try {
-            const seen = await api.json<Record<string, unknown>>("get", `profiles/${them.slug}/`);
-            expect(JSON.stringify(seen), "the nickname just set is not visible to the person who set it").toContain(nickname);
-
-            // The half that matters: a nickname is a private annotation. If the
-            // subject can see what you call them, it is not one.
-            const theirOwnView = await secondaryApi.json<Record<string, unknown>>("get", `profiles/${them.slug}/`);
-            expect(
-                JSON.stringify(theirOwnView),
-                "the nickname one account set for another is visible to the person it describes",
-            ).not.toContain(nickname);
-
-            // And it must not leak to the person's view of *you* either.
-            const theirViewOfMe = await secondaryApi.json<Record<string, unknown>>("get", `profiles/${me.slug}/`);
-            expect(JSON.stringify(theirViewOfMe), "a private nickname leaked into the other account's view").not.toContain(nickname);
-        } finally {
-            await api.delete(`profiles/${them.slug}/nickname/`);
-        }
-    });
-
-    ifSecondaryAccount()("a private note about somebody is not visible to them", async ({ api, secondaryApi }) => {
-        const them = await whoami(secondaryApi);
-        const content = resourceName("private note");
-
-        const created = await api.post(`profiles/${them.slug}/notes/`, { content });
-        expect(created.status(), `creating a note answered ${created.status()}: ${(await created.text()).slice(0, 200)}`).toBeLessThan(300);
-
-        const mine = await api.get(`profiles/${them.slug}/notes/`);
-        expect(mine.status()).toBe(200);
-        expect(await mine.text(), "a note just written is not in its author's list").toContain(content);
-
-        // The subject asking for notes about themselves must not receive the
-        // ones other people wrote.
-        const theirs = await secondaryApi.get(`profiles/${them.slug}/notes/`);
-        if (theirs.status() === 200) {
-            expect(await theirs.text(), "a private note about somebody is readable by that person").not.toContain(content);
-        }
-    });
-
-    ifSecondaryAccount()("a trust rating round-trips", async ({ api, secondaryApi }) => {
-        const them = await whoami(secondaryApi);
-
-        const rated = await api.put(`profiles/${them.slug}/trust/`, { rating: 1 });
-        expect(rated.status(), `setting trust answered ${rated.status()}: ${(await rated.text()).slice(0, 200)}`).toBeLessThan(300);
-
-        const removed = await api.delete(`profiles/${them.slug}/trust/`);
-        expect(removed.ok(), `clearing trust answered ${removed.status()}`).toBeTruthy();
     });
 
     test("your own preferences round-trip", async ({ api }) => {

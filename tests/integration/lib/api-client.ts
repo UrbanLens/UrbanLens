@@ -91,8 +91,19 @@ function scatter(base: number): number {
  */
 const THROTTLE_ATTEMPTS = 3;
 
-/** Longest single backoff honoured, in milliseconds. */
-const MAX_THROTTLE_WAIT_MS = 35_000;
+/**
+ * Longest single backoff honoured, in milliseconds.
+ *
+ * Comfortably longer than the per-minute burst window, and that margin is the
+ * whole point. This was 35s, which is *just* under what the API actually quotes
+ * when the burst cap is hit near the start of a window - runs came back full of
+ * "available in 36 seconds", one second past the cap, so the client gave up on
+ * waits it was one second away from being able to ride out.
+ *
+ * Still well short of the hourly ceiling, which quotes thousands of seconds and
+ * is not something to sit in a loop for.
+ */
+const MAX_THROTTLE_WAIT_MS = 70_000;
 
 /** Fallback wait when the response says nothing useful about timing. */
 const DEFAULT_THROTTLE_WAIT_MS = 5_000;
