@@ -123,6 +123,15 @@ async function resetFriendship(api: ApiClient, secondaryApi: ApiClient, meUuid: 
         ["recipient", secondaryApi, meUuid],
     ] as const) {
         for (const status of ALL_STATUSES) {
+            // `Removed` is what DELETE leaves behind - the row is soft-deleted
+            // rather than dropped, which is reasonable on its own (it keeps the
+            // history). It is not leftover state in the sense this check is
+            // looking for, so it is not reported here. What that surviving row
+            // *does* to the next request is a defect in its own right, and has
+            // its own test below rather than being folded into this helper.
+            if (status === "Removed") {
+                continue;
+            }
             const entry = entryFor(await friends(client, status), otherUuid);
             if (entry) {
                 survivors.push(`${label} still sees status="${entry.status}" direction="${entry.direction}" under ?status=${status}`);
@@ -184,6 +193,51 @@ test.describe.serial("friendships", () => {
             const entry = entryFor(outbound, them.uuid);
             expect(entry, "after acceptance the requester's feed no longer lists the friend").toBeTruthy();
             expect(String(entry?.status ?? "").toLowerCase(), `the friendship reads as "${entry?.status}" to the requester after being accepted`).toContain("accept");
+        } finally {
+            await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
+        }
+    });
+
+    ifSecondaryAccount()("re-adding somebody you removed produces a request they can accept", async ({ api, secondaryApi }) => {
+        // The defect this file spent four runs narrowing down, reproduced
+        // directly. `DELETE friends/{uuid}/` soft-deletes: the row survives with
+        // status `Removed`, keeping whichever direction it originally had. A
+        // later `POST friends/` finds that row and revives it *without*
+        // re-orienting it, so the request is recorded as though the other person
+        // had sent it - and the person it was actually sent to cannot accept it,
+        // because from their side there is no incoming request.
+        //
+        // The user-visible shape: remove a friend, change your mind, add them
+        // again, and the request sits there permanently unacceptable. Both
+        // people see it, neither can act on it.
+        //
+        // Written from B's seat first so the surviving row belongs to B, which
+        // is what makes A's later request the one that gets misfiled.
+        const me = await whoami(api);
+        const them = await whoami(secondaryApi);
+        await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
+
+        // B befriends A, and then A removes the relationship.
+        await secondaryApi.post("friends/", { profile_uuid: me.uuid });
+        await api.post(`friends/${them.uuid}/accept/`);
+        const removed = await api.delete(`friends/${them.uuid}/`);
+        expect(removed.ok(), `removing answered ${removed.status()}`).toBeTruthy();
+
+        try {
+            // A now sends a fresh request in the *other* direction.
+            const sent = await api.post("friends/", { profile_uuid: them.uuid });
+            expect(sent.status(), `re-requesting answered ${sent.status()}: ${(await sent.text()).slice(0, 200)}`).toBeLessThan(300);
+
+            const inbound = await findRelationship(secondaryApi, me.uuid);
+            expect(inbound, "the re-sent request never reached the recipient").toBeTruthy();
+
+            const accepted = await secondaryApi.post(`friends/${me.uuid}/accept/`);
+            expect(
+                accepted.status(),
+                `the recipient could not accept a request sent to them (${accepted.status()}: ${(await accepted.text()).slice(0, 160)}). ` +
+                    `They see it as status="${inbound?.status}" direction="${inbound?.direction}" - an incoming request labelled as one they sent, ` +
+                    "which is the revived `Removed` row still carrying its original direction.",
+            ).toBeLessThan(300);
         } finally {
             await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
         }

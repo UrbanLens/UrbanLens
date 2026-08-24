@@ -3891,6 +3891,45 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
+## OPEN 2026-08-24: re-adding a removed friend creates a request nobody can accept
+
+Remove a friend, change your mind, and send them a friend request again. Both
+people can see the request. Neither can act on it, permanently.
+
+**Mechanism.** `DELETE friends/{profile_uuid}/` soft-deletes: the `Friendship`
+row survives with status `Removed`, keeping the `from_profile` it originally
+had. A later `POST friends/` finds that row through
+`Friendship.objects.all().between(a, b)` and revives it **without re-orienting
+it**, so a request A sends to B is recorded as though B had sent it to A. B then
+calls `friends/{A}/accept/`, which looks for an incoming request from A, finds
+none, and answers `404 Friend request not found`.
+
+The feed shows it plainly once you ask for the right status - the requester sees
+`direction="incoming"` for a request they sent:
+
+    requester still sees status="Removed" direction="incoming" under ?status=Removed
+    recipient still sees status="Removed" direction="outgoing" under ?status=Removed
+
+**How it was found**, because the path is instructive. It surfaced as an
+intermittent 404 in the integration suite that only ever hit the *first* test in
+the file - the one meeting the previous run's leftovers. Three plausible
+explanations were wrong: that the `message` field was implicated (isolating it
+proved the opposite - the request *with* a note accepted, the one without
+failed), that the two clients shared an account, and that `direction` was
+computed from the row rather than the viewer. What settled it was making the
+test's cleanup *prove* the relationship was gone across all eight statuses
+instead of the three it had been checking, at which point the surviving
+`Removed` row named itself.
+
+**Fix.** Re-orient the row when reviving it - a revived request's `from_profile`
+should be whoever is asking now. Worth checking the same question of the other
+statuses `between()` can return (`Declined`, `Ignored`, `Blocked`): each is a
+row that a later request will find and reuse.
+
+Reproduced by
+`tests/integration/specs/api/social.spec.ts::re-adding somebody you removed
+produces a request they can accept`, which stays red until it is fixed.
+
 ## OPEN 2026-08-24: a photo upload trusts the filename, not the bytes
 
 `POST /dashboard/api/external/v1/photos/` accepts a shell script sent as

@@ -117,7 +117,25 @@ needing no deployment. The gap is that it is not part of the default run. Either
 add a fast subset to CI, or accept that this class is caught only when somebody
 runs the contract suite - and say so out loud rather than assuming coverage.
 
-### 6. nginx advertised its exact version
+### 6. Re-adding a removed friend creates a request nobody can accept
+
+**Found:** `DELETE friends/{uuid}/` soft-deletes to status `Removed`, and a
+later `POST friends/` revives that row without re-orienting it - so the request
+is recorded in the *old* direction and the recipient's accept 404s.
+
+**Why pytest missed it:** every friendship test starts from a clean slate. The
+defect needs a *prior* relationship in a specific end state, which a test that
+builds its own fixtures from nothing never has. This is the same blind spot as
+the adversarial-input group, in a different disguise: not an input nobody tried,
+but a *starting state* nobody started from.
+
+**What closes it:** a pytest test that sets a `Friendship` to `Removed` first,
+then sends a request the other way and asserts the recipient can accept. Cheap -
+it is one service-level test with no HTTP - and worth generalising to the other
+statuses `Friendship.objects.between()` can return (`Declined`, `Ignored`,
+`Blocked`), each of which a later request will find and reuse.
+
+### 7. nginx advertised its exact version
 
 **Found:** `Server: nginx/1.31.3`.
 
@@ -128,7 +146,7 @@ asserting `server_tokens off;` is present in the `http` block - the same shape a
 `test_page_template_integrity.py`. Cheap, and it generalises: that file is
 otherwise untested.
 
-### 7. One pin-detail page load opens ~30 database connections at once
+### 8. One pin-detail page load opens ~30 database connections at once
 
 **Found:** the panel fan-out exhausted `max_connections`, producing 500s across
 whichever panels arrived when the pool was full.
@@ -164,11 +182,20 @@ re-attempted.
 
 ## The lesson underneath most of these
 
-Six of the closable findings above are **adversarial inputs nobody tried**: a
+Most of the closable findings above are **adversarial inputs nobody tried**: a
 future date, a file that lies about its type, a method with no id, an operation
 with no error responses. The unit suite is thorough about the feature working and
 thin about the feature being abused, because tests get written alongside the code
 they describe and by the same person.
+
+The friendship one (6) is the same blind spot wearing a different coat, and worth
+separating out because it needs a different remedy. Nothing about that input is
+adversarial - it is an ordinary request from an ordinary user. What is unusual is
+the *starting state*: a relationship that already existed and was removed. A
+suite that builds every fixture from nothing never begins there, so no amount of
+adversarial input generation would have found it. Closing that class means
+writing tests that start from states the system has *been* in, not only from
+states it can be constructed in.
 
 That is worth acting on more broadly than these six. The suite already has the
 machinery to do it systematically - Hypothesis is used throughout, and
