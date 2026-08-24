@@ -70,26 +70,38 @@ test.describe("media storage", () => {
         expect(body.length, "the photo's url answered 200 with an empty body").toBeGreaterThan(0);
     });
 
-    test("a file that is not an image is refused", async ({ apiRequestContext, account }) => {
-        // The upload path sniffs content rather than trusting the declared
-        // type, which is what stops an executable being stored under a name
-        // ending in .png. Only a real upload exercises the sniffer.
+    test("a file that is not an image is refused", async ({ api, apiRequestContext, account }) => {
+        // The bytes are unique per run on purpose. An earlier version of this
+        // test reused the same payload and got a 409 on the second run, which
+        // reads as "refused" and is actually duplicate detection noticing the
+        // file it accepted the first time. Unique content makes every run a
+        // first upload, so the answer is about validation and nothing else.
+        const marker = resourceName("bogus upload");
+        const notAnImage = Buffer.from(`#!/bin/sh\necho this is not a png - ${marker}\n`, "utf-8");
+
         const upload = await apiRequestContext.post(apiUrl("photos/"), {
             headers: { Authorization: `Bearer ${account.apiKey ?? ""}` },
             multipart: {
-                file: { name: "not-really.png", mimeType: "image/png", buffer: Buffer.from("#!/bin/sh\necho this is not a png\n", "utf-8") },
-                caption: resourceName("bogus upload"),
+                file: { name: "not-really.png", mimeType: "image/png", buffer: notAnImage },
+                caption: marker,
             },
         });
 
-        // 409 in practice, 400 and 415 both being defensible answers too. The
-        // status is not the point: what matters is that the bytes were
-        // inspected rather than the filename trusted, and that the refusal is
-        // not a 500 (which is what an unhandled decode error looks like) or a
-        // 2xx (which is what trusting the extension looks like).
+        // If it was stored anyway, clean it up before failing - a red test
+        // should not also leak a row.
+        if (upload.ok()) {
+            const stored = (await upload.json()) as Photo;
+            if (stored.uuid) {
+                api.track("photo", stored.uuid, () => api.delete(`photos/${stored.uuid}/`));
+            }
+        }
+
+        // The status is not the point: what matters is that the bytes were
+        // inspected rather than the filename and Content-Type trusted. A 2xx
+        // means an arbitrary file is now stored, and served back, as an image.
         expect(
             [400, 409, 415],
-            `a file whose bytes are not an image answered ${upload.status()}; it was either accepted on the strength of its .png name, or it crashed`,
+            `a file whose bytes are plainly not an image answered ${upload.status()} - it was accepted on the strength of its .png name and image/png Content-Type`,
         ).toContain(upload.status());
     });
 

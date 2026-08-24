@@ -3891,6 +3891,33 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
+## OPEN 2026-08-24: a photo upload trusts the filename, not the bytes
+
+`POST /dashboard/api/external/v1/photos/` accepts a shell script sent as
+`not-really.png` with `Content-Type: image/png` and answers **201**. The file is
+stored and served back from the photo's `url` as an image.
+
+Both signals the endpoint appears to trust - the extension and the declared
+content type - are supplied by the caller, so neither is evidence of anything.
+The project already carries `filetype` as a dependency and has a malware-scan
+service, so rejecting a file whose magic bytes are not an image looks like the
+intent rather than a new feature.
+
+**It hid behind duplicate detection.** The first version of the test reused the
+same payload every run and saw a `409` on the second and later runs, which reads
+as "refused" and is really the store recognising the file it accepted the first
+time. The test now embeds the run id in the bytes so every run is a first
+upload. Anything else asserting on upload rejection should do the same.
+
+How much this matters is worth deciding rather than assuming: a browser will not
+execute a shell script served as `image/png`, so this is not remote code
+execution. What it is, is an unbounded arbitrary-file store attached to any
+account with a `photos:write` key, whose contents are served from the
+application's own origin.
+
+Found by `tests/integration/specs/services/media-storage.spec.ts`, which stays
+red until the bytes are checked.
+
 ## OPEN 2026-08-24: a visit can be logged in the future
 
 `POST /dashboard/api/external/v1/pins/{pin_slug}/visits/` accepts a
