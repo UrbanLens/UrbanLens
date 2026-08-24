@@ -12,7 +12,6 @@ from urbanlens.dashboard.models.auto_removals import AutoRemovalKind, PinAutoRem
 from urbanlens.dashboard.models.billing import BillingCustomer, BillingSubscriptionStatus, RoleSubscription, StripeProcessedRefund, StripeWebhookEvent
 from urbanlens.dashboard.models.boundary import Boundary, BoundarySource, BoundaryType
 from urbanlens.dashboard.models.boundary_vote import BoundaryVote
-from urbanlens.dashboard.models.reputation import ProfileReputation, ReputationEvent, TargetKind
 from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.models.calendar_sync import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.comments import Comment
@@ -109,6 +108,7 @@ from urbanlens.dashboard.models.property_owner import OwnerSource, PinOwner, Pin
 from urbanlens.dashboard.models.public_pins import PublicPinCandidate, PublicPinCandidateStatus, PublicPinVote
 from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
 from urbanlens.dashboard.models.reactions import Reaction
+from urbanlens.dashboard.models.reputation import ProfileReputation, ReputationEvent, TargetKind
 from urbanlens.dashboard.models.reviews import Review
 from urbanlens.dashboard.models.routes import Route, RouteSource
 from urbanlens.dashboard.models.safety import (
@@ -162,6 +162,6 @@ from urbanlens.dashboard.models.trivia import (
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.models.visit_suggestions import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits import ExternalVisitParticipant, PinVisit, VisitSource
-from urbanlens.dashboard.models.wiki import Wiki
+from urbanlens.dashboard.models.wiki import Wiki, WikiFieldRevision
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote

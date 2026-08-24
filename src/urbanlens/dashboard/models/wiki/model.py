@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
+class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
     """Community-editable page describing a shared, real-world place.
 
     Wiki is the *community* half of the place model:
@@ -161,6 +161,35 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     # wiki exists yet" - see WikiManager.get_for_location and
     # services.wiki.wiki_access.resolve_visible_wiki.
     officially_created = BooleanField(default=True)
+
+    #: Scalar fields whose writes record provenance. Mirrors
+    #: services.wiki.wiki_edits.WIKI_EDITABLE_FIELDS - the fields a person can
+    #: change - plus pin_type and indoor_outdoor, which enrichment and the
+    #: Consensus game both write. Declared rather than inferred so a new column
+    #: does not start being versioned by accident.
+    #:
+    #: The reason this list matters: a concealed viewer is shown automatic
+    #: writes plus their own plus their friends', so every field a person can
+    #: change has to carry who changed it. See docs/designs/versioned-content.md.
+    versioned_fields = (
+        "name",
+        "description",
+        "fences",
+        "alarms",
+        "cameras",
+        "security",
+        "signs",
+        "vps",
+        "plywood",
+        "locked",
+        "date_abandoned",
+        "date_last_active",
+        "pin_type",
+        "indoor_outdoor",
+    )
+
+    #: Where this model's field revisions are stored.
+    revision_model = "dashboard.WikiFieldRevision"
     # Flips true the first time a profile other than created_by views the
     # wiki page (see LocationWikiView.get). Once true, the wiki is community
     # content and its creator can no longer unilaterally delete it.

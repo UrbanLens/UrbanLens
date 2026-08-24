@@ -110,7 +110,7 @@ that list, each finding then handed to an adversarial verifier told to refute it
 
 ## Structural checks (CI)
 
-Five checkers guard properties that are invisible from a working copy, which is
+Six checkers guard properties that are invisible from a working copy, which is
 exactly why they need checking — the machine that made the mistake is the one
 that cannot see it.
 
@@ -121,6 +121,7 @@ that cannot see it.
 | `bin/check_doc_line_refs.py` | A documentation citation pointing past end-of-file |
 | `bin/check_outage_not_cached.py` | A `fetch` that caches a swallowed failure as though it were an answer |
 | `bin/check_notification_choke_point.py` | A notification written around the mute preference |
+| `bin/check_versioned_writes.py` | A model half-adopting field versioning, so bulk writes go unrecorded |
 
 The last two exist because a *defect class* recurred, not because one bug did.
 `check_outage_not_cached.py` came from an outage being stored as "nothing here"
@@ -131,6 +132,17 @@ remembering it thirty times. Both replace "remember to" with "cannot forget":
 notifications go through `NotificationLog.objects.notify()`, and a deliberate
 bypass is marked `notify-bypass-ok: <why>` on the line above so the exemption
 sits where the decision is.
+
+`check_versioned_writes.py` exists for the same reason as those two: provenance
+has to be recorded at write time, and the wiki's *existing* edit history is
+already bypassed by three writers — a bulk `update()`, a bare `save()`, and one
+that omits `updated` from `update_fields`. None is visible to a `post_save`
+receiver, which is why recording is interception (`VersionedModel.save()`,
+`VersionedQuerySet.update()`/`bulk_update()`) rather than a funnel. The check
+catches the half-adopted cases that look fine in review: `versioned_fields`
+declared without the mixin, the mixin without a `VersionedQuerySet` (instance
+saves recorded, every bulk write silently not — the worse half), a missing
+`revision_model`, and a field name a rename left behind.
 
 `check_doc_line_refs.py --report-drift` additionally lists citations whose line
 exists but no longer holds what the prose claims. That half is *not* enforced:

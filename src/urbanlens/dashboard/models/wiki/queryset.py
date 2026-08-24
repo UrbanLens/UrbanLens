@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class WikiQuerySet(abstract.PublicDashboardQuerySet):
+class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet):
     """QuerySet for Wiki - the community-editable half of the place model.
 
     Filters here operate on community data (name, labels). For address/geo
