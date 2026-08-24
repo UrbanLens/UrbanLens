@@ -6,24 +6,62 @@ Concealment is the first consumer, not the reason: the same substrate is what me
 
 ## The shape
 
-Three materialised things and one log.
+**Revised 2026-08-24 after the friend requirement (below), which invalidated the earlier
+two-materialised-HEADs design.**
 
-| | What it is | Cost to read |
-|---|---|---|
-| **Real HEAD** | the live row, exactly as today | free — a plain row read |
-| **Automatic HEAD** | the row as it would be if only automatic writers had ever touched it | free — a plain row read |
-| **Revision 1** | the origin state | free — always stored whole (see storage) |
-| **The log** | append-only, forward-only, one entry per write | cold path only |
+### What a concealed viewer must see
 
-**No read path ever reconstructs anything.** Reconstruction exists for history browsing and
-merge, both cold, and is bounded (below). This is the whole answer to "no performance hit for
-typical users".
+Not "automatic content". Three things unioned:
 
-The automatic HEAD is what makes this better than recording provenance per field. The state a
-concealed viewer needs is not "the wiki at time T" — that would freeze enrichment and go stale,
-which is what sank the earlier proposal. It is *"the row as if only automatic writers had
-touched it"*, which is **a filter over the log rather than a point in it**, and therefore keeps
-up as enrichment continues.
+1. **automatic** content — provider and enrichment writes;
+2. **their own** contributions — the own-content rule holds everywhere;
+3. **their friends'** contributions — because friends talk offline. "Just check the UrbanLens
+   wiki, I put a load of stuff up there" has to work, or concealment breaks the product for
+   the people it is not aimed at.
+
+That third clause is what forces the design. The visible set is **per viewer** — everyone has
+a different friend list — so it cannot be materialised as a fixed projection. There is no
+"automatic HEAD" row to read.
+
+### The resolution: field-granular revisions, no replay
+
+Store one row per **(target, field, write)** rather than one per edit. Then every view of the
+data is the same single query — *the latest qualifying write per field*:
+
+```sql
+SELECT DISTINCT ON (field_name) field_name, value
+FROM   <model>_field_revisions
+WHERE  target_id = %s
+  AND  (source = 'automatic' OR actor_id = ANY(%s))   -- viewer + friends
+ORDER  BY field_name, sequence DESC
+```
+
+One indexed query, Postgres `DISTINCT ON`, no replay, no checkpoints, no reconstruction. And
+it is correct about ordering for free, which a delta-overlay design is not: if a stranger edits
+`name` after a friend did, the stranger's row is filtered out and the friend's is still the
+newest *qualifying* row. If enrichment then writes `name` again, its row is newer than both and
+wins. Per-field last-writer-wins, over whatever subset the viewer is entitled to.
+
+The same query shape answers every other question the substrate exists for:
+
+| Question | Change to the query |
+|---|---|
+| current state | *nothing reads this* — the live row is HEAD |
+| concealed view | `WHERE source='automatic' OR actor = ANY(viewer+friends)` |
+| state at revision K | `AND sequence <= K` |
+| as if only automatic | `WHERE source='automatic'` |
+| who last set this field | drop `DISTINCT ON`, read `actor` |
+
+**The live row stays HEAD.** Normal viewers read a plain row exactly as today and touch none of
+this. That is Jess's performance constraint, satisfied by not changing the hot path at all.
+
+### Why not the earlier design
+
+Forward deltas plus periodic whole-row checkpoints do not survive the friend clause: a
+checkpoint is a *cumulative* snapshot including everyone's edits, so it cannot be the starting
+point for a filtered replay. Filtered replay would have to start at revision 1 every time.
+Field-granular rows make the question a `max(sequence) per field` aggregate instead, which the
+database answers directly.
 
 ## 1. Enforcement: make the right path the only path
 
@@ -91,34 +129,37 @@ wikis — are rows rather than fields, already carry usable provenance (`Image.s
 text per revision and already has `restored_from`. It should become an `AbstractRevision`
 subclass so articles join the same machinery rather than keeping a parallel one.
 
-## 3. Storage: forward deltas with periodic checkpoints
+## 3. Storage
 
-Full snapshots per edit are the right *starting* shape and the wrong *ending* one. The standard
-answer, and the one that fits the read pattern here:
+Field-granular rows are already the delta — a row exists only for a field that was actually
+written, so an edit touching two of fifteen fields costs two rows. There is no whole-row
+snapshot to economise on and no checkpoint machinery to build.
 
-- **Deltas by default** — changed fields only. Most edits touch one or two of ~15, so an entry
-  is small.
-- **A checkpoint every `N` revisions**, storing the whole field set. `N` tunable, starting
-  around 50.
-- **Revision 1 is always a checkpoint.** It is the origin state and is read often enough to
-  matter.
-- Reconstructing revision K = nearest preceding checkpoint, then forward-apply. **Bounded by
-  `N`, never by the wiki's age.**
+**Value column: text, not JSON.** Per Jess, JSON columns are avoided unless strongly preferred
+— they fight searching, indexing and encryption. A single text column with the field name
+alongside is indexable, and deserialisation goes through Django's own
+`model._meta.get_field(name).to_python()` rather than a bare `setattr`. That last detail
+matters: the existing revert path assigns **stringified** values back to typed fields, which is
+the bug that made backward replay lossy in the first place. Going through `to_python()` is what
+stops this design inheriting it.
 
-The hot reads never touch this: current version is the real HEAD, concealed version is the
-automatic HEAD, origin is a checkpoint. All three are plain row reads.
+**Store only the post-state.** Forward-only needs no `from` value: the prior state is the
+previous row for that field. This halves the rows' width and closes a real leak — the tells
+audit found `WikiEdit.changes` keeps the community's *prior* value inside the viewer's own
+edit history, which survives a perfect read gate (type a character into the "empty"
+description, read the hidden one out of your own history, revert). Forward-only removes it by
+construction rather than by remembering to redact.
 
-**Store only the post-state, never the prior value.** Forward replay does not need `from` — the
-prior state is reconstructible by replaying to K-1. This halves entry size, and it also closes
-a real leak: the tells audit found that `WikiEdit.changes` storing the community's *prior* value
-inside the viewer's own edit row survives a perfect read gate (type a character into the
-"empty" description, read the hidden one out of your own history, revert). Forward-only storage
-removes that by construction rather than by remembering to redact it — which is worth more than
-the space saving.
+**Retention** is per-model policy, and safe by construction: the newest row per field must be
+kept, everything older is history. Collapsing old history is a delete, not a rewrite.
 
-**Retention** is per-model policy: collapse runs of deltas older than a window into a fresh
-checkpoint and drop the deltas between, always keeping revision 1. Undo and merge need recent
-history; nobody needs the 400th intermediate state of a wiki from three years ago.
+**No projection row, no JSON column, no parallel table.** The open question from R18 is closed
+by the above: with the filtered read being one indexed query, there is nothing to materialise.
+This also avoids the hazard flagged when it was proposed — a projection row in the same table
+means every existing query must remember to exclude projections, which is exactly the
+"one call site at a time" failure this codebase has been bitten by twice. If profiling later
+shows the concealed query is hot, a cache can be added behind the same accessor without moving
+the source of truth.
 
 ## Sequencing
 
@@ -131,11 +172,10 @@ history; nobody needs the 400th intermediate state of a wiki from three years ag
    just "full snapshots" and is a correct starting configuration.
 5. Migrate `ArticleRevision` onto the base; extend to pins and floorplans.
 
-## Open
+## Settled
 
-- Does the automatic HEAD live as a second row in the same table (a self-FK, `is_projection`),
-  a `JSONField` on the model, or a parallel table? Second row keeps one code path for reads
-  and is probably right, but it means every existing query must exclude projections — which is
-  exactly the "one call site at a time" failure this codebase has been bitten by twice.
-- Whether `source` needs more than `user` / `automatic` / `system` — a merge resolution, for
-  instance, is arguably a fourth.
+- **Where the concealed projection lives** — nowhere. It is a query, not a row. See §3.
+- **Whether `source` needs a merge value** — no. Jess: a merge is a *reason*, not a source;
+  both user and automatic merge resolution are possible, and the provenance of the things being
+  merged may itself need tracking. `source` stays `user` / `automatic` / `system`, and a
+  separate `reason` field is the right shape when merge work starts. Not now.
