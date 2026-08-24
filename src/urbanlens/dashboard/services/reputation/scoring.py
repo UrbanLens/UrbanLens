@@ -23,6 +23,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.reputation.meta import TargetKind, period_key_for
@@ -147,17 +148,22 @@ def score_event(event: ReputationEvent) -> Decimal | None:
         inputs["decay_multiplier"] = str(multiplier)
         value = value * multiplier
 
-    if rule.capped:
-        value, cap_note = _apply_caps(event, value)
-        if cap_note:
-            inputs["capped_by"] = cap_note
+    # One transaction, one write. When the rule is capped, _apply_caps takes a
+    # row lock on the profile's period slice, and this block is what holds that
+    # lock through the write it exists to protect.
+    with transaction.atomic():
+        if rule.capped:
+            value, cap_note = _apply_caps(event, value)
+            if cap_note:
+                inputs["capped_by"] = cap_note
 
-    value = value.quantize(Decimal("0.0001"))
-    if value < coefficients.DECAY_FLOOR:
-        value = Decimal(0)
+        value = value.quantize(Decimal("0.0001"))
+        if value < coefficients.DECAY_FLOOR:
+            value = Decimal(0)
 
-    inputs["scored_at"] = timezone.now().isoformat()
-    ReputationEvent.objects.filter(pk=event.pk).update(value=value, inputs=inputs)
+        inputs["scored_at"] = timezone.now().isoformat()
+        ReputationEvent.objects.filter(pk=event.pk).update(value=value, inputs=inputs)
+
     event.value = value
     event.inputs = inputs
     _mark_stale(event.profile_id)
@@ -177,7 +183,16 @@ def _decay_multiplier(event: ReputationEvent) -> Decimal:
         ReputationEvent.objects.for_profile(event.profile_id)
         .for_rule(event.rule_key)
         .in_period(event.period_key)
-        .filter(retracted=False, occurred_at__lt=event.occurred_at)
+        # Deliberately not filtered on `retracted`: score_event retracts rows
+        # itself, so excluding them would make this factor depend on the order
+        # the scorer happened to reach siblings in - which is what the docstring
+        # above promises it does not.
+        #
+        # The pk tiebreak matters because occurred_at is explicit so a backfill
+        # can attribute rows to the past; a day-precision backfill ties every
+        # row in a period and would otherwise disable decay for exactly the bulk
+        # import where farming is worth doing.
+        .filter(Q(occurred_at__lt=event.occurred_at) | Q(occurred_at=event.occurred_at, pk__lt=event.pk))
         .count()
     )
     return coefficients.DECAY_RATIO**earlier
@@ -191,6 +206,15 @@ def _apply_caps(event: ReputationEvent, value: Decimal) -> tuple[Decimal, str]:
         neither bound).
     """
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
+
+    # Locked for the length of the caps check and the write that follows it.
+    # Headroom is computed from stored values, so two workers scoring
+    # same-period siblings concurrently would each see the other's row as
+    # worthless and both award full value - overshooting a ceiling whose whole
+    # point is that no rule can forget it. The nightly sweep fans 500-row chunks
+    # out to parallel subtasks, so this is the expected path rather than a race
+    # that needs bad luck.
+    list(ReputationEvent.objects.select_for_update().filter(profile_id=event.profile_id, rule_key=event.rule_key, period_key=event.period_key).values_list("pk", flat=True))
 
     same_rule = ReputationEvent.objects.for_profile(event.profile_id).for_rule(event.rule_key).in_period(event.period_key).exclude(pk=event.pk).total_value()
     rule_headroom = coefficients.PER_RULE_PERIOD_CAP - same_rule

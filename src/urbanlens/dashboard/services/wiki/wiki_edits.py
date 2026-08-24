@@ -285,5 +285,33 @@ def revert_wiki_edit(location: Location, wiki: Wiki, profile: Profile, target_ed
         undone_ids = list(target_edit.reverts.values_list("pk", flat=True))
         if undone_ids:
             WikiEdit.objects.filter(pk__in=undone_ids).update(reverted=False, reverted_by=None)
+            _restore_reputation_for(undone_ids)
 
     return revert_edit, skipped_fields
+
+
+def _restore_reputation_for(edit_ids: list[int]) -> None:
+    """Un-retract the ledger rows for edits whose revert was itself reverted.
+
+    Called here rather than left to the reputation signal, because the line
+    above is a queryset ``update()`` and emits no ``post_save`` - so the
+    handler watching for the flag to clear never sees it. Retraction was
+    designed as a reversible flag specifically because a revert-of-a-revert
+    puts the original edit back in force; without this the reversal half never
+    ran, and the design's justification for the flag was untrue.
+
+    Args:
+        edit_ids: WikiEdit pks whose reverts have just been undone.
+    """
+    from urbanlens.dashboard.models.reputation.meta import TargetKind
+    from urbanlens.dashboard.models.reputation.model import ReputationEvent
+    from urbanlens.dashboard.services.reputation.scoring import restore_event
+
+    rows = ReputationEvent.objects.filter(
+        rule_key="wiki_field_edit",
+        target_kind=TargetKind.WIKI_EDIT,
+        target_id__in=edit_ids,
+        retracted=True,
+    )
+    for event in rows:
+        restore_event(event)

@@ -149,6 +149,26 @@ class VersionedQuerySet(QuerySet):
                     _record_fields(model, pk, touched)
         return updated
 
+    def bulk_create(self, objs: Sequence[Any], *args: Any, **kwargs: Any) -> list[Any]:
+        """Create in bulk, recording each new row's initial field state.
+
+        A create is revision 1: the whole versioned field set is the state the
+        row started in, with whatever source the context says made it. Without
+        this, a bulk-created row has no provenance at all, and every one of its
+        fields resolves to a default for a concealed viewer - which reads as an
+        empty wiki rather than the one that was actually created.
+        """
+        created = super().bulk_create(objs, *args, **kwargs)
+
+        versioned = getattr(self.model, "versioned_fields", ())
+        if not versioned or is_unversioned():
+            return created
+
+        for obj in created:
+            if obj.pk is not None:
+                _record_fields(self.model, obj.pk, {name: getattr(obj, name, None) for name in versioned})
+        return created
+
     def bulk_update(self, objs: Sequence[Any], fields: Sequence[str], batch_size: int | None = None) -> int:
         """Apply the bulk update, recording a revision per versioned field touched."""
         # Django implements bulk_update by ending with
