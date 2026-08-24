@@ -114,6 +114,46 @@ async function readPin(api: ApiClient, slug: string): Promise<CampusPin> {
     return api.json<CampusPin>("get", `pins/${slug}/`);
 }
 
+/** One row of the pin delta-sync payload, as far as these specs read it. */
+export interface SyncPinRow {
+    slug: string;
+    uuid: string;
+    name: string;
+    latitude: number;
+    longitude: number;
+    parent_uuid?: string | null;
+}
+
+/**
+ * Every pin this account holds, root and child alike.
+ *
+ * `GET pins/` is a **delta-sync** endpoint, not an ordinary list: it answers
+ * `{pins, next_cursor, sync_watermark, total}`, pages by opaque cursor, and
+ * serves child pins alongside root ones. Reading `results` from it - the shape
+ * every other list endpoint in this API uses - silently yields nothing, which
+ * is exactly the sort of quiet wrong answer that makes a fixture look like an
+ * application failure.
+ */
+export async function allPins(api: ApiClient): Promise<SyncPinRow[]> {
+    const rows: SyncPinRow[] = [];
+    let cursor: string | null = null;
+    // Bounded rather than `while (true)`: a cursor that stopped advancing would
+    // otherwise spin here forever instead of failing.
+    for (let page = 0; page < 20; page += 1) {
+        const params: Record<string, string> = { limit: "200" };
+        if (cursor) {
+            params.cursor = cursor;
+        }
+        const body: { pins?: SyncPinRow[]; next_cursor?: string | null } = await api.json("get", "pins/", params as never);
+        rows.push(...(body.pins ?? []));
+        cursor = body.next_cursor ?? null;
+        if (!cursor) {
+            break;
+        }
+    }
+    return rows;
+}
+
 /**
  * Finds a pin this account already has on the campus, if any.
  *
@@ -122,13 +162,7 @@ async function readPin(api: ApiClient, slug: string): Promise<CampusPin> {
  * that took minutes to arrive, and would make every run pay for them again.
  */
 async function findExistingCampusPin(api: ApiClient): Promise<CampusPin | null> {
-    const page = await api.json<{ results?: Array<{ slug: string; latitude: number; longitude: number; parent_uuid?: string | null }> }>("get", "pins/", {
-        // Generous: the account is disposable and holds few pins, and the
-        // campus pin could be of any age.
-        page_size: "200",
-    } as unknown as undefined);
-
-    for (const row of page.results ?? []) {
+    for (const row of await allPins(api)) {
         if (row.parent_uuid) {
             continue;
         }
@@ -171,15 +205,35 @@ async function buildCampus(request: APIRequestContext): Promise<CampusFixture> {
         note(`adopted an existing campus pin: ${pin.slug}`);
     } else {
         note(`creating a campus pin at ${origin.latitude}, ${origin.longitude}`);
-        const created = await api.json<{ slug: string }>("post", "pins/", {
+        const response = await api.post("pins/", {
             name: CAMPUS_PIN_NAME,
             latitude: origin.latitude,
             longitude: origin.longitude,
             description: `Created by the UrbanLens integration suite (run ${env.runId}).`,
             name_is_user_provided: true,
         });
-        pin = await readPin(api, created.slug);
-        note(`created ${pin.slug}`);
+        if (response.ok()) {
+            const created = (await response.json()) as { slug: string };
+            pin = await readPin(api, created.slug);
+            note(`created ${pin.slug}`);
+        } else {
+            // A refusal here means a pin is already there and the search above
+            // did not recognise it - a pin just outside CAMPUS_MATCH_RADIUS_M,
+            // or one left by something other than this suite. Adopting it is
+            // right either way: the app has just told us this coordinate is
+            // taken, so the pin that holds it is the campus pin.
+            const refusal = (await response.text()).slice(0, 200);
+            note(`create refused (${response.status()}): ${refusal} - re-searching`);
+            pin = await findExistingCampusPin(api);
+            if (pin === null) {
+                throw new Error(
+                    `Could not create a pin on the campus (${refusal}) and could not find the pin that is blocking it. ` +
+                        "Something else on this account holds these coordinates; list the account's pins and remove it, or run " +
+                        "provision_integration_env --purge.",
+                );
+            }
+            note(`adopted ${pin.slug} after the refusal`);
+        }
     }
 
     // The documented lazy trigger. `services.pins.external_data`'s boundary

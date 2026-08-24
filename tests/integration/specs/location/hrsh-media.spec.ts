@@ -57,7 +57,7 @@ async function settleGallery(page: import("@playwright/test").Page): Promise<num
                 "slow providers",
         })
         .toBe(0);
-    return page.locator(".media-item, .media-gallery-item").count();
+    return page.locator(".media-item").count();
 }
 
 test.describe("Hudson River State Hospital - external media", () => {
@@ -90,7 +90,7 @@ test.describe("Hudson River State Hospital - external media", () => {
         // Attribution is not decoration here: these are third-party images shown
         // under someone else's terms, and a tile with no source is a licensing
         // problem as much as a UI one.
-        const attributed = await page.locator(".media-item [data-provider], .media-item .media-item-source, .media-gallery-item [data-provider]").count();
+        const attributed = await page.locator(".media-item [data-provider], .media-item .media-item-source").count();
 
         expect(attributed, `${tiles} media tiles rendered but none carries a provider attribution`).toBeGreaterThan(0);
     });

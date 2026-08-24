@@ -115,11 +115,12 @@ test.describe("Hudson River State Hospital - the parcel boundary", () => {
 
         await page.goto(`/dashboard/map/pin/${campus.pin.slug}/`);
 
-        // The boundary is drawn by Leaflet as an SVG path inside the map's
-        // overlay pane. Asserting on the pane rather than a specific class,
-        // because the class is a styling decision and the presence of a drawn
-        // vector is the actual claim.
-        const overlay = page.locator("#pin-detail-map .leaflet-overlay-pane path, #pin-map .leaflet-overlay-pane path");
+        // The map is `.location-map.pin-map` wrapping `#pin-detail-map-wrapper`;
+        // there is no `#pin-detail-map`. The boundary is drawn by Leaflet as an
+        // SVG path in the overlay pane - asserted on the pane rather than any
+        // particular class, because the class is a styling decision while a
+        // drawn vector existing is the actual claim.
+        const overlay = page.locator("#pin-detail-map-wrapper .leaflet-overlay-pane path");
         await expect(
             overlay.first(),
             "no vector was drawn on the pin detail map. The boundary endpoint returns a polygon, so either the map never fetched it or " +

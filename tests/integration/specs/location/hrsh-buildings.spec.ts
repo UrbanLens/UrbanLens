@@ -35,7 +35,7 @@
  * having no outline is not a defect.
  */
 
-import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
+import { allPins, expect, locationDataTest as test, skipUnlessLocationDataEnabled, type CampusFixture } from "./fixtures.js";
 import { BUILDING_COORDINATE, containsCoordinate, hrshRoutes, metresBetween, type GeoJsonGeometry } from "../../lib/hrsh.js";
 import { waitForOrNull } from "../../lib/waiting.js";
 
@@ -57,13 +57,15 @@ interface ChildPin {
 /**
  * The campus pin's child pins.
  *
- * There is no `pins/{slug}/children/` route - the pin list carries `parent_uuid`
- * on every row, and filtering it is the only way to ask this question through
- * the published API.
+ * There is no `pins/{slug}/children/` route. `GET pins/` is a delta-sync
+ * endpoint that serves child pins alongside root ones and carries `parent_uuid`
+ * on every row, so filtering it is the only way to ask this through the
+ * published API - see `allPins`, which also handles that endpoint's `pins`
+ * envelope and cursor paging.
  */
-async function childPins(campus: { api: { json: <T>(m: "get", p: string) => Promise<T> }; pin: { uuid: string } }): Promise<ChildPin[]> {
-    const all = await campus.api.json<{ results?: ChildPin[] }>("get", "pins/");
-    return (all.results ?? []).filter((row) => row.parent_uuid === campus.pin.uuid);
+async function childPins(campus: CampusFixture): Promise<ChildPin[]> {
+    const rows = await allPins(campus.api);
+    return rows.filter((row) => row.parent_uuid === campus.pin.uuid) as ChildPin[];
 }
 
 test.describe("Hudson River State Hospital - buildings on the property", () => {
