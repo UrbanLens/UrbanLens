@@ -156,3 +156,48 @@ class ConcealedHistoryTests(TestCase):
         body = self._history()
 
         self.assertNotIn("CANARY-HIDDEN-PRIOR", body)
+
+
+class ConcealedPanelTests(TestCase):
+    """The HTMX panels, which the page-level test never touches.
+
+    Aliases, comments and links load from their own endpoints after the page
+    renders, so a canary planted for the main view is never in that response.
+    Those assertions were decorative until these tests existed.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = baker.make(Location, latitude=39.7392, longitude=-104.9903, official_name="Provider Name")
+        self.wiki = baker.make(Wiki, location=self.location, name="Provider Name", officially_created=True)
+        self.stranger = baker.make(User).profile
+        self.viewer_user = baker.make(User)
+        baker.make(Pin, profile=self.viewer_user.profile, location=self.location, parent_pin=None)
+        self.slug = self.location.slug or str(self.location.uuid)
+
+    def _get(self, route: str) -> str:
+        self.client.force_login(self.viewer_user)
+        with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
+            response = self.client.get(reverse(route, kwargs={"location_slug": self.slug}))
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
+
+    def test_the_alias_panel_omits_a_strangers_alias(self) -> None:
+        """Aliases are how a concealed name comes back as a row."""
+        from urbanlens.dashboard.models.aliases.model import AliasSource, WikiAlias
+
+        baker.make(WikiAlias, wiki=self.wiki, name="CANARY-ALIAS", source=AliasSource.USER, created_by=self.stranger)
+
+        self.assertNotIn("CANARY-ALIAS", self._get("location.wiki.aliases"))
+
+    def test_the_comment_panel_omits_a_strangers_comment(self) -> None:
+        """Comments are where people write down how they got in."""
+        baker.make("dashboard.Comment", wiki=self.wiki, pin=None, profile=self.stranger, text="CANARY-COMMENT")
+
+        self.assertNotIn("CANARY-COMMENT", self._get("location.wiki.comments"))
+
+    def test_the_links_row_omits_a_strangers_link(self) -> None:
+        """A link somebody added is a contribution like any other."""
+        baker.make("dashboard.WikiLink", wiki=self.wiki, name="CANARY-LINK", url="https://example.invalid/x", created_by=self.stranger)
+
+        self.assertNotIn("CANARY-LINK", self._get("location.wiki.links"))

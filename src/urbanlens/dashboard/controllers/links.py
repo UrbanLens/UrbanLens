@@ -66,12 +66,19 @@ def _render_pin_links(request, pin: Pin) -> HttpResponse:
 
 
 def _render_wiki_links(request, wiki) -> HttpResponse:
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
+
+    profile = getattr(request.user, "profile", None)
+    links = wiki.links.all()
+    if concealment_active(wiki, profile):
+        links = conceal_rows(links, profile)
+
     return render(
         request,
         "dashboard/partials/pins/_pin_links_row.html",
         {
-            "wiki": wiki,
-            "links": wiki.links.all(),
+            "wiki": conceal_wiki(wiki, profile),
+            "links": links,
             "delete_url_name": "location.wiki.link.delete",
             "row_id": "wiki-links-row",
             "owner_slug": wiki.location.slug,

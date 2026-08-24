@@ -370,8 +370,13 @@ class WikiCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a wiki."""
 
     def get(self, request, location_slug):
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
+
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        rows = wiki.comments.all()
+        if concealment_active(wiki, profile):
+            rows = conceal_rows(rows, profile)
+        ctx = _build_context(rows, profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):

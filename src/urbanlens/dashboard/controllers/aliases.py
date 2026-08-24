@@ -110,13 +110,23 @@ def _render_pin_panel(request, pin: Pin) -> HttpResponse:
 
 def _render_location_panel(request, location: Location, wiki: Wiki) -> HttpResponse:
     """Render the wiki aliases panel with current-name annotation."""
-    aliases = _annotated(wiki.aliases.order_by("name"), wiki.name)
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
+
+    profile = getattr(request.user, "profile", None)
+    rows = wiki.aliases.order_by("name")
+    if concealment_active(wiki, profile):
+        rows = conceal_rows(rows, profile)
+    # Annotated against the *shown* name, not the stored one: "is current" is a
+    # comparison, and comparing to a name this viewer cannot see would mark the
+    # wrong alias - or none - and say so on the page.
+    shown = conceal_wiki(wiki, profile)
+    aliases = _annotated(rows, shown.name)
     return render(
         request,
         "dashboard/partials/pins/aliases_panel.html",
         {
             "location": location,
-            "wiki": wiki,
+            "wiki": shown,
             "aliases": aliases,
             "panel_id": "location-aliases-panel",
             "collapse_scope": "wiki",
