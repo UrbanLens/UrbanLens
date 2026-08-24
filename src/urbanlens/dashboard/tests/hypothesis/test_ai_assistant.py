@@ -93,6 +93,24 @@ class AssistantToolTests(TestCase):
         self.assertEqual(activity.pin_id, self.pin.id)
         self.assertIsNotNone(activity.scheduled_at)
 
+    def test_add_trip_activity_rejects_invited_but_unjoined_members(self) -> None:
+        trip = baker.make(Trip, name="Pending Invite", creator=self.other)
+        TripMembership.objects.create(trip=trip, profile=self.profile, status=TripMembership.STATUS_INVITED)
+
+        result = _tool_add_trip_activity(self.profile, {"trip_slug": trip.slug, "pin_slug": self.pin.slug})
+
+        self.assertIn("error", result)
+        self.assertFalse(TripActivity.objects.filter(trip=trip, added_by=self.profile).exists())
+
+    def test_add_trip_activity_respects_trip_permission_level(self) -> None:
+        trip = baker.make(Trip, name="Locked Trip", creator=self.other, allow_add_activities=Trip.PERM_NONE)
+        TripMembership.objects.create(trip=trip, profile=self.profile, status=TripMembership.STATUS_JOINED)
+
+        result = _tool_add_trip_activity(self.profile, {"trip_slug": trip.slug, "pin_slug": self.pin.slug})
+
+        self.assertIn("error", result)
+        self.assertFalse(TripActivity.objects.filter(trip=trip, added_by=self.profile).exists())
+
 
 class _StubGateway:
     """Feeds a scripted sequence of answers to the loop.

@@ -6,6 +6,7 @@ from itertools import count
 from unittest.mock import patch
 
 from django.contrib.gis.geos import Point
+from django.urls import reverse
 from model_bakery import baker
 import pytest
 
@@ -214,6 +215,13 @@ class JoinedOnlyRoundAndGuessTests(TestCase):
         submit_guess(self.round_, self.guest, guess_point)
         self.round_.refresh_from_db()
         self.assertIsNotNone(self.round_.revealed_at)  # never_joins was never counted
+
+    def test_never_joined_invitee_cannot_fetch_round_after_the_game_starts(self) -> None:
+        self.client.force_login(self.never_joins.user)
+
+        response = self.client.get(reverse("spotguessr.round", args=[self.session.pk]))
+
+        self.assertEqual(response.status_code, 404)
 
     @patch("urbanlens.dashboard.services.spotguessr.realtime.broadcast")
     def test_guessing_broadcasts_and_completes_the_session_when_out_of_rounds(self, mock_broadcast) -> None:

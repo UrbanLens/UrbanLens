@@ -588,6 +588,7 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "detail_border_opacity": pin.detail_border_opacity,
                 "created": str(pin.created),
                 "updated": str(pin.updated),
+                "parent_uuid": str(pin.parent_pin.uuid) if pin.parent_pin_id else None,
                 "label_uuids": [str(b.uuid) for b in pin.labels.all()],
                 "article": {"content": article.content} if article and article.content else None,
             },

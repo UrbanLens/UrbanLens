@@ -23,7 +23,7 @@ from urbanlens.dashboard.consumers import GameSessionConsumer
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import SpotGuessrMode
+from urbanlens.dashboard.models.spotguessr.model import GameSessionStatus, SpotGuessrMode
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_multiplayer_session
 
 _IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
@@ -80,14 +80,26 @@ class GameSessionConsumerTests(TransactionTestCase):
         self.assertTrue(connected)
         await comm.disconnect()
 
-    def test_an_invited_but_not_yet_joined_participant_can_also_connect(self) -> None:
-        _run(self._an_invited_but_not_yet_joined_participant_can_also_connect())
+    def test_an_invited_but_not_yet_joined_participant_can_connect_to_the_lobby(self) -> None:
+        _run(self._an_invited_but_not_yet_joined_participant_can_connect_to_the_lobby())
 
-    async def _an_invited_but_not_yet_joined_participant_can_also_connect(self) -> None:
+    async def _an_invited_but_not_yet_joined_participant_can_connect_to_the_lobby(self) -> None:
         comm = self._communicator(self.guest.user)
         connected, _ = await comm.connect()
         self.assertTrue(connected)
         await comm.disconnect()
+
+    def test_an_invited_but_not_joined_participant_cannot_connect_after_start(self) -> None:
+        self.session.status = GameSessionStatus.ACTIVE
+        self.session.save(update_fields=["status"])
+
+        _run(self._an_invited_but_not_joined_participant_cannot_connect_after_start())
+
+    async def _an_invited_but_not_joined_participant_cannot_connect_after_start(self) -> None:
+        comm = self._communicator(self.guest.user)
+        connected, close_code = await comm.connect()
+        self.assertFalse(connected)
+        self.assertEqual(close_code, 4404)
 
     def test_a_non_participant_is_rejected(self) -> None:
         _run(self._a_non_participant_is_rejected())

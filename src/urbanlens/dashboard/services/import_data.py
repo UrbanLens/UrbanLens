@@ -602,6 +602,7 @@ def _import_pins(
 
     from urbanlens.dashboard.models.abstract.choices import SecurityLevel
     from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
     rows = _read_json(data_dir, "pins.json")
@@ -659,8 +660,23 @@ def _import_pins(
         if uuid_str and not Pin.objects.filter(uuid=uuid_str).exists():
             defaults["uuid"] = uuid_str
 
+        parent_pin = None
+        parent_uuid = row.get("parent_uuid")
+        if parent_uuid:
+            parent_pk = pin_uuid_map.get(parent_uuid)
+            parent_pin = Pin.objects.filter(pk=parent_pk, profile=profile).first() if parent_pk is not None else None
+            if parent_pin is None:
+                result.warnings.append(f"Could not import detail pin '{row.get('name', uuid_str)}': missing parent pin.")
+                result.inc_skipped("pins")
+                continue
+
         try:
-            pin, created = Pin.objects.get_nearby_or_create(lat, lng, profile, defaults=defaults)
+            if parent_pin is not None:
+                location, _location_created = Location.objects.get_nearby_or_create(lat, lng)
+                pin = Pin.objects.create(profile=profile, location=location, parent_pin=parent_pin, **defaults)
+                created = True
+            else:
+                pin, created = Pin.objects.get_nearby_or_create(lat, lng, profile, defaults=defaults)
         except (IntegrityError, ValueError, TypeError):
             logger.warning("Failed to import pin %s", uuid_str, exc_info=True)
             result.warnings.append(f"Could not import pin '{row.get('name', uuid_str)}'.")

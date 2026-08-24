@@ -33,6 +33,8 @@ from urbanlens.dashboard.models.spotguessr.model import (
     GameRound,
     GameSession,
     GameSessionParticipant,
+    GameSessionParticipantStatus,
+    GameSessionStatus,
     Guess,
     SpotGuessrMode,
 )
@@ -55,15 +57,17 @@ def _current_profile(request: HttpRequest) -> Profile:
 
 
 def _participant_session(profile: Profile, session_id: int) -> GameSession:
-    """The session, only if ``profile`` participates in it (any status) - 404 otherwise.
+    """The session, only if ``profile`` may currently see it - 404 otherwise.
 
     404 (not 403) mirrors the boundary-vote endpoint's convention: a session
-    another profile is playing shouldn't even reveal that it exists. Any
-    status (INVITED or JOINED) can view - an invitee should see the lobby
-    fill up before deciding to accept.
+    another profile is playing shouldn't even reveal that it exists. Invited
+    users can view the lobby before accepting, but once the roster is locked,
+    only joined players may keep receiving rounds, chat, reveals, or summaries.
     """
     participant = GameSessionParticipant.objects.filter(session_id=session_id, profile=profile).select_related("session").first()
     if participant is None:
+        raise Http404("No such session for this profile.")
+    if participant.session.status != GameSessionStatus.LOBBY and participant.status != GameSessionParticipantStatus.JOINED:
         raise Http404("No such session for this profile.")
     return participant.session
 

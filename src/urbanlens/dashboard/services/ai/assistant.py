@@ -187,12 +187,10 @@ def _tool_create_trip(profile: Profile, args: dict) -> dict:
 
 
 def _tool_add_trip_activity(profile: Profile, args: dict) -> dict:
-    from django.db import transaction
-
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.models.site_settings import SiteSettings
-    from urbanlens.dashboard.models.trips.model import Trip, TripActivity
-    from urbanlens.dashboard.services.trip_share_tracking import record_trip_activity_shares
+    from urbanlens.dashboard.models.trips.model import Trip
+    from urbanlens.dashboard.services.trip_activities import create_activity
+    from urbanlens.dashboard.services.trip_errors import TripError
 
     trip = Trip.objects.filter(slug=str(args.get("trip_slug") or ""), profiles=profile).first()
     if trip is None:
@@ -214,32 +212,15 @@ def _tool_add_trip_activity(profile: Profile, args: dict) -> dict:
             # 9am local: an arbitrary-but-sane default hour for a date-only plan.
             scheduled_at = datetime.combine(day, time(hour=9), tzinfo=get_current_timezone())
 
-    # Lock the trip row for the duration of the check-then-create so two concurrent
-    # requests (e.g. two members adding activities to the same trip at once, or the
-    # user double-submitting) can't both pass the max_trip_activities count check
-    # and jointly exceed it - same shape/reason as _tool_create_trip's profile-row
-    # lock above. Locked on the trip (not the profile) since the count this guards
-    # is per-trip and other members can add activities to it too.
-    with transaction.atomic():
-        Trip.objects.select_for_update().get(pk=trip.pk)
-
-        max_activities = SiteSettings.get_current().max_trip_activities
-        if max_activities > 0 and trip.activities.count() >= max_activities:
-            return {"error": f"That trip already has the maximum of {max_activities} activities."}
-
-        activity = TripActivity.objects.create(
-            trip=trip,
-            pin=pin,
-            location=pin.location,
-            added_by=profile,
-            title=None,
+    try:
+        activity = create_activity(
+            trip,
+            profile,
             scheduled_at=scheduled_at,
-            order=trip.activities.count(),
-            status=TripActivity.STATUS_PROPOSED,
+            place={"pin_slug": pin.slug},
         )
-    # Same rule as the trip view: putting a place on an itinerary reveals it
-    # to every member and must count in the sharer's reshare chain.
-    record_trip_activity_shares(activity)
+    except TripError as exc:
+        return {"error": exc.message}
     return {"added": {"trip": trip.name, "pin": pin.effective_name, "activity_id": activity.id}}
 
 

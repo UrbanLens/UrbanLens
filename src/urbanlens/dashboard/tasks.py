@@ -1119,6 +1119,7 @@ def resolve_deferred_pin_locations(
     deferred_lists: list[dict],
     auto_tag: bool = True,
     original_total: int | None = None,
+    accumulated_counts: dict[str, int] | None = None,
 ) -> dict[str, int]:
     """Place pins whose Google Maps CID needed a live lookup to be accurate.
 
@@ -1144,6 +1145,9 @@ def resolve_deferred_pin_locations(
             progress reporting stays relative to the whole job, not just
             whatever's left. Defaults to this call's own pin count when unset
             (i.e. on the first, non-retry invocation).
+        accumulated_counts: Counts from earlier partial-resolution attempts in
+            the same deferred import. Older queued tasks omit this and start
+            from zero.
 
     Returns:
         Summary counts (created/exists/skipped).
@@ -1173,23 +1177,13 @@ def resolve_deferred_pin_locations(
 
     result = resolve_cids(all_cids)
 
-    if result.pending:
-        pending_set = set(result.pending)
-        remaining_lists = []
-        for lst in deferred_lists:
-            remaining_pins = [p for p in lst.get("pins", []) if p["cid"] in pending_set]
-            if remaining_pins:
-                remaining_lists.append({**lst, "pins": remaining_pins})
+    counts = accumulated_counts or {}
+    created_count = counts.get("created", 0)
+    exists_count = counts.get("exists", 0)
+    skipped_count = counts.get("skipped", 0)
+    unresolved_count = counts.get("unresolved", 0) + len(result.unresolvable)
+    pending_set = set(result.pending)
 
-        if result.provider == "google_places":
-            countdown, message = 65, "Waiting on Google's rate limit - resuming shortly..."
-        else:
-            countdown, message = 120, "Having trouble reaching REData - retrying shortly..."
-
-        update_task_progress(self, current=total - len(result.pending), total=total, message=message)
-        raise self.retry(args=[profile_id, remaining_lists, auto_tag, total], countdown=countdown, max_retries=None)
-
-    created_count = exists_count = skipped_count = 0
     for lst in deferred_lists:
         stem = lst.get("stem", "")
         list_label_ids = lst.get("label_ids") or []
@@ -1208,7 +1202,8 @@ def resolve_deferred_pin_locations(
             cid = pin_dict["cid"]
             coords = result.resolved.get(cid)
             if coords is None:
-                skipped_count += 1
+                if cid not in pending_set:
+                    skipped_count += 1
                 continue
 
             # Re-check now, not just at defer time: an earlier pin in this
@@ -1233,7 +1228,31 @@ def resolve_deferred_pin_locations(
             else:
                 skipped_count += 1
 
-    unresolved = len(result.unresolvable)
+    if result.pending:
+        remaining_lists = []
+        for lst in deferred_lists:
+            remaining_pins = [p for p in lst.get("pins", []) if p["cid"] in pending_set]
+            if remaining_pins:
+                remaining_lists.append({**lst, "pins": remaining_pins})
+
+        if result.provider == "google_places":
+            countdown, message = 65, "Waiting on Google's rate limit - resuming shortly..."
+        else:
+            countdown, message = 120, "Having trouble reaching REData - retrying shortly..."
+
+        update_task_progress(self, current=total - len(result.pending), total=total, message=message)
+        raise self.retry(
+            args=[
+                profile_id,
+                remaining_lists,
+                auto_tag,
+                total,
+                {"created": created_count, "exists": exists_count, "skipped": skipped_count, "unresolved": unresolved_count},
+            ],
+            countdown=countdown,
+            max_retries=None,
+        )
+
     provider_label = "REData" if result.provider == "redata" else "Google Places"
     NotificationLog.objects.create(
         profile=profile,
@@ -1241,7 +1260,7 @@ def resolve_deferred_pin_locations(
         importance=Importance.MEDIUM,
         notification_type=NotificationType.PIN_IMPORT_COMPLETE,
         title=f"Finished placing {created_count + exists_count} pin(s)",
-        message=(f"{created_count} created · {exists_count} existed · {skipped_count} skipped" + (f" ({unresolved} could not be located)" if unresolved else "") + f" — resolved via {provider_label}."),
+        message=(f"{created_count} created · {exists_count} existed · {skipped_count} skipped" + (f" ({unresolved_count} could not be located)" if unresolved_count else "") + f" — resolved via {provider_label}."),
         url=reverse("map.view"),
     )
     update_task_progress(self, current=total, total=total, message="Done.")

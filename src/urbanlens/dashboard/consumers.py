@@ -1176,18 +1176,25 @@ class GameSessionConsumer(_ParticipantSessionConsumer):
 
     @database_sync_to_async
     def _is_participant(self, session_id, user):
-        """Whether ``user``'s profile is a participant (any status) of ``session_id``.
+        """Whether ``user``'s profile may currently subscribe to ``session_id``.
 
         Returns:
-            False for a nonexistent session or a real session the profile
-            just isn't part of - deliberately not distinguished, matching
-            the 404-not-403 convention used everywhere else in this feature.
+            False for a nonexistent session, a real session the profile
+            just isn't part of, or an active game where the profile was
+            invited but never joined - deliberately not distinguished,
+            matching the 404-not-403 convention used everywhere else in this
+            feature.
         """
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.models.spotguessr.model import GameSessionParticipant
+        from urbanlens.dashboard.models.spotguessr.model import GameSessionParticipant, GameSessionParticipantStatus, GameSessionStatus
 
         profile, _ = Profile.objects.get_or_create(user=user)
-        return GameSessionParticipant.objects.filter(session_id=session_id, profile=profile).exists()
+        participant = GameSessionParticipant.objects.filter(session_id=session_id, profile=profile).select_related("session").first()
+        if participant is None:
+            return False
+        if participant.session.status == GameSessionStatus.LOBBY:
+            return True
+        return participant.status == GameSessionParticipantStatus.JOINED
 
     @database_sync_to_async
     def _send_chat_message(self, body):

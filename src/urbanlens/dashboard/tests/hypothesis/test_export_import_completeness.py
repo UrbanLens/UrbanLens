@@ -81,6 +81,13 @@ class ExportPinsCompletenessTests(TestCase):
         row = self._export_pins()[0]
         self.assertIn("History", row["article"]["content"])
 
+    def test_detail_pin_exports_parent_uuid(self) -> None:
+        child = baker.make(Pin, profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Boiler Room")
+        rows = self._export_pins()
+
+        child_row = next(row for row in rows if row["uuid"] == str(child.uuid))
+        self.assertEqual(child_row["parent_uuid"], str(self.pin.uuid))
+
     def test_pin_with_no_article_exports_null(self) -> None:
         baker.make(Pin, profile=self.profile, name="No Article")
         rows = self._export_pins()
@@ -186,6 +193,19 @@ class ImportPinCompletenessTests(TestCase):
         self.assertEqual(imported.cameras, "everywhere")
         self.assertEqual(Review.objects.get(profile=self.importer, pin=imported).rating, 4)
         self.assertEqual(Article.objects.get(pin=imported).content, "An old mill.")
+
+    def test_round_trip_preserves_detail_pin_parentage_at_same_location(self) -> None:
+        child = baker.make(Pin, profile=self.exporter, location=self.pin.location, parent_pin=self.pin, name="Boiler Room")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            export_service._export_pins(self.exporter, temp_dir)
+            result = import_data.ImportResult()
+            import_data._import_pins(self.importer, temp_dir, result, pin_uuid_map={}, label_uuid_map={})
+
+        imported_parent = Pin.objects.get(profile=self.importer, name="Old Mill", parent_pin__isnull=True)
+        imported_child = Pin.objects.get(profile=self.importer, name="Boiler Room", parent_pin=imported_parent)
+        self.assertEqual(imported_child.location_id, imported_parent.location_id)
+        self.assertNotEqual(imported_child.uuid, child.uuid)
 
     def test_reimporting_an_existing_pin_does_not_duplicate_rating_or_article(self) -> None:
         """Idempotency: a pin that already exists for this user is skipped

@@ -20,7 +20,13 @@ from urbanlens.dashboard.models.cache.model import GeocodedLocation
 from urbanlens.dashboard.models.google_place.model import GooglePlace
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.services.apis.locations.cid_resolution import CidResolutionResult, PROVIDER_REDATA
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.tasks import resolve_deferred_pin_locations
+
+
+class _RetryScheduled(Exception):
+    pass
 
 
 class ImportPreviewCidDeferralTests(TestCase):
@@ -102,3 +108,37 @@ class ImportPreviewCidDeferralTests(TestCase):
         self.assertFalse(any(e["type"] == "deferred" for e in events))
         pin = Pin.objects.get(profile=self.profile, name="Known Place")
         self.assertEqual(pin.location_id, location.pk)
+
+
+class ResolveDeferredPinLocationsTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make("auth.User").profile
+
+    def test_places_resolved_subset_before_retrying_pending_cids(self) -> None:
+        deferred_lists = [
+            {
+                "stem": "",
+                "create_category": False,
+                "label_ids": [],
+                "pins": [
+                    {"name": "Resolved Place", "description": "", "cid": 111},
+                    {"name": "Still Pending", "description": "", "cid": 222},
+                ],
+            },
+        ]
+        resolution = CidResolutionResult(provider=PROVIDER_REDATA, resolved={111: (40.1, -74.1)}, pending=[222])
+
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=resolution),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+            mock.patch.object(resolve_deferred_pin_locations, "retry", side_effect=_RetryScheduled) as retry,
+            self.assertRaises(_RetryScheduled),
+        ):
+            resolve_deferred_pin_locations.run(self.profile.pk, deferred_lists, False)
+
+        self.assertTrue(Pin.objects.filter(profile=self.profile, name="Resolved Place").exists())
+        self.assertFalse(Pin.objects.filter(profile=self.profile, name="Still Pending").exists())
+        retry_args = retry.call_args.kwargs["args"]
+        self.assertEqual(retry_args[1][0]["pins"], [{"name": "Still Pending", "description": "", "cid": 222}])
+        self.assertEqual(retry_args[4]["created"], 1)
