@@ -46,12 +46,25 @@ Worse, it does not even require opening the wiki. Verified on this branch:
 Pin an address, look at your own pin page, read the button text. That is the entire attack,
 and it costs one page load.
 
-**Correction:** below the threshold, a wiki must resolve as **absent**, not as degraded. The
-mechanism already exists and is already the documented contract — `Wiki.officially_created`
-makes a draft read as "no wiki exists yet" everywhere, funnelled through
-`WikiManager.get_for_location` and `resolve_visible_wiki`, which raises a bare `Http404` for
-"no wiki", "draft only", and "not yours to see" alike. The gate belongs in that same
-chokepoint, producing the same 404.
+**Correction:** below the threshold, a gated place must present as **undocumented** — as it
+would if nobody had ever contributed to it and this viewer were the first person there.
+
+*Corrected again 2026-08-24 (Jess).* An earlier draft of this section said "absent" and
+proposed withdrawing the wiki feature from the account entirely. That is wrong, and the
+distinction is the whole feature: **we are not hiding that a place exists. We are hiding that
+other explorers know about it and go there.** Removing the feature is *different behaviour*,
+which tells the viewer they are being throttled, which tells them something here is worth
+protecting and that they should change tactics. The camouflage is the **empty state**, and the
+wiki feature must go on working normally for the account everywhere.
+
+Two rules follow, and they are the ones to hold onto:
+
+> The gate must be **silent**. No messaging, no "unlock" copy, no visible difference in how the
+> site behaves for this account.
+
+> Visible content is **monotonically non-decreasing** per viewer. Content that appears and then
+> disappears — a reveal budget tripping, points being retracted — is a loud tell. This is what
+> makes durable per-wiki clearance (R7) load-bearing for concealment, not just anti-griefing.
 
 ### R2. Sizing the gate by vulnerability turns it into a *sensitivity* oracle
 
@@ -62,34 +75,32 @@ flagged as sensitive. The gate would rank targets for the attacker.
 
 **Correction — the governing rule for this whole feature:**
 
-> The gate may be visible to the user. It must never vary by place.
+> A gated place must be indistinguishable from a place nobody has documented.
 
-A user learning *they* are gated reveals nothing. A user learning *which places* gate them
-reveals everything. This resolves the UX tension too: we can be entirely transparent
-("community features unlock as you take part") as long as the message is identical
-everywhere, and never mentions the place being looked at.
+*Corrected 2026-08-24 (Jess).* This originally read "the gate may be visible to the user; it
+must never vary by place", and proposed being transparent about the throttle. Both halves were
+wrong. Per-place variation is **fine** — it is what the feature *is* — because the camouflage
+is the empty state, and most addresses a prober pins genuinely are undocumented, so gated and
+undocumented places are the same picture. What must never be visible is the *gate itself*.
+
+Graded hiding survives this, with one constraint: every level must look like a state a real
+wiki could naturally be in. No floorplans reads as "nobody mapped it"; no comments as "nobody
+commented". So the vulnerability rating can still scale how much is withheld.
 
 It follows that unrated wikis must fail **closed**. If only rated wikis gate, the absence of
 votes is itself the signal.
 
-### R3. Two thresholds, only one of which is per-place
+### R3. ~~Two thresholds, only one of which is per-place~~ — superseded
 
-R2 forbids per-place variation; Jess's model calls for vulnerability to influence what is
-seen. Both hold, in this order:
+*Superseded 2026-08-24 by the corrected R1/R2 and by R14.* This section originally proposed a
+site-wide uniform `T_community` below which the community layer vanished for the account, plus
+a per-wiki `T_detail` above it. The uniform tier is dead: withdrawing the feature account-wide
+is exactly the "different behaviour" the corrected R1 rules out.
 
-1. **`T_community` — site-wide, uniform, not scaled by anything.** Below it, the entire
-   community layer is invisible: no wiki existence anywhere, no create affordance, no wiki
-   search results, no community photos, comments, markup or floorplans. Because it is
-   uniform, it reveals nothing about any particular place. **This is the tier that closes
-   the probing attack**, and it is the only one that has to be right for the feature to be
-   worth shipping.
-2. **`T_detail` — per-wiki, scaled by the vulnerability/danger composite.** Applies only
-   *above* `T_community`, where the viewer already knows the wiki exists, so varying it per
-   place leaks nothing new. This is where "the content they see is influenced by the wiki's
-   vulnerability rating" actually lives.
-
-`T_detail` may start equal to `T_community`, shipping one mechanism and turning the second
-on later.
+What survives is the *grading*. A single per-place decision — the viewer's standing against
+this wiki's vulnerability/danger composite — chooses how much of the community's contribution
+is withheld, and every level presents as a plausible organic wiki state. One threshold, applied
+per place, not two thresholds in sequence.
 
 ### R4. Prefer a low threshold plus a reveal budget over a high threshold
 
@@ -205,6 +216,42 @@ a handful of coarse, hard-to-forge signals answer well. Building all of the scor
 gating means the privacy hole stays open for the entire build.
 
 Reversed below: ledger with a small signal set, then the gate, then scorer enrichment.
+
+### R14. Filtering cannot reproduce the empty state — see the tells audit
+
+A six-channel audit of this branch (`reputation-gating-tells.md`, 82 verified findings) asked
+what can still distinguish a gated wiki from an undocumented place. Its conclusion is that the
+approach in this document — withhold community content from the existing wiki — **cannot work
+on this codebase**, for three independently sufficient reasons:
+
+1. **The empty state is a different row, not a filtered one.** A genuine first arrival *owns*
+   the wiki: `created_by` is them, the delete button renders, their stat vote *is* the
+   composite, their edit is the entire history, `wikis_created` increments, and the create
+   endpoint answers `created: true`. Reproducing that by filtering somebody else's row means
+   faking attribution, a composite, a delete affordance that must then appear to succeed, and
+   an achievement delta — each a lie the write path eventually contradicts.
+2. **Uniqueness makes the write path undeniable.** `Article.wiki` is a `OneToOneField`
+   (verified, `models/article/model.py:65`), so the gated viewer's "blank canvas" *is* the
+   community's row and the first save conflicts every time. Aliases and links are unique per
+   wiki. A collision cannot be made to look like a creation while the created thing also
+   persists.
+3. **Warm shared state and background-work asymmetry sit outside the request path.** Other
+   users already warmed `LocationCache`, set the coordinate-keyed slides ready-marker and ran
+   boundary generation — and `get_or_create_draft_for_location` short-circuits on
+   `existing_for_location` (verified, `models/wiki/queryset.py:178`), so a gated account gets
+   **no draft and no enrichment run of its own**. That is a data-model asymmetry, not a
+   serializer one.
+
+The audit's recommended shape is a **copy-on-write shadow wiki**: route a gated viewer's whole
+interaction, read *and* write, to a private wiki row on their own Location, created and
+enriched exactly as a first arrival's would be; merge it into the community row when they
+clear the threshold. Every affordance is then genuine rather than simulated, and classes A,
+D, E, F and G close by construction instead of by vigilance.
+
+**Two residual risks no design removes, to be stated in the doc rather than discovered later:**
+un-gating is itself an oracle (probe cheaply, earn in, diff), and an attacker can age or rent
+a second account. The honest success criterion is *raising the cost of bulk automated
+probing*, not a security boundary.
 
 ## What already exists (read this before designing anything below)
 
