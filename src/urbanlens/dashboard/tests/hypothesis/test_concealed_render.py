@@ -27,12 +27,17 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 
+#: Provider-supplied text a brand-new wiki would carry. Its *presence* is the
+#: only assertion in this file that fails if field resolution regresses.
+AUTOMATIC_BLURB = "AUTOMATIC-BLURB-relayed-from-a-provider"
+
 #: Planted in every field a stranger can write. Any of these reaching the page
 #: is a leak, and naming them individually is what makes the failure readable.
+#: Only `name` and `description` render in the page response - aliases and
+#: comments load over HTMX from their own endpoints, so those two are asserted
+#: in ConcealedPanelTests, not here (V7).
 CANARIES = {
     "description": "CANARY-DESCRIPTION-entry through the north fence",
-    "alias": "CANARY-ALIAS",
-    "comment": "CANARY-COMMENT-the door is unlocked",
     "name": "CANARY-NAME",
 }
 
@@ -49,6 +54,14 @@ class ConcealedRenderTests(TestCase):
         self.location = baker.make(Location, latitude=43.0731, longitude=-89.4012, official_name="Provider Name")
         self.wiki = baker.make(Wiki, location=self.location, name="Provider Name", officially_created=True)
 
+        # A real automatic write. Without one, every field falls to its model
+        # default and resolve_fields is never exercised - the whole file passed
+        # with it stubbed to return {}, which is how this went unnoticed.
+        # baker.make() runs outside a request or task, so its create rows record
+        # as SYSTEM, which qualifies for nobody.
+        with writing_as(WriteSource.AUTOMATIC):
+            Wiki.objects.filter(pk=self.wiki.pk).update(description=AUTOMATIC_BLURB)
+
         self.stranger = baker.make(User).profile
         with writing_as(WriteSource.USER, actor=self.stranger.pk):
             Wiki.objects.filter(pk=self.wiki.pk).update(
@@ -58,8 +71,13 @@ class ConcealedRenderTests(TestCase):
                 fences=SecurityLevel.SOME,
             )
 
-        baker.make("dashboard.WikiAlias", wiki=self.wiki, name=CANARIES["alias"], created_by=self.stranger)
-        baker.make("dashboard.Comment", wiki=self.wiki, pin=None, profile=self.stranger, text=CANARIES["comment"])
+        # Kept as fixtures so the wiki under test is a realistically populated
+        # one, but deliberately not in CANARIES: both load over HTMX from their
+        # own endpoints, so asserting them against the page response would be
+        # asserting an absence the page was never going to contain.
+        # ConcealedPanelTests covers them where they actually render.
+        baker.make("dashboard.WikiAlias", wiki=self.wiki, name="PANEL-ONLY-ALIAS", created_by=self.stranger)
+        baker.make("dashboard.Comment", wiki=self.wiki, pin=None, profile=self.stranger, text="PANEL-ONLY-COMMENT")
 
         self.viewer_user = baker.make(User)
         # A pin is what grants wiki access at all; it says nothing about
@@ -81,6 +99,17 @@ class ConcealedRenderTests(TestCase):
         leaked = sorted(label for label, canary in CANARIES.items() if canary in body)
         self.assertEqual(leaked, [], f"concealed wiki page leaked: {leaked}")
 
+    def test_provider_content_still_reaches_the_page(self) -> None:
+        """The one assertion here that fails if resolve_fields regresses.
+
+        Rule 2 is "show automatically fetched content", and until this existed
+        nothing tested it: every other assertion in this file is negative, so
+        stubbing resolve_fields to return {} left them all green while
+        concealing everything including the provider data a brand-new wiki
+        carries.
+        """
+        self.assertIn(AUTOMATIC_BLURB, self._render_concealed())
+
     def test_the_page_still_renders_the_automatic_name(self) -> None:
         """Positive control, and a tell in its own right.
 
@@ -97,14 +126,23 @@ class ConcealedRenderTests(TestCase):
 
         self.assertIn("Provider Name", body)
 
-    def test_security_indicators_read_as_unset(self) -> None:
-        """A place that reads as surveyed is what concealment exists to prevent."""
-        body = self._render_concealed()
+    def test_security_indicators_resolve_to_unknown(self) -> None:
+        """Rule 3, asserted on the values rather than on the rendered page.
 
-        self.assertNotIn(CANARIES["description"], body)
-        # The chips render the display label of each security level; "Some"
-        # against cameras or fences means the page is still reporting them.
-        self.assertNotIn("CANARY", body)
+        The About card suppresses itself entirely when a concealed wiki has no
+        description, dates or links, so the chips are unreachable from the
+        rendered HTML and an assertion there proves nothing. The checkable
+        claim is that every one of the eight resolves to exactly UNKNOWN -
+        `assertNotEqual(..., SOME)` would be satisfied by None, which renders a
+        chip, because the template shows anything that is not the literal
+        "unknown".
+        """
+        from urbanlens.dashboard.services.wiki.concealment import ALWAYS_UNSET, concealed_field_values
+
+        values = concealed_field_values(Wiki.objects.get(pk=self.wiki.pk), self.viewer_user.profile)
+
+        for field_name in ALWAYS_UNSET:
+            self.assertEqual(values[field_name], SecurityLevel.UNKNOWN, f"{field_name} must read as unset")
 
 
 class ConcealedHistoryTests(TestCase):
@@ -191,7 +229,16 @@ class ConcealedPanelTests(TestCase):
         self.assertNotIn("CANARY-ALIAS", self._get("location.wiki.aliases"))
 
     def test_the_comment_panel_omits_a_strangers_comment(self) -> None:
-        """Comments are where people write down how they got in."""
+        """Comments are where people write down how they got in.
+
+        The stranger needs a pin here, and that is not incidental. Their
+        ``comment_visibility`` defaults to ANYTHING_IN_COMMON, so without a
+        shared pin the *settings* gate hides the comment and concealment is
+        never reached - the assertion passes while proving nothing. Verified by
+        disabling concealment: with no pin the test still passed, with a pin it
+        fails as it should.
+        """
+        baker.make(Pin, profile=self.stranger, location=self.location, parent_pin=None)
         baker.make("dashboard.Comment", wiki=self.wiki, pin=None, profile=self.stranger, text="CANARY-COMMENT")
 
         self.assertNotIn("CANARY-COMMENT", self._get("location.wiki.comments"))
@@ -213,6 +260,11 @@ class ConcealedMediaTests(TestCase):
         self.stranger = baker.make(User).profile
         self.viewer_user = baker.make(User)
         baker.make(Pin, profile=self.viewer_user.profile, location=self.location, parent_pin=None)
+        # The stranger needs a pin too. photo_upload_visibility defaults to
+        # ANYTHING_IN_COMMON, so without one visible_to drops their upload
+        # before conceal_rows is reached and the assertion below passes while
+        # testing nothing - the same defect the comment test had.
+        baker.make(Pin, profile=self.stranger, location=self.location, parent_pin=None)
         self.slug = self.location.slug or str(self.location.uuid)
 
     def _get(self, route: str) -> str:
@@ -262,7 +314,7 @@ class ConcealedMediaTests(TestCase):
         baker.make(
             Image,
             wiki=self.wiki,
-            profile=self.viewer_user.profile,
+            profile=self.stranger,
             source=ImageSource.WIKIMEDIA,
             media_type=MediaKind.PHOTO,
             image="pin_images/PROVIDER-OK.png",
@@ -278,8 +330,67 @@ class ConcealedMediaTests(TestCase):
 
         baker.make(CustomLayer, parent_wiki=self.wiki, name="CANARY-LAYER", profile=self.stranger)
 
+        # Through _get, which asserts 200 - inlining the request meant a 302 to
+        # login, a 404 or a 500 all satisfied the assertion.
+        self.assertNotIn("CANARY-LAYER", self._get("location.wiki"))
+
+
+class FriendVisibilityTests(TestCase):
+    """Rule 5 at render level: a friend's contribution must still arrive.
+
+    Every other assertion in this file is negative, so a bug that concealed too
+    much would be invisible to the whole suite. That is not hypothetical - both
+    the alias and link panels re-derive the viewer as
+    ``getattr(request.user, "profile", None)`` rather than using the profile
+    ``resolve_visible_wiki`` already returned, and if that ever yields None the
+    viewer silently loses their own and their friends' rows with every test
+    still green.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = baker.make(Location, latitude=42.3601, longitude=-71.0589, official_name="Provider Name")
+        self.wiki = baker.make(Wiki, location=self.location, name="Provider Name", officially_created=True)
+        self.viewer_user = baker.make(User)
+        self.friend = baker.make(User).profile
+        baker.make(Pin, profile=self.viewer_user.profile, location=self.location, parent_pin=None)
+        baker.make(Pin, profile=self.friend, location=self.location, parent_pin=None)
+        baker.make(
+            "dashboard.Friendship",
+            from_profile=self.viewer_user.profile,
+            to_profile=self.friend,
+            status="Accepted",
+        )
+        self.slug = self.location.slug or str(self.location.uuid)
+
+    def _get(self, route: str) -> str:
         self.client.force_login(self.viewer_user)
         with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
-            response = self.client.get(reverse("location.wiki", kwargs={"location_slug": self.slug}))
+            response = self.client.get(reverse(route, kwargs={"location_slug": self.slug}))
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
 
-        self.assertNotIn("CANARY-LAYER", response.content.decode())
+    def test_a_friends_alias_still_reaches_the_panel(self) -> None:
+        """"I put a load of stuff on the wiki" has to remain true."""
+        from urbanlens.dashboard.models.aliases.model import AliasSource, WikiAlias
+
+        baker.make(WikiAlias, wiki=self.wiki, name="FRIEND-ALIAS", source=AliasSource.USER, created_by=self.friend)
+
+        self.assertIn("FRIEND-ALIAS", self._get("location.wiki.aliases"))
+
+    def test_a_friends_comment_still_reaches_the_panel(self) -> None:
+        """The case the friend clause exists for."""
+        baker.make("dashboard.Comment", wiki=self.wiki, pin=None, profile=self.friend, text="FRIEND-COMMENT")
+
+        self.assertIn("FRIEND-COMMENT", self._get("location.wiki.comments"))
+
+    def test_a_friends_field_edit_still_resolves(self) -> None:
+        """Field values, not just rows."""
+        from urbanlens.dashboard.services.wiki.concealment import concealed_field_values
+
+        with writing_as(WriteSource.USER, actor=self.friend.pk):
+            Wiki.objects.filter(pk=self.wiki.pk).update(description="FRIEND-WROTE-THIS")
+
+        values = concealed_field_values(Wiki.objects.get(pk=self.wiki.pk), self.viewer_user.profile)
+
+        self.assertEqual(values["description"], "FRIEND-WROTE-THIS")

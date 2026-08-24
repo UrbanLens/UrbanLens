@@ -181,10 +181,33 @@ class AggregateConcealmentTests(TestCase):
         for _ in range(4):
             WikiStatVote.objects.cast(self.wiki, baker.make(User).profile, WikiStatField.VULNERABILITY, 5)
 
-        composite = WikiStatVote.objects.composite(self.wiki, WikiStatField.VULNERABILITY, viewer_conceals=True)
+        composite = WikiStatVote.objects.composite(self.wiki, WikiStatField.VULNERABILITY, viewer_conceals=True, viewer=self.viewer)
 
         self.assertIsNone(composite.rounded)
         self.assertIsNone(composite.exact)
+        self.assertEqual(composite.count, 0)
+
+    def test_a_concealed_composite_still_reflects_the_viewers_own_vote(self) -> None:
+        """The subtle half, and the one the branch was written for.
+
+        Returning a flatly empty composite is its own tell: the page still
+        renders "Your vote" from my_vote, so a concealed viewer who votes would
+        see their stars filled beside a Community row that stays empty forever.
+        A fresh wiki does not behave that way - there the sole voter's value
+        *is* the composite - so one vote would be a reliable discriminator.
+
+        Without passing `viewer`, the branch exits on its None guard and this
+        goes untested, which is what the previous version of this test did.
+        """
+        from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField, WikiStatVote
+
+        for _ in range(4):
+            WikiStatVote.objects.cast(self.wiki, baker.make(User).profile, WikiStatField.VULNERABILITY, 5)
+        WikiStatVote.objects.cast(self.wiki, self.viewer, WikiStatField.VULNERABILITY, 2)
+
+        composite = WikiStatVote.objects.composite(self.wiki, WikiStatField.VULNERABILITY, viewer_conceals=True, viewer=self.viewer)
+
+        self.assertEqual(composite.rounded, 2, "the viewer's own vote, not the community's 5s")
         self.assertEqual(composite.count, 0)
 
     def test_an_unconcealed_stat_composite_still_reports(self) -> None:
@@ -347,5 +370,6 @@ class RelatedRowConcealmentTests(TestCase):
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 
         baker.make(Trip)
+        self.assertEqual(Trip.objects.count(), 1, "fixture must exist, or the assertion below is vacuous")
 
         self.assertEqual(conceal_rows(Trip.objects.all(), self.viewer).count(), 0)
