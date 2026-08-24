@@ -230,7 +230,7 @@ def _record_fields(model: type[Model], pk: Any, values: dict[str, Any]) -> None:
             raise
 
 
-def _concrete_field(model: type[Model], field_name: str) -> Field | None:
+def concrete_field(model: type[Model], field_name: str) -> Field | None:
     """Return a versioned field's definition, or None if it is not a real column.
 
     ``_meta.get_field`` also returns reverse relations, which have no
@@ -249,7 +249,7 @@ def _serialise(model: type[Model], field_name: str, value: Any) -> str:
     inheriting the existing revert path's bug of assigning a stringified value
     straight back onto a typed field.
     """
-    field = _concrete_field(model, field_name)
+    field = concrete_field(model, field_name)
     if field is not None and field.is_relation:
         return str(getattr(value, "pk", value))
     return str(value)
@@ -304,7 +304,7 @@ def resolve_fields(
         if row.is_null:
             resolved[row.field_name] = None
             continue
-        field = _concrete_field(model, row.field_name)
+        field = concrete_field(model, row.field_name)
         if field is None:
             continue
         # A relation stores its pk; everything else goes back through the

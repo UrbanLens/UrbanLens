@@ -4,7 +4,7 @@ from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, SecurityL
 from urbanlens.dashboard.models.abstract.model import DashboardModel, FrontendDashboardModel, PublicDashboardModel
 from urbanlens.dashboard.models.abstract.queryset import DashboardManager, DashboardQuerySet, FrontendDashboardManager, FrontendDashboardQuerySet, PublicDashboardManager, PublicDashboardQuerySet
 from urbanlens.dashboard.models.abstract.security import SecurityModel
-from urbanlens.dashboard.models.abstract.versioned import AbstractFieldRevision, VersionedModel, VersionedQuerySet, resolve_fields
+from urbanlens.dashboard.models.abstract.versioned import AbstractFieldRevision, VersionedModel, VersionedQuerySet, concrete_field, resolve_fields
 from urbanlens.dashboard.models.abstract.versioning import WriteSource, bind_write_source, unversioned, writing_as
 
 # Imported last: this reaches the labels package, whose querysets subclass the
