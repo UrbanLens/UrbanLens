@@ -476,9 +476,11 @@ funnelling refactor above. Against that it gives concealment for free at read ti
 substrate the merge work needs (R15), a real "view wiki at this revision" feature, and a
 provenance record that does not have to be inferred.
 
-**Not scoped here.** The generic form — one revision log serving wikis, articles, pins and
-floorplans — is the obvious next question and should be answered before the schema is written,
-not after.
+**Now its own design.** The generic form, the enforcement mechanism and the storage shape are
+in `versioned-content.md` — it outgrew this document, and concealment is only its first
+consumer. Three rulings from Jess landed there: generalise it from the start rather than
+building it wiki-first; get as close to a guarantee as possible that every write is logged; and
+do not store a full snapshot per edit forever.
 
 ## What already exists (read this before designing anything below)
 
