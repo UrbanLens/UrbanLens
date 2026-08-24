@@ -304,6 +304,55 @@ Two cases the design should be held to, in Jess's framing:
    converge on similar states. Not fully guaranteed, and accepted as such: the goal is to curb
    the behaviour, not to prove a bound.
 
+### R16. The concealment specification (Jess, 2026-08-24) — this is the design
+
+Supersedes R1's "resolve as absent", R3's tiers, and R14 entirely. **The goal, in Jess's
+words:**
+
+> Make "users have gone to this place and edited this wiki" indistinguishable from "no users
+> have gone to this place or edited this wiki".
+
+Everything else is in service of that sentence. In particular, a concealed wiki must **not**
+pretend not to exist: a wiki row is created automatically for every place, so absence is
+itself a tell.
+
+> The wiki should look like it exists in a state that it would plausibly have had when it was
+> first created.
+
+**The rules:**
+
+1. **Hide user-contributed content.**
+2. **Show automatically fetched content** — provider and enrichment data (Google, Wikipedia,
+   REData, weather, imagery, geocoding). It is public information the site relays, and a
+   brand-new wiki would already carry it.
+3. **Always unset security indicators**, whether they came from a user or an automatic source.
+4. **Always hide all markup maps and map markup.**
+5. Assess every other piece of information on the wiki against the goal.
+
+The viewer's own content is never concealed from them, as everywhere else in the app.
+
+**Consequence to resolve before building — the unclaimed-place baseline.** Rules 1-5 describe
+a wiki that *renders*, bare. But an unclaimed place does not render one today: a background
+draft exists and `WikiManager.get_for_location` deliberately treats
+`officially_created=False` as "no wiki", so the pin hero shows "Create Community Wiki" and
+`GET /wikis/<slug>/` is a 404 (verified `models/wiki/queryset.py:131`,
+`services/wiki/wiki_access.py:388`). A concealed wiki that renders bare would therefore be
+distinguishable from a place nobody has been to — the opposite of the goal.
+
+Two ways to close it, and they are a product decision rather than an implementation detail
+because both change what every user sees:
+
+- **(a) Surface drafts.** Every place renders a bare wiki; most are empty. Concealed and
+  never-visited then look identical by construction, and no create-path work is needed. This
+  matches "wikis are automatically created for every place" most directly, and is the more
+  robust of the two. It does mean the "Create Community Wiki" affordance changes meaning
+  across the whole app.
+- **(b) Conceal to the unclaimed state.** A concealed wiki presents as "Create Community
+  Wiki". Nothing changes for other places, but the create path then has to accept a click on
+  a wiki that already exists without revealing it — `claim_for_location` returns
+  `(wiki, False)` for an already-official wiki, so the outcome is workable but the
+  `created:false` signal and the missing `created_by`/`wikis_created` need handling.
+
 ## What already exists (read this before designing anything below)
 
 A 2026-08-21 survey found most of the "we should build X" asks in the source voice memo already
