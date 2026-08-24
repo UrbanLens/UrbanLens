@@ -75,6 +75,41 @@ function scatter(base: number): number {
     return base + (Math.random() * 2 - 1) * COORDINATE_SPREAD_DEGREES;
 }
 
+/**
+ * Attempts a throttled request makes before it is allowed to fail.
+ *
+ * The external API caps a credential at 60 writes a minute
+ * (`external_api_burst`), and a test run is the burstiest client it will ever
+ * have: every spec that needs a pin creates one, in parallel, on one key. That
+ * is not a defect in either side - a real client is expected to honour a 429 -
+ * so the suite honours it too rather than pretending the limit is not there.
+ *
+ * Three attempts covers a burst window. It deliberately does not cover the
+ * *sustained* ceiling (300 writes an hour): if that is exhausted the wait is
+ * tens of minutes, and the right answer is to run the suite less often or
+ * provision a second account, not to sit in a retry loop.
+ */
+const THROTTLE_ATTEMPTS = 3;
+
+/** Longest single backoff honoured, in milliseconds. */
+const MAX_THROTTLE_WAIT_MS = 35_000;
+
+/** Fallback wait when the response says nothing useful about timing. */
+const DEFAULT_THROTTLE_WAIT_MS = 5_000;
+
+/** Pulls the advertised delay out of a 429, in milliseconds. */
+async function throttleWaitMs(response: APIResponse): Promise<number> {
+    const header = response.headers()["retry-after"];
+    if (header && /^\d+$/.test(header.trim())) {
+        return Number(header.trim()) * 1000;
+    }
+    // DRF's body carries it when the header does not:
+    // {"error": "Request was throttled. Expected available in 3 seconds."}
+    const body = await response.text();
+    const match = /available in (\d+)\s*second/i.exec(body);
+    return match?.[1] ? Number(match[1]) * 1000 : DEFAULT_THROTTLE_WAIT_MS;
+}
+
 export class ApiError extends Error {
     constructor(
         readonly method: string,
@@ -107,24 +142,46 @@ export class ApiClient {
         return this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {};
     }
 
+    /**
+     * Runs a request, waiting out a 429 rather than reporting it as a failure.
+     *
+     * Every call goes through here, so no spec has to think about throttling.
+     * A 429 that survives {@link THROTTLE_ATTEMPTS} is returned as-is: the
+     * caller then fails on the status it actually got, with the API's own
+     * explanation in the body, which is what a genuinely exhausted quota should
+     * look like.
+     */
+    private async send(attempt: () => Promise<APIResponse>): Promise<APIResponse> {
+        let response = await attempt();
+        for (let remaining = THROTTLE_ATTEMPTS; remaining > 0 && response.status() === 429; remaining -= 1) {
+            const wait = await throttleWaitMs(response);
+            if (wait > MAX_THROTTLE_WAIT_MS) {
+                return response;
+            }
+            await new Promise((resolve) => setTimeout(resolve, wait));
+            response = await attempt();
+        }
+        return response;
+    }
+
     async get(path: string, params?: Record<string, string | number | boolean>): Promise<APIResponse> {
-        return this.request.get(apiUrl(path), { headers: this.authHeaders(), params });
+        return this.send(() => this.request.get(apiUrl(path), { headers: this.authHeaders(), params }));
     }
 
     async post(path: string, data?: unknown): Promise<APIResponse> {
-        return this.request.post(apiUrl(path), { headers: this.authHeaders(), data: data ?? {} });
+        return this.send(() => this.request.post(apiUrl(path), { headers: this.authHeaders(), data: data ?? {} }));
     }
 
     async patch(path: string, data?: unknown): Promise<APIResponse> {
-        return this.request.patch(apiUrl(path), { headers: this.authHeaders(), data: data ?? {} });
+        return this.send(() => this.request.patch(apiUrl(path), { headers: this.authHeaders(), data: data ?? {} }));
     }
 
     async put(path: string, data?: unknown): Promise<APIResponse> {
-        return this.request.put(apiUrl(path), { headers: this.authHeaders(), data: data ?? {} });
+        return this.send(() => this.request.put(apiUrl(path), { headers: this.authHeaders(), data: data ?? {} }));
     }
 
     async delete(path: string): Promise<APIResponse> {
-        return this.request.delete(apiUrl(path), { headers: this.authHeaders() });
+        return this.send(() => this.request.delete(apiUrl(path), { headers: this.authHeaders() }));
     }
 
     /**

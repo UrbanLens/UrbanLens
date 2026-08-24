@@ -126,7 +126,27 @@ test.describe("narrow viewport", () => {
         const { overflow, offenders } = await page.evaluate(() => {
             const root = document.documentElement;
             const limit = root.clientWidth;
-            const culprits: string[] = [];
+
+            /**
+             * Whether anything above `element` clips horizontally.
+             *
+             * This is the whole difficulty. `getBoundingClientRect` reports an
+             * element's geometry as if nothing clipped it, so every map tile
+             * Leaflet draws past the edge of its own `overflow: hidden`
+             * container looks like an offender and none of them are. Reporting
+             * those buries the one element that really does widen the page.
+             */
+            const isClipped = (element: HTMLElement): boolean => {
+                for (let parent = element.parentElement; parent && parent !== root; parent = parent.parentElement) {
+                    const overflowX = window.getComputedStyle(parent).overflowX;
+                    if (overflowX === "hidden" || overflowX === "clip" || overflowX === "auto" || overflowX === "scroll") {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            const culprits: Array<{ depth: number; description: string }> = [];
             for (const element of Array.from(document.body.querySelectorAll<HTMLElement>("*"))) {
                 const box = element.getBoundingClientRect();
                 // Only elements that actually cross the right edge, and only
@@ -136,16 +156,26 @@ test.describe("narrow viewport", () => {
                     continue;
                 }
                 const style = window.getComputedStyle(element);
-                if (style.visibility === "hidden" || style.display === "none") {
+                if (style.visibility === "hidden" || style.display === "none" || isClipped(element)) {
                     continue;
+                }
+                let depth = 0;
+                for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+                    depth += 1;
                 }
                 const id = element.id ? `#${element.id}` : "";
                 const classes = typeof element.className === "string" && element.className ? `.${element.className.trim().split(/\s+/).slice(0, 3).join(".")}` : "";
-                culprits.push(`${element.tagName.toLowerCase()}${id}${classes} — right edge at ${Math.round(box.right)}px (viewport ${limit}px), width ${Math.round(box.width)}px`);
+                culprits.push({
+                    depth,
+                    description: `${element.tagName.toLowerCase()}${id}${classes} — right edge at ${Math.round(box.right)}px (viewport ${limit}px), width ${Math.round(box.width)}px`,
+                });
             }
-            // Deepest-first: an ancestor is usually only wide because a
-            // descendant is, so the last entries are the likeliest cause.
-            return { overflow: root.scrollWidth - root.clientWidth, offenders: culprits.slice(-8) };
+
+            // Shallowest first: the outermost unclipped element that crosses
+            // the edge is the one to change. Its descendants are usually just
+            // going along with it.
+            culprits.sort((a, b) => a.depth - b.depth);
+            return { overflow: root.scrollWidth - root.clientWidth, offenders: culprits.slice(0, 8).map((c) => c.description) };
         });
 
         expect(

@@ -201,7 +201,10 @@ export const env = {
     /** Runner tuning. Defaults are chosen for a shared staging box, not a laptop. */
     workers: readInteger("UL_E2E_WORKERS", 4),
     retries: readInteger("UL_E2E_RETRIES", 1),
-    testTimeoutMs: readInteger("UL_E2E_TIMEOUT_MS", 60_000),
+    // 90s rather than 60s because the API client waits out a 429 rather than
+    // failing on it, and one burst-limit wait can be ~30s. A test that needs
+    // two of those still has room.
+    testTimeoutMs: readInteger("UL_E2E_TIMEOUT_MS", 90_000),
     expectTimeoutMs: readInteger("UL_E2E_EXPECT_TIMEOUT_MS", 10_000),
     actionTimeoutMs: readInteger("UL_E2E_ACTION_TIMEOUT_MS", 15_000),
     navigationTimeoutMs: readInteger("UL_E2E_NAVIGATION_TIMEOUT_MS", 30_000),
