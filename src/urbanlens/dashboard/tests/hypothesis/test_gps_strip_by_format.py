@@ -1,26 +1,28 @@
-"""``strip_gps`` must scrub the stored file, for every format we accept and can rewrite.
+"""The EXIF strip must scrub the stored file, for every format we accept and can rewrite.
 
-A user who turns off "track pin visits" is telling the app not to keep location
-data derived from their photos. ``_process_photo_upload`` honours that in the
-database - it skips ``Image.latitude``/``longitude`` and pops ``GPSInfo`` from
-the ``exif_data`` snapshot - and asks ``downscale_stored_image`` to scrub the
-*file*, which is the copy that actually gets served.
+Stripping is unconditional now - a stored file is served to everyone who can
+reach the container it was contributed to, so the block comes off whatever the
+uploader's settings say, and the values live on the ``Image`` row instead. What
+"track pin visits" still governs is narrower: whether GPS is *recorded* on the
+row at all (``Image.latitude``/``longitude`` and the ``GPSInfo`` key in the
+``exif_data`` snapshot).
 
-Two formats silently ignored that request:
+The per-format coverage below predates that change and survives it unaltered,
+because two formats used to slip the strip for reasons that are still live:
 
 - **TIFF** - the strip was gated on ``img.info["exif"]``, but TIFF carries EXIF
   in its own native IFD and leaves that key unset, so a GPS-tagged TIFF was
-  never even examined. TIFF is squarely in scope; the codebase notes elsewhere
-  that "TIFFs, scanned PDFs and HEICs reach the gallery routinely".
+  never even examined. The current check reads ``getexif()`` as well for exactly
+  this reason. TIFF is squarely in scope; the codebase notes elsewhere that
+  "TIFFs, scanned PDFs and HEICs reach the gallery routinely".
 - **AVIF** - accepted on upload, carries a GPS IFD, and returned early as
   "not a processable format" *before* reaching the strip.
 
-Both are exercised end-to-end here: author a file that genuinely carries GPS,
-run the real function, and read the coordinates back off the bytes on disk.
-The fixture-validity assertion matters as much as the strip assertion - an
-authoring mistake that produced a GPS-less fixture would make every one of
-these pass while testing nothing, which is exactly what happened on the way to
-finding this.
+Both are exercised end-to-end: author a file that genuinely carries GPS, run the
+real function, and read the coordinates back off the bytes on disk. The
+fixture-validity assertion matters as much as the strip assertion - an authoring
+mistake that produced a GPS-less fixture would make every one of these pass while
+testing nothing, which is exactly what happened on the way to finding this.
 """
 
 from __future__ import annotations
@@ -80,7 +82,7 @@ class GpsStripByFormatTests(TestCase):
         image = baker.make(Image, image=None)
         image.image.save(f"gps.{ext}", ContentFile(_image_bytes_with_gps(fmt)), save=True)
 
-        downscale_stored_image(image, max_dimension=None, convert_webp=False, strip_gps=True)
+        downscale_stored_image(image, max_dimension=None, convert_webp=False)
 
         # downscale_stored_image leaves persisting image.image.name to its caller,
         # so read the in-memory field rather than a refreshed row still pointing
@@ -97,14 +99,19 @@ class GpsStripByFormatTests(TestCase):
     def test_gps_is_stripped_from_the_stored_file(self) -> None:
         leaked = [fmt for fmt, ext in _FORMATS if _has_gps(self._stored_bytes_after_strip(fmt, ext))]
 
-        self.assertEqual(leaked, [], "GPS coordinates survived strip_gps=True in the stored file")
+        self.assertEqual(leaked, [], "GPS coordinates survived the strip in the stored file")
 
-    def test_gps_is_left_alone_when_not_asked_for(self) -> None:
-        """The strip is opt-in: a user who tracks visits keeps their photo's GPS."""
+    def test_gps_goes_even_for_a_user_who_tracks_visits(self) -> None:
+        """There is no opt-out from the file strip - only from recording it on the row.
+
+        This asserted the opposite while the strip was opt-in. Keeping the
+        coordinates in the served bytes is not something a visit-tracking
+        preference should buy, and it was never what that preference described.
+        """
         image = baker.make(Image, image=None)
         image.image.save("keep.jpg", ContentFile(_image_bytes_with_gps("JPEG")), save=True)
 
-        downscale_stored_image(image, max_dimension=None, convert_webp=False, strip_gps=False)
+        downscale_stored_image(image, max_dimension=None, convert_webp=False)
 
         with image.image.open("rb") as handle:
-            self.assertTrue(_has_gps(handle.read()))
+            self.assertFalse(_has_gps(handle.read()))

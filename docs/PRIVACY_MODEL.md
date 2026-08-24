@@ -162,9 +162,12 @@ the sharer's own label.
    found while doing it: the strip was gated on the uploader's downscale policy, so a
    downscale-exempt subscriber kept the block entirely; and photos already in storage needed a
    scrub, which `manage.py strip_exif_from_stored_photos` does (`--dry-run` first).
-   **Encryption at rest is still outstanding** — it needs a field change and a migration.
-5. **`ocr_text` is a plain `TextField`** — derived text from a possibly-private photo, and
-   a plausible search-leak path. Not yet audited.
+   *Encryption at rest done 2026-08-24* — `EncryptedJSONField` and migration 0066, which also
+   moves the column from `jsonb` to `text`. See docs/DATA_ENCRYPTION.md.
+5. **`ocr_text` is a plain `TextField`** — derived text from a possibly-private photo.
+   *Audited 2026-08-24 (ruling 4): reachable only through `PhotoSearchProvider`, whose results
+   pass through `visible_to`.* Left unencrypted deliberately: unlike `exif_data` it is a search
+   field, and ciphertext does not match.
 6. **Existing profiles** predate the stricter photo default and still need migrating.
 7. **Nit:** `pin_sharing.py:217` sets `name_is_user_provided=True` when the name actually
    came from an official alias rather than from the sharer.

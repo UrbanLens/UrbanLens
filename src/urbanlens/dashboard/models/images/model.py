@@ -10,6 +10,7 @@ from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, C
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
+from urbanlens.dashboard.models.fields import EncryptedJSONField
 from urbanlens.dashboard.models.images.queryset import ImageManager
 
 if TYPE_CHECKING:
@@ -293,10 +294,17 @@ class Image(abstract.FrontendDashboardModel):
     # never retroactively push them over quota.
     quota_exempt_reason = CharField(max_length=20, blank=True, default="", choices=QuotaExemption.choices)
     # Full EXIF metadata captured from the original upload BEFORE any
-    # downscaling or format conversion, so nothing is lost if the stored file
-    # is re-encoded. Keys are human-readable tag names; values are
-    # JSON-sanitized (rationals/bytes stringified).
-    exif_data = JSONField(null=True, blank=True)
+    # downscaling or format conversion. Keys are human-readable tag names;
+    # values are JSON-sanitized (rationals/bytes stringified).
+    #
+    # Encrypted, and the only copy: the stored file has its EXIF removed on the
+    # way in (see services.media.images.downscale_stored_image), so this column
+    # holds what the photo no longer carries - camera make, model and serial,
+    # and, unless the uploader opted out of location, where the shot was taken.
+    # fail_soft because there is nothing to re-fetch it from: a key mismatch
+    # must degrade this one field rather than break every gallery that loads a
+    # photo row. Never filter on its contents; ciphertext does not compare.
+    exif_data = EncryptedJSONField(null=True, blank=True, fail_soft=True)
     # Extracted text for a document upload: the PDF's native text layer plus
     # OCR output from any embedded raster images (see services.media.documents).
     # Searched by the Media section's search box (labels__name, caption, etc.)
