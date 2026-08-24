@@ -187,3 +187,63 @@ def concealed_community_summary() -> dict[str, Any]:
         "first_pinned": None,
         "first_pinned_precision": "month",
     }
+
+
+#: How to tell, per related model, whether a row was contributed by a person
+#: and if so by whom.
+#:
+#: Recorded here as a table rather than as a rule each queryset re-states,
+#: because the failure mode this whole feature exists to avoid is a rule spelled
+#: out per call site and forgotten at one of them.
+#:
+#: The shape is uniform: a row is **automatic** when it has no actor, and
+#: **user-contributed** when it does. Two models need a second clause because
+#: their actor column means something other than authorship:
+#:
+#: - ``Image.profile`` is the *up-voter* on a materialised provider row, not the
+#:   photographer, so authorship is only meaningful when ``source == UPLOAD``.
+#: - ``WikiAlias`` carries its own ``source``, and the geocoder backfill writes
+#:   ``created_by=NULL`` with an official source.
+_ACTOR_FIELDS: dict[str, str] = {
+    "Comment": "profile_id",
+    "WikiAlias": "created_by_id",
+    "WikiLink": "created_by_id",
+    "WikiStatVote": "profile_id",
+    "Floorplan": "profile_id",
+    "MarkupMap": "profile_id",
+}
+
+
+def conceal_rows(queryset: Any, viewer: Profile | None) -> Any:
+    """Narrow a wiki-scoped queryset to what a concealed viewer may see.
+
+    Keeps rows nobody contributed (provider and enrichment data, which a
+    brand-new wiki would carry) and rows contributed by the viewer or one of
+    their friends. Drops everybody else's.
+
+    Args:
+        queryset: Rows already scoped to one wiki.
+        viewer: Who is looking, or None when signed out.
+
+    Returns:
+        The narrowed queryset. Unchanged when the model is not in
+        :data:`_ACTOR_FIELDS` and has no special case, so a caller cannot
+        silently get an unfiltered result for a model this does understand -
+        see the KeyError path.
+    """
+    from urbanlens.dashboard.models.images.model import Image, ImageSource
+
+    model_name = queryset.model.__name__
+    allowed = visible_actor_ids(viewer)
+
+    if queryset.model is Image:
+        # Provider rows stay: they are what a fresh wiki shows. Uploads stay
+        # only when the uploader is the viewer or a friend.
+        return queryset.filter(~Q(source=ImageSource.UPLOAD) | Q(profile_id__in=allowed))
+
+    actor_field = _ACTOR_FIELDS.get(model_name)
+    if actor_field is None:
+        logger.error("conceal_rows: no provenance rule for %s; refusing to guess", model_name)
+        return queryset.none()
+
+    return queryset.filter(Q(**{f"{actor_field}__isnull": True}) | Q(**{f"{actor_field}__in": allowed}))

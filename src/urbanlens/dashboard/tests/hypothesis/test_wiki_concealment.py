@@ -238,3 +238,98 @@ class InvertedTellTests(TestCase):
             context = boundary_vote_context(place, self.viewer)
 
         self.assertTrue(context["auto_open"])
+
+
+class RelatedRowConcealmentTests(TestCase):
+    """Rows, as opposed to fields: comments, photos, aliases, links."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.viewer = baker.make(User).profile
+        self.friend = baker.make(User).profile
+        self.stranger = baker.make(User).profile
+        baker.make(Friendship, from_profile=self.viewer, to_profile=self.friend, status=FriendshipStatus.ACCEPTED)
+
+    def test_comments_keep_yours_and_your_friends_and_drop_strangers(self) -> None:
+        """The general rule: a row with an actor is a contribution."""
+        from urbanlens.dashboard.models.comments.model import Comment
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        mine = baker.make(Comment, wiki=self.wiki, pin=None, profile=self.viewer)
+        theirs = baker.make(Comment, wiki=self.wiki, pin=None, profile=self.friend)
+        others = baker.make(Comment, wiki=self.wiki, pin=None, profile=self.stranger)
+
+        visible = conceal_rows(Comment.objects.filter(wiki=self.wiki), self.viewer)
+
+        self.assertIn(mine, visible)
+        self.assertIn(theirs, visible)
+        self.assertNotIn(others, visible)
+
+    def test_provider_photos_stay_and_strangers_uploads_go(self) -> None:
+        """Image.profile is the up-voter on a materialised provider row.
+
+        So authorship only means anything when source is UPLOAD - reading the
+        actor column alone would drop provider media a fresh wiki would show,
+        and credit a voter for somebody else's photograph.
+        """
+        from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        provider = baker.make(
+            Image,
+            wiki=self.wiki,
+            profile=self.stranger,
+            source=ImageSource.WIKIMEDIA,
+            media_type=MediaKind.PHOTO,
+            image="pin_images/p.png",
+        )
+        stranger_upload = baker.make(
+            Image,
+            wiki=self.wiki,
+            profile=self.stranger,
+            source=ImageSource.UPLOAD,
+            media_type=MediaKind.PHOTO,
+            image="pin_images/s.png",
+        )
+        friend_upload = baker.make(
+            Image,
+            wiki=self.wiki,
+            profile=self.friend,
+            source=ImageSource.UPLOAD,
+            media_type=MediaKind.PHOTO,
+            image="pin_images/f.png",
+        )
+
+        visible = conceal_rows(Image.objects.filter(wiki=self.wiki), self.viewer)
+
+        self.assertIn(provider, visible)
+        self.assertIn(friend_upload, visible)
+        self.assertNotIn(stranger_upload, visible)
+
+    def test_an_enrichment_written_alias_stays(self) -> None:
+        """The geocoder backfill writes created_by=NULL - that is not a person."""
+        from urbanlens.dashboard.models.aliases.model import WikiAlias
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        official = baker.make(WikiAlias, wiki=self.wiki, created_by=None)
+        community = baker.make(WikiAlias, wiki=self.wiki, created_by=self.stranger)
+
+        visible = conceal_rows(WikiAlias.objects.filter(wiki=self.wiki), self.viewer)
+
+        self.assertIn(official, visible)
+        self.assertNotIn(community, visible)
+
+    def test_an_unknown_model_returns_nothing_rather_than_everything(self) -> None:
+        """Failing closed is the only safe default for a concealment filter.
+
+        A model nobody has written a rule for must not quietly return every
+        row - that is the "one call site at a time" failure this table exists
+        to avoid, and it would fail silently and permissively.
+        """
+        from urbanlens.dashboard.models.trips.model import Trip
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        baker.make(Trip)
+
+        self.assertEqual(conceal_rows(Trip.objects.all(), self.viewer).count(), 0)
