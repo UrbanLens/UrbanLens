@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -1348,6 +1349,14 @@ class SavedFilterUpdateResponseSerializer(SavedFilterSerializer):
     lists_resynced = serializers.IntegerField(read_only=True)
 
 
+#: Schema for a count that is only present when ``?with_counts=true`` was
+#: passed. See where it is used, on ``LabelSerializer``.
+_OPTIONAL_COUNT_SCHEMA = {
+    "type": "integer",
+    "description": "Only present when the request passed `with_counts=true`; each count costs a correlated subquery per label.",
+}
+
+
 class LabelSerializer(serializers.Serializer):
     """One label visible to the caller, with their own customizations applied.
 
@@ -1382,8 +1391,24 @@ class LabelSerializer(serializers.Serializer):
     parent_uuids = serializers.SerializerMethodField()
     #: Present only when the caller asked for counts (``?with_counts=true``) -
     #: they cost a correlated subquery per label.
-    pin_count = serializers.IntegerField(read_only=True, required=False)
-    location_count = serializers.IntegerField(read_only=True, required=False)
+    #:
+    #: Deliberately **not** ``read_only``, which is what keeps them optional in
+    #: the published document. drf-spectacular adds any field carrying
+    #: ``readOnly`` to the component's ``required`` list no matter what
+    #: ``required`` says, and its only off-switch
+    #: (``COMPONENT_NO_READ_ONLY_REQUIRED``) is global - turning that on to fix
+    #: two fields would make every read-only field of every component optional,
+    #: so a client could no longer rely on ``uuid`` being present anywhere. The
+    #: schema previously demanded a key the response omits unless asked for, so
+    #: a generated client with a non-optional field could not parse an ordinary
+    #: label list.
+    #:
+    #: Dropping ``read_only`` costs nothing here: this serializer is
+    #: response-only (writes go through ``LabelWriteSerializer``), so nothing
+    #: ever parses input through it. Restore ``read_only=True`` if that changes,
+    #: and solve the required-ness another way.
+    pin_count = extend_schema_field(_OPTIONAL_COUNT_SCHEMA)(serializers.IntegerField(required=False))
+    location_count = extend_schema_field(_OPTIONAL_COUNT_SCHEMA)(serializers.IntegerField(required=False))
     created = serializers.DateTimeField(read_only=True)
     updated = serializers.DateTimeField(read_only=True)
 

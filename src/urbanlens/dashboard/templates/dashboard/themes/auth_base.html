@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html id="html-root">
+{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
+<html id="html-root" lang="{{ LANGUAGE_CODE|default:"en" }}">
 <head>
     <meta charset="utf-8">
     <title>{% block title %}UrbanLens{% endblock %}</title>

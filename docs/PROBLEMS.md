@@ -22,7 +22,7 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
-## OPEN 2026-08-24: the published OpenAPI document under-describes its own responses
+## ~~2026-08-24: the published OpenAPI document under-describes its own responses~~ - RESOLVED 2026-08-24
 
 Found by the new schemathesis suite (`tests/contract/`, `docs/CONTRACT_TESTS.md`)
 on its first run. Both are in the *published* contract, so both are paid for by
@@ -49,12 +49,29 @@ a drf-spectacular postprocessing hook, or `extend_schema(responses=...)` on the
 shared base view. Guarded by
 `TestDocumentShape::test_authenticated_operations_document_rejection`.
 
-Until (2) is fixed, the contract suite's `status_code_conformance` and
-`content_type_conformance` checks stay behind `UL_CONTRACT_STRICT=1` — on, they
-fire on almost every parameterised operation for a response that is *correct*,
-which is a hundred red tests carrying one piece of information.
+**Both fixed 2026-08-24.**
 
-## OPEN 2026-08-24: two endpoints return a different shape than they publish
+(1) became two view classes. `E2EEPasskeyWrapView` now defines only `post` and
+`E2EEPasskeyWrapItemView` only `delete`, over a shared `_E2EEPasskeyWrapBase`,
+so each `operationId` is claimed once. That also removed a **500**: `delete`
+took `credential_id` as a required positional while both URLs routed to the one
+view, so `DELETE /dashboard/e2ee/passkey-wrap/` (no id) raised `TypeError` out
+of the DRF dispatcher. `post` had been given a default precisely to avoid that;
+`delete` never was. Both combinations are now DRF's own 405. Guarded by
+`test_e2ee_passkey_unlock.py::PasskeyWrapEndpointTests::test_delete_without_a_credential_id_is_refused_not_a_crash`.
+
+(2) became `external_api.schema.document_error_responses`, a postprocessing
+hook: any operation declaring `security` documents 401 and 403, and any path
+carrying a parameter documents 404, all against a shared `ErrorResponse`
+component matching the `{"error": ...}` envelope the API actually returns. Done
+in one place because the omission was not per view. `setdefault` throughout, so
+a view that documents its own 401 keeps it.
+
+With those in, `UL_CONTRACT_STRICT=1` (status-code and content-type conformance)
+is worth trying again — it was held back only because the schema documented
+nothing but success.
+
+## ~~2026-08-24: two endpoints return a different shape than they publish~~ - RESOLVED 2026-08-24
 
 Also from the first schemathesis run, and worse than the documentation gaps
 above: these are cases where a generated client would be **wrong at runtime**,
@@ -76,8 +93,27 @@ required.** `location_count` is in the `Label` schema's `required` list and is
 absent from the serialized response. A client with a non-optional field there
 fails to parse a perfectly ordinary list of labels.
 
-Both are guarded by `test_operation_matches_its_schema` in `tests/contract/`, so
-whichever way each is fixed, the test goes green when the two agree.
+**Both fixed 2026-08-24, in the schema rather than the responses** — in each
+case the code was right and the declaration was wrong.
+
+`undo/` now declares `UndoHistorySerializer`, the envelope it actually returns.
+The envelope is the correct half: `omitted` is load-bearing, and flattening the
+response to match the old declaration would have removed a client's only signal
+that its credential is missing a domain-read scope.
+
+`labels/` keeps returning the counts only for `?with_counts=true`; the two
+fields are simply no longer marked required. The mechanism is worth knowing,
+because it will catch the next person: **drf-spectacular adds every field
+carrying `readOnly` to a component's `required` list regardless of
+`required=False`**, and its only off-switch, `COMPONENT_NO_READ_ONLY_REQUIRED`,
+is global — flipping it to fix two fields would make every read-only field of
+every component optional, so a client could no longer rely on `uuid` being
+present anywhere. Dropping `read_only=True` from just those two fields is safe
+because `LabelSerializer` is response-only (writes go through
+`LabelWriteSerializer`), and that is noted at the fields so the next person does
+not re-add it.
+
+The whole contract suite is green: **101 passed**.
 
 ## OPEN 2026-08-21: production REData 404s on `/api/v1/public-locations/` (and `/capabilities/`)
 
@@ -3855,7 +3891,10 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
-## OPEN 2026-08-23: four findings from the integration suite's first real run
+## PARTIALLY RESOLVED 2026-08-23: four findings from the integration suite's first real run
+
+**Status as of 2026-08-24: four of the five fixed; the map's horizontal overflow
+is the one still open.** Each fix is described inline below.
 
 Found by `tests/integration/` (see `docs/INTEGRATION_TESTS.md`) run against a dev-environment
 stack built from `feat/multi-site-health-probes`. Each is a true positive that the pytest suite
@@ -3870,12 +3909,26 @@ reader guesses which language to pronounce the page in. The fix is one attribute
 but the *value* is a decision - the app runs `gettext`, so `{% get_current_language %}` may be more
 correct than a hardcoded `en`.
 
+**FIXED 2026-08-24.** Both templates now carry `lang="{{ LANGUAGE_CODE|default:"en" }}"` from
+`{% get_current_language %}`, which follows the active translation rather than freezing English into
+the markup. Guarded in CI by `test_page_template_integrity.py::PageLanguageTests` - a static check
+on the template source, because neither property depends on rendering and the integration suite
+that found it runs by hand.
+
 **HTMX is loaded from a CDN with no subresource integrity.** `themes/base.html` loads
 `https://unpkg.com/htmx.org@1.9.11` with no `integrity`/`crossorigin`, while the jQuery and toastr
 tags immediately around it both have one. HTMX drives essentially every interaction in this
 application, so whoever controls that CDN response controls the app for every visitor. The
 stylesheets nearby (font-awesome, toastr's CSS) are also unpinned but are a much narrower problem;
 Google Fonts cannot be pinned at all, since it serves a different stylesheet per user agent.
+
+**FIXED 2026-08-24**, with `integrity="sha384-0gxUXCCR8yv9FM2b+U3FDbsKthCI66oH5IA9fHppQq9DDMHuMauqq1ZHBpJxQ0J0"`
+and `crossorigin="anonymous"` - computed from the bytes unpkg actually serves for that version
+(which redirects to `dist/htmx.min.js`, 48036 bytes), not guessed. **A stale hash blocks the script
+outright and the site stops responding**, so recompute it if the version ever moves.
+`test_page_template_integrity.py::SubresourceIntegrityTests` now asserts over *every* cross-origin
+`<script>` in both themes rather than that one URL, so the next unpinned tag fails too. Stylesheets
+stay out of scope for the reason given above.
 
 **A freshly created pin's detail page intermittently 404s two of its own panels.** Opening
 `/dashboard/map/pin/<slug>/` shortly after creating the pin sometimes fetches
@@ -3884,13 +3937,41 @@ a retry, so it is a race rather than a missing route. It is user-visible: `theme
 global `htmx:responseError` handler raises an error toast for every non-2xx HTMX response, so the
 user sees two error toasts on a pin they have just made.
 
-**The map page scrolls sideways at phone width.** At a 390px viewport, `/dashboard/map/`'s
-`document.documentElement.scrollWidth` exceeds its `clientWidth` by 40px.
+**DIAGNOSED AND FIXED 2026-08-24.** The route is fine; the *slug* moves. `tasks.py`'s
+`upgrade_placeholder_pin_names` sweep calls `Pin.refresh_placeholder_slug()`, which replaces a
+slug that still reads as a placeholder (`unnamed-location`, `dropped-pin`, ...) once the pin finally
+has a real name. A pin created moments ago is exactly that case: it is created unnamed, background
+enrichment names it, the sweep reslugs it - and the detail page the user is *already looking at* has
+the old slug baked into every HTMX panel URL it rendered. Those panels 404, and the global handler
+turns each into a toast.
 
-Two smaller deployment notes from the same run, neither a code defect:
+The sweep's own comment claimed "so no working link changes", which is true of links that are
+stored and false of a link that is open. It is a **legacy-data backfill** by its docstring, so the
+fix makes that literal: it now skips pins younger than `_RESLUG_MIN_AGE` (1 hour). The pin still
+heals, just after nobody is holding a page rendered before the rename. Guarded by
+`test_placeholder_slug_refresh.py::test_the_sweep_will_not_reslug_a_pin_somebody_may_be_looking_at`,
+plus a companion asserting the guard is a delay and not an exemption.
 
-- nginx answers with `Server: nginx/1.31.3`. A precise version is free reconnaissance; the fix is
-  `server_tokens off;` at whatever terminates TLS.
+Worth knowing for any future fix here: **there is no slug history**, and ~60 call sites resolve pins
+with a bare `get_object_or_404(Pin, slug=pin_slug, ...)`. Making an old slug keep working in general
+therefore needs a stored previous slug *and* a choke point, which is why the narrow age guard was
+preferred - it removes the observed race without a migration or a 60-site sweep.
+
+**The map page scrolls sideways at phone width. STILL OPEN.** At a 390px viewport,
+`/dashboard/map/`'s `document.documentElement.scrollWidth` exceeds its `clientWidth` by 40px.
+Not fixed here: pinning down an overflow means looking at the rendered box model, and guessing at
+SCSS without a browser produces plausible edits that do not fix it. Instead the *test* was upgraded
+to do the expensive half of the diagnosis - `specs/ui/navigation.spec.ts` now enumerates every
+visible element whose right edge crosses the viewport, innermost last, and prints them in the
+failure message. The next run names the culprit instead of the symptom.
+
+One smaller deployment note from the same run, not a code defect:
+
+- nginx answers with `Server: nginx/1.31.3`. A precise version is free reconnaissance.
+  **FIXED 2026-08-24**: `server_tokens off;` in `src/urbanlens/config/nginx/nginx.conf`'s `http`
+  block - the config is in this repo, not the infrastructure one, which the original note assumed.
+  It also drops the version from nginx's own error pages. Guarded by the integration suite's
+  `services › the server does not advertise what it is running`.
 - Colour-contrast violations are widespread (secondary text, the social sign-in buttons) and are
   real WCAG AA failures. The suite routes that one rule to advisory rather than failing - see
   `ADVISORY_RULES` in `tests/integration/lib/a11y.ts` - so that the accessibility project is not red

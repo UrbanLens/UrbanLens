@@ -116,7 +116,41 @@ test.describe("narrow viewport", () => {
 
         // A page that scrolls sideways on a phone is the single most common
         // responsive regression, and it is invisible at desktop width.
-        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-        expect(overflow, `the page overflows its viewport horizontally by ${overflow}px`).toBeLessThanOrEqual(1);
+        //
+        // The measurement also names the culprits. "The page is 40px too wide"
+        // sends whoever reads it back to a browser to find out which element
+        // did it, which is the expensive half of the job and the half a test
+        // run is in the best position to do: it is already standing in front of
+        // the rendered DOM. Reporting the offenders is what turns this from a
+        // notification into a diagnosis.
+        const { overflow, offenders } = await page.evaluate(() => {
+            const root = document.documentElement;
+            const limit = root.clientWidth;
+            const culprits: string[] = [];
+            for (const element of Array.from(document.body.querySelectorAll<HTMLElement>("*"))) {
+                const box = element.getBoundingClientRect();
+                // Only elements that actually cross the right edge, and only
+                // visible ones - a hidden off-canvas drawer is positioned out
+                // there on purpose and does not create a scrollbar.
+                if (box.right <= limit + 1 || box.width === 0 || box.height === 0) {
+                    continue;
+                }
+                const style = window.getComputedStyle(element);
+                if (style.visibility === "hidden" || style.display === "none") {
+                    continue;
+                }
+                const id = element.id ? `#${element.id}` : "";
+                const classes = typeof element.className === "string" && element.className ? `.${element.className.trim().split(/\s+/).slice(0, 3).join(".")}` : "";
+                culprits.push(`${element.tagName.toLowerCase()}${id}${classes} — right edge at ${Math.round(box.right)}px (viewport ${limit}px), width ${Math.round(box.width)}px`);
+            }
+            // Deepest-first: an ancestor is usually only wide because a
+            // descendant is, so the last entries are the likeliest cause.
+            return { overflow: root.scrollWidth - root.clientWidth, offenders: culprits.slice(-8) };
+        });
+
+        expect(
+            overflow,
+            `the page overflows its viewport horizontally by ${overflow}px.\nElements crossing the right edge (innermost last):\n  ${offenders.join("\n  ")}`,
+        ).toBeLessThanOrEqual(1);
     });
 });

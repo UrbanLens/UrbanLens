@@ -130,6 +130,74 @@ def preprocess_external_api_only(endpoints: list, **_kwargs) -> list:
     return [(path, path_regex, method, callback) for path, path_regex, method, callback in endpoints if path.startswith(PUBLISHED_SCHEMA_PREFIXES)]
 
 
+#: Component name for the shared error body.
+ERROR_SCHEMA_NAME = "ErrorResponse"
+
+#: The envelope every refusal actually uses. DRF's own body is ``{"detail": ...}``;
+#: ``external_api.mixins`` rewrites it, and a generated client that has to
+#: special-case which endpoints use which shape is a client that will get it
+#: wrong somewhere.
+_ERROR_COMPONENT = {
+    "type": "object",
+    "properties": {"error": {"type": "string", "description": "Human-readable reason the request was refused."}},
+    "required": ["error"],
+}
+
+#: HTTP methods an OpenAPI path item can carry. Everything else in a path item
+#: (``parameters``, ``summary``) is not an operation and must be skipped.
+_OPERATION_KEYS = frozenset({"get", "put", "post", "delete", "options", "head", "patch", "trace"})
+
+
+def _error_response(description: str) -> dict:
+    """One response entry pointing at the shared error component."""
+    return {"description": description, "content": {"application/json": {"schema": {"$ref": f"#/components/schemas/{ERROR_SCHEMA_NAME}"}}}}
+
+
+def document_error_responses(result: dict, generator, request, public) -> dict:
+    """Declare the refusals every operation can already produce.
+
+    The published document described only success. Every authenticated endpoint
+    returns 401 without credentials and 403 when the key's scopes do not cover
+    the call, and every endpoint addressed by a path parameter returns 404 for
+    an id that does not resolve - none of which appeared in the schema. A client
+    generated from it therefore had no branch for the most likely failures it
+    would ever meet, and a strict generated client treats an undeclared status
+    as a protocol violation rather than as "your token expired".
+
+    Done as a postprocessing hook rather than per view because the omission is
+    not per view: responses are not declared individually anywhere, so declaring
+    them individually would be ~284 edits that the next endpoint would forget.
+
+    ``setdefault`` throughout, so a view that documents its own 401 - with a
+    better description, or a different shape - keeps it.
+
+    Args:
+        result: The generated schema, mutated in place.
+        generator: drf-spectacular's generator (unused).
+        request: The request the schema is being generated for (unused).
+        public: Whether this is the public schema (unused).
+
+    Returns:
+        The schema, with error responses declared.
+    """
+    result.setdefault("components", {}).setdefault("schemas", {}).setdefault(ERROR_SCHEMA_NAME, _ERROR_COMPONENT)
+
+    for path, path_item in result.get("paths", {}).items():
+        # A templated segment is the only way an operation can be handed an
+        # identifier that does not resolve.
+        addressable = "{" in path
+        for method, operation in path_item.items():
+            if method.lower() not in _OPERATION_KEYS or not isinstance(operation, dict):
+                continue
+            responses = operation.setdefault("responses", {})
+            if operation.get("security"):
+                responses.setdefault("401", _error_response("Authentication credentials were missing or invalid."))
+                responses.setdefault("403", _error_response("The credential is valid but does not carry the scope this operation requires."))
+            if addressable:
+                responses.setdefault("404", _error_response("No such resource, or it is not visible to this caller."))
+    return result
+
+
 class ApiKeyAuthenticationScheme(OpenApiAuthenticationExtension):
     """Documents ``ApiKeyAuthentication`` in the generated OpenAPI schema.
 

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html id="html-root"{% if request.user.is_authenticated %}{% with tm=request.user.profile.theme_mode %}{% if tm == "dark" %} data-theme="dark"{% elif tm == "light" %} data-theme="light"{% endif %}{% endwith %}{% if not request.user.profile.show_hover_tooltips %} class="tooltips-disabled"{% endif %}{% endif %}>
+{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
+<html id="html-root" lang="{{ LANGUAGE_CODE|default:"en" }}"{% if request.user.is_authenticated %}{% with tm=request.user.profile.theme_mode %}{% if tm == "dark" %} data-theme="dark"{% elif tm == "light" %} data-theme="light"{% endif %}{% endwith %}{% if not request.user.profile.show_hover_tooltips %} class="tooltips-disabled"{% endif %}{% endif %}>
 
 <head>
     <meta charset="utf-8">
@@ -24,7 +25,12 @@
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}" />
 
     <!-- Compiled and minified JavaScript -->
-    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    {# Pinned like the jQuery and toastr tags above. HTMX drives essentially every
+       interaction here, so an unpinned CDN response is total control of the app for
+       every visitor. The hash is of unpkg's htmx.org@1.9.11 (which resolves to
+       dist/htmx.min.js, 48036 bytes) - recompute it if the version moves, because a
+       stale hash blocks the script entirely and the site stops responding. #}
+    <script src="https://unpkg.com/htmx.org@1.9.11" integrity="sha384-0gxUXCCR8yv9FM2b+U3FDbsKthCI66oH5IA9fHppQq9DDMHuMauqq1ZHBpJxQ0J0" crossorigin="anonymous"></script>
 
     <!--Let browser know website is optimized for mobile-->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
