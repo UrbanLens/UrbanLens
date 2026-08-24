@@ -95,7 +95,7 @@ def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None, *, conce
     return {
         "field": field,
         "my_vote": WikiStatVote.objects.my_vote(wiki, field, profile),
-        "composite": WikiStatVote.objects.composite(wiki, field, viewer_conceals=conceal),
+        "composite": WikiStatVote.objects.composite(wiki, field, viewer_conceals=conceal, viewer=profile),
         **WIKI_STAT_FIELD_META[field],
     }
 
@@ -132,7 +132,12 @@ class LocationWikiView(LoginRequiredMixin, View):
         # drift on the privacy rules (notably: first_pinned is suppressed
         # entirely while the pin count is too low to display).
         from urbanlens.dashboard.services.wiki.community_counts import wiki_community_summary
-        from urbanlens.dashboard.services.wiki.concealment import concealed_community_summary
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealed_community_summary
+
+        # Everything below reads field values through this rather than the live
+        # row. It delegates for anything not concealed, so the ordinary path is
+        # unchanged and the concealed one cannot forget a field.
+        shown = conceal_wiki(wiki, profile)
 
         community = concealed_community_summary() if conceal else wiki_community_summary(wiki, location)
         pin_count_display = {"is_low": community["pin_count_low"], "value": community["pin_count_approx"]}
@@ -180,7 +185,7 @@ class LocationWikiView(LoginRequiredMixin, View):
             request,
             "dashboard/pages/location/wiki.html",
             {
-                "wiki": wiki,
+                "wiki": shown,
                 "custom_layers": custom_layers,
                 "custom_layers_json": [layer.to_json() for layer in custom_layers],
                 "manage_layers_url": reverse("location.wiki.layers", args=[location.slug]),
@@ -199,11 +204,14 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "can_delete_wiki": wiki.can_be_deleted_by(profile),
                 "is_site_scope": site_scope.is_site_scope(wiki),
                 **scope_badge(wiki),
-                "wiki_comment_count": wiki.comments.count(),
+                # Counted over what this viewer can see, not over every row - a
+                # badge computed on the raw set announces the comments it is
+                # standing in front of.
+                "wiki_comment_count": (conceal_rows(wiki.comments.all(), profile) if conceal else wiki.comments.all()).count(),
                 "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
                 "wiki_stats": [_wiki_stat_context(wiki, field, profile, conceal=conceal) for field in WikiStatField.values],
-                "public_vote": public_vote_context(location, profile),
+                "public_vote": public_vote_context(location, profile, conceal=conceal),
                 "boundary_vote": boundary_vote_context(location.place, profile, conceal=conceal),
                 "user_pin": user_pin,
                 "other_locations": other_locations,
@@ -216,15 +224,19 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "markup_border_color": profile.markup_border_color,
                 "markup_border_opacity": profile.markup_border_opacity,
                 "security_level_choices": SecurityLevel.choices,
+                # Read from `shown`: these eight feed both the About-card chips
+                # and the always-rendered Suggest-edits prefill, so reading the
+                # live row here would put concealed values back on the page
+                # through a <select>.
                 "location_security_values": [
-                    ("fences", "Fences", wiki.fences),
-                    ("alarms", "Alarms", wiki.alarms),
-                    ("cameras", "Cameras", wiki.cameras),
-                    ("security", "Security", wiki.security),
-                    ("signs", "Signs", wiki.signs),
-                    ("vps", "VPS", wiki.vps),
-                    ("plywood", "Plywood", wiki.plywood),
-                    ("locked", "Locked", wiki.locked),
+                    ("fences", "Fences", shown.fences),
+                    ("alarms", "Alarms", shown.alarms),
+                    ("cameras", "Cameras", shown.cameras),
+                    ("security", "Security", shown.security),
+                    ("signs", "Signs", shown.signs),
+                    ("vps", "VPS", shown.vps),
+                    ("plywood", "Plywood", shown.plywood),
+                    ("locked", "Locked", shown.locked),
                 ],
                 "show_map_footer": True,
             },

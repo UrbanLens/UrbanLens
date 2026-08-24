@@ -304,6 +304,12 @@ def boundary_vote_context(place: Place | None, profile: Profile | None, *, conce
         ],
         "my_vote_id": my_vote_id,
         "has_votes": has_votes,
-        "has_consensus": has_consensus(place),
+        # Concealed viewers get False, not the real answer. has_consensus is
+        # True when the leader has weight and the runner-up has none, so the
+        # viewer's own vote alone makes it True - which means True *before* I
+        # voted says somebody else did, and False *after* I voted says a
+        # competing voter exists. Either reading defeats the concealment two
+        # lines above.
+        "has_consensus": False if conceal else has_consensus(place),
         "auto_open": not has_votes,
     }

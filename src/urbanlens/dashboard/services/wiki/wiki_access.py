@@ -254,6 +254,10 @@ def visible_wiki_location_ids(profile: Profile) -> set[int]:
     return direct_ids | set(Location.objects.filter(wiki__isnull=False, place__domain_root_id__in=domains).values_list("pk", flat=True))
 
 
+#: Instance attribute the per-request memoization hangs on.
+_CACHE_ATTR = "_ul_visible_wiki_location_ids"
+
+
 def visible_wiki_location_ids_cached(profile: Profile) -> set[int]:
     """:func:`visible_wiki_location_ids`, memoised on the profile instance.
 
@@ -273,10 +277,14 @@ def visible_wiki_location_ids_cached(profile: Profile) -> set[int]:
     Returns:
         Set of Location primary keys whose Wiki is visible to *profile*.
     """
-    cached = getattr(profile, "_ul_visible_wiki_location_ids", None)
+    cached = getattr(profile, _CACHE_ATTR, None)
     if cached is None:
         cached = visible_wiki_location_ids(profile)
-        profile._ul_visible_wiki_location_ids = cached  # noqa: SLF001
+        # setattr rather than a direct assignment: the attribute is not declared
+        # on Profile, and assigning it directly is an error django-stubs is
+        # right to flag. Memoizing on the instance is still the point - a
+        # Profile is loaded fresh per request, so the entry cannot outlive one.
+        setattr(profile, _CACHE_ATTR, cached)
     return cached
 
 

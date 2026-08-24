@@ -51,16 +51,18 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
         """Restrict to votes on the given stat field."""
         return self.filter(field=field)
 
-    def composite(self, wiki: Wiki, field: str, *, viewer_conceals: bool = False) -> WikiStatComposite:
+    def composite(self, wiki: Wiki, field: str, *, viewer_conceals: bool = False, viewer: Profile | None = None) -> WikiStatComposite:
         """Compute the community composite for ``field`` on ``wiki``.
 
         Args:
             wiki: The wiki whose votes to aggregate.
             field: One of :class:`WikiStatField`'s values.
-            viewer_conceals: When True, return the no-votes state. A wiki whose
-                danger and vulnerability have been rated is self-evidently one
-                people have surveyed, so the ratings are among the first things
-                concealment has to withhold.
+            viewer_conceals: When True, aggregate over the viewer's own vote
+                alone. A wiki whose danger and vulnerability have been rated is
+                self-evidently one people have surveyed, so other people's
+                ratings are among the first things concealment must withhold.
+            viewer: The viewing profile, needed to find their own vote when
+                concealing.
 
         Returns:
             The composite average and a privacy-fuzzed vote count for that
@@ -71,12 +73,25 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
             for a wiki's pinned-user count, reused here unchanged.
         """
         if viewer_conceals:
-            # The no-votes state, without reaching approximate_pin_count. Its
-            # cache is keyed only on the id passed in, with no viewer, so a
-            # concealed viewer arriving second would be handed the value an
-            # ordinary viewer populated - see
-            # services.wiki.concealment.concealed_community_summary.
-            return WikiStatComposite(rounded=None, exact=None, count=0)
+            # Aggregate over the viewer's own ballot only, and never reach
+            # approximate_pin_count. Two reasons, and the second is the subtle
+            # one.
+            #
+            # The fuzz caches its value for a day keyed only on the id passed
+            # in, with no viewer in the key, so a concealed viewer arriving
+            # after an ordinary one would be handed the number that viewer
+            # populated.
+            #
+            # And returning a flatly empty composite is its own tell: the page
+            # still renders "Your vote" from my_vote, so a viewer who votes
+            # would see their own stars filled beside a Community row that
+            # stays empty forever. An unconcealed fresh wiki does not behave
+            # that way - the sole voter's value *is* the composite there - so
+            # one vote would be a reliable discriminator.
+            own = self.for_wiki(wiki).for_field(field).filter(profile=viewer).first() if viewer is not None else None
+            if own is None:
+                return WikiStatComposite(rounded=None, exact=None, count=0)
+            return WikiStatComposite(rounded=own.value, exact=float(own.value), count=0)
 
         agg = self.for_wiki(wiki).for_field(field).aggregate(avg=Avg("value"), count=Count("id"))
         count = agg["count"] or 0

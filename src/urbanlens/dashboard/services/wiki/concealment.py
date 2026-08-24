@@ -134,6 +134,17 @@ def concealed_field_values(wiki: Wiki, viewer: Profile | None) -> dict[str, Any]
         # written it. Either way fall back to the field's default rather than
         # the live value - the live value is precisely what is being concealed.
         values[name] = field.get_default()
+
+    # `name` has no model default, so the fallback above yields "". No wiki ever
+    # looks like that: every creation path names it from the location
+    # (WikiManager.claim_for_location, get_or_create_draft_for_location). A
+    # blank title would announce the concealment as loudly as a leak would, so
+    # reproduce what a brand-new wiki would have shown.
+    if not values.get("name"):
+        from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
+
+        location = wiki.location
+        values["name"] = (location.official_name if location else "") or WikiModel.objects._placeholder_name(location)  # noqa: SLF001
     return values
 
 
@@ -218,7 +229,6 @@ def concealed_community_summary() -> dict[str, Any]:
 #:   ``created_by=NULL`` with an official source.
 _ACTOR_FIELDS: dict[str, str] = {
     "Comment": "profile_id",
-    "WikiAlias": "created_by_id",
     "WikiLink": "created_by_id",
     "WikiStatVote": "profile_id",
     "Floorplan": "profile_id",
@@ -253,9 +263,91 @@ def conceal_rows(queryset: Any, viewer: Profile | None) -> Any:
         # only when the uploader is the viewer or a friend.
         return queryset.filter(~Q(source=ImageSource.UPLOAD) | Q(profile_id__in=allowed))
 
+    if model_name == "WikiAlias":
+        # `created_by` is the intuitive discriminator here and it is wrong: it
+        # is NULL for the geocoder backfill *and* for the alias Wiki.save()
+        # auto-creates on every rename, so filtering on it would re-expose a
+        # name concealed as a field, as an alias row. The durable answer is the
+        # alias's own source.
+        from urbanlens.dashboard.models.aliases.model import AliasSource
+
+        return queryset.filter(~Q(source=AliasSource.USER) | Q(created_by_id__in=allowed))
+
     actor_field = _ACTOR_FIELDS.get(model_name)
     if actor_field is None:
         logger.error("conceal_rows: no provenance rule for %s; refusing to guess", model_name)
         return queryset.none()
 
     return queryset.filter(Q(**{f"{actor_field}__isnull": True}) | Q(**{f"{actor_field}__in": allowed}))
+
+
+class ConcealedWiki:
+    """A read-only stand-in for a Wiki, showing only what a viewer may see.
+
+    Everything not overridden delegates to the real row, so a template or
+    serializer can use this wherever it used a ``Wiki`` and pick up concealment
+    without knowing it exists. That is the point: the tells audit found 82 ways
+    a concealed wiki gives itself away, and nearly every class behind them comes
+    from a rule applied at some call sites and forgotten at others.
+
+    **Writes raise.** Not tidiness - it is the mechanism that turns a
+    write-through-the-proxy bug into a loud failure instead of a silent one that
+    persists a concealed value back over the real row.
+    """
+
+    def __init__(self, wiki: Wiki, viewer: Profile | None) -> None:
+        """Wrap *wiki* as *viewer* is entitled to see it.
+
+        Args:
+            wiki: The real row.
+            viewer: Who is looking, or None when signed out.
+        """
+        self._wiki = wiki
+        self._viewer = viewer
+        self._values = concealed_field_values(wiki, viewer)
+
+    def __getattr__(self, name: str) -> Any:
+        """Return a concealed field value, or delegate to the real row."""
+        values = object.__getattribute__(self, "_values")
+        if name in values:
+            return values[name]
+
+        wiki = object.__getattribute__(self, "_wiki")
+        # get_<field>_display() reads the model's own attribute, so delegating
+        # it would hand back the real value's label for a field we just
+        # concealed - the security chips render through exactly this.
+        if name.startswith("get_") and name.endswith("_display"):
+            field_name = name[len("get_") : -len("_display")]
+            if field_name in values:
+                field = concrete_field(type(wiki), field_name)
+                choices = dict(getattr(field, "choices", None) or [])
+                return lambda: choices.get(values[field_name], values[field_name])
+        return getattr(wiki, name)
+
+    def __str__(self) -> str:
+        return str(self.name)
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Refuse. A concealed projection must never be written back."""
+        raise TypeError("ConcealedWiki is read-only; write to the real Wiki row")
+
+    def delete(self, *args: Any, **kwargs: Any) -> None:
+        """Refuse, for the same reason as :meth:`save`."""
+        raise TypeError("ConcealedWiki is read-only; delete the real Wiki row")
+
+
+def conceal_wiki(wiki: Wiki, viewer: Profile | None) -> Wiki | ConcealedWiki:
+    """Return *wiki* itself, or a concealed stand-in when the viewer is gated.
+
+    The one call every renderer should make. Returning the real row unchanged
+    when concealment is off keeps the ordinary path free of both a wrapper and
+    a branch at each call site.
+
+    Args:
+        wiki: The row being rendered.
+        viewer: Who is looking.
+
+    Returns:
+        The real wiki, or a read-only concealed view of it.
+    """
+    return ConcealedWiki(wiki, viewer) if concealment_active(wiki, viewer) else wiki

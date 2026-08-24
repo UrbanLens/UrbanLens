@@ -307,18 +307,34 @@ class RelatedRowConcealmentTests(TestCase):
         self.assertIn(friend_upload, visible)
         self.assertNotIn(stranger_upload, visible)
 
-    def test_an_enrichment_written_alias_stays(self) -> None:
-        """The geocoder backfill writes created_by=NULL - that is not a person."""
-        from urbanlens.dashboard.models.aliases.model import WikiAlias
+    def test_a_provider_alias_stays_and_a_strangers_goes(self) -> None:
+        """Provenance is the alias's own source, not created_by."""
+        from urbanlens.dashboard.models.aliases.model import AliasSource, WikiAlias
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 
-        official = baker.make(WikiAlias, wiki=self.wiki, created_by=None)
-        community = baker.make(WikiAlias, wiki=self.wiki, created_by=self.stranger)
+        provider = baker.make(WikiAlias, wiki=self.wiki, source="google_places", created_by=None)
+        community = baker.make(WikiAlias, wiki=self.wiki, source=AliasSource.USER, created_by=self.stranger)
 
         visible = conceal_rows(WikiAlias.objects.filter(wiki=self.wiki), self.viewer)
 
-        self.assertIn(official, visible)
+        self.assertIn(provider, visible)
         self.assertNotIn(community, visible)
+
+    def test_a_rename_created_alias_is_concealed_despite_a_null_author(self) -> None:
+        """The exact case created_by gets wrong, and why the spec rejected it.
+
+        Wiki.save() auto-creates an alias on every rename with created_by unset,
+        so filtering on the author would re-expose - as an alias row - the very
+        name concealed as a field.
+        """
+        from urbanlens.dashboard.models.aliases.model import AliasSource, WikiAlias
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        from_rename = baker.make(WikiAlias, wiki=self.wiki, name="A Stranger's Name For It", source=AliasSource.USER, created_by=None)
+
+        visible = conceal_rows(WikiAlias.objects.filter(wiki=self.wiki), self.viewer)
+
+        self.assertNotIn(from_rename, visible)
 
     def test_an_unknown_model_returns_nothing_rather_than_everything(self) -> None:
         """Failing closed is the only safe default for a concealment filter.

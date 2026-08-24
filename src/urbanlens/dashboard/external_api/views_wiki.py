@@ -335,7 +335,9 @@ class WikiStatVoteApiView(WikiApiView):
 
     def _payload(self, wiki: Any, field: str, profile: Profile) -> dict[str, Any]:
         """Build the composite/own-vote response body for one stat field."""
-        composite = WikiStatVote.objects.composite(wiki, field)
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+        composite = WikiStatVote.objects.composite(wiki, field, viewer_conceals=concealment_active(wiki, profile), viewer=profile)
         return {
             "rounded": composite.rounded,
             "exact": composite.exact,
