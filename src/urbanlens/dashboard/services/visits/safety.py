@@ -1618,6 +1618,40 @@ def find_community_wiki(latitude: float | Decimal | None, longitude: float | Dec
     return location.wiki if location else None
 
 
+def find_visible_community_wiki(latitude: float | Decimal | None, longitude: float | Decimal | None, profile: Profile | None) -> Wiki | None:
+    """Return the community Wiki covering a point, but only if *profile* may already see it.
+
+    :func:`find_community_wiki` answers "is there a wiki here?" for any
+    coordinate, which is the right question for an escalation deciding where to
+    post - that runs on the system's behalf, not a viewer's. It is the wrong
+    question to answer *to a user*: wiki access is a place-domain rule
+    (``services.wiki.wiki_access``), and every user-facing route deliberately
+    404s rather than 403s so the absence of a page cannot be told apart from
+    the absence of permission to see it. A fragment that names a wiki for
+    whatever coordinate the caller typed hands back exactly the inference the
+    rest of the model spends its effort denying.
+
+    Args:
+        latitude: WGS-84 latitude of the destination, or None if unset.
+        longitude: WGS-84 longitude of the destination, or None if unset.
+        profile: The viewer. None (a signed-out safety contact) reaches no wiki
+            through this path, since the place-domain rule is defined over a
+            profile's pins.
+
+    Returns:
+        The matching Wiki when the viewer can already reach it, else None -
+        the same answer as for a coordinate no wiki covers.
+    """
+    if profile is None:
+        return None
+    wiki = find_community_wiki(latitude, longitude)
+    if wiki is None or wiki.location is None:
+        return None
+    from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
+
+    return wiki if location_visible_to(wiki.location, profile) else None
+
+
 def wiki_notify_stats(wiki: Wiki) -> tuple[datetime.datetime | None, int]:
     """Return the wiki-notify toggle's stats: last edit time and editor count.
 

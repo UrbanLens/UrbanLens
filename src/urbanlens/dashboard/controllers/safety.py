@@ -42,6 +42,7 @@ from urbanlens.dashboard.services.visits.safety import (
     default_contacts_as_input,
     delete_checkin,
     find_community_wiki,
+    find_visible_community_wiki,
     get_active_checkin,
     get_active_checkins,
     get_or_create_preference,
@@ -689,7 +690,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         checkin.ensure_slug()
         _ensure_markup_map(checkin, owner)
         contacts = list(checkin.contacts.all())
-        destination_wiki = find_community_wiki(checkin.destination_latitude, checkin.destination_longitude)
+        destination_wiki = find_visible_community_wiki(checkin.destination_latitude, checkin.destination_longitude, owner)
         last_wiki_edit, wiki_editor_count = wiki_notify_stats(destination_wiki) if destination_wiki else (None, 0)
         return render(
             request,
@@ -763,6 +764,11 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             "dashboard/pages/safety/community_status.html",
             {
                 "checkin": checkin,
+                # Deliberately unscoped: gated on wiki_notified_at, so the
+                # check-in has already been posted to this wiki and the
+                # association is its own content rather than a lookup. This
+                # page also serves signed-out contacts, who have no profile to
+                # scope by.
                 "wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude) if checkin.wiki_notified_at and not is_archived else None,
                 "map_attribution": _MAP_ATTRIBUTION,
                 "viewer_is_contact": is_contact,
@@ -1217,7 +1223,9 @@ class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
             lng = float(request.GET.get("destination_longitude", ""))
         except ValueError:
             lat = lng = None
-        wiki = find_community_wiki(lat, lng)
+        # Scoped to the viewer: this reads coordinates straight from the query
+        # string, so the unscoped lookup made it a wiki enumerator.
+        wiki = find_visible_community_wiki(lat, lng, request.user.profile)
         last_wiki_edit, wiki_editor_count = wiki_notify_stats(wiki) if wiki else (None, 0)
         return render(
             request,
