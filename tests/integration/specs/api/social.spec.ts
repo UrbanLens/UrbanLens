@@ -33,12 +33,18 @@ interface FriendFeed {
 }
 
 /**
- * Statuses the feed will filter by.
+ * The statuses an unsettled request can be in, from either seat.
  *
- * Capitalised, and that matters: `?status=pending` is not the same string and
- * quietly returns the unfiltered feed. The values come from the schema's enum.
+ * The schema's enum carries both `Pending` and `Requested`, and the pair is the
+ * point: one row is described differently depending on which end is asking, so
+ * the sender's outstanding request and the recipient's incoming one are not the
+ * same string. Searching both is what keeps this about the friendship rather
+ * than about which label the API picked for which direction.
+ *
+ * Capitalisation matters too - `?status=pending` is a different string and
+ * quietly returns the unfiltered feed rather than an error.
  */
-const PENDING = "Pending";
+const UNSETTLED = ["Pending", "Requested"] as const;
 
 /** The calling credential's own profile. */
 async function whoami(api: ApiClient): Promise<{ uuid: string; slug: string }> {
@@ -53,23 +59,50 @@ function entryFor(feed: FriendFeed, profileUuid: string): FriendEntry | undefine
 /**
  * The feed, optionally narrowed to one status.
  *
- * The default feed does not include incoming requests - a pending request is
- * not yet a friendship - so anything looking for one has to ask for it.
+ * The default feed does not include an unsettled request - one is not yet a
+ * friendship - so anything looking for one has to ask for it.
  */
 async function friends(api: ApiClient, status?: string): Promise<FriendFeed> {
     return api.json<FriendFeed>("get", "friends/", status ? { status } : undefined);
 }
 
-/** Removes any friendship between the two accounts, ignoring "there wasn't one". */
-async function unfriend(api: ApiClient, profileUuid: string): Promise<void> {
-    await api.delete(`friends/${profileUuid}/`);
+/** Looks for a relationship with `profileUuid` in the settled feed and both unsettled ones. */
+async function findRelationship(api: ApiClient, profileUuid: string): Promise<FriendEntry | undefined> {
+    const found = entryFor(await friends(api), profileUuid);
+    if (found) {
+        return found;
+    }
+    for (const status of UNSETTLED) {
+        const entry = entryFor(await friends(api, status), profileUuid);
+        if (entry) {
+            return entry;
+        }
+    }
+    return undefined;
 }
 
-test.describe("friendships", () => {
+/**
+ * Returns the pair to having no relationship at all, from both sides.
+ *
+ * Both sides, because a row left in any state - declined, blocked, still
+ * pending - makes the next `POST friends/` answer 400 "Could not send that
+ * friend request", which reads as a broken endpoint rather than as leftover
+ * state from the previous test.
+ */
+async function resetFriendship(api: ApiClient, secondaryApi: ApiClient, meUuid: string, themUuid: string): Promise<void> {
+    await api.delete(`friends/${themUuid}/`);
+    await secondaryApi.delete(`friends/${meUuid}/`);
+}
+
+// Serial, because every test in this file manipulates the *one* relationship
+// between the suite's two fixed accounts. Run in parallel they take it from
+// each other, and the failures that produces ("Could not send that friend
+// request") look like endpoint faults rather than like two tests sharing a row.
+test.describe.serial("friendships", () => {
     ifSecondaryAccount()("a request is visible to the recipient, and acceptance to both", async ({ api, secondaryApi }) => {
         const me = await whoami(api);
         const them = await whoami(secondaryApi);
-        await unfriend(api, them.uuid);
+        await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
 
         const requested = await api.post("friends/", { profile_uuid: them.uuid, message: "Sent by the UrbanLens integration suite." });
         expect(requested.status(), `sending a friend request answered ${requested.status()}: ${(await requested.text()).slice(0, 200)}`).toBeLessThan(300);
@@ -77,11 +110,8 @@ test.describe("friendships", () => {
         try {
             // The recipient's view. A request that only the sender can see is
             // the failure mode worth catching: it looks sent and never arrives.
-            const inbound = await friends(secondaryApi, PENDING);
-            expect(
-                entryFor(inbound, me.uuid),
-                `the recipient's pending feed does not mention the requester. Entries: ${JSON.stringify(inbound.results).slice(0, 300)}`,
-            ).toBeTruthy();
+            const inbound = await findRelationship(secondaryApi, me.uuid);
+            expect(inbound, "the recipient cannot see the request in any feed - settled or unsettled - so it was sent to nobody").toBeTruthy();
 
             const accepted = await secondaryApi.post(`friends/${me.uuid}/accept/`);
             expect(accepted.status(), `accepting answered ${accepted.status()}: ${(await accepted.text()).slice(0, 200)}`).toBeLessThan(300);
@@ -93,14 +123,14 @@ test.describe("friendships", () => {
             expect(entry, "after acceptance the requester's feed no longer lists the friend").toBeTruthy();
             expect(String(entry?.status ?? "").toLowerCase(), `the friendship reads as "${entry?.status}" to the requester after being accepted`).toContain("accept");
         } finally {
-            await unfriend(api, them.uuid);
+            await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
         }
     });
 
     ifSecondaryAccount()("a rejected request does not become a friendship", async ({ api, secondaryApi }) => {
         const me = await whoami(api);
         const them = await whoami(secondaryApi);
-        await unfriend(api, them.uuid);
+        await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
 
         const sent = await api.post("friends/", { profile_uuid: them.uuid });
         expect(sent.status(), `sending answered ${sent.status()}: ${(await sent.text()).slice(0, 200)}`).toBeLessThan(300);
@@ -116,15 +146,16 @@ test.describe("friendships", () => {
             expect(String(entry.status ?? "").toLowerCase(), `a rejected request reads as "${entry.status}"`).not.toContain("accept");
         }
 
-        await unfriend(api, them.uuid);
+        await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
     });
 
     ifSecondaryAccount()("a second request to the same person does not create a second friendship", async ({ api, secondaryApi }) => {
         // A retrying offline client, or an impatient user. Two rows for one
         // relationship is how a "friend" ends up listed twice and how one of
         // the two silently stops being honoured.
+        const me = await whoami(api);
         const them = await whoami(secondaryApi);
-        await unfriend(api, them.uuid);
+        await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
 
         const first = await api.post("friends/", { profile_uuid: them.uuid });
         expect(first.status()).toBeLessThan(300);
@@ -137,7 +168,7 @@ test.describe("friendships", () => {
             const matches = outbound.results.filter((entry) => entry.profile?.uuid === them.uuid);
             expect(matches.length, `the same person appears ${matches.length} times in the friend feed`).toBeLessThanOrEqual(1);
         } finally {
-            await unfriend(api, them.uuid);
+            await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
         }
     });
 
