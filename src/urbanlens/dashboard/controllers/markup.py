@@ -281,7 +281,7 @@ def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | Non
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if location is None or not location_visible_to(location, profile):
             return None
-        return Wiki.objects.filter(location=location).first()
+        return Wiki.objects.official().filter(location=location).first()
     return None
 
 

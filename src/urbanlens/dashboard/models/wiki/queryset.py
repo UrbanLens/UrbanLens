@@ -26,6 +26,22 @@ class WikiQuerySet(abstract.PublicDashboardQuerySet):
     filtering use LocationQuerySet; for per-user filtering use PinQuerySet.
     """
 
+    def official(self) -> Self:
+        """Return only wikis that user-facing surfaces are allowed to know exist.
+
+        Every pinned Location gets a background draft (see
+        ``tasks.ensure_draft_wiki_for_location``) so enrichment has somewhere to
+        write before anyone clicks "Create Wiki", which means a row existing
+        says only "somebody pinned this". ``Wiki.officially_created`` is what
+        separates the two, and its contract is that a draft must read as "no
+        wiki exists yet" *everywhere*.
+
+        That contract was enforced one call site at a time, and several missed
+        it. Prefer this scope over spelling the filter out again, so a surface
+        added later inherits the rule instead of having to remember it.
+        """
+        return self.filter(officially_created=True)
+
     def root_wikis(self) -> Self:
         """Return only top-level wikis (excludes child wikis)."""
         return self.filter(parent_wiki__isnull=True)

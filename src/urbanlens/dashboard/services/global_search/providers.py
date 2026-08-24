@@ -864,7 +864,7 @@ class CommentSearchProvider(SearchProvider):
 
         comment_qs = (
             Comment.objects.filter(
-                Q(profile=profile) | Q(pin__profile=profile) | Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile)),
+                Q(profile=profile) | Q(pin__profile=profile) | Q(wiki__officially_created=True, wiki__location_id__in=visible_wiki_location_ids_cached(profile)),
             )
             .filter(term_filter(parsed.terms, ["text"]))
             .filter(date_range_filter("created", parsed))

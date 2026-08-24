@@ -67,7 +67,7 @@ def eligible_wikis(profile: Profile, *, exclude_wiki_ids: Iterable[int] = ()) ->
         A Wiki queryset, unevaluated.
     """
     visited_location_ids = Pin.objects.by_profile(profile).visited().values_list("location_id", flat=True)
-    candidates = Wiki.objects.filter(location_id__in=visited_location_ids)
+    candidates = Wiki.objects.official().filter(location_id__in=visited_location_ids)
     exclude_ids = list(exclude_wiki_ids)
     if exclude_ids:
         candidates = candidates.exclude(pk__in=exclude_ids)
@@ -99,7 +99,7 @@ def eligible_wikis_for_all(profiles: Iterable[Profile], *, exclude_wiki_ids: Ite
     if not profiles:
         return Wiki.objects.none()
 
-    candidates = Wiki.objects.all()
+    candidates = Wiki.objects.official()
     for profile in profiles:
         visited_location_ids = Pin.objects.by_profile(profile).visited().values_list("location_id", flat=True)
         candidates = candidates.filter(location_id__in=visited_location_ids)
