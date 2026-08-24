@@ -60,15 +60,25 @@ def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     Direct messages are handled before this gate: sending is itself the consent,
     so ``MediaGateView`` admits the two participants without consulting settings.
 
+    A trip is the other audience-shaped container: putting a pin on a shared
+    itinerary shows its photos to the trip, so every member reaches them and the
+    uploader's setting then decides which of them actually sees each one.
+
     Args:
         viewer_profile: The profile doing the looking.
 
     Returns:
         A ``Q`` matching photos in containers within this viewer's reach.
     """
+    from urbanlens.dashboard.models.trips.model import TripActivity, TripMembership
     from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
 
-    return Q(wiki__location_id__in=visible_wiki_location_ids(viewer_profile))
+    # Subquery rather than a join through ``pin__trip_activities``: a pin can be
+    # an activity on several of the viewer's trips, and the join would repeat the
+    # image row once per activity in every gallery that calls this.
+    activity_pin_ids = TripActivity.objects.filter(trip_id__in=TripMembership.objects.trip_ids_for(viewer_profile)).values_list("pin_id", flat=True)
+
+    return Q(wiki__location_id__in=visible_wiki_location_ids(viewer_profile)) | Q(pin_id__in=activity_pin_ids)
 
 
 class ImageQuerySet(abstract.FrontendDashboardQuerySet):

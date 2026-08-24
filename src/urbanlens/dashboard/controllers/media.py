@@ -140,49 +140,22 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
             logger.info("Denied media request for %s by profile %s", rel_path, profile.pk)
             raise Http404
 
-        if getattr(settings, "MEDIA_X_ACCEL", False):
-            # Hand the actual byte-serving back to nginx: the internal-only
-            # /_protected_media/ location aliases the media volume. Content-Type
-            # is deliberately left unset so nginx derives it from the file
-            # extension via its own mime.types.
-            response = HttpResponse()
-            del response["Content-Type"]
-            response["X-Accel-Redirect"] = settings.MEDIA_X_ACCEL_PREFIX + quote(rel_path)
-            return mark_private_media(response)
-
-        return mark_private_media(FileResponse(full_path.open("rb")))  # lgtm[py/path-injection] -- already traversal-checked by _resolve_media_path below
+        return serve_media_file(rel_path, full_path)
 
     def _resolve_media_path(self, path: str) -> tuple[str, Path]:
-        """Resolve the requested path and verify it stays inside ``MEDIA_ROOT``.
+        """Delegate to :func:`resolve_media_path`.
 
         Args:
             path: The untrusted relative path from the URL.
 
         Returns:
-            Tuple of (normalized POSIX-style path relative to ``MEDIA_ROOT``,
-            resolved absolute ``Path`` of the file on disk).
+            Tuple of (path relative to ``MEDIA_ROOT``, absolute ``Path``).
 
         Raises:
-            Http404: The path is empty, contains a NUL byte, resolves outside
-                ``MEDIA_ROOT`` (traversal attempt), or isn't an existing file.
+            Http404: See :func:`resolve_media_path`.
         """
-        if not path or "\x00" in path:
-            raise Http404
+        return resolve_media_path(path)
 
-        media_root = Path(settings.MEDIA_ROOT).resolve()
-        try:
-            full_path = (media_root / path).resolve()  # lgtm[py/path-injection] -- checked against media_root just below, before any use
-        except (OSError, ValueError) as exc:
-            raise Http404 from exc
-
-        if full_path == media_root or not full_path.is_relative_to(media_root):
-            logger.warning("Blocked media path traversal attempt: %r", path)
-            raise Http404
-
-        if not full_path.is_file():  # lgtm[py/path-injection] -- reached only after the is_relative_to(media_root) check above
-            raise Http404
-
-        return full_path.relative_to(media_root).as_posix(), full_path
 
     def _authorized(self, profile: Profile, rel_path: str) -> bool:
         """Decide whether *profile* may fetch the file at *rel_path*.
@@ -309,3 +282,64 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         # Orphan file - no surviving comment row to derive an owner from.
         # TODO(media-auth): authenticated-only fallback; see "Authenticated media gate - residual per-family risk" in docs/PROBLEMS.md.
         return True
+
+def resolve_media_path(path: str) -> tuple[str, Path]:
+    """Resolve a media path and verify it stays inside ``MEDIA_ROOT``.
+
+    Args:
+        path: The untrusted relative path.
+
+    Returns:
+        Tuple of (normalized POSIX-style path relative to ``MEDIA_ROOT``,
+        resolved absolute ``Path`` of the file on disk).
+
+    Raises:
+        Http404: The path is empty, contains a NUL byte, resolves outside
+            ``MEDIA_ROOT`` (traversal attempt), or isn't an existing file.
+    """
+    if not path or "\x00" in path:
+        raise Http404
+
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    try:
+        full_path = (media_root / path).resolve()  # lgtm[py/path-injection] -- checked against media_root just below, before any use
+    except (OSError, ValueError) as exc:
+        raise Http404 from exc
+
+    if full_path == media_root or not full_path.is_relative_to(media_root):
+        logger.warning("Blocked media path traversal attempt: %r", path)
+        raise Http404
+
+    if not full_path.is_file():  # lgtm[py/path-injection] -- reached only after the is_relative_to(media_root) check above
+        raise Http404
+
+    return full_path.relative_to(media_root).as_posix(), full_path
+
+
+def serve_media_file(rel_path: str, full_path: Path) -> HttpResponseBase:
+    """Serve one already-authorized media file.
+
+    Authorization is the caller's job - this only moves bytes. Split out so a
+    surface with its own credential (the safety contact portal authenticates by
+    magic-link token, not by login) can reuse the nginx hand-off instead of
+    reimplementing it.
+
+    Args:
+        rel_path: Path relative to ``MEDIA_ROOT``, already traversal-checked.
+        full_path: The resolved absolute path on disk.
+
+    Returns:
+        An ``X-Accel-Redirect`` response when nginx fronts the app, otherwise a
+        ``FileResponse`` streaming the file.
+    """
+    if getattr(settings, "MEDIA_X_ACCEL", False):
+        # Hand the actual byte-serving back to nginx: the internal-only
+        # /_protected_media/ location aliases the media volume. Content-Type
+        # is deliberately left unset so nginx derives it from the file
+        # extension via its own mime.types.
+        response = HttpResponse()
+        del response["Content-Type"]
+        response["X-Accel-Redirect"] = settings.MEDIA_X_ACCEL_PREFIX + quote(rel_path)
+        return mark_private_media(response)
+
+    return mark_private_media(FileResponse(full_path.open("rb")))  # lgtm[py/path-injection] -- already traversal-checked by resolve_media_path

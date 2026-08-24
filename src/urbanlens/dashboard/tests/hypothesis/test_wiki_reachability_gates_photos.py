@@ -114,3 +114,47 @@ class AnonymousViewersTests(WikiReachabilityTestCase):
         Profile.objects.filter(pk=self.owner.pk).update(photo_upload_visibility=VisibilityChoice.ANYONE)
 
         self.assertFalse(self._visible(photo, None), "the ANYONE setting leaked a photo to a signed-out visitor")
+
+
+class TripActivityPhotosTests(WikiReachabilityTestCase):
+    """A pin on a trip activity shares its photos with that trip's members.
+
+    Both gates apply here, unlike a check-in: adding a pin to a shared itinerary
+    puts its photos in front of an audience rather than a named person, so the
+    uploader's setting still decides which members of that audience see them.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+
+        self.member_user = baker.make(User)
+        self.member = self.member_user.profile
+        Profile.objects.filter(pk=self.member.pk).update(viewer_photo_filter=VisibilityChoice.ANYONE)
+        self.member.refresh_from_db()
+
+        self.trip = baker.make(Trip, creator=self.owner)
+        baker.make(TripActivity, trip=self.trip, pin=self.owner_far_pin)
+        baker.make(TripMembership, trip=self.trip, profile=self.member)
+
+        self.photo = self._pin_photo(self.owner_far_pin, "trip-activity")
+
+    def _pin_photo(self, pin: Pin, name: str) -> Image:
+        """A photo on the owner's pin, contributed to no wiki."""
+        result = upload_photo_for_owner(pin, self.owner, SimpleUploadedFile(f"{name}.jpg", b"not-a-real-jpeg", content_type="image/jpeg"), name)
+        assert isinstance(result, Image), f"fixture upload was rejected: {result}"
+        return result
+
+    def test_a_trip_member_can_see_a_photo_on_an_activity_pin(self) -> None:
+        self.assertTrue(self._visible(self.photo, self.member), "a trip member could not see the photos on the trip's own activity")
+
+    def test_somebody_not_on_the_trip_cannot(self) -> None:
+        """The viewer pins the same near place, so only trip membership differs."""
+        self.assertFalse(self._visible(self.photo, self.viewer), "a photo on a trip activity leaked to somebody not on the trip")
+
+    def test_the_uploaders_setting_still_gates_a_trip_member(self) -> None:
+        """Unlike a check-in, a trip is an audience - so the setting still filters it."""
+        Profile.objects.filter(pk=self.owner.pk).update(photo_upload_visibility=VisibilityChoice.FRIENDS)
+        self.owner.refresh_from_db()
+
+        self.assertFalse(self._visible(self.photo, self.member), "the uploader's setting stopped gating trip members")

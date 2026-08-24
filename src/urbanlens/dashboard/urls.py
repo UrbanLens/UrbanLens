@@ -1742,6 +1742,7 @@ urlpatterns = [
                 path("contact/<uuid:token>/mark-safe/", safety.SafetyContactMarkSafeView.as_view(), name="safety.contact.mark_safe"),
                 path("contact/<uuid:token>/opt-out/<str:scope>/", safety.SafetyContactOptOutView.as_view(), name="safety.contact.optout"),
                 path("contact/<uuid:token>/messages/", safety.SafetyCheckinMessageView.as_view(), name="safety.contact.messages"),
+                path("contact/<uuid:token>/photo/<int:image_id>/", safety.SafetyContactPhotoView.as_view(), name="safety.contact.photo"),
                 path("contact/<uuid:token>/markup/json/", markup.SafetyContactMarkupJsonView.as_view(), name="safety.contact.markup.json"),
                 path("<slug:checkin_slug>/", safety.SafetyCheckinDetailView.as_view(), name="safety.checkin.detail"),
                 path("<uuid:checkin_uuid>/cancel/", safety.SafetyCheckinCancelView.as_view(), name="safety.checkin.cancel"),

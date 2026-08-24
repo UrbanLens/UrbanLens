@@ -438,3 +438,78 @@ class SafetyCheckinMediaGateTests(TestCase):
         self.client.force_login(self.owner_user)
 
         self.assertEqual(self._fetch(), 200)
+
+
+class SafetyContactTokenPhotoTests(TestCase):
+    """A signed-out emergency contact can see the check-in's photos.
+
+    An emergency contact is frequently somebody with no account at all - that is
+    the point of the magic-link portal - so the login-gated media path can never
+    serve them. Reaching the check-in is the whole barrier: a valid token is the
+    credential, and it scopes to exactly one check-in's photos.
+    """
+
+    def setUp(self):
+        import datetime
+
+        from django.utils import timezone
+
+        self._media_root = tempfile.mkdtemp(prefix="ul_media_gate_token_")
+        self.addCleanup(shutil.rmtree, self._media_root, ignore_errors=True)
+        self._overrides = override_settings(MEDIA_ROOT=self._media_root, MEDIA_X_ACCEL=False)
+        self._overrides.enable()
+        self.addCleanup(self._overrides.disable)
+        (Path(self._media_root) / "pin_images").mkdir(parents=True)
+        (Path(self._media_root) / "pin_images" / "tok.png").write_bytes(_IMAGE_BYTES)
+        (Path(self._media_root) / "pin_images" / "other.png").write_bytes(_IMAGE_BYTES)
+
+        self.owner: Profile = _new_user().profile
+        self._now = timezone.now
+        self._delta = datetime.timedelta
+
+        self.checkin = self._checkin()
+        self.image = baker.make(Image, image="pin_images/tok.png", profile=self.owner, safety_checkin=self.checkin)
+        self.contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+
+    def _checkin(self):
+        return baker.make(
+            "dashboard.SafetyCheckin",
+            profile=self.owner,
+            title="Test hike",
+            checkin_by=self._now() + self._delta(hours=2),
+            grace_period=self._delta(hours=1),
+        )
+
+    def _url(self, token, image_id) -> str:
+        from django.urls import reverse
+
+        return reverse("safety.contact.photo", args=[token, image_id])
+
+    def test_a_signed_out_contact_can_fetch_the_photo(self):
+        response = self.client.get(self._url(self.contact.token, self.image.pk))
+
+        self.assertEqual(response.status_code, 200, "a valid magic-link token could not fetch the check-in's photo")
+        self.assertEqual(b"".join(response.streaming_content) if response.streaming else response.content, _IMAGE_BYTES)
+
+    def test_an_invalid_token_gets_nothing(self):
+        import uuid
+
+        response = self.client.get(self._url(uuid.uuid4(), self.image.pk))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_a_token_does_not_reach_another_checkins_photo(self):
+        """The token is scoped to its own check-in, not to check-in photos at large."""
+        other_image = baker.make(Image, image="pin_images/other.png", profile=self.owner, safety_checkin=self._checkin())
+
+        response = self.client.get(self._url(self.contact.token, other_image.pk))
+
+        self.assertEqual(response.status_code, 404, "a contact's token reached a photo on a different check-in")
+
+    def test_the_portal_lists_the_photo(self):
+        from django.urls import reverse
+
+        response = self.client.get(reverse("safety.contact.portal", args=[self.contact.token]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self._url(self.contact.token, self.image.pk))

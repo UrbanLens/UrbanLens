@@ -47,9 +47,9 @@ this?", and the container gate has to enumerate all seven:
 | `location` | not a share by itself | n/a |
 | `trip` (via activities) | trip members | **yes** |
 | `direct_message` | the recipient | **no — sending is consent** |
-| `safety_checkin` | the check-in's contacts and accepted partners | **no — naming is consent** ⚠️ |
-| `visit` | follows the visit's own visibility | **yes** |
-| `pin_suggestion` | the suggestion's recipient | **yes** |
+| `safety_checkin` | anyone who can see the check-in, **including signed-out token contacts** | **no** |
+| `visit` | owner only, as far as verified | n/a |
+| `pin_suggestion` | the suggestion's owner | n/a |
 
 > **Known gap.** `ImageQuerySet.visible_to` currently treats `wiki__isnull=False` as the
 > whole of "shared". That is simultaneously **too narrow** (a photo shared to a trip or a
@@ -98,6 +98,10 @@ friends qualify for every option except `NO_ONE`.
 | `read_receipt_visibility` | FRIENDS | read receipts |
 | `typing_indicator_visibility` | FRIENDS | typing indicator |
 | `common_pins_visibility` | FRIENDS | which specific pins you share with a viewer (**both** sides must allow) |
+
+`viewer_photo_filter` is **courtesy-only**. It is set by the *receiving* user about what they
+want shown to them, so it never grants sight of anything and never gates anyone else's access —
+its job is to stop unsolicited explicit images.
 
 `photo_upload_visibility` is a limit on **who, among people who can already reach the
 container, may see the photo**. It is *not* permission to publish a pin photo to a wiki.
@@ -182,26 +186,51 @@ gate's sizing input).
 
 ---
 
-## 7. Questions
+## 7. Rulings (Jess, 2026-08-24)
 
-1. **Trips.** A pin photo attached to a trip activity — visible to trip members subject to
-   `photo_upload_visibility`, or does joining a trip imply broader consent?
-2. **Check-ins.** ⚠️ **I made a call here — please confirm or reverse it.** Applying
-   `photo_upload_visibility` to check-in photos denied them to accepted safety partners, who
-   are strangers to the uploader by design; the gallery listed the photos and the byte path
-   404'd them, so partners saw broken images on the page that exists to tell them somebody is
-   overdue. I treated a check-in like a DM — naming one person *is* the consent — on the
-   strength of the setting's own help text, "who can see the photos you upload to
-   **locations**". A check-in photo is not a location contribution. The alternative reading
-   (your "DMs are the only exception") would instead require the gallery to apply `visible_to`
-   so partners consistently see nothing. **Visits** are still unruled and unverified.
-3. **`viewer_photo_filter` blurs.** Is blurring meant as a *courtesy* filter over photos the
-   viewer is already entitled to, or does it ever *grant* sight of something? (I read it as
-   courtesy-only.)
-4. **Derived data.** Do `ocr_text`, `checksum`, and `redata_confidence` inherit the privacy
-   of the photo they came from? Checksums in particular allow cross-user existence probes.
-5. **Location vs Pin.** `Location` is shared, canonical data. Is any field on it ever
-   private, or is the whole model public-by-construction once a user can see the location?
-6. **Deletion.** When a user deletes a photo that has been contributed to a wiki, does the
-   wiki keep it (community contribution) or lose it (owner's right to withdraw)?
-7. **Earned credit.** Should §6's missing gate be built now, and against what signal?
+Answers to the questions this document was written to ask. Each names the work it implies.
+
+1. **Trips.** A pin photo attached to a trip activity **is** shared to a container for all trip
+   members — **and** it must still pass the owner's visibility settings before any particular
+   member sees it. Both gates, as everywhere except DMs and check-ins.
+   → *Done 2026-08-24:* trip clause added to the settings-gated term, as a subquery on activity
+   pin ids (a join would repeat a row per activity).
+
+2. **Check-ins.** Photos on a safety check-in are **not** subject to `photo_upload_visibility`,
+   because it makes no sense for safety contacts who have no account at all. They are visible to
+   **anyone who can see the check-in, including signed-out token holders**. Reaching the check-in
+   is the only barrier.
+   → *Done 2026-08-24:* the portal now lists the check-in's photos, and
+   `safety.contact.photo` serves their bytes to a valid magic-link token, scoped to that token's
+   own check-in. The nginx hand-off was extracted from `MediaGateView` rather than reimplemented.
+
+3. **`viewer_photo_filter`.** Courtesy-only, as read. It is controlled by the *receiving* user, so
+   it has nothing to do with gating that user's access — it exists to stop unsolicited explicit
+   images. It never grants sight of anything.
+
+4. **Derived data.** `ocr_text`, `checksum`, and `redata_confidence` **inherit the privacy of the
+   photo they came from.**
+   → *Verified 2026-08-24, nothing to fix:* `checksum` is only ever used for owner-scoped dedup
+   (`profile=profile`, or within one check-in) and is never serialized; `ocr_text` is a
+   `PhotoSearchProvider` search field whose results pass through `visible_to`;
+   `redata_confidence` is a sort key on querysets that already apply `visible_to`.
+
+5. **Location.** The model is a coordinate plus official data about that coordinate, existing so
+   other things can link to it rather than restating it. It **must not be queryable on its own** —
+   not through the REST API, not through search, not any other way, because that would let a user
+   fuzz which coordinates are attached to things. Serving coordinates *alongside* a model the
+   caller may see is fine.
+   → *Verified 2026-08-24:* structurally satisfied. The DRF router registers only `PinViewSet`,
+   there is no Location search provider, and `/locations/search/` is autocomplete over the
+   caller's **own pins** plus external places, not a Location query. Nothing to fix; worth a
+   structural check so it stays that way.
+
+6. **Deletion.** For a photo **the user uploaded**, deleting it somewhere other than the wiki
+   **prompts**: "delete from the wiki too?" Silence means no — it stays. For **external photos**
+   (fetched from a URL) there is **no prompt at all**; they stay on the wiki unless the user goes
+   to the wiki and deletes it there, because a public resource that already exists online is not
+   a consent question.
+   → *Work:* neither the prompt nor the external/uploaded distinction exists yet.
+
+7. **Earned credit.** **Not now** — finish the work above first. The design in
+   `docs/designs/reputation-and-gating.md` stays parked.
