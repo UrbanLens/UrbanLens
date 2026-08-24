@@ -22,6 +22,80 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-08-24: two views read `request.user.profile` on a possibly-anonymous user
+
+`controllers/map_overlays.py:320` and `controllers/safety.py:1228` both call
+`request.user.profile` where mypy types `request.user` as `User | AnonymousUser`. Surfaced by
+running mypy across the whole `controllers/` package rather than a file at a time, which is not
+routine here.
+
+Not live: both are on `LoginRequiredMixin` views, so `request.user` is always authenticated by the
+time either line runs. It is a typing lie rather than a crash, and the trap is that removing the
+mixin - or reusing either helper from an unauthenticated path - turns it into an `AttributeError`
+with nothing pointing at the cause.
+
+The fix is not a cast. Every other view resolves the viewer as
+`Profile.objects.get_or_create(user=request.user)` (see `services/wiki/wiki_access.resolve_visible_wiki`),
+which is honest about both the type and the possibility that the profile does not exist yet. Left
+alone here because these two views are unrelated to the work that surfaced them and the change is
+behavioural, not cosmetic.
+
+## OPEN 2026-08-24: child wikis (detail pins) record no creator
+
+Both paths that create a child wiki leave `created_by` unset -
+`controllers/detail_pins.py`'s POST handler and `services/pins/pin_wiki_sync.py`'s
+send-pins-to-wiki - so a detail pin carries no answer to "who put this here".
+
+The field-revision substrate does not close the gap. `Wiki.objects.create()` records its writes
+under `current_write_source()`, which is `SYSTEM` outside a request or task; the pin-sync path
+therefore attributes user-derived markers to the system, and anything reading provenance from the
+revisions would show a stranger's entrance marker to a concealed viewer as though a provider had
+placed it.
+
+The consequence today is that concealment has to hide detail pins outright rather than filter them
+to the viewer's own and their friends', which is what every other related row gets. That is
+conservative and consistent with the markup ruling, but it is coarser than the rules elsewhere and
+would hide a viewer's *own* detail pins from them once the gate is live.
+
+**Setting `created_by` is not a one-line fix**, which is why it was not done in passing.
+`models/reputation/signals.py` awards reputation on `officially_created and created_by_id is not
+None`, and `services/undo/handlers/wiki.py` round-trips the field; `models/wiki/queryset.py`'s
+`claim_for_location` is currently its only writer, so the field presently means "who claimed this
+place's wiki", not "who created this row". Giving it a second meaning needs the reputation rule and
+the undo handler checked against it first.
+
+## OPEN 2026-08-24: wiki search and autocomplete are a substring oracle for concealed content
+
+`services/global_search/providers.py` (the wiki provider's `apply_text` over `["name",
+"description", "aliases__name"]`) and `services/map_pins/autocomplete.py` (`Q(name__icontains=q) |
+Q(aliases__name__icontains=q) | Q(description__icontains=q)`) both match user-contributed wiki text
+as a substring, scoped only by `visible_wiki_location_ids_cached(profile)`.
+
+For a concealed viewer that is an oracle: type a distinctive phrase from a stranger's description
+and the wiki comes back, confirming both that the text exists and that this account is being shown
+something other than the whole row. It survives a perfect read gate on the page, because the answer
+is carried by the *result set* rather than by any field the page renders.
+
+**Why it was not fixed with the rest of the layer** (the resolve-time rework, `39eb86c4`). Every
+other surface conceals by resolving per-viewer provenance in Python - `resolve_fields` for wiki
+fields, `conceal_rows` for related rows, the newest visible `ArticleRevision` for prose. None of
+that is expressible as a SQL predicate, and search is a queryset-level substring filter over
+thousands of rows. The three obvious patches are each wrong:
+
+- **Match `name` only for concealed viewers** - the *stored* name may itself be a stranger's edit,
+  so it leaks the same way, one field further along.
+- **Drop concealed wikis from text search** - a brand-new wiki still matches on its automatic name,
+  so a place that is reachable but unfindable is a tell in the other direction.
+- **Filter results in Python after the query** - the query already applied `LIMIT`, so a page of
+  results silently shrinks in a way that varies per viewer.
+
+The real answer is a search index that carries provenance per indexed span, so a viewer's query
+matches only text they are entitled to see. That is the same substrate as the facts-with-sources
+direction (`docs/designs/versioned-content.md`), and should be built with it rather than ahead of it.
+
+Not live today: `concealment_active` returns `False`, so no account is concealed. This is what has
+to exist before that boolean can flip.
+
 ## OPEN 2026-08-21: production REData 404s on `/api/v1/public-locations/` (and `/capabilities/`)
 
 Verified live against a fresh dev environment (`a962bf8`, `--redata production`, the default as of

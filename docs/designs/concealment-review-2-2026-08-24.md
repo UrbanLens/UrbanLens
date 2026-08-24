@@ -34,10 +34,25 @@ did not exercise the code they name, which is why a self-review reported the lay
   particular, and which is the artefact whoever flips the boolean will read -
   has been rewritten against the current wiring.
 
-Still open, and still the largest gaps: the Article body, the search and
-autocomplete substring oracles, the markup and detail-pin JSON endpoints, and
-`for_wiki(viewer=)` across the related-row querysets. §2's vacuous tests were
-fixed in `d08a74c2`.
+Since then, in the same pass:
+
+- **The Article tab.** An article is prose, so there is nothing to resolve
+  field-by-field - but every `ArticleRevision` stores the *complete* source as
+  of that revision, so a concealed viewer is shown the newest revision they may
+  see, and no article at all when there is none. The rule with teeth is the null
+  editor: it means a Wikipedia seed *or* a deleted account, and the model's own
+  `editor_display_name` already distinguishes them, so `conceal_rows` does too.
+  The revision history, the by-id diff and the by-id restore are all scoped to
+  the same queryset - an unfiltered by-id lookup was an oracle that answered
+  "does revision N exist here" and then handed over its diff.
+- **Markup and detail pins** are hidden outright rather than filtered by author,
+  per the product owner's ruling on map annotations. For detail pins that is
+  also forced: a child wiki records no creator at all (see PROBLEMS.md).
+
+Still open: the search and autocomplete substring oracles, which need a
+provenance-carrying index rather than a patch, and `for_wiki(viewer=)` across
+the remaining related-row querysets. Both are written up in `docs/PROBLEMS.md`
+under their 2026-08-24 entries. §2's vacuous tests were fixed in `d08a74c2`.
 
 ---
 
