@@ -219,6 +219,10 @@ Reversed below: ledger with a small signal set, then the gate, then scorer enric
 
 ### R14. Filtering cannot reproduce the empty state — see the tells audit
 
+> **Partly withdrawn — read R15 immediately after this.** The audit's individual
+> findings stand and are worth acting on; two of the conclusions drawn from them here
+> do not.
+
 A six-channel audit of this branch (`reputation-gating-tells.md`, 82 verified findings) asked
 what can still distinguish a gated wiki from an undocumented place. Its conclusion is that the
 approach in this document — withhold community content from the existing wiki — **cannot work
@@ -252,6 +256,53 @@ D, E, F and G close by construction instead of by vigilance.
 un-gating is itself an oracle (probe cheaply, earn in, diff), and an attacker can age or rent
 a second account. The honest success criterion is *raising the cost of bulk automated
 probing*, not a security boundary.
+
+### R15. Corrections to R14 (Jess, 2026-08-24)
+
+R14 drew two conclusions harder than the evidence supported. Both are withdrawn.
+
+**"Article.wiki is a OneToOne so the write path is undeniable" is not an argument against
+this feature.** It is a gap the codebase has anyway. Per-viewer visibility already means the
+wiki renders differently to different people, *including at the moment they choose to edit
+it*; offline editing in the mobile client makes colliding edits to any field, article
+included, an ordinary occurrence rather than an exotic one; and a future distributed setup
+would force the same conclusion again. Articles need **merge mechanics** regardless of
+whether a reputation gate ever ships.
+
+The intended direction, noted here so it is not re-derived: distil edits into **facts**,
+which already carry sources and confidence (`dashboard/models/facts/`, with
+`recompute()` doing trust-weighted, decaying, conflict-aware resolution and a `CONTESTED`
+state for genuine disagreement), and resolve merges against that substrate — potentially
+with an AI agent, which the fact representation exists to make tractable. Not scoped here.
+The point is that this is a general problem with a general solution, not a cost this feature
+has to carry alone.
+
+**"Completely unaware is not achievable" was wrong.** The claim rested on treating the
+gated view as something that must be *fabricated*. It does not: **the variance already
+exists.** Visibility settings already mean two viewers of the same wiki see different photos,
+different comments, different everything — a wiki that looks bare because its contributors'
+settings exclude you is an ordinary, common state, not a suspicious one. The gate is another
+input to a per-viewer computation the wiki already performs, not a new illusion layered over
+a shared row. Shadow wikis would produce correct behaviour but are not needed for it, and
+their merge cost is real.
+
+**"A second aged account defeats any version of this" was also wrong**, and wrong in an
+interesting way. It assumed the gate keys on account identity or age. It should key on
+**behaviour**, which makes the outcome deterministic: two accounts doing the same thing about
+the same pin see the same bare wiki. Registering a fresh account to re-check a place
+therefore gains nothing, which is precisely the case that matters most — somebody outside the
+hobby checking one spot. Bypassing it requires genuinely earning standing, which is the tax
+working as designed rather than a hole in it.
+
+Two cases the design should be held to, in Jess's framing:
+
+1. **Register, immediately check one pin.** Must be reliable. Multiple accounts must not help,
+   because the same behaviour yields the same bare wiki every time.
+2. **Polling many places at once.** Does not need to be airtight. Most pins a prober adds have
+   no wiki at all, so the pattern surfaces quickly — plausibly before they happen to hit a
+   real spot — and because the most vulnerable places conceal first, similarly-behaving users
+   converge on similar states. Not fully guaranteed, and accepted as such: the goal is to curb
+   the behaviour, not to prove a bound.
 
 ## What already exists (read this before designing anything below)
 

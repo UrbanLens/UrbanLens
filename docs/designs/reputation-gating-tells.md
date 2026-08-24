@@ -10,8 +10,13 @@ branch against one question:
 grouped them — by root cause and structural class, not by channel — because the class-level
 fixes are worth far more than the point fixes.
 
-**The headline: filtering community content out of the existing wiki does not work.** The
-empty state is not a filtered view of a community wiki; it is *a row the viewer owns*. See §4.
+**The headline as first written — "filtering does not work" — was overstated, and §4 is
+partly withdrawn (see `reputation-and-gating.md` R15).** The findings themselves stand and
+are the value of this document. What changed is the conclusion drawn from them: per-viewer
+variance already exists in the wiki, so the gate is another input to a computation the page
+already performs, not an illusion that has to be fabricated over a shared row.
+
+**Re-triage under that model is at the end of this document.** Read §5 before §4.
 
 # Anti‑probing gate: consolidated engineering findings
 
@@ -165,3 +170,68 @@ That reframes the work from "audit 60 surfaces forever" to "one resolver, one re
 * **The attacker can rent an ungated account.** The whole feature is a reputation tax on probing, not a security boundary. Scope your success criteria to "raises the cost of bulk automated probing", and say so in the design doc, because "COMPLETELY UNAWARE" is not achievable against a patient attacker with two accounts.
 
 **One more thing worth flagging before implementation:** six independent channels found 82 tells and the last two channels were still finding *new* fatal ones (#14, #28, #29, #30, #31, #32, #44, #58). The tail is not exhausted. Any plan that relies on enumerating surfaces is already known to fail on this codebase — the `officially_created` draft rule was enforced call‑site by call‑site, several sites missed it, and `.official()` was added afterwards to stop the bleeding (`queryset.py:33-41`). Commit 5357d400 fixed five of those five days ago and #8, #38, #64 and #77 show at least three more still open. Build the gate as a property of resolution and reach, with CI enforcement, or it will leak the same way.
+
+---
+
+## 5. Re-triage (2026-08-24, after R15)
+
+Under the corrected model — the wiki renders per viewer, with community contributions
+withheld, rather than the viewer being handed a fabricated row they appear to own — the
+findings split cleanly.
+
+### Dissolved: everything that existed only to sustain an ownership illusion
+
+These were problems because §1's "phase 2" baseline assumed a gated viewer had to *appear to
+have created* the wiki. They do not, so these stop being tells:
+
+- `POST /wiki/create/` answering `created:false` (item 16's first half)
+- the delete button, and the 403 that explains other people have viewed the page (item 21)
+- `wikis_created` failing to increment (item 24)
+- the draft asymmetry — a gated account getting no draft or enrichment run of its own
+  (item 28), since it reads the real wiki
+- most of §1 phase 2's list: attribution, the composite equalling one's own vote, the edit
+  history being one's own
+
+### Still real, and this is the actual worklist
+
+Ordered by how much they defeat the feature. Every one is "make an existing per-viewer
+computation consistent", not new architecture:
+
+1. **Aggregates computed before or without filtering** (class E — items 17, 22, 23, 26).
+   The largest class and the most reliably fatal: a count, badge, tab label or composite
+   that includes withheld rows announces them. `WikiStatVoteQuerySet.composite` takes a
+   `Wiki` rather than a queryset and its `rounded`/`exact` bypass the count fuzz entirely —
+   and vulnerability is one of those fields. **Fuzzing a count is not gating it**:
+   `approximate_pin_count` floors at 3, so it can never impersonate "fewer than 3".
+2. **Viewer-less name resolution** (class K — items 3, 25). `Location.display_name` reads
+   `self.wiki` with no viewer and feeds the map payload, pin cache, sync, search subtitles
+   and pin-list sort order. A hidden name that still sorts the list is binary-searchable.
+3. **Reach computed from the pin-discovery rule alone** (class C — items 10, 11, 13, 15).
+   One edit inside `visible_wiki_location_ids`/`_cached` covers four search providers,
+   autocomplete, device scans and the image container clause. Separately, the
+   `location__wiki__name|aliases__name|description` OR clauses on own-row queries are a
+   blind substring oracle and buy nothing.
+4. **Audit trails that persist unshown values** (class G — item 20). `WikiEdit.changes`
+   stores the community's prior value inside the *viewer's own* edit row, and their own
+   history is content we promise always to show. Type a character into the "empty"
+   description, read the hidden one back, revert. This survives a perfect read gate.
+5. **Write responses echoing the unfiltered projection** (class F(i) — item 17). Field edit,
+   stat vote, alias add, link add and owner add all re-render from the raw wiki.
+6. **Bulk payloads inlined before any tab filter** (class H). These are the withheld content
+   itself; they close with the read gate rather than separately. Note
+   `wiki.cover_photo.image.url` never passes through `Image.objects.visible_to` — a live bug
+   today, independent of any gate.
+7. **Out-of-band channels** (class J). Safety-checkin escalation notifies every profile with
+   a pin at the location and names the wiki over SMS/WhatsApp; comment notifications
+   deep-link a wiki the recipient is gated on; Consensus and trivia serve wiki content as
+   game rounds, trivia questions being AI-mined verbatim from `wiki.description`.
+8. **Shared warmth and timing** (class I — items 7, 27). Lower priority: real, but needs
+   many comparisons to exploit.
+
+### Deferred to the merge work, not to be solved here
+
+**Uniqueness collisions on write** (class F(ii) — item 18): alias and link uniqueness per
+wiki, and `Article.wiki` being a OneToOne. Per R15 these belong to the general problem of
+concurrent and offline edits against a per-viewer wiki, whose intended solution is
+fact-based merge. A gated viewer adding an alias that already exists is the same class of
+event as two people editing offline and reconciling later.
