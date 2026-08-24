@@ -342,10 +342,26 @@ class WikiGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the wiki page."""
 
     def _get_context(self, request: HttpRequest, location_slug: str) -> dict:
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
+
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).order_by("-created")
+        # A third gate, on top of the container and settings gates visible_to
+        # already applies. Provider media stays - a fresh wiki carries it - and
+        # uploads survive only from the viewer or a friend. Paginated *after*
+        # filtering, or the page count reports the photos it is standing in
+        # front of.
+        if concealment_active(wiki, profile):
+            images = conceal_rows(images, profile)
         page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
-        return {"location": location, "wiki": wiki, "images": page_obj.object_list, "page_obj": page_obj, "profile": profile, "context_type": "wiki"}
+        return {
+            "location": location,
+            "wiki": conceal_wiki(wiki, profile),
+            "images": page_obj.object_list,
+            "page_obj": page_obj,
+            "profile": profile,
+            "context_type": "wiki",
+        }
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
         ctx = self._get_context(request, location_slug)
@@ -361,8 +377,15 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
     """JSON endpoint for the wiki photo map layer."""
 
     def get(self, request: HttpRequest, location_slug: str) -> JsonResponse:
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
+
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).with_coords()
+        # This layer plots photos at their capture coordinates, so an unfiltered
+        # payload does not merely list other people's contributions - it maps
+        # where they stood.
+        if concealment_active(wiki, profile):
+            images = conceal_rows(images, profile)
         data = [image_to_gallery_json(img, request, profile) for img in images]
         return JsonResponse({"images": data})
 

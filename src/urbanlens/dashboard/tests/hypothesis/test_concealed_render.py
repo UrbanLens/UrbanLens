@@ -201,3 +201,85 @@ class ConcealedPanelTests(TestCase):
         baker.make("dashboard.WikiLink", wiki=self.wiki, name="CANARY-LINK", url="https://example.invalid/x", created_by=self.stranger)
 
         self.assertNotIn("CANARY-LINK", self._get("location.wiki.links"))
+
+
+class ConcealedMediaTests(TestCase):
+    """Photos, layers and overlays - the surfaces that show where people stood."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = baker.make(Location, latitude=47.6062, longitude=-122.3321, official_name="Provider Name")
+        self.wiki = baker.make(Wiki, location=self.location, name="Provider Name", officially_created=True)
+        self.stranger = baker.make(User).profile
+        self.viewer_user = baker.make(User)
+        baker.make(Pin, profile=self.viewer_user.profile, location=self.location, parent_pin=None)
+        self.slug = self.location.slug or str(self.location.uuid)
+
+    def _get(self, route: str) -> str:
+        self.client.force_login(self.viewer_user)
+        with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
+            response = self.client.get(reverse(route, kwargs={"location_slug": self.slug}))
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
+
+    def test_the_photo_map_layer_omits_a_strangers_upload(self) -> None:
+        """This layer plots photos at their capture coordinates.
+
+        An unfiltered payload does not merely list other people's
+        contributions - it maps where they stood.
+        """
+        from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
+
+        baker.make(
+            Image,
+            wiki=self.wiki,
+            profile=self.stranger,
+            source=ImageSource.UPLOAD,
+            media_type=MediaKind.PHOTO,
+            image="pin_images/CANARY-UPLOAD.png",
+            latitude=47.6062,
+            longitude=-122.3321,
+        )
+
+        self.assertNotIn("CANARY-UPLOAD", self._get("location.wiki.gallery.json"))
+
+    def test_concealment_keeps_provider_media_the_viewer_can_already_see(self) -> None:
+        """Positive control, scoped to what this layer is actually responsible for.
+
+        An earlier version attributed the provider row to a stranger and
+        expected it through, which the app does not do - and the reason is
+        worth keeping. ``Image.profile`` on a materialised provider row is the
+        *up-voter*, not the photographer, so ``visible_to`` applies that
+        voter's photo settings and drops the row before concealment is reached.
+
+        Widening ``visible_to`` to admit those rows is a privacy-model decision
+        affecting every viewer, and the concealment spec says explicitly not to
+        make it as part of this work. So this asserts the thing concealment
+        owns: a non-UPLOAD row the viewer can already see survives the filter.
+        """
+        from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
+
+        baker.make(
+            Image,
+            wiki=self.wiki,
+            profile=self.viewer_user.profile,
+            source=ImageSource.WIKIMEDIA,
+            media_type=MediaKind.PHOTO,
+            image="pin_images/PROVIDER-OK.png",
+            latitude=47.6062,
+            longitude=-122.3321,
+        )
+
+        self.assertIn("PROVIDER-OK", self._get("location.wiki.gallery.json"))
+
+    def test_the_page_carries_no_custom_layers(self) -> None:
+        """A layer of entrance routes and camera markers is the sharpest tell there is."""
+        from urbanlens.dashboard.models.markup.model import CustomLayer
+
+        baker.make(CustomLayer, parent_wiki=self.wiki, name="CANARY-LAYER", profile=self.stranger)
+
+        self.client.force_login(self.viewer_user)
+        with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
+            response = self.client.get(reverse("location.wiki", kwargs={"location_slug": self.slug}))
+
+        self.assertNotIn("CANARY-LAYER", response.content.decode())

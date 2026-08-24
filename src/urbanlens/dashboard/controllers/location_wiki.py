@@ -172,14 +172,22 @@ class LocationWikiView(LoginRequiredMixin, View):
             ("emergency", "Emergency"),
         ]
 
-        show_wiki_cover_photo = bool(profile.show_wiki_cover_photos and wiki.cover_photo_id)
+        # A cover photo is somebody's photograph, promoted by somebody's choice,
+        # and neither the act nor the promotion is recorded anywhere the
+        # provenance rules can read. Concealed viewers get the state a wiki has
+        # before anyone picks one.
+        show_wiki_cover_photo = bool(not conceal and profile.show_wiki_cover_photos and wiki.cover_photo_id)
         wiki_cover_candidates: list[dict] = []
         if show_wiki_cover_photo:
             from urbanlens.dashboard.models.images.model import Image
 
             wiki_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in Image.objects.filter(wiki=wiki).visible_to(profile).exclude(pk=wiki.cover_photo_id).order_by("-created")[:20] if img.image]
 
-        custom_layers = list(CustomLayer.objects.for_wiki(wiki).order_by("order", "created"))
+        # Markup and custom layers are hidden outright, whatever their
+        # provenance - the product rule, and the sharpest of the lot: a layer
+        # carrying entrance routes and SecurityIndicatorType markers is the
+        # single most direct statement that people go here.
+        custom_layers = [] if conceal else list(CustomLayer.objects.for_wiki(wiki).order_by("order", "created"))
 
         return render(
             request,
@@ -193,7 +201,10 @@ class LocationWikiView(LoginRequiredMixin, View):
                 # visible_parent_wiki: linking to one they haven't earned would
                 # confirm a place exists that they cannot see.
                 "parent_wiki": visible_parent_wiki(wiki, profile),
-                "map_overlays_json": overlay_payload(MapImageOverlay.objects.for_wiki(wiki)),
+                # Georeferenced overlays are traced and positioned by hand, so an
+                # overlay existing is a contribution regardless of where the
+                # underlying image came from.
+                "map_overlays_json": [] if conceal else overlay_payload(MapImageOverlay.objects.for_wiki(wiki)),
                 "manage_overlays_url": reverse("location.wiki.overlays", args=[location.slug]),
                 "manage_overlays_historical_url": reverse("location.wiki.overlays.historical", args=[location.slug]),
                 "overlay_corners_url_template": reverse("location.wiki.overlays.corners", args=[location.slug, OVERLAY_UUID_PLACEHOLDER]),
