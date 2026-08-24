@@ -91,15 +91,31 @@ Domains covered, and the question each spec file is really asking:
 | `ui/trips` | Does a trip page render the join, including the empty case? |
 | `ui/*` | Sign-in, the map, navigation, pin detail. |
 
-> **Calibration status.** Everything except the seven files added on 2026-08-24
-> (`api/labels`, `api/trips`, `api/undo`, `api/search`, `api/wiki`,
-> `services/media-storage`, `ui/trips`) has been run against a live deployment
-> and had its assumptions corrected. Those seven typecheck and register, and
-> their payload shapes were read out of the generated OpenAPI document rather
-> than guessed, but **they have not yet been run against a deployment** - so
-> treat a failure from one of them as "the test is probably wrong" until a first
-> calibration run says otherwise. The first run of the original suite corrected
-> fifteen wrong assumptions, and there is no reason to think these are better.
+> **Calibration status.** Every spec here has now been run against a live
+> deployment. The seven added on 2026-08-24 were calibrated the same day: their
+> first run corrected four assumptions (`with_counts` is a list concern, a
+> duplicate label name answers 409, a non-image upload answers 409, and the
+> `types` search filter takes a token the schema does not enumerate), and
+> exposed one thing about the *suite* rather than the app - see "Running it
+> more than once" below.
+
+## Running it more than once
+
+The external API caps a credential at **60 writes a minute** and **300 an
+hour**. The suite is the burstiest client it will ever have: nearly every spec
+that needs a pin creates one, in parallel, on a single key.
+
+`ApiClient` handles the per-minute cap for you - it waits out a 429 and retries,
+honouring `Retry-After` or the delay DRF puts in the body, up to three attempts.
+That is why the test timeout is 90s rather than 60s. It deliberately does *not*
+chase the hourly ceiling: if 300 writes are gone the wait is tens of minutes,
+and the honest answers are to run less often, or to provision a second account
+and point a second run at it.
+
+A full run costs roughly a hundred writes, so **three back-to-back runs inside
+an hour will exhaust the hourly quota** and start failing on writes with no way
+to distinguish that from a broken endpoint. If a run fails with 429s whose
+message quotes minutes rather than seconds, that is what happened.
 
 Some things it deliberately does **not** do:
 
@@ -352,8 +368,11 @@ Recorded so they do not have to be rediscovered:
 - **No lockfile.** Direct dependencies are pinned exactly, so runs are
   reproducible to the version; transitive ones float. Committing the
   `package-lock.json` from a first `npm install` closes that.
-- **Seven spec files have never been run against a deployment.** Listed under
-  "Calibration status" above. Running them is the next thing worth doing here.
+- **The wiki specs skip on a fresh deployment.** A wiki is promoted through the
+  web UI and the published API has no endpoint that creates one, so the suite
+  cannot make the precondition it needs through the surface it is testing. They
+  resolve the wiki and skip with that reason; they start running the moment one
+  exists. Recorded as a finding in `docs/PROBLEMS.md`, 2026-08-24.
 - **Games (SpotGuessr, Trivia, Consensus) are uncovered.** Each is
   WebSocket-driven with its own session lifecycle and deserves its own spec
   file; the socket helpers to write them are in `lib/websocket.ts`. They are
