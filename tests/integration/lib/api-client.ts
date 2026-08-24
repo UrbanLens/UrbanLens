@@ -119,6 +119,10 @@ export class ApiClient {
         return this.request.patch(apiUrl(path), { headers: this.authHeaders(), data: data ?? {} });
     }
 
+    async put(path: string, data?: unknown): Promise<APIResponse> {
+        return this.request.put(apiUrl(path), { headers: this.authHeaders(), data: data ?? {} });
+    }
+
     async delete(path: string): Promise<APIResponse> {
         return this.request.delete(apiUrl(path), { headers: this.authHeaders() });
     }
@@ -129,7 +133,7 @@ export class ApiClient {
      * Use this for setup, where a failure means the test never got started.
      * Assertions about status codes belong on the raw helpers above.
      */
-    async json<T = unknown>(method: "get" | "post" | "patch" | "delete", path: string, data?: unknown): Promise<T> {
+    async json<T = unknown>(method: "get" | "post" | "patch" | "put" | "delete", path: string, data?: unknown): Promise<T> {
         const response = method === "get" ? await this.get(path, data as Record<string, string> | undefined) : await this[method](path, data);
         if (!response.ok()) {
             throw new ApiError(method.toUpperCase(), path, response.status(), await response.text());

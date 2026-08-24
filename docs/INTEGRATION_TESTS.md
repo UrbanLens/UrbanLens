@@ -75,6 +75,32 @@ they tell you when they fail.
 A run with no `--project` does everything except `visual` and the non-Chromium
 browsers.
 
+Domains covered, and the question each spec file is really asking:
+
+| Spec | The question |
+| --- | --- |
+| `api/pins` | Does the shared creation path behave against real data (dedup, slugs, tombstones)? |
+| `api/labels` | Are the opt-in counts present exactly when asked for, and is the name uniqueness rule in front of the database constraint? |
+| `api/trips` | Does a trip → activity → pin → location join survive being read back, including through the trip map? |
+| `api/undo` | Does deleting something leave a restorable entry, and does restoring it work? |
+| `api/search` | Does a thing made seconds ago turn up, and did any search source fail behind a 200? |
+| `api/wiki` | Does `base_revision_id` actually stop a concurrent edit from overwriting one, or is it only declared? |
+| `api/auth`, `api/contract` | Scope enforcement, and the published schema itself. |
+| `services/media-storage` | Do uploaded bytes survive leaving the process, and does the URL handed back actually serve them? |
+| `services/*` | Valkey, Celery, Channels, the static pipeline, headers, third-party origins. |
+| `ui/trips` | Does a trip page render the join, including the empty case? |
+| `ui/*` | Sign-in, the map, navigation, pin detail. |
+
+> **Calibration status.** Everything except the seven files added on 2026-08-24
+> (`api/labels`, `api/trips`, `api/undo`, `api/search`, `api/wiki`,
+> `services/media-storage`, `ui/trips`) has been run against a live deployment
+> and had its assumptions corrected. Those seven typecheck and register, and
+> their payload shapes were read out of the generated OpenAPI document rather
+> than guessed, but **they have not yet been run against a deployment** - so
+> treat a failure from one of them as "the test is probably wrong" until a first
+> calibration run says otherwise. The first run of the original suite corrected
+> fifteen wrong assumptions, and there is no reason to think these are better.
+
 Some things it deliberately does **not** do:
 
 - **Throttling.** Proving the rate limiter works means tripping it, and tripping
@@ -326,6 +352,8 @@ Recorded so they do not have to be rediscovered:
 - **No lockfile.** Direct dependencies are pinned exactly, so runs are
   reproducible to the version; transitive ones float. Committing the
   `package-lock.json` from a first `npm install` closes that.
+- **Seven spec files have never been run against a deployment.** Listed under
+  "Calibration status" above. Running them is the next thing worth doing here.
 - **Games (SpotGuessr, Trivia, Consensus) are uncovered.** Each is
   WebSocket-driven with its own session lifecycle and deserves its own spec
   file; the socket helpers to write them are in `lib/websocket.ts`. They are
