@@ -30,6 +30,19 @@ themselves usually cost single-digit seconds. The consensus field-scope file
 takes 188s cold and 3.05s against a database that already exists. `--reuse-db`
 does not apply new migrations, hence `--fresh-db` when models move.
 
+**Killing a run mid-migration poisons the reusable database**, and the symptom
+names neither cause. The interrupted migration leaves its schema change applied
+but unrecorded, and the dead process leaves a Postgres session holding the
+database open, so the next `--fresh-db` cannot drop it and quietly reuses it
+instead. Every test then errors in fixture setup with pytest's internal
+`assert not self._finalizers`, which is what a failed `django_db_setup` looks
+like from the outside — the real error, `column ... already exists`, is only
+visible above the fold, and a `| tail` hides it. Diagnosed 2026-08-24 after the
+same failure had already been written off once as a flaky transient.
+`--fresh-db` now terminates sessions and drops the database itself, so it means
+what it says; if a run still fails this way, the database survived some other
+way and dropping it by hand is the fix.
+
 `--allow-drift` exists for verifying a fix by breaking it: editing the
 container's copy on purpose and expecting failures. Without it the parity guard
 refuses the run, which is otherwise exactly what you want — a file restored on
@@ -110,7 +123,7 @@ that list, each finding then handed to an adversarial verifier told to refute it
 
 ## Structural checks (CI)
 
-Seven checkers guard properties that are invisible from a working copy, which is
+Eight checkers guard properties that are invisible from a working copy, which is
 exactly why they need checking — the machine that made the mistake is the one
 that cannot see it.
 
@@ -123,6 +136,7 @@ that cannot see it.
 | `bin/check_notification_choke_point.py` | A notification written around the mute preference |
 | `bin/check_versioned_writes.py` | A model half-adopting field versioning, so bulk writes go unrecorded |
 | `bin/check_signal_reachable.py` | A `post_save` subscription waiting on a field only a queryset `update()` sets |
+| `bin/check_concealed_writes.py` | A wiki resolved for reading being saved, persisting one viewer's redacted view |
 
 The last two exist because a *defect class* recurred, not because one bug did.
 `check_outage_not_cached.py` came from an outage being stored as "nothing here"
@@ -143,6 +157,17 @@ none could ever fire. The check matches a subscription's watched fields against
 `.update()` calls on the same model; a deliberate case is marked
 `signal-update-ok: <ModelName> <why>`. Its limits are in its docstring, and a
 pass means "no detected gap" rather than "the subscription fires".
+
+`check_concealed_writes.py` guards the seam the concealment rework created.
+`resolve_visible_wiki` is the one gate all 99 wiki-scoped call sites pass
+through, and since concealment moved to resolve time it may return a
+*projection*: a real `Wiki` carrying only the field values one viewer may see.
+Reading one is the point; saving one writes that viewer's redacted view over
+what the community wrote. Nine write paths sat downstream of that gate across
+four modules, and every one looked correct, because a projection is a `Wiki` and
+mutating one is ordinary Django — nothing at the call site says which kind of
+row it holds. They now launder through `concealment.writable_wiki`, and a
+deliberate case is marked `concealed-write-ok: <why>`.
 
 `check_versioned_writes.py` exists for the same reason as those two: provenance
 has to be recorded at write time, and the wiki's *existing* edit history is
