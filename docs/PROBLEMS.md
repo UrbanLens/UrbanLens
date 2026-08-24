@@ -3922,7 +3922,7 @@ the generated document.
 Found by `tests/integration/specs/api/contract.spec.ts`, where it presents as a
 flake rather than a failure - which is the shape it would have in production too.
 
-## OPEN 2026-08-24: re-adding a removed friend creates a request nobody can accept
+## RESOLVED 2026-08-24: re-adding a removed friend creates a request nobody can accept
 
 Remove a friend, change your mind, and send them a friend request again. Both
 people can see the request. Neither can act on it, permanently.
@@ -3964,21 +3964,45 @@ test's cleanup *prove* the relationship was gone across all eight statuses
 instead of the three it had been checking, at which point the surviving
 `Removed` row named itself.
 
-**Likely fix, once the state is pinned down.** Re-orient the row when reviving
-it - a revived request's `from_profile` should be whoever is asking now. Worth
-asking the same question of every status `between()` can return (`Declined`,
-`Ignored`, `Blocked`, `Removed`): each is a row a later request will find and
-reuse, and only one of them has been shown to orient correctly.
+**Resolved, and the "further sub-state" above turned out not to exist.** The
+mechanism *was* simply `between()` reviving the row without re-orienting it. The
+reason the reconstruction passed is that the reconstruction was the wrong way
+round: in "B befriends A, A accepts, A removes, A re-requests", A is already the
+row's `from_profile`, so there is nothing to re-orient and the case was never
+going to fail. The failing shape needs the *other* party to re-request - A asks
+B, B accepts, B removes, **B** asks A - and that fails reliably from a clean
+slate, no leftovers required. Anyone reading the paragraph above should take it
+as a warning about reconstructions that confirm what you expected: it was
+symmetric-looking enough to seem equivalent, and being wrong about it sent the
+investigation looking for a state that was not there.
 
-Observed on every run by
+**The fix** re-orients the row in `Friendship.request`, with two details that
+were not obvious from the diagnosis:
+
+- `unique_together` is `(from_profile, to_profile)`, so A->B and B->A can both
+  exist (see "reciprocal `Friendship` rows" above). Swapping a row's ends can
+  therefore collide with a real row, and the fix prefers an
+  already-correctly-oriented row when one exists rather than swapping blind.
+- `muted_by_from_profile` / `muted_by_to_profile` are **positional** - which
+  column is yours depends on which end of the row you are. Swapping the ends
+  without swapping these hands one person's mute to the other, silencing the
+  wrong party invisibly. That is a worse bug than the one being fixed, and it
+  has its own test.
+
+The suggestion to ask the same question of every status `between()` can return
+was half wrong, which is the other correction worth keeping: `can_request`
+admits `Declined` and `Removed` only. For `Blocked` and `Ignored` the correct
+behaviour is a **refusal**, and re-orienting one of those rows would have been a
+new defect. Both now have tests asserting the refusal, sitting directly beside
+the re-orientation.
+
+Guarded by `test_friendship_revival_direction.py` (7 tests), proved non-vacuous
+by reverting the fix - 3 of them fail. Originally observed by
 `tests/integration/specs/api/social.spec.ts::a request is visible to the
-recipient, and acceptance to both` - which fails *only* as the first test in
-that file, i.e. the one that meets the previous run's leftovers. The companion
-test `re-adding somebody you removed produces a request they can accept`
-constructs the reconstruction above and passes, which is what narrows the
-question.
+recipient, and acceptance to both`, which failed only as the first test in that
+file, i.e. the one that met the previous run's leftovers.
 
-## OPEN 2026-08-24: a photo upload trusts the filename, not the bytes
+## RESOLVED 2026-08-24: a photo upload trusts the filename, not the bytes
 
 `POST /dashboard/api/external/v1/photos/` accepts a shell script sent as
 `not-really.png` with `Content-Type: image/png` and answers **201**. The file is
@@ -4005,7 +4029,22 @@ application's own origin.
 Found by `tests/integration/specs/services/media-storage.spec.ts`, which stays
 red until the bytes are checked.
 
-## OPEN 2026-08-24: a visit can be logged in the future
+**Fixed**: `image_upload_error` now requires a *positive* image identification
+for `MediaKind.PHOTO` rather than letting sniffing fail open. Guarded by
+`test_photo_bytes_must_be_an_image.py` (11 tests).
+
+**The fix nearly caused a worse regression than the defect**, and this is the
+transferable part. Failing closed is only safe if every allowed image extension
+has a magic-byte signature the library recognises *under the same name* - and
+two did not: `filetype` reports a TIFF as `tif` and an animated PNG as `apng`,
+neither of which was in the photo allowlist. Shipping the strict check without
+noticing would have started rejecting genuine TIFF and APNG uploads, trading a
+security hole for a broken feature. It also broke eight existing tests that
+uploaded `b"photo-bytes"`, which is now correctly refused; those were moved onto
+real image bytes from a new `core/tests/images.py`. When you make a check
+stricter, ask what it now rejects that it should not.
+
+## RESOLVED 2026-08-24: a visit can be logged in the future
 
 `POST /dashboard/api/external/v1/pins/{pin_slug}/visits/` accepts a
 `visited_at` a week from now and answers **201**.
@@ -4025,6 +4064,13 @@ Found by `tests/integration/specs/api/visits.spec.ts`, which also pins the
 timestamp round-trip - the neighbouring risk on that field is a deployment
 whose database or worker is set to a different timezone shifting a visit by
 hours, so it is compared as an instant rather than as a string.
+
+**Fixed in both layers**, which is the part worth noting: the serializer
+validator alone would have left `create_manual_visit` accepting a future
+timestamp from every other caller, so the bound lives on the shared service too
+(`VisitInFutureError`, `MAX_VISIT_CLOCK_SKEW = 5 minutes`) with the serializer
+rejecting early for a clean 400. Guarded by `test_visit_time_bounds.py` across
+the serializer, the service, and the endpoint.
 
 ## OPEN 2026-08-24: a native client can edit a wiki but can never start one
 
@@ -4096,7 +4142,7 @@ second defect underneath it:
   swaps the element when a file 404s and the dev deployment has no media files.
   Worth ten minutes in front of a browser rather than another blind edit.
 
-## OPEN 2026-08-24: one pin-detail page load can exhaust the database connection pool
+## OPEN (ratcheted) 2026-08-24: one pin-detail page load can exhaust the database connection pool
 
 Found by `tests/integration/` on 2026-08-24, and only visible because the
 console/network guard watches every request a page makes rather than just the
@@ -4132,6 +4178,21 @@ client-side fan-out so panels load in waves, give the panel views a shared
 connection or move them behind one request, raise `max_connections`, or put
 pgbouncer in front. The first is the only one that helps a deployment of any
 size.
+
+**What has been done, short of fixing it.**
+`test_pin_detail_fanout_budget.py` renders the page and asserts the number of
+elements that fetch on load stays under a ceiling. It does *not* reproduce the
+exhaustion - that needs concurrency against a real pool, which a suite issuing
+one request at a time does not have - but it holds the number, which is the
+cause, and which creeps up one innocuous panel at a time. The ceiling is set
+**at** the current count, so it is a ratchet rather than an endorsement: raising
+it should take an argument, and it should come down when the real fix lands.
+
+Two measurements worth recording. The rendered count is **53**, not the ~30 seen
+above; the difference is real rather than an error in either, because some
+triggers carry a filter (`load[!window.ulSectionCollapsed(...)]`) and stay quiet
+for a collapsed section. 53 is the ceiling a user with everything expanded
+reaches, which is the number a budget should bound.
 
 Related: this is the concrete instance of the load-testing gap recorded in
 `docs/TOOLING.md` under "Evaluated, not adopted" - the integration suite found

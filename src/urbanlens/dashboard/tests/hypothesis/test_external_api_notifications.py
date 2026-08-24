@@ -194,6 +194,38 @@ class NotificationInboxTests(TestCase):
         foreign.refresh_from_db()
         self.assertEqual(foreign.status, Status.UNREAD)
 
+    def test_a_matched_row_answers_exactly_like_an_unmatched_one(self) -> None:
+        """The third leg, and the one that makes this an anti-oracle test.
+
+        The companion above compares two *non*-matches with each other, which
+        shows only that a foreign uuid looks like a nonexistent one. The
+        property the endpoint actually claims is stronger - 204 whether or not a
+        row matched - and it is not held unless the *matched* response is
+        indistinguishable too. Without this, a serializer added to the success
+        path, or a `Location` header, or a body of `{"status": "read"}`, would
+        turn every uuid into a membership test and the pair of tests above would
+        both still pass.
+        """
+        mine = self._notify(self.profile)
+
+        matched = self.client.post(
+            reverse("external_api:notifications.detail", kwargs={"notification_uuid": mine.uuid}),
+            **_bearer(self.raw_key),
+        )
+        unmatched = self.client.post(
+            reverse("external_api:notifications.detail", kwargs={"notification_uuid": uuid4()}),
+            **_bearer(self.raw_key),
+        )
+
+        self.assertEqual(matched.status_code, unmatched.status_code)
+        self.assertEqual(matched.content, unmatched.content)
+        self.assertEqual(sorted(matched.headers), sorted(unmatched.headers))
+
+        # The acknowledgement still has to have happened - an endpoint that did
+        # nothing at all would satisfy everything above.
+        mine.refresh_from_db()
+        self.assertEqual(mine.status, Status.READ)
+
     def test_read_all_clears_only_the_callers_notifications(self) -> None:
         self._notify(self.profile)
         self._notify(self.profile)
