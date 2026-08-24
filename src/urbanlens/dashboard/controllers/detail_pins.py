@@ -329,8 +329,22 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
-        child_wikis = wiki.child_wikis.order_by("pin_type", "name")
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        # Detail pins are map annotations - a marked entrance, a hazard, a way
+        # in - and they are hidden outright for a concealed viewer for the same
+        # reason markup is: they say people have surveyed this place and shared
+        # what they found, whoever placed them.
+        #
+        # Hidden rather than filtered to the viewer's own and their friends',
+        # which is what every other related row gets, because a child wiki
+        # records no creator: neither creation path sets `created_by`, and the
+        # field-revision substrate attributes the pin-sync path to SYSTEM, which
+        # would read as automatic and show a stranger's markers. Filtering needs
+        # provenance on the row first - see "child wikis (detail pins) record no
+        # creator" in docs/PROBLEMS.md.
+        child_wikis = wiki.child_wikis.none() if concealment_active(wiki, profile) else wiki.child_wikis.order_by("pin_type", "name")
         return render(
             request,
             "dashboard/partials/pins/location_detail_pins_panel.html",

@@ -158,7 +158,17 @@ def _resolve_owner(
         return markup_map, PinMarkup.objects.for_map(markup_map)
     if location_slug is None:
         raise Http404
-    _location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+    _location, wiki, profile = resolve_visible_wiki(request, location_slug)
+    # Markup is hidden outright for a concealed viewer - not filtered by who
+    # drew it, the way comments and photos are. A hand-drawn entrance route or
+    # a marked hole in a fence says people have been inside and compared notes,
+    # which is the exact fact concealment exists to withhold, and it says it
+    # whoever drew it. Ruled on directly by the product owner; see
+    # docs/designs/concealed-wiki-spec.md.
+    from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+    if concealment_active(wiki, profile):
+        return wiki, PinMarkup.objects.none()
     return wiki, PinMarkup.objects.for_wiki(wiki)
 
 
