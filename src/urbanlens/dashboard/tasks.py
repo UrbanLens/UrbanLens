@@ -727,7 +727,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         # cannot render them.
         if max_dimension is not None or convert_webp or strip_location or stored_file_needs_transcode(image.image.name or ""):
             try:
-                new_size = downscale_stored_image(image, max_dimension, convert_webp, strip_gps=strip_location)
+                new_size = downscale_stored_image(image, max_dimension, convert_webp)
             except (OSError, ValueError, PILDecompressionBombError) as exc:
                 # DecompressionBombError inherits straight from Exception, not from
                 # OSError/ValueError like the rest of Pillow's failures (Unidentified-

@@ -156,8 +156,10 @@ the sharer's own label.
    `services/map_pins/autocomplete.py:138`, `services/consensus/eligibility.py:37`.
 3. **Consensus photo rounds** do not apply `visible_to`; fixing needs a `build_round`
    protocol change.
-4. **`exif_data` is a plain `JSONField`.** Intent: encrypt it at rest and **strip it from
-   the image file**. Currently neither happens.
+4. **`exif_data` is a plain `JSONField`.** Intent: encrypt it at rest and strip it from the
+   image file. *Stripping done 2026-08-24* — the block now comes off every stored file
+   unconditionally, with `exif_transpose` applied first so nothing renders rotated. **Encryption
+   at rest is still outstanding** (it needs a field change and a migration).
 5. **`ocr_text` is a plain `TextField`** — derived text from a possibly-private photo, and
    a plausible search-leak path. Not yet audited.
 6. **Existing profiles** predate the stricter photo default and still need migrating.
