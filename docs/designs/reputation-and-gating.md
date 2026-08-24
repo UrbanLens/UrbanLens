@@ -389,10 +389,29 @@ target state — no provenance classification needed at all.
   the provenance gap with no schema change, which is what made the alternative worth taking
   seriously.
 
-  *Caveat to handle:* if enrichment rewrites a field **after** a user edit, the oldest `from`
-  is stale. And note the tension with the audit's tell #20 — `WikiEdit.changes` leaking prior
-  values into the viewer's own visible history is a bug to fix, while this reads the same data
-  server-side. Both are correct; the redaction is at the rendering layer.
+  *Corrected 2026-08-24, after the classification pass.* **This does not work for `name`, and
+  I overstated it.** `WikiEdit` is not a reliable provenance record: `LocationWikiEditDeleteView`
+  (`controllers/location_wiki.py:453`) hard-deletes an edit *and* its revert row while leaving
+  the value in place; `wiki_creation.py:177` renames a freshly-claimed wiki with a bare
+  `save()` and writes no edit at all; and `tasks.py:124` writes the enrichment name with a bulk
+  `.update()` that bypasses `save()`. Three of the four candidate channels are lossy and none
+  is authoritative.
+
+  The right fix is a column, and the codebase already demonstrates it: `Pin` carries
+  `name_is_user_provided` (`models/pin/model.py:121`), and `Wiki.pin_type` carries
+  `pin_type_is_user_provided` with **every** automatic writer honouring it and every user
+  writer setting it. `Wiki.name` simply never grew the equivalent. Until it does, blanket-
+  conceal to the automatic name — the cost is that a community name identical to the official
+  one still renders as the official one, which is harmless.
+
+  The oldest-`from` reading still holds where the edit history *is* the record — articles,
+  via `ArticleRevision`, which stores complete text per revision rather than diffs.
+
+  Note also the tension with the audit's tell #20: `WikiEdit.changes` leaking prior values into
+  the viewer's own visible history is a bug to fix, while any provenance reading uses the same
+  data server-side. Both hold; the redaction belongs at the rendering layer.
+
+  Full field-by-field detail: `concealed-wiki-spec.md`.
 
 **Worth building on its own merits.** "View wiki at this revision" is a good feature
 independently — it just is not the concealment mechanism.
