@@ -119,7 +119,20 @@ the message: the per-minute cap quotes *seconds* ("available in 3 seconds") and
 the client rides it out; the hourly cap quotes *thousands* of seconds
 ("available in 2017 seconds") and every write for the next half hour fails.
 
-The way out, when it happens, is to **re-provision**:
+Two other limits show up the same way - as failures that look like defects and
+are not:
+
+- **The malware scanner.** Every upload is scanned before it is stored, and the
+  API answers 503 when the scanner is unreachable. That is correct behaviour,
+  and it is not a statement about whatever the test was checking, so the photo
+  specs skip on it rather than failing. A scanner that is genuinely down is
+  `services/dependencies.spec.ts`'s business.
+- **Sign-in lockout.** Repeated runs in quick succession can trip the login
+  rate limit, and the form then reports "Please enter a correct username and
+  password" for a password that is perfectly correct. Re-provisioning does not
+  clear it; waiting does.
+
+The way out of the write quota, when it happens, is to **re-provision**:
 
 ```bash
 python src/urbanlens/manage.py provision_integration_env --out /tmp/e2e.json

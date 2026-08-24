@@ -3891,6 +3891,37 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
+## OPEN 2026-08-24: concurrent requests to `schema/` can 500
+
+Two overlapping fetches of `/dashboard/api/external/v1/schema/` can produce a
+500, with the next request answering 200 normally. The traceback is inside
+drf-spectacular rather than our code:
+
+    drf_spectacular/plumbing.py:854 in _load_class
+        if any(cls.target_class.startswith(app + '.') for app in installed_apps) ...
+    AttributeError: 'NoneType' object has no attribute 'startswith'
+
+`_load_class` resolves an extension's `target_class` from a dotted string to the
+class object, in place, on first use. Two requests arriving together race over
+that mutation: one reads `target_class` after the other has replaced it (or
+while it is None), and `startswith` is not a method of either replacement. The
+app runs gevent workers, so genuinely concurrent requests to one process are
+ordinary rather than exotic.
+
+**Not caused by anything in this branch** - nothing here registers a
+drf-spectacular extension - but newly *visible*, because `tests/contract` and
+the Playwright `api` project both fetch the schema and can overlap. It is
+almost certainly long-standing.
+
+It matters because the schema is a deployed artefact: a client generating code
+against it gets an intermittent 500 with no indication that retrying would work.
+Options are to warm the extension registry at startup (fetch the schema once in
+`AppConfig.ready`, so the mutation happens before any request races), or to cache
+the generated document.
+
+Found by `tests/integration/specs/api/contract.spec.ts`, where it presents as a
+flake rather than a failure - which is the shape it would have in production too.
+
 ## OPEN 2026-08-24: re-adding a removed friend creates a request nobody can accept
 
 Remove a friend, change your mind, and send them a friend request again. Both
