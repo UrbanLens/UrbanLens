@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.images.attachment import ImageAttachment
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
@@ -295,10 +295,41 @@ class PinImageView(LoginRequiredMixin, View):
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
     def delete(self, request: HttpRequest, pin_slug: str, image_id: int) -> HttpResponse:
+        """Take a photo off this pin, and off the wiki only if asked.
+
+        Contributing a photo to a community wiki is a deliberate act, so undoing
+        it has to be one too. This screen never mentions the wiki, and it used to
+        drop the ``Image`` row outright - which withdrew the contribution
+        silently. Now the wiki keeps the photo unless the owner says otherwise;
+        silence means no.
+
+        ``?from_wiki=1`` is that explicit answer, and it is honoured only for a
+        photo the owner uploaded. One fetched from a URL was a public resource
+        online before this app saw it, so there is no consent here to withdraw -
+        removing it is something you do on the wiki itself.
+
+        Args:
+            request: Incoming request; ``from_wiki=1`` also withdraws it.
+            pin_slug: Slug of the pin the photo is being removed from.
+            image_id: Primary key of the photo.
+
+        Returns:
+            204, whichever branch ran.
+
+        Raises:
+            Http404: The photo does not belong to the requester.
+        """
         img = self._get_image(image_id, pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404
+
+        withdrawing = request.GET.get("from_wiki") == "1" and img.source == ImageSource.UPLOAD
+        if img.wiki_id is not None and not withdrawing:
+            Image.objects.filter(pk=img.pk).update(pin=None)
+            ImageAttachment.objects.filter(image=img, pin__slug=pin_slug).delete()
+            return HttpResponse(status=204)
+
         delete_stored_file(img)
         img.delete()
         return HttpResponse(status=204)

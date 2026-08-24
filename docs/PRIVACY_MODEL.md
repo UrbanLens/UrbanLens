@@ -150,12 +150,21 @@ the sharer's own label.
 
 1. **`ImageQuerySet.visible_to` implements one container, not seven** (§2), and never
    checks reachability of the specific wiki. This is the largest open gap.
-2. **Five inline reimplementations of wiki access** that never call `wiki_access.py`, so
-   they cannot inherit fixes: `models/article/queryset.py:18`,
-   `services/global_search/providers.py:372,463,509,851`,
-   `services/map_pins/autocomplete.py:138`, `services/consensus/eligibility.py:37`.
-3. **Consensus photo rounds** do not apply `visible_to`; fixing needs a `build_round`
-   protocol change.
+2. ~~**Five inline reimplementations of wiki access**~~ — **four fixed 2026-08-24**; the fifth
+   was never one. `models/article/queryset.py`, `services/global_search/providers.py` (×4) and
+   `services/map_pins/autocomplete.py` now ask `visible_wiki_location_ids_cached`. They had all
+   restated clause one of four ("a pin on the exact location"), and three added a `created_by`
+   clause the authority does not have — wrong in both directions, and both visible to users: a
+   pin sharing the place's domain opened the page but found nothing in search, and a creator
+   with no pin was offered results whose page answers 404.
+   `services/consensus/eligibility.py` is **not** a reimplementation — it is a deliberate game
+   rule (visited-pinned only, per the Consensus design spec), stricter than access and a subset
+   of it.
+3. ~~**Consensus photo rounds** do not apply `visible_to`~~ — **fixed 2026-08-24**, and it did
+   not need the protocol change I expected. `eligibility` already prefetches `images` and already
+   has the profile, so filtering *that* prefetch fixes every strategy at once. Two bugs were
+   stacked: `_photo_build_round` used `wiki.images.filter(...)`, which skipped visibility *and*
+   defeated the prefetch — the misuse eligibility's own comment warns about.
 4. **`exif_data` is a plain `JSONField`.** Intent: encrypt it at rest and strip it from the
    image file. *Stripping done 2026-08-24* — the block now comes off every stored file
    unconditionally, with `exif_transpose` applied first so nothing renders rotated. Two follow-ons
@@ -238,7 +247,12 @@ Answers to the questions this document was written to ask. Each names the work i
    (fetched from a URL) there is **no prompt at all**; they stay on the wiki unless the user goes
    to the wiki and deletes it there, because a public resource that already exists online is not
    a consent question.
-   → *Work:* neither the prompt nor the external/uploaded distinction exists yet.
+   → *Done 2026-08-24:* the pin gallery detaches instead of dropping the row, and the wiki
+   keeps the photo unless `?from_wiki=1` says otherwise — honoured only for uploads. Deleting
+   from a pin used to destroy the row outright, withdrawing the contribution silently from a
+   screen that never mentions the wiki. *The external API's photo delete follows the same rule as of the same
+   day* — `?from_wiki=true`, uploads only, enforced server-side. A client can ask first:
+   `wiki_slug` and `source` were already on the photo payload.
 
 7. **Earned credit.** **Not now** — finish the work above first. The design in
    `docs/designs/reputation-and-gating.md` stays parked.

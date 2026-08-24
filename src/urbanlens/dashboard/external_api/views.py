@@ -162,7 +162,7 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.labels.meta import DEFAULT_LABEL_COLOR
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.links.model import PinLink
@@ -1297,12 +1297,39 @@ class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
 
     @extend_schema(responses={204: None, 404: ErrorSerializer})
     def delete(self, request: Request, image_uuid: UUID) -> Response:
-        """Delete one of the caller's own photos, file included."""
+        """Delete one of the caller's own photos, file included.
+
+        A photo the caller contributed to a community wiki is taken off their
+        own library and left on the wiki, unless ``?from_wiki=true`` says
+        otherwise - the same rule the pin gallery follows. Contributing is a
+        deliberate act, so undoing it is another one, and a client that says
+        nothing gets the answer that needs no action. Clients can ask first:
+        ``wiki_slug`` and ``source`` are both on the photo payload.
+
+        ``from_wiki`` is honoured only for an upload. A photo fetched from a URL
+        was a public resource online before this app saw it, so there is no
+        consent here to withdraw - it is removed on the wiki itself or not at
+        all, and that is enforced here rather than left to the client.
+
+        Args:
+            request: The API request; ``from_wiki=true`` also withdraws it.
+            image_uuid: UUID of the photo.
+
+        Returns:
+            204 when something was removed, 404 for a photo that is not the
+            caller's.
+        """
         image = self._get_image(request, image_uuid)
         if image is None:
             # 404 rather than 403 for someone else's photo - the same
             # no-oracle policy the rest of this API and the media gate follow.
             return Response({"error": "No such photo."}, status=404)
+
+        withdrawing = request.query_params.get("from_wiki", "").lower() in {"1", "true", "yes"} and image.source == ImageSource.UPLOAD
+        if image.wiki_id is not None and not withdrawing:
+            Image.objects.filter(pk=image.pk).update(pin=None)
+            return Response(status=204)
+
         # Matches controllers.photos.PhotoActionView.delete_photo: drop the
         # stored file before the row, so deleting the row can't orphan bytes.
         delete_stored_file(image)
