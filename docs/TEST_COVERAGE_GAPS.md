@@ -29,10 +29,25 @@ testable.
 | HTMX loaded from a CDN with no `integrity` | `test_page_template_integrity.py::SubresourceIntegrityTests` - asserted over *every* cross-origin `<script>`, not the one URL that was wrong |
 | A fresh pin's panels 404'd because the reslug sweep moved its URL underneath an open page | `test_placeholder_slug_refresh.py::test_the_sweep_will_not_reslug_a_pin_somebody_may_be_looking_at`, plus a companion proving the guard is a delay and not an exemption |
 | `DELETE /dashboard/e2ee/passkey-wrap/` raised `TypeError` out of the dispatcher (a 500) | `test_e2ee_passkey_unlock.py::test_delete_without_a_credential_id_is_refused_not_a_crash` |
+| A visit could be logged in the future | `test_visit_time_bounds.py` - the serializer, the shared service, and the endpoint. **Defect fixed**, both layers |
+| A photo upload trusted the filename over the bytes | `test_photo_bytes_must_be_an_image.py` - **defect fixed**; photos now need a positive image identification instead of sniffing failing open |
+| Two pairs of operations shared an `operationId` | `test_published_schema_properties.py::OperationIdTests` - pure schema, no database |
+| No authenticated operation documented its 401 | `test_published_schema_properties.py::DocumentedRefusalTests` - same file, also covers 403 and 404 |
+| nginx advertised its exact version | `test_security_headers.py::ProxyConfigTests` - a static check over `nginx.conf`, which nothing had ever read |
 
-The pattern worth noticing: three of the four became **static** checks over source
-or a schema, not request/response tests. That is usually the cheapest way to
-close an integration finding, and it is available more often than it looks.
+The pattern worth noticing: most of these became **static** checks over source or
+a schema, not request/response tests. That is usually the cheapest way to close
+an integration finding, and it is available more often than it looks.
+
+**One of them nearly caused the regression it was meant to prevent**, which is
+worth carrying forward. Making photo sniffing fail closed is only safe if every
+allowed image extension has a magic-byte signature the library recognises - and
+two did not agree by *name*: `filetype` reports a TIFF as `tif` and an animated
+PNG as `apng`, and neither string was in the photo allowlist. Shipping the strict
+check without noticing would have started rejecting genuine TIFF and APNG
+uploads, trading a security hole for a broken feature. The fix carries alias
+tests so it cannot be reintroduced. When you close one of the gaps below, ask
+what the *stricter* rule now rejects that it should not.
 
 ---
 
@@ -40,68 +55,7 @@ close an integration finding, and it is available more often than it looks.
 
 Ranked by how cheap the pytest guard is against how bad the defect is.
 
-### 1. A visit can be logged in the future
-
-**Found:** `POST pins/{slug}/visits/` accepts `visited_at` a week from now and
-answers 201, corrupting "last visited" everywhere it is displayed and ordered by.
-
-**Why pytest missed it:** nothing asserts the *absence* of validation. Every
-existing visit test supplies a sensible timestamp, because the author writing the
-test is thinking about the feature working. Nobody wrote the adversarial case.
-
-**What closes it:** a serializer-level test - no HTTP needed. Assert the field
-rejects a future datetime and accepts a past one, then bound the field. This is
-the cheapest guard in this document and the defect is a data-integrity one, so it
-should be first.
-
-### 2. A photo upload trusts the filename rather than the bytes
-
-**Found:** a shell script uploaded as `not-really.png` with
-`Content-Type: image/png` is stored and served back as an image.
-
-**Why pytest missed it:** the upload tests all upload real images. The same
-blind spot as above - the adversarial input was never tried.
-
-**Watch out:** the integration test that found this *nearly missed it too*. The
-first version reused the same payload, so from the second run onward the store's
-duplicate detection answered 409, which reads as "refused". **A pytest guard must
-use unique bytes per run, or assert on a fresh database.** Getting this wrong
-produces a test that passes for the wrong reason.
-
-**What closes it:** a `SimpleTestCase`-adjacent upload test posting non-image
-bytes under an image name and asserting a 4xx, plus one asserting a real image
-still succeeds so the check cannot be satisfied by rejecting everything.
-
-### 3. Two pairs of operations shared an `operationId`
-
-**Found:** `passkey_wrap_create`/`_destroy` were each claimed by two routes;
-drf-spectacular resolved it by appending `_2` to whichever it walked second, so
-adding an unrelated route could rename a method in every generated client.
-
-**Why pytest missed it:** the schema tests that exist assert that *particular*
-paths are present or absent. Nothing asserted a global property of the document.
-
-**What closes it:** a pure-schema `SimpleTestCase` - generate the document with
-`SchemaGenerator().get_schema(request=None, public=True)` and assert every
-`operationId` is unique. No database, no HTTP, runs in seconds. The assertion
-already exists in `tests/contract/test_openapi_conformance.py`; it should be
-*mirrored* into the pytest suite, because `tests/contract` is outside `testpaths`
-and does not run on a normal `pytest` invocation.
-
-### 4. No authenticated operation documented the 401 it returns
-
-**Found:** 284 operations declared `security` and documented only success, so a
-generated client had no branch for the most likely failure it will meet.
-
-**Why pytest missed it:** same reason as above - no test asserted a property
-across all operations.
-
-**What closes it:** the same pure-schema test file. Assert that an operation
-declaring `security` documents 401 and 403, and that a path with a parameter
-documents 404. Cheap, and it now passes, so it is a regression guard rather than
-a backlog item.
-
-### 5. Responses did not match their declared schema
+### 1. Responses did not match their declared schema
 
 **Found:** `undo/` declared a bare array and returned `{entries, omitted}`;
 `labels/` declared `location_count` required and omitted it.
@@ -117,7 +71,7 @@ needing no deployment. The gap is that it is not part of the default run. Either
 add a fast subset to CI, or accept that this class is caught only when somebody
 runs the contract suite - and say so out loud rather than assuming coverage.
 
-### 6. Re-adding a removed friend creates a request nobody can accept
+### 2. Re-adding a removed friend creates a request nobody can accept
 
 **Found:** `DELETE friends/{uuid}/` soft-deletes to status `Removed`, and a
 later `POST friends/` revives that row without re-orienting it - so the request
@@ -135,18 +89,7 @@ it is one service-level test with no HTTP - and worth generalising to the other
 statuses `Friendship.objects.between()` can return (`Declined`, `Ignored`,
 `Blocked`), each of which a later request will find and reuse.
 
-### 7. nginx advertised its exact version
-
-**Found:** `Server: nginx/1.31.3`.
-
-**Why pytest missed it:** the config file is not Python and nothing reads it.
-
-**What closes it:** a static check over `src/urbanlens/config/nginx/nginx.conf`
-asserting `server_tokens off;` is present in the `http` block - the same shape as
-`test_page_template_integrity.py`. Cheap, and it generalises: that file is
-otherwise untested.
-
-### 8. One pin-detail page load opens ~30 database connections at once
+### 3. One pin-detail page load opens ~30 database connections at once
 
 **Found:** the panel fan-out exhausted `max_connections`, producing 500s across
 whichever panels arrived when the pool was full.

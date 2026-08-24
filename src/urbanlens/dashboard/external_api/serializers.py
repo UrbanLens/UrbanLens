@@ -12,6 +12,7 @@ regardless of caller.
 
 from __future__ import annotations
 
+import datetime
 import math
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -86,8 +87,6 @@ from urbanlens.dashboard.services.pins.pin_edit import EDITABLE_PIN_FIELDS
 from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS
 
 if TYPE_CHECKING:
-    import datetime
-
     from urbanlens.dashboard.models.profile.model import Profile
 
 #: Same scheme restriction as controllers.links._clean_link_input - external
@@ -684,11 +683,43 @@ class PinVisitSerializer(serializers.Serializer):
     updated = serializers.DateTimeField(read_only=True)
 
 
+#: How far ahead of the server's clock a submitted visit time may sit.
+#:
+#: Not zero, because a client's clock is its own and a phone a minute fast is
+#: not lying about anything. Small, because the point is to reject a *date*
+#: in the future rather than to accommodate one.
+MAX_VISIT_CLOCK_SKEW = datetime.timedelta(minutes=5)
+
+
 class PinVisitCreateSerializer(serializers.Serializer):
     """A manually logged visit submitted for a pin."""
 
     visited_at = serializers.DateTimeField(required=True)
     notes = serializers.CharField(max_length=MAX_VISIT_NOTES_LENGTH, required=False, allow_blank=True, allow_null=True, default=None)
+
+    def validate_visited_at(self, value: datetime.datetime) -> datetime.datetime:
+        """Refuse a visit that has not happened yet.
+
+        A visit is a record of somewhere the user has *been*. A future one has
+        no meaning the product supports - a planned outing is a trip activity,
+        which is a different model with its own scheduling - and it is not
+        inert: ``sync_last_visited`` feeds ``Pin.last_visited``, which is
+        displayed and ordered by, so one mistyped year makes a pin permanently
+        the most recently visited thing its owner has.
+
+        Args:
+            value: The submitted visit time.
+
+        Returns:
+            The value, unchanged, when it is in the past.
+
+        Raises:
+            serializers.ValidationError: The time is beyond
+                :data:`MAX_VISIT_CLOCK_SKEW` ahead of now.
+        """
+        if value > timezone.now() + MAX_VISIT_CLOCK_SKEW:
+            raise serializers.ValidationError("A visit cannot be logged in the future.")
+        return value
 
 
 class LocationSearchQuerySerializer(serializers.Serializer):

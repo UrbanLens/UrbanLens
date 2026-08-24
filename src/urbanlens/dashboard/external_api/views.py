@@ -309,6 +309,7 @@ from urbanlens.dashboard.services.visits.safety import (
     validate_notifiable_contacts,
 )
 from urbanlens.dashboard.services.visits.visits import (
+    VisitInFutureError,
     VisitLoggingDisabledError,
     accept_visit_suggestion,
     create_manual_visit,
@@ -2774,6 +2775,11 @@ class PinVisitsView(OwnedPinMixin, PaginatedListMixin, ExternalApiView):
             visit = create_manual_visit(pin, visited_at=data["visited_at"], notes=data.get("notes"))
         except VisitLoggingDisabledError as exc:
             return Response({"error": exc.safe_message}, status=403)
+        except VisitInFutureError as exc:
+            # Normally unreachable - PinVisitCreateSerializer rejects a future
+            # time first, with field-level detail. Mapped anyway so the service
+            # guard cannot surface as a 500 if the two ever disagree.
+            return Response({"error": exc.safe_message}, status=400)
 
         # Re-read through the same annotation the list path uses, so the created
         # row carries photo_count rather than the response shape depending on
