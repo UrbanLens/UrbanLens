@@ -51,12 +51,16 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
         """Restrict to votes on the given stat field."""
         return self.filter(field=field)
 
-    def composite(self, wiki: Wiki, field: str) -> WikiStatComposite:
+    def composite(self, wiki: Wiki, field: str, *, viewer_conceals: bool = False) -> WikiStatComposite:
         """Compute the community composite for ``field`` on ``wiki``.
 
         Args:
             wiki: The wiki whose votes to aggregate.
             field: One of :class:`WikiStatField`'s values.
+            viewer_conceals: When True, return the no-votes state. A wiki whose
+                danger and vulnerability have been rated is self-evidently one
+                people have surveyed, so the ratings are among the first things
+                concealment has to withhold.
 
         Returns:
             The composite average and a privacy-fuzzed vote count for that
@@ -66,6 +70,14 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
             ``services.wiki.community_counts.approximate_pin_count`` fuzzes away
             for a wiki's pinned-user count, reused here unchanged.
         """
+        if viewer_conceals:
+            # The no-votes state, without reaching approximate_pin_count. Its
+            # cache is keyed only on the id passed in, with no viewer, so a
+            # concealed viewer arriving second would be handed the value an
+            # ordinary viewer populated - see
+            # services.wiki.concealment.concealed_community_summary.
+            return WikiStatComposite(rounded=None, exact=None, count=0)
+
         agg = self.for_wiki(wiki).for_field(field).aggregate(avg=Avg("value"), count=Count("id"))
         count = agg["count"] or 0
         avg = agg["avg"]

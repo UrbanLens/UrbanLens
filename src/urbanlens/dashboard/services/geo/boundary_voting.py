@@ -249,20 +249,21 @@ def cast_boundary_vote(place: Place | None, profile: Profile, boundary_id: int) 
     return vote
 
 
-def boundary_vote_context(place: Place | None, profile: Profile | None) -> dict | None:
+def boundary_vote_context(place: Place | None, profile: Profile | None, *, conceal: bool = False) -> dict | None:
     """Template context for the wiki page's boundary-vote dialog and button.
 
     Args:
         place: The wiki's place.
         profile: The viewing profile (for their current choice).
+        conceal: Whether this viewer sees the concealed form of the wiki.
 
     Returns:
         None when fewer than two candidates exist (nothing to vote on - no
         button, no dialog). Otherwise a dict with ``options`` (id, source,
         label, GeoJSON polygon, whether it's the viewer's current choice),
         ``my_vote_id``, ``has_votes``, ``has_consensus``, and ``auto_open``
-        (True only when nobody has voted yet, per the spec - once any votes
-        exist the dialog stays behind the manual button).
+        (True only when nobody *else* has voted yet, per the spec - once other
+        people's votes exist the dialog stays behind the manual button).
     """
     from urbanlens.dashboard.services.geo.geo import geometry_to_geojson
 
@@ -271,7 +272,25 @@ def boundary_vote_context(place: Place | None, profile: Profile | None) -> dict 
         return None
     my_vote = BoundaryVote.objects.my_vote(place, profile)
     my_vote_id = my_vote.boundary_id if my_vote else None
-    has_votes = BoundaryVote.objects.for_place(place).exists()
+
+    # Other people's votes only, and this is deliberately not "all votes".
+    #
+    # `auto_open` is an *inverted* tell: a place nobody has voted on opens this
+    # dialog on arrival, so a concealed viewer who does not get it has been
+    # shown that other people have been here - the concealment announcing
+    # itself by staying quiet. Concealing the votes therefore has to conceal
+    # them from this predicate too, or the dialog stops opening for exactly the
+    # viewer it is hiding them from.
+    #
+    # Excluding the viewer's own vote also fixes a contradiction that predates
+    # concealment: once you had voted, `has_votes` was true because of your own
+    # row, so the dialog stopped auto-opening for you on every other place too.
+    others = BoundaryVote.objects.for_place(place)
+    if profile is not None:
+        others = others.exclude(profile=profile)
+    if conceal:
+        others = others.none()
+    has_votes = others.exists()
     return {
         "options": [
             {

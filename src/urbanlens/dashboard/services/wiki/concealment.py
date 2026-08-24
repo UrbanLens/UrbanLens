@@ -135,3 +135,55 @@ def concealed_field_values(wiki: Wiki, viewer: Profile | None) -> dict[str, Any]
         # the live value - the live value is precisely what is being concealed.
         values[name] = field.get_default()
     return values
+
+
+def concealment_active(wiki: Wiki, viewer: Profile | None) -> bool:
+    """Whether this viewer should be shown the concealed form of this wiki.
+
+    **Currently always False.** The predicate is a reputation threshold scaled
+    by the wiki's community-voted vulnerability, and the threshold cannot be
+    chosen before there is real score data to choose it against - see the
+    reputation ledger, which is collecting that now. Landing the mechanism
+    behind a stub keeps every call site written and exercised in the meantime,
+    so turning it on later is a change to one function rather than a sweep.
+
+    Deliberately the *only* place this decision is made. The tells audit found
+    82 ways a concealed wiki could give itself away, and most of the classes
+    behind them exist because a rule was spelled out per call site instead of
+    once.
+
+    Args:
+        wiki: The wiki being rendered.
+        viewer: Who is looking, or None when signed out.
+
+    Returns:
+        Whether to conceal.
+    """
+    return False
+
+
+def concealed_community_summary() -> dict[str, Any]:
+    """The community card as it reads for a place nobody has pinned but you.
+
+    Returns the empty state **without calling**
+    ``services.wiki.community_counts.approximate_pin_count``, and that is the
+    whole point of this function existing rather than the caller filtering an
+    input queryset.
+
+    That fuzz caches its value for a day keyed **only on the id passed in**,
+    with no viewer in the key. So a concealed viewer who reached it would be
+    handed the number an ordinary viewer had already populated - defeating
+    concealment silently, only under concurrency, and only in the window after
+    somebody else loaded the page. Re-keying the cache per viewer would not fix
+    it either: it would just make the fuzz per-viewer averageable, which is the
+    attack the fuzz exists to stop.
+
+    Returns:
+        The same shape ``wiki_community_summary`` returns, in its empty state.
+    """
+    return {
+        "pin_count_low": True,
+        "pin_count_approx": None,
+        "first_pinned": None,
+        "first_pinned_precision": "month",
+    }

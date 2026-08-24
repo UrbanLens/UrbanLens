@@ -79,13 +79,14 @@ WIKI_STAT_FIELD_META = {
 }
 
 
-def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None) -> dict:
+def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None, *, conceal: bool = False) -> dict:
     """Build the template context for one community stat item.
 
     Args:
         wiki: The wiki the vote/composite belongs to.
         field: One of :class:`WikiStatField`'s values.
         profile: The viewing profile, used to look up their own vote.
+        conceal: Whether this viewer sees the concealed form of the wiki.
 
     Returns:
         Dict with the composite, the viewer's own vote, and that field's
@@ -94,7 +95,7 @@ def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None) -> dict:
     return {
         "field": field,
         "my_vote": WikiStatVote.objects.my_vote(wiki, field, profile),
-        "composite": WikiStatVote.objects.composite(wiki, field),
+        "composite": WikiStatVote.objects.composite(wiki, field, viewer_conceals=conceal),
         **WIKI_STAT_FIELD_META[field],
     }
 
@@ -108,9 +109,20 @@ class LocationWikiView(LoginRequiredMixin, View):
     def get(self, request, location_slug):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+        conceal = concealment_active(wiki, profile)
+
         # First view by someone other than the creator retires their
         # self-service delete eligibility (see Wiki.can_be_deleted_by).
-        if wiki.created_by_id and profile.id != wiki.created_by_id and not wiki.viewed_by_other:
+        #
+        # Skipped for a concealed viewer, and that is a privacy fix rather than
+        # a tidiness one: this write is visible to the *creator*, whose Delete
+        # button disappears the moment somebody else opens the page. A viewer
+        # who is being concealed from the community would otherwise announce
+        # their visit to the one person guaranteed to notice - concealment
+        # protecting the visitor and betraying them in the same request.
+        if not conceal and wiki.created_by_id and profile.id != wiki.created_by_id and not wiki.viewed_by_other:
             Wiki.objects.filter(pk=wiki.pk).update(viewed_by_other=True)
             wiki.viewed_by_other = True
 
@@ -120,8 +132,9 @@ class LocationWikiView(LoginRequiredMixin, View):
         # drift on the privacy rules (notably: first_pinned is suppressed
         # entirely while the pin count is too low to display).
         from urbanlens.dashboard.services.wiki.community_counts import wiki_community_summary
+        from urbanlens.dashboard.services.wiki.concealment import concealed_community_summary
 
-        community = wiki_community_summary(wiki, location)
+        community = concealed_community_summary() if conceal else wiki_community_summary(wiki, location)
         pin_count_display = {"is_low": community["pin_count_low"], "value": community["pin_count_approx"]}
         first_pinned = community["first_pinned"]
 
@@ -189,9 +202,9 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "wiki_comment_count": wiki.comments.count(),
                 "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
-                "wiki_stats": [_wiki_stat_context(wiki, field, profile) for field in WikiStatField.values],
+                "wiki_stats": [_wiki_stat_context(wiki, field, profile, conceal=conceal) for field in WikiStatField.values],
                 "public_vote": public_vote_context(location, profile),
-                "boundary_vote": boundary_vote_context(location.place, profile),
+                "boundary_vote": boundary_vote_context(location.place, profile, conceal=conceal),
                 "user_pin": user_pin,
                 "other_locations": other_locations,
                 "page_name": "location-wiki",
@@ -558,8 +571,10 @@ class WikiStatVoteView(LoginRequiredMixin, View):
         else:
             WikiStatVote.objects.clear(wiki, profile, field)
 
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
         return render(
             request,
             "dashboard/partials/pins/_wiki_stat_rating_item.html",
-            {"wiki": wiki, **_wiki_stat_context(wiki, field, profile)},
+            {"wiki": wiki, **_wiki_stat_context(wiki, field, profile, conceal=concealment_active(wiki, profile))},
         )
