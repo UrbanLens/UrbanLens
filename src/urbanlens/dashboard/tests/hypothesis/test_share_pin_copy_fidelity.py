@@ -64,23 +64,27 @@ class SharedPinCopyFidelityTests(TestCase):
 
         self.assertFalse(copied.pin_type_is_user_provided)
 
-    def test_a_custom_uploaded_icon_survives_the_share(self):
-        # Pin.effective_icon checks custom_icon before icon, so losing it silently
-        # changes what the pin looks like - and the docstring promises the icon travels.
+    def test_a_custom_uploaded_icon_does_not_survive_the_share(self):
+        """An icon is how one person marked a place for themselves.
+
+        This used to assert the opposite, on the reasoning that losing it "changes
+        what the pin looks like". It does, and that is the intent: the recipient
+        gets the place, not the sender's presentation of it.
+        """
         pin = Pin.objects.create(profile=self.sender, location=self.location, name="Custom icon", custom_icon="icons/skull.png", icon="place")
 
         copied = self._accept(pin)
 
-        self.assertEqual(copied.custom_icon.name, "icons/skull.png")
-        self.assertEqual(copied.effective_icon, pin.effective_icon)
+        self.assertFalse(copied.custom_icon, "the recipient inherited the sender's uploaded icon")
 
-    def test_a_pin_without_a_custom_icon_still_copies_its_plain_icon(self):
+    def test_the_plain_icon_does_not_travel_either(self):
+        """Same reasoning as the uploaded one - it is a presentation choice."""
         pin = Pin.objects.create(profile=self.sender, location=self.location, name="Plain icon", icon="place")
 
         copied = self._accept(pin)
 
         self.assertFalse(copied.custom_icon)
-        self.assertEqual(copied.icon, "place")
+        self.assertNotEqual(copied.icon, "place", "the recipient inherited the sender's icon choice")
 
     def test_the_indoor_outdoor_classification_travels(self):
         pin = Pin.objects.create(profile=self.sender, location=self.location, name="Indoors", indoor_outdoor="indoor")
@@ -189,11 +193,28 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         "wiki": "a cache of an explicit link; the new pin resolves its own",
         "inferred_source_share": "provenance is recorded via source_share on the new pin",
         "cover_photo": "set afterwards by _carry_cover_photo, pointing at the recipient's copy",
+        # The owner's side of the line. A share carries what is true about the
+        # *site*; how one person recorded, rated or decorated it stays with them.
+        # Ruled by Jess 2026-08-23, field by field, after each was found travelling.
+        "description": "the owner's personal notes - and nothing in the product lets somebody consent to passing them on",
+        "vulnerability": "the owner's rating of the place, not a property of it",
+        "danger": "the owner's rating of the place, not a property of it",
+        "priority": "how much this place matters to its owner",
+        "icon": "how the owner marked the place for themselves",
+        "color": "how the owner marked the place for themselves",
+        "custom_icon": "how the owner marked the place for themselves",
+        "detail_bg_color": "the owner's styling of their own pin",
+        "detail_bg_opacity": "the owner's styling of their own pin",
+        "detail_border_color": "the owner's styling of their own pin",
+        "detail_border_opacity": "the owner's styling of their own pin",
     }
 
     def test_every_pin_field_is_either_copied_or_deliberately_skipped(self):
         passed = _copied_field_names()
-        self.assertGreater(len(passed), 20, "could not find the property copy - has create_pin_from_share been restructured?")
+        # A floor, not a target: the guard exists to notice the copy being
+        # restructured out from under this test, and the count legitimately fell
+        # when the owner-side fields below stopped travelling.
+        self.assertGreater(len(passed), 12, "could not find the property copy - has create_pin_from_share been restructured?")
 
         concrete = {field.name for field in Pin._meta.get_fields() if getattr(field, "concrete", False)}
         unaccounted = sorted(concrete - passed - set(self.NOT_COPIED))

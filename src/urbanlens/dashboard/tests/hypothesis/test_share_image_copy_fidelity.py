@@ -9,6 +9,7 @@ defaults to ``UPLOAD`` and ``media_type`` defaults to ``PHOTO``.
 from __future__ import annotations
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -139,6 +140,82 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         new_pin = self._accept()
 
         self.assertNotEqual(new_pin.detail_bg_color, "#123456", "the recipient inherited the sender's pin styling")
+
+    def test_the_senders_own_view_of_the_place_does_not_travel(self) -> None:
+        """Icon, colour and priority are how one person marked a place for
+        themselves, not anything true about it."""
+        self.pin.icon = "zzq-custom-icon"
+        self.pin.color = "#abcdef"
+        self.pin.priority = 5
+        self.pin.save(update_fields=["icon", "color", "priority"])
+
+        new_pin = self._accept()
+
+        self.assertNotEqual(new_pin.icon, "zzq-custom-icon", "the recipient inherited the sender's icon")
+        self.assertNotEqual(new_pin.color, "#abcdef", "the recipient inherited the sender's colour")
+        self.assertNotEqual(new_pin.priority, 5, "the recipient inherited the sender's priority")
+
+    def test_the_senders_own_name_for_the_pin_does_not_travel(self) -> None:
+        """What somebody called their own pin says more about them than the place."""
+        self.pin.name = "zzq-my-old-school"
+        self.pin.save(update_fields=["name"])
+        self.location.official_name = "Hudson River State Hospital"
+        self.location.save(update_fields=["official_name"])
+
+        new_pin = self._accept()
+
+        self.assertNotIn("zzq-my-old-school", new_pin.name or "", "the recipient inherited the sender's name for the pin")
+        self.assertEqual(new_pin.name, "Hudson River State Hospital")
+
+    def test_a_deliberate_shared_name_is_used(self) -> None:
+        """The consent path: the sharer names the share themselves."""
+        from urbanlens.dashboard.models.pin_share.model import PinShare
+        from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
+
+        share = PinShare.objects.create(pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, shared_name="The old hospital")
+
+        self.assertEqual(create_pin_from_share(share).name, "The old hospital")
+
+    def test_a_shared_photo_keeps_where_and_when_but_not_the_caption(self) -> None:
+        """Dates and coordinates place the photo; the caption is what the sharer
+        wrote about it, and exif_data is the file behind it."""
+        photo = Image.objects.create(
+            image=SimpleUploadedFile("shot.jpg", b"not-a-real-jpeg", content_type="image/jpeg"),
+            profile=self.sender,
+            pin=self.pin,
+            location=self.location,
+            caption="zzq-what-i-thought-of-it",
+            latitude=41.7361,
+            longitude=-73.9361,
+            direction=270,
+            exif_data={"GPSInfo": {"secret": True}},
+        )
+        from urbanlens.dashboard.models.pin_share.model import PinShare
+        from urbanlens.dashboard.services.sharing.pin_sharing import create_pin_from_share
+
+        share = PinShare.objects.create(pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient)
+        share.images.set([photo])
+
+        new_pin = create_pin_from_share(share)
+        copy = Image.objects.get(pin=new_pin)
+
+        self.assertNotIn("zzq-what-i-thought-of-it", copy.caption or "")
+        self.assertFalse(copy.exif_data, "the recipient received the sender's photo metadata")
+        self.assertEqual(float(copy.latitude), 41.7361)
+        self.assertEqual(copy.direction, 270)
+        self.assertIn(self.sender.username, copy.author or "", "an unattributed photo should say who shared it")
+
+    def test_the_senders_ratings_of_the_place_do_not_travel(self) -> None:
+        """vulnerability and danger look like properties of the site and are not:
+        they are one person's assessment of it."""
+        self.pin.vulnerability = 4
+        self.pin.danger = 5
+        self.pin.save(update_fields=["vulnerability", "danger"])
+
+        new_pin = self._accept()
+
+        self.assertNotEqual(new_pin.vulnerability, 4, "the recipient inherited the sender's vulnerability rating")
+        self.assertNotEqual(new_pin.danger, 5, "the recipient inherited the sender's danger rating")
 
     def test_the_senders_labels_do_not_travel(self) -> None:
         """Labels are per-profile; the recipient must not end up holding the
