@@ -7,7 +7,7 @@ their friends' - as a single indexed query rather than a replay:
     SELECT DISTINCT ON (field_name) field_name, value
     FROM   <model>_field_revisions
     WHERE  target_id = %s AND (source = 'automatic' OR actor_id = ANY(%s))
-    ORDER  BY field_name, sequence DESC
+    ORDER  BY field_name, id DESC
 
 The latest *qualifying* write per field. Correct about ordering for free: a
 stranger's later edit is filtered out and a friend's earlier one is still the
@@ -34,7 +34,6 @@ from django.conf import settings as django_settings
 from django.db.models import (
     CASCADE,
     SET_NULL,
-    BigIntegerField,
     BooleanField,
     CharField,
     DateTimeField,
@@ -76,9 +75,12 @@ class AbstractFieldRevision(Model):
             because an empty string is a legitimate value for most CharFields
             here, so conflating the two would resurrect a concealed value as
             "" rather than None.
-        sequence: Monotonic per target. Orders writes without depending on
-            timestamps, which collide under load and go backwards under clock
-            adjustment.
+        (Ordering is by primary key. An explicit per-target sequence column was
+        tried first and was a race: computing ``Max(sequence) + 1`` and then
+        inserting is read-modify-write, so two concurrent writes to one target
+        pick the same number and one loses to the unique constraint. The table's
+        own auto-increment is already monotonic in insert order, needs no extra
+        query, and orders correctly within a target once filtered to it.)
         source: Whether a person, an automatic process, or the system wrote it.
         actor: The profile responsible, when there is one.
         recorded_at: Wall-clock time, for display only - never for ordering.
@@ -93,7 +95,6 @@ class AbstractFieldRevision(Model):
     field_name = CharField(max_length=64, db_index=True)
     value = TextField(blank=True, default="")
     is_null = BooleanField(default=False)
-    sequence = BigIntegerField()
     source = CharField(max_length=16, choices=WriteSource.choices, db_index=True)
     actor = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="+")
     recorded_at = DateTimeField(auto_now_add=True)
@@ -159,18 +160,43 @@ class VersionedModel(Model):
         abstract = True
         app_label = "dashboard"
 
+    @classmethod
+    def from_db(cls, db: Any, field_names: Any, values: Any) -> Any:
+        """Load, snapshotting the versioned fields so ``save()`` can diff them."""
+        instance = super().from_db(db, field_names, values)
+        instance._version_snapshot = {name: getattr(instance, name, None) for name in cls.versioned_fields}  # noqa: SLF001
+        return instance
+
     def save(self, *args: Any, **kwargs: Any) -> None:
-        """Save, recording a revision for each versioned field written."""
+        """Save, recording a revision only for versioned fields that changed.
+
+        Recording *every* versioned field on an untargeted save would be worse
+        than noisy - it would be wrong. A bare ``save()`` after editing one
+        field would stamp the saver's name and source onto all the others, so a
+        value a stranger contributed would be re-attributed to whoever saved
+        next. A concealed viewer resolves by author, so that is a leak: a
+        friend's ordinary save would hand them a stranger's contribution.
+        """
         update_fields = kwargs.get("update_fields")
-        if update_fields is None:
+        snapshot = getattr(self, "_version_snapshot", None)
+
+        if update_fields is not None:
+            touched = [name for name in update_fields if name in self.versioned_fields]
+        elif snapshot is None:
+            # No snapshot means this instance was never loaded from the
+            # database - a create. Its whole field set is the initial state.
             touched = list(self.versioned_fields)
         else:
-            touched = [name for name in update_fields if name in self.versioned_fields]
+            touched = [name for name in self.versioned_fields if getattr(self, name, None) != snapshot.get(name)]
 
         super().save(*args, **kwargs)
 
         if touched and not is_unversioned():
             _record_fields(type(self), self.pk, {name: getattr(self, name) for name in touched})
+
+        # Re-snapshot, so a second save on the same instance does not re-record
+        # what the first one already did.
+        self._version_snapshot = {name: getattr(self, name, None) for name in self.versioned_fields}
 
 
 def _revision_model(model: type[Model]) -> type[AbstractFieldRevision] | None:
@@ -193,32 +219,28 @@ def _revision_model(model: type[Model]) -> type[AbstractFieldRevision] | None:
 
 
 def _record_fields(model: type[Model], pk: Any, values: dict[str, Any]) -> None:
-    """Write one revision row per field, at the next sequence for this target.
+    """Write one revision row per field written.
 
     Never raises in production. A provenance record that takes down the write
     it was describing would be worse than the gap it leaves - but in DEBUG and
     under test it re-raises, so a bypass is loud where somebody is looking.
     """
-    from django.db.models import Max
-
     revision_model = _revision_model(model)
     if revision_model is None or pk is None:
         return
 
     try:
-        highest = revision_model.objects.filter(target_id=pk).aggregate(top=Max("sequence"))["top"] or 0
         source = current_write_source()
         actor_id = current_write_actor() if source == WriteSource.USER else None
 
         rows = []
-        for offset, (name, value) in enumerate(sorted(values.items()), start=1):
+        for name, value in sorted(values.items()):
             rows.append(
                 revision_model(
                     target_id=pk,
                     field_name=name,
                     value="" if value is None else _serialise(model, name, value),
                     is_null=value is None,
-                    sequence=highest + offset,
                     source=source,
                     actor_id=actor_id,
                 )
@@ -260,7 +282,7 @@ def resolve_fields(
     *,
     sources: Iterable[str] = (WriteSource.AUTOMATIC,),
     actor_ids: Iterable[int] = (),
-    up_to_sequence: int | None = None,
+    up_to_revision: int | None = None,
 ) -> dict[str, Any]:
     """Return the latest qualifying value of every versioned field.
 
@@ -272,7 +294,8 @@ def resolve_fields(
         actor_ids: Profiles whose writes also qualify - the viewer, and their
             friends, so that a friend saying "I put a load of stuff on the
             wiki" is not contradicted by the page.
-        up_to_sequence: Ignore anything newer, for viewing an earlier state.
+        up_to_revision: Ignore revisions newer than this row id, for viewing
+            an earlier state.
 
     Returns:
         ``{field_name: value}`` for every versioned field that has a
@@ -292,12 +315,12 @@ def resolve_fields(
         predicate |= Q(actor_id__in=actor_ids)
 
     rows = revision_model.objects.filter(target_id=target.pk).filter(predicate)
-    if up_to_sequence is not None:
-        rows = rows.filter(sequence__lte=up_to_sequence)
+    if up_to_revision is not None:
+        rows = rows.filter(pk__lte=up_to_revision)
 
     # DISTINCT ON needs the ordering to lead with the distinct column; the
     # database then hands back the newest qualifying row per field directly.
-    rows = rows.order_by("field_name", "-sequence").distinct("field_name")
+    rows = rows.order_by("field_name", "-pk").distinct("field_name")
 
     resolved: dict[str, Any] = {}
     for row in rows:

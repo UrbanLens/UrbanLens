@@ -34,7 +34,7 @@ class InterceptionTests(TestCase):
         WikiFieldRevision.objects.filter(target=self.wiki).delete()
 
     def _names(self) -> list[str]:
-        return list(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").order_by("sequence").values_list("value", flat=True))
+        return list(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").order_by("pk").values_list("value", flat=True))
 
     def test_save_records_a_revision(self) -> None:
         """The ordinary path."""
@@ -153,7 +153,7 @@ class SourceInferenceTests(TestCase):
         self.user = baker.make(User)
 
     def _latest(self) -> WikiFieldRevision:
-        return WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").latest("sequence")
+        return WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").latest("pk")
 
     def test_a_write_during_a_signed_in_request_is_that_persons(self) -> None:
         """The middleware answers it once, so no view has to."""
@@ -197,3 +197,75 @@ class SourceInferenceTests(TestCase):
         revision = self._latest()
         self.assertEqual(revision.source, WriteSource.AUTOMATIC)
         self.assertIsNone(revision.actor_id)
+
+
+class DirtyFieldTests(TestCase):
+    """An untargeted save records what changed, not everything it could have."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.wiki = baker.make(Wiki, location=baker.make(Location), name="Start", officially_created=True)
+        self.stranger = baker.make(User).profile
+        self.friend = baker.make(User).profile
+
+    def _fields_written_by(self, actor_id: int) -> set[str]:
+        return set(
+            WikiFieldRevision.objects.filter(target=self.wiki, actor_id=actor_id).values_list("field_name", flat=True)
+        )
+
+    def test_a_bare_save_records_only_the_changed_field(self) -> None:
+        """Recording all of them would re-attribute other people's work.
+
+        A concealed viewer resolves by author, so if an ordinary save stamped
+        the saver onto every versioned field, a friend saving the wiki for an
+        unrelated reason would hand that viewer a stranger's contribution.
+        """
+        from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
+
+        with writing_as(WriteSource.USER, actor=self.stranger.pk):
+            Wiki.objects.filter(pk=self.wiki.pk).update(description="A stranger's note")
+
+        fresh = Wiki.objects.get(pk=self.wiki.pk)
+        with writing_as(WriteSource.USER, actor=self.friend.pk):
+            fresh.name = "Renamed by a friend"
+            fresh.save()
+
+        self.assertEqual(self._fields_written_by(self.friend.pk), {"name"})
+        self.assertNotIn("description", self._fields_written_by(self.friend.pk))
+
+    def test_a_stranger_s_contribution_survives_a_friend_s_unrelated_save(self) -> None:
+        """The consequence of the above, stated as the behaviour that matters."""
+        from urbanlens.dashboard.services.wiki.concealment import concealed_field_values
+
+        with writing_as(WriteSource.USER, actor=self.stranger.pk):
+            Wiki.objects.filter(pk=self.wiki.pk).update(description="How to get in")
+
+        fresh = Wiki.objects.get(pk=self.wiki.pk)
+        with writing_as(WriteSource.USER, actor=self.friend.pk):
+            fresh.name = "Renamed"
+            fresh.save()
+
+        baker.make(
+            "dashboard.Friendship",
+            from_profile=self.stranger,
+            to_profile=self.friend,
+            status="Accepted",
+        )
+        viewer = baker.make(User).profile
+        baker.make("dashboard.Friendship", from_profile=viewer, to_profile=self.friend, status="Accepted")
+
+        values = concealed_field_values(Wiki.objects.get(pk=self.wiki.pk), viewer)
+
+        self.assertNotEqual(values["description"], "How to get in")
+
+    def test_saving_twice_does_not_re_record_an_unchanged_field(self) -> None:
+        """The snapshot is refreshed after each save."""
+        from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
+
+        fresh = Wiki.objects.get(pk=self.wiki.pk)
+        with writing_as(WriteSource.USER, actor=self.friend.pk):
+            fresh.name = "Once"
+            fresh.save()
+            fresh.save()
+
+        self.assertEqual(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name", actor_id=self.friend.pk).count(), 1)
