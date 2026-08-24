@@ -657,7 +657,6 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         extract_source_url,
         extract_taken_at,
         is_camera_generated_filename,
-        stored_file_needs_transcode,
     )
     from urbanlens.dashboard.services.media.storage import get_downscale_policy
 
@@ -721,26 +720,29 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
     new_stored_size: int | None = None
     if image.profile is not None:
         max_dimension, convert_webp = get_downscale_policy(image.profile)
-        # `stored_file_needs_transcode`: a HEIC has to be re-encoded even when the
-        # uploader's policy asks for no resize, no WebP and no GPS strip, because
-        # the stored bytes are what a plain <img src> gets and most browsers
-        # cannot render them.
-        if max_dimension is not None or convert_webp or strip_location or stored_file_needs_transcode(image.image.name or ""):
-            try:
-                new_size = downscale_stored_image(image, max_dimension, convert_webp)
-            except (OSError, ValueError, PILDecompressionBombError) as exc:
-                # DecompressionBombError inherits straight from Exception, not from
-                # OSError/ValueError like the rest of Pillow's failures (Unidentified-
-                # ImageError does), so it escaped this handler and took the whole
-                # photo-processing task down with it. Pillow's own 89MP ceiling already
-                # prevents the memory exhaustion; what was missing was degrading to the
-                # same logged warning every other unprocessable image gets, leaving the
-                # upload stored and the rest of the pipeline intact.
-                logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
-            else:
-                if new_size is not None:
-                    update_fields["image"] = image.image.name
-                    new_stored_size = new_size
+        # Called unconditionally. It used to be gated on there being a resize, a
+        # conversion, a location opt-out or a HEIC to transcode - reasonable while
+        # this function existed to resize, but it is also what removes EXIF now,
+        # and "no cap, no conversion" is exactly the policy a downscale-exempt
+        # subscriber gets. Gating it left their photos carrying the block.
+        # downscale_stored_image decides for itself whether anything needs doing,
+        # including the HEIC case (`stored_file_needs_transcode`), where the stored
+        # bytes are what a plain <img src> gets and most browsers cannot render them.
+        try:
+            new_size = downscale_stored_image(image, max_dimension, convert_webp)
+        except (OSError, ValueError, PILDecompressionBombError) as exc:
+            # DecompressionBombError inherits straight from Exception, not from
+            # OSError/ValueError like the rest of Pillow's failures (Unidentified-
+            # ImageError does), so it escaped this handler and took the whole
+            # photo-processing task down with it. Pillow's own 89MP ceiling already
+            # prevents the memory exhaustion; what was missing was degrading to the
+            # same logged warning every other unprocessable image gets, leaving the
+            # upload stored and the rest of the pipeline intact.
+            logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
+        else:
+            if new_size is not None:
+                update_fields["image"] = image.image.name
+                new_stored_size = new_size
 
     return _UploadProcessResult(update_fields, coords, new_stored_size)
 
