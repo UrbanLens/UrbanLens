@@ -472,7 +472,6 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
         target_point=round_.target_point,
     )
     points = scoring.points_for_distance(distance)
-    photo_coordinates.record_guess(round_, guess_point, distance)
 
     session = round_.session
     config = _config_from_session(session)
@@ -509,6 +508,7 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
         except IntegrityError:
             raise SpotGuessrError("This profile has already guessed this round.") from None
 
+        photo_coordinates.record_guess(locked_round, guess_point, distance)
         GameSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=F("total_points") + points + date_points + bonus.total)
 
         joined_count = session.participants.joined().count()

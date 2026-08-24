@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import (
     GameSessionStatus,
     LocationModeRating,
+    PhotoCoordinateGuess,
     PlayerModeRating,
     SpotGuessrMode,
 )
@@ -139,6 +140,15 @@ class SubmitGuessTests(TestCase):
         submit_guess(self.round_, self.profile, guess_point)
         with pytest.raises(SpotGuessrError):
             submit_guess(self.round_, self.profile, guess_point)
+
+    def test_a_rejected_duplicate_guess_does_not_record_coordinate_evidence(self) -> None:
+        guess_point = Point(float(self.location.longitude), float(self.location.latitude), srid=4326)
+        submit_guess(self.round_, self.profile, guess_point)
+
+        with pytest.raises(SpotGuessrError):
+            submit_guess(self.round_, self.profile, guess_point)
+
+        self.assertEqual(PhotoCoordinateGuess.objects.filter(image_id=self.round_.image_id).count(), 1)
 
     def test_guessing_completes_the_round_and_updates_ratings(self) -> None:
         guess_point = Point(float(self.location.longitude), float(self.location.latitude), srid=4326)
