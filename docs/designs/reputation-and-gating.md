@@ -416,6 +416,70 @@ target state — no provenance classification needed at all.
 **Worth building on its own merits.** "View wiki at this revision" is a good feature
 independently — it just is not the concealment mechanism.
 
+### R18. Forward revisions — this supersedes the provenance columns
+
+Jess: replay is backwards today; would it make sense to redesign so revisions play **forward**,
+git-style, provided the current version stays free to read?
+
+**Yes, and it is a better answer than R17's correction.** Two of my three objections to the
+revision approach were objections to *backward* replay specifically, and they do not survive
+the inversion:
+
+- *"Replay is lossy for non-text fields"* — only because it reconstructs by inverting diffs.
+  Store **full snapshots of the scalar field set** instead, which is what `ArticleRevision`
+  already does and what its docstring commends: "any revision can be viewed, diffed, or
+  restored wholesale without replaying a chain of diffs" (`models/article/model.py:143`). A
+  wiki has roughly fifteen editable fields; a snapshot is cheap. No replay, no inversion, no
+  stringification.
+- *"Freezing time freezes automatic content too"* — this was the objection that killed it, and
+  it dies once each write records **its own source**. The thing we want is not "the wiki at
+  time T". It is *"the wiki as it would be if only automatic writers had ever touched it"* —
+  which is a **filter over the log, not a point in it**, and therefore stays current as
+  enrichment continues.
+
+That second point is the whole idea. It also dissolves the MIXED problem outright rather than
+patching it: provenance stops being something we infer after the fact from lossy channels, and
+becomes a property recorded at write time. R17's recommendation of a `name_is_user_provided`
+column — and the equivalent column the classification pass wants for labels, links and child
+wikis — answers only "who wrote this last". The log answers the question we actually ask.
+
+**The design, against Jess's performance constraint.**
+
+1. **`Wiki` stays exactly as it is — the materialised real HEAD.** Normal viewers read a plain
+   row and nothing is reconstructed. This is the constraint satisfied by doing nothing.
+2. **A second materialised projection: the automatic-only HEAD.** Updated on every automatic
+   write, untouched by user writes. A concealed viewer reads *that* row. So concealed reads are
+   also O(1) — there is no replay on any read path, ever. Replay exists only for history and
+   merge, which are cold.
+3. **An append-only revision log** — one row per write, carrying a full snapshot of the scalar
+   fields, a `source` (automatic / user / system), the actor, and a parent pointer. This is the
+   git-shaped part: immutable snapshots plus a pointer to HEAD.
+4. **Related rows are not part of this.** Photos, comments, aliases, links, floorplans, child
+   wikis and stat votes are rows, not fields, and rows already carry usable provenance
+   (`Image.source`, `WikiAlias.source`, `created_by`). They keep per-row filtering. The log
+   covers the scalar fields, which is exactly where provenance is currently unrecoverable.
+
+**What has to happen first, and it is the real cost.** The architecture only holds if every
+write funnels through one place, and today they emphatically do not — `tasks.py:124` writes the
+enrichment name with a bulk `.update()` that bypasses `save()`, `wiki_creation.py:177` renames
+with a bare `save()` and no edit row, and `controllers/markup.py:76` writes a security field
+while deliberately omitting `"updated"` from `update_fields`. Funnelling wiki field writes
+through a single function is a prerequisite, is a long tail of bypass paths, and is worth doing
+on its own merits — those three bypasses are already bugs.
+
+Add a structural CI check for it, alongside the three that exist. Without one this decays back
+to the current state, which is how it got here.
+
+**Honest costs:** write amplification (two rows plus a log row per edit, on a path that is not
+hot); storage linear in edit count, bounded and prunable by collapsing old snapshots; and the
+funnelling refactor above. Against that it gives concealment for free at read time, the
+substrate the merge work needs (R15), a real "view wiki at this revision" feature, and a
+provenance record that does not have to be inferred.
+
+**Not scoped here.** The generic form — one revision log serving wikis, articles, pins and
+floorplans — is the obvious next question and should be answered before the schema is written,
+not after.
+
 ## What already exists (read this before designing anything below)
 
 A 2026-08-21 survey found most of the "we should build X" asks in the source voice memo already
