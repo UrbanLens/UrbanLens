@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json, parse_reposition_payload
 from urbanlens.dashboard.services.photos.uploads import UploadRejection, upload_photo_for_owner
+from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -444,7 +445,7 @@ class WikiImageView(LoginRequiredMixin, View):
 
     def _get_image(self, request: HttpRequest, image_id: int, location_slug: str) -> tuple[Image, Profile]:
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        return get_object_or_404(Image, pk=image_id, wiki=wiki), profile
+        return get_object_or_404(visible_rows(Image.objects.filter(wiki=wiki), wiki, profile), pk=image_id), profile
 
     def post(self, request: HttpRequest, location_slug: str, image_id: int) -> JsonResponse:
         img, profile = self._get_image(request, image_id, location_slug)

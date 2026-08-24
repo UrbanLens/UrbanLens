@@ -414,7 +414,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
-            parent = get_object_or_404(Comment, id=parent_id, wiki=wiki)
+            parent = get_object_or_404(_visible_wiki_comments(wiki, profile), id=parent_id)
         comment = Comment.objects.create(
             wiki=wiki,
             profile=profile,
@@ -439,7 +439,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
 
     def delete(self, request, location_slug, comment_id):
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        comment = get_object_or_404(Comment, id=comment_id, wiki=wiki)
+        comment = get_object_or_404(_visible_wiki_comments(wiki, profile), id=comment_id)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map

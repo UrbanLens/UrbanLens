@@ -35,6 +35,7 @@ from urbanlens.dashboard.services.pins.pin_subresources import (
     delete_pin_alias,
     promote_alias_to_name,
 )
+from urbanlens.dashboard.services.wiki.concealment import visible_rows, writable_wiki
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 from urbanlens.dashboard.services.wiki.wiki_aliases import promote_wiki_alias_to_name
 
@@ -262,7 +263,7 @@ class LocationAliasView(LoginRequiredMixin, View):
 class LocationAliasDeleteView(LoginRequiredMixin, View):
     def delete(self, request, location_slug, alias_id):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
+        alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
         if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(wiki.name):
             return HttpResponse("This alias is the current name - pick another name first.", status=400)
         alias_name = alias.name
@@ -284,9 +285,13 @@ class LocationAliasUseView(LoginRequiredMixin, View):
 
     def post(self, request, location_slug, alias_id):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
-        edit = promote_wiki_alias_to_name(wiki, profile, alias)
-        response = _render_location_panel(request, location, wiki, profile)
+        alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
+        # Renaming saves the wiki (through apply_wiki_edit), so it needs the
+        # real row - see concealment.writable_wiki. The panel then re-renders
+        # from what was written, not from the pre-write projection.
+        target = writable_wiki(wiki)
+        edit = promote_wiki_alias_to_name(target, profile, alias)
+        response = _render_location_panel(request, location, target, profile)
         if edit is None:
             # The alias was already the wiki's name, so nothing was written.
             # Announcing a rename anyway would push a "renamed" toast and a
@@ -306,6 +311,6 @@ class LocationAliasToggleNicknameView(LoginRequiredMixin, View):
 
     def post(self, request, location_slug, alias_id):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
+        alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
         alias.toggle_nickname()
         return _render_location_panel(request, location, wiki, profile)

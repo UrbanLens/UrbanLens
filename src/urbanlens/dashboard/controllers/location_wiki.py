@@ -38,6 +38,7 @@ from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locatio
 from urbanlens.dashboard.services.places.scope import scope_badge
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
+from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki, visible_parent_wiki
 from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit, save_edited_fields
 
@@ -478,7 +479,7 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import writable_wiki
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
+        target_edit = get_object_or_404(visible_rows(WikiEdit.objects.filter(wiki=wiki), wiki, profile), id=edit_id)
 
         if target_edit.reverted:
             return JsonResponse({"error": "This edit has already been reverted."}, status=400)
@@ -525,7 +526,7 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import writable_wiki
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
+        target_edit = get_object_or_404(visible_rows(WikiEdit.objects.filter(wiki=wiki), wiki, profile), id=edit_id)
 
         if target_edit.editor_id != profile.id:
             return JsonResponse({"error": "You can only permanently delete your own edits."}, status=403)

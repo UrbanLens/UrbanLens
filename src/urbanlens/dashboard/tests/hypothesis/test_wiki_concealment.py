@@ -21,12 +21,14 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.article.model import EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA, Article, ArticleRevision
 from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki.revision import WikiFieldRevision
-from urbanlens.dashboard.services.wiki.concealment import accepted_friend_ids, conceal_wiki, concealed_field_values, is_concealed, writable_wiki
+from urbanlens.dashboard.services.wiki.concealment import accepted_friend_ids, conceal_article, conceal_wiki, concealed_field_values, is_concealed, visible_rows, writable_wiki
 
 
 class ConcealedValueTests(TestCase):
@@ -521,3 +523,133 @@ class ProjectionTests(TestCase):
             for_other = conceal_wiki(projection, self.other)
 
         self.assertIsNot(for_other, projection)
+
+
+class ConcealedArticleTests(TestCase):
+    """What a concealed viewer reads on the Article tab.
+
+    An article is prose, not fields, so there is nothing to resolve write-by-
+    write. What makes it tractable is that every ``ArticleRevision`` stores the
+    complete source as of that revision: showing the newest revision a viewer
+    may see needs no reconstruction.
+
+    The rule with teeth is the null editor. It means a Wikipedia seed *or* a
+    deleted account, and treating the two alike would hand a stranger's prose to
+    a concealed viewer on the strength of that stranger having closed their
+    account.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.viewer = baker.make(User).profile
+        self.friend = baker.make(User).profile
+        self.stranger = baker.make(User).profile
+        baker.make(Friendship, from_profile=self.viewer, to_profile=self.friend, status=FriendshipStatus.ACCEPTED)
+
+        self.article = baker.make(Article, wiki=self.wiki, pin=None, content="stranger text")
+
+    def _revision(self, content: str, *, editor=None, summary: str = "") -> ArticleRevision:
+        return baker.make(ArticleRevision, article=self.article, content=content, editor=editor, edit_summary=summary)
+
+    def _shown(self):
+        with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
+            return conceal_article(self.article, self.wiki, self.viewer)
+
+    def test_a_place_only_strangers_have_written_up_has_no_article(self) -> None:
+        """Which is exactly what a place nobody has written up looks like."""
+        self._revision("A stranger's write-up", editor=self.stranger)
+
+        self.assertIsNone(self._shown())
+
+    def test_a_wikipedia_seed_is_shown(self) -> None:
+        """Automatic content is public information the site relays; a fresh wiki carries it."""
+        self._revision("Seeded prose", editor=None, summary=EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA)
+
+        self.assertEqual(self._shown().content, "Seeded prose")
+
+    def test_a_deleted_strangers_revision_is_not_mistaken_for_a_seed(self) -> None:
+        """The trap: `editor` is null for a deleted account too."""
+        self._revision("A deleted stranger's write-up", editor=None, summary="tidied up")
+
+        self.assertIsNone(self._shown())
+
+    def test_a_friends_revision_is_shown(self) -> None:
+        """Friends talk offline - "I put a load of stuff on the wiki" has to work."""
+        self._revision("Seeded prose", editor=None, summary=EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA)
+        self._revision("My friend's write-up", editor=self.friend)
+
+        self.assertEqual(self._shown().content, "My friend's write-up")
+
+    def test_a_strangers_later_revision_does_not_displace_a_friends(self) -> None:
+        """The newest *visible* revision, not the newest revision."""
+        self._revision("My friend's write-up", editor=self.friend)
+        self._revision("A stranger's later rewrite", editor=self.stranger)
+
+        shown = self._shown()
+
+        self.assertEqual(shown.content, "My friend's write-up")
+        self.assertNotIn("stranger", shown.content_html)
+
+    def test_the_projection_refuses_to_be_saved(self) -> None:
+        """Saving it would publish an older revision as the current article."""
+        self._revision("My friend's write-up", editor=self.friend)
+        self._revision("A stranger's later rewrite", editor=self.stranger)
+
+        with self.assertRaises(TypeError):
+            self._shown().save()
+
+    def test_an_unconcealed_viewer_reads_the_live_article(self) -> None:
+        """The ordinary path, and the control for every assertion above."""
+        self._revision("A stranger's later rewrite", editor=self.stranger)
+
+        self.assertIs(conceal_article(self.article, self.wiki, self.viewer), self.article)
+
+
+class ByIdScopeTests(TestCase):
+    """The queryset every by-id lookup on a wiki-scoped row is now scoped to.
+
+    Fifteen call sites looked up a comment, alias, link, edit, photo or article
+    revision by id, scoped to the wiki rather than to the viewer. That is an
+    existence oracle - "is there a row N here" is answered for rows concealment
+    had already decided the account cannot see - and on the mutating routes it
+    let the account act on one: reverting an edit it was never shown, deleting
+    a stranger's alias, promoting one to the wiki's name.
+
+    They all go through ``visible_rows`` now, so this covers the property they
+    share rather than fifteen views separately.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.viewer = baker.make(User).profile
+        self.friend = baker.make(User).profile
+        self.stranger = baker.make(User).profile
+        baker.make(Friendship, from_profile=self.viewer, to_profile=self.friend, status=FriendshipStatus.ACCEPTED)
+
+        self.mine = baker.make(WikiEdit, wiki=self.wiki, editor=self.viewer)
+        self.friends = baker.make(WikiEdit, wiki=self.wiki, editor=self.friend)
+        self.theirs = baker.make(WikiEdit, wiki=self.wiki, editor=self.stranger)
+
+    def _scoped(self):
+        with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
+            return visible_rows(WikiEdit.objects.filter(wiki=self.wiki), self.wiki, self.viewer)
+
+    def test_a_strangers_row_is_not_reachable_by_id(self) -> None:
+        """The oracle, stated as the lookup that used to succeed."""
+        self.assertFalse(self._scoped().filter(id=self.theirs.id).exists())
+
+    def test_your_own_row_is_still_reachable_by_id(self) -> None:
+        """Scoping must not cost the viewer their own rows - every route here is one they use."""
+        self.assertTrue(self._scoped().filter(id=self.mine.id).exists())
+
+    def test_a_friends_row_is_still_reachable_by_id(self) -> None:
+        """Same rule as everywhere else: friends' contributions stay visible."""
+        self.assertTrue(self._scoped().filter(id=self.friends.id).exists())
+
+    def test_an_unconcealed_viewer_reaches_every_row(self) -> None:
+        """The control. Without it these assertions pass against an empty queryset."""
+        rows = visible_rows(WikiEdit.objects.filter(wiki=self.wiki), self.wiki, self.viewer)
+
+        self.assertEqual(rows.count(), 3)

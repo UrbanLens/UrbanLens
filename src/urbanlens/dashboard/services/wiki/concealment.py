@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn, Protocol
 
 from django.db.models import Q
 
@@ -40,6 +40,7 @@ from urbanlens.dashboard.models.abstract.versioned import concrete_field, resolv
 from urbanlens.dashboard.models.abstract.versioning import WriteSource
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.article.model import Article, ArticleRevision
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
@@ -283,12 +284,44 @@ def conceal_rows(queryset: Any, viewer: Profile | None) -> Any:
 
         return queryset.filter(~Q(source=AliasSource.USER) | Q(created_by_id__in=allowed))
 
+    if model_name == "ArticleRevision":
+        # A null `editor` means one of two things and the generic
+        # null-is-automatic rule gets one of them badly wrong: a system seed
+        # from Wikipedia, which a fresh wiki would carry, and an account that
+        # has since been deleted, whose prose is a stranger's. The model's own
+        # `editor_display_name` distinguishes them by edit summary; so does this.
+        from urbanlens.dashboard.models.article.model import SYSTEM_EDIT_SUMMARIES
+
+        return queryset.filter(Q(editor_id__in=allowed) | Q(editor_id__isnull=True, edit_summary__in=SYSTEM_EDIT_SUMMARIES))
+
     actor_field = _ACTOR_FIELDS.get(model_name)
     if actor_field is None:
         logger.error("conceal_rows: no provenance rule for %s; refusing to guess", model_name)
         return queryset.none()
 
     return queryset.filter(Q(**{f"{actor_field}__isnull": True}) | Q(**{f"{actor_field}__in": allowed}))
+
+
+def visible_rows(queryset: Any, wiki: Wiki, viewer: Profile | None) -> Any:
+    """A wiki-scoped queryset narrowed to what *viewer* may see.
+
+    :func:`conceal_rows` plus the gate check, which every caller was writing out
+    as the same three lines. Worth one name for two reasons beyond brevity: it
+    is what a by-id lookup should be scoped to, and spelling that out per call
+    site is how nine of them ended up scoped to the wiki instead of the viewer -
+    an existence oracle that answers "is there a row N here" for rows
+    concealment has already decided the account cannot see, and, on the
+    mutating routes, lets it act on one.
+
+    Args:
+        queryset: Rows already scoped to one wiki.
+        wiki: The wiki they belong to, for the concealment decision.
+        viewer: Who is looking, or None when signed out.
+
+    Returns:
+        The queryset, narrowed when this viewer is concealed.
+    """
+    return conceal_rows(queryset, viewer) if concealment_active(wiki, viewer) else queryset
 
 
 def _real_row(wiki: Wiki) -> Wiki:
@@ -373,9 +406,22 @@ def conceal_wiki(wiki: Wiki, viewer: Profile | None) -> Wiki:
     return projection
 
 
-def is_concealed(wiki: Wiki) -> bool:
+class Concealable(Protocol):
+    """A model that can exist as a concealed projection of itself.
+
+    Two do - ``Wiki`` and ``Article`` - and both declare the marker on the model
+    rather than having it set on them ad hoc, so the distinction is visible
+    where the row is defined. Stated as a protocol because "carries the marker"
+    is the actual requirement; the two share no base class that would be true
+    of, and inventing one would claim every model is concealable.
+    """
+
+    _ul_concealed: bool
+
+
+def is_concealed(row: Concealable) -> bool:
     """Whether this object is a concealed projection rather than a real row."""
-    return wiki._ul_concealed  # noqa: SLF001
+    return row._ul_concealed  # noqa: SLF001
 
 
 def writable_wiki(wiki: Wiki) -> Wiki:
@@ -431,3 +477,85 @@ def redact_edit_changes(changes: Any) -> dict[str, Any]:
         else:
             redacted[field_name] = diff
     return redacted
+
+
+def visible_article_revision(article: Article, viewer: Profile | None) -> ArticleRevision | None:
+    """The newest article revision *viewer* is entitled to see, or None.
+
+    An article is entirely user-contributed prose, so unlike a wiki's fields it
+    cannot be resolved write-by-write - there is nothing to merge on. What it
+    has instead is better: every ``ArticleRevision`` stores the *complete*
+    Markdown source as of that revision, so showing a concealed viewer the
+    newest revision they may see needs no reconstruction at all. This is the
+    "view the wiki at this revision" idea applied to the one model that already
+    supports it.
+
+    A null ``editor`` is deliberately **not** treated as automatic. It means one
+    of two things - a system-initiated seed from Wikipedia, or an account that
+    has since been deleted - and the model's own ``editor_display_name`` goes to
+    the trouble of telling them apart. Collapsing them here would show a
+    concealed viewer a stranger's prose on the strength of that stranger having
+    closed their account.
+
+    Args:
+        article: The article being rendered.
+        viewer: Who is looking, or None when signed out.
+
+    Returns:
+        The newest revision this viewer may see, or None when there is none -
+        which is what a place nobody has written up looks like.
+    """
+    return conceal_rows(article.revisions.all(), viewer).order_by("-created", "-pk").first()
+
+
+def conceal_article(article: Article | None, wiki: Wiki, viewer: Profile | None) -> Article | None:
+    """Return *article* itself, a projection of it, or None.
+
+    None is a real answer here, and the common one: a place nobody the viewer
+    can see has written up has no article, and that is exactly the state a
+    brand-new wiki is in. Returning an empty article instead would be its own
+    tell - the panel renders an always-editable canvas either way, so absence
+    and emptiness look the same to the viewer, but only one of them is honest
+    about what the row contains.
+
+    **Known limitation.** A friend's revision is shown verbatim, and a friend
+    editing on top of a stranger's text carries that text forward. This is the
+    same trade the field rules already make - ``resolve_fields`` returns the
+    friend's value, whatever they based it on - and closing it properly needs
+    the merge mechanics tracked in ``docs/designs/versioned-content.md``, not a
+    special case here.
+
+    Args:
+        article: The live article row, or None when none exists.
+        wiki: The wiki hosting it, for the concealment decision.
+        viewer: Who is looking, or None when signed out.
+
+    Returns:
+        An article safe to render to this viewer, or None.
+    """
+    if article is None or not concealment_active(wiki, viewer):
+        return article
+
+    revision = visible_article_revision(article, viewer)
+    if revision is None:
+        return None
+
+    # The overwhelmingly common case once a viewer has any visible revision:
+    # theirs is also the newest, so the live row already says what to show and
+    # re-rendering it would be pure cost.
+    if revision.content == article.content:
+        return article
+
+    from urbanlens.dashboard.services.wiki.articles import render_article
+
+    rendered = render_article(revision.content)
+    projection = copy.copy(article)
+    projection._state = copy.copy(article._state)  # noqa: SLF001
+    projection._state.fields_cache = dict(article._state.fields_cache)  # noqa: SLF001
+    projection.content = revision.content
+    projection.content_html = rendered.html
+    projection.toc = rendered.toc
+    projection._ul_concealed = True  # noqa: SLF001
+    projection.save = _refuse_write  # type: ignore[method-assign]
+    projection.delete = _refuse_write  # type: ignore[method-assign]
+    return projection

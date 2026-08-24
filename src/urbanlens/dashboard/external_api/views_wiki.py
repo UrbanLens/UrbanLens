@@ -109,7 +109,7 @@ from urbanlens.dashboard.services.wiki.articles import (
     restore_revision,
     save_article_checked,
 )
-from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+from urbanlens.dashboard.services.wiki.concealment import visible_rows, writable_wiki
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 from urbanlens.dashboard.services.wiki.wiki_aliases import promote_wiki_alias_to_name
 from urbanlens.dashboard.services.wiki.wiki_detail import build_wiki_detail, masked_editor_name
@@ -295,9 +295,11 @@ class WikiRevertView(WikiApiView):
     def post(self, request: Request, location_slug: str, edit_id: int) -> Response:
         """Revert one edit, recording the reversal as a new edit."""
         location, wiki, profile = self.resolve(request, location_slug)
-        # Scoped to this wiki: a bare id lookup would make WikiEdit ids
-        # enumerable across every wiki in the database.
-        target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
+        # Scoped to this wiki *and* to this viewer: a bare id lookup would make
+        # WikiEdit ids enumerable across every wiki in the database, and a
+        # wiki-only one would confirm the existence of - and let this account
+        # revert - an edit concealment decided it must not see.
+        target_edit = get_object_or_404(visible_rows(WikiEdit.objects.filter(wiki=wiki), wiki, profile), id=edit_id)
 
         if target_edit.reverted:
             return Response({"error": "This edit has already been reverted."}, status=400)
@@ -465,17 +467,20 @@ class WikiAliasUseView(WikiApiView):
         # oracle for the names on wikis this caller cannot see - the same leak
         # the module docstring describes for edit and comment ids, and worse
         # here because an alias *is* content rather than just a handle.
-        alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
+        alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
 
+        # Renaming saves the wiki; `wiki` may be a concealed projection.
+        target = writable_wiki(wiki)
         with transaction.atomic():
-            promote_wiki_alias_to_name(wiki, profile, alias)
+            promote_wiki_alias_to_name(target, profile, alias)
 
         # Built strictly after the save. Wiki.save() sanitizes ``name`` to a
         # restricted character set, so a payload assembled from ``alias.name``
         # beforehand can report a name the database does not actually hold -
         # and the client would then cache and display a value that disagrees
-        # with every subsequent read.
-        return Response(build_wiki_detail(wiki, location, profile))
+        # with every subsequent read. `target`, for the same reason: the rename
+        # went through it, so the projection resolve returned predates it.
+        return Response(build_wiki_detail(target, location, profile))
 
 
 class WikiAliasDetailView(WikiApiView):
@@ -488,8 +493,8 @@ class WikiAliasDetailView(WikiApiView):
     @extend_schema(responses={204: None, 404: ErrorSerializer})
     def delete(self, request: Request, location_slug: str, alias_id: int) -> Response:
         """Remove one alias, scoped to this wiki."""
-        _location, wiki, _profile = self.resolve(request, location_slug)
-        alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
+        _location, wiki, profile = self.resolve(request, location_slug)
+        alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
         alias.delete()
         return Response(status=204)
 
@@ -524,8 +529,8 @@ class WikiAliasToggleNicknameView(WikiApiView):
             Http404: The wiki is not visible to this caller, or *alias_id* is
                 not an alias of it.
         """
-        _location, wiki, _profile = self.resolve(request, location_slug)
-        alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
+        _location, wiki, profile = self.resolve(request, location_slug)
+        alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
         alias.toggle_nickname()
         return Response(WikiAliasSerializer(alias, context={"wiki": wiki}).data)
 
@@ -745,8 +750,8 @@ class WikiLinkDetailView(WikiApiView):
     @extend_schema(responses={204: None, 404: ErrorSerializer})
     def delete(self, request: Request, location_slug: str, link_id: int) -> Response:
         """Remove one link, scoped to this wiki."""
-        _location, wiki, _profile = self.resolve(request, location_slug)
-        link = get_object_or_404(WikiLink, id=link_id, wiki=wiki)
+        _location, wiki, profile = self.resolve(request, location_slug)
+        link = get_object_or_404(visible_rows(WikiLink.objects.filter(wiki=wiki), wiki, profile), id=link_id)
         link.delete()
         return Response(status=204)
 
@@ -1211,7 +1216,7 @@ class WikiCommentReactionView(_ReactionMixin, WikiApiView):
                 indistinguishable.
         """
         _location, wiki, profile = self.resolve(request, kwargs["location_slug"])
-        comment = get_object_or_404(Comment.objects.select_related("profile"), id=kwargs["comment_id"], wiki=wiki)
+        comment = get_object_or_404(visible_rows(Comment.objects.select_related("profile").filter(wiki=wiki), wiki, profile), id=kwargs["comment_id"])
         if not comment_is_visible(comment, profile):
             raise Http404
         return comment, profile
