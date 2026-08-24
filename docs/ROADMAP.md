@@ -602,12 +602,19 @@ Do not start these without a written design (add it to `docs/`):
   groundwork (UL-163) and a strategy-persistence schema; big but well-sketched in TODO.
 - **Offline maps** (UL-287), **native apps** (UL-72+) — out of current scope; note only.
 - **Hidden reputation/points system gating sensitive wiki content** (UL-397/UL-398) — design doc
-  at `docs/designs/reputation-and-gating.md` (draft, needs Jess's sign-off before code). Most of
-  the scoring/gating primitives already exist (Consensus points, `WikiStatVote`,
-  `SiteFeature`/`user_has_feature`, `Comment.pending_scan`) — this is largely an integration and
-  product-values design, not new infrastructure. Open conflict to resolve first: an existing
-  stated stance against admin-visible individual reputation scores (`controllers/
-  site_admin_models.py`'s docstring), which the new ask directly touches.
+  at `docs/designs/reputation-and-gating.md`, **reviewed and corrected 2026-08-24**; read its
+  "Design review" section first, which supersedes the rest.
+  - The **ledger** is being built (models, rule registry, scoring, decay, caps, retraction).
+    Correction to an earlier note here: Consensus points are *not* a usable base — see the five
+    structural reasons in the design doc's inventory. The admin-visible-score conflict was
+    resolved by Jess 2026-08-21 and does not block.
+  - The **gate** is deliberately deferred. A six-channel audit
+    (`docs/designs/reputation-gating-tells.md`, 82 verified findings) established that concealing
+    a wiki by filtering its content cannot work here: the empty state is a row the viewer *owns*,
+    `Article.wiki` is a OneToOne so the first save always collides, and a gated account gets no
+    draft or enrichment run of its own. The workable shape is a copy-on-write shadow wiki, which
+    is a materially larger build; the decision is to get real score data first and then choose.
+  - Two live oracles found by that audit are already fixed (`f15f0a3b`, `5357d400`).
 - **Facts model: topic/geography-scoped reliability** (UL-399) — the Facts model itself already
   exists and works (`dashboard/models/facts/`); missing piece is decomposing
   `ConsensusProfile.trust_score`'s single global scalar into per-category/per-region posteriors.

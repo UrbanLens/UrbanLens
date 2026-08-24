@@ -56,6 +56,13 @@ class DashboardConfig(AppConfig):
         # are registered from a table rather than one import per sender.
         connect_achievement_signals()
 
+        # The reputation ledger's rule_key choices are supplied by this
+        # registry, so it has to be populated before any form or admin page
+        # renders that field. Registration only builds dataclasses.
+        from urbanlens.dashboard.services.reputation.builtin_rules import register_builtin_rules
+
+        register_builtin_rules()
+
         # Plugin discovery only imports modules and instantiates plugin
         # classes - it must never touch the database this early.
         plugin_registry.discover()

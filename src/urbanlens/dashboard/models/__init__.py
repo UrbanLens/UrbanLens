@@ -12,6 +12,7 @@ from urbanlens.dashboard.models.auto_removals import AutoRemovalKind, PinAutoRem
 from urbanlens.dashboard.models.billing import BillingCustomer, BillingSubscriptionStatus, RoleSubscription, StripeProcessedRefund, StripeWebhookEvent
 from urbanlens.dashboard.models.boundary import Boundary, BoundarySource, BoundaryType
 from urbanlens.dashboard.models.boundary_vote import BoundaryVote
+from urbanlens.dashboard.models.reputation import ProfileReputation, ReputationEvent, TargetKind
 from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.models.calendar_sync import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.comments import Comment
