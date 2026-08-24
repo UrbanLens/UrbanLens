@@ -38,27 +38,11 @@
  * count to follow the access domain, which is an application change.
  */
 
-import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
+import { ensureCampusWiki, expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
 import { hrshRoutes } from "../../lib/hrsh.js";
 import { waitForOrNull } from "../../lib/waiting.js";
 
 skipUnlessLocationDataEnabled();
-
-/** Promotes the campus draft to a real wiki, or reports why it could not. */
-async function ensureWiki(campus: { api: { get: (p: string) => Promise<{ status: () => number }> }; pin: { slug: string; location_slug: string } }, page: import("@playwright/test").Page): Promise<boolean> {
-    const existing = await campus.api.get(`wikis/${campus.pin.location_slug}/`);
-    if (existing.status() === 200) {
-        return true;
-    }
-    // The only promotion path in the product. A CSRF token is needed, so go
-    // through the pin page rather than posting cold.
-    await page.goto(`/dashboard/map/pin/${campus.pin.slug}/`);
-    const token = await page.evaluate(() => (document.querySelector('input[name="csrfmiddlewaretoken"]') as HTMLInputElement | null)?.value ?? "");
-    const response = await page.request.post(`/dashboard/map/pin/${campus.pin.slug}/wiki/create/`, {
-        headers: token ? { "X-CSRFToken": token } : {},
-    });
-    return response.ok();
-}
 
 test.describe("Hudson River State Hospital - the community wiki", () => {
     test("a draft wiki is not visible until somebody creates it", async ({ campus }) => {
@@ -75,7 +59,7 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
     });
 
     test("creating the wiki yields one that is already filled in", async ({ campus, page }) => {
-        const promoted = await ensureWiki(campus, page);
+        const promoted = await ensureCampusWiki(campus, page);
         expect(promoted, "the wiki could not be created through the pin page, so nothing below can be assessed").toBe(true);
 
         const wiki = await campus.api.json<{ name?: string; latitude?: number; longitude?: number; boundary?: unknown }>(
@@ -96,7 +80,7 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
     });
 
     test("the wiki page reports the pinned-user count in masked form", async ({ campus, page }) => {
-        expect(await ensureWiki(campus, page)).toBe(true);
+        expect(await ensureCampusWiki(campus, page)).toBe(true);
         await page.goto(hrshRoutes.wiki(campus.pin.location_slug));
 
         const low = page.locator(".wiki-stat-value--low");
@@ -124,7 +108,7 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
     });
 
     test("an exact pinned-user count is never rendered", async ({ campus, page }) => {
-        expect(await ensureWiki(campus, page)).toBe(true);
+        expect(await ensureCampusWiki(campus, page)).toBe(true);
         await page.goto(hrshRoutes.wiki(campus.pin.location_slug));
 
         const statText = (await page.locator(".wiki-stat").allTextContents()).join(" ");
@@ -140,7 +124,7 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
     });
 
     test("the wiki carries an article seeded from Wikipedia", async ({ campus, page }) => {
-        expect(await ensureWiki(campus, page)).toBe(true);
+        expect(await ensureCampusWiki(campus, page)).toBe(true);
 
         const article = await waitForOrNull(
             () => campus.api.get(`wikis/${campus.pin.location_slug}/article/`),
@@ -167,7 +151,7 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
     });
 
     test("official aliases reach the wiki", async ({ campus, page }) => {
-        expect(await ensureWiki(campus, page)).toBe(true);
+        expect(await ensureCampusWiki(campus, page)).toBe(true);
 
         const aliases = await waitForOrNull(
             async () => {
@@ -195,7 +179,7 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
     });
 
     test("the wiki's name is one of its own aliases", async ({ campus, page }) => {
-        expect(await ensureWiki(campus, page)).toBe(true);
+        expect(await ensureCampusWiki(campus, page)).toBe(true);
 
         const wiki = await campus.api.json<{ name?: string }>("get", `wikis/${campus.pin.location_slug}/`);
         const body = await campus.api.json<Array<{ name?: string }> | { results?: Array<{ name?: string }> }>("get", `wikis/${campus.pin.location_slug}/aliases/`);
@@ -216,7 +200,7 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
     });
 
     test("the pin and its wiki agree about what the place is called", async ({ campus, page }) => {
-        expect(await ensureWiki(campus, page)).toBe(true);
+        expect(await ensureCampusWiki(campus, page)).toBe(true);
 
         const pin = await campus.api.json<{ aliases?: Array<{ name?: string }>; official_name?: string | null }>("get", `pins/${campus.pin.slug}/`);
         const pinAliases = (pin.aliases ?? []).map((alias) => (alias.name ?? "").toLowerCase()).filter(Boolean);

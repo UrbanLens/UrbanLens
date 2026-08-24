@@ -21,9 +21,6 @@ import { waitForOrNull } from "../../lib/waiting.js";
 
 skipUnlessLocationDataEnabled();
 
-/** The name the fixture gives the campus pin, asserted to survive enrichment. */
-const CAMPUS_PIN_NAME = "e2e Hudson River State Hospital";
-
 test.describe("Hudson River State Hospital - what the pin learns", () => {
     test("the pin is geocoded to the right municipality", async ({ campus }) => {
         const detail = await waitForOrNull(
@@ -143,14 +140,21 @@ test.describe("Hudson River State Hospital - what the pin learns", () => {
 
     test("a user-provided pin name is never overwritten by enrichment", async ({ campus }) => {
         // The other half of automatic naming, and the more important half: the
-        // fixture pin is created with name_is_user_provided, and enrichment has
-        // to respect that however good a name it finds.
+        // pin carries name_is_user_provided, and enrichment has to respect that
+        // however good a name it finds.
+        //
+        // Compared against the name recorded at setup rather than a constant.
+        // The fixture adopts a pin left by an earlier run, which may carry any
+        // name at all - asserting a literal here fails on the inherited name
+        // instead of on a rename, which is the opposite of the point. Stability
+        // across the run is the real claim either way.
         const detail = await campus.api.json<{ name?: string }>("get", `pins/${campus.pin.slug}/`);
 
         expect(
             detail.name,
-            `the pin was created as "${CAMPUS_PIN_NAME}" with name_is_user_provided set, and is now called "${detail.name}". Background ` +
-                "enrichment renamed something a human supplied, which is the one thing that flag exists to prevent",
-        ).toBe(CAMPUS_PIN_NAME);
+            `the pin was called "${campus.nameAtSetup}" when this run started and is now called "${detail.name}". It carries ` +
+                "name_is_user_provided, so background enrichment renamed something a human supplied - the one thing that flag exists to " +
+                "prevent",
+        ).toBe(campus.nameAtSetup);
     });
 });

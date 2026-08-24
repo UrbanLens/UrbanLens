@@ -33,7 +33,7 @@
  * than an argument, which is what the last two tests here do.
  */
 
-import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
+import { ensureCampusWiki, expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
 import { EARLIEST_PLAUSIBLE_SALE, EXPECTED_OWNER_FRAGMENT, hrshRoutes, KNOWN_OWNER_CANDIDATES } from "../../lib/hrsh.js";
 import { waitForOrNull } from "../../lib/waiting.js";
 
@@ -53,13 +53,36 @@ interface SaleRow {
     new_owners?: Array<{ name?: string | null }>;
 }
 
-/** Reads a paginated list endpoint, tolerating both envelope and bare-array shapes. */
-async function rows<T>(api: { json: <R>(m: "get", p: string) => Promise<R> }, path: string): Promise<T[]> {
-    const body = await api.json<T[] | { results?: T[] }>("get", path);
+/**
+ * Reads a list endpoint, tolerating both envelope shapes and a missing wiki.
+ *
+ * **These are wiki routes, not property routes**, which is easy to miss from
+ * their names: `wikis/{slug}/ownership/` and `wikis/{slug}/sales/` both 404
+ * until a wiki has been promoted. Left to throw, that 404 aborts a wait meant to
+ * be watching for enrichment - the spec fails in a second, looking like "the
+ * data never arrived" when the truth is "there was nothing to ask". Returning an
+ * empty list instead lets the wait do its job and lets the assertion say what it
+ * means.
+ */
+async function rows<T>(api: { get: (p: string) => Promise<{ ok: () => boolean; status: () => number; json: () => Promise<unknown> }> }, path: string): Promise<T[]> {
+    const response = await api.get(path);
+    if (!response.ok()) {
+        return [];
+    }
+    const body = (await response.json()) as T[] | { results?: T[] };
     return Array.isArray(body) ? body : (body.results ?? []);
 }
 
 test.describe("Hudson River State Hospital - property records", () => {
+    // Ownership and sale history are served from wiki routes, so a promoted
+    // wiki is a precondition for the whole file rather than a subject of it.
+    // Without this, every test here fails on a 404 that says nothing about
+    // property data.
+    test.beforeEach(async ({ campus, page }) => {
+        const ready = await ensureCampusWiki(campus, page);
+        test.skip(!ready, "the campus has no wiki, and ownership/sales are wiki routes - see hrsh-wiki.spec.ts.");
+    });
+
     test("official owner records reach the campus location", async ({ campus }) => {
         const found = await waitForOrNull(
             () => rows<OwnerRow>(campus.api, `wikis/${campus.pin.location_slug}/ownership/`),

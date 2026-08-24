@@ -32,7 +32,7 @@
  * other people's APIs, not on CPU.
  */
 
-import { type APIRequestContext } from "@playwright/test";
+import { type APIRequestContext, type Page } from "@playwright/test";
 
 import { PRIMARY_ROLE, requireAccount } from "../../lib/accounts.js";
 import { ApiClient } from "../../lib/api-client.js";
@@ -85,6 +85,15 @@ export interface CampusFixture {
     pin: CampusPin;
     /** Where the pin was placed. */
     origin: Coordinate;
+    /**
+     * The pin's name when setup finished.
+     *
+     * Recorded rather than assumed, because the fixture adopts a pin left by an
+     * earlier run and that pin may carry any name. Asserting against a constant
+     * would then fail on the inherited name rather than on a rename, which is
+     * the opposite of what the test is for.
+     */
+    nameAtSetup: string;
     /** The resolved parcel geometry, or null when it never arrived. */
     boundary: GeoJsonGeometry | null;
     /** Why there is no boundary, when there is none. Empty string otherwise. */
@@ -284,6 +293,7 @@ async function buildCampus(request: APIRequestContext): Promise<CampusFixture> {
         api,
         pin,
         origin,
+        nameAtSetup: pin.name,
         boundary,
         diagnosis,
         log: log.join("\n"),
@@ -331,6 +341,39 @@ export const locationDataTest = suiteTest.extend<{}, { campus: CampusFixture }>(
         { scope: "worker" },
     ],
 });
+
+/**
+ * Ensures the campus has a real (promoted) wiki, and reports whether it does.
+ *
+ * Needed by more than one spec, because several endpoints that look like
+ * property routes are actually **wiki** routes - `wikis/{slug}/ownership/` and
+ * `wikis/{slug}/sales/` among them. Until a wiki is promoted those answer 404,
+ * and a spec that waits on them without creating one first is not waiting for
+ * enrichment at all; it is waiting for something that will never happen.
+ *
+ * Promotion has exactly one entry point in the product and it is not in the
+ * published API: `POST /dashboard/map/pin/<slug>/wiki/create/`, from a browser
+ * session. Hence the `page` argument.
+ *
+ * @param campus The campus fixture.
+ * @param page A signed-in page, used for the CSRF token and the POST.
+ * @returns True when a promoted wiki exists afterwards.
+ */
+export async function ensureCampusWiki(campus: CampusFixture, page: Page): Promise<boolean> {
+    const existing = await campus.api.get(`wikis/${campus.pin.location_slug}/`);
+    if (existing.status() === 200) {
+        return true;
+    }
+    await page.goto(`/dashboard/map/pin/${campus.pin.slug}/`);
+    const token = await page.evaluate(() => (document.querySelector('input[name="csrfmiddlewaretoken"]') as HTMLInputElement | null)?.value ?? "");
+    const response = await page.request.post(`/dashboard/map/pin/${campus.pin.slug}/wiki/create/`, {
+        headers: token ? { "X-CSRFToken": token } : {},
+    });
+    if (!response.ok()) {
+        return false;
+    }
+    return (await campus.api.get(`wikis/${campus.pin.location_slug}/`)).status() === 200;
+}
 
 /** Skips the whole file unless this run opted into live location data. */
 export function skipUnlessLocationDataEnabled(): void {
