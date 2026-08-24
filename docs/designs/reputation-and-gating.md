@@ -331,27 +331,24 @@ itself a tell.
 
 The viewer's own content is never concealed from them, as everywhere else in the app.
 
-**Consequence to resolve before building — the unclaimed-place baseline.** Rules 1-5 describe
-a wiki that *renders*, bare. But an unclaimed place does not render one today: a background
-draft exists and `WikiManager.get_for_location` deliberately treats
-`officially_created=False` as "no wiki", so the pin hero shows "Create Community Wiki" and
-`GET /wikis/<slug>/` is a 404 (verified `models/wiki/queryset.py:131`,
-`services/wiki/wiki_access.py:388`). A concealed wiki that renders bare would therefore be
-distinguishable from a place nobody has been to — the opposite of the goal.
+**The unclaimed-place baseline — resolved (Jess, 2026-08-24).** An earlier draft of this
+section treated "Create Community Wiki" as the intended state for a place nobody has visited,
+and asked whether concealed wikis should match it. That was a misreading of the code.
 
-Two ways to close it, and they are a product decision rather than an implementation detail
-because both change what every user sees:
+Every place gets a wiki. `tasks.ensure_draft_wiki_for_location` runs in the background off
+the pin's post_save, so the only reason `get_for_location` returns None — and the only reason
+the create affordance exists at all — is the window before that task lands. **In practice a
+user should essentially never see a create button**, and a TODO already exists to render it
+identically to the view button so the distinction is invisible from the outside.
 
-- **(a) Surface drafts.** Every place renders a bare wiki; most are empty. Concealed and
-  never-visited then look identical by construction, and no create-path work is needed. This
-  matches "wikis are automatically created for every place" most directly, and is the more
-  robust of the two. It does mean the "Create Community Wiki" affordance changes meaning
-  across the whole app.
-- **(b) Conceal to the unclaimed state.** A concealed wiki presents as "Create Community
-  Wiki". Nothing changes for other places, but the create path then has to accept a click on
-  a wiki that already exists without revealing it — `claim_for_location` returns
-  `(wiki, False)` for an already-official wiki, so the outcome is workable but the
-  `created:false` signal and the missing `created_by`/`wikis_created` need handling.
+So there is no baseline mismatch to design around, and no create-path work: the target state
+for a concealed wiki is simply *a wiki that exists and renders as it would have when first
+created*. The claimed/unclaimed distinction is an implementation artefact that the product is
+already moving to hide, not a state concealment has to imitate.
+
+One thing that follows and is worth holding onto: because that button is a race-window
+artefact, **anything that makes it appear more often for a concealed viewer than for anyone
+else would be a tell.** Concealment must not route through `get_for_location` returning None.
 
 ## What already exists (read this before designing anything below)
 
