@@ -124,7 +124,10 @@ test.describe.serial("friendships", () => {
         const them = await whoami(secondaryApi);
         await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
 
-        const requested = await api.post("friends/", { profile_uuid: them.uuid, message: "Sent by the UrbanLens integration suite." });
+        // No `message` here on purpose - the test below isolates that field,
+        // because it is the one difference between this request and the ones
+        // that accept cleanly.
+        const requested = await api.post("friends/", { profile_uuid: them.uuid });
         expect(requested.status(), `sending a friend request answered ${requested.status()}: ${(await requested.text()).slice(0, 200)}`).toBeLessThan(300);
 
         try {
@@ -156,6 +159,44 @@ test.describe.serial("friendships", () => {
             const entry = entryFor(outbound, them.uuid);
             expect(entry, "after acceptance the requester's feed no longer lists the friend").toBeTruthy();
             expect(String(entry?.status ?? "").toLowerCase(), `the friendship reads as "${entry?.status}" to the requester after being accepted`).toContain("accept");
+        } finally {
+            await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
+        }
+    });
+
+    ifSecondaryAccount()("a request carrying a note can still be accepted", async ({ api, secondaryApi }) => {
+        // Isolating one field, because three consecutive live runs put the same
+        // correlation on the table: requests sent *with* a `message` failed at
+        // the accept step with "Friend request not found", while otherwise
+        // identical requests sent without one accepted normally. The recipient
+        // saw the request as `status="Requested" direction="outgoing"` - an
+        // incoming request labelled as though they had sent it - which is
+        // consistent either with the row being created the wrong way round or
+        // with `direction` being computed from the row rather than the viewer.
+        //
+        // Written as its own test so the next run answers the question instead
+        // of restating it: if this fails while the one above passes, `message`
+        // is the cause and the difference is in `request_or_accept_friendship`'s
+        // note-carrying path. If both pass, the earlier failures were leftover
+        // state that `resetFriendship` now verifies away.
+        const me = await whoami(api);
+        const them = await whoami(secondaryApi);
+        await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
+
+        const sent = await api.post("friends/", { profile_uuid: them.uuid, message: resourceName("a note with the request") });
+        expect(sent.status(), `sending with a note answered ${sent.status()}: ${(await sent.text()).slice(0, 200)}`).toBeLessThan(300);
+
+        try {
+            const inbound = await findRelationship(secondaryApi, me.uuid);
+            expect(inbound, "a request carrying a note never reached the recipient's feed").toBeTruthy();
+
+            const accepted = await secondaryApi.post(`friends/${me.uuid}/accept/`);
+            expect(
+                accepted.status(),
+                `a request carrying a note could not be accepted (${accepted.status()}: ${(await accepted.text()).slice(0, 160)}). ` +
+                    `The recipient saw status="${inbound?.status}" direction="${inbound?.direction}". ` +
+                    "The same exchange without a message accepts cleanly, so the note-carrying path creates a different row.",
+            ).toBeLessThan(300);
         } finally {
             await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
         }
