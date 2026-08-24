@@ -3949,6 +3949,18 @@ thirteen failures and left three genuine ones, each a different rule:
   repair is an underline (or other non-colour affordance) on inline links, which
   is a site-wide visual decision rather than a local patch.
 
+Both fixes were verified against the deployment: the pin detail page's scan is
+now clean. The home page's is not, because clearing `button-name` uncovered a
+second defect underneath it:
+
+- **`image-alt`, critical, the home page.** axe reports `.photo-tile > img` with
+  no `alt` and no `aria-label`. Both templates that render a photo tile put the
+  `<img>` inside the `.photo-tile-btn` button and do give it an `alt`, so this is
+  either a third render path or an image the thumbnail-fallback script rewrites
+  after load - `urbanlensMediaThumbFallback` is the obvious suspect, since it
+  swaps the element when a file 404s and the dev deployment has no media files.
+  Worth ten minutes in front of a browser rather than another blind edit.
+
 ## OPEN 2026-08-24: one pin-detail page load can exhaust the database connection pool
 
 Found by `tests/integration/` on 2026-08-24, and only visible because the
@@ -4071,6 +4083,14 @@ One smaller deployment note from the same run, not a code defect:
   block - the config is in this repo, not the infrastructure one, which the original note assumed.
   It also drops the version from nginx's own error pages. Guarded by the integration suite's
   `services › the server does not advertise what it is running`.
+- **No `Strict-Transport-Security`, and it is the edge rather than the app.** Django's
+  `SECURE_HSTS_SECONDS` is gated on `SECURE_SSL_REDIRECT`, which `UL_UNSAFE_ALLOW_HTTP` turns off -
+  correct for an app served over plain HTTP behind a TLS terminator. But the deployment *as a
+  whole* does redirect HTTP to HTTPS (the terminator does it), and sends no HSTS with that
+  redirect, so a first visit is still strippable. The test now establishes which case it is by
+  asking whether plain HTTP is redirected before demanding the header, so it stays quiet on a
+  genuinely HTTP-only deployment and fails on this one. The fix belongs at whatever terminates
+  TLS, not in Django.
 - Colour-contrast violations are widespread (secondary text, the social sign-in buttons) and are
   real WCAG AA failures. The suite routes that one rule to advisory rather than failing - see
   `ADVISORY_RULES` in `tests/integration/lib/a11y.ts` - so that the accessibility project is not red

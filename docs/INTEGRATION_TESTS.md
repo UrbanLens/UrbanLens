@@ -114,8 +114,22 @@ and point a second run at it.
 
 A full run costs roughly a hundred writes, so **three back-to-back runs inside
 an hour will exhaust the hourly quota** and start failing on writes with no way
-to distinguish that from a broken endpoint. If a run fails with 429s whose
-message quotes minutes rather than seconds, that is what happened.
+to distinguish that from a broken endpoint. Tell the two apart by the number in
+the message: the per-minute cap quotes *seconds* ("available in 3 seconds") and
+the client rides it out; the hourly cap quotes *thousands* of seconds
+("available in 2017 seconds") and every write for the next half hour fails.
+
+The way out, when it happens, is to **re-provision**:
+
+```bash
+python src/urbanlens/manage.py provision_integration_env --out /tmp/e2e.json
+```
+
+The throttle is keyed per credential, and provisioning revokes the old keys and
+mints new ones, so the fresh key starts with a fresh quota. This is a
+maintainer verifying a deployment, not a way around a limit that exists to stop
+abusive clients - if you find yourself doing it repeatedly, the run is too
+write-heavy and the fix is to share fixtures between specs.
 
 Some things it deliberately does **not** do:
 
