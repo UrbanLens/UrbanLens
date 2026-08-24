@@ -62,6 +62,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 class AbstractFieldRevision(Model):
     """One recorded write of one field.
 

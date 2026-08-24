@@ -9,6 +9,38 @@ did not exercise the code they name, which is why a self-review reported the lay
 
 ---
 
+## 0. What has been acted on since (2026-08-24, later the same day)
+
+§1's architectural verdict was accepted and the layer reworked to what
+`concealed-wiki-spec.md` §4.2 specified.
+
+- **`conceal_wiki` no longer returns a proxy.** It returns a `copy` of the row
+  with substituted field values - a real `Wiki`, real primary key - which
+  inverts the failure mode from open to closed. The concrete class of leak this
+  closes is a property computed from concealed fields: `effective_date_last_active`
+  derives from two versioned fields, and the proxy answered it by delegating to
+  the real row, so the fields were hidden and the conclusion drawn from them was
+  not. `ProjectionTests` in `test_wiki_concealment.py` pins that case.
+- **Substitution happens in `resolve_visible_wiki`**, the single gate all 99
+  wiki-scoped call sites pass through - all 31 external API handlers among them,
+  each of which calls `WikiApiView.resolve` as its first statement (verified by
+  AST, not by reading).
+- **Writes launder through `writable_wiki`.** The projection refuses `save()`,
+  which turned nine write paths downstream of the read gate into latent 500s -
+  and a 500 only gated accounts receive is the tell the feature exists to avoid.
+  `bin/check_concealed_writes.py` is the eighth structural check and fails the
+  build on a tenth.
+- **`concealment_active`'s docstring** - which §5 called wrong in every
+  particular, and which is the artefact whoever flips the boolean will read -
+  has been rewritten against the current wiring.
+
+Still open, and still the largest gaps: the Article body, the search and
+autocomplete substring oracles, the markup and detail-pin JSON endpoints, and
+`for_wiki(viewer=)` across the related-row querysets. §2's vacuous tests were
+fixed in `d08a74c2`.
+
+---
+
 ## 1. Is the layer sound enough to keep building on?
 
 The primitives are good and the reasoning in the comments is better than the code around them — `concealed_field_values`, `visible_actor_ids`, the fuzz-cache short-circuit, the "sole voter's own value *is* the composite" note at `wiki_stat_vote/queryset.py:85-90`, the alias `is_current` inversion caught at `controllers/aliases.py:119-123`. But the layer as built is a per-call-site branch on a predicate, repeated at ten sites, over a proxy that fails **open** by delegation. `docs/designs/concealed-wiki-spec.md` §4.2/§4.3 specified the opposite — resolve-time substitution and a viewer-aware `for_wiki` — and neither was built: `resolve_visible_wiki` (`services/wiki/wiki_access.py:391-402`) still hands back the raw `Wiki`, and every `for_wiki` in the tree still takes no viewer. The predictable result is that the four surfaces that were remembered are correct and roughly two dozen that were not are wide open, including the entire Article tab, ~30 of 32 external-API wiki handlers, and every write-path re-render on the page that the GET conceals. Keep the primitives; do not add a twelfth call site. And treat the test suite as unbuilt — six of its fourteen assertions do not exercise the code they name, which is why a self-review reported this clean.

@@ -171,6 +171,19 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
     #: The reason this list matters: a concealed viewer is shown automatic
     #: writes plus their own plus their friends', so every field a person can
     #: change has to carry who changed it. See docs/designs/versioned-content.md.
+    #: True only on a concealed projection built by
+    #: ``services.wiki.concealment.conceal_wiki`` - a copy of this row carrying
+    #: the subset of field values one viewer is entitled to see. Declared here
+    #: rather than set ad hoc so the distinction is visible from the model, and
+    #: so reading it is a plain attribute access with an honest type. A row
+    #: loaded from the database is never concealed.
+    _ul_concealed: bool = False
+
+    #: Which viewer the projection above was built for, so re-concealing is a
+    #: no-op for that viewer and a rebuild for anyone else. None means signed
+    #: out, which is why this is a separate attribute rather than a falsy pk.
+    _ul_concealed_for: int | None = None
+
     versioned_fields = (
         "name",
         "description",

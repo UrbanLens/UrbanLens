@@ -13,6 +13,7 @@ place that reads as surveyed is exactly what concealment exists to prevent.
 
 from __future__ import annotations
 
+import datetime
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -25,7 +26,7 @@ from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipSt
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki.revision import WikiFieldRevision
-from urbanlens.dashboard.services.wiki.concealment import accepted_friend_ids, concealed_field_values
+from urbanlens.dashboard.services.wiki.concealment import accepted_friend_ids, conceal_wiki, concealed_field_values, is_concealed, writable_wiki
 
 
 class ConcealedValueTests(TestCase):
@@ -373,3 +374,150 @@ class RelatedRowConcealmentTests(TestCase):
         self.assertEqual(Trip.objects.count(), 1, "fixture must exist, or the assertion below is vacuous")
 
         self.assertEqual(conceal_rows(Trip.objects.all(), self.viewer).count(), 0)
+
+
+class ProjectionTests(TestCase):
+    """The object ``conceal_wiki`` hands back, and what may be done with it.
+
+    The rework these cover replaced a ``__getattr__`` proxy, which failed *open*:
+    anything it did not explicitly override - far more than what it did - fell
+    through to the real row. A projection is a real ``Wiki`` instead, so the
+    failure mode inverts. These pin the properties that inversion depends on.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        WikiFieldRevision.objects.filter(target=self.wiki).delete()
+
+        self.viewer = baker.make(User).profile
+        self.other = baker.make(User).profile
+        self.stranger = baker.make(User).profile
+
+        with writing_as(WriteSource.USER, actor=self.stranger.pk):
+            Wiki.objects.filter(pk=self.wiki.pk).update(description="A stranger's notes", cameras=SecurityLevel.EVERYWHERE)
+        self.wiki.refresh_from_db()
+
+    def _concealed(self, viewer=None):
+        """Conceal ``self.wiki`` with the gate forced on."""
+        with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
+            return conceal_wiki(self.wiki, viewer if viewer is not None else self.viewer)
+
+    def test_a_projection_is_a_real_wiki_with_the_real_primary_key(self) -> None:
+        """Templates, serializers and foreign keys all depend on this.
+
+        The proxy this replaced could not be assigned to a ``ForeignKey`` at
+        all, which is why every write path had to be taught it existed.
+        """
+        projection = self._concealed()
+
+        self.assertIsInstance(projection, Wiki)
+        self.assertEqual(projection.pk, self.wiki.pk)
+
+    def test_a_projection_carries_concealed_values(self) -> None:
+        """The point of the object."""
+        projection = self._concealed()
+
+        self.assertNotIn("stranger", str(projection.description or ""))
+
+    def test_concealing_does_not_disturb_the_row_it_came_from(self) -> None:
+        """A shallow copy shares state with its original unless prevented."""
+        real_description = self.wiki.description
+
+        self._concealed()
+
+        self.assertEqual(self.wiki.description, real_description)
+        self.assertEqual(Wiki.objects.get(pk=self.wiki.pk).description, real_description)
+
+    def test_the_display_helper_reflects_the_concealed_value(self) -> None:
+        """``get_cameras_display()`` reads the field, so it must read the concealed one.
+
+        The proxy needed explicit code for this and the security chips render
+        through exactly this call - if it regressed, a concealed page would show
+        a stranger's survey in words while the field said otherwise.
+        """
+        projection = self._concealed()
+        unset = Wiki(cameras=Wiki._meta.get_field("cameras").get_default())
+
+        self.assertEqual(self.wiki.get_cameras_display(), SecurityLevel.EVERYWHERE.label)
+        self.assertEqual(projection.get_cameras_display(), unset.get_cameras_display())
+
+    def test_saving_a_projection_is_refused(self) -> None:
+        """The one thing that must never happen: concealment persisted over content."""
+        projection = self._concealed()
+
+        with self.assertRaises(TypeError):
+            projection.save()
+
+    def test_deleting_a_projection_is_refused(self) -> None:
+        """Same reason as saving."""
+        projection = self._concealed()
+
+        with self.assertRaises(TypeError):
+            projection.delete()
+
+    def test_writable_wiki_returns_a_row_carrying_the_real_values(self) -> None:
+        """What every write path downstream of the read gate has to do."""
+        projection = self._concealed()
+
+        target = writable_wiki(projection)
+
+        self.assertFalse(is_concealed(target))
+        self.assertEqual(target.description, self.wiki.description)
+        self.assertEqual(target.pk, self.wiki.pk)
+
+    def test_writable_wiki_leaves_an_ordinary_row_alone(self) -> None:
+        """No extra query on the path everybody is on."""
+        self.assertIs(writable_wiki(self.wiki), self.wiki)
+
+    def test_concealing_twice_for_one_viewer_reuses_the_projection(self) -> None:
+        """Several surfaces conceal a wiki the resolve gate already concealed."""
+        projection = self._concealed()
+
+        with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
+            again = conceal_wiki(projection, self.viewer)
+
+        self.assertIs(again, projection)
+
+    def test_a_property_computed_from_concealed_fields_reads_the_concealed_ones(self) -> None:
+        """The failure the projection exists to make impossible.
+
+        ``effective_date_last_active`` derives from two versioned fields. The
+        proxy this replaced answered it by delegating to the real row, so the
+        property computed from the *stored* dates and handed back a stranger's
+        answer through a concealed object - the fields were hidden and the
+        conclusion drawn from them was not. A projection is a real ``Wiki``, so
+        the property runs against the values this viewer is entitled to.
+        """
+        with writing_as(WriteSource.USER, actor=self.stranger.pk):
+            Wiki.objects.filter(pk=self.wiki.pk).update(date_last_active=datetime.date(2019, 6, 1))
+        self.wiki.refresh_from_db()
+
+        projection = self._concealed()
+
+        self.assertEqual(self.wiki.effective_date_last_active, datetime.date(2019, 6, 1))
+        self.assertIsNone(projection.effective_date_last_active)
+
+    def test_an_ungated_viewer_never_inherits_someone_elses_projection(self) -> None:
+        """The fail-open the viewer key exists to close.
+
+        Reuse is an optimisation; if the second viewer is not gated at all, the
+        cheap answer would be to hand the projection straight back, which serves
+        one person's redacted view to somebody entitled to the whole row.
+        """
+        projection = self._concealed()
+
+        # Gate off for this second viewer - the ordinary, ungated path.
+        shown = conceal_wiki(projection, self.other)
+
+        self.assertFalse(is_concealed(shown))
+        self.assertEqual(shown.description, self.wiki.description)
+
+    def test_concealing_someone_elses_projection_rebuilds_it(self) -> None:
+        """Reuse is keyed on the viewer, or one person's view could be served to another."""
+        projection = self._concealed()
+
+        with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
+            for_other = conceal_wiki(projection, self.other)
+
+        self.assertIsNot(for_other, projection)

@@ -30,8 +30,9 @@ them so is what stops concealment becoming an access-control bypass.
 
 from __future__ import annotations
 
+import copy
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from django.db.models import Q
 
@@ -151,25 +152,33 @@ def concealed_field_values(wiki: Wiki, viewer: Profile | None) -> dict[str, Any]
 def concealment_active(wiki: Wiki, viewer: Profile | None) -> bool:
     """Whether this viewer should be shown the concealed form of this wiki.
 
-    **Currently always False, and turning it True is NOT sufficient.** Read this
-    before flipping it.
+    **Currently always False.** The threshold is a reputation score scaled by
+    the wiki's community-voted vulnerability, and cannot be chosen before there
+    is real score data to choose it against - the ledger is collecting that now.
 
-    Four things are wired to it today: the ``viewed_by_other`` write, the
-    community pin-count summary, the stat composites and the boundary-vote
-    dialog. Everything else on the wiki page still renders from the live row -
-    the name, description, dates, the eight security chips, comments, images,
-    aliases, links and the whole edit history. ``concealed_field_values`` and
-    ``conceal_rows`` exist, are tested, and have **no production callers**;
-    ``services/wiki/wiki_detail.build_wiki_detail``, which serves the external
-    API, does not consult this module at all.
+    What flipping it would already do, as of the resolve-time rework:
 
-    So flipping this boolean conceals four things and leaves the rest visible,
-    which is worse than not concealing: it is the *inconsistent* state, where a
-    place looks unvisited in its counts and fully documented in its content.
+    - **Wiki field values** are substituted for every surface, because
+      ``wiki_access.resolve_visible_wiki`` conceals what it returns and is the
+      one gate all 99 wiki-scoped call sites pass through - including all 31
+      external API handlers, each of which calls ``WikiApiView.resolve`` as its
+      first statement.
+    - **Related rows** - comments, photos, aliases, links, edit history - are
+      filtered by :func:`conceal_rows` at the eight call sites that load them.
+    - **Writes** go to the real row via :func:`writable_wiki`, enforced by
+      ``bin/check_concealed_writes.py``.
 
-    The threshold itself is a reputation score scaled by the wiki's
-    community-voted vulnerability, and cannot be chosen before there is real
-    score data to choose it against - the ledger is collecting that now.
+    What it would **not** yet cover, so nobody reads a flip as complete:
+
+    - the **Article** body (``controllers/article.py``), which is entirely
+      user-contributed and would render in full;
+    - **search and autocomplete**, which match ``wiki.description`` and alias
+      names as substrings (``services/global_search/providers.py`` and
+      ``services/map_pins/autocomplete.py``) - a distinctive phrase from a
+      stranger's description is confirmable by typing it;
+    - the **markup** and **detail-pin** JSON endpoints.
+
+    Those are tracked in ``docs/designs/concealment-review-2-2026-08-24.md``.
 
     Deliberately the only place this decision is made. The tells audit found 82
     ways a concealed wiki could give itself away, and most of the classes behind
@@ -282,76 +291,117 @@ def conceal_rows(queryset: Any, viewer: Profile | None) -> Any:
     return queryset.filter(Q(**{f"{actor_field}__isnull": True}) | Q(**{f"{actor_field}__in": allowed}))
 
 
-class ConcealedWiki:
-    """A read-only stand-in for a Wiki, showing only what a viewer may see.
+def _real_row(wiki: Wiki) -> Wiki:
+    """Re-read *wiki* from the database, discarding any concealment applied to it."""
+    from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
 
-    Everything not overridden delegates to the real row, so a template or
-    serializer can use this wherever it used a ``Wiki`` and pick up concealment
-    without knowing it exists. That is the point: the tells audit found 82 ways
-    a concealed wiki gives itself away, and nearly every class behind them comes
-    from a rule applied at some call sites and forgotten at others.
+    return WikiModel.objects.select_related("location", "place").get(pk=wiki.pk)
 
-    **Writes raise.** Not tidiness - it is the mechanism that turns a
-    write-through-the-proxy bug into a loud failure instead of a silent one that
-    persists a concealed value back over the real row.
+
+def _refuse_write(*_args: Any, **_kwargs: Any) -> NoReturn:
+    """Refuse a write through a concealed projection.
+
+    Loud on purpose. A projection carries concealed values for fields this
+    viewer may not see, so persisting it would write those values over the real
+    row - a concealment bug that silently destroys community content. Write
+    paths must act on a freshly fetched row, or use ``queryset.update()``.
     """
-
-    def __init__(self, wiki: Wiki, viewer: Profile | None) -> None:
-        """Wrap *wiki* as *viewer* is entitled to see it.
-
-        Args:
-            wiki: The real row.
-            viewer: Who is looking, or None when signed out.
-        """
-        self._wiki = wiki
-        self._viewer = viewer
-        self._values = concealed_field_values(wiki, viewer)
-
-    def __getattr__(self, name: str) -> Any:
-        """Return a concealed field value, or delegate to the real row."""
-        values = object.__getattribute__(self, "_values")
-        if name in values:
-            return values[name]
-
-        wiki = object.__getattribute__(self, "_wiki")
-        # get_<field>_display() reads the model's own attribute, so delegating
-        # it would hand back the real value's label for a field we just
-        # concealed - the security chips render through exactly this.
-        if name.startswith("get_") and name.endswith("_display"):
-            field_name = name[len("get_") : -len("_display")]
-            if field_name in values:
-                field = concrete_field(type(wiki), field_name)
-                choices = dict(getattr(field, "choices", None) or [])
-                return lambda: choices.get(values[field_name], values[field_name])
-        return getattr(wiki, name)
-
-    def __str__(self) -> str:
-        return str(self.name)
-
-    def save(self, *args: Any, **kwargs: Any) -> None:
-        """Refuse. A concealed projection must never be written back."""
-        raise TypeError("ConcealedWiki is read-only; write to the real Wiki row")
-
-    def delete(self, *args: Any, **kwargs: Any) -> None:
-        """Refuse, for the same reason as :meth:`save`."""
-        raise TypeError("ConcealedWiki is read-only; delete the real Wiki row")
+    raise TypeError("this Wiki is a concealed projection and must not be written; re-fetch the row")
 
 
-def conceal_wiki(wiki: Wiki, viewer: Profile | None) -> Wiki | ConcealedWiki:
-    """Return *wiki* itself, or a concealed stand-in when the viewer is gated.
+def conceal_wiki(wiki: Wiki, viewer: Profile | None) -> Wiki:
+    """Return *wiki* itself, or a concealed projection of it.
 
-    The one call every renderer should make. Returning the real row unchanged
-    when concealment is off keeps the ordinary path free of both a wrapper and
-    a branch at each call site.
+    **A real ``Wiki`` instance, not a wrapper.** An earlier version returned a
+    proxy object with ``__getattr__`` delegation, which failed *open*: anything
+    the proxy did not explicitly override - and there is far more of that than
+    of what it did - fell through to the real row. It also could not be used as
+    a foreign key value, so every write path had to be taught about it.
+
+    Returning a copy of the row with substituted field values inverts that.
+    Templates, serializers and FK assignment all work unchanged because it *is*
+    a Wiki, with the real primary key; and the substitution is a property of the
+    object rather than something each reader has to remember to ask for.
+
+    Writes are refused (see :func:`_refuse_write`), because the one thing that
+    must never happen is a concealed value being persisted over a real one.
+
+    Related managers are **not** concealed by this - ``projection.comments`` is
+    keyed on the primary key and returns every row. Rows are filtered by
+    :func:`conceal_rows` at the queryset, which is a separate mechanism.
 
     Args:
-        wiki: The row being rendered.
-        viewer: Who is looking.
+        wiki: The real row.
+        viewer: Who is looking, or None when signed out.
 
     Returns:
-        The real wiki, or a read-only concealed view of it.
+        The real wiki, or a write-refusing projection of it.
     """
-    return ConcealedWiki(wiki, viewer) if concealment_active(wiki, viewer) else wiki
+    viewer_key = viewer.pk if viewer else None
+    if is_concealed(wiki):
+        # Idempotent, and cheaply so: several surfaces still call this on a wiki
+        # that resolve_visible_wiki already concealed, and re-resolving the
+        # write history to reach the same answer is pure cost.
+        if wiki._ul_concealed_for == viewer_key:  # noqa: SLF001
+            return wiki
+        # Built for somebody else. One viewer's projection must never be handed
+        # to another, and it must not be re-concealed either - it no longer
+        # carries the values a rebuild needs. Go back to the row.
+        wiki = _real_row(wiki)
+
+    if not concealment_active(wiki, viewer):
+        return wiki
+
+    projection = copy.copy(wiki)
+    # A shallow copy shares ``_state`` with the row it came from, and ``_state``
+    # is where Django caches fetched relations. Every versioned field is scalar
+    # today, so nothing would notice - but the day one becomes a foreign key,
+    # assigning it below would reach through and overwrite the *real* row's
+    # cached relation. ``fields_cache`` needs copying separately: copying the
+    # state object alone leaves both pointing at the same cache dict.
+    projection._state = copy.copy(wiki._state)  # noqa: SLF001
+    projection._state.fields_cache = dict(wiki._state.fields_cache)  # noqa: SLF001
+    for name, value in concealed_field_values(wiki, viewer).items():
+        setattr(projection, name, value)
+
+    # Marked so a reader can assert on it, and so tests can tell a projection
+    # from the row it came from.
+    projection._ul_concealed = True  # noqa: SLF001
+    projection._ul_concealed_for = viewer_key  # noqa: SLF001
+    projection.save = _refuse_write  # type: ignore[method-assign]
+    projection.delete = _refuse_write  # type: ignore[method-assign]
+    return projection
+
+
+def is_concealed(wiki: Wiki) -> bool:
+    """Whether this object is a concealed projection rather than a real row."""
+    return wiki._ul_concealed  # noqa: SLF001
+
+
+def writable_wiki(wiki: Wiki) -> Wiki:
+    """Return a row that may be written: *wiki* itself, or a fresh fetch of it.
+
+    Every write path downstream of ``resolve_visible_wiki`` needs this. That
+    function now returns a concealed projection to viewers who are gated, and a
+    projection carries substituted values for the fields its viewer may not see
+    - so saving it would write concealment over real community content, which is
+    why the projection refuses ``save()`` outright.
+
+    Refusing is the right default but the wrong ending: a gated viewer setting a
+    cover photo would get a 500, and a 500 only this account receives is exactly
+    the tell concealment exists to avoid. Re-reading the row gives the write real
+    values to act on, and leaves the viewer's own reads concealed.
+
+    Args:
+        wiki: A wiki, possibly a projection.
+
+    Returns:
+        A wiki safe to mutate and save.
+    """
+    if not is_concealed(wiki):
+        return wiki
+
+    return _real_row(wiki)
 
 
 def redact_edit_changes(changes: Any) -> dict[str, Any]:

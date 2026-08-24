@@ -382,7 +382,12 @@ def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Loca
         location_slug: Slug of the Location whose Wiki is being resolved.
 
     Returns:
-        Tuple of (Location, Wiki, requester's Profile).
+        Tuple of (Location, Wiki, requester's Profile). The Wiki may be a
+        **concealed projection** - a real Wiki instance, with the real primary
+        key, carrying only the field values this viewer is entitled to. It
+        refuses ``save()``/``delete()``; a write path must re-fetch the row or
+        use ``queryset.update()``. Related managers on it are *not* filtered -
+        rows are concealed separately by ``concealment.conceal_rows``.
 
     Raises:
         Http404: The location doesn't exist, has no wiki, or the requester
@@ -399,4 +404,19 @@ def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Loca
     profile, _ = Profile.objects.get_or_create(user=request.user)
     if not location_visible_to(location, profile):
         raise Http404
-    return location, wiki, profile
+
+    # Concealment is applied *here*, at the one place every wiki-scoped surface
+    # already funnels through - 56 controller call sites plus the external API's
+    # 32 handlers, all of which get it without knowing it exists.
+    #
+    # It was previously applied per call site, and that is why an adversarial
+    # review found roughly two dozen surfaces still serving real values: the
+    # ones somebody remembered were right and the rest were untouched. A rule
+    # kept in one place cannot be forgotten at the others.
+    #
+    # This narrows what a wiki *shows*. It never widens who can reach one -
+    # that decision is the place-domain rule above, and the two stay separate so
+    # concealment can never become an access-control bypass.
+    from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
+
+    return location, conceal_wiki(wiki, profile), profile
