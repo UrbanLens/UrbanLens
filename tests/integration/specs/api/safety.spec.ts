@@ -17,6 +17,7 @@
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";
+import type { ApiClient } from "../../lib/api-client.js";
 
 interface Page<T> {
     count: number;
@@ -35,7 +36,31 @@ function deadline(minutes: number): string {
     return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
-test.describe("safety check-ins", () => {
+/**
+ * Cancels and removes any check-in this account still has open.
+ *
+ * **An account may have only one active check-in at a time** - the API answers
+ * 409 "You already have an active check-in" otherwise - which is correct for
+ * the feature and makes every test here order-dependent on the last one. That
+ * is also why this describe block is serial: run in parallel, the tests take
+ * the single slot from each other and fail on a rule rather than on a defect.
+ */
+async function clearActiveCheckins(api: ApiClient): Promise<void> {
+    const page = await api.json<Page<Checkin>>("get", "safety/checkins/", { page_size: "100" });
+    for (const checkin of page.results) {
+        if (!checkin.slug) {
+            continue;
+        }
+        await api.post(`safety/checkins/${checkin.slug}/cancel/`);
+        await api.delete(`safety/checkins/${checkin.slug}/`);
+    }
+}
+
+test.describe.serial("safety check-ins", () => {
+    test.beforeEach(async ({ api }) => {
+        await clearActiveCheckins(api);
+    });
+
     test("a check-in can be opened, read back, amended and cancelled", async ({ api }) => {
         const title = resourceName("check-in lifecycle");
         const created = await api.json<Checkin>("post", "safety/checkins/", {

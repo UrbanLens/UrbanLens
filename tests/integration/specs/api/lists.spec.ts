@@ -59,15 +59,22 @@ test.describe("lists", () => {
         expect(await items.text(), "a pin just added is not among the list's items").toContain(pin.uuid);
     });
 
-    test("adding a pin that does not exist is refused rather than silently ignored", async ({ api }) => {
+    test("adding a pin that does not exist reports that nothing was added", async ({ api }) => {
         const list = await api.json<PinList>("post", "lists/", { name: resourceName("strict membership") });
         api.track("list", list.slug, () => api.delete(`lists/${list.slug}/`));
 
         const response = await api.post(`lists/${list.slug}/items/`, { pin_uuids: ["00000000-0000-4000-8000-000000000000"] });
-        // A write that accepts an unknown id and stores nothing is the worst of
-        // both: the client believes the pin is in the list and it is not.
-        expect([400, 404], `adding an unknown pin uuid answered ${response.status()}`).toContain(response.status());
-        expect(await response.json()).toHaveProperty("error");
+
+        // 200 with `added: 0`, not a 4xx - and that is the right shape for a
+        // bulk endpoint, because a batch can be partly valid. What would be
+        // wrong is accepting the unknown id *silently*: a client that cannot
+        // tell the difference between "added" and "ignored" shows the user a
+        // pin in a list it is not in. The count is what makes it tellable, so
+        // the count is what this asserts.
+        expect(response.status(), `adding an unknown pin uuid answered ${response.status()}`).toBe(200);
+        const body = (await response.json()) as { added?: number };
+        expect(body, `the response does not report how many pins were added: ${JSON.stringify(body)}`).toHaveProperty("added");
+        expect(body.added, "an unknown pin uuid was counted as added").toBe(0);
     });
 
     test("a smart list built from a saved filter resyncs its membership", async ({ api }) => {

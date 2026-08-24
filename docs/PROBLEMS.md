@@ -3891,6 +3891,27 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
+## OPEN 2026-08-24: a visit can be logged in the future
+
+`POST /dashboard/api/external/v1/pins/{pin_slug}/visits/` accepts a
+`visited_at` a week from now and answers **201**.
+
+A visit is a record of somewhere the user has *been*. A future one is not a
+mistake the API should store: it propagates into "last visited" everywhere that
+is displayed and ordered by, so one fat-fingered year makes a pin permanently
+the most recently visited thing the user owns. It also has no legitimate
+meaning - a planned outing is a trip activity, which is a different model with
+its own scheduling.
+
+The fix is a validator on the serializer field. Bounding it at "not after now,
+give or take clock skew" is enough; nothing needs to reason about how far in
+the past is plausible.
+
+Found by `tests/integration/specs/api/visits.spec.ts`, which also pins the
+timestamp round-trip - the neighbouring risk on that field is a deployment
+whose database or worker is set to a different timezone shifting a visit by
+hours, so it is compared as an instant rather than as a string.
+
 ## OPEN 2026-08-24: a native client can edit a wiki but can never start one
 
 The published API exposes `GET` and `PATCH` on `wikis/{location_slug}/` and no
