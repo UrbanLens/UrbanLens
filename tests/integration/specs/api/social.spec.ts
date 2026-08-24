@@ -158,9 +158,28 @@ test.describe.serial("friendships", () => {
         const them = await whoami(secondaryApi);
         await resetFriendship(api, secondaryApi, me.uuid, them.uuid);
 
-        // No `message` here on purpose - the test below isolates that field,
-        // because it is the one difference between this request and the ones
-        // that accept cleanly.
+        // Everything the two accounts already have between them, before this
+        // test touches anything. This is the first test in the file, so it is
+        // the one that meets the previous *run's* leftovers - and the surviving
+        // row is the open question in docs/PROBLEMS.md, 2026-08-24 ("re-adding a
+        // removed friend"). Capturing it here means the next failure carries the
+        // answer instead of another round of narrowing.
+        const priorState: string[] = [];
+        for (const [label, client, otherUuid] of [
+            ["requester", api, them.uuid],
+            ["recipient", secondaryApi, me.uuid],
+        ] as const) {
+            for (const status of ALL_STATUSES) {
+                const entry = entryFor(await friends(client, status), otherUuid);
+                if (entry) {
+                    priorState.push(`${label} ?status=${status}: ${JSON.stringify(entry)}`);
+                }
+            }
+        }
+
+        // No `message` here on purpose - a companion test isolates that field,
+        // because it was the leading suspect for three runs and turned out not
+        // to be the cause.
         const requested = await api.post("friends/", { profile_uuid: them.uuid });
         expect(requested.status(), `sending a friend request answered ${requested.status()}: ${(await requested.text()).slice(0, 200)}`).toBeLessThan(300);
 
@@ -182,8 +201,10 @@ test.describe.serial("friendships", () => {
                 const accepted = await secondaryApi.post(`friends/${me.uuid}/accept/`);
                 expect(
                     accepted.status(),
-                    `accepting answered ${accepted.status()}: ${(await accepted.text()).slice(0, 200)}. ` +
-                        `Immediately before, the recipient saw status="${inbound?.status}" direction="${inbound?.direction}".`,
+                    `accepting answered ${accepted.status()}: ${(await accepted.text()).slice(0, 200)}.\n` +
+                        `  After the request, the recipient saw status="${inbound?.status}" direction="${inbound?.direction}".\n` +
+                        `  Before this test touched anything, the pair already had:\n    ${priorState.join("\n    ") || "(nothing)"}\n` +
+                        "  That prior row is the open question in docs/PROBLEMS.md 2026-08-24 - a constructed remove-then-re-request does not reproduce this.",
                 ).toBeLessThan(300);
             }
 

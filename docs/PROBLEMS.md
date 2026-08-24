@@ -3896,13 +3896,25 @@ deciding whether the custom-dropdown rewrite is worth doing.
 Remove a friend, change your mind, and send them a friend request again. Both
 people can see the request. Neither can act on it, permanently.
 
-**Mechanism.** `DELETE friends/{profile_uuid}/` soft-deletes: the `Friendship`
-row survives with status `Removed`, keeping the `from_profile` it originally
-had. A later `POST friends/` finds that row through
-`Friendship.objects.all().between(a, b)` and revives it **without re-orienting
-it**, so a request A sends to B is recorded as though B had sent it to A. B then
-calls `friends/{A}/accept/`, which looks for an incoming request from A, finds
-none, and answers `404 Friend request not found`.
+**What is established.** `DELETE friends/{profile_uuid}/` soft-deletes: the
+`Friendship` row survives with status `Removed`, keeping the `from_profile` it
+originally had. When a `POST friends/` later meets such a row, the request can
+end up recorded in the **old** direction - A sends to B, and B sees it as
+`status="Requested" direction="outgoing"`, an incoming request labelled as one
+they sent. `friends/{A}/accept/` then looks for an incoming request from A,
+finds none, and answers `404 Friend request not found`. Both people can see the
+request; neither can act on it.
+
+**What is not established, and is the next thing to find out.** The obvious
+mechanism - `Friendship.objects.all().between()` finding the soft-deleted row
+and reviving it without re-orienting `from_profile` - is *not sufficient on its
+own*. A test that constructs exactly that state (B befriends A, A accepts, A
+removes, A re-requests) **passes**: that revival orients correctly. Only the
+first test to run against a *previous run's* leftovers fails, so the row it
+meets must be in some further sub-state this reproduction does not recreate -
+removed-while-still-requested, or declined-then-removed, or similar. Whoever
+picks this up should dump the surviving row's full record rather than trusting
+the reconstruction above.
 
 The feed shows it plainly once you ask for the right status - the requester sees
 `direction="incoming"` for a request they sent:
@@ -3921,14 +3933,19 @@ test's cleanup *prove* the relationship was gone across all eight statuses
 instead of the three it had been checking, at which point the surviving
 `Removed` row named itself.
 
-**Fix.** Re-orient the row when reviving it - a revived request's `from_profile`
-should be whoever is asking now. Worth checking the same question of the other
-statuses `between()` can return (`Declined`, `Ignored`, `Blocked`): each is a
-row that a later request will find and reuse.
+**Likely fix, once the state is pinned down.** Re-orient the row when reviving
+it - a revived request's `from_profile` should be whoever is asking now. Worth
+asking the same question of every status `between()` can return (`Declined`,
+`Ignored`, `Blocked`, `Removed`): each is a row a later request will find and
+reuse, and only one of them has been shown to orient correctly.
 
-Reproduced by
-`tests/integration/specs/api/social.spec.ts::re-adding somebody you removed
-produces a request they can accept`, which stays red until it is fixed.
+Observed on every run by
+`tests/integration/specs/api/social.spec.ts::a request is visible to the
+recipient, and acceptance to both` - which fails *only* as the first test in
+that file, i.e. the one that meets the previous run's leftovers. The companion
+test `re-adding somebody you removed produces a request they can accept`
+constructs the reconstruction above and passes, which is what narrows the
+question.
 
 ## OPEN 2026-08-24: a photo upload trusts the filename, not the bytes
 
