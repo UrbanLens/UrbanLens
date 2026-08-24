@@ -314,6 +314,8 @@ score for an individual is not something this application has a use for" stance 
 * API for CRIS
 * Integrate with instagram (instagram makes this extremely annoying). This would allow, for instance, importing all your instagram photos to jumpstart documenting the places you've been. [UL-390]
 * Flaresolver (and similar), plus Tor for retrieving some API data (such as county tax records, etc). I'm not currently aware of anywhere this is needed yet, but surely there is somewhere it would be helpful and improve data quality or access.
+* App / connector for Claude / ChatGPT allowing users to interact with urbanlens directly from those interfaces.
+* App / connector for Notion.
 
 ### Native Mobile App
 * Automatically check off visit logs [UL-82]

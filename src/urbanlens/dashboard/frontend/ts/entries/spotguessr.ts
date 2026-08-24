@@ -11,6 +11,7 @@
 import { getCsrfToken } from "../shared/csrf";
 import { confirmAction, toast } from "../shared/dialogs";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
+import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
 import { createMapLayers } from "../shared/map-layers";
 import {
     avatarInitial,
@@ -223,7 +224,7 @@ interface SpotGuessrState {
     isMultiplayer: boolean;
     hostProfileId: number | null;
     lastRevealedRoundId: number | null;
-    ws: WebSocket | null;
+    ws: LiveSocketHandle | null;
     guessMap: L.Map | null;
     // Reused across rounds/sessions via setPano() rather than torn down and
     // recreated - same singleton-container convention as guessMap/areaMap
@@ -1717,17 +1718,17 @@ function applyLastConfig(): void {
 
 function connectSessionSocket(): void {
     if (state.ws || state.sessionId === null) return;
-    const proto = location.protocol === "https:" ? "wss://" : "ws://";
-    state.ws = new WebSocket(`${proto}${location.host}/ws/spotguessr/session/${state.sessionId}/`);
-    state.ws.addEventListener("message", (event) => {
-        try {
-            handleSocketMessage(JSON.parse(event.data));
-        } catch {
-            // Ignore unparseable frames - nothing actionable to do with one.
-        }
-    });
-    state.ws.addEventListener("close", () => {
-        state.ws = null;
+    // shared/live-socket.ts adds the heartbeat this socket needs to survive the
+    // Cloudflare tunnel's idle cutoff, and the reconnect it never had.
+    state.ws = openLiveSocket({
+        path: `/ws/spotguessr/session/${state.sessionId}/`,
+        onMessage: handleSocketMessage,
+        // 4404 here means the host removed this player, or the entitlement went
+        // away - nothing more is coming, so drop the handle rather than leave a
+        // dead one blocking a later join.
+        onPermanentClose: () => {
+            state.ws = null;
+        },
     });
     el("sg-chat-panel").hidden = false;
     void loadChatHistory();
@@ -1786,8 +1787,9 @@ function initChat(): void {
         event.preventDefault();
         const input = el<HTMLInputElement>("sg-chat-input");
         const body = input.value.trim();
-        if (!body || !state.ws) return;
-        state.ws.send(JSON.stringify({ body }));
+        // send() is false while the socket is reconnecting - leave what they
+        // typed in the box rather than clearing it for a message that never left.
+        if (!body || !state.ws?.send({ body })) return;
         input.value = "";
     });
 }

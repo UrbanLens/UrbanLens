@@ -196,6 +196,19 @@ DATABASES = {
         "PASSWORD": os.getenv("UL_DB_PASS"),
         "HOST": os.getenv("UL_DB_HOST", "localhost"),
         "PORT": os.getenv("UL_DB_PORT", "5432"),
+        # Persistent connections. Defaults to Django's close-every-request
+        # behaviour, which is fine when the database is a container away. It
+        # stops being fine when an instance reaches its database across a
+        # ~100ms link, where reconnecting costs several round trips before any
+        # query runs - set this (and the health check, which discards a
+        # connection that died while idle) wherever that is the case.
+        "CONN_MAX_AGE": int(os.getenv("UL_DB_CONN_MAX_AGE", "0")),
+        "CONN_HEALTH_CHECKS": os.getenv("UL_DB_CONN_HEALTH_CHECKS", "").lower() in {"1", "true", "yes"},
+        # Fail fast rather than hanging a worker when the database host is
+        # unreachable: during a site failover it is unreachable by definition,
+        # and a request that errors immediately is a better outcome than one
+        # that occupies a worker until the client gives up.
+        "OPTIONS": {"connect_timeout": int(os.getenv("UL_DB_CONNECT_TIMEOUT", "10"))},
         # UL_TEST_DB_NAME lets concurrent test runs (e.g. two working copies
         # or agent sessions on one machine) use separate test databases
         # instead of fighting over the default "test_<NAME>".

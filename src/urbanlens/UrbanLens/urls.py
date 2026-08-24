@@ -108,6 +108,11 @@ urlpatterns = [
     # it - but they are mounted, so narrow this include if that stops being true.
     path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
+    # Split probes for orchestrators and load balancers. /health/ above stays
+    # as-is because the compose healthchecks depend on its exact behaviour.
+    path("health/live", HealthController.as_view({"get": "live"}), name="health-live"),
+    path("health/ready", HealthController.as_view({"get": "ready"}), name="health-ready"),
+    path("health/primary", HealthController.as_view({"get": "primary"}), name="health-primary"),
     path("", IndexController.as_view(), name="index"),
     # Authenticated media gate - replaces the old unconditional
     # `*static(MEDIA_URL, ...)` entry (which only ever served files when

@@ -13,12 +13,21 @@
     var RETRY_MAX_MS = 30000;
     var POLL_MS = 60000;
     var FAILURES_BEFORE_POLLING = 2;
+    // Cloudflare closes a tunnelled WebSocket that has carried no traffic for
+    // roughly 100 seconds, and the threshold isn't configurable below an
+    // Enterprise plan. A quiet account sends nothing for hours, so without this
+    // ping the socket dies while the page still believes it's connected. Same
+    // interval, and the same reasoning, as ts/shared/live-socket.ts - which this
+    // inline script can't import. UserNotificationConsumer ignores every client
+    // frame, so the ping needs no reply.
+    var HEARTBEAT_MS = 45000;
 
     var ws = null;
     var retryDelay = RETRY_MIN_MS;
     var failures = 0;
     var pollTimer = null;
     var reconnectTimer = null;
+    var heartbeatTimer = null;
     var stopped = false;   // set on close 4404 (unauthenticated) - retrying won't help
 
     function refreshBadge() {
@@ -110,6 +119,17 @@
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     }
 
+    function startHeartbeat() {
+        stopHeartbeat();   // every reconnect passes through here - don't stack intervals
+        heartbeatTimer = setInterval(function () {
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send('{"type":"ping"}');
+        }, HEARTBEAT_MS);
+    }
+
+    function stopHeartbeat() {
+        if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    }
+
     function scheduleReconnect() {
         if (stopped || reconnectTimer) return;
         reconnectTimer = setTimeout(function () {
@@ -134,6 +154,7 @@
             retryDelay = RETRY_MIN_MS;
             failures = 0;
             stopPolling();
+            startHeartbeat();
             refreshBadge();  // catch anything that arrived while disconnected
         };
 
@@ -157,6 +178,7 @@
 
         ws.onclose = function (e) {
             ws = null;
+            stopHeartbeat();
             if (e && e.code === 4404) {  // session no longer authenticated - permanent
                 stopped = true;
                 stopPolling();
