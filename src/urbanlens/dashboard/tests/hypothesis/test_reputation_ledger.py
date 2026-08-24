@@ -16,6 +16,7 @@ single WikiEdit row.
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -24,14 +25,15 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.reputation.meta import TargetKind, period_key_for
 from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
 from urbanlens.dashboard.services.reputation import coefficients
 from urbanlens.dashboard.services.reputation.builtin_rules import register_builtin_rules
 from urbanlens.dashboard.services.reputation.scoring import (
-    record_event,
     recompute_total,
+    record_event,
     restore_event,
     retract_event,
     score_event,
@@ -59,25 +61,34 @@ class LedgerWriteTests(TestCase):
         }
         return baker.make(Image, **{**defaults, **kwargs})
 
-    def test_a_recorded_row_starts_unscored_rather_than_worth_zero(self) -> None:
-        """Null and zero are different states, and summing must not confuse them."""
-        event = record_event(self.profile, "photo_upload", target=self._photo(), wiki=self.wiki)
+    def _event_for(self, target: Any, rule_key: str) -> ReputationEvent:
+        """The row the contribution signal wrote for *target*."""
+        return ReputationEvent.objects.get(rule_key=rule_key, target_id=target.pk)
 
-        self.assertIsNotNone(event)
+    def test_a_recorded_row_starts_unscored_rather_than_worth_zero(self) -> None:
+        """Null and zero are different states, and summing must not confuse them.
+
+        The row is written by the contribution signal, synchronously; scoring
+        is the deferred half and has not run.
+        """
+        event = self._event_for(self._photo(), "photo_upload")
+
         self.assertIsNone(event.value)
         self.assertIn(event, ReputationEvent.objects.unscored())
         self.assertNotIn(event, ReputationEvent.objects.counting())
 
     def test_recording_the_same_contribution_twice_writes_one_row(self) -> None:
-        """Celery runs with acks_late and retries, so every writer can run twice."""
+        """Celery runs with acks_late and retries, so every writer can run twice.
+
+        The signal has already written this photo's row, so an explicit
+        re-record stands in for the retry - and must be refused.
+        """
         photo = self._photo()
 
-        first = record_event(self.profile, "photo_upload", target=photo, wiki=self.wiki)
-        second = record_event(self.profile, "photo_upload", target=photo, wiki=self.wiki)
+        again = record_event(self.profile, "photo_upload", target=photo, wiki=self.wiki)
 
-        self.assertIsNotNone(first)
-        self.assertIsNone(second)
-        self.assertEqual(ReputationEvent.objects.for_profile(self.profile).count(), 1)
+        self.assertIsNone(again)
+        self.assertEqual(ReputationEvent.objects.for_profile(self.profile).for_rule("photo_upload").count(), 1)
 
     def test_a_first_ever_contributor_is_marked_for_the_sweep(self) -> None:
         """The staleness flag has to survive there being no totals row yet.
@@ -123,14 +134,14 @@ class ScoringTests(TestCase):
         }
         return baker.make(Image, **{**defaults, **kwargs})
 
-    def _record_and_score(self, photo: Image) -> Decimal | None:
-        event = record_event(self.profile, "photo_upload", target=photo, wiki=self.wiki)
-        return score_event(event)
+    def _score(self, target: Any, rule_key: str = "photo_upload") -> Decimal | None:
+        """Score the row the contribution signal already wrote for *target*."""
+        return score_event(ReputationEvent.objects.get(rule_key=rule_key, target_id=target.pk))
 
     def test_the_first_photo_on_a_wiki_beats_the_second(self) -> None:
         """Value follows how badly the target needed it, not the action type."""
-        first = self._record_and_score(self._photo())
-        second = self._record_and_score(self._photo())
+        first = self._score(self._photo())
+        second = self._score(self._photo())
 
         self.assertIsNotNone(first)
         self.assertGreater(first, second)
@@ -143,12 +154,21 @@ class ScoringTests(TestCase):
         """
         external = self._photo(source=ImageSource.WIKIMEDIA)
 
-        event = record_event(self.profile, "photo_upload", target=external, wiki=self.wiki)
-        value = score_event(event)
+        self.assertFalse(ReputationEvent.objects.filter(rule_key="photo_upload", target_id=external.pk).exists())
 
-        self.assertIsNone(value)
-        event.refresh_from_db()
-        self.assertTrue(event.retracted)
+        # And if a row is forced into existence anyway - a rule registered
+        # later, a backfill - the scorer still refuses to value it.
+        forced = ReputationEvent.objects.create(
+            profile=self.profile,
+            rule_key="photo_upload",
+            target_kind=TargetKind.IMAGE,
+            target_id=external.pk,
+            wiki=self.wiki,
+            period_key=period_key_for(),
+        )
+        self.assertIsNone(score_event(forced))
+        forced.refresh_from_db()
+        self.assertTrue(forced.retracted)
 
     def test_metadata_is_a_bonus_and_its_absence_is_never_a_penalty(self) -> None:
         """EXIF extraction is skipped when the uploader has track_pin_visits off.
@@ -177,8 +197,8 @@ class ScoringTests(TestCase):
             longitude=Decimal("-73.9"),
         )
 
-        bare = score_event(record_event(self.profile, "photo_upload", target=bare_photo, wiki=self.wiki))
-        rich = score_event(record_event(other_profile, "photo_upload", target=rich_photo, wiki=other_wiki))
+        bare = self._score(bare_photo)
+        rich = self._score(rich_photo)
 
         self.assertGreater(bare, 0, "a photo with no metadata must still be worth something")
         expected_bonus = coefficients.QUALITY_HAS_CAPTURE_DATE + coefficients.QUALITY_HAS_REAL_GPS
@@ -195,15 +215,15 @@ class ScoringTests(TestCase):
             reverted=False,
         )
 
-        one_value = score_event(record_event(self.profile, "wiki_field_edit", target=one, wiki=self.wiki))
-        three_value = score_event(record_event(self.profile, "wiki_field_edit", target=three, wiki=self.wiki))
+        one_value = self._score(one, "wiki_field_edit")
+        three_value = self._score(three, "wiki_field_edit")
 
         self.assertIsNotNone(one_value)
         self.assertGreater(three_value, one_value)
 
     def test_repeating_one_activity_in_a_period_decays(self) -> None:
         """A full point, then half, then a quarter - varied use beats bursts."""
-        values = [self._record_and_score(self._photo()) for _ in range(3)]
+        values = [self._score(self._photo()) for _ in range(3)]
 
         self.assertTrue(all(v is not None for v in values))
         self.assertGreater(values[0], values[1])
@@ -212,7 +232,7 @@ class ScoringTests(TestCase):
     def test_one_wiki_cannot_be_farmed_past_its_period_cap(self) -> None:
         """Bounds how much one profile can extract from one target."""
         for _ in range(40):
-            self._record_and_score(self._photo())
+            self._score(self._photo())
 
         earned = ReputationEvent.objects.for_profile(self.profile).for_wiki(self.wiki).total_value()
 
@@ -235,7 +255,7 @@ class RetractionTests(TestCase):
             media_type=MediaKind.PHOTO,
             image="pin_images/x.png",
         )
-        self.event = record_event(self.profile, "photo_upload", target=photo, wiki=self.wiki)
+        self.event = ReputationEvent.objects.get(rule_key="photo_upload", target_id=photo.pk)
         score_event(self.event)
 
     def test_retraction_is_reversible(self) -> None:
@@ -265,6 +285,6 @@ class RetractionTests(TestCase):
         recompute_total(self.profile)
         after = ProfileReputation.objects.get(profile=self.profile)
 
-        self.assertEqual(after.total, Decimal("0"))
+        self.assertEqual(after.total, Decimal(0))
         self.assertEqual(after.lifetime_earned, before.lifetime_earned)
         self.assertGreater(after.lifetime_earned, 0)

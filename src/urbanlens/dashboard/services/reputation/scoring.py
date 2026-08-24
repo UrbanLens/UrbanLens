@@ -76,13 +76,23 @@ def record_event(
     wiki_id = wiki if isinstance(wiki, int) or wiki is None else wiki.pk
     moment = occurred_at or timezone.now()
 
+    target_id = getattr(target, "pk", None)
+    # Fast path. Several subscriptions are not created_only - a photo is
+    # usually attached to its wiki by a later "send to wiki", not at upload -
+    # so ordinary re-saves re-enter here for a contribution already recorded.
+    # Letting those reach the insert costs a savepoint and a rolled-back
+    # IntegrityError on a write path users hit constantly. The constraint is
+    # still the guarantee; this only avoids paying for it in the common case.
+    if target_id is not None and ReputationEvent.objects.filter(rule_key=rule.key, target_kind=rule.target_kind, target_id=target_id).exists():
+        return None
+
     try:
         with transaction.atomic():
             event = ReputationEvent.objects.create(
                 profile_id=profile_id,
                 rule_key=rule.key,
                 target_kind=rule.target_kind,
-                target_id=getattr(target, "pk", None),
+                target_id=target_id,
                 wiki_id=wiki_id,
                 value=None,
                 occurred_at=moment,

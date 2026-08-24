@@ -63,6 +63,12 @@ class DashboardConfig(AppConfig):
 
         register_builtin_rules()
 
+        # Same table-driven shape as achievements, but the ledger write is
+        # synchronous - see that module's docstring.
+        from urbanlens.dashboard.models.reputation.signals import connect as connect_reputation_signals
+
+        connect_reputation_signals()
+
         # Plugin discovery only imports modules and instantiates plugin
         # classes - it must never touch the database this early.
         plugin_registry.discover()

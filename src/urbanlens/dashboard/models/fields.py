@@ -297,6 +297,11 @@ class UndecryptableJSON(dict):
         self.ciphertext = ciphertext
 
 
+#: Anything ``json.dumps`` round-trips. Named so the descriptor declarations
+#: below read as intent rather than as a widening.
+type JSONValue = dict[str, Any] | list[Any] | str | int | float | bool | None
+
+
 class EncryptedJSONField(EncryptedTextField):
     """A JSON field whose serialised value is encrypted at rest with Fernet.
 
@@ -312,6 +317,17 @@ class EncryptedJSONField(EncryptedTextField):
     empty column, or an empty :class:`UndecryptableJSON` when ``fail_soft`` is
     set and no key matched.
     """
+
+    if TYPE_CHECKING:
+        # django-stubs derives a field's attribute type from its base, which
+        # here is TextField - so without this, every read is typed `str` and
+        # every write of the dict this field exists to hold is an error. The
+        # storage type is text; the *Python* type is a JSON value, and saying
+        # so here is what stops callers having to work around a type the
+        # attribute never actually has.
+        def __get__(self, instance: Any, owner: Any) -> JSONValue: ...
+
+        def __set__(self, instance: Any, value: JSONValue) -> None: ...
 
     def get_prep_value(self, value: object) -> str | None:
         """Serialise then encrypt ``value`` for storage.

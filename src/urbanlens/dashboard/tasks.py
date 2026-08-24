@@ -3310,6 +3310,118 @@ def backfill_achievement(achievement_id: int) -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def score_reputation_event(event_id: int) -> str:
+    """Work out what one recorded contribution was worth.
+
+    Queued from ``models.reputation.signals`` after the row is already written.
+    Deferred because establishing how badly a target needed a contribution
+    means querying that target's state, which for photos can mean walking
+    external gallery panels - by far the most expensive input in the model, and
+    exactly the cost this feature must not add to a page load.
+
+    Args:
+        event_id: PK of the ledger row to value.
+
+    Returns:
+        The stored value as a string, or a short status when nothing was.
+    """
+    from urbanlens.dashboard.models.reputation.model import ReputationEvent
+    from urbanlens.dashboard.services.reputation.scoring import recompute_total, score_event
+
+    event = ReputationEvent.objects.filter(pk=event_id).first()
+    if event is None:
+        logger.info("score_reputation_event: event %s no longer exists", event_id)
+        return "missing"
+    if event.value is not None:
+        # Already scored. acks_late means this task can be redelivered.
+        return "already_scored"
+
+    value = score_event(event)
+    recompute_total(event.profile_id)
+    return "unscorable" if value is None else str(value)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def recompute_reputation_total(profile_id: int) -> str:
+    """Rebuild one profile's cached reputation totals from the ledger.
+
+    Args:
+        profile_id: Whose totals to rebuild.
+
+    Returns:
+        The new total as a string.
+    """
+    from urbanlens.dashboard.services.reputation.scoring import recompute_total
+
+    return str(recompute_total(profile_id))
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_reputation(chunk_size: int = 500) -> int:
+    """Drain unscored ledger rows and rebuild any totals known to be stale.
+
+    The backstop for a lost enqueue. ``safely_enqueue_task`` swallows broker
+    failures and returns None, so a row can sit unscored indefinitely with
+    nothing to notice - which is survivable only because the row itself was
+    written synchronously and is therefore still there to find.
+
+    Dispatch only: rows are sliced into bounded ranges, in pk order, and each
+    range is handled by its own subtask, so a chunk that crashes costs its own
+    range rather than the whole sweep.
+
+    Args:
+        chunk_size: Maximum rows per subtask.
+
+    Returns:
+        How many subtasks were dispatched.
+    """
+    from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    chunk_size = max(1, chunk_size)
+    pks = list(ReputationEvent.objects.unscored().order_by("pk").values_list("pk", flat=True))
+
+    dispatched = 0
+    for start in range(0, len(pks), chunk_size):
+        chunk = pks[start : start + chunk_size]
+        if safely_enqueue_task(sweep_reputation_range, chunk[0], chunk[-1]) is not None:
+            dispatched += 1
+
+    for profile_id in ProfileReputation.objects.stale().values_list("profile_id", flat=True):
+        if safely_enqueue_task(recompute_reputation_total, profile_id) is not None:
+            dispatched += 1
+
+    return dispatched
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_reputation_range(start_pk: int, end_pk: int) -> int:
+    """Score every unscored ledger row with ``start_pk <= pk <= end_pk``.
+
+    Args:
+        start_pk: First row in the range, inclusive.
+        end_pk: Last row in the range, inclusive.
+
+    Returns:
+        How many rows were scored.
+    """
+    from urbanlens.dashboard.models.reputation.model import ReputationEvent
+    from urbanlens.dashboard.services.reputation.scoring import recompute_total, score_event
+
+    rows = ReputationEvent.objects.unscored().filter(pk__gte=start_pk, pk__lte=end_pk)
+    touched: set[int] = set()
+    scored = 0
+    for event in rows:
+        if score_event(event) is not None:
+            scored += 1
+        touched.add(event.profile_id)
+
+    for profile_id in touched:
+        recompute_total(profile_id)
+    return scored
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def sweep_achievements(chunk_size: int = 1000) -> int:
     """Fan the nightly achievement sweep out as bounded profile-range subtasks.
 

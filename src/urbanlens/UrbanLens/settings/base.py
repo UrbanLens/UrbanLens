@@ -385,6 +385,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.sweep_achievements",
         "schedule": crontab(hour=3, minute=10),
     },
+    # Drains ledger rows whose scoring enqueue was lost to a broker blip, and
+    # rebuilds totals flagged stale. The rows themselves are written
+    # synchronously, so this recovers value rather than data.
+    "reputation-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_reputation",
+        "schedule": crontab(hour=6, minute=10),
+    },
     # Safety net for missed Stripe webhook deliveries - the core "did this
     # charge clear the threshold" mechanic runs at webhook time, not here.
     "stripe-subscriptions-sync": {
