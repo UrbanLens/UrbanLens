@@ -22,6 +22,63 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-08-24: the published OpenAPI document under-describes its own responses
+
+Found by the new schemathesis suite (`tests/contract/`, `docs/CONTRACT_TESTS.md`)
+on its first run. Both are in the *published* contract, so both are paid for by
+whoever generates a client from it — the Flutter app included.
+
+**1. Two pairs of operations share an `operationId`.**
+`passkey_wrap_create` is claimed by `POST /dashboard/e2ee/passkey-wrap/` and
+`POST /dashboard/e2ee/passkey-wrap/{credential_id}/`; `passkey_wrap_destroy` by
+the two `DELETE`s. drf-spectacular does not fail on this — it appends `_2` to
+whichever operation it reaches second and logs a warning nobody reads. Which one
+loses depends on the order the urlconf is walked, so adding an unrelated route
+can move the suffix to the other operation and silently rename a method that
+downstream code calls. Fix is an explicit `operation_id` on each
+`@extend_schema`. Guarded by
+`TestDocumentShape::test_operation_ids_are_unique`.
+
+**2. No authenticated operation documents a 401**, though every one returns it
+for a request without credentials. A generated client has no branch for the most
+likely failure it will ever see, and a strict one treats the response as a
+protocol violation rather than "your token expired". The same is true of the 403
+that a scope check produces and the 404 a detail endpoint produces for an
+unknown slug. Because responses are not declared per view, the fix is one place:
+a drf-spectacular postprocessing hook, or `extend_schema(responses=...)` on the
+shared base view. Guarded by
+`TestDocumentShape::test_authenticated_operations_document_rejection`.
+
+Until (2) is fixed, the contract suite's `status_code_conformance` and
+`content_type_conformance` checks stay behind `UL_CONTRACT_STRICT=1` — on, they
+fire on almost every parameterised operation for a response that is *correct*,
+which is a hundred red tests carrying one piece of information.
+
+## OPEN 2026-08-24: two endpoints return a different shape than they publish
+
+Also from the first schemathesis run, and worse than the documentation gaps
+above: these are cases where a generated client would be **wrong at runtime**,
+not merely under-informed. Neither was reachable by the existing suite, which
+asserts endpoint behaviour against hand-written expectations rather than against
+the schema.
+
+**`GET /dashboard/api/external/v1/undo/` declares an array and returns an
+object.** The schema says `{"type": "array", "items": UndoEntry}`; the endpoint
+returns `{"entries": [...], "omitted": [...]}`. A generated client iterates the
+response and gets an object, or fails to deserialize it outright. One of the two
+is wrong — the `omitted` key suggests the envelope is intentional and the
+`@extend_schema(responses=...)` was never updated to match, in which case the
+fix is the schema, but that should be confirmed against what the mobile client
+expects before changing either.
+
+**`GET /dashboard/api/external/v1/labels/` omits a field it declares
+required.** `location_count` is in the `Label` schema's `required` list and is
+absent from the serialized response. A client with a non-optional field there
+fails to parse a perfectly ordinary list of labels.
+
+Both are guarded by `test_operation_matches_its_schema` in `tests/contract/`, so
+whichever way each is fixed, the test goes green when the two agree.
+
 ## OPEN 2026-08-21: production REData 404s on `/api/v1/public-locations/` (and `/capabilities/`)
 
 Verified live against a fresh dev environment (`a962bf8`, `--redata production`, the default as of

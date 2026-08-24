@@ -23,7 +23,23 @@ bin/run_tests.sh --fast <paths>      # reuse a persistent database
 bin/run_tests.sh --fresh-db <paths>  # rebuild it (do this after any migration)
 bin/run_tests.sh --verify-only       # just compare host and container
 bin/run_tests.sh --allow-drift ...   # run despite drift, on purpose
+bin/run_tests.sh --parallel[=N] ...  # N xdist workers (default: auto)
+bin/run_tests.sh --shuffle ...       # randomise order (pytest-randomly)
 ```
+
+`--parallel` cuts the opposite way to `--fast`: pytest-django gives each xdist
+worker its own database, so N workers means N database builds before any test
+runs. It pays off on a large selection, especially combined with `--fast` (each
+worker then reuses its own), and loses badly on a single file. It is not the
+default because it multiplies concurrent load on Postgres, which is what has
+been observed to take the local instance down — the symptom is mass "ERROR at
+setup" across files that have nothing to do with each other.
+
+`--shuffle` enables pytest-randomly, which is installed but switched off in
+`addopts`. Shuffling found no order dependence when probed across three seeds,
+but only over a subset, so it stays opt-in until a full shuffled run has been
+green. Under it, pytest prints the seed; reproduce with that before assuming the
+plugin is at fault.
 
 **Use `--fast`.** Building a test database costs about 190 seconds; the tests
 themselves usually cost single-digit seconds. The consensus field-scope file
@@ -60,6 +76,50 @@ regenerated. Six selectable projects - `smoke`, `services`, `api`, `ui`,
 
 Full documentation, including how to write a test and what it deliberately does
 not cover, is `docs/INTEGRATION_TESTS.md`.
+
+### `bin/run_contract_tests.sh`
+
+Property-based conformance testing of the external API against its own published
+OpenAPI document, via schemathesis. Two modes: in-process (generate the schema
+from the urlconf, drive Django's WSGI callable — no deployment needed) and live
+(`--url`, fetch the schema from a deployment and call it over HTTP).
+
+```bash
+bin/run_contract_tests.sh                      # in-process, safe methods
+bin/run_contract_tests.sh --methods all        # include writes
+bin/run_contract_tests.sh --url https://s1.dev.urbanlens.org
+```
+
+It exists because the schema is a *deployed artefact* with generated clients
+depending on it, and nothing else compared a response to it. The Python suite
+checks endpoints against hand-written expectations — written by the same author
+as the serializer, so both can agree while disagreeing with the schema — and the
+Playwright `api` project checks the document generates, not that responses match
+it.
+
+**Its first run found two things.** `passkey_wrap_create` and
+`passkey_wrap_destroy` are each claimed by two operations, which drf-spectacular
+resolves by appending `_2` to whichever it reaches second — so adding a route can
+rename a method downstream code calls. And no authenticated operation documents
+a 401, though every one of them returns it.
+
+Full documentation, including the three fixture traps it cost to get working, is
+`docs/CONTRACT_TESTS.md`.
+
+### `bin/report_diff_coverage.sh`
+
+Coverage of the lines a branch changed, rather than a whole-tree percentage that
+barely moves on any one commit.
+
+```bash
+bin/report_diff_coverage.sh -- <the tests covering your change>
+bin/report_diff_coverage.sh --reuse            # against an existing coverage.xml
+bin/report_diff_coverage.sh --fail-under 80
+```
+
+Measuring means running under coverage, which is slow, so pass the relevant
+tests after `--`. A partial report is honest here in a way it would not be for
+whole-tree coverage, because the lines reported on are the ones just written.
 
 ### `bin/run_mutation_tests.sh`
 
@@ -198,20 +258,53 @@ the bug also writes the expectations. Use it whenever adding a batch or cached
 path over an existing predicate. It caught a real defect in the identity-batching
 fix within minutes.
 
+### `django_perf_rec.record()` — query fingerprints
+
+Records the exact sequence of statements an endpoint runs to a `.perf.yml`
+beside its test, so a change in query *shape* arrives as a reviewable diff.
+
+Complementary to `QueryScalingMixin`, and the split matters. The scaling harness
+measures a **slope** — same endpoint at two data sizes, fail if queries grow with
+rows — which is right for a list and deliberately blind to the intercept, so an
+endpoint that always cost thirty queries keeps passing. A record measures a
+**fingerprint**, which catches what a slope cannot: a detail view that gains one
+query per related object (three rows today, no visible slope), a
+`select_related` dropped in a refactor, a cache read that became a database read.
+
+The cost is that a legitimate query change is a diff somebody has to approve.
+Re-record with `PERF_REC={"MODE": "overwrite"}` once you have confirmed it was
+intended. `settings/test.py` sets `MODE` to `none` under CI, so a *missing*
+record fails there rather than silently recording whatever the code does today —
+including the regression under review.
+
+Applied in `dashboard/tests/hypothesis/test_query_records.py` to the external
+API's most-fetched endpoints, `whoami/` among them as a floor: if that record
+grows, the cost went into authentication or middleware, and every other endpoint
+grew by the same amount without any of their records explaining why.
+
 ## Evaluated, not adopted
 
-- **`pytest-randomly`** — the suite always runs in one order, so order
-  dependence would be invisible. Probed with three shuffled seeds over the
-  scaling, consensus and helper suites: **no order dependence found**. Safe to
-  adopt; a full-suite shuffled run (~95 min) would be needed for confidence
-  across all 11,000 tests.
+- **`nplusone`** — the obvious runtime N+1 detector, and rejected on two counts:
+  it has not shipped a release since 2019, and `django-auto-prefetch` (already a
+  dependency) suppresses exactly the access pattern it watches for, so it would
+  be quietest where this codebase's N+1s actually came from — model *properties*
+  that fall back to a query. `django-perf-rec` was adopted instead, above.
 - **`django-linear-migrations`** — would subsume part of
   `check_migration_graph.py` and additionally prevent branching migration
   graphs. Worth adopting if migrations ever branch across parallel work.
 - **`django-test-migrations`** — asserts migrations apply *and* roll back.
   Complements the static graph check with runtime behaviour.
-- **`diff-cover`** — coverage on changed lines, which targets review at what is
-  new rather than reporting a whole-project percentage.
-- **Runtime N+1 detectors** — attractive given three N+1s in one audit, but the
-  scaling harness already covers the measured endpoints, and maintenance status
-  should be checked before taking the dependency.
+- **VCR.py / `responses` cassettes** — would replace the ~60 hand-written
+  `mock.patch` sites for outbound HTTP. Rejected for now: most of those sites
+  sit under Hypothesis property tests, where each generated input is a different
+  request and a recorded cassette either misses or has to be re-recorded, and
+  recording against the real gateways needs live credentials for REData,
+  Overpass and Stripe. (`respx` does not apply at all — it is httpx-only, and
+  this project is on `requests`.)
+- **`testcontainers-python`** — an ephemeral PostGIS per run. `bin/run_tests.sh`
+  already runs pytest inside the project's own compose stack against real
+  PostGIS, so this would replace a working setup rather than add a capability.
+- **Load testing (Locust / k6)** — a genuine gap: `QueryScalingMixin` proves
+  query counts do not grow per row, which says nothing about connection-pool
+  exhaustion or gevent worker behaviour under concurrency. Wants its own scoped
+  effort against a deployment, not a bolt-on here.

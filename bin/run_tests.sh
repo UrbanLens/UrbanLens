@@ -27,6 +27,8 @@
 #   bin/run_tests.sh --allow-drift ...          # run despite drift, on purpose
 #   bin/run_tests.sh --fast [pytest args...]    # reuse a persistent database
 #   bin/run_tests.sh --fresh-db [pytest args...]# rebuild it (needed after a migration)
+#   bin/run_tests.sh --parallel[=N] [args...]   # N xdist workers (default: auto)
+#   bin/run_tests.sh --shuffle [pytest args...] # randomise test order
 #
 # --fast is worth knowing about. A unique database per run is what keeps
 # parallel sessions from colliding, but building one costs about three minutes,
@@ -34,6 +36,22 @@
 # seconds cold and 3.5 seconds against a database that already exists. For a
 # tight edit-run loop, or anything that runs the same tests hundreds of times
 # (mutation testing), reuse the database and rebuild it when the schema moves.
+#
+# --parallel is the other half of that arithmetic, and it cuts the opposite way:
+# pytest-django gives every xdist worker its own database (`..._gw0`, `_gw1`,
+# ...), so N workers means N database builds before any test runs. It pays off
+# on a large selection or against --fast, and loses badly on a single file.
+# Combined with --fast each worker reuses its own database, which is the
+# configuration worth having. Deliberately not the default: this multiplies
+# concurrent load on Postgres, which is exactly what has been observed to take
+# the local instance down (it shows up as mass "ERROR at setup" in files that
+# have nothing to do with each other).
+#
+# --shuffle turns on pytest-randomly, which is installed but disabled in
+# `addopts`. Shuffling found no order dependence when it was probed across three
+# seeds, but only over a subset - so it is opt-in until a full shuffled run has
+# been green, and a failure under it is worth reproducing with the seed pytest
+# prints before assuming the plugin is at fault.
 #
 # Environment:
 #   UL_TEST_CONTAINER   test-runner container name (default urbanlens_development_main_test_runner)
@@ -53,6 +71,8 @@ FRESH_DB=0
 # and expecting the tests to fail. That is drift on purpose, so it needs a way
 # past the guard - named so it cannot be reached by accident or by habit.
 ALLOW_DRIFT=0
+PARALLEL=""
+SHUFFLE=0
 
 args=()
 for arg in "$@"; do
@@ -62,9 +82,23 @@ for arg in "$@"; do
         --fast) FAST=1 ;;
         --fresh-db) FAST=1; FRESH_DB=1 ;;
         --verify-only) VERIFY_ONLY=1 ;;
+        --parallel) PARALLEL="auto" ;;
+        --parallel=*) PARALLEL="${arg#*=}" ;;
+        --shuffle) SHUFFLE=1 ;;
         *) args+=("$arg") ;;
     esac
 done
+
+if [ -n "$PARALLEL" ]; then
+    # --dist loadfile keeps each file's tests on one worker. Several suites here
+    # build expensive per-class state, and splitting a class across workers pays
+    # that cost once per worker instead of once.
+    args=(-n "$PARALLEL" --dist loadfile "${args[@]}")
+fi
+if [ "$SHUFFLE" -eq 1 ]; then
+    # Undoes the `-p no:randomly` in pyproject's addopts; a later -p wins.
+    args=(-p randomly "${args[@]}")
+fi
 
 if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
     echo "error: container '$CONTAINER' not found. Set UL_TEST_CONTAINER or start the stack." >&2

@@ -15,6 +15,12 @@ testing, the two "where to look" reports, the three structural CI checks, and th
 shared test helpers. Each entry records the defect that motivated it, so its value
 does not have to be re-derived.
 
+`docs/CONTRACT_TESTS.md` - the schemathesis suite in `tests/contract/`, which holds
+the external API to its own published OpenAPI document. Runs in-process (no
+deployment) or against a live one. Read it before touching a serializer's
+declared types - and note the three pytest-django traps it records, which cost a
+session to find.
+
 `docs/INTEGRATION_TESTS.md` - the on-demand Playwright suite in `tests/integration/`,
 run by hand against staging. It answers what the pytest suite structurally cannot:
 whether the deployed pieces work together. Read it before adding a test there -

@@ -1,8 +1,21 @@
+import os
+
 from urbanlens.UrbanLens.settings._gdal_windows import local_windows_gdal_overrides
 from urbanlens.UrbanLens.settings.app import settings as _app_settings
 from urbanlens.UrbanLens.settings.base import *  # noqa: F403
 
 TESTING = True
+
+# django-perf-rec writes each covered view's query *fingerprint* to a .perf.yml
+# beside its test, so an N+1 arrives as a reviewable diff rather than as a
+# number nobody can interpret.
+#
+# MODE decides what a missing record means. "once" writes it and passes, which
+# is what you want the first time you cover a view. In CI a missing record means
+# the file was never committed, and silently recording it there would assert
+# whatever the code does today - including the regression under review - so it
+# fails instead.
+PERF_REC = {"MODE": "none" if os.getenv("CI") else "once"}
 
 # Django's default PBKDF2 hasher runs ~1.2M iterations per call, which is the
 # point in production and pure overhead in tests - every baked User, every
