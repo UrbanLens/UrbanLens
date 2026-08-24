@@ -387,7 +387,9 @@
         var badge = (img.latitude !== null && img.longitude !== null)
             ? '<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>' : '';
         li.innerHTML =
-            '<button type="button" class="photo-tile-btn" onclick="photosOpenLightbox(' + img.id + ')">' +
+            // aria-label on the button: the thumbnail's alt is lost when the
+            // file 404s and the icon fallback replaces the <img>.
+            '<button type="button" class="photo-tile-btn" aria-label="Open photo: ' + ((img.caption || 'untitled') + '').replace(/"/g, '&quot;') + '" onclick="photosOpenLightbox(' + img.id + ')">' +
             '<img src="' + img.url + '" alt="" loading="lazy">' + badge + '</button>' +
             '<button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete(' + img.id + ')">' +
             '<i class="material-symbols-outlined">delete</i></button>';

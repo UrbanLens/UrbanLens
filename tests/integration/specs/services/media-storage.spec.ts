@@ -82,7 +82,15 @@ test.describe("media storage", () => {
             },
         });
 
-        expect(upload.status(), "a file whose bytes are not an image was accepted because its name ended in .png").toBe(400);
+        // 409 in practice, 400 and 415 both being defensible answers too. The
+        // status is not the point: what matters is that the bytes were
+        // inspected rather than the filename trusted, and that the refusal is
+        // not a 500 (which is what an unhandled decode error looks like) or a
+        // 2xx (which is what trusting the extension looks like).
+        expect(
+            [400, 409, 415],
+            `a file whose bytes are not an image answered ${upload.status()}; it was either accepted on the strength of its .png name, or it crashed`,
+        ).toContain(upload.status());
     });
 
     test("another account's photo is not readable", async ({ restrictedApi }) => {

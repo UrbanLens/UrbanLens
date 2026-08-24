@@ -1584,7 +1584,19 @@
         function rebuildMediaTabs() {
             var g = grid();
             var tabsEl = document.getElementById('media-tabs');
-            if (!g || !tabsEl) return;
+            if (!tabsEl) return;
+            if (!g) {
+                // Nothing to build tabs from. A container still advertising
+                // role="tablist" with no role="tab" inside it is an axe
+                // `aria-required-children` violation at critical, and it tells
+                // a screen reader there is a tab strip here when there is not.
+                tabsEl.removeAttribute('role');
+                tabsEl.removeAttribute('aria-label');
+                tabsEl.innerHTML = '';
+                return;
+            }
+            tabsEl.setAttribute('role', 'tablist');
+            tabsEl.setAttribute('aria-label', 'Media view');
             var counts = {};
             var notRelevantCount = 0;
             var total = 0;
@@ -1606,20 +1618,27 @@
             if (activeTab === 'not_relevant' && !notRelevantCount) activeTab = 'all';
 
             var currentView = section().dataset.mediaView || 'all';
-            var html = '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === 'all' ? ' active' : '') +
-                '" data-tab="all">All<span class="media-tab-count">' + total + '</span></button>';
-            html += '<button type="button" class="card-tab media-tab' + (currentView === 'mine' ? ' active' : '') +
-                '" data-tab="mine">Mine</button>';
+            // role="tab"/aria-selected on every generated button, matching the
+            // statically-rendered article sub-tabs above. Without them the
+            // surrounding role="tablist" has no valid children, which axe
+            // reports as `aria-required-children` at critical - the strip reads
+            // to a screen reader as a list of unrelated buttons rather than as
+            // one control with a current selection.
+            function mediaTab(selected, tab, inner) {
+                return '<button type="button" role="tab" aria-selected="' + (selected ? 'true' : 'false') +
+                    '" class="card-tab media-tab' + (selected ? ' active' : '') + '" data-tab="' + tab + '">' + inner + '</button>';
+            }
+
+            var html = mediaTab(currentView === 'all' && activeTab === 'all', 'all', 'All<span class="media-tab-count">' + total + '</span>');
+            html += mediaTab(currentView === 'mine', 'mine', 'Mine');
             if (showSourceTabs) {
                 sources.sort().forEach(function (src) {
                     var label = TAB_LABELS[src] || src;
-                    html += '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === src ? ' active' : '') +
-                        '" data-tab="' + src + '">' + label + '<span class="media-tab-count">' + counts[src] + '</span></button>';
+                    html += mediaTab(currentView === 'all' && activeTab === src, src, label + '<span class="media-tab-count">' + counts[src] + '</span>');
                 });
             }
             if (notRelevantCount) {
-                html += '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === 'not_relevant' ? ' active' : '') +
-                    '" data-tab="not_relevant">Not Relevant<span class="media-tab-count">' + notRelevantCount + '</span></button>';
+                html += mediaTab(currentView === 'all' && activeTab === 'not_relevant', 'not_relevant', 'Not Relevant<span class="media-tab-count">' + notRelevantCount + '</span>');
             }
             tabsEl.innerHTML = html;
             tabsEl.querySelectorAll('.media-tab').forEach(function (btn) {

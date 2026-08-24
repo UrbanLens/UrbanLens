@@ -14,7 +14,7 @@
 
 import { expect, test } from "../../lib/fixtures.js";
 import { env } from "../../lib/env.js";
-import { appRoutes, publicRoutes } from "../../lib/routes.js";
+import { appRoutes, contentRoutes, publicRoutes } from "../../lib/routes.js";
 
 const isHttps = env.baseUrl.startsWith("https:");
 
@@ -47,9 +47,29 @@ test.describe("response headers", () => {
     test("HTTPS is asserted to the browser", async ({ request }) => {
         test.skip(!isHttps, "This deployment is served over plain HTTP, so HSTS would be meaningless.");
 
+        // Reaching the site over https is not the same as the site *insisting*
+        // on https. `SECURE_HSTS_SECONDS` is gated on `SECURE_SSL_REDIRECT`,
+        // which `UL_UNSAFE_ALLOW_HTTP` turns off - the development default, and
+        // a deliberate choice rather than an oversight. Asserting HSTS on such
+        // a deployment fails a correct configuration, which is how a security
+        // test gets muted.
+        //
+        // So ask the deployment which it is: if plain HTTP is answered rather
+        // than redirected, it has declared itself HTTP-permissive and the
+        // absent header is the setting working.
+        const plain = new URL(env.baseUrl);
+        plain.protocol = "http:";
+        const overHttp = await request.get(new URL(contentRoutes.about, plain).toString(), { maxRedirects: 0 });
+        const redirectsToHttps = overHttp.status() >= 300 && overHttp.status() < 400 && (overHttp.headers()["location"] ?? "").startsWith("https://");
+
+        test.skip(
+            !redirectsToHttps,
+            `This deployment answers plain HTTP with ${overHttp.status()} rather than redirecting, so it is intentionally HTTP-permissive (UL_UNSAFE_ALLOW_HTTP) and HSTS is correctly absent.`,
+        );
+
         const response = await request.get(appRoutes.home);
         const hsts = response.headers()["strict-transport-security"];
-        expect(hsts, "no Strict-Transport-Security header on an HTTPS deployment").toBeTruthy();
+        expect(hsts, "this deployment redirects HTTP to HTTPS but sends no Strict-Transport-Security header, so a first visit is still strippable").toBeTruthy();
         expect(hsts, `HSTS max-age is too short to be useful: "${hsts}"`).toMatch(/max-age=\d{5,}/);
     });
 

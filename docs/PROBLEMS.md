@@ -3891,6 +3891,105 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
+## OPEN 2026-08-24: a native client can edit a wiki but can never start one
+
+The published API exposes `GET` and `PATCH` on `wikis/{location_slug}/` and no
+`POST`. A wiki is auto-created as an invisible draft when a location appears,
+and becomes visible only when somebody promotes it through the web UI's "Create
+Wiki" action - a route that has no external-API equivalent.
+
+The effect on a client holding an API key: it can read and edit wikis that
+already exist, and can never create one, so a mobile user who pins somewhere new
+has no way to start its wiki without opening a browser. It is also why five
+tests in `tests/integration/specs/api/wiki.spec.ts` skip on a fresh deployment -
+the suite cannot manufacture the precondition through the surface it is testing.
+
+Found while writing that spec on 2026-08-24. Whether the fix is a `POST`
+endpoint or a documented "promote" action is a product decision; what should not
+stand is the current state, where the capability exists and only one of the two
+clients can reach it.
+
+## OPEN 2026-08-24: the nav bar, not the map, is what overflows at phone width
+
+The 2026-08-23 entry recorded "the map page scrolls sideways at 390px" and
+guessed the map. It is not the map. Once the overflow probe was taught to ignore
+elements clipped by an ancestor - `getBoundingClientRect` reports geometry as if
+nothing clipped it, so every Leaflet tile drawn past its own `overflow: hidden`
+container looked guilty - the real culprits came out shallowest-first:
+
+    div.app-nav-right       — right edge at 430px (viewport 390px), width 230px
+    div#nav-user.nav-user   — right edge at 430px (viewport 390px), width 140px
+    button#nav-user-btn     — right edge at 430px (viewport 390px)
+
+The navigation bar's right-hand group runs 40px past a 390px viewport. It is on
+every page; the map page is simply where it was noticed, presumably because
+other pages clip it somewhere up the tree. Fixing it is a CSS change to
+`.app-nav-right`'s layout at narrow widths, which wants doing in front of a
+browser rather than blind - but the element is now named.
+
+## OPEN 2026-08-24: three accessibility defects, found once `lang` stopped masking them
+
+Adding `lang` to the two page templates cleared ten of the a11y project's
+thirteen failures and left three genuine ones, each a different rule:
+
+- **`button-name`, critical, the home page.** `.photo-tile-btn` wraps only an
+  `<img>`, and `urbanlensMediaThumbFallback` replaces that image with an icon
+  when the file 404s - taking the button's only accessible name with it. **Fixed
+  2026-08-24** by putting `aria-label` on the button in all three places that
+  render a photo tile, so the name no longer depends on the thumbnail loading.
+- **`aria-required-children`, critical, the pin detail page.** `#media-tabs`
+  declares `role="tablist"` in markup but is filled by JavaScript, and the
+  buttons it generates carried no `role="tab"` - unlike the statically-rendered
+  article sub-tabs directly above them. It also stayed an empty tablist when
+  the media grid was absent. **Fixed 2026-08-24**: the generated buttons carry
+  `role="tab"` and `aria-selected`, and the container drops the role entirely
+  when it has nothing to put in it.
+- **`link-in-text-block`, serious, the settings page.** `a[href$="locations/"]`
+  is distinguishable from surrounding prose by colour alone. **Not fixed** - the
+  repair is an underline (or other non-colour affordance) on inline links, which
+  is a site-wide visual decision rather than a local patch.
+
+## OPEN 2026-08-24: one pin-detail page load can exhaust the database connection pool
+
+Found by `tests/integration/` on 2026-08-24, and only visible because the
+console/network guard watches every request a page makes rather than just the
+document.
+
+Opening `/dashboard/map/pin/<slug>/` fires roughly **thirty concurrent HTMX
+requests** - one per enrichment panel, plus the media and overview fragments -
+and each one is a Django request that takes its own database connection
+(`CONN_MAX_AGE` is 0, so connections are per-request). On the dev stack, whose
+Postgres runs the default `max_connections = 100`, that tipped over: 14 requests
+in one hour failed with
+
+    django.db.utils.OperationalError: connection to server at "urbanlens_db",
+    port 5432 failed: FATAL: sorry, too many clients already
+
+The failures are spread evenly across seven different panel endpoints, one each
+- `azure-maps`, `location-data-overview`, `markup-maps`, `media/cris_building`,
+`panel/epa_echo_detail`, `panel/property_records`, `panel/redata_permits` - which
+is the signature of pool exhaustion rather than of any one panel being broken.
+Whichever panel arrives when the pool is full is the one that 500s.
+
+**How much of this is the test environment.** Some: the suite runs several
+browser workers, so more than one pin page was loading at once, and a single
+container's Postgres is smaller than a real deployment's. But the shape does not
+depend on that - a page that opens thirty connections at once needs only three
+simultaneous readers to want ninety, and the panels are the *point* of that page,
+so this is what a normal user does rather than a stress case. It is also
+user-visible when it happens: `themes/base.html`'s global `htmx:responseError`
+handler raises an error toast per failed panel.
+
+Not fixed here, because every fix is a decision rather than a repair: cap the
+client-side fan-out so panels load in waves, give the panel views a shared
+connection or move them behind one request, raise `max_connections`, or put
+pgbouncer in front. The first is the only one that helps a deployment of any
+size.
+
+Related: this is the concrete instance of the load-testing gap recorded in
+`docs/TOOLING.md` under "Evaluated, not adopted" - the integration suite found
+it by accident, which is not a substitute for looking on purpose.
+
 ## PARTIALLY RESOLVED 2026-08-23: four findings from the integration suite's first real run
 
 **Status as of 2026-08-24: four of the five fixed; the map's horizontal overflow
