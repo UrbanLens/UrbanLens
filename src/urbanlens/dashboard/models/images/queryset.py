@@ -13,6 +13,31 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
 
+def _named_this_viewer(viewer_profile: Profile) -> Q:
+    """Containers whose membership *is* the consent, so settings do not apply.
+
+    A direct message and a safety check-in both work by naming one person. The
+    owner did not publish to an audience and then filter it; they picked this
+    individual, which is the same act ``photo_upload_visibility`` exists to let
+    them perform. That setting reads "who can see the photos you upload to
+    locations" - a check-in photo is not a location contribution, and a safety
+    partner is typically a stranger to the uploader by design, so consulting it
+    here denies the photos to exactly the person the feature exists to inform.
+
+    Direct messages never reach this function - ``MediaGateView`` admits the two
+    participants earlier, before any queryset filtering.
+
+    Args:
+        viewer_profile: The profile doing the looking.
+
+    Returns:
+        A ``Q`` matching photos in containers this viewer was named on.
+    """
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+
+    return Q(safety_checkin__in=SafetyCheckin.objects.shared_with(viewer_profile)) | Q(safety_checkin__in=SafetyCheckin.objects.partnered_with(viewer_profile))
+
+
 def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     """The container gate: shared deliberately, into a wiki this viewer can reach.
 
@@ -21,19 +46,25 @@ def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     not the only one: ``photo_upload_visibility`` then decides which of the
     people who can reach that wiki may actually see it. Both have to say yes.
 
-    *Which* wiki matters as much as whether. Wiki access is a place-domain rule,
-    so reaching one wiki says nothing about any other; asking only
+    *Which* container matters as much as whether. Wiki access is a place-domain
+    rule, so reaching one wiki says nothing about any other; asking only
     ``wiki__isnull=False`` let a permissive upload setting carry a photo to
-    somebody whose only pin is somewhere else entirely.
+    somebody whose only pin is somewhere else entirely - and denied a safety
+    check-in's photos to the partner watching it, since a check-in has no wiki.
+
+    Each container answers reachability its own way, and each answer is asked of
+    the model that owns it rather than restated here.
 
     Filing a photo under a pin is not sharing. An explicit pin share hands the
     recipient their own row, which they see as its owner rather than through here.
+    Direct messages are handled before this gate: sending is itself the consent,
+    so ``MediaGateView`` admits the two participants without consulting settings.
 
     Args:
         viewer_profile: The profile doing the looking.
 
     Returns:
-        A ``Q`` matching photos on wikis within this viewer's reach.
+        A ``Q`` matching photos in containers within this viewer's reach.
     """
     from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
 
@@ -49,7 +80,10 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         - The viewer's own ``viewer_photo_filter`` (whose photos I want to see).
 
         Both are gated behind the photo having been shared into a wiki the viewer
-        can actually reach - see :func:`_shared_within_reach_of`.
+        can actually reach - see :func:`_shared_within_reach_of`. Containers that
+        work by naming one person answer separately, since picking somebody is
+        itself the consent the settings exist to express - see
+        :func:`_named_this_viewer`.
 
         Images uploaded by the viewer are always included regardless of settings.
         If ``viewer_profile`` is None (anonymous), nothing is returned.
@@ -92,7 +126,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         # pin was reachable by anyone the setting happened to admit, and the
         # default admits whoever pinned the same place.
         return self.filter(
-            Q(profile=viewer_profile) | (Q(profile_id__in=allowed_uploader_ids) & _shared_within_reach_of(viewer_profile)),
+            Q(profile=viewer_profile) | _named_this_viewer(viewer_profile) | (Q(profile_id__in=allowed_uploader_ids) & _shared_within_reach_of(viewer_profile)),
         )
 
     def _allowed_uploader_ids(self, viewer_profile: Profile, viewer_filter: str) -> set[int]:

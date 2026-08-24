@@ -47,7 +47,7 @@ this?", and the container gate has to enumerate all seven:
 | `location` | not a share by itself | n/a |
 | `trip` (via activities) | trip members | **yes** |
 | `direct_message` | the recipient | **no — sending is consent** |
-| `safety_checkin` | the check-in's contacts | **yes** |
+| `safety_checkin` | the check-in's contacts and accepted partners | **no — naming is consent** ⚠️ |
 | `visit` | follows the visit's own visibility | **yes** |
 | `pin_suggestion` | the suggestion's recipient | **yes** |
 
@@ -186,8 +186,15 @@ gate's sizing input).
 
 1. **Trips.** A pin photo attached to a trip activity — visible to trip members subject to
    `photo_upload_visibility`, or does joining a trip imply broader consent?
-2. **Check-ins and visits.** Do photos on a safety check-in follow `photo_upload_visibility`,
-   or should the check-in's contact list override it (safety beating privacy)?
+2. **Check-ins.** ⚠️ **I made a call here — please confirm or reverse it.** Applying
+   `photo_upload_visibility` to check-in photos denied them to accepted safety partners, who
+   are strangers to the uploader by design; the gallery listed the photos and the byte path
+   404'd them, so partners saw broken images on the page that exists to tell them somebody is
+   overdue. I treated a check-in like a DM — naming one person *is* the consent — on the
+   strength of the setting's own help text, "who can see the photos you upload to
+   **locations**". A check-in photo is not a location contribution. The alternative reading
+   (your "DMs are the only exception") would instead require the gallery to apply `visible_to`
+   so partners consistently see nothing. **Visits** are still unruled and unverified.
 3. **`viewer_photo_filter` blurs.** Is blurring meant as a *courtesy* filter over photos the
    viewer is already entitled to, or does it ever *grant* sight of something? (I read it as
    courtesy-only.)

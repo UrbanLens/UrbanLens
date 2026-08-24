@@ -368,3 +368,73 @@ class CommentImageMediaGateTests(TestCase):
                 file_to_stream.close()
             return data
         return response.content
+
+
+class SafetyCheckinMediaGateTests(TestCase):
+    """A check-in is a container, and the people watching it can see its photos.
+
+    The container gate reads reachability off the photo's container. A check-in
+    photo has no wiki, so a gate that asked only about wikis denied its bytes to
+    everybody but the uploader - while the gallery panel happily listed them to
+    an accepted partner, who saw a grid of broken images on the page that exists
+    to tell them somebody is overdue.
+    """
+
+    def setUp(self):
+        self._media_root = tempfile.mkdtemp(prefix="ul_media_gate_safety_")
+        self.addCleanup(shutil.rmtree, self._media_root, ignore_errors=True)
+        self._overrides = override_settings(MEDIA_ROOT=self._media_root, MEDIA_X_ACCEL=False)
+        self._overrides.enable()
+        self.addCleanup(self._overrides.disable)
+        (Path(self._media_root) / "pin_images").mkdir(parents=True)
+        (Path(self._media_root) / "pin_images" / "checkin.png").write_bytes(_IMAGE_BYTES)
+
+        self.owner_user = _new_user()
+        self.owner: Profile = self.owner_user.profile
+        self.checkin = self._make_checkin()
+        self.image = baker.make(Image, image="pin_images/checkin.png", profile=self.owner, safety_checkin=self.checkin)
+
+    def _make_checkin(self):
+        import datetime
+
+        from django.utils import timezone
+
+        return baker.make(
+            "dashboard.SafetyCheckin",
+            profile=self.owner,
+            title="Test hike",
+            checkin_by=timezone.now() + datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+        )
+
+    def _fetch(self) -> int:
+        return self.client.get("/media/pin_images/checkin.png").status_code
+
+    def test_an_accepted_partner_can_fetch_a_checkin_photo(self):
+        from urbanlens.dashboard.models.safety.model import SafetyCheckinPartner, SafetyCheckinPartnerStatus
+
+        partner_user = _new_user()
+        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=partner_user.profile, invited_by=self.owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
+        self.client.force_login(partner_user)
+
+        self.assertEqual(self._fetch(), 200, "an accepted safety partner could not load the check-in's photos")
+
+    def test_an_invited_but_unaccepted_partner_cannot(self):
+        """Being asked is not the same as having accepted - mirrors partnered_with."""
+        from urbanlens.dashboard.models.safety.model import SafetyCheckinPartner, SafetyCheckinPartnerStatus
+
+        invitee_user = _new_user()
+        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=invitee_user.profile, invited_by=self.owner, status=SafetyCheckinPartnerStatus.INVITED)
+        self.client.force_login(invitee_user)
+
+        self.assertEqual(self._fetch(), 404)
+
+    def test_a_stranger_cannot_fetch_a_checkin_photo(self):
+        self.client.force_login(_new_user())
+
+        self.assertEqual(self._fetch(), 404)
+
+    def test_the_owner_can_fetch_their_own_checkin_photo(self):
+        self.client.force_login(self.owner_user)
+
+        self.assertEqual(self._fetch(), 200)
