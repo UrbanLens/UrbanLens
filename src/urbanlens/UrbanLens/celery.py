@@ -54,10 +54,21 @@ def bind_write_source(task_id=None, task=None, **_extra) -> None:
     request that then does the user's edit - overrides this with
     ``writing_as`` at the point it knows.
 
-    Deliberately not paired with a reset in ``task_postrun``: each task runs in
-    its own context, and a worker thread reused for the next task rebinds this
+    Skipped in eager mode, which is not a detail. ``task_always_eager`` runs the
+    task inline in the caller's own context and Celery does not isolate it, so
+    binding here would leave the *enclosing request* marked AUTOMATIC for the
+    rest of its life - and AUTOMATIC is the source every concealed viewer sees.
+    A request that enqueues anything would have its subsequent writes attributed
+    to nobody. Eager mode is off in the deployed stacks and on wherever the
+    suite runs it, which is exactly where the provenance tests live.
+
+    Outside eager mode there is deliberately no ``task_postrun`` counterpart:
+    each task run gets its own context, and a reused worker thread rebinds this
     before that task's first write.
     """
+    if getattr(getattr(task, "request", None), "is_eager", False):
+        return
+
     from urbanlens.dashboard.models.abstract.versioning import WriteSource, bind_write_source
 
     bind_write_source(WriteSource.AUTOMATIC)

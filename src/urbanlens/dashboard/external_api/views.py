@@ -508,6 +508,33 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
     throttle_classes = [ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle]
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {}
 
+    def initial(self, request, *args, **kwargs):
+        """Authenticate, then bind the caller as the source of any writes.
+
+        ``WriteSourceMiddleware`` cannot do this for the API. Both credential
+        kinds here are DRF authenticators, resolved in this method - so at
+        middleware time a bearer-token request still carries an
+        ``AnonymousUser``, and every write from a native app would record with
+        no actor at all. Field provenance decides what a concealed viewer sees
+        of their *own* contributions, so losing the identity here would conceal
+        an API editor's edit from the API editor.
+
+        Bound for the life of the request rather than in a context manager: DRF
+        dispatches the handler after ``initial()`` returns, so there is no block
+        to wrap. The ContextVar is per request-thread and every entry point
+        rebinds before its first write.
+        """
+        super().initial(request, *args, **kwargs)
+
+        from urbanlens.dashboard.models.abstract.versioning import WriteSource, bind_write_source
+
+        user = getattr(request, "user", None)
+        profile_id = getattr(getattr(user, "profile", None), "pk", None) if user is not None and user.is_authenticated else None
+        if profile_id is None:
+            bind_write_source(WriteSource.SYSTEM)
+        else:
+            bind_write_source(WriteSource.USER, actor=profile_id)
+
     @property
     def required_scopes(self) -> frozenset[ApiKeyScope]:
         """The scopes the current request's HTTP method requires."""

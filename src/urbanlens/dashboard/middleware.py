@@ -217,7 +217,11 @@ class WriteSourceMiddleware:
             profile_id = getattr(getattr(user, "profile", None), "pk", None)
 
         if profile_id is None:
-            return self.get_response(request)
+            # Bind SYSTEM explicitly rather than returning early. An early
+            # return leaves whatever the last binder on this thread set, so an
+            # anonymous request could inherit a previous request's actor.
+            with writing_as(WriteSource.SYSTEM, actor=None):
+                return self.get_response(request)
 
         with writing_as(WriteSource.USER, actor=profile_id):
             return self.get_response(request)

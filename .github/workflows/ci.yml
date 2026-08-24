@@ -109,6 +109,12 @@ jobs:
       - name: Migration graph resolves in the committed tree
         run: python3 bin/check_migration_graph.py
 
+      # Field provenance is recorded by interception, so a model that declares
+      # versioned_fields without a VersionedQuerySet records instance saves and
+      # silently drops every bulk write - which reads as working.
+      - name: Versioned models intercept every write path
+        run: python3 bin/check_versioned_writes.py
+
       # Nothing else checks this: a model change without its migration only
       # surfaces if some test happens to touch the field, and otherwise waits
       # until the column is needed in production.

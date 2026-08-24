@@ -269,3 +269,79 @@ class DirtyFieldTests(TestCase):
             fresh.save()
 
         self.assertEqual(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name", actor_id=self.friend.pk).count(), 1)
+
+
+class ErasureTests(TestCase):
+    """Deleting your own edit must leave no copy of the value anywhere.
+
+    The wiki edit-delete view exists for "accidentally pasting private
+    information into a public wiki field", and its docstring promises no copy
+    lingers. Recording field provenance quietly made that false: the pasted
+    string survives in a revision row with the author's name on it.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.editor = baker.make(User).profile
+
+    def test_purging_a_recorded_value_removes_it(self) -> None:
+        """The row erased is the one whose stored value is the secret."""
+        from urbanlens.dashboard.models.abstract.versioned import purge_recorded_value
+
+        with writing_as(WriteSource.USER, actor=self.editor.pk):
+            Wiki.objects.filter(pk=self.wiki.pk).update(description="my home address is ...")
+
+        self.assertTrue(WikiFieldRevision.objects.filter(target=self.wiki, value__contains="home address").exists())
+
+        purge_recorded_value(self.wiki, "description", "my home address is ...")
+
+        self.assertFalse(WikiFieldRevision.objects.filter(target=self.wiki, value__contains="home address").exists())
+
+    def test_purging_leaves_the_pre_edit_value_alone(self) -> None:
+        """That text was never the secret, and removing it would lose provenance."""
+        from urbanlens.dashboard.models.abstract.versioned import purge_recorded_value
+
+        with writing_as(WriteSource.AUTOMATIC):
+            Wiki.objects.filter(pk=self.wiki.pk).update(description="innocuous provider text")
+        with writing_as(WriteSource.USER, actor=self.editor.pk):
+            Wiki.objects.filter(pk=self.wiki.pk).update(description="secret")
+
+        purge_recorded_value(self.wiki, "description", "secret")
+
+        self.assertTrue(WikiFieldRevision.objects.filter(target=self.wiki, value="innocuous provider text").exists())
+
+
+class UpdateAccuracyTests(TestCase):
+    """A revision must describe a write that actually landed."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.wiki = baker.make(Wiki, location=baker.make(Location), name="Real Name", officially_created=True)
+        WikiFieldRevision.objects.filter(target=self.wiki).delete()
+
+    def test_a_compare_and_set_that_matches_nothing_records_nothing(self) -> None:
+        """The enrichment rename is a CAS, and losing it must be silent.
+
+        Recording anyway would write an AUTOMATIC row for a value that never
+        reached the wiki - and AUTOMATIC is the one source shown to every
+        viewer, so the phantom would outrank the real name for everybody.
+        """
+        matched = Wiki.objects.filter(pk=self.wiki.pk, name="Some Other Name").update(name="Provider Name")
+
+        self.assertEqual(matched, 0)
+        self.assertFalse(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").exists())
+
+    def test_bulk_update_records_the_value_not_a_case_expression(self) -> None:
+        """Django ends bulk_update with an update() carrying Case expressions.
+
+        That re-enters the interception, and str()-ing a Case stores the SQL
+        compiler's repr as though it were the field's value.
+        """
+        self.wiki.name = "Bulk Name"
+        Wiki.objects.bulk_update([self.wiki], ["name"])
+
+        values = list(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").values_list("value", flat=True))
+
+        self.assertEqual(values, ["Bulk Name"])
+        self.assertFalse(any("CASE" in v for v in values))

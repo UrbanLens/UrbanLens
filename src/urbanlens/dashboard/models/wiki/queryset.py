@@ -19,6 +19,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _record_wiki_created(wiki: Wiki, profile: Profile) -> None:
+    """Record the reputation event for promoting a place to a real wiki.
+
+    Called from both claim branches rather than left to a post_save
+    subscription: the promotion branch is a queryset ``update()``, which fires
+    no signal, and the create branch's signal would fire before
+    ``officially_created`` is meaningful on a draft. A rule that only watches
+    saves records this at an arbitrary later time, by whoever happened to save
+    next.
+    """
+    from urbanlens.dashboard.services.reputation.scoring import record_event
+
+    record_event(profile, "wiki_created", target=wiki, wiki=wiki)
+
+
 class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet):
     """QuerySet for Wiki - the community-editable half of the place model.
 
@@ -214,6 +229,7 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
                 created_by=profile,
                 officially_created=True,
             )
+            _record_wiki_created(wiki, profile)
             return wiki, True
 
         if wiki.officially_created:
@@ -222,4 +238,5 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
         self.filter(pk=wiki.pk).update(officially_created=True, created_by=profile)
         wiki.officially_created = True
         wiki.created_by = profile
+        _record_wiki_created(wiki, profile)
         return wiki, True

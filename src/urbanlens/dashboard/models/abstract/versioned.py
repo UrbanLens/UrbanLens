@@ -31,6 +31,8 @@ import logging
 from typing import TYPE_CHECKING, Any, Self
 
 from django.conf import settings as django_settings
+from django.core.exceptions import FieldDoesNotExist
+from django.db import transaction
 from django.db.models import (
     CASCADE,
     SET_NULL,
@@ -52,6 +54,7 @@ from urbanlens.dashboard.models.abstract.versioning import (
     current_write_actor,
     current_write_source,
     is_unversioned,
+    unversioned,
 )
 
 if TYPE_CHECKING:
@@ -122,18 +125,40 @@ class VersionedQuerySet(QuerySet):
         if not touched or is_unversioned():
             return super().update(**kwargs)
 
-        # Snapshot the pks before the write: the update may change the very
-        # fields this queryset filters on, so re-evaluating afterwards can
-        # match a different set of rows.
-        pks = list(self.values_list("pk", flat=True))
-        updated = super().update(**kwargs)
-        for pk in pks:
-            _record_fields(model, pk, touched)
+        # Snapshot the pks before the write - the update may change the very
+        # fields this queryset filters on, so re-evaluating afterwards can match
+        # a different set of rows - but do it under a lock, and inside the same
+        # transaction as the write.
+        #
+        # Without that, a compare-and-set loses silently in the worst possible
+        # direction. `enrich_wiki_location` renames a wiki with
+        # `filter(pk=..., name=wiki.name).update(name=...)`, whose `name=` term
+        # exists precisely so a concurrent user rename is not clobbered. If the
+        # user's rename lands between the SELECT and the UPDATE, the UPDATE
+        # matches nothing - and we would still write an AUTOMATIC revision for a
+        # value that never reached the row. AUTOMATIC is the one source shown to
+        # *every* viewer, so a phantom row would outrank the user's real rename
+        # for everybody.
+        with transaction.atomic(using=self.db):
+            pks = list(self.select_for_update().values_list("pk", flat=True))
+            if not pks:
+                return 0
+            updated = super().update(**kwargs)
+            if updated:
+                for pk in pks:
+                    _record_fields(model, pk, touched)
         return updated
 
     def bulk_update(self, objs: Sequence[Any], fields: Sequence[str], batch_size: int | None = None) -> int:
         """Apply the bulk update, recording a revision per versioned field touched."""
-        result = super().bulk_update(objs, fields, batch_size=batch_size)
+        # Django implements bulk_update by ending with
+        # `queryset.filter(pk__in=...).update(**case_expressions)` on a clone of
+        # this very class, so `update()` above re-enters and would record a
+        # `Case` expression's repr as the value. Suppress that inner pass and
+        # record the real values here.
+        with unversioned(reason="bulk_update records its own revisions"):
+            result = super().bulk_update(objs, fields, batch_size=batch_size)
+
         versioned = getattr(self.model, "versioned_fields", ())
         touched_fields = [name for name in fields if name in versioned]
         if not touched_fields or is_unversioned():
@@ -225,11 +250,13 @@ def _record_fields(model: type[Model], pk: Any, values: dict[str, Any]) -> None:
     it was describing would be worse than the gap it leaves - but in DEBUG and
     under test it re-raises, so a bypass is loud where somebody is looking.
     """
-    revision_model = _revision_model(model)
-    if revision_model is None or pk is None:
+    if pk is None:
         return
 
     try:
+        revision_model = _revision_model(model)
+        if revision_model is None:
+            return
         source = current_write_source()
         actor_id = current_write_actor() if source == WriteSource.USER else None
 
@@ -245,7 +272,15 @@ def _record_fields(model: type[Model], pk: Any, values: dict[str, Any]) -> None:
                     actor_id=actor_id,
                 )
             )
-        revision_model.objects.bulk_create(rows)
+        # Its own savepoint. On PostgreSQL a failed INSERT aborts the whole
+        # transaction at the server, so catching the Python exception is not
+        # enough - the caller's next statement would fail with "current
+        # transaction is aborted", and several callers (wiki_creation,
+        # pin_wiki_sync, the external API's wiki edit) run inside one. The
+        # codebase already uses nested atomic() for exactly this, in
+        # wiki_aliases and pin_subresources.
+        with transaction.atomic(using=revision_model.objects.db):
+            revision_model.objects.bulk_create(rows)
     except Exception:
         logger.exception("Could not record field revisions for %s pk=%s", model.__name__, pk)
         if django_settings.DEBUG or getattr(django_settings, "TESTING", False):
@@ -259,7 +294,15 @@ def concrete_field(model: type[Model], field_name: str) -> Field | None:
     ``to_python`` and cannot be versioned. Narrowing here keeps the two call
     sites from each having to know that.
     """
-    field = model._meta.get_field(field_name)  # noqa: SLF001
+    try:
+        field = model._meta.get_field(field_name)  # noqa: SLF001
+    except FieldDoesNotExist:
+        # `field_name` is historical text in an append-only table, so a field
+        # that is later renamed or dropped leaves rows naming a column that no
+        # longer exists. Without this, the first such rename turns every
+        # resolve_fields call on an affected row into a 500 on the concealed
+        # render path.
+        return None
     return field if isinstance(field, Field) else None
 
 
@@ -336,3 +379,36 @@ def resolve_fields(
         # typed field.
         resolved[row.field_name] = int(row.value) if field.is_relation else field.to_python(row.value)
     return resolved
+
+
+def purge_recorded_value(target: Model, field_name: str, value: Any) -> int:
+    """Delete revision rows on *target* that stored this exact value for a field.
+
+    The revision log is append-only by design, and that is at odds with one
+    existing user-facing promise: permanently deleting your own wiki edit
+    ("intended for cases like accidentally pasting private information into a
+    public wiki field") is supposed to leave *no copy anywhere*. Adding
+    provenance recording quietly made that false, because the pasted string
+    survives in a revision row along with the name of who wrote it.
+
+    Matching on the value is deliberate and is narrower than it looks: the row
+    being erased is the one whose stored value *is* the text the user is trying
+    to unsay. Rows holding the pre-edit value are a different value and are left
+    alone, which is right - that text was never the secret.
+
+    Args:
+        target: The row the revisions belong to.
+        field_name: Which field.
+        value: The stored value to erase, or None for a recorded NULL.
+
+    Returns:
+        How many rows were deleted.
+    """
+    revision_model = _revision_model(type(target))
+    if revision_model is None:
+        return 0
+
+    rows = revision_model.objects.filter(target_id=target.pk, field_name=field_name)
+    rows = rows.filter(is_null=True) if value is None else rows.filter(is_null=False, value=_serialise(type(target), field_name, value))
+    deleted, _ = rows.delete()
+    return deleted

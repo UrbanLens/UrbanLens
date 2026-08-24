@@ -140,17 +140,29 @@ def concealed_field_values(wiki: Wiki, viewer: Profile | None) -> dict[str, Any]
 def concealment_active(wiki: Wiki, viewer: Profile | None) -> bool:
     """Whether this viewer should be shown the concealed form of this wiki.
 
-    **Currently always False.** The predicate is a reputation threshold scaled
-    by the wiki's community-voted vulnerability, and the threshold cannot be
-    chosen before there is real score data to choose it against - see the
-    reputation ledger, which is collecting that now. Landing the mechanism
-    behind a stub keeps every call site written and exercised in the meantime,
-    so turning it on later is a change to one function rather than a sweep.
+    **Currently always False, and turning it True is NOT sufficient.** Read this
+    before flipping it.
 
-    Deliberately the *only* place this decision is made. The tells audit found
-    82 ways a concealed wiki could give itself away, and most of the classes
-    behind them exist because a rule was spelled out per call site instead of
-    once.
+    Four things are wired to it today: the ``viewed_by_other`` write, the
+    community pin-count summary, the stat composites and the boundary-vote
+    dialog. Everything else on the wiki page still renders from the live row -
+    the name, description, dates, the eight security chips, comments, images,
+    aliases, links and the whole edit history. ``concealed_field_values`` and
+    ``conceal_rows`` exist, are tested, and have **no production callers**;
+    ``services/wiki/wiki_detail.build_wiki_detail``, which serves the external
+    API, does not consult this module at all.
+
+    So flipping this boolean conceals four things and leaves the rest visible,
+    which is worse than not concealing: it is the *inconsistent* state, where a
+    place looks unvisited in its counts and fully documented in its content.
+
+    The threshold itself is a reputation score scaled by the wiki's
+    community-voted vulnerability, and cannot be chosen before there is real
+    score data to choose it against - the ledger is collecting that now.
+
+    Deliberately the only place this decision is made. The tells audit found 82
+    ways a concealed wiki could give itself away, and most of the classes behind
+    them exist because a rule was spelled out per call site instead of once.
 
     Args:
         wiki: The wiki being rendered.

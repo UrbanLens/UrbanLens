@@ -475,6 +475,17 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
             revert_changes, skipped_fields = revert_edit_fields(location, wiki, target_edit)
             save_edited_fields(wiki, revert_changes)
 
+        # The field-revision log records every write, so the value this view
+        # exists to erase also survives there, with the editor's name on it.
+        # Purge those rows before dropping the edit, or the promise in this
+        # view's docstring stops being true - see
+        # models.abstract.versioned.purge_recorded_value.
+        from urbanlens.dashboard.models.abstract.versioned import purge_recorded_value
+
+        for field_name, diff in (target_edit.changes or {}).items():
+            if isinstance(diff, dict) and "to" in diff:
+                purge_recorded_value(wiki, field_name, diff["to"])
+
         revert_record = target_edit.reverted_by
         if revert_record is not None:
             revert_record.delete()
