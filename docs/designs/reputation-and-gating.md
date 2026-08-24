@@ -350,6 +350,53 @@ One thing that follows and is worth holding onto: because that button is a race-
 artefact, **anything that makes it appear more often for a concealed viewer than for anyone
 else would be a tell.** Concealment must not route through `get_for_location` returning None.
 
+### R17. Revision-based concealment — rejected globally, adopted for two things
+
+Jess raised an alternative to per-viewer filtering: extend the undo/history work with a
+"view wiki at this revision" feature, and show a concealed viewer **the first version of the
+wiki, before any edits occurred**. Appealing because that version *is*, by construction, the
+target state — no provenance classification needed at all.
+
+**Rejected as the general mechanism**, for three reasons, in increasing order of severity:
+
+1. **There is no whole-wiki snapshot to show.** No `WikiRevision`/`WikiVersion` model exists
+   (checked). Reconstructing version 1 means replaying `WikiEdit.changes` backwards, and
+   `revert_edit_fields` already assigns **stringified** stored values, so replay is lossy for
+   anything that is not text — the audit flagged this for `cover_photo` specifically.
+2. **Related objects are not versioned at all.** Photos, comments, aliases, links, floorplans,
+   markup, child wikis, stat votes and boundaries are separate rows. "The wiki at revision 1"
+   does not exclude them; you would still filter each set per viewer, so the classification
+   work does not actually go away.
+3. **Decisive: freezing time freezes automatic content too, and that is a worse tell.**
+   Enrichment is continuous — provider media, REData panels, boundary generation, place-name
+   resolution, weather. A wiki frozen at its creation date would show *stale* provider data,
+   while a genuinely new place shows current data. That staleness is proportional to how long
+   the place has been documented, which is very close to the exact fact concealment exists to
+   hide. It also directly violates rule 2 of R16.
+
+**Adopted for two things, where it is clearly the better answer:**
+
+- **Articles.** `ArticleRevision` stores the *complete* text of each revision, not a diff
+  (`models/article/model.py:139`), so any revision is cheap to show and nothing has to be
+  replayed. More importantly the first revision may be genuinely automatic — enrichment seeds
+  articles from Wikipedia — so showing it satisfies rule 2 exactly, where hiding the article
+  outright would discard automatic content the viewer is entitled to.
+- **MIXED scalar fields** — `name`, `description`, and the other Suggest-Edits fields, where
+  enrichment and users both write and the row records no provenance. `WikiEdit.changes` is
+  `{"field": {"from": old, "to": new}}`, so the **oldest recorded `from` for a field is its
+  value before any user edited it** — i.e. the enrichment value. Rule: show the current value
+  when the field has never been user-edited, otherwise the oldest recorded `from`. This closes
+  the provenance gap with no schema change, which is what made the alternative worth taking
+  seriously.
+
+  *Caveat to handle:* if enrichment rewrites a field **after** a user edit, the oldest `from`
+  is stale. And note the tension with the audit's tell #20 — `WikiEdit.changes` leaking prior
+  values into the viewer's own visible history is a bug to fix, while this reads the same data
+  server-side. Both are correct; the redaction is at the rendering layer.
+
+**Worth building on its own merits.** "View wiki at this revision" is a good feature
+independently — it just is not the concealment mechanism.
+
 ## What already exists (read this before designing anything below)
 
 A 2026-08-21 survey found most of the "we should build X" asks in the source voice memo already
