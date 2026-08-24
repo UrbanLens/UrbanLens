@@ -13,14 +13,31 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
 
-#: A photo is private until its owner shares it. Being on a wiki is that act -
-#: somebody put it there deliberately - and it is the *first* of two gates, not
-#: the only one: `photo_upload_visibility` then decides which of the people who
-#: can reach that wiki may actually see it. Both have to say yes.
-#:
-#: Filing a photo under a pin is not sharing. An explicit pin share hands the
-#: recipient their own row, which they see as its owner rather than through here.
-_SHARED = Q(wiki__isnull=False)
+def _shared_within_reach_of(viewer_profile: Profile) -> Q:
+    """The container gate: shared deliberately, into a wiki this viewer can reach.
+
+    A photo is private until its owner shares it, and being on a wiki is that
+    act - somebody put it there deliberately. This is the *first* of two gates,
+    not the only one: ``photo_upload_visibility`` then decides which of the
+    people who can reach that wiki may actually see it. Both have to say yes.
+
+    *Which* wiki matters as much as whether. Wiki access is a place-domain rule,
+    so reaching one wiki says nothing about any other; asking only
+    ``wiki__isnull=False`` let a permissive upload setting carry a photo to
+    somebody whose only pin is somewhere else entirely.
+
+    Filing a photo under a pin is not sharing. An explicit pin share hands the
+    recipient their own row, which they see as its owner rather than through here.
+
+    Args:
+        viewer_profile: The profile doing the looking.
+
+    Returns:
+        A ``Q`` matching photos on wikis within this viewer's reach.
+    """
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
+
+    return Q(wiki__location_id__in=visible_wiki_location_ids(viewer_profile))
 
 
 class ImageQuerySet(abstract.FrontendDashboardQuerySet):
@@ -31,9 +48,11 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         - The uploader's ``photo_upload_visibility`` (who can see my photos).
         - The viewer's own ``viewer_photo_filter`` (whose photos I want to see).
 
+        Both are gated behind the photo having been shared into a wiki the viewer
+        can actually reach - see :func:`_shared_within_reach_of`.
+
         Images uploaded by the viewer are always included regardless of settings.
-        If ``viewer_profile`` is None (anonymous), only images from users who
-        set ``photo_upload_visibility=ANYONE`` are returned.
+        If ``viewer_profile`` is None (anonymous), nothing is returned.
 
         Unlike an ordinary queryset method this one is **eager**: the
         relationship rules can't be expressed in SQL, so the allowed-uploader
@@ -45,7 +64,11 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         from urbanlens.dashboard.models.profile.model import VisibilityChoice
 
         if viewer_profile is None:
-            return self.filter(_SHARED, profile__photo_upload_visibility=VisibilityChoice.ANYONE)
+            # Nothing. Wiki access is earned by having pinned the place, which a
+            # signed-out visitor cannot have done, so no container is in reach -
+            # and the most permissive setting is labelled "Anyone (Logged In)",
+            # which does not describe them either.
+            return self.none()
 
         # 1. Determine which uploader profiles this viewer is allowed to see photos from,
         #    based on the VIEWER's own photo filter preference.
@@ -69,7 +92,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         # pin was reachable by anyone the setting happened to admit, and the
         # default admits whoever pinned the same place.
         return self.filter(
-            Q(profile=viewer_profile) | (Q(profile_id__in=allowed_uploader_ids) & _SHARED),
+            Q(profile=viewer_profile) | (Q(profile_id__in=allowed_uploader_ids) & _shared_within_reach_of(viewer_profile)),
         )
 
     def _allowed_uploader_ids(self, viewer_profile: Profile, viewer_filter: str) -> set[int]:

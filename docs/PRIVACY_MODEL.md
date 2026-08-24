@@ -160,15 +160,25 @@ the sharer's own label.
 7. **Nit:** `pin_sharing.py:217` sets `name_is_user_provided=True` when the name actually
    came from an official alias rather than from the sharer.
 
-### Not a divergence — a missing feature
+### Not a divergence — designed, not yet built
 
-Jess described a gate where users without enough **earned credit** cannot see content on
-**vulnerable** wikis. **This does not exist on this branch.** Four things use adjacent
-vocabulary and are not it: `wiki_access.py`'s "earned access" (the place-domain rule,
-binary); `ConsensusProfile.trust_score` (a Beta posterior that weights *fact evidence at
-submission*, never a read); `ProfileTrust` (a private 1–5 star rating one viewer keeps
-about another); and wiki `vulnerability` (a consensus-*voted* field). If the gate is
-required, it is new work.
+The hidden reputation gate that scales how much wiki detail a new account sees —
+defeating "pin a random address and check whether a wiki exists" probing — is **designed
+in full and not implemented**. See `docs/designs/reputation-and-gating.md` (494 lines,
+written 2026-08-21 from the 2026-08-20 voice memo; tickets UL-397/UL-398/UL-399). Its
+status line: *DRAFT — needs Jess's input on the open questions in "Decisions needed"
+before any code lands.* Decisions 1–2 are resolved; **3–6 are open and block the build**:
+coefficient tunability, the v1 list of "sensitive", whether "earn your way in locally"
+ships in v1, and anti-gaming scope.
+
+Nothing in the codebase implements it today, so **no read path currently consults any
+reputation signal.** Four things use adjacent vocabulary and are not it:
+`wiki_access.py`'s "earned access" (the place-domain rule, binary);
+`ConsensusProfile.trust_score` (a Beta posterior that weights *fact evidence at
+submission* — all 28 references are confined to consensus/facts, none on a read path);
+`ProfileTrust` (a private 1–5 star rating one viewer keeps about another); and wiki
+`vulnerability` (a consensus-*voted* field, which the design does intend to use as the
+gate's sizing input).
 
 ---
 

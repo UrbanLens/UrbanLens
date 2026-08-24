@@ -128,17 +128,46 @@ class MediaGateTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_a_friend_can_fetch_a_photo_that_was_shared(self):
-        """And with both gates open, they can - which is the point of sharing."""
+        """And with both gates open, they can - which is the point of sharing.
+
+        Both gates means both. The friendship opens the uploader's setting; the
+        friend's own pin at the place is what brings the wiki within reach. This
+        fixture used to make a wiki nobody had pinned and still expect a 200,
+        which only passed while the container gate ignored *which* wiki.
+        """
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
         from urbanlens.dashboard.models.wiki.model import Wiki
 
-        wiki = baker.make(Wiki)
+        location = baker.make(Location, latitude=41.7361, longitude=-73.9361)
+        wiki = baker.make(Wiki, location=location)
         Image.objects.filter(pk=self.image.pk).update(wiki=wiki)
-        self.client.force_login(self._befriend())
+        friend = self._befriend()
+        baker.make(Pin, profile=friend.profile, location=location, parent_pin=None)
+        self.client.force_login(friend)
 
         response = self.client.get("/media/pin_images/owned.png")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._get_bytes(response), _IMAGE_BYTES)
+
+    def test_a_friend_cannot_fetch_a_photo_on_a_wiki_they_cannot_reach(self):
+        """Wiki access is earned per place, and a friendship does not carry across.
+
+        The uploader's setting admits this friend; the wiki is at a place they
+        have never pinned, so the container gate is shut and the setting never
+        gets to speak.
+        """
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        wiki = baker.make(Wiki, location=baker.make(Location, latitude=47.6062, longitude=-122.3321))
+        Image.objects.filter(pk=self.image.pk).update(wiki=wiki)
+        self.client.force_login(self._befriend())
+
+        response = self.client.get("/media/pin_images/owned.png")
+
+        self.assertEqual(response.status_code, 404)
 
     def test_dm_attachment_is_participant_only(self):
         from urbanlens.dashboard.models.direct_messages.model import DirectMessage
