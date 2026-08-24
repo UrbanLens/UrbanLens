@@ -141,3 +141,59 @@ class ResolutionTests(TestCase):
         resolved = resolve_fields(self.wiki)
 
         self.assertIsNone(resolved["date_abandoned"])
+
+
+class SourceInferenceTests(TestCase):
+    """Whose write it was is answered from context, not from the call site."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        WikiFieldRevision.objects.filter(target=self.wiki).delete()
+        self.user = baker.make(User)
+
+    def _latest(self) -> WikiFieldRevision:
+        return WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").latest("sequence")
+
+    def test_a_write_during_a_signed_in_request_is_that_persons(self) -> None:
+        """The middleware answers it once, so no view has to."""
+        self.client.force_login(self.user)
+        # Any authenticated request establishes the context; the write itself
+        # is made inside it.
+        from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
+
+        with writing_as(WriteSource.USER, actor=self.user.profile.pk):
+            Wiki.objects.filter(pk=self.wiki.pk).update(name="Person wrote this")
+
+        revision = self._latest()
+        self.assertEqual(revision.source, WriteSource.USER)
+        self.assertEqual(revision.actor_id, self.user.profile.pk)
+
+    def test_an_unattributed_write_records_no_actor(self) -> None:
+        """A shell or migration write is SYSTEM and belongs to nobody.
+
+        Attributing it to whoever happened to be around would be worse than
+        leaving it blank - the whole point of the record is that a viewer can
+        be shown their friends' contributions and not a stranger's.
+        """
+        Wiki.objects.filter(pk=self.wiki.pk).update(name="Nobody in particular")
+
+        revision = self._latest()
+        self.assertEqual(revision.source, WriteSource.SYSTEM)
+        self.assertIsNone(revision.actor_id)
+
+    def test_an_automatic_write_records_no_actor_even_when_a_person_is_present(self) -> None:
+        """Enrichment triggered from a request is still enrichment.
+
+        The inference defaults a request to USER, so a task or service that
+        knows better has to say so - and when it does, the person must not be
+        credited with what the provider wrote.
+        """
+        from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
+
+        with writing_as(WriteSource.USER, actor=self.user.profile.pk), writing_as(WriteSource.AUTOMATIC):
+            Wiki.objects.filter(pk=self.wiki.pk).update(name="Provider name")
+
+        revision = self._latest()
+        self.assertEqual(revision.source, WriteSource.AUTOMATIC)
+        self.assertIsNone(revision.actor_id)

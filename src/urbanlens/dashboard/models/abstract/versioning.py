@@ -72,6 +72,22 @@ def is_unversioned() -> bool:
     return _unversioned.get()
 
 
+def bind_write_source(source: str, *, actor: int | None = None) -> None:
+    """Set the write source for the rest of this context, without a block.
+
+    For entry points that own their whole context and have no natural place to
+    wrap - a Celery task, which gets a fresh context per run. Prefer
+    :func:`writing_as` anywhere a block is possible, because it restores the
+    previous value.
+
+    Args:
+        source: A :class:`WriteSource` value.
+        actor: Profile pk to attribute writes to, when the source is USER.
+    """
+    _write_source.set(source)
+    _write_actor.set(actor)
+
+
 @contextlib.contextmanager
 def writing_as(source: str, *, actor: int | None = None) -> Iterator[None]:
     """Declare the write source for the enclosed block.

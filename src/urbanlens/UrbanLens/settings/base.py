@@ -141,6 +141,9 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # Innermost: swaps in the simulated viewer for "view profile as" previews.
     "urbanlens.dashboard.middleware.ProfilePreviewMiddleware",
+    # Below the preview swap on purpose: field provenance should record the
+    # viewer the request is actually acting as.
+    "urbanlens.dashboard.middleware.WriteSourceMiddleware",
 ]
 
 AUTHENTICATION_BACKENDS = [

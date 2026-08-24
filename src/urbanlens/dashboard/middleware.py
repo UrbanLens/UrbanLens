@@ -184,3 +184,40 @@ class ProfilePreviewMiddleware:
             "</div>"
         ).encode()
         response.content = response.content[:body_end] + banner + response.content[body_end:]
+
+
+class WriteSourceMiddleware:
+    """Declare that writes during this request came from the signed-in person.
+
+    Field provenance is recorded by interception rather than by asking callers
+    to declare it (see ``models/abstract/versioned.py``), which leaves one
+    question: whose write is this? Answering it per call site would not survive
+    several hundred of them, so it is answered once, here, from context - a
+    write inside an authenticated request is that profile's.
+
+    Anonymous requests are left alone: they resolve to SYSTEM, which is
+    correct, since nothing a signed-out visitor does should attribute a
+    contribution to anybody.
+
+    Placed innermost, below ``AuthenticationMiddleware``, because it needs
+    ``request.user`` to already be resolved.
+    """
+
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        """Store the next handler in the chain."""
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        """Run the request with the write source bound to the signed-in profile."""
+        from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
+
+        user = getattr(request, "user", None)
+        profile_id = None
+        if user is not None and user.is_authenticated:
+            profile_id = getattr(getattr(user, "profile", None), "pk", None)
+
+        if profile_id is None:
+            return self.get_response(request)
+
+        with writing_as(WriteSource.USER, actor=profile_id):
+            return self.get_response(request)

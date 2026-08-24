@@ -5,7 +5,7 @@ from urbanlens.dashboard.models.abstract.model import DashboardModel, FrontendDa
 from urbanlens.dashboard.models.abstract.queryset import DashboardManager, DashboardQuerySet, FrontendDashboardManager, FrontendDashboardQuerySet, PublicDashboardManager, PublicDashboardQuerySet
 from urbanlens.dashboard.models.abstract.security import SecurityModel
 from urbanlens.dashboard.models.abstract.versioned import AbstractFieldRevision, VersionedModel, VersionedQuerySet, resolve_fields
-from urbanlens.dashboard.models.abstract.versioning import WriteSource, unversioned, writing_as
+from urbanlens.dashboard.models.abstract.versioning import WriteSource, bind_write_source, unversioned, writing_as
 
 # Imported last: this reaches the labels package, whose querysets subclass the
 # base querysets defined above. `isort: skip` is load-bearing - without it
