@@ -160,8 +160,11 @@ the sharer's own label.
    `services/consensus/eligibility.py` is **not** a reimplementation — it is a deliberate game
    rule (visited-pinned only, per the Consensus design spec), stricter than access and a subset
    of it.
-3. **Consensus photo rounds** do not apply `visible_to`; fixing needs a `build_round`
-   protocol change.
+3. ~~**Consensus photo rounds** do not apply `visible_to`~~ — **fixed 2026-08-24**, and it did
+   not need the protocol change I expected. `eligibility` already prefetches `images` and already
+   has the profile, so filtering *that* prefetch fixes every strategy at once. Two bugs were
+   stacked: `_photo_build_round` used `wiki.images.filter(...)`, which skipped visibility *and*
+   defeated the prefetch — the misuse eligibility's own comment warns about.
 4. **`exif_data` is a plain `JSONField`.** Intent: encrypt it at rest and strip it from the
    image file. *Stripping done 2026-08-24* — the block now comes off every stored file
    unconditionally, with `exif_transpose` applied first so nothing renders rotated. Two follow-ons

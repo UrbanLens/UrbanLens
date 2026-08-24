@@ -15,7 +15,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import logging
 import math
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
 from django.contrib.postgres.search import TrigramSimilarity
 from django.db.models import BooleanField, Case, Exists, F, OuterRef, Q, Value, When
@@ -30,6 +30,12 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.global_search.parser import ParsedQuery
 from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
+
+#: Preserves the concrete queryset class through the shared helpers. Without it
+#: they hand back a plain QuerySet, and a provider that then calls a custom
+#: manager method - PhotoSearchProvider's visible_to() is the one that matters -
+#: is calling something the type no longer admits exists.
+_QS = TypeVar("_QS", bound="QuerySet[Any, Any]")
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +221,7 @@ class SearchProvider(ABC):
         """
         raise NotImplementedError
 
-    def apply_text(self, queryset: QuerySet, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None) -> QuerySet:
+    def apply_text(self, queryset: _QS, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None) -> _QS:
         """Apply term matching plus fuzzy title matching and relevance ordering.
 
         With no free-text terms (a purely structured query like "photos from
