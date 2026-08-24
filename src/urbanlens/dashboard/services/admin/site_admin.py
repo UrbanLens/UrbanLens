@@ -71,8 +71,9 @@ def promote_first_user_if_needed(user: User) -> bool:
 
     from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.services.demo import DEMO_USERNAME_PREFIX
+    from urbanlens.dashboard.services.integration_testing import INTEGRATION_USERNAME_PREFIX
 
-    # A seeded demo account must never claim the bootstrap admin slot. The guard
+    # A disposable account must never claim the bootstrap admin slot. The guard
     # belongs here rather than at the call site, because the caller is a
     # post_save signal that fires for *every* path that creates a User - so a
     # call-site guard would have to be repeated at each one and would be missed
@@ -80,7 +81,12 @@ def promote_first_user_if_needed(user: User) -> bool:
     # definition the first user, and the slot is single-claim and permanent:
     # letting them take it hands a throwaway account the admin panel and leaves
     # the real operator unable to ever be promoted.
-    if user.username.startswith(DEMO_USERNAME_PREFIX):
+    #
+    # The integration prefix is here for exactly the same reason: provisioning
+    # against a freshly built staging database creates the first user on it, and
+    # a purged-and-reprovisioned account would leave the slot pointing at a row
+    # that no longer exists.
+    if user.username.startswith((DEMO_USERNAME_PREFIX, INTEGRATION_USERNAME_PREFIX)):
         return False
 
     with transaction.atomic():

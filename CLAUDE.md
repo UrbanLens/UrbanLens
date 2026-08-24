@@ -15,6 +15,12 @@ testing, the two "where to look" reports, the three structural CI checks, and th
 shared test helpers. Each entry records the defect that motivated it, so its value
 does not have to be re-derived.
 
+`docs/INTEGRATION_TESTS.md` - the on-demand Playwright suite in `tests/integration/`,
+run by hand against staging. It answers what the pytest suite structurally cannot:
+whether the deployed pieces work together. Read it before adding a test there -
+particularly the rules about waiting for HTMX and never signing out on the shared
+session.
+
 `CLAUDE.local.md` at the repo root contains environment-specific info.
 
 ## Quick Start

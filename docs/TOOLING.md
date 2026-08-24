@@ -35,6 +35,32 @@ container's copy on purpose and expecting failures. Without it the parity guard
 refuses the run, which is otherwise exactly what you want — a file restored on
 the host but not re-copied is how the audit's only red consolidation happened.
 
+### `bin/run_integration_tests.sh`
+
+Drives a **deployed** instance over HTTP - real database, real Valkey, real
+Celery workers, real WebSocket container, real proxy. Manual only; the config
+refuses to start against production.
+
+```bash
+# On the target, once:
+python src/urbanlens/manage.py provision_integration_env --out /tmp/e2e.json
+
+bin/run_integration_tests.sh --url https://s1.dev.urbanlens.org
+bin/run_integration_tests.sh --url ... --project smoke   # the 5-second version
+bin/run_integration_tests.sh --url ... --docker          # needs only Docker
+```
+
+It exists because the 11,000-test pytest suite structurally cannot answer "do
+the pieces work together when they are separate processes". Everything it
+checks is invisible from inside one process: a bundle that did not build, a
+proxy that will not upgrade a WebSocket, a worker container consuming a
+different broker, a header a proxy rewrote, an asset manifest never
+regenerated. Six selectable projects - `smoke`, `services`, `api`, `ui`,
+`a11y`, and an opt-in `visual`.
+
+Full documentation, including how to write a test and what it deliberately does
+not cover, is `docs/INTEGRATION_TESTS.md`.
+
 ### `bin/run_mutation_tests.sh`
 
 Mutation testing over the modules in `[tool.mutmut]` — money, privacy, and the

@@ -3797,3 +3797,45 @@ Left the `color-scheme: dark` additions in place (correct regardless, and may we
 Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GTK-backed popup) -
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
+
+## OPEN 2026-08-23: four findings from the integration suite's first real run
+
+Found by `tests/integration/` (see `docs/INTEGRATION_TESTS.md`) run against a dev-environment
+stack built from `feat/multi-site-health-probes`. Each is a true positive that the pytest suite
+structurally cannot see, because each is about the deployed page or the deployed proxy rather than
+about a function's behaviour. Recorded here rather than fixed, because they are application and
+infrastructure changes and the work that found them was test infrastructure.
+
+**`<html>` carries no `lang` attribute, on every page.** `themes/base.html` and
+`themes/auth_base.html` both open `<html id="html-root">`. axe reports `html-has-lang` at
+`serious` on all ten scanned pages; it is WCAG 3.1.1, and its practical effect is that a screen
+reader guesses which language to pronounce the page in. The fix is one attribute in each template,
+but the *value* is a decision - the app runs `gettext`, so `{% get_current_language %}` may be more
+correct than a hardcoded `en`.
+
+**HTMX is loaded from a CDN with no subresource integrity.** `themes/base.html` loads
+`https://unpkg.com/htmx.org@1.9.11` with no `integrity`/`crossorigin`, while the jQuery and toastr
+tags immediately around it both have one. HTMX drives essentially every interaction in this
+application, so whoever controls that CDN response controls the app for every visitor. The
+stylesheets nearby (font-awesome, toastr's CSS) are also unpinned but are a much narrower problem;
+Google Fonts cannot be pinned at all, since it serves a different stylesheet per user agent.
+
+**A freshly created pin's detail page intermittently 404s two of its own panels.** Opening
+`/dashboard/map/pin/<slug>/` shortly after creating the pin sometimes fetches
+`.../wikipedia/` and `.../comments/` and gets 404 from both. Both routes exist and both succeed on
+a retry, so it is a race rather than a missing route. It is user-visible: `themes/base.html`'s
+global `htmx:responseError` handler raises an error toast for every non-2xx HTMX response, so the
+user sees two error toasts on a pin they have just made.
+
+**The map page scrolls sideways at phone width.** At a 390px viewport, `/dashboard/map/`'s
+`document.documentElement.scrollWidth` exceeds its `clientWidth` by 40px.
+
+Two smaller deployment notes from the same run, neither a code defect:
+
+- nginx answers with `Server: nginx/1.31.3`. A precise version is free reconnaissance; the fix is
+  `server_tokens off;` at whatever terminates TLS.
+- Colour-contrast violations are widespread (secondary text, the social sign-in buttons) and are
+  real WCAG AA failures. The suite routes that one rule to advisory rather than failing - see
+  `ADVISORY_RULES` in `tests/integration/lib/a11y.ts` - so that the accessibility project is not red
+  on every run before anyone has had a chance to act on it. Findings still land in each run's
+  `a11y-advisory.txt`.
