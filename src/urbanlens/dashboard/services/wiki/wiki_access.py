@@ -254,6 +254,32 @@ def visible_wiki_location_ids(profile: Profile) -> set[int]:
     return direct_ids | set(Location.objects.filter(wiki__isnull=False, place__domain_root_id__in=domains).values_list("pk", flat=True))
 
 
+def visible_wiki_location_ids_cached(profile: Profile) -> set[int]:
+    """:func:`visible_wiki_location_ids`, memoised on the profile instance.
+
+    One global search fans out to eleven providers, four of which need the
+    viewer's wiki reach. Recomputing it per provider costs the pin lookup, the
+    aggregate fixpoint and the location query four times over for an answer that
+    cannot change mid-request.
+
+    Cached on the instance rather than in a module-level dict deliberately: a
+    ``Profile`` is loaded fresh per request, so the entry cannot outlive the
+    request that made it, and nothing has to invalidate it when a pin moves.
+    Pass the *same* instance to every caller that should share the answer.
+
+    Args:
+        profile: The viewing profile.
+
+    Returns:
+        Set of Location primary keys whose Wiki is visible to *profile*.
+    """
+    cached = getattr(profile, "_ul_visible_wiki_location_ids", None)
+    if cached is None:
+        cached = visible_wiki_location_ids(profile)
+        profile._ul_visible_wiki_location_ids = cached  # noqa: SLF001
+    return cached
+
+
 def wikis_hidden_by_pin_move(pin: Pin, latitude: float, longitude: float) -> list[Wiki]:
     """Wikis the owner can see now but would lose by moving *pin* to this point.
 
