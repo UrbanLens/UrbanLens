@@ -40,6 +40,7 @@ from urbanlens.dashboard.services.wiki.wiki_aliases import promote_wiki_alias_to
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
@@ -108,11 +109,19 @@ def _render_pin_panel(request, pin: Pin) -> HttpResponse:
     )
 
 
-def _render_location_panel(request, location: Location, wiki: Wiki) -> HttpResponse:
-    """Render the wiki aliases panel with current-name annotation."""
+def _render_location_panel(request, location: Location, wiki: Wiki, profile: Profile) -> HttpResponse:
+    """Render the wiki aliases panel with current-name annotation.
+
+    Takes the profile rather than re-deriving it from the request: every caller
+    has just had one back from ``resolve_visible_wiki``, and a second derivation
+    can disagree with the first. ``getattr(request.user, "profile", None)``
+    swallows ``RelatedObjectDoesNotExist`` (Django makes it an ``AttributeError``
+    so ``hasattr`` works), and a None viewer means ``visible_actor_ids`` returns
+    the empty set - silently costing the viewer their own and their friends'
+    rows, on the one path whose job is to show them.
+    """
     from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
 
-    profile = getattr(request.user, "profile", None)
     rows = wiki.aliases.order_by("name")
     if concealment_active(wiki, profile):
         rows = conceal_rows(rows, profile)
@@ -217,12 +226,12 @@ class LocationAliasView(LoginRequiredMixin, View):
     """GET: HTMX partial listing a wiki's aliases.  POST: add a new alias."""
 
     def get(self, request, location_slug):
-        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         # Wikis are created lazily, so official-name candidates gathered before
         # the wiki existed have no alias rows yet; backfill them from the cache
         # (DB reads only - no network) now that there is a wiki to attach to.
         persist_official_aliases_for_location(location)
-        return _render_location_panel(request, location, wiki)
+        return _render_location_panel(request, location, wiki, profile)
 
     def post(self, request, location_slug):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
@@ -247,7 +256,7 @@ class LocationAliasView(LoginRequiredMixin, View):
             editor=profile,
             changes={"alias_added": {"from": None, "to": name}},
         )
-        return _render_location_panel(request, location, wiki)
+        return _render_location_panel(request, location, wiki, profile)
 
 
 class LocationAliasDeleteView(LoginRequiredMixin, View):
@@ -267,7 +276,7 @@ class LocationAliasDeleteView(LoginRequiredMixin, View):
             editor=profile,
             changes={"alias_removed": {"from": alias_name, "to": None}},
         )
-        return _render_location_panel(request, location, wiki)
+        return _render_location_panel(request, location, wiki, profile)
 
 
 class LocationAliasUseView(LoginRequiredMixin, View):
@@ -277,7 +286,7 @@ class LocationAliasUseView(LoginRequiredMixin, View):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
         edit = promote_wiki_alias_to_name(wiki, profile, alias)
-        response = _render_location_panel(request, location, wiki)
+        response = _render_location_panel(request, location, wiki, profile)
         if edit is None:
             # The alias was already the wiki's name, so nothing was written.
             # Announcing a rename anyway would push a "renamed" toast and a
@@ -296,7 +305,7 @@ class LocationAliasToggleNicknameView(LoginRequiredMixin, View):
     """POST: flip one of the wiki's aliases between nickname-only and a plain alias."""
 
     def post(self, request, location_slug, alias_id):
-        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
         alias.toggle_nickname()
-        return _render_location_panel(request, location, wiki)
+        return _render_location_panel(request, location, wiki, profile)

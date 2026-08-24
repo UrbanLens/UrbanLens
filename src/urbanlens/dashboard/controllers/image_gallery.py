@@ -401,6 +401,8 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
+        from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         try:
             data = json.loads(request.body)
@@ -408,9 +410,13 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
+        # The row that gets saved must be the real one, not a concealed
+        # projection of it - see concealment.writable_wiki.
+        target = writable_wiki(wiki)
+
         if image_id is None:
-            wiki.cover_photo = None
-            wiki.save(update_fields=["cover_photo", "updated"])
+            target.cover_photo = None
+            target.save(update_fields=["cover_photo", "updated"])
             return JsonResponse({"cover_photo": None})
 
         # Scoped to the one row before `visible_to`, whose per-uploader pass
@@ -428,8 +434,8 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
         on_this_wiki = image.wiki_id == wiki.pk or ImageAttachment.objects.filter(image=image, wiki=wiki).exists()
         if not on_this_wiki:
             raise Http404
-        wiki.cover_photo = image
-        wiki.save(update_fields=["cover_photo", "updated"])
+        target.cover_photo = image
+        target.save(update_fields=["cover_photo", "updated"])
         return JsonResponse({"cover_photo": image.image.url if image.image else image.source_url})
 
 

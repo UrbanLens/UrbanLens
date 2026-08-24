@@ -94,11 +94,7 @@ def _photo_quality(wiki: Wiki | None, image: Image) -> tuple[Decimal, dict[str, 
 
         from urbanlens.dashboard.models.images.model import Image as ImageModel, MediaKind
 
-        newest = (
-            ImageModel.objects.filter(wiki=wiki, media_type=MediaKind.PHOTO)
-            .exclude(pk=image.pk)
-            .aggregate(newest=Max(Coalesce("taken_at", "created")))["newest"]
-        )
+        newest = ImageModel.objects.filter(wiki=wiki, media_type=MediaKind.PHOTO).exclude(pk=image.pk).aggregate(newest=Max(Coalesce("taken_at", "created")))["newest"]
         if newest is not None and (image.taken_at - newest) > datetime.timedelta(days=coefficients.TIME_GAP_DAYS):
             bonus += coefficients.QUALITY_CLOSES_TIME_GAP
             notes["closes_time_gap"] = True

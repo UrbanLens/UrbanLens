@@ -121,6 +121,11 @@ jobs:
       - name: Signal subscriptions are reachable
         run: python3 bin/check_signal_reachable.py
 
+      # resolve_visible_wiki may return a concealed projection, and saving one
+      # writes a single viewer's redacted view over the community's content.
+      - name: A wiki resolved for reading is never saved
+        run: python3 bin/check_concealed_writes.py
+
       # Nothing else checks this: a model change without its migration only
       # surfaces if some test happens to touch the field, and otherwise waits
       # until the column is needed in production.

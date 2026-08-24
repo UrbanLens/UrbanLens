@@ -382,6 +382,8 @@ class LocationWikiEditView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug):
+        from urbanlens.dashboard.services.wiki.concealment import conceal_wiki, writable_wiki
+
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
@@ -393,8 +395,13 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         # behavior (see apply_wiki_edit's docstring, and "Messaging / external API
         # (noted 2026-07-26)" in docs/PROBLEMS.md, the strict-vs-lenient item); the
         # external API passes strict=True and gets a hard rejection instead.
+        # apply_wiki_edit mutates and saves the row it is given, so it needs the
+        # real one: resolve_visible_wiki hands back a concealed projection to a
+        # gated viewer, and saving that would persist their redacted view over
+        # what the community actually wrote.
+        target = writable_wiki(wiki)
         try:
-            edit = apply_wiki_edit(wiki, profile, body, strict=False)
+            edit = apply_wiki_edit(target, profile, body, strict=False)
         except WikiEditValidationError as exc:
             return JsonResponse({"error": exc.message}, status=400)
 
@@ -405,7 +412,9 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         # Description, dates, and security indicators all render together in the
         # "About" card - send back the freshly-rendered fragment so the client can
         # swap it in place instead of leaving edited-but-unrendered fields stale.
-        about_html = render_to_string("dashboard/partials/wiki/_wiki_about_card.html", {"wiki": wiki}, request=request)
+        # Concealed again on the way out: this fragment goes back to the viewer
+        # who just wrote, and `target` is now carrying everyone's values.
+        about_html = render_to_string("dashboard/partials/wiki/_wiki_about_card.html", {"wiki": conceal_wiki(target, profile)}, request=request)
         return JsonResponse({"ok": True, "changes": list(changes.keys()), "about_html": about_html})
 
 
@@ -466,25 +475,30 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, edit_id: int):
+        from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
 
         if target_edit.reverted:
             return JsonResponse({"error": "This edit has already been reverted."}, status=400)
 
-        revert_edit, skipped_fields = revert_wiki_edit(location, wiki, profile, target_edit)
+        # Reverting writes the "from" values back, so it needs the real row -
+        # `wiki` may be a projection carrying this viewer's redacted view.
+        target = writable_wiki(wiki)
+        revert_edit, skipped_fields = revert_wiki_edit(location, target, profile, target_edit)
 
         if revert_edit is None:
             # Every field this edit touched was changed again by someone else
             # since - nothing left to revert. Don't record a no-op WikiEdit or
             # mark the original as reverted.
-            response = _render_history(request, location, wiki)
+            response = _render_history(request, location, target)
             response["HX-Trigger"] = json.dumps(
                 {"showToast": {"level": "warning", "message": f"Could not revert - every field was changed again since this edit: {', '.join(skipped_fields)}."}},
             )
             return response
 
-        response = _render_history(request, location, wiki)
+        response = _render_history(request, location, target)
         if skipped_fields:
             response["HX-Trigger"] = json.dumps(
                 {"showToast": {"level": "warning", "message": f"Reverted, but some fields were left unchanged because they were edited again since: {', '.join(skipped_fields)}."}},
@@ -508,16 +522,22 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, edit_id: int):
+        from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
 
         if target_edit.editor_id != profile.id:
             return JsonResponse({"error": "You can only permanently delete your own edits."}, status=403)
 
+        # Both the revert and the purge below write, so both act on the real
+        # row rather than whatever this viewer is entitled to see.
+        target = writable_wiki(wiki)
+
         skipped_fields: list[str] = []
         if not target_edit.reverted:
-            revert_changes, skipped_fields = revert_edit_fields(location, wiki, target_edit)
-            save_edited_fields(wiki, revert_changes)
+            revert_changes, skipped_fields = revert_edit_fields(location, target, target_edit)
+            save_edited_fields(target, revert_changes)
 
         # The field-revision log records every write, so the value this view
         # exists to erase also survives there, with the editor's name on it.
@@ -528,14 +548,14 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
 
         for field_name, diff in (target_edit.changes or {}).items():
             if isinstance(diff, dict) and "to" in diff:
-                purge_recorded_value(wiki, field_name, diff["to"])
+                purge_recorded_value(target, field_name, diff["to"])
 
         revert_record = target_edit.reverted_by
         if revert_record is not None:
             revert_record.delete()
         target_edit.delete()
 
-        response = _render_history(request, location, wiki)
+        response = _render_history(request, location, target)
         if skipped_fields:
             response["HX-Trigger"] = json.dumps(
                 {"showToast": {"level": "warning", "message": f"Deleted, but some fields were left unchanged because they were edited again since: {', '.join(skipped_fields)}."}},

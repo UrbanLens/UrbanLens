@@ -71,6 +71,12 @@ repos:
         language: system
         files: '\.py$'
         pass_filenames: false
+      - id: concealed-writes
+        name: a wiki resolved for reading is never saved
+        entry: python3 bin/check_concealed_writes.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
 
 # TYPESCRIPT
 -   repo: local

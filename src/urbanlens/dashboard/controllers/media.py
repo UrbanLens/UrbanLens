@@ -156,7 +156,6 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         """
         return resolve_media_path(path)
 
-
     def _authorized(self, profile: Profile, rel_path: str) -> bool:
         """Decide whether *profile* may fetch the file at *rel_path*.
 
@@ -282,6 +281,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         # Orphan file - no surviving comment row to derive an owner from.
         # TODO(media-auth): authenticated-only fallback; see "Authenticated media gate - residual per-family risk" in docs/PROBLEMS.md.
         return True
+
 
 def resolve_media_path(path: str) -> tuple[str, Path]:
     """Resolve a media path and verify it stays inside ``MEDIA_ROOT``.

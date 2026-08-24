@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -35,6 +35,9 @@ from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, r
 
 # Re-exported so existing imports (e.g. tests) keep resolving from this module.
 __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes", "_sanitize_number"]
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
@@ -366,17 +369,33 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 # -- Wiki comments -------------------------------------------------------------
 
 
+def _visible_wiki_comments(wiki: Wiki, profile: Profile) -> QuerySet[Comment]:
+    """The wiki's comments as *profile* is entitled to see them.
+
+    One function rather than the same two lines at each of the three call sites:
+    the GET had them and the POST and DELETE re-renders did not, so posting a
+    comment handed a concealed viewer the whole thread that the page they were
+    looking at had just filtered.
+
+    Args:
+        wiki: The wiki whose comments are being listed.
+        profile: The viewer.
+
+    Returns:
+        A comment queryset, filtered when this viewer is concealed.
+    """
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
+
+    rows = wiki.comments.all()
+    return conceal_rows(rows, profile) if concealment_active(wiki, profile) else rows
+
+
 class WikiCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a wiki."""
 
     def get(self, request, location_slug):
-        from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
-
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        rows = wiki.comments.all()
-        if concealment_active(wiki, profile):
-            rows = conceal_rows(rows, profile)
-        ctx = _build_context(rows, profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        ctx = _build_context(_visible_wiki_comments(wiki, profile), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):
@@ -411,7 +430,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
             attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
             notify_reply(profile, parent, reply=comment)
-        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        ctx = _build_context(_visible_wiki_comments(wiki, profile), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
         return _render_comments(request, ctx)
 
 
@@ -436,7 +455,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         # orphaned top-level comments. Re-render the whole panel rather than just
         # removing the deleted <li>, so those replies stay visible in place
         # instead of disappearing until the next reload.
-        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        ctx = _build_context(_visible_wiki_comments(wiki, profile), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
         return _render_comments(request, ctx)
 
 

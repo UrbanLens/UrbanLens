@@ -109,6 +109,7 @@ from urbanlens.dashboard.services.wiki.articles import (
     restore_revision,
     save_article_checked,
 )
+from urbanlens.dashboard.services.wiki.concealment import writable_wiki
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 from urbanlens.dashboard.services.wiki.wiki_aliases import promote_wiki_alias_to_name
 from urbanlens.dashboard.services.wiki.wiki_detail import build_wiki_detail, masked_editor_name
@@ -245,13 +246,16 @@ class WikiDetailApiView(WikiApiView):
         # Dates arrive as date objects from DateField; the service writes them
         # through unchanged and stringifies for the audit record.
 
+        # The service mutates and saves what it is handed, and `resolve` may
+        # have handed back a concealed projection - see concealment.writable_wiki.
+        target = writable_wiki(wiki)
         try:
             with transaction.atomic():
-                apply_wiki_edit(wiki, profile, changes, strict=True)
+                apply_wiki_edit(target, profile, changes, strict=True)
         except WikiEditValidationError as exc:
             return Response({"error": exc.message, "fields": {exc.field: exc.message} if exc.field else {}}, status=400)
 
-        return Response(build_wiki_detail(wiki, location, profile))
+        return Response(build_wiki_detail(target, location, profile))
 
 
 class WikiHistoryView(PaginatedListMixin, WikiApiView):
@@ -298,8 +302,9 @@ class WikiRevertView(WikiApiView):
         if target_edit.reverted:
             return Response({"error": "This edit has already been reverted."}, status=400)
 
+        target = writable_wiki(wiki)
         with transaction.atomic():
-            revert_edit, skipped_fields = revert_wiki_edit(location, wiki, profile, target_edit)
+            revert_edit, skipped_fields = revert_wiki_edit(location, target, profile, target_edit)
 
         if revert_edit is None:
             return Response(
@@ -307,7 +312,9 @@ class WikiRevertView(WikiApiView):
                 status=409,
             )
 
-        payload = build_wiki_detail(wiki, location, profile)
+        # `target`, not `wiki`: the revert wrote through target, so the
+        # projection resolve handed back is a snapshot from before it.
+        payload = build_wiki_detail(target, location, profile)
         payload["skipped_fields"] = skipped_fields
         return Response(payload)
 
@@ -642,16 +649,18 @@ class WikiCoverPhotoApiView(WikiApiView):
         image = get_object_or_404(Image.objects.filter(uuid=serializer.validated_data["image_uuid"]).visible_to(profile))
         if image.wiki_id != wiki.pk and image.location_id != location.pk:
             raise Http404
-        wiki.cover_photo = image
-        wiki.save(update_fields=["cover_photo", "updated"])
+        target = writable_wiki(wiki)
+        target.cover_photo = image
+        target.save(update_fields=["cover_photo", "updated"])
         return Response({"cover_photo_url": image.image.url if image.image else image.source_url})
 
     @extend_schema(responses={200: WikiCoverPhotoResponseSerializer, 404: ErrorSerializer})
     def delete(self, request: Request, location_slug: str) -> Response:
         """Clear the wiki's cover photo."""
         _location, wiki, _profile = self.resolve(request, location_slug)
-        wiki.cover_photo = None
-        wiki.save(update_fields=["cover_photo", "updated"])
+        target = writable_wiki(wiki)
+        target.cover_photo = None
+        target.save(update_fields=["cover_photo", "updated"])
         return Response({"cover_photo_url": None})
 
 
