@@ -65,6 +65,12 @@ repos:
         language: system
         files: '\.py$'
         pass_filenames: false
+      - id: signal-reachable
+        name: no post_save subscription waits on a field only update() sets
+        entry: python3 bin/check_signal_reachable.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
 
 # TYPESCRIPT
 -   repo: local

@@ -110,7 +110,7 @@ that list, each finding then handed to an adversarial verifier told to refute it
 
 ## Structural checks (CI)
 
-Six checkers guard properties that are invisible from a working copy, which is
+Seven checkers guard properties that are invisible from a working copy, which is
 exactly why they need checking — the machine that made the mistake is the one
 that cannot see it.
 
@@ -122,6 +122,7 @@ that cannot see it.
 | `bin/check_outage_not_cached.py` | A `fetch` that caches a swallowed failure as though it were an answer |
 | `bin/check_notification_choke_point.py` | A notification written around the mute preference |
 | `bin/check_versioned_writes.py` | A model half-adopting field versioning, so bulk writes go unrecorded |
+| `bin/check_signal_reachable.py` | A `post_save` subscription waiting on a field only a queryset `update()` sets |
 
 The last two exist because a *defect class* recurred, not because one bug did.
 `check_outage_not_cached.py` came from an outage being stored as "nothing here"
@@ -132,6 +133,16 @@ remembering it thirty times. Both replace "remember to" with "cannot forget":
 notifications go through `NotificationLog.objects.notify()`, and a deliberate
 bypass is marked `notify-bypass-ok: <why>` on the line above so the exemption
 sits where the decision is.
+
+`check_signal_reachable.py` came from three instances of one defect. Rules in
+the reputation ledger subscribed to `post_save` on `FriendInvitation`, `Wiki`
+and `WikiEdit`, whose real transitions all happen through
+`QuerySet.update()` — which emits no signal, *deliberately*, because those
+transitions are atomic compare-and-sets. Every one looked correct in review and
+none could ever fire. The check matches a subscription's watched fields against
+`.update()` calls on the same model; a deliberate case is marked
+`signal-update-ok: <ModelName> <why>`. Its limits are in its docstring, and a
+pass means "no detected gap" rather than "the subscription fires".
 
 `check_versioned_writes.py` exists for the same reason as those two: provenance
 has to be recorded at write time, and the wiki's *existing* edit history is

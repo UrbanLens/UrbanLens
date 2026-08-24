@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
@@ -405,12 +405,33 @@ def _render_history(request, location: Location, wiki: Wiki):
     successful action re-renders the up-to-date list in place, instead of
     leaving a stale row (or a raw JSON body) swapped into the DOM.
     """
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active, redact_edit_changes
+
     profile, _ = Profile.objects.get_or_create(user=request.user)
     edits = wiki.edits.select_related("editor__user", "reverted_by").order_by("-created")
+
+    conceal = concealment_active(wiki, profile)
+    if conceal:
+        # Two separate problems here. The list itself names every editor and
+        # what they changed, so it is filtered to the viewer and their friends.
+        # And each surviving row's `changes` still carries the *pre-edit* value
+        # in its "from" side - which for the viewer's own edit is whatever a
+        # stranger had written there. That half survives a perfect read gate,
+        # because it lands in content the rules promise always to show.
+        # Materialised before mutating: a queryset re-runs its query on each
+        # iteration, so redacting in place and handing the queryset to the
+        # template would render the unredacted rows from a second fetch.
+        visible_edits = list(conceal_rows(edits, profile))
+        for edit in visible_edits:
+            edit.changes = redact_edit_changes(edit.changes)
+        rows: Any = visible_edits
+    else:
+        rows = edits
+
     return render(
         request,
         "dashboard/pages/location/wiki_history.html",
-        {"location": location, "wiki": wiki, "edits": edits, "current_profile": profile},
+        {"location": location, "wiki": conceal_wiki(wiki, profile), "edits": rows, "current_profile": profile},
     )
 
 

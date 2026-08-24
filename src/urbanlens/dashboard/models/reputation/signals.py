@@ -17,6 +17,12 @@ transaction (a rolled-back contribution rolls its row back too) and only
 never revoked. Here a contribution that gets reverted has to stop counting, and
 - because reverting a revert clears ``WikiEdit.reverted`` - has to be able to
 start counting again.
+
+**Not everything belongs in this table.** A transition made by a queryset
+``update()`` emits no signal, so a subscription watching for it is dead and
+looks alive. Three rules here started that way; ``invite_accepted`` and
+``wiki_created`` now record at their transitions instead, and
+``bin/check_signal_reachable.py`` fails the build if another one appears.
 """
 
 from __future__ import annotations
@@ -111,19 +117,14 @@ _SUBSCRIPTIONS: tuple[_Subscription, ...] = (
         profile_id=lambda comment: comment.profile_id,
         wiki_id=lambda comment: comment.wiki_id,
     ),
+    # signal-update-ok: Pin - pin_created is create-only on purpose. A pin
+    # re-parented later by an update() is not an unrewarded discovery; it is a
+    # pin that was already counted, or was never a root pin at all.
     _Subscription(
         model_path="urbanlens.dashboard.models.pin.model:Pin",
         rule_key="pin_created",
         qualifies=lambda pin: pin.parent_pin_id is None,
         profile_id=lambda pin: pin.profile_id,
-    ),
-    _Subscription(
-        model_path="urbanlens.dashboard.models.friendship.invitation.model:FriendInvitation",
-        rule_key="invite_accepted",
-        qualifies=lambda invitation: invitation.accepted_at is not None,
-        profile_id=lambda invitation: invitation.inviter_id,
-        # Not created_only: acceptance is an update to the row the invite made.
-        created_only=False,
     ),
     _Subscription(
         model_path="urbanlens.dashboard.models.wiki.model:Wiki",

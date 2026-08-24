@@ -105,3 +105,54 @@ class ConcealedRenderTests(TestCase):
         # The chips render the display label of each security level; "Some"
         # against cameras or fences means the page is still reporting them.
         self.assertNotIn("CANARY", body)
+
+
+class ConcealedHistoryTests(TestCase):
+    """The edit history names who changed what, and carries prior values."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = baker.make(Location, latitude=44.9778, longitude=-93.2650, official_name="Provider Name")
+        self.wiki = baker.make(Wiki, location=self.location, name="Provider Name", officially_created=True)
+        self.stranger = baker.make(User).profile
+        self.viewer_user = baker.make(User)
+        baker.make(Pin, profile=self.viewer_user.profile, location=self.location, parent_pin=None)
+
+    def _history(self) -> str:
+        self.client.force_login(self.viewer_user)
+        with mock.patch("urbanlens.dashboard.services.wiki.concealment.concealment_active", return_value=True):
+            response = self.client.get(reverse("location.wiki.history", kwargs={"location_slug": self.location.slug or str(self.location.uuid)}))
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
+
+    def test_a_strangers_edit_is_absent(self) -> None:
+        """The list is the record of who has been here."""
+        baker.make(
+            "dashboard.WikiEdit",
+            wiki=self.wiki,
+            editor=self.stranger,
+            changes={"description": {"from": "", "to": "CANARY-STRANGER-EDIT"}},
+            reverted=False,
+        )
+
+        self.assertNotIn("CANARY-STRANGER-EDIT", self._history())
+
+    def test_your_own_edit_does_not_carry_the_hidden_prior_value(self) -> None:
+        """The leak a read gate cannot close.
+
+        Your own edit row is content the rules promise always to show you - and
+        its "from" side holds whatever the stranger had written there. Type one
+        character into a description that looks empty, open your own history,
+        read the concealed value back.
+        """
+        baker.make(
+            "dashboard.WikiEdit",
+            wiki=self.wiki,
+            editor=self.viewer_user.profile,
+            changes={"description": {"from": "CANARY-HIDDEN-PRIOR", "to": "x"}},
+            reverted=False,
+        )
+
+        body = self._history()
+
+        self.assertNotIn("CANARY-HIDDEN-PRIOR", body)

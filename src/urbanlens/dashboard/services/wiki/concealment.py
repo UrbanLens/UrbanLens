@@ -229,6 +229,7 @@ def concealed_community_summary() -> dict[str, Any]:
 #:   ``created_by=NULL`` with an official source.
 _ACTOR_FIELDS: dict[str, str] = {
     "Comment": "profile_id",
+    "WikiEdit": "editor_id",
     "WikiLink": "created_by_id",
     "WikiStatVote": "profile_id",
     "Floorplan": "profile_id",
@@ -351,3 +352,32 @@ def conceal_wiki(wiki: Wiki, viewer: Profile | None) -> Wiki | ConcealedWiki:
         The real wiki, or a read-only concealed view of it.
     """
     return ConcealedWiki(wiki, viewer) if concealment_active(wiki, viewer) else wiki
+
+
+def redact_edit_changes(changes: Any) -> dict[str, Any]:
+    """Strip the pre-edit value out of an edit's diff.
+
+    ``WikiEdit.changes`` is ``{"field": {"from": old, "to": new}}``, and the
+    history page renders both halves. That is a leak a read gate cannot close,
+    because it lands in the viewer's *own* edit row - content the rules promise
+    always to show them. Type one character into a description that looks empty,
+    open your own history, and read the hidden value out of the "from" side.
+
+    The "to" side is kept: it is what this viewer wrote, and concealing it would
+    make their own history unreadable for no gain.
+
+    Args:
+        changes: The edit's stored diff.
+
+    Returns:
+        The same shape with every ``from`` replaced.
+    """
+    if not isinstance(changes, dict):
+        return {}
+    redacted: dict[str, Any] = {}
+    for field_name, diff in changes.items():
+        if isinstance(diff, dict):
+            redacted[field_name] = {**diff, "from": None}
+        else:
+            redacted[field_name] = diff
+    return redacted
