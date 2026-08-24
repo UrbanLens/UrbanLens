@@ -238,7 +238,11 @@ Answers to the questions this document was written to ask. Each names the work i
    (fetched from a URL) there is **no prompt at all**; they stay on the wiki unless the user goes
    to the wiki and deletes it there, because a public resource that already exists online is not
    a consent question.
-   → *Work:* neither the prompt nor the external/uploaded distinction exists yet.
+   → *Done 2026-08-24:* the pin gallery detaches instead of dropping the row, and the wiki
+   keeps the photo unless `?from_wiki=1` says otherwise — honoured only for uploads. Deleting
+   from a pin used to destroy the row outright, withdrawing the contribution silently from a
+   screen that never mentions the wiki. **Still to do:** the same distinction on the external
+   API's photo delete (`external_api/views.py:1299`), which was not part of this pass.
 
 7. **Earned credit.** **Not now** — finish the work above first. The design in
    `docs/designs/reputation-and-gating.md` stays parked.

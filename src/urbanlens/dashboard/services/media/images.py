@@ -717,8 +717,10 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
     Returns:
         Dict with id/url/caption/latitude/longitude/uploader/is_mine, plus the
         attribution fields (author/source_url/copyright/taken_at) shown in the
-        lightbox.
+        lightbox, and the two flags the pin gallery's delete prompt reads.
     """
+    from urbanlens.dashboard.models.images.model import ImageSource
+
     return {
         "id": img.pk,
         "url": request.build_absolute_uri(img.image.url),
@@ -731,6 +733,11 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         "source_url": img.source_url or "",
         "copyright": img.copyright or "",
         "taken_at": img.taken_at.isoformat() if img.taken_at else None,
+        # What the pin gallery's delete prompt needs to know: whether removing
+        # this photo from a pin would also take it off a community wiki, and
+        # whether withdrawing it from there is even the owner's to do.
+        "on_wiki": img.wiki_id is not None,
+        "uploaded": img.source == ImageSource.UPLOAD,
     }
 
 

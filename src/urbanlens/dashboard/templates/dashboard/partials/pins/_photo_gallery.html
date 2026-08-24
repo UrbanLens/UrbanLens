@@ -62,6 +62,8 @@ Context:
         data-copyright="{{ img.copyright|default:'' }}"
         data-source-url="{{ img.source_url|default:'' }}"
         data-taken-at="{{ img.taken_at|date:'c'|default:'' }}"
+        data-on-wiki="{% if img.wiki_id %}true{% else %}false{% endif %}"
+        data-uploaded="{% if img.source == 'upload' %}true{% else %}false{% endif %}"
         onmouseenter="galleryHover({{ img.pk }}, true)"
         onmouseleave="galleryHover({{ img.pk }}, false)">
       {% if img.profile == profile %}
@@ -173,6 +175,7 @@ Context:
   var UPLOAD_URL = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% elif context_type == "safety" %}{% url "safety.checkin.gallery" checkin.slug|default:checkin.uuid %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
   var REPOSITION_BASE = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% elif context_type == "safety" %}{% url "safety.checkin.gallery" checkin.slug|default:checkin.uuid %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
   var CSRF_TOKEN = '{{ csrf_token }}';
+  var CONTEXT_TYPE = '{{ context_type }}';
 
   // Build an ordered list of image ids for lightbox navigation.
   var _items = Array.from(document.querySelectorAll('.gallery-item')).map(function (el) {
@@ -343,6 +346,8 @@ Context:
     li.dataset.copyright = img.copyright || '';
     li.dataset.sourceUrl = img.source_url || '';
     li.dataset.takenAt = img.taken_at || '';
+    li.dataset.onWiki = img.on_wiki ? 'true' : 'false';
+    li.dataset.uploaded = img.uploaded === false ? 'false' : 'true';
     li.addEventListener('mouseenter', function () { galleryHover(img.id, true); });
     li.addEventListener('mouseleave', function () { galleryHover(img.id, false); });
 
@@ -379,8 +384,26 @@ Context:
 
   // -- Delete -----------------------------------------------------------------
   window.galleryDelete = function (imgId) {
-    if (!confirm('Delete this photo?\n\nThis cannot be undone - the file is removed permanently.')) return;
-    fetch(REPOSITION_BASE + imgId + '/', {
+    var tile = document.getElementById('gallery-item-' + imgId);
+    var onWiki = CONTEXT_TYPE === 'pin' && tile && tile.dataset.onWiki === 'true';
+    var uploaded = tile && tile.dataset.uploaded === 'true';
+    var withdraw = false;
+
+    if (!onWiki) {
+      if (!confirm('Delete this photo?\n\nThis cannot be undone - the file is removed permanently.')) return;
+    } else if (!uploaded) {
+      // Fetched from a URL: it was a public resource online before we saw it,
+      // so there is nothing here to withdraw and nothing to ask about. Taking
+      // it off the wiki is done on the wiki.
+      if (!confirm('Remove this photo from your pin?\n\nIt stays on the community wiki - remove it there if you want it gone from the wiki too.')) return;
+    } else {
+      if (!confirm('Remove this photo from your pin?\n\nYou also contributed it to the community wiki. It stays there unless you say otherwise on the next prompt.')) return;
+      // Cancel keeps it on the wiki. Silence is not consent to withdraw a
+      // contribution, so the safe answer is the one that needs no action.
+      withdraw = confirm('Also remove it from the community wiki?\n\nOK removes it from the wiki as well, permanently.\nCancel leaves it on the wiki.');
+    }
+
+    fetch(REPOSITION_BASE + imgId + '/' + (withdraw ? '?from_wiki=1' : ''), {
       method: 'DELETE',
       headers: { 'X-CSRFToken': CSRF_TOKEN },
     }).then(function (r) {
@@ -397,7 +420,7 @@ Context:
       _items = _items.filter(function (i) { return i.id !== imgId; });
       if (window._galleryRemoveMarker) window._galleryRemoveMarker(imgId);
       _updateGalleryCountLabel(-1);
-      if (window.toastr) toastr.success('Photo deleted.');
+      if (window.toastr) toastr.success(onWiki && !withdraw ? 'Removed from this pin. Still on the wiki.' : 'Photo deleted.');
     }).catch(function () {
       if (window.toastr) toastr.error('Could not delete that photo.');
     });
