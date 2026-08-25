@@ -13,6 +13,8 @@ See :data:`E2EE_PREFIX`.
 
 from __future__ import annotations
 
+import threading
+
 from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from drf_spectacular.settings import spectacular_settings
 
@@ -219,3 +221,44 @@ class ApiKeyAuthenticationScheme(OpenApiAuthenticationExtension):
             "scheme": "bearer",
             "description": "UrbanLens API key (`ulk_...`), created in Settings -> API Keys. OAuth2 access tokens share the Bearer scheme and are documented separately.",
         }
+
+
+#: Guards the mutation :func:`patch_extension_thread_safety` serializes.
+_extension_load_lock = threading.Lock()
+
+
+def patch_extension_thread_safety() -> None:
+    """Serialize drf-spectacular's per-extension ``target_class`` resolution.
+
+    ``OpenApiGeneratorExtension._load_class`` resolves ``target_class`` from a
+    dotted string to the class object by mutating that *class* attribute in
+    place, with no lock - shared process-wide, not per-request. Two schema
+    requests arriving together (this app runs gevent workers, so genuinely
+    concurrent requests to one process are ordinary) can both see the string,
+    both start resolving, and one can read ``target_class`` mid-mutation - e.g.
+    as the ``None`` the other's failed-import branch just wrote - raising
+    ``AttributeError: 'NoneType' object has no attribute 'startswith'`` instead
+    of producing a schema. Not caused by anything registered in this app
+    (``ApiKeyAuthenticationScheme`` included), but every extension - ours and
+    drf-spectacular's own built-ins - shares this one base class and the same
+    race. See PROBLEMS.md, "concurrent requests to schema/ can 500".
+
+    Called once from ``DashboardConfig.ready()``, before any request can be
+    served. Idempotent - a second call (e.g. a test importing this module
+    directly) leaves an already-patched method alone.
+    """
+    from drf_spectacular.plumbing import OpenApiGeneratorExtension
+
+    unpatched = OpenApiGeneratorExtension.__dict__["_load_class"].__func__
+    if getattr(unpatched, "_urbanlens_serialized", False):
+        return
+
+    def _serialized_load_class(cls: type) -> None:
+        with _extension_load_lock:
+            # Whoever got the lock first may have already resolved this exact
+            # class while we were waiting for it.
+            if isinstance(cls.target_class, str):  # type: ignore[attr-defined]
+                unpatched(cls)
+
+    _serialized_load_class._urbanlens_serialized = True  # type: ignore[attr-defined]  # noqa: SLF001 - our own marker, not drf-spectacular's
+    OpenApiGeneratorExtension._load_class = classmethod(_serialized_load_class)  # type: ignore[assignment]  # noqa: SLF001 - the whole point is patching drf-spectacular's private hook

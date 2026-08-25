@@ -18,6 +18,13 @@ class DashboardConfig(AppConfig):
 
         register_heif_opener()
 
+        # drf-spectacular resolves each extension's target_class lazily by
+        # mutating a shared class attribute with no lock - unsafe under this
+        # app's gevent concurrency. See schema.patch_extension_thread_safety.
+        from urbanlens.dashboard.external_api.schema import patch_extension_thread_safety
+
+        patch_extension_thread_safety()
+
         from django.core.signals import request_finished, request_started
         from django.db.models.signals import post_save
 
