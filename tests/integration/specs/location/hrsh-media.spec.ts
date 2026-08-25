@@ -41,26 +41,82 @@ skipUnlessLocationDataEnabled();
 /** The gallery's own poll budget, plus room for the task behind it. */
 const GALLERY_SETTLE_MS = 120_000;
 
+/** Gap between observations while waiting for the tile count to stop moving. */
+const GALLERY_POLL_MS = 2_500;
+
+/** Consecutive unchanged observations that count as "finished". */
+const GALLERY_STABLE_POLLS = 4;
+
 /**
- * Waits for every provider loader on the current page to finish.
+ * Third-party origins whose failures are not this spec's subject.
+ *
+ * Measured on the pin detail page: `wayback.maptiles.arcgis.com` is blocked by
+ * Chrome's Opaque Response Blocking and an OpenStreetMap tile aborts. Those are
+ * the *map* layers, not gallery items - but the console guard fails any test
+ * whose page logged a failed subresource, so without narrowing it every media
+ * test dies at ~8 s on a page whose gallery is working perfectly.
+ *
+ * Whether third-party origins are reachable is a real question, and
+ * `specs/services/third-party-origins.spec.ts` asks it deliberately. Asking it
+ * again here, by accident, only obscures what these tests are for.
+ */
+const THIRD_PARTY_TILE_HOSTS = [/wayback\.maptiles\.arcgis\.com/, /tile\.openstreetmap\.org/, /server\.arcgisonline\.com/];
+
+/**
+ * Waits for a media gallery to stop filling, and returns how many tiles it has.
+ *
+ * **The two pages need different treatment, and using one signal for both was a
+ * real defect in this file.** The pin page removes each provider loader as it
+ * completes (`el.remove()`), so counting `.media-provider-loader` down to zero
+ * works there. The wiki page never removes them: measured, it sits at 13 loaders
+ * indefinitely while its tiles arrive within seconds, and `#wiki-media-loading`
+ * stays visible too. Counting to zero there can only ever time out - which is
+ * exactly what happened, for two minutes per test, on a gallery that had already
+ * finished.
+ *
+ * So the signal used here is the one both pages share: the tile count stops
+ * changing. Zero loaders is kept as a fast path for the pin page, because when
+ * it is available it is unambiguous.
  *
  * @param page The page showing a media gallery.
- * @returns How many media tiles ended up in the grid.
+ * @returns How many media tiles the grid settled on.
  */
 async function settleGallery(page: import("@playwright/test").Page): Promise<number> {
-    await expect
-        .poll(async () => page.locator(".media-provider-loader").count(), {
-            timeout: GALLERY_SETTLE_MS,
-            message:
-                "media provider loaders never finished. Each polls every 2s for up to 30 attempts while a fetch_panel_source task runs " +
-                "on the panel_fetch queue - if no worker consumes that queue they poll out and stay pending, which looks identical to " +
-                "slow providers",
-        })
-        .toBe(0);
+    const deadline = Date.now() + GALLERY_SETTLE_MS;
+    let previous = -1;
+    let unchanged = 0;
+
+    while (Date.now() < deadline) {
+        const tiles = await page.locator(".media-item").count();
+        if (tiles === previous) {
+            unchanged += 1;
+        } else {
+            unchanged = 0;
+            previous = tiles;
+        }
+        // The pin page's own completion signal, when it is offered.
+        if ((await page.locator(".media-provider-loader").count()) === 0) {
+            return tiles;
+        }
+        if (unchanged >= GALLERY_STABLE_POLLS) {
+            return tiles;
+        }
+        await page.waitForTimeout(GALLERY_POLL_MS);
+    }
     return page.locator(".media-item").count();
 }
 
 test.describe("Hudson River State Hospital - external media", () => {
+    // The pin detail page carries satellite and street map layers alongside the
+    // gallery, and those tiles come from origins that fail in this environment.
+    // See THIRD_PARTY_TILE_HOSTS for why that is narrowed rather than tolerated
+    // wholesale.
+    test.beforeEach(async ({ guard }) => {
+        for (const host of THIRD_PARTY_TILE_HOSTS) {
+            guard.allow(host);
+        }
+    });
+
     test("the pin detail page has a media gallery section", async ({ campus, page }) => {
         await page.goto(`/dashboard/map/pin/${campus.pin.slug}/`);
 
