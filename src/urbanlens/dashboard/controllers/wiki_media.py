@@ -219,8 +219,8 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
     attempt failed) but is reported back via ``materialize_error`` so the
     frontend can toast it. A down-vote or a cleared vote never materializes
     anything - only an existing, already-materialized ``image_id`` supplied
-    by the client (re-scoped to this location) gets its REData signal
-    reversed.
+    by the client (re-scoped to this wiki's own attached media) gets its
+    REData signal reversed.
     """
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
@@ -278,10 +278,11 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
                 item_key=item_key,
                 defaults={"is_relevant": bool(is_relevant)},
             )
-            # image_id is only trusted after re-scoping to this location - a
-            # client sending an id from elsewhere must not be able to attach
-            # a vote to an unrelated photo.
-            existing_image = Image.objects.filter(pk=image_id, location=location).first() if image_id else None
+            # image_id is only trusted after re-scoping to this wiki's own
+            # attached media - scoping to the location alone let a caller
+            # record a vote against a pin-owned (not wiki-attached) photo at
+            # the same location, which they have no business voting on.
+            existing_image = Image.objects.filter(pk=image_id, wiki=wiki).first() if image_id else None
             if existing_image is not None:
                 queue_relevance_vote(existing_image, profile, is_relevant=bool(is_relevant))
                 if is_relevant:
