@@ -2052,6 +2052,48 @@ APIs the key may call) untouched. Requires Cloud Console access neither this ses
 REData session had. Confirm both keys - UrbanLens's Custom Search/Image Search key and REData's
 Places API (New) key may or may not be the same underlying Google Cloud project/key.
 
+### Follow-up (2026-08-25): fixed - wrong key was being called, not a Console misconfiguration
+
+Got Cloud Console access (`gcloud`, project `urban-lens`, number `940182089833` - both keys live
+in the same project, confirmed by key-string lookup against the production `.env` values on
+Damballa). `google_images.py`/`GoogleImageSearchGateway`, the caller originally cited above, no
+longer exists in the codebase; today the only live caller on the UrbanLens side is
+`maps.py::streetview_check`.
+
+**First attempt was wrong and was reverted.** Read `UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY` and
+`RD_GOOGLE_MAPS_API_KEY` as *the* two keys, and "fixed" the 403 by stripping the domain-restricted
+key's referrer restriction in Console. That defeats the point of a domain-restricted key existing
+at all and was caught in review. Reverted it back to its original `HTTP referrers: *.urbanlens.org`
+restriction and original four API targets - untouched, as it should be.
+
+**Actual root cause**: `UL_GOOGLE_MAPS_API_KEY` naming aside, UrbanLens already has a correctly-
+configured unrestricted server key - `UL_GOOGLE_UNRESTRICTED_API_KEY` - and it turns out to be the
+*same underlying Google key* as REData's `RD_GOOGLE_MAPS_API_KEY` (identical key string). It
+already had no application restriction and already listed both
+`street-view-image-backend.googleapis.com` and `customsearch.googleapis.com` among its API
+targets - nothing to fix in Console on that key. Renamed its Console display name from generic
+"Places / Search API Key (no referrer restrictions)" to "UrbanLens/REData Server-Side Key
+(unrestricted, no referrer)" so its purpose reads unambiguously next to the domain-restricted one.
+
+The bug was purely in `maps.py::streetview_check`: `api_key = settings.google_domain_restricted_api_key
+or settings.google_unrestricted_api_key` tried the wrong key first for a server-to-server call.
+Fixed to use `settings.google_unrestricted_api_key` directly. Also fixed `setup.py`'s "Google
+Street View" and "Google Search" integration-status entries, which pointed at
+`UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY` - both are server-side features and were documenting the
+wrong key from the start, which is presumably how this bug got written in the first place.
+
+Live-verified with the production key values directly against Google: unrestricted key ->
+`streetview/metadata` returns `status: OK`; domain-restricted key against the same endpoint
+correctly comes back `REQUEST_DENIED` (never had that API in its target list - proof it was never
+the right key for this call, referrer restriction aside).
+
+**Still open, unrelated to key selection**: the "Google Search" (Custom Search) feature has no
+calling code yet, and independently 403s (`PERMISSION_DENIED: This project does not have the
+access to Custom Search JSON API`) with *either* key, even with `customsearch.googleapis.com`
+enabled project-wide - reproduced against both keys, so it isn't an API-key config problem at all.
+Likely a Programmable Search Engine (cx `85435ec2...`) linkage issue. Not investigated further
+since nothing in production calls it yet.
+
 ## 2026-07-31: REData's `/api/v1/parcels/lookup/` is in an OOM/WORKER-TIMEOUT crash loop on chiron
 
 Found while investigating the `resolve_deferred_pin_locations` retry-forever bug below - unrelated

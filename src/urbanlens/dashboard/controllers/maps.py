@@ -460,7 +460,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not request.user.profile.external_apis_enabled:
             return JsonResponse({"available": False, "reason": "disabled"})
 
-        api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key
+        # Server-to-server call - must use the unrestricted key. The domain-restricted
+        # key is HTTP-referrer-locked to urbanlens.org and 403s on every backend request,
+        # since Google only honors that restriction when a browser sends a Referer header.
+        api_key = settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"available": False, "reason": "no_key"})
 

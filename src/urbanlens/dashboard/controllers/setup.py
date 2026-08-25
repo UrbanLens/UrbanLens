@@ -207,8 +207,8 @@ def _build_feature_groups(app_settings) -> list[dict]:
                 {
                     "name": "Google Street View",
                     "description": "Street-level imagery on pin detail pages",
-                    "env_var": "UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY",
-                    "configured": bool(app_settings.google_domain_restricted_api_key),
+                    "env_var": "UL_GOOGLE_UNRESTRICTED_API_KEY",
+                    "configured": bool(app_settings.google_unrestricted_api_key),
                 },
             ],
         },
@@ -219,8 +219,8 @@ def _build_feature_groups(app_settings) -> list[dict]:
                 {
                     "name": "Google Search",
                     "description": "Google Custom Search for pin-related web results",
-                    "env_var": "UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY + UL_GOOGLE_SEARCH_TENANT",
-                    "configured": bool(app_settings.google_domain_restricted_api_key and app_settings.google_search_tenant),
+                    "env_var": "UL_GOOGLE_UNRESTRICTED_API_KEY + UL_GOOGLE_SEARCH_TENANT",
+                    "configured": bool(app_settings.google_unrestricted_api_key and app_settings.google_search_tenant),
                 },
             ],
         },
