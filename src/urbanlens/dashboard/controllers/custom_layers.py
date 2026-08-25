@@ -61,17 +61,19 @@ def _resolve_layer_owner(request: HttpRequest, pin_slug: str | None, location_sl
         return pin, CustomLayer.objects.for_pin(pin)
     if location_slug is None:
         raise Http404
-    # Map annotation layers carry the same ruling as markup and detail pins:
-    # hidden outright for a concealed viewer, whoever made them. The wiki page
-    # already sends an empty list in its render context, but this endpoint is
-    # fetched separately after load, so concealing only the context left the map
-    # repopulating itself a moment later.
-    from urbanlens.dashboard.services.wiki.concealment import concealment_active
+    # Filtered by who created it, not hidden outright - the same rule
+    # controllers.markup applies to PinMarkup and for the same reason: a
+    # layer you made yourself and then can't find in your own layers panel
+    # is a malfunction, and a malfunction only some accounts get is a tell.
+    # `visible_rows` also scopes the by-id lookups below (_get_layer), so a
+    # concealed viewer can edit/reorder/delete their own and their friends'
+    # layers but not reach a stranger's - narrower than the ordinary
+    # any-signed-in-user write model, but only for ids concealment already
+    # keeps this viewer from ever seeing, so nothing new is exposed.
+    from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
     _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-    if concealment_active(wiki, profile):
-        return wiki, CustomLayer.objects.none()
-    return wiki, CustomLayer.objects.for_wiki(wiki)
+    return wiki, visible_rows(CustomLayer.objects.for_wiki(wiki), wiki, profile)
 
 
 def _owner_kwargs(owner: Pin | Wiki) -> dict:

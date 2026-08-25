@@ -68,6 +68,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
 
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.wiki.concealment import concealment_active
     from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
 
     results: list[AutocompleteResult] = []
@@ -105,6 +106,24 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
             continue
         seen_pin_ids.add(pin.id)
 
+        # A pin's own fields justify surfacing it regardless of its wiki's
+        # concealment state - nothing wiki-scoped is being disclosed. But the
+        # query above also matches via location__wiki__* clauses, and a pin
+        # whose *only* reason for matching is a concealed wiki's live
+        # name/description/alias is exactly the substring oracle
+        # docs/PROBLEMS.md's 2026-08-24 entry describes, one hop further out.
+        # Wiki.objects.get_for_location, not the reverse accessor directly -
+        # `Location.wiki` raises RelatedObjectDoesNotExist rather than
+        # returning None when the location has no wiki yet, even with
+        # select_related (the descriptor caches "there is none" as an
+        # exception, not a cached None).
+        wiki = Wiki.objects.get_for_location(pin.location) if pin.location_id and pin.location is not None else None
+        if wiki is not None and concealment_active(wiki, profile) and not _pin_own_fields_match(pin, q_lower):
+            from urbanlens.dashboard.services.global_search.providers import _concealed_wiki_haystacks, _terms_survive
+
+            if not _terms_survive([q_lower], _concealed_wiki_haystacks(wiki, profile)):
+                continue
+
         lat = pin.effective_latitude
         lng = pin.effective_longitude
         if lat is None or lng is None:
@@ -114,7 +133,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         if is_child and pin.parent_pin is not None:
             subtitle = f"Child pin of {pin.parent_pin.effective_name or 'a pin'}"
         else:
-            subtitle = _pin_match_subtitle(pin, q_lower)
+            subtitle = _pin_match_subtitle(pin, q_lower, profile)
         results.append(
             AutocompleteResult(
                 type="pin",
@@ -150,10 +169,23 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         seen_wiki_ids.add(wiki.id)
         if wiki.location is None or wiki.location.latitude is None or wiki.location.longitude is None:
             continue
+        # Re-verify against what this viewer would actually be shown - the SQL
+        # match above ran against the live name/description/aliases, which is
+        # precisely what concealment exists to hide. Surviving that check only
+        # says the wiki may appear in the list; the title itself must still
+        # come from the concealed value, or a term matched via a friend's
+        # alias would display the wiki's true, stranger-renamed title.
+        from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
+
+        if concealment_active(wiki, profile):
+            from urbanlens.dashboard.services.global_search.providers import _concealed_wiki_haystacks, _terms_survive
+
+            if not _terms_survive([q_lower], _concealed_wiki_haystacks(wiki, profile)):
+                continue
         results.append(
             AutocompleteResult(
                 type="location",
-                title=wiki.name,
+                title=conceal_wiki(wiki, profile).name,
                 subtitle="Community wiki",
                 lat=float(wiki.location.latitude),
                 lng=float(wiki.location.longitude),
@@ -165,10 +197,29 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     return results
 
 
-def _pin_match_subtitle(pin, q_lower: str) -> str:
+def _pin_own_fields_match(pin, q_lower: str) -> bool:
+    """Whether *q_lower* matches the pin's own data, ignoring anything wiki-scoped.
+
+    Used to tell "this pin matched on its own name/notes/labels" (always fine
+    to surface, concealment or not) apart from "this pin matched only via its
+    location's wiki" (needs the concealed-content re-check).
+    """
+    if q_lower in (pin.name or "").lower():
+        return True
+    if any(q_lower in alias.name.lower() for alias in pin.aliases.all()):
+        return True
+    if q_lower in (pin.description or "").lower():
+        return True
+    if any(q_lower in label.name.lower() for label in pin.labels.all()):
+        return True
+    return bool(pin.location is not None and q_lower in (pin.location.official_name or "").lower())
+
+
+def _pin_match_subtitle(pin, q_lower: str, profile) -> str:
     """Return a one-line subtitle that explains why *pin* matched *q_lower*."""
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
+
     pin_name = (pin.name or "").lower()
-    loc_name = (pin.location.display_name if pin.location else "").lower()
 
     # Direct name match - use location as context
     if q_lower in pin_name:
@@ -196,17 +247,23 @@ def _pin_match_subtitle(pin, q_lower: str) -> str:
         if q_lower in label.name.lower():
             return f"Tagged: {label.name}"
 
-    # Wiki/display name match
-    if q_lower in loc_name:
-        return pin.location.display_name
+    # Wiki/display name and wiki-alias matches both need the concealed value
+    # when this pin's wiki is concealed for the viewer - Location.display_name
+    # prefers the live wiki name, which is exactly what concealment hides.
+    wiki = pin.wiki
+    conceal = wiki is not None and concealment_active(wiki, profile)
+    display_name = conceal_wiki(wiki, profile).name if conceal else (pin.location.display_name if pin.location else None)
 
-    # Wiki alias match
-    if pin.wiki:
-        for alias in pin.wiki.aliases.all():
+    if display_name and q_lower in display_name.lower():
+        return display_name
+
+    if wiki is not None:
+        aliases = conceal_rows(wiki.aliases.all(), profile) if conceal else wiki.aliases.all()
+        for alias in aliases:
             if q_lower in alias.name.lower():
                 return f'Wiki alias: "{alias.name}"'
 
-    return pin.location.display_name if pin.location else "Your pin"
+    return display_name or "Your pin"
 
 
 def search_google_places(query: str, api_key: str) -> list[AutocompleteResult]:

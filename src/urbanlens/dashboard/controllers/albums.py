@@ -78,8 +78,15 @@ def _resolve_album_owner(request: HttpRequest, pin_slug: str | None, location_sl
         return pin, Album.objects.for_pin(pin)
     if location_slug is None:
         raise Http404
-    _location, wiki, _profile = resolve_visible_wiki(request, location_slug)
-    return wiki, Album.objects.for_wiki(wiki)
+    # Filtered by who created it, not hidden outright - an album is a named
+    # grouping like a CustomLayer, and the same "your own work back is not a
+    # leak" reasoning applies (see custom_layers._resolve_layer_owner). The
+    # photos inside a visible album are filtered separately - see
+    # services.photos.albums.
+    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+    _location, wiki, profile = resolve_visible_wiki(request, location_slug)
+    return wiki, visible_rows(Album.objects.for_wiki(wiki), wiki, profile)
 
 
 def _get_album(request: HttpRequest, pin_slug: str | None, location_slug: str | None, album_slug: str) -> tuple[Pin | Wiki, QuerySet[Album], Album]:
@@ -215,7 +222,7 @@ def _album_detail_context(owner: Pin | Wiki, album: Album, viewer: Profile) -> d
     Returns:
         Template context for ``_album_detail.html``.
     """
-    row = _album_row(owner, album, album_images(album, viewer))
+    row = _album_row(owner, album, album_images(album, viewer, owner=owner))
     filed_ids = {image.pk for image in row["images"]}
     row["available_images"] = [image for image in eligible_images_for(owner, viewer) if image.pk not in filed_ids]
     row["back_url"] = reverse(_url_prefix(owner), args=[_owner_slug(owner)])
@@ -430,7 +437,7 @@ class AlbumEditView(LoginRequiredMixin, View):
             raw = request.POST.get("cover_image_id") or ""
             # Re-scope through the album's own contents so a foreign image id
             # can't be pinned as a cover.
-            allowed = {image.pk for image in album_images(album, profile)}
+            allowed = {image.pk for image in album_images(album, profile, owner=owner)}
             album.cover_image_id = int(raw) if raw.isdigit() and int(raw) in allowed else None
             fields.append("cover_image")
 
