@@ -70,6 +70,15 @@ def _apply_security_indicator(owner: Pin | Wiki, indicator: str) -> None:
     field = _INDICATOR_TO_FIELD.get(indicator)
     if not field:
         return
+    # The real row, for the read as much as the write. A concealed projection
+    # reports every indicator as UNKNOWN by rule, so reading one would turn this
+    # never-downgrade rule into a downgrade - a place surveyed as EVERYWHERE
+    # quietly reduced to SOME - and then the save would raise on the projection
+    # anyway, as a 500 only concealed accounts receive.
+    from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+
+    if isinstance(owner, Wiki):
+        owner = writable_wiki(owner)
     current = getattr(owner, field, SecurityLevel.UNKNOWN)
     if current in {SecurityLevel.UNKNOWN, SecurityLevel.NO}:
         setattr(owner, field, SecurityLevel.SOME)

@@ -317,6 +317,16 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
             # child wikis to show; the map overlay shouldn't error, or leak
             # the draft, just because nobody has created a wiki page yet.
             return JsonResponse({"detail_pins": []})
+        # This is the endpoint the wiki page's Leaflet map actually fetches
+        # (wiki.html's data-detail-pins-json-url, loaded at map init), so it
+        # carries the same ruling as the panel below and as markup: detail pins
+        # are hidden outright for a concealed viewer. Concealing the panel and
+        # not this would have left every marker drawing on the map while the
+        # page around it said the place was untouched.
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+        if concealment_active(wiki, profile):
+            return JsonResponse({"detail_pins": []})
         child_wikis = wiki.child_wikis.order_by("pin_type", "name")
         return JsonResponse({"detail_pins": [cw.to_detail_json() for cw in child_wikis]})
 
@@ -383,7 +393,13 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         except ChildWikiLocationError as exc:
             return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
 
-        child_name = body.get("name") or wiki.name
+        # The real row's name for the fallback: `wiki` may be a concealed
+        # projection, and its name is the automatic placeholder this viewer was
+        # shown - persisting that as a community child wiki's name would write
+        # concealment into shared content.
+        from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+
+        child_name = body.get("name") or writable_wiki(wiki).name
         name_error = column_length_error(Wiki, "name", child_name, "Name")
         if name_error:
             return JsonResponse({"ok": False, "error": name_error}, status=400)
