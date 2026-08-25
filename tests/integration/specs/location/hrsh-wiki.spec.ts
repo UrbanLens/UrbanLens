@@ -111,16 +111,25 @@ test.describe("Hudson River State Hospital - the community wiki", () => {
         expect(await ensureCampusWiki(campus, page)).toBe(true);
         await page.goto(hrshRoutes.wiki(campus.pin.location_slug));
 
-        const statText = (await page.locator(".wiki-stat").allTextContents()).join(" ");
+        // Asserted on the *value* element rather than on the card's whole text,
+        // and that distinction is the entire test. An earlier version searched
+        // the joined text for `\d+ users have this pinned`, which matches the
+        // "3" inside "Fewer than 3 users have this pinned" - so it reported a
+        // privacy leak against a page doing exactly the right thing. A privacy
+        // check that cries wolf is worse than none, because it is the one people
+        // learn to wave through.
+        //
+        // `services.wiki.community_counts` produces exactly two shapes, so the
+        // value must be one of them and nothing else.
+        const value = (await page.locator(".wiki-stat").first().locator(".wiki-stat-value").first().textContent()) ?? "";
+        const shown = value.replace(/\s+/g, " ").trim();
 
-        // The whole purpose of the module: a bare number next to "users have
-        // this pinned" would let somebody pin the place and watch the count to
-        // learn when anyone else took an interest.
         expect(
-            /(^|\s)\d+\s+users have this pinned/.test(statText),
-            `the Community card rendered a bare count: ${JSON.stringify(statText.slice(0, 200))}. It must be either "Fewer than 3" or ` +
-                '"about N"',
-        ).toBe(false);
+            /^Fewer than \d+$/.test(shown) || /^about \d+$/.test(shown),
+            `the Community card's pinned-user value reads ${JSON.stringify(shown)}. approximate_pin_count returns either a masked ` +
+                '"Fewer than N" or a fuzzed "about N" - a bare number would let somebody pin the place and watch the count to learn ' +
+                "when anyone else took an interest, which is the whole reason that module exists",
+        ).toBe(true);
     });
 
     test("the wiki carries an article seeded from Wikipedia", async ({ campus, page }) => {
