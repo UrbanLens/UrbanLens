@@ -467,17 +467,13 @@ class WikiSearchProvider(SearchProvider):
 
         if not profile.community_enabled:
             return []
-        # officially_created=True: an unofficial background draft (see
-        # Wiki.officially_created) must stay invisible in search just like
-        # everywhere else, until a user actually creates it.
         # Asks the access authority rather than restating one of its clauses.
         # This used to be "a pin on the exact location, or you created it": too
         # narrow, because a pin sharing the place's domain opens the page; and
-        # too broad, because creating a wiki is not one of the four clauses, so
+        # too broad, because creating a wiki was not one of the four clauses, so
         # a creator with no pin was offered a result whose page answers 404.
         queryset = Wiki.objects.filter(
             location_id__in=visible_wiki_location_ids_cached(profile),
-            officially_created=True,
         ).select_related("location")
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
@@ -519,10 +515,7 @@ class ArticleSearchProvider(SearchProvider):
 
         access = Q(pin__profile=profile)
         if profile.community_enabled:
-            # officially_created=True: a draft's seeded Wikipedia article (see
-            # models.cache.signals) must not leak into search before the wiki
-            # itself is user-visible.
-            access |= Q(wiki__officially_created=True) & Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile))
+            access |= Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile))
         queryset = Article.objects.filter(access).exclude(content="").select_related("pin__location__wiki", "wiki__location", "last_edited_by__user")
         if parsed.place:
             queryset = queryset.filter(place_filter("pin__location", parsed.place) | place_filter("wiki__location", parsed.place))
@@ -864,7 +857,7 @@ class CommentSearchProvider(SearchProvider):
 
         comment_qs = (
             Comment.objects.filter(
-                Q(profile=profile) | Q(pin__profile=profile) | Q(wiki__officially_created=True, wiki__location_id__in=visible_wiki_location_ids_cached(profile)),
+                Q(profile=profile) | Q(pin__profile=profile) | Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile)),
             )
             .filter(term_filter(parsed.terms, ["text"]))
             .filter(date_range_filter("created", parsed))

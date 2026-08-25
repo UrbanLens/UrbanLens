@@ -87,8 +87,8 @@ from urbanlens.dashboard.controllers import (
     visit_suggestions,
     visits,
     webauthn,
-    wiki_create,
     wiki_media,
+    wiki_share,
 )
 from urbanlens.dashboard.controllers.index import HomeOverviewView, HomeWidgetLayoutSaveView, IndexController
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
@@ -433,9 +433,9 @@ urlpatterns = [
                                 name="boundary.pin",
                             ),
                             path(
-                                "<slug:pin_slug>/wiki/create/",
-                                wiki_create.PinWikiCreateView.as_view(),
-                                name="pin.wiki.create",
+                                "<slug:pin_slug>/wiki/share/",
+                                wiki_share.PinWikiShareView.as_view(),
+                                name="pin.wiki.share",
                             ),
                             path("<slug:pin_slug>/article/", article.ArticlePanelView.as_view(), name="pin.article"),
                             path("<slug:pin_slug>/article/save/", article.ArticleSaveView.as_view(), name="pin.article.save"),
@@ -1314,11 +1314,6 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/",
                     location_wiki.LocationWikiView.as_view(),
                     name="location.wiki",
-                ),
-                path(
-                    "<slug:location_slug>/wiki/delete/",
-                    location_wiki.LocationWikiDeleteView.as_view(),
-                    name="location.wiki.delete",
                 ),
                 path(
                     "<slug:location_slug>/wiki/edit/",

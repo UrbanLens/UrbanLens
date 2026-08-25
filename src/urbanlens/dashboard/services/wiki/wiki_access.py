@@ -330,7 +330,7 @@ def wikis_hidden_by_pin_move(pin: Pin, latitude: float, longitude: float) -> lis
     visible_ids = visible_wiki_location_ids(profile)
     if not visible_ids:
         return []
-    candidates = list(Wiki.objects.filter(location_id__in=visible_ids, officially_created=True).select_related("location", "location__place"))
+    candidates = list(Wiki.objects.filter(location_id__in=visible_ids).select_related("location", "location__place"))
     if not candidates:
         return []
 
@@ -364,12 +364,10 @@ def visible_parent_wiki(wiki: Wiki, profile: Profile) -> Wiki | None:
 def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
     """Resolve a Location and its Wiki, 404ing unless the requester can see it.
 
-    A location with no wiki yet, a location whose only wiki is still an
-    unofficial background-created draft (see ``Wiki.officially_created``), a
-    location_slug that doesn't exist at all, and a real wiki the requester
-    hasn't earned all raise the identical ``Http404`` - deliberately
-    indistinguishable, so guessing slugs can never reveal which locations
-    other users have pinned (or which have a draft quietly being enriched).
+    A location with no wiki yet, a location_slug that doesn't exist at all,
+    and a real wiki the requester hasn't earned all raise the identical
+    ``Http404`` - deliberately indistinguishable, so guessing slugs can never
+    reveal which locations other users have pinned.
 
     The wiki is found through the Location's *place*, not only through the
     Location itself, so everyone who pinned one property reaches the same page

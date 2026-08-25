@@ -242,7 +242,7 @@ on this codebase**, for three independently sufficient reasons:
 3. **Warm shared state and background-work asymmetry sit outside the request path.** Other
    users already warmed `LocationCache`, set the coordinate-keyed slides ready-marker and ran
    boundary generation — and `get_or_create_draft_for_location` short-circuits on
-   `existing_for_location` (verified, `models/wiki/queryset.py:178`), so a gated account gets
+   `existing_for_location` (verified, `models/wiki/queryset.py (draft/claim code, removed 2026-08-25)`), so a gated account gets
    **no draft and no enrichment run of its own**. That is a data-model asymmetry, not a
    serializer one.
 

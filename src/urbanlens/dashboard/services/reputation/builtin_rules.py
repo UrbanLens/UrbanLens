@@ -43,10 +43,6 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-#: Keys that appear in a WikiEdit's `changes` without anyone having typed
-#: anything - housekeeping the edit machinery writes for itself.
-_UNSCORED_EDIT_KEYS = frozenset({"officially_created"})
-
 
 def _photo_need(wiki: Wiki | None, image: Image) -> tuple[Decimal, str]:
     """How badly the wiki needed this photo, and why.
@@ -133,7 +129,11 @@ def _score_wiki_edit(edit: Any | None) -> ScoreResult | None:
         return None
 
     changes = edit.changes if isinstance(edit.changes, dict) else {}
-    fields = [key for key in changes if key not in _UNSCORED_EDIT_KEYS]
+    # Every key in `changes` is now something a person typed. There used to be
+    # an exclusion set here for housekeeping the edit machinery wrote for
+    # itself; `officially_created` was its only member, and the draft state it
+    # tracked no longer exists.
+    fields = list(changes)
     if not fields:
         return None
 
@@ -170,17 +170,6 @@ def _score_invite(invitation: Any | None) -> ScoreResult | None:
     if invitation is None or getattr(invitation, "accepted_at", None) is None:
         return None
     base = coefficients.BASE_VALUES["invite_accepted"]
-    return ScoreResult(value=base, inputs={"base": str(base)})
-
-
-def _score_wiki_created(wiki: Wiki | None) -> ScoreResult | None:
-    """Score promoting a place to a real community wiki."""
-    # The scorer re-checks what the subscription already filtered on, so a row
-    # written before that filter existed - or by any future path that skips it -
-    # scores zero rather than awarding a page creation for a detail pin.
-    if wiki is None or not wiki.officially_created or wiki.parent_wiki_id is not None or wiki.created_by_id is None:
-        return None
-    base = coefficients.BASE_VALUES["wiki_created"]
     return ScoreResult(value=base, inputs={"base": str(base)})
 
 
@@ -232,16 +221,5 @@ def register_builtin_rules() -> None:
             # Bounded per inviter so vouching cannot be farmed into a supply of
             # sock puppets - see R6 in the design doc.
             capped=True,
-        )
-    )
-    register(
-        Rule(
-            key="wiki_created",
-            label="Community wiki created",
-            description="Promoting a place to a real community page.",
-            target_kind=TargetKind.WIKI,
-            score=_score_wiki_created,
-            # Unique per location by construction; nothing to decay.
-            decays=False,
         )
     )

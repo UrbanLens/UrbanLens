@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def ensure_draft_wiki_for_location(location_id: int) -> int | None:
-    """Auto-create an unofficial draft Wiki for a Location, so enrichment can get a head start.
+def ensure_wiki_for_location(location_id: int) -> int | None:
+    """Auto-create the Wiki for a Location, so enrichment can get a head start.
 
     Queued by the ``Pin`` post_save signal (``models.pin.signals``) whenever a
     pin gets a shared Location, for any community-enabled profile - covering
@@ -34,10 +34,10 @@ def ensure_draft_wiki_for_location(location_id: int) -> int | None:
     external API is touched here or by the signal that queued this - that
     only happens below, once, when the draft is first created.
 
-    The draft stays invisible to users and the external API (see
-    ``Wiki.officially_created`` and ``WikiManager.get_for_location``) until a
-    user's own "Create Wiki" click promotes it (``WikiManager.claim_for_location``)
-    - by then it's already enriched and ready to go.
+    The page is published from the moment it exists - there is no draft state
+    and nothing for a user to "create". It starts empty and fills in as
+    enrichment lands, which is what a place nobody has written up looks like
+    anyway.
 
     Args:
         location_id: PK of the Location that just gained a pin.
@@ -52,12 +52,20 @@ def ensure_draft_wiki_for_location(location_id: int) -> int | None:
 
     location = Location.objects.filter(pk=location_id).first()
     if location is None:
-        logger.info("ensure_draft_wiki_for_location: location %s no longer exists", location_id)
+        logger.info("ensure_wiki_for_location: location %s no longer exists", location_id)
         return None
 
-    wiki, created = Wiki.objects.get_or_create_draft_for_location(location)
+    wiki, created = Wiki.objects.get_or_create_for_location(location)
     if created:
         safely_enqueue_task(enrich_wiki_location, wiki.pk)
+        # Covers a Wikipedia article matched and cached for this location
+        # *before* there was a wiki to seed. The other direction - a match
+        # caching after the wiki exists - is handled by models.cache.signals.
+        # This used to hang off the "Create wiki" click, which was the moment
+        # the page appeared; that moment is here now.
+        from urbanlens.dashboard.services.wiki.wiki_seed import seed_wiki_article_from_wikipedia
+
+        seed_wiki_article_from_wikipedia(location)
     return wiki.pk
 
 
@@ -65,9 +73,8 @@ def ensure_draft_wiki_for_location(location_id: int) -> int | None:
 def enrich_wiki_location(self, wiki_id: int) -> bool:
     """Enrich a Wiki's Location with external data.
 
-    Runs either after a user clicks "Create community wiki", or right after
-    ``ensure_draft_wiki_for_location`` auto-creates an unofficial draft in the
-    background: links the Location to its Google Place, resolves a canonical
+    Runs right after ``ensure_wiki_for_location`` creates the page: links the
+    Location to its Google Place, resolves a canonical
     name when the wiki is still unnamed, and generates the location's default
     property/building boundaries. This is the only place these APIs are hit
     for a wiki - pin creation and bulk imports never call them synchronously.

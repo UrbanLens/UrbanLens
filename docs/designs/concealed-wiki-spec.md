@@ -55,7 +55,7 @@ Implemented as a read-only presentation proxy (§4), never by mutating rows.
 
 | Field | File | Concealed value |
 |---|---|---|
-| `name` | `models/wiki/model.py:68` | `location.official_name` if set, else `WikiManager._placeholder_name(location)` (`wiki/queryset.py:131-133`). **Never** the stored value. |
+| `name` | `models/wiki/model.py:68` | `location.official_name` if set, else `WikiManager._placeholder_name(location)` (`wiki/queryset.py (draft/claim code, removed 2026-08-25)-133`). **Never** the stored value. |
 | `slug` | `model.py:65` | Omit `wiki_slug` from payloads, or emit `slugify(concealed_name)`. The stored slug is a frozen snapshot of the name at first save and is never regenerated (`abstract/model.py:194-198`). |
 | `description` | `model.py:69` | `""`. No automatic writer exists — every write path is a person. |
 | `date_abandoned`, `date_last_active` | `model.py:71-72` | `None`. Sole writer is `wiki_edits.py:136-147`. |
@@ -70,7 +70,7 @@ Implemented as a read-only presentation proxy (§4), never by mutating rows.
 | `location`, `place` | `model.py:115-131` | **Unchanged.** Provider data, rule 2. |
 | `parent_wiki` | `model.py:136-142` | `None` (render no up-link). |
 | `child_wikis` | reverse | Empty, everywhere (§1.2). |
-| `created_by` | `model.py:146-152` | `None`. Matches a background draft (`wiki/queryset.py:181`). |
+| `created_by` | `model.py:146-152` | `None`. Matches a background draft (`wiki/queryset.py (draft/claim code, removed 2026-08-25)`). |
 | `officially_created` | `model.py:163` | Not exposed; nothing user-visible may branch on it under concealment. |
 | `viewed_by_other` | `model.py:167` | `False` on read — **and no write** (§1.6). |
 | `cover_photo` | `model.py:173-179` | `None`. A brand-new wiki has no cover; do not substitute an enrichment photo. |
@@ -185,7 +185,7 @@ Per field: how provenance is (or is not) recorded, the three options, and a reco
 
 `models/wiki/model.py:68`. The most important field on the surface.
 
-Automatic writers: `tasks.py:103-124` (`enrich_wiki_location`, replaces a non-meaningful name with `location.official_name` or `PlaceNameResolverChain.resolve()`); `naming.py:190-196`; `wiki/queryset.py:158/181/213`. User writers: `wiki_edits.py:122-169`; `wiki_aliases.py:111` (`promote_wiki_alias_to_name`); `consensus/fields.py:70-71`; `wiki_creation.py:141-177` (`_name_from_pin` renames a freshly-claimed wiki to a user-chosen pin alias via a bare `wiki.save()` with no `WikiEdit`).
+Automatic writers: `tasks.py:103-124` (`enrich_wiki_location`, replaces a non-meaningful name with `location.official_name` or `PlaceNameResolverChain.resolve()`); `naming.py:190-196`; `wiki/queryset.py (draft/claim code, removed 2026-08-25)/181/213`. User writers: `wiki_edits.py:122-169`; `wiki_aliases.py:111` (`promote_wiki_alias_to_name`); `consensus/fields.py:70-71`; `wiki_creation.py:141-177` (`_name_from_pin` renames a freshly-claimed wiki to a user-chosen pin alias via a bare `wiki.save()` with no `WikiEdit`).
 
 Four lossy channels, none authoritative:
 1. **No `name_is_user_provided` column.** `Pin` has exactly this flag at `models/pin/model.py:121`. `Wiki` never grew one.
@@ -302,7 +302,7 @@ Two routes write the *same columns with the same values*:
 - Automatic REData building seeding: `services/wiki/wiki_creation.py:119-130` → `services/pins/pin_restructure.py:589-596`.
 
 Every plausible discriminator fails:
-- `created_by` is NULL on both (neither path passes it; the only writers are `wiki/queryset.py:214,222` for top-level wikis).
+- `created_by` is NULL on both (neither path passes it; the only writers are `wiki/queryset.py (draft/claim code, removed 2026-08-25),222` for top-level wikis).
 - `pin_type_is_user_provided` is `False` on both — user placement with the dialog's "Auto" option writes `_PROVISIONAL_PIN_TYPE` with the flag `False`, then `classify_detail_marker` can flip it to `BUILDING` while leaving the flag `False` (`tasks.py:227-265`). The flag means "an editor chose this type", never "a human created this row".
 - `place_id` fails in **both** directions: `place_by_key.get(...)` returns `None` for a building the provisioner could not reconcile, so seeded rows can also be placeless (`pin_restructure.py:571,594`), and nothing back-fills a child wiki's `place` later.
 - The paired `WikiEdit` differs (`child_wiki_added` vs. one aggregate `child_wikis_imported`) but the import entry names only a count, not which rows.

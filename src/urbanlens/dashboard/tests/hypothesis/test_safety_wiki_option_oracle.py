@@ -3,7 +3,7 @@
 ``SafetyCheckinWikiOptionView`` renders "also notify the <name> community wiki"
 for whatever coordinate the create form's destination marker currently sits on.
 The lookup behind it (``find_community_wiki``) filters on
-``officially_created`` and nothing else - no viewer, no domain check - so the
+the wiki's existence and nothing else - no viewer, no domain check - so the
 fragment answered "is there a community wiki at this coordinate?" for any
 logged-in caller, naming the wiki, linking to it, and reporting its last edit
 and editor count.
@@ -43,7 +43,7 @@ class SafetyWikiOptionOracleTests(TestCase):
         """Put one official wiki at a known coordinate, pinned by its owner."""
         super().setUp()
         self.location = baker.make(Location, latitude=LAT, longitude=LNG)
-        self.wiki = baker.make(Wiki, location=self.location, name="Sensitive Site", officially_created=True)
+        self.wiki = baker.make(Wiki, location=self.location, name="Sensitive Site")
         self.owner = baker.make(User)
         baker.make(Pin, profile=self.owner.profile, location=self.location, parent_pin=None)
 

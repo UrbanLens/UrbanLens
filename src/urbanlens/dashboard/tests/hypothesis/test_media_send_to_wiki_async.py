@@ -40,7 +40,7 @@ class MediaSendToWikiTests(TestCase):
         self.client.force_login(self.user)
         self.location = Location.objects.create(latitude=40.0, longitude=-74.0)
         self.pin = baker.make(Pin, profile=self.profile, location=self.location)
-        self.wiki = baker.make(Wiki, location=self.location, name="Powerhouse", officially_created=True)
+        self.wiki = baker.make(Wiki, location=self.location, name="Powerhouse")
         self.url = reverse("pin.media.send_to_wiki", args=[self.pin.slug])
 
     def _post(self, items: list[dict]):
@@ -106,7 +106,7 @@ class CacheMediaItemIntoWikiTaskTests(TestCase):
         baker.make(User)
         self.profile = baker.make(User).profile
         self.location = Location.objects.create(latitude=42.0, longitude=-76.0)
-        self.wiki = baker.make(Wiki, location=self.location, name="Boiler House", officially_created=True)
+        self.wiki = baker.make(Wiki, location=self.location, name="Boiler House")
 
     def test_it_materializes_against_the_wikis_location(self) -> None:
         from urbanlens.dashboard.tasks import cache_media_item_into_wiki

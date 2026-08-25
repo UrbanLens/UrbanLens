@@ -48,7 +48,7 @@ class LedgerWriteTests(TestCase):
         register_builtin_rules()
         self.profile = baker.make(User).profile
         self.location = baker.make(Location)
-        self.wiki = baker.make(Wiki, location=self.location, officially_created=True)
+        self.wiki = baker.make(Wiki, location=self.location)
 
     def _photo(self, **kwargs) -> Image:
         """An ordinary user upload attached to the fixture wiki."""
@@ -119,7 +119,7 @@ class ScoringTests(TestCase):
         super().setUp()
         register_builtin_rules()
         self.profile = baker.make(User).profile
-        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
 
     def _photo(self, **kwargs) -> Image:
         defaults = {
@@ -182,7 +182,7 @@ class ScoringTests(TestCase):
         of the metadata.
         """
         other_profile = baker.make(User).profile
-        other_wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        other_wiki = baker.make(Wiki, location=baker.make(Location))
 
         bare_photo = self._photo()
         rich_photo = baker.make(
@@ -246,7 +246,7 @@ class RetractionTests(TestCase):
         super().setUp()
         register_builtin_rules()
         self.profile = baker.make(User).profile
-        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
         photo = baker.make(
             Image,
             profile=self.profile,

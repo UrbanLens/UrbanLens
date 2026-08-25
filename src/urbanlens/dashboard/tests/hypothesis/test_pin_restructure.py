@@ -463,11 +463,15 @@ class RestructureWikiMirrorTests(TestCase):
 
         self.assertTrue(any("mirror_buildings" in getattr(call.args[0], "name", "") for call in enqueue.call_args_list), "the building import must hand the wiki mirror to a task")
 
-    def test_a_place_with_no_wiki_gains_a_draft_not_a_published_page(self) -> None:
+    def test_a_place_with_no_wiki_gains_one_to_hang_the_buildings_off(self) -> None:
+        """This used to assert the mirror created a *draft* rather than a published
+        page. Every place has a published page now, so the mirror publishes nothing
+        that was not already there - what is left to check is that it makes one when
+        the background task has not yet.
+        """
         self._mirror()
 
-        wiki = Wiki.objects.get(location=self.location)
-        self.assertFalse(wiki.officially_created, "a mirror must not publish a community page behind the user's back")
+        self.assertTrue(Wiki.objects.filter(location=self.location).exists())
 
     def test_an_existing_wiki_gets_matching_child_wikis(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")

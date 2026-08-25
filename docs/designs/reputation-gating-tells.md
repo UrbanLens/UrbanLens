@@ -24,7 +24,7 @@ already performs, not an illusion that has to be fabricated over a shared row.
 
 The 82 channel findings collapse to **eleven structural classes and three root causes**. The three roots are:
 
-1. **`Wiki.objects.get_for_location()` / `existing_for_location()` take a `Location` and no viewer** (`models/wiki/queryset.py:91-129`). Every surface in the app asks this one function "does this place have a community wiki?" and is told the truth. There is no seam for a viewer-dependent answer.
+1. **`Wiki.objects.get_for_location()` / `existing_for_location()` take a `Location` and no viewer** (`models/wiki/queryset.py (draft/claim code, removed 2026-08-25)-129`). Every surface in the app asks this one function "does this place have a community wiki?" and is told the truth. There is no seam for a viewer-dependent answer.
 2. **`Pin.wiki` is a stored FK, written at pin creation** (`services/pins/pin_creation.py:287`) and read as an access shortcut (`models/boundary/queryset.py:324`, `services/pins/pin_detail.py:92`). It is a denormalised copy of the answer to (1), so fixing (1) alone leaves the leak stored on the attacker's own row.
 3. **`visible_wiki_location_ids()` / `_cached()` (`services/wiki/wiki_access.py:250-254`) is the app's only notion of "wikis in reach", and it is the pin‑discovery rule verbatim** — the exact predicate the attack model grants the attacker for free. Search, autocomplete, device scans, photo containment, games and notifications all consume it.
 
@@ -38,7 +38,7 @@ This is the target, verified against code. It has **two phases**, and the second
 
 ### Phase 1 — an undocumented place the viewer has pinned, before they click Create
 
-* A background **draft** `Wiki` row exists (`tasks.py:27-61`, `models/wiki/queryset.py:161-182`), named `location.official_name` or `"Unnamed Location in <area>"`, later possibly overwritten by `PlaceNameResolverChain` (`tasks.py:100-124`). It is invisible to `get_for_location` (`queryset.py:115-129`).
+* A background **draft** `Wiki` row exists (`tasks.py:27-61`, `models/wiki/queryset.py (draft/claim code, removed 2026-08-25)-182`), named `location.official_name` or `"Unnamed Location in <area>"`, later possibly overwritten by `PlaceNameResolverChain` (`tasks.py:100-124`). It is invisible to `get_for_location` (`queryset.py:115-129`).
 * Pin hero renders `pin-hero-wiki-box--create` (`partials/pins/_pin_detail_hero_body.html:93`), **not** the `<aside class="pin-hero-wiki-box">` at line 58. No detach button, no swap button, no `location.display_name` link.
 * Child‑pins panel: `has_wiki: False` → no pull button; "No child pins yet".
 * Boundary: `source ∈ {place, generated, circle}` or `polygon: null`; **never `"wiki"`**. `pending: true` on the first‑ever view of that Location.

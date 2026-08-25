@@ -55,7 +55,7 @@ class SearchMatchesWikiAccessTests(TestCase):
         self.parcel = make_place(PlaceKind.PARCEL, _square(-74.0, 40.0, 0.003))
         self.wiki_location = Location.objects.create(latitude=40.0, longitude=-74.0)
         resolution.resolve_location_place(self.wiki_location)
-        self.wiki = baker.make(Wiki, location=self.wiki_location, name=_WIKI_NAME, officially_created=True)
+        self.wiki = baker.make(Wiki, location=self.wiki_location, name=_WIKI_NAME)
 
     def _page_status(self) -> int:
         self.client.force_login(self.user)

@@ -62,8 +62,7 @@ def save_edited_fields(wiki: Wiki, changed_fields: Iterable[str]) -> None:
 
     A bare ``wiki.save()`` writes every column from the in-memory instance, which
     on a community-editable row means reverting whatever was committed since the
-    request loaded it - a second editor's change to a different field, or
-    ``viewed_by_other``, which the view sets through its own targeted update.
+    request loaded it - a second editor's change to a different field.
     That also silently defeats :func:`revert_edit_fields`' conflict check, which
     goes to the trouble of leaving changed-since fields alone.
 

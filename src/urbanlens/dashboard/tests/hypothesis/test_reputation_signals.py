@@ -31,7 +31,7 @@ class ContributionSignalTests(TestCase):
         super().setUp()
         register_builtin_rules()
         self.profile = baker.make(User).profile
-        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
 
     def _rows(self, rule_key: str) -> list[ReputationEvent]:
         return list(ReputationEvent.objects.for_profile(self.profile).for_rule(rule_key))
@@ -107,7 +107,7 @@ class RevertSignalTests(TestCase):
         super().setUp()
         register_builtin_rules()
         self.profile = baker.make(User).profile
-        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
         self.edit = baker.make(
             WikiEdit,
             wiki=self.wiki,

@@ -150,17 +150,11 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         blank=True,
         related_name="created_wikis",
     )
-    # False only for a wiki auto-created in the background by
-    # tasks.ensure_draft_wiki_for_location, ahead of any user action - lets
-    # enrichment (Google place linking, name resolution, boundary generation,
-    # Wikipedia seeding) populate the page before anyone has clicked "Create".
-    # Every other creation path (the pin page's Create button via
-    # WikiManager.claim_for_location, child-wiki mirroring/sync, wiki splits)
-    # creates an already-official wiki, hence the default. Every user- and
-    # API-visible surface must treat officially_created=False the same as "no
-    # wiki exists yet" - see WikiManager.get_for_location and
-    # services.wiki.wiki_access.resolve_visible_wiki.
-    officially_created = BooleanField(default=True)
+    # Only meaningful on a child wiki - a detail pin - where it records who
+    # placed it, and null means it was mirrored from building data. A
+    # top-level page has no creator: every pinned Location gets one
+    # automatically (tasks.ensure_wiki_for_location), so there is nobody to
+    # attribute it to and nothing about creating one to reward.
 
     #: Scalar fields whose writes record provenance. Mirrors
     #: services.wiki.wiki_edits.WIKI_EDITABLE_FIELDS - the fields a person can
@@ -203,10 +197,6 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
 
     #: Where this model's field revisions are stored.
     revision_model = "dashboard.WikiFieldRevision"
-    # Flips true the first time a profile other than created_by views the
-    # wiki page (see LocationWikiView.get). Once true, the wiki is community
-    # content and its creator can no longer unilaterally delete it.
-    viewed_by_other = BooleanField(default=False)
     # Hero banner photo for the wiki page. Any Image tied to this wiki
     # (community gallery uploads, or a materialized Media-gallery item, see
     # services.media.media_materialize) is eligible; SET_NULL so deleting the photo
@@ -354,22 +344,6 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
     # ------------------------------------------------------------------
     # Self-service deletion
     # ------------------------------------------------------------------
-
-    def can_be_deleted_by(self, profile: Profile) -> bool:
-        """Whether ``profile`` may delete this wiki outright.
-
-        Only the profile that created the wiki may do so, and only before
-        anyone else has viewed it - once another profile has seen the page,
-        it's community content and deletion should go through normal
-        moderation rather than a unilateral self-service action.
-
-        Args:
-            profile: The profile requesting deletion.
-
-        Returns:
-            True if ``profile`` created this wiki and no one else has viewed it.
-        """
-        return self.created_by_id is not None and self.created_by_id == profile.id and not self.viewed_by_other
 
     # ------------------------------------------------------------------
     # Label helpers

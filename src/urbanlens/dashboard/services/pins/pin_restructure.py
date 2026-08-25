@@ -525,7 +525,7 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
     """Mirror imported buildings as child wikis, when the place already has a wiki.
 
     Never creates a wiki - community pages are only ever created explicitly
-    (see ``services.wiki.wiki_creation.WikiCreationService``). When one already
+    (see ``services.wiki.wiki_share.WikiShareService``). When one already
     exists, though, its readers benefit from the same building markers.
 
     Args:
@@ -548,7 +548,7 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
         # every pinned location (tasks.ensure_draft_wiki_for_location) and stay
         # invisible until somebody claims them, so seeding one here mirrors the
         # buildings without publishing a community page behind the user's back.
-        wiki, _created = WikiModel.objects.get_or_create_draft_for_location(pin.location)
+        wiki, _created = WikiModel.objects.get_or_create_for_location(pin.location)
 
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_tree_order
 

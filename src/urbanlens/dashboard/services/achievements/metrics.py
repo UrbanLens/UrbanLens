@@ -198,7 +198,6 @@ def metrics_for_triggers(events: Iterable[str]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 TRIGGER_PIN = "pin"
-TRIGGER_WIKI = "wiki"
 TRIGGER_WIKI_EDIT = "wiki_edit"
 TRIGGER_PHOTO = "photo"
 TRIGGER_VISIT = "visit"
@@ -246,25 +245,6 @@ def _pins_created_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
     from urbanlens.dashboard.models.pin.model import Pin
 
     return _grouped_count(Pin.objects.filter(profile_id__in=profile_ids), "profile_id")
-
-
-def _wikis_created(profile: Profile) -> int:
-    from urbanlens.dashboard.models.wiki.model import Wiki
-
-    # Drafts are auto-created in the background for any pinned location, so
-    # counting them would award "wikis created" for merely dropping a pin.
-    # parent_wiki__isnull excludes detail pins, which are child Wiki rows - see
-    # the note in _wikis_created_bulk, whose filter this has to match.
-    return Wiki.objects.filter(created_by=profile, officially_created=True, parent_wiki__isnull=True).count()
-
-
-def _wikis_created_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
-    from urbanlens.dashboard.models.wiki.model import Wiki
-
-    # parent_wiki__isnull: a detail pin is a child Wiki row and would otherwise
-    # count as a community page created. See the matching note in
-    # models/reputation/signals.py.
-    return _grouped_count(Wiki.objects.filter(created_by_id__in=profile_ids, officially_created=True, parent_wiki__isnull=True), "created_by_id")
 
 
 def _photos_uploaded(profile: Profile) -> int:
@@ -510,17 +490,6 @@ def _register_builtin_metrics() -> None:
             group=GROUP_CONTENT,
             triggers=frozenset({TRIGGER_PIN}),
             requirement_template="Save {threshold} pins",
-        ),
-        Metric(
-            key="wikis_created",
-            label="Wikis created",
-            unit="wikis",
-            description="Community wikis the user actually created. Background drafts do not count.",
-            compute=_wikis_created,
-            compute_bulk=_wikis_created_bulk,
-            group=GROUP_CONTENT,
-            triggers=frozenset({TRIGGER_WIKI}),
-            requirement_template="Create {threshold} community wikis",
         ),
         Metric(
             key="wiki_edits",

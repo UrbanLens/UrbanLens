@@ -311,11 +311,10 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
             wiki = location.wiki
         except ObjectDoesNotExist:
             wiki = None
-        if wiki is None or not wiki.officially_created:
-            # A location with no wiki yet - or only a still-unofficial
-            # background draft (see Wiki.officially_created) - simply has no
-            # child wikis to show; the map overlay shouldn't error, or leak
-            # the draft, just because nobody has created a wiki page yet.
+        if wiki is None:
+            # A location whose wiki has not been created yet simply has no
+            # child wikis to show; the map overlay shouldn't error just
+            # because the background task has not run.
             return JsonResponse({"detail_pins": []})
         # This is the endpoint the wiki page's Leaflet map actually fetches
         # (wiki.html's data-detail-pins-json-url, loaded at map init), so it

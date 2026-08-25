@@ -37,7 +37,7 @@ def _location_on(place, *, lat: float, lng: float) -> Location:
 
 
 def _wiki_on(location: Location, name: str, *, parent: Wiki | None = None) -> Wiki:
-    return baker.make(Wiki, location=location, name=name, parent_wiki=parent, officially_created=True)
+    return baker.make(Wiki, location=location, name=name, parent_wiki=parent)
 
 
 class VisibleParentWikiTests(TestCase):

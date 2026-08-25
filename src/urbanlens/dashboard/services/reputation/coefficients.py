@@ -28,7 +28,6 @@ BASE_VALUES: dict[str, Decimal] = {
     "photo_upload": Decimal(10),
     "article_revision": Decimal(12),
     "wiki_field_edit": Decimal(4),
-    "wiki_created": Decimal(6),
     "comment": Decimal(2),
     "alias_added": Decimal(1),
     "link_added": Decimal(1),

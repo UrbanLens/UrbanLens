@@ -101,4 +101,4 @@ def competing_wiki_locations(pin, profile: Profile) -> list[Location]:
     wanted = [place.pk for place in rivals if place.domain_root_id in visible_domains]
     if not wanted:
         return []
-    return list(Location.objects.filter(wiki__isnull=False, wiki__officially_created=True, place_id__in=wanted).select_related("wiki").order_by("official_name"))
+    return list(Location.objects.filter(wiki__isnull=False, place_id__in=wanted).select_related("wiki").order_by("official_name"))

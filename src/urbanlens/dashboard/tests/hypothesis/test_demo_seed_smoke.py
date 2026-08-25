@@ -78,7 +78,7 @@ class SeedingCommitOrderingTests(django_test.TransactionTestCase):
     exists to make - so it needs a real commit, which only
     `TransactionTestCase` gives it.
 
-    Pin creation fires `ensure_draft_wiki_for_pin_location` on post_save, which
+    Pin creation fires `ensure_wiki_for_pin_location` on post_save, which
     defers to `transaction.on_commit` rather than calling `safely_enqueue_task`
     immediately - unconditionally (just `created` and a `community_enabled`
     profile, both true for every demo pin), so unlike an achievement-evaluation
@@ -96,13 +96,13 @@ class SeedingCommitOrderingTests(django_test.TransactionTestCase):
         from model_bakery import baker
 
         from urbanlens.dashboard.models.location.model import Location
-        from urbanlens.dashboard.tasks import ensure_draft_wiki_for_location
+        from urbanlens.dashboard.tasks import ensure_wiki_for_location
 
         # The location pool is empty by default (no manifest configured in
         # tests), so no Pin - and no signal - would fire without this: give
         # the seeder one real Location to actually pin.
         location = baker.make(Location, google_place=None)
-        with mock.patch("urbanlens.dashboard.services.demo.seeding.pool_locations", return_value=[location]), mock.patch.object(ensure_draft_wiki_for_location, "apply_async") as apply_async:
+        with mock.patch("urbanlens.dashboard.services.demo.seeding.pool_locations", return_value=[location]), mock.patch.object(ensure_wiki_for_location, "apply_async") as apply_async:
             seed_demo_account()
 
         apply_async.assert_not_called()

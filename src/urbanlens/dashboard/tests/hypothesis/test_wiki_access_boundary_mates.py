@@ -116,7 +116,7 @@ class LocationVisibleToSamePlaceTests(TestCase):
     def test_wiki_page_reachable_via_same_place_pin(self) -> None:
         """End-to-end: a pin on the same place unlocks the real wiki page."""
         self.client.force_login(self.user)
-        wiki = baker.make(Wiki, location=self.wiki_location, place=self.parcel, officially_created=True)
+        wiki = baker.make(Wiki, location=self.wiki_location, place=self.parcel)
         nearby_location = Location.objects.create(latitude=40.0005, longitude=-74.0005)
         resolution.resolve_location_place(nearby_location)
         baker.make(Pin, profile=self.profile, location=nearby_location)
@@ -128,7 +128,7 @@ class LocationVisibleToSamePlaceTests(TestCase):
     def test_a_second_pinners_own_slug_reaches_the_page(self) -> None:
         """Everyone who pinned one property reaches it from their own URL."""
         self.client.force_login(self.user)
-        baker.make(Wiki, location=self.wiki_location, place=self.parcel, officially_created=True)
+        baker.make(Wiki, location=self.wiki_location, place=self.parcel)
         mine = Location.objects.create(latitude=40.0008, longitude=-74.0008)
         resolution.resolve_location_place(mine)
         baker.make(Pin, profile=self.profile, location=mine)

@@ -82,8 +82,8 @@ in context, plus the wiki/linking context used by the overview panel.
                             hx-target="#pin-overview"
                             hx-swap="outerHTML"
                             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                            hx-confirm="Detach from this location? Your pin will move to its own independent location without a community wiki."
-                            data-tooltip="Unlink this pin from the shared location. It gets its own independent location; you can create a wiki for it later."
+                            hx-confirm="Detach from this location? Your pin will move to its own independent location, with its own community page."
+                            data-tooltip="Unlink this pin from the shared location. It gets its own independent location, with its own page."
                             data-tooltip-pos="left"
                             title="Detach from this shared location">
                         <i class="material-symbols-outlined">link_off</i>
@@ -92,15 +92,15 @@ in context, plus the wiki/linking context used by the overview panel.
                 <div id="pin-location-picker"></div>
             </aside>
             {% else %}
-            <button type="button" class="pin-hero-wiki-box pin-hero-wiki-box--create"
-                    hx-get="{% url 'pin.wiki.create' pin.slug %}"
-                    hx-target="#pin-wiki-create-dialog-body"
+            <button type="button" class="pin-hero-wiki-box pin-hero-wiki-box--share"
+                    hx-get="{% url 'pin.wiki.share' pin.slug %}"
+                    hx-target="#pin-wiki-share-dialog-body"
                     hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){document.getElementById('pin-wiki-create-dialog').showModal()}"
-                    data-tooltip="Start a shared wiki page for this place. You choose which of your pin's details (if any) to include."
-                    title="Create a community wiki for this place">
-                <i class="material-symbols-outlined">add_circle</i>
-                <span>Create Community Wiki</span>
+                    hx-on::after-request="if(event.detail.successful){document.getElementById('pin-wiki-share-dialog').showModal()}"
+                    data-tooltip="Contribute your own details, names and photos to this place's shared page. You choose exactly what to include."
+                    title="Share to this place's community wiki">
+                <i class="material-symbols-outlined">group_add</i>
+                <span>Share to Community Wiki</span>
             </button>
             {% endif %}
         {% endif %}

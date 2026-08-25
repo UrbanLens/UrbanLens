@@ -397,7 +397,7 @@ def seed_landmark_pin(profile: Profile, landmark: dict[str, str] | None = None) 
     )
     # Same reason the catalog import creates one: a pinned location with no wiki
     # is a dead end, and holding the pin is what earns access to it.
-    Wiki.objects.get_or_create(location=location, defaults={"name": landmark["name"], "officially_created": True})
+    Wiki.objects.get_or_create(location=location, defaults={"name": landmark["name"]})
     pin, _ = Pin.objects.get_or_create(
         profile=profile,
         location=location,

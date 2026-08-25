@@ -30,7 +30,7 @@ class InterceptionTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.wiki = baker.make(Wiki, location=baker.make(Location), name="Original", officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location), name="Original")
         WikiFieldRevision.objects.filter(target=self.wiki).delete()
 
     def _names(self) -> list[str]:
@@ -71,9 +71,9 @@ class InterceptionTests(TestCase):
 
     def test_an_unversioned_field_is_not_recorded(self) -> None:
         """Only declared fields are versioned, so a new column cannot join by accident."""
-        Wiki.objects.filter(pk=self.wiki.pk).update(officially_created=True)
+        Wiki.objects.filter(pk=self.wiki.pk).update(icon="factory")
 
-        self.assertFalse(WikiFieldRevision.objects.filter(target=self.wiki, field_name="officially_created").exists())
+        self.assertFalse(WikiFieldRevision.objects.filter(target=self.wiki, field_name="icon").exists())
 
 
 class ResolutionTests(TestCase):
@@ -81,7 +81,7 @@ class ResolutionTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.wiki = baker.make(Wiki, location=baker.make(Location), name="Auto Name", officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location), name="Auto Name")
         WikiFieldRevision.objects.filter(target=self.wiki).delete()
         self.friend = baker.make(User).profile
         self.stranger = baker.make(User).profile
@@ -148,7 +148,7 @@ class SourceInferenceTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
         WikiFieldRevision.objects.filter(target=self.wiki).delete()
         self.user = baker.make(User)
 
@@ -204,7 +204,7 @@ class DirtyFieldTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.wiki = baker.make(Wiki, location=baker.make(Location), name="Start", officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location), name="Start")
         self.stranger = baker.make(User).profile
         self.friend = baker.make(User).profile
 
@@ -282,7 +282,7 @@ class ErasureTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
         self.editor = baker.make(User).profile
 
     def test_purging_a_recorded_value_removes_it(self) -> None:
@@ -317,7 +317,7 @@ class UpdateAccuracyTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.wiki = baker.make(Wiki, location=baker.make(Location), name="Real Name", officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location), name="Real Name")
         WikiFieldRevision.objects.filter(target=self.wiki).delete()
 
     def test_a_compare_and_set_that_matches_nothing_records_nothing(self) -> None:

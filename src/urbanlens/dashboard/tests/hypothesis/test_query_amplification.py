@@ -150,7 +150,7 @@ class WikiPageAmplificationTests(_AmplificationTestCase):
         self.client.force_login(self.user)
         self.location = self._next_location()
         baker.make(Pin, profile=self.profile, location=self.location)
-        self.wiki = baker.make(Wiki, location=self.location, name="Powerhouse", officially_created=True)
+        self.wiki = baker.make(Wiki, location=self.location, name="Powerhouse")
         self.url = reverse("location.wiki", kwargs={"location_slug": self.location.slug})
 
     def _measure(self) -> None:

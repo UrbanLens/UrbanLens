@@ -36,7 +36,7 @@ class ConcealedValueTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
         WikiFieldRevision.objects.filter(target=self.wiki).delete()
 
         self.viewer = baker.make(User).profile
@@ -154,7 +154,7 @@ class AggregateConcealmentTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
         self.viewer = baker.make(User).profile
 
     def test_the_concealed_community_summary_never_reaches_the_fuzz_cache(self) -> None:
@@ -271,7 +271,7 @@ class RelatedRowConcealmentTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
         self.viewer = baker.make(User).profile
         self.friend = baker.make(User).profile
         self.stranger = baker.make(User).profile
@@ -389,7 +389,7 @@ class ProjectionTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
         WikiFieldRevision.objects.filter(target=self.wiki).delete()
 
         self.viewer = baker.make(User).profile
@@ -541,7 +541,7 @@ class ConcealedArticleTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
         self.viewer = baker.make(User).profile
         self.friend = baker.make(User).profile
         self.stranger = baker.make(User).profile
@@ -626,7 +626,7 @@ class ByIdScopeTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.wiki = baker.make(Wiki, location=baker.make(Location), officially_created=True)
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
         self.viewer = baker.make(User).profile
         self.friend = baker.make(User).profile
         self.stranger = baker.make(User).profile

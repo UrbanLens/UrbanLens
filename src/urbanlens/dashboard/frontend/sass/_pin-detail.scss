@@ -2644,7 +2644,7 @@ body.page-location-details {
 
 // -- Create-community-wiki dialog (seed-field/alias/photo picker) -----------
 
-.pin-wiki-create-dialog {
+.pin-wiki-share-dialog {
     max-width: 56rem;
 
     .ul-dialog-body {
@@ -2652,14 +2652,14 @@ body.page-location-details {
     }
 }
 
-.wiki-create-intro {
+.wiki-share-intro {
     font-size: .88rem;
     color: var(--ul-grey-7);
     margin: 0 0 .9rem;
     line-height: 1.5;
 }
 
-.wiki-create-hint {
+.wiki-share-hint {
     display: flex;
     align-items: flex-start;
     gap: .5rem;
@@ -2679,7 +2679,7 @@ body.page-location-details {
     }
 }
 
-.wiki-create-section {
+.wiki-share-section {
     margin-bottom: 1.15rem;
 
     &:last-of-type {
@@ -2687,7 +2687,7 @@ body.page-location-details {
     }
 }
 
-.wiki-create-section-title {
+.wiki-share-section-title {
     display: flex;
     align-items: center;
     gap: .4rem;
@@ -2704,7 +2704,7 @@ body.page-location-details {
     }
 }
 
-.wiki-create-section-hint {
+.wiki-share-section-hint {
     margin: .1rem 0 .5rem;
     font-size: .76rem;
     color: var(--ul-grey-5);

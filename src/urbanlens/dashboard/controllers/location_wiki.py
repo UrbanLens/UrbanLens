@@ -27,7 +27,6 @@ from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
 from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
@@ -44,6 +43,7 @@ from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditValidationError
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
@@ -113,19 +113,6 @@ class LocationWikiView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import concealment_active
 
         conceal = concealment_active(wiki, profile)
-
-        # First view by someone other than the creator retires their
-        # self-service delete eligibility (see Wiki.can_be_deleted_by).
-        #
-        # Skipped for a concealed viewer, and that is a privacy fix rather than
-        # a tidiness one: this write is visible to the *creator*, whose Delete
-        # button disappears the moment somebody else opens the page. A viewer
-        # who is being concealed from the community would otherwise announce
-        # their visit to the one person guaranteed to notice - concealment
-        # protecting the visitor and betraying them in the same request.
-        if not conceal and wiki.created_by_id and profile.id != wiki.created_by_id and not wiki.viewed_by_other:
-            Wiki.objects.filter(pk=wiki.pk).update(viewed_by_other=True)
-            wiki.viewed_by_other = True
 
         # Only count root pins (not detail pins), and count distinct users.
         # The exact count is never exposed - see services.wiki.community_counts.
@@ -213,7 +200,6 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "profile": profile,
                 "show_wiki_cover_photo": show_wiki_cover_photo,
                 "wiki_cover_candidates": wiki_cover_candidates,
-                "can_delete_wiki": wiki.can_be_deleted_by(profile),
                 "is_site_scope": site_scope.is_site_scope(wiki),
                 **scope_badge(wiki),
                 # Counted over what this viewer can see, not over every row - a
@@ -334,44 +320,6 @@ class WikiParcelBuildingsPanelView(LoginRequiredMixin, View):
                 "rows": building_rows(buildings, list(wiki.child_wikis.select_related("location")), boundary_polygon=boundary_polygon),
             },
         )
-
-
-class LocationWikiDeleteView(LoginRequiredMixin, View):
-    """Let a wiki's creator delete it, before anyone else has seen it.
-
-    DELETE /location/<slug>/wiki/delete/
-
-    Only available to the profile that created the wiki, and only while
-    ``Wiki.viewed_by_other`` is still false - see ``Wiki.can_be_deleted_by``.
-    Once eligible, deletes the wiki and its full child-wiki subtree (stashed
-    for undo, same as detail-wiki deletion) and unlinks it from the pin.
-    """
-
-    def delete(self, request, location_slug):
-        location, wiki, profile = resolve_visible_wiki(request, location_slug)
-
-        if not wiki.can_be_deleted_by(profile):
-            return JsonResponse({"error": "This wiki can no longer be deleted - it's already been viewed by someone else."}, status=403)
-
-        user_pin = location.pins.filter(profile=profile).first()
-
-        subtree = with_wiki_descendants([wiki])
-        with transaction.atomic():
-            # The stash must happen inside the same atomic block as the delete: stashing
-            # first and deleting after ensures a mid-delete failure rolls back both together,
-            # rather than leaving a committed UndoAction claiming a deletion that never
-            # actually happened. Wiki.parent_wiki is on_delete=CASCADE, so deleting just the
-            # originally-selected wiki already cascades to every descendant captured in
-            # `subtree` above in one bulk operation - no need to delete each subtree member
-            # individually.
-            stash_for_undo(WIKI_MODEL_LABEL, subtree, profile)
-            Wiki.objects.filter(pk=wiki.pk).delete()
-
-        redirect_url = reverse("pin.details", kwargs={"pin_slug": user_pin.slug}) if user_pin else reverse("map.view")
-        response = HttpResponse("", status=200)
-        response["HX-Redirect"] = redirect_url
-        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Community wiki deleted. Undo within 7 days from Settings → Undo History."}})
-        return response
 
 
 class LocationWikiEditView(LoginRequiredMixin, View):

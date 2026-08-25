@@ -748,7 +748,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         """
         from urbanlens.dashboard.models.wiki.model import Wiki
 
-        if self.wiki_id and self.wiki is not None and self.wiki.officially_created:
+        if self.wiki_id and self.wiki is not None:
             return self.wiki
         return Wiki.objects.get_for_location(self.location) if self.location_id else None
 
