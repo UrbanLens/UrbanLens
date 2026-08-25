@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.urls import reverse
 from model_bakery import baker
 
@@ -79,3 +80,51 @@ class LoginViewEmailTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
+
+
+class LoginLockoutIdentifierNormalizationTests(TestCase):
+    """The lockout counter must key on the resolved account, not the raw string.
+
+    ``EmailOrUsernameModelBackend`` resolves Gmail dot/plus variants and
+    verified secondary emails to the same account before authenticating (see
+    ``EmailOrUsernameModelBackendTests`` above). If the lockout counter keyed
+    on the raw submitted string instead, an attacker could brute-force one
+    account forever by rotating through equivalent-but-textually-distinct
+    identifiers, each getting its own untripped counter.
+    """
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.user = baker.make(User, username="explorer3", is_active=True, email="jane.doe@gmail.com")
+        self.user.set_password("correct horse battery staple")
+        self.user.save()
+
+    def _login(self, identifier: str, password: str):
+        return self.client.post(reverse("login"), {"username": identifier, "password": password})
+
+    def test_failures_against_gmail_variants_share_one_counter(self) -> None:
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        max_attempts = SiteSettings.get_current().login_max_attempts
+        variants = ["jane.doe@gmail.com", "janedoe@gmail.com", "j.a.n.e.doe+urbanlens@gmail.com"]
+
+        for i in range(max_attempts):
+            identifier = variants[i % len(variants)]
+            self._login(identifier, "wrong password")
+
+        # The account is now locked, even against the correct password, and
+        # even via yet another variant never used above.
+        response = self._login("Jane.Doe@gmail.com", "correct horse battery staple")
+
+        self.assertContains(response, "Too many failed login attempts", status_code=200)
+
+    def test_lockout_key_collapses_gmail_variants_to_the_same_account(self) -> None:
+        from urbanlens.dashboard.controllers.account import _lockout_key_for_identifier
+
+        keys = {
+            _lockout_key_for_identifier("jane.doe@gmail.com"),
+            _lockout_key_for_identifier("janedoe@gmail.com"),
+            _lockout_key_for_identifier("j.a.n.e.doe+urbanlens@gmail.com"),
+        }
+
+        self.assertEqual(keys, {f"uid:{self.user.pk}"})
