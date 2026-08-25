@@ -72,18 +72,36 @@ def masked_editor_name(profile: Profile | None, viewer: Profile) -> str | None:
 def _article_summary(wiki: Wiki, profile: Profile) -> dict[str, Any] | None:
     """Summarize the wiki's article without shipping its full body.
 
+    Concealed for a viewer who is gated, in every part: the body it counts
+    words from, the revision it names as the edit baseline, and who it credits.
+    A summary is a description of content, so leaving it unconcealed beside
+    concealed fields reports the size and recency of a write-up the same
+    response refuses to show.
+
     Args:
         wiki: The wiki whose article to summarize.
         profile: The requesting profile, for author masking.
 
     Returns:
-        A summary dict, or None when the wiki has no article yet.
+        A summary dict, or None when this viewer has no article to see.
     """
     from urbanlens.dashboard.services.wiki.articles import get_article
+    from urbanlens.dashboard.services.wiki.concealment import conceal_article, is_concealed, visible_rows
 
-    article = get_article(wiki=wiki)
+    article = conceal_article(get_article(wiki=wiki), wiki, profile)
     if article is None:
         return None
+
+    if is_concealed(article):
+        visible = visible_rows(article.revisions.all(), wiki, profile).order_by("-created", "-pk").first()
+        return {
+            "id": article.pk,
+            "word_count": article.word_count(),
+            "updated": _isoformat_or_none(visible.created) if visible else None,
+            "last_edited_by": masked_editor_name(visible.editor if visible else None, profile),
+            "base_revision_id": visible.pk if visible else None,
+        }
+
     return {
         "id": article.pk,
         "word_count": article.word_count(),

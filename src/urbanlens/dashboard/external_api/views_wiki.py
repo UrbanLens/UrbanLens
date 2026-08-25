@@ -109,7 +109,7 @@ from urbanlens.dashboard.services.wiki.articles import (
     restore_revision,
     save_article_checked,
 )
-from urbanlens.dashboard.services.wiki.concealment import visible_rows, writable_wiki
+from urbanlens.dashboard.services.wiki.concealment import conceal_article, concealment_active, redact_edit_changes, visible_rows, writable_wiki
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 from urbanlens.dashboard.services.wiki.wiki_aliases import promote_wiki_alias_to_name
 from urbanlens.dashboard.services.wiki.wiki_detail import build_wiki_detail, masked_editor_name
@@ -251,7 +251,7 @@ class WikiDetailApiView(WikiApiView):
         target = writable_wiki(wiki)
         try:
             with transaction.atomic():
-                apply_wiki_edit(target, profile, changes, strict=True)
+                apply_wiki_edit(target, profile, changes, strict=True, baseline=wiki)
         except WikiEditValidationError as exc:
             return Response({"error": exc.message, "fields": {exc.field: exc.message} if exc.field else {}}, status=400)
 
@@ -269,11 +269,15 @@ class WikiHistoryView(PaginatedListMixin, WikiApiView):
     def get(self, request: Request, location_slug: str) -> Response:
         """Return one page of the wiki's edit history."""
         _location, wiki, profile = self.resolve(request, location_slug)
-        edits = wiki.edits.select_related("editor__user").order_by("-created", "-pk")
+        # Both halves of what the HTML history page does: the rows this viewer
+        # may see, and then the "from" side stripped - it carries the pre-edit
+        # value, which for the viewer's own edit is whatever a stranger wrote.
+        conceal = concealment_active(wiki, profile)
+        edits = visible_rows(wiki.edits.select_related("editor__user"), wiki, profile).order_by("-created", "-pk")
         rows = [
             {
                 "id": edit.pk,
-                "changes": edit.changes,
+                "changes": redact_edit_changes(edit.changes) if conceal else edit.changes,
                 "reverted": edit.reverted,
                 "editor": masked_editor_name(edit.editor, profile),
                 "created": edit.created.isoformat(),
@@ -400,8 +404,8 @@ class WikiAliasesView(WikiApiView):
     @extend_schema(responses={200: WikiAliasSerializer(many=True), 404: ErrorSerializer})
     def get(self, request: Request, location_slug: str) -> Response:
         """List the wiki's aliases."""
-        _location, wiki, _profile = self.resolve(request, location_slug)
-        return Response(WikiAliasSerializer(wiki.aliases.order_by("pk"), many=True, context={"wiki": wiki}).data)
+        _location, wiki, profile = self.resolve(request, location_slug)
+        return Response(WikiAliasSerializer(visible_rows(wiki.aliases.all(), wiki, profile).order_by("pk"), many=True, context={"wiki": wiki}).data)
 
     @extend_schema(request=WikiAliasCreateSerializer, responses={201: WikiAliasSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, location_slug: str) -> Response:
@@ -717,8 +721,8 @@ class WikiLinksView(WikiApiView):
     @extend_schema(responses={200: WikiLinkSerializer(many=True), 404: ErrorSerializer})
     def get(self, request: Request, location_slug: str) -> Response:
         """List the wiki's links in display order."""
-        _location, wiki, _profile = self.resolve(request, location_slug)
-        return Response(WikiLinkSerializer(wiki.links.order_by("order", "pk"), many=True).data)
+        _location, wiki, profile = self.resolve(request, location_slug)
+        return Response(WikiLinkSerializer(visible_rows(wiki.links.all(), wiki, profile).order_by("order", "pk"), many=True).data)
 
     @extend_schema(request=WikiLinkCreateSerializer, responses={201: WikiLinkSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, location_slug: str) -> Response:
@@ -807,7 +811,7 @@ class WikiGalleryView(PaginatedListMixin, WikiApiView):
         # Most-likely-relevant first (REData's cached confidence - see
         # services.photos.redata_relevance), falling back to upload order for
         # a photo REData hasn't scored yet.
-        images = Image.objects.filter(wiki=wiki).visible_to(profile).exclude(image="").order_by(F("redata_confidence").desc(nulls_last=True), "-created", "-pk")
+        images = visible_rows(Image.objects.filter(wiki=wiki), wiki, profile).visible_to(profile).exclude(image="").order_by(F("redata_confidence").desc(nulls_last=True), "-created", "-pk")
         # The queryset is paginated, then rows are built for the page only.
         # Building rows first materialized the *entire* visible gallery and
         # resolved a storage URL per image on every request before the
@@ -829,7 +833,11 @@ class WikiArticleView(WikiApiView):
     def get(self, request: Request, location_slug: str) -> Response:
         """Return the wiki's article, body included."""
         _location, wiki, profile = self.resolve(request, location_slug)
-        article = get_article(wiki=wiki)
+        # Concealed the same way the HTML tab is: the newest revision this
+        # viewer may see, or nothing. `get_article` fetches by primary key, so
+        # without this the API hands back the live body in full while every
+        # field beside it is concealed.
+        article = conceal_article(get_article(wiki=wiki), wiki, profile)
         if article is None:
             raise Http404
         return Response(
@@ -862,6 +870,7 @@ class WikiArticleView(WikiApiView):
                     edit_summary=data.get("edit_summary", ""),
                     base_revision_id=data["base_revision_id"],
                     wiki=wiki,
+                    viewer=profile,
                 )
         except ArticleConflictError as exc:
             # Mirrors the internal editor's conflict handling exactly: nothing
@@ -901,7 +910,7 @@ class WikiArticleRevisionsView(PaginatedListMixin, WikiApiView):
         if article is None:
             raise Http404
 
-        revisions = list(article.revisions.select_related("editor__user", "restored_from").order_by("-created", "-pk"))
+        revisions = list(visible_rows(article.revisions.select_related("editor__user", "restored_from"), wiki, profile).order_by("-created", "-pk"))
         rows = [
             {
                 "id": revision.pk,
@@ -948,8 +957,12 @@ class WikiArticleRevisionDetailView(WikiApiView):
 
         # Scoped to this wiki's article - a bare id would expose revisions of
         # every article in the database.
-        revision = get_object_or_404(ArticleRevision, id=revision_id, article=article)
-        previous = article.revisions.filter(created__lt=revision.created).order_by("-created", "-pk").first()
+        # Scoped to the viewer, not just the article: an unfiltered by-id
+        # lookup answers "does revision N exist here" and then hands over its
+        # full text and diff, for revisions concealment already ruled out.
+        visible = visible_rows(article.revisions.all(), wiki, profile)
+        revision = get_object_or_404(visible, id=revision_id)
+        previous = visible.filter(created__lt=revision.created).order_by("-created", "-pk").first()
 
         return Response(
             {
@@ -1012,7 +1025,9 @@ class WikiArticleRevisionRestoreView(WikiApiView):
         if article is None:
             raise Http404
 
-        revision = get_object_or_404(ArticleRevision, id=revision_id, article=article)
+        # Restoring a revision that was never shown would publish its text as
+        # the current article and name the caller in the history for it.
+        revision = get_object_or_404(visible_rows(article.revisions.all(), wiki, profile), id=revision_id)
         with transaction.atomic():
             article, _new_revision = restore_revision(scope_article=article, revision=revision, editor=profile)
 
@@ -1132,7 +1147,7 @@ class WikiCommentsView(_CommentListMixin, WikiApiView):
     def get(self, request: Request, location_slug: str) -> Response:
         """Return one page of the wiki's visible comments."""
         _location, wiki, profile = self.resolve(request, location_slug)
-        return self._list_comments(request, wiki.comments.all(), profile)
+        return self._list_comments(request, visible_rows(wiki.comments.all(), wiki, profile), profile)
 
     @extend_schema(request=CommentCreateSerializer, responses={201: CommentSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, location_slug: str) -> Response:

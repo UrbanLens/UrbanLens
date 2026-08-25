@@ -355,6 +355,7 @@ def save_article_checked(
     content: str,
     edit_summary: str = "",
     base_revision_id: int | None,
+    viewer: Profile | None = None,
     pin: Pin | None = None,
     wiki: Wiki | None = None,
 ) -> tuple[Article, ArticleRevision | None]:
@@ -374,6 +375,9 @@ def save_article_checked(
         editor: The profile making the edit (None for system saves).
         content: The complete new Markdown source.
         edit_summary: Optional one-line description of the change.
+        viewer: Who is saving, when the conflict check must be asked about what
+            they were shown rather than what is stored - a concealed viewer. Its
+            absence means the two are the same, which is the ordinary case.
         base_revision_id: The revision the editor started from, or None when
             they believe the article has no revisions yet.
         pin: Host pin (mutually exclusive with ``wiki``).
@@ -403,6 +407,18 @@ def save_article_checked(
             # Article.pin/.wiki are OneToOne, so the second insert loses there.
             Article.objects.select_for_update().filter(pk=article.pk).first()
         latest_id = latest_revision_id(article)
+        # A concealed viewer's editor was handed the newest revision *they* can
+        # see as its baseline, so comparing it against the live newest is a
+        # conflict they can never clear - a permanent 409 on an article that
+        # looks, to them, like nobody else has touched it. Ask the question they
+        # can actually answer: has anything changed that they were shown?
+        # Inside the lock, so it keeps the read-check-write above honest.
+        if article is not None and viewer is not None and wiki is not None:
+            from urbanlens.dashboard.services.wiki.concealment import concealment_active, visible_rows
+
+            if concealment_active(wiki, viewer):
+                newest_visible = visible_rows(article.revisions.all(), wiki, viewer).order_by("-created", "-pk").first()
+                latest_id = newest_visible.pk if newest_visible is not None else None
         if latest_id is not None and latest_id != base_revision_id:
             raise ArticleConflictError(latest_id)
 

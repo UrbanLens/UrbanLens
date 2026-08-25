@@ -322,6 +322,7 @@ class ArticleSaveView(ArticleViewBase):
                 base_revision_id=base_revision_id,
                 pin=scope.pin,
                 wiki=scope.wiki,
+                viewer=scope.profile,
             )
         except ArticleConflictError:
             response = HttpResponse(status=409)
