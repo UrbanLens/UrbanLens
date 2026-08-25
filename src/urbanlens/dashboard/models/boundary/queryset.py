@@ -292,14 +292,23 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
         from urbanlens.dashboard.models.boundary.model import BoundaryType
         from urbanlens.dashboard.services.places.scope import place_polygon
 
-        if row := self.row_for_pin(pin, boundary_type):
-            if row.polygon:
-                return row.polygon, "pin"
-            if row.generated_polygon:
-                return row.generated_polygon, "generated"
+        row = self.row_for_pin(pin, boundary_type)
+        if row is not None and row.polygon:
+            return row.polygon, "pin"
 
         place = pin.location.place if (pin.location_id and pin.location is not None and pin.location.place_id) else None
         scoped = place_polygon(place, boundary_type) if place is not None else None
+
+        # A hull fitted around this pin's own children describes the markers we
+        # happen to know about, not the property - so it stands in only while
+        # nobody has offered the real outline, and steps aside the moment one
+        # exists. Left ahead of the place, geometry the chain had just fetched
+        # stayed invisible on the very page that asked for it, and the map drew
+        # a shape the app had invented. Every other generated row - the
+        # pre-places location default among them - keeps the precedence it had.
+        if row is not None and row.generated_polygon and not (row.generated_from_children and scoped is not None):
+            return row.generated_polygon, "generated"
+
         if place is not None and scoped is None:
             return None, None
 

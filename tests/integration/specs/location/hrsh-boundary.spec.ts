@@ -38,9 +38,20 @@
  * nothing will run it until the stamp goes stale, which is
  * `SiteSettings.boundary_cache_days` away.
  *
- * That is a reading of the source, not a measurement - which is exactly why it
- * is written as a test. If it passes, the reading is wrong and this comment
- * should be deleted. If it fails, the failure is the evidence.
+ * **This was confirmed and fixed.** It was a reading of the source when first
+ * written; it was then measured directly - the campus pin carried a stamped
+ * `place_resolved_at` with a null `place_id`, and no Place covered its
+ * coordinate, while REData answered six scored parcel candidates for it on
+ * demand. `resolve_location_place` no longer stamps a coordinate it resolved
+ * nothing for, so the stamp once again means only what
+ * `generation_status` reads it as.
+ *
+ * What the deployment drew in the meantime was a convex hull around the pin's
+ * own child pins, which is a distinct defect from this one and passes every
+ * assertion in this file - the shape arrives, it is plausibly sized, it
+ * contains the pin. `hrsh-boundary-provenance.spec.ts` is the file that
+ * catches it, and the distinction between "a boundary arrived" and "the
+ * boundary came from somewhere" is why the two are separate.
  */
 
 import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";

@@ -41,8 +41,22 @@ def resolve_location_place(location: Location, *, save: bool = True) -> Place | 
         when it is on no known parcel or building.
     """
     place = Place.objects.resolve_for_point(location.latitude, location.longitude)
-    if save and (location.place_id != (place.pk if place else None) or location.place_resolved_at is None):
-        Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=timezone.now())
+    if save and location.place_id != (place.pk if place else None):
+        # Deliberately not stamped when the answer is unchanged, and in
+        # particular not when it is "no known place". ``place_resolved_at`` is
+        # what ``services.locations.boundaries.generation_status`` reads as
+        # "the provider chain has run here", and this function calls no
+        # provider - so stamping an unresolved coordinate told the scheduler
+        # that REData had already been asked about ground nothing had ever
+        # looked at, and it was never asked again until the row went stale.
+        # The chain stamps its own genuine miss in ``generate_location_boundaries``.
+        stamped = timezone.now()
+        Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=stamped)
+        # Mirrored onto the instance because callers act on it immediately:
+        # ``generate_location_boundaries`` reads this attribute right after
+        # provisioning to decide whether to record a miss, and a stale None
+        # there makes it clear the place that was just resolved.
+        location.place_resolved_at = stamped
     location.place = place
     return place
 
