@@ -1225,7 +1225,10 @@ class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
             lat = lng = None
         # Scoped to the viewer: this reads coordinates straight from the query
         # string, so the unscoped lookup made it a wiki enumerator.
-        wiki = find_visible_community_wiki(lat, lng, request.user.profile)
+        # get_or_create rather than the reverse accessor - see the matching note
+        # in map_overlays.OverlayMediaPickerView.
+        viewer, _ = Profile.objects.get_or_create(user=request.user)
+        wiki = find_visible_community_wiki(lat, lng, viewer)
         last_wiki_edit, wiki_editor_count = wiki_notify_stats(wiki) if wiki else (None, 0)
         return render(
             request,

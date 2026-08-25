@@ -326,7 +326,12 @@ class OverlayMediaPickerView(LoginRequiredMixin, View):
         # did not ask. On the pin branch it costs nothing - _resolve_owner has
         # already scoped that to the viewer's own pin, and visible_to always
         # includes the viewer's own images.
-        images = Image.objects.filter(**owner_filter).exclude(image="").visible_to(request.user.profile).order_by("-created")[:60]
+        # get_or_create, not request.user.profile: the reverse accessor raises
+        # RelatedObjectDoesNotExist for a user whose profile row was never made,
+        # and it is typed against an anonymous user this LoginRequired view can
+        # never actually receive. Same resolution every other view uses.
+        viewer, _ = Profile.objects.get_or_create(user=request.user)
+        images = Image.objects.filter(**owner_filter).exclude(image="").visible_to(viewer).order_by("-created")[:60]
         return JsonResponse({"images": [{"id": image.pk, "url": request.build_absolute_uri(image.image.url), "caption": image.caption or ""} for image in images]})
 
 

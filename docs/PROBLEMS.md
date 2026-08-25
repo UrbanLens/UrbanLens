@@ -67,24 +67,6 @@ it can send only what differs), and make writes field-scoped (`update_fields`, w
 codebase already does). The second is the safety net for anything that still posts everything, and
 is the cheaper half to finish first.
 
-## OPEN 2026-08-24: two views read `request.user.profile` on a possibly-anonymous user
-
-`controllers/map_overlays.py:320` and `controllers/safety.py:1228` both call
-`request.user.profile` where mypy types `request.user` as `User | AnonymousUser`. Surfaced by
-running mypy across the whole `controllers/` package rather than a file at a time, which is not
-routine here.
-
-Not live: both are on `LoginRequiredMixin` views, so `request.user` is always authenticated by the
-time either line runs. It is a typing lie rather than a crash, and the trap is that removing the
-mixin - or reusing either helper from an unauthenticated path - turns it into an `AttributeError`
-with nothing pointing at the cause.
-
-The fix is not a cast. Every other view resolves the viewer as
-`Profile.objects.get_or_create(user=request.user)` (see `services/wiki/wiki_access.resolve_visible_wiki`),
-which is honest about both the type and the possibility that the profile does not exist yet. Left
-alone here because these two views are unrelated to the work that surfaced them and the change is
-behavioural, not cosmetic.
-
 ## OPEN 2026-08-24: child wikis (detail pins) record no creator
 
 Both paths that create a child wiki leave `created_by` unset -
