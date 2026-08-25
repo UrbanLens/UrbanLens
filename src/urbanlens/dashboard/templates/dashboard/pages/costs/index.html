@@ -1,5 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% load vendor_assets %}
 {% block page_title %}Costs - {{ site_title|default:"UrbanLens" }}{% endblock %}
 
 {% block hero %}
@@ -94,7 +95,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% vendor_asset "chartjs_js" %}
 <script>
 (function () {
     var canvas = document.getElementById('chart-public-cost-monthly');

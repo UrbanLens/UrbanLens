@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sys
+from urllib.parse import urlparse
 
 from celery.schedules import crontab
 from django.core.management.utils import get_random_secret_key
@@ -140,6 +141,9 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # Innermost: swaps in the simulated viewer for "view profile as" previews.
     "urbanlens.dashboard.middleware.ProfilePreviewMiddleware",
+    # Below the preview swap on purpose: field provenance should record the
+    # viewer the request is actually acting as.
+    "urbanlens.dashboard.middleware.WriteSourceMiddleware",
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -383,6 +387,13 @@ CELERY_BEAT_SCHEDULE = {
     "achievements-sweep": {
         "task": "urbanlens.dashboard.tasks.sweep_achievements",
         "schedule": crontab(hour=3, minute=10),
+    },
+    # Drains ledger rows whose scoring enqueue was lost to a broker blip, and
+    # rebuilds totals flagged stale. The rows themselves are written
+    # synchronously, so this recovers value rather than data.
+    "reputation-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_reputation",
+        "schedule": crontab(hour=6, minute=10),
     },
     # Safety net for missed Stripe webhook deliveries - the core "did this
     # charge clear the threshold" mechanic runs at webhook time, not here.
@@ -660,6 +671,34 @@ _CSP_DIRECTIVES: dict[str, object] = {
     "frame-ancestors": ["'self'"],
     "form-action": ["'self'"],
 }
+
+# A configured vendor-asset mirror serves the scripts, stylesheets and font files
+# the CDN hosts above would otherwise serve, so the policy has to admit it or
+# setting UL_VENDOR_ASSET_BASE_URL takes every one of them off the page the
+# moment UL_CSP_ENFORCE is on. img-src already allows https: wholesale, so the
+# mirrored images need nothing here.
+def allow_vendor_mirror(directives: dict[str, object], base_url: object) -> str | None:
+    """Admit a vendor-asset mirror's origin to the directives that need it.
+
+    Args:
+        directives: The CSP directive lists, modified in place.
+        base_url: The configured mirror root, or a falsy value for none.
+
+    Returns:
+        The origin admitted, or None when no mirror is configured.
+    """
+    if not base_url:
+        return None
+    parsed = urlparse(str(base_url))
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    for name in ("script-src", "style-src", "font-src"):
+        hosts = directives.get(name)
+        if isinstance(hosts, list) and origin not in hosts:
+            hosts.append(origin)
+    return origin
+
+
+allow_vendor_mirror(_CSP_DIRECTIVES, _app_settings.vendor_asset_base_url)
 
 # Report-only by default: the header is emitted and violations are reported, but
 # nothing is blocked, so a policy mistake shows up in reports instead of as a

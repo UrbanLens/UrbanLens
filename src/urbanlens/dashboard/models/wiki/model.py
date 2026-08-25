@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
+class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
     """Community-editable page describing a shared, real-world place.
 
     Wiki is the *community* half of the place model:
@@ -150,21 +150,53 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         blank=True,
         related_name="created_wikis",
     )
-    # False only for a wiki auto-created in the background by
-    # tasks.ensure_draft_wiki_for_location, ahead of any user action - lets
-    # enrichment (Google place linking, name resolution, boundary generation,
-    # Wikipedia seeding) populate the page before anyone has clicked "Create".
-    # Every other creation path (the pin page's Create button via
-    # WikiManager.claim_for_location, child-wiki mirroring/sync, wiki splits)
-    # creates an already-official wiki, hence the default. Every user- and
-    # API-visible surface must treat officially_created=False the same as "no
-    # wiki exists yet" - see WikiManager.get_for_location and
-    # services.wiki.wiki_access.resolve_visible_wiki.
-    officially_created = BooleanField(default=True)
-    # Flips true the first time a profile other than created_by views the
-    # wiki page (see LocationWikiView.get). Once true, the wiki is community
-    # content and its creator can no longer unilaterally delete it.
-    viewed_by_other = BooleanField(default=False)
+    # Only meaningful on a child wiki - a detail pin - where it records who
+    # placed it, and null means it was mirrored from building data. A
+    # top-level page has no creator: every pinned Location gets one
+    # automatically (tasks.ensure_wiki_for_location), so there is nobody to
+    # attribute it to and nothing about creating one to reward.
+
+    #: Scalar fields whose writes record provenance. Mirrors
+    #: services.wiki.wiki_edits.WIKI_EDITABLE_FIELDS - the fields a person can
+    #: change - plus pin_type and indoor_outdoor, which enrichment and the
+    #: Consensus game both write. Declared rather than inferred so a new column
+    #: does not start being versioned by accident.
+    #:
+    #: The reason this list matters: a concealed viewer is shown automatic
+    #: writes plus their own plus their friends', so every field a person can
+    #: change has to carry who changed it. See docs/designs/versioned-content.md.
+    #: True only on a concealed projection built by
+    #: ``services.wiki.concealment.conceal_wiki`` - a copy of this row carrying
+    #: the subset of field values one viewer is entitled to see. Declared here
+    #: rather than set ad hoc so the distinction is visible from the model, and
+    #: so reading it is a plain attribute access with an honest type. A row
+    #: loaded from the database is never concealed.
+    _ul_concealed: bool = False
+
+    #: Which viewer the projection above was built for, so re-concealing is a
+    #: no-op for that viewer and a rebuild for anyone else. None means signed
+    #: out, which is why this is a separate attribute rather than a falsy pk.
+    _ul_concealed_for: int | None = None
+
+    versioned_fields = (
+        "name",
+        "description",
+        "fences",
+        "alarms",
+        "cameras",
+        "security",
+        "signs",
+        "vps",
+        "plywood",
+        "locked",
+        "date_abandoned",
+        "date_last_active",
+        "pin_type",
+        "indoor_outdoor",
+    )
+
+    #: Where this model's field revisions are stored.
+    revision_model = "dashboard.WikiFieldRevision"
     # Hero banner photo for the wiki page. Any Image tied to this wiki
     # (community gallery uploads, or a materialized Media-gallery item, see
     # services.media.media_materialize) is eligible; SET_NULL so deleting the photo
@@ -253,7 +285,21 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
                 # Case-insensitive lookup matches the alias uniqueness rule, so
                 # renaming to a different casing of an existing alias reuses
                 # that row instead of racing the DB constraint.
-                WikiAlias.objects.get_or_create(wiki=self, name__iexact=new_name, defaults={"name": new_name})
+                # created_by from the write context, not left null. The alias
+                # concealment rule reads `source` because created_by is null
+                # for the geocoder backfill too - so a rename alias with the
+                # default source=USER and no author matched neither branch and
+                # was concealed from everyone, including the person who had
+                # just renamed the wiki: the name showed with no alias row
+                # behind it, and re-adding it by hand hit the uniqueness
+                # constraint. The renamer is exactly who authored it.
+                from urbanlens.dashboard.models.abstract.versioning import current_write_actor
+
+                WikiAlias.objects.get_or_create(
+                    wiki=self,
+                    name__iexact=new_name,
+                    defaults={"name": new_name, "created_by_id": current_write_actor()},
+                )
             except DatabaseError:
                 logger.exception("Could not ensure alias for wiki %s name %r", self.pk, self.name)
         self._loaded_name = self.name
@@ -298,22 +344,6 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     # ------------------------------------------------------------------
     # Self-service deletion
     # ------------------------------------------------------------------
-
-    def can_be_deleted_by(self, profile: Profile) -> bool:
-        """Whether ``profile`` may delete this wiki outright.
-
-        Only the profile that created the wiki may do so, and only before
-        anyone else has viewed it - once another profile has seen the page,
-        it's community content and deletion should go through normal
-        moderation rather than a unilateral self-service action.
-
-        Args:
-            profile: The profile requesting deletion.
-
-        Returns:
-            True if ``profile`` created this wiki and no one else has viewed it.
-        """
-        return self.created_by_id is not None and self.created_by_id == profile.id and not self.viewed_by_other
 
     # ------------------------------------------------------------------
     # Label helpers

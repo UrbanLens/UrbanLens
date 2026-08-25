@@ -1,11 +1,11 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load map_components %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
+{% vendor_asset "sortable_js" %}
 {% endblock %}
 
 {% block hero %}

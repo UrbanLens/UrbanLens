@@ -432,12 +432,33 @@ class ImageToGalleryJsonTests(SimpleTestCase):
         self.assertAlmostEqual(result["latitude"], 51.5)
         self.assertAlmostEqual(result["longitude"], -0.12)
 
-    def test_uploader_username_from_profile(self):
+    def test_uploader_username_shown_to_the_uploader(self):
+        """The uploader is never masked from themselves, and is not asked."""
         profile = self._make_profile(username="alice")
         img = self._make_image()
         img.profile = profile
-        result = image_to_gallery_json(img, self._make_request())
+        img.profile_id = profile.pk
+        result = image_to_gallery_json(img, self._make_request(), profile)
         self.assertEqual(result["uploader"], "alice")
+        profile.can_view_profile.assert_not_called()
+
+    def test_uploader_name_is_masked_from_a_viewer_who_may_not_see_the_profile(self):
+        """Naming somebody is its own disclosure, separate from showing their photo.
+
+        Every other surface that names a profile - the API's owner_slug, wiki edit
+        attribution - resolves it through identity visibility first. This one
+        printed profile.username off the row, which is what this used to assert.
+        """
+        profile = self._make_profile(username="alice")
+        profile.can_view_profile.return_value = False
+        img = self._make_image()
+        img.profile = profile
+        img.profile_id = profile.pk
+
+        result = image_to_gallery_json(img, self._make_request(), None)
+
+        self.assertNotEqual(result["uploader"], "alice")
+        profile.can_view_profile.assert_called_once_with(None)
 
     def test_uploader_empty_when_no_profile(self):
         img = self._make_image()

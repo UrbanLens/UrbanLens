@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { Pt } from "./coords";
 import type { Segment } from "./planar";
-import { ANGLE_STEP_RADIANS, clampOpening, parameterAlong, shouldRelease, snapPoint, tolerancesFor } from "./snapping";
+import { ANGLE_STEP_RADIANS, clampOpening, parameterAlong, shouldRelease, snapPoint, snapTranslation, tolerancesFor } from "./snapping";
 
 const TOL = { endpoint: 0.5, wall: 0.35, extension: 0.35 };
 
@@ -179,5 +179,51 @@ describe("clampOpening", () => {
             expect(end).toBeLessThanOrEqual(1);
             expect(start).toBeLessThan(end);
         }
+    });
+});
+
+describe("snapTranslation", () => {
+    const WIDE = { endpoint: 1, wall: 0.5, extension: 0.5 };
+    const wall = (id: string, ax: number, ay: number, bx: number, by: number): Segment => ({ wallId: id, a: { x: ax, y: ay }, b: { x: bx, y: by } });
+
+    test("no candidates leaves the delta alone", () => {
+        expect(snapTranslation([{ x: 0, y: 0 }], { x: 3, y: 4 }, [], WIDE)).toEqual({ x: 3, y: 4 });
+    });
+
+    test("nothing carried leaves the delta alone", () => {
+        expect(snapTranslation([], { x: 3, y: 4 }, [wall("w", 0, 0, 5, 0)], WIDE)).toEqual({ x: 3, y: 4 });
+    });
+
+    test("a carried point landing near a corner is pulled onto it exactly", () => {
+        // Moving (0,0) by (4.8, 0) lands 0.2 short of the corner at (5,0).
+        const result = snapTranslation([{ x: 0, y: 0 }], { x: 4.8, y: 0 }, [wall("w", 5, 0, 5, 5)], WIDE);
+        expect(result.x).toBeCloseTo(5, 6);
+        expect(result.y).toBeCloseTo(0, 6);
+    });
+
+    test("a delta out of reach of everything is untouched", () => {
+        const result = snapTranslation([{ x: 0, y: 0 }], { x: 1, y: 0 }, [wall("w", 50, 50, 50, 55)], WIDE);
+        expect(result).toEqual({ x: 1, y: 0 });
+    });
+
+    test("the whole group moves by one delta, so it keeps its shape", () => {
+        const corners = [
+            { x: 0, y: 0 },
+            { x: 2, y: 0 },
+            { x: 2, y: 2 },
+            { x: 0, y: 2 },
+        ];
+        const delta = snapTranslation(corners, { x: 4.8, y: 0 }, [wall("target", 5, 0, 5, 5)], WIDE);
+        const moved = corners.map((c) => ({ x: c.x + delta.x, y: c.y + delta.y }));
+        // Same box, just translated: opposite sides still 2 apart.
+        expect(moved[1]!.x - moved[0]!.x).toBeCloseTo(2, 9);
+        expect(moved[3]!.y - moved[0]!.y).toBeCloseTo(2, 9);
+    });
+
+    test("the smallest correction among the carried points wins", () => {
+        // (0,0)+delta is 0.6 from a corner; (10,0)+delta is 0.1 from another.
+        const segments = [wall("near", 10.9, 0, 10.9, 3), wall("far", 0.4, 0, 0.4, 3)];
+        const result = snapTranslation([{ x: 0, y: 0 }, { x: 10, y: 0 }], { x: 1, y: 0 }, segments, WIDE);
+        expect(result.x).toBeCloseTo(0.9, 6);
     });
 });

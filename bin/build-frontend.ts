@@ -32,7 +32,9 @@ const minify = process.argv.includes("--minify");
 function tsFiles(dir: string): string[] {
     try {
         return readdirSync(dir)
-            .filter((name) => name.endsWith(".ts"))
+            // Tests live beside the entry they exercise, and are not pages.
+            // A browser test importing bun:test fails the build outright.
+            .filter((name) => name.endsWith(".ts") && !name.includes(".test."))
             .map((name) => join(dir, name));
     } catch {
         return [];

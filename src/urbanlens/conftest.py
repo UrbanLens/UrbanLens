@@ -47,7 +47,12 @@ def _disable_hypothesis_example_patching() -> None:
     ``@example`` decorator, in exchange for always being able to see *which*
     property test failed.
     """
-    sys.modules.setdefault("hypothesis.extra._patching", None)  # type: ignore[assignment]
+    # None is CPython's own "block this import" sentinel - `import x` raises
+    # ImportError when sys.modules[x] is None - but typeshed types the mapping
+    # as dict[str, ModuleType], which the sentinel predates. Narrowly suppressed
+    # with the code actually raised: the previous comment named [assignment],
+    # which silenced nothing and hid the [arg-type] underneath it.
+    sys.modules.setdefault("hypothesis.extra._patching", None)  # type: ignore[arg-type]
 
 
 def _configure_hypothesis() -> None:

@@ -68,6 +68,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
 
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
 
     results: list[AutocompleteResult] = []
     q = query.strip()
@@ -129,13 +130,16 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         )
 
     # -- Wiki search (community pages) -------------------------------------------
-    # Only show wikis whose place the requesting user has pinned so results stay relevant.
+    # Scoped to the wikis this user can actually open, asked of the access
+    # authority rather than restated here: "has a pin on the exact location" is
+    # one of its four clauses, so a pin sharing the place's domain opened the
+    # wiki page while its name refused to autocomplete.
     seen_wiki_ids: set[int] = set()
     wiki_qs = (
         Wiki.objects.filter(
             Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q),
         )
-        .filter(location__pins__profile=profile)
+        .filter(location_id__in=visible_wiki_location_ids_cached(profile))
         .select_related("location")
         .distinct()[:5]
     )

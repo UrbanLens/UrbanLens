@@ -151,6 +151,10 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
     return {
         **_item_out(floorplan, source_uuids, reference_uuids),
         "name": floorplan.name,
+        # What this document was read at. A save sends it back, and a save
+        # whose token no longer matches the row is a save built on a version
+        # somebody else has already replaced - see save_document.
+        "version_token": floorplan.updated.isoformat() if floorplan.updated else "",
         "building_ref": floorplan.building_ref,
         "building_name": floorplan.building_name,
         "valid_from": floorplan.valid_from.isoformat() if floorplan.valid_from else None,
@@ -178,6 +182,7 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
             {
                 **_item_out(floor, source_uuids, reference_uuids),
                 "level": floor.level,
+                "designation": floor.designation,
                 "name": floor.name,
                 "elevation_meters": floor.elevation_meters,
                 "height_meters": floor.height_meters,
@@ -254,6 +259,118 @@ def _date_in(raw) -> datetime.date | None:
     return datetime.date.fromisoformat(str(raw))
 
 
+#: Ceilings on how much one document may describe. Generous for any real
+#: building - a 200-storey tower with 500 walls a floor fits - and small enough
+#: that a malformed or hostile POST cannot ask one request to write a million
+#: rows. Checked before anything is saved, so hitting one costs no work.
+_MAX_FLOORS = 250
+_MAX_WALLS_PER_FLOOR = 2_000
+_MAX_OPENINGS_PER_WALL = 100
+_MAX_ROOMS_PER_FLOOR = 2_000
+_MAX_MARKERS_PER_FLOOR = 2_000
+
+
+def _text_in(raw, field: str, limit: int) -> str:
+    """Coerce a payload value to text this column can actually hold.
+
+    Django does not enforce ``max_length`` on save, so an over-long string is
+    not caught until Postgres refuses it - as a ``DataError``, which reaches the
+    client as a 500 with nothing in it that says which field was wrong.
+
+    Args:
+        raw: The payload value.
+        field: Field name, for the message.
+        limit: The column's ``max_length``.
+
+    Returns:
+        The text, unchanged.
+
+    Raises:
+        ValueError: If it is longer than the column allows.
+    """
+    text = "" if raw is None else str(raw)
+    if len(text) > limit:
+        raise ValueError(f"{field} must be {limit} characters or fewer (got {len(text)})")
+    return text
+
+
+class StaleDocumentError(ValueError):
+    """A save built on a version of the plan that has since been replaced.
+
+    Separate from the other ValueErrors this module raises because it is not a
+    malformed request: the document is perfectly valid, it is just no longer
+    current. The caller answers it with 409 rather than 400, and the editor
+    treats it as "somebody else got there first" rather than "you sent
+    nonsense".
+    """
+
+
+def _reject_stale(floorplan: Floorplan, document: dict[str, Any]) -> None:
+    """Refuse a save whose base version is no longer the current one.
+
+    A whole-document save deletes by omission, so two tabs editing one plan do
+    not merge - the second one to save silently discards everything the first
+    did. Nothing detected that, because nothing recorded which version a
+    document was read at.
+
+    A document with no token at all is let through: it is a save from a client
+    that predates this, or a deliberate fork (which carries no uuid either), and
+    breaking those to catch a rarer problem is the wrong trade.
+
+    Args:
+        floorplan: The row about to be written.
+        document: The incoming payload.
+
+    Raises:
+        StaleDocumentError: If the token names a different version than the row is at.
+    """
+    token = str(document.get("version_token") or "")
+    if not token or floorplan.pk is None or floorplan.updated is None:
+        return
+    # The token describes the row the document was *read* from. Writing that
+    # document into a different row is a copy, not an update - publish_to_wiki
+    # does exactly this, and so does every deliberate fork - and the token says
+    # nothing about the row being written. Only a same-row save can lose an
+    # update, so only a same-row save is checked.
+    if str(document.get("uuid") or "") != str(floorplan.uuid):
+        return
+    current = floorplan.updated.isoformat()
+    if token != current:
+        raise StaleDocumentError("This plan was changed somewhere else since you opened it. Reload to see the newer version.")
+
+
+def _reject_oversized(document: dict[str, Any]) -> None:
+    """Refuse a document that would write an unreasonable number of rows.
+
+    Args:
+        document: The whole payload.
+
+    Raises:
+        ValueError: If any collection is past its ceiling.
+    """
+    floors = document.get("floors")
+    if not isinstance(floors, list):
+        return
+    if len(floors) > _MAX_FLOORS:
+        raise ValueError(f"a plan cannot have more than {_MAX_FLOORS} floors (got {len(floors)})")
+    for floor in floors:
+        if not isinstance(floor, dict):
+            continue
+        for key, ceiling in (("walls", _MAX_WALLS_PER_FLOOR), ("rooms", _MAX_ROOMS_PER_FLOOR), ("markers", _MAX_MARKERS_PER_FLOOR)):
+            items = floor.get(key)
+            if isinstance(items, list) and len(items) > ceiling:
+                raise ValueError(f"a floor cannot have more than {ceiling} {key} (got {len(items)})")
+        walls = floor.get("walls")
+        if not isinstance(walls, list):
+            continue
+        for wall in walls:
+            if not isinstance(wall, dict):
+                continue
+            openings = wall.get("openings")
+            if isinstance(openings, list) and len(openings) > _MAX_OPENINGS_PER_WALL:
+                raise ValueError(f"a wall cannot have more than {_MAX_OPENINGS_PER_WALL} openings (got {len(openings)})")
+
+
 def _choice_in(raw, choices, field: str, default: str) -> str:
     """One of an enum's values, defaulting when absent.
 
@@ -283,13 +400,14 @@ class _Pools:
         from urbanlens.dashboard.models.images.model import Image
 
         stale_sources = {str(row.uuid): row for row in self.floorplan.source_pool.all()}
-        for payload in document.get("source_pool") or []:
+        for index, payload in enumerate(document.get("source_pool") or []):
             source = stale_sources.pop(str(payload.get("uuid") or ""), None) or FloorplanSource(floorplan=self.floorplan)
             source.floorplan = self.floorplan
-            source.title = payload.get("title") or ""
-            source.url = payload.get("url") or ""
+            source.sort_order = index
+            source.title = _text_in(payload.get("title"), "source.title", 255)
+            source.url = _text_in(payload.get("url"), "source.url", 1000)
             source.note = payload.get("note") or ""
-            source.author = payload.get("author") or ""
+            source.author = _text_in(payload.get("author"), "source.author", 255)
             source.attributes = payload.get("attributes") or {}
             source.save()
             for name in (payload.get("uuid"), payload.get("key"), source.uuid):
@@ -299,12 +417,13 @@ class _Pools:
             stale_source.delete()
 
         stale_references = {str(row.uuid): row for row in self.floorplan.reference_pool.all()}
-        for payload in document.get("reference_pool") or []:
+        for index, payload in enumerate(document.get("reference_pool") or []):
             reference = stale_references.pop(str(payload.get("uuid") or ""), None) or FloorplanReference(floorplan=self.floorplan)
             reference.floorplan = self.floorplan
+            reference.sort_order = index
             reference.kind = payload.get("kind") if payload.get("kind") in FloorplanReferenceKind.values else FloorplanReferenceKind.OTHER
-            reference.title = payload.get("title") or ""
-            reference.url = payload.get("url") or ""
+            reference.title = _text_in(payload.get("title"), "reference.title", 255)
+            reference.url = _text_in(payload.get("url"), "reference.url", 1000)
             reference.description = payload.get("description") or ""
             reference.attributes = payload.get("attributes") or {}
             reference.image = Image.objects.filter(uuid=payload["image_uuid"]).first() if payload.get("image_uuid") else None
@@ -316,12 +435,24 @@ class _Pools:
             stale_reference.delete()
 
 
-def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, profile: Profile | None) -> None:
+def _stored_values(row: FloorplanItem) -> dict[str, Any] | None:
+    """Every concrete column's current value, or None for a row not yet in the database.
+
+    Read by attname, so a foreign key is compared as its id rather than by fetching
+    the object it points at.
+    """
+    if row.pk is None:
+        return None
+    # _meta is Django's documented model API, underscore notwithstanding.
+    return {field.attname: getattr(row, field.attname) for field in row._meta.concrete_fields}  # noqa: SLF001
+
+
+def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, profile: Profile | None, before: dict[str, Any] | None = None) -> None:
     """Write the shared item surface from a payload; saves the row."""
     from urbanlens.dashboard.models.labels.model import Label
 
     row.description = payload.get("description") or ""
-    row.condition = payload.get("condition") or ""
+    row.condition = _text_in(payload.get("condition"), "condition", 255)
     try:
         row.built_date = _date_in(payload.get("built_date"))
     except ValueError as exc:
@@ -335,7 +466,12 @@ def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, prof
         attributes.pop(LOCAL_NAMESPACE, None)
     row.attributes = attributes
     row.source = pools.sources.get(str(payload.get("source") or ""))
-    row.save()
+    after = _stored_values(row)
+    # An unchanged row is left alone: the editor autosaves on a debounce after
+    # every edit, so a whole-document save that rewrites every row turns one
+    # keystroke into a write across the plan.
+    if before is None or after is None or before != after:
+        row.save()
     row.references.set([pools.references[key] for key in (payload.get("references") or []) if key in pools.references])
     if profile is not None:
         # Scoped to the saver's own labels: a document cannot attach somebody
@@ -351,6 +487,11 @@ _MARKER_KIND_TO_PIN_TYPE = {
     "stair": "stair",
     "elevator": "elevator",
 }
+
+
+#: The twin fields :func:`_sync_linked_pin` sets, and therefore the only ones it
+#: has to compare to know whether saving would change anything.
+_TWIN_FIELDS = ("name", "name_is_user_provided", "pin_type", "pin_type_is_user_provided", "location_id", "icon", "color")
 
 
 def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan: Floorplan) -> None:
@@ -393,8 +534,14 @@ def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan
     location, _created = Location.objects.get_exact_or_create(lat, lng)
 
     linked = marker.linked_pin
+    creating = linked is None
     if linked is None:
         linked = Pin(parent_pin=parent_pin, profile=parent_pin.profile)
+    # Every field this function writes, read before it writes them. A Pin save is
+    # not a row write: it runs the whole Pin signal chain, and the editor saves on
+    # a debounce after every edit, so a plan with markers ran that chain per marker
+    # per keystroke-batch whether or not anything about the twin had changed.
+    before = None if creating else [getattr(linked, name) for name in _TWIN_FIELDS]
     linked.name = marker.name or None
     # Not an explicit rename any more than DetailPinPanelView's own creation
     # is - the name is prefilled from the marker kind, and should stay
@@ -403,7 +550,20 @@ def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan
     linked.pin_type = _MARKER_KIND_TO_PIN_TYPE.get(marker.kind, "other")
     linked.pin_type_is_user_provided = True
     linked.location = location
-    linked.save()
+    # Appearance is stored on the pin, never on the marker: the document reads
+    # it back through linked.effective_icon/effective_color (see _marker_dict),
+    # so a second copy on FloorplanMarker would be a second answer to the same
+    # question. Only the write half was missing, which is why anything set in
+    # the floorplan editor vanished on save.
+    #
+    # Blank means "no override", so the kind's own default returns - that is
+    # how a marker is un-styled, and it has to be distinguishable from absent.
+    if "icon" in payload:
+        linked.icon = (payload.get("icon") or "").strip() or None
+    if "color" in payload:
+        linked.color = (payload.get("color") or "").strip() or None
+    if creating or [getattr(linked, name) for name in _TWIN_FIELDS] != before:
+        linked.save()
     if marker.linked_pin_id != linked.pk:
         marker.linked_pin = linked
         marker.save(update_fields=["linked_pin"])
@@ -425,7 +585,7 @@ def _sync_markers(existing_by_uuid: dict, payloads: list[dict] | None, floor: Fl
         marker.x = _required_float_in(payload.get("x"), "marker.x")
         marker.y = _required_float_in(payload.get("y"), "marker.y")
         marker.kind = _choice_in(payload.get("kind"), FloorplanMarkerKind.values, "marker kind", FloorplanMarkerKind.HAZARD)
-        marker.name = payload.get("name") or ""
+        marker.name = _text_in(payload.get("name"), "marker.name", 255)
         marker.facing_degrees = _float_in(payload.get("facing_degrees"), "facing_degrees")
         marker.connector_id = payload.get("connector_id") or ""
         marker.sort_order = index
@@ -443,15 +603,39 @@ def _sync(existing_by_uuid: dict, payloads: list[dict] | None, build, pools: _Po
     kept: list[tuple[dict, Any]] = []
     for index, payload in enumerate(payloads or []):
         row = existing_by_uuid.pop(str(payload.get("uuid") or ""), None)
+        # Read before the builder touches it: the builder mutates the row in
+        # place, so afterwards there is nothing left to compare against.
+        before = _stored_values(row) if row is not None else None
         row = build(payload, row)
         # Position in the document is the stored order, so re-arranging items
         # in an editor survives the round-trip.
         row.sort_order = index
-        _apply_item(row, payload, pools, profile)
+        _apply_item(row, payload, pools, profile, before)
         kept.append((payload, row))
     for orphan in existing_by_uuid.values():
         orphan.delete()
     return kept
+
+
+def _reject_duplicate_levels(payload: Any) -> None:
+    """Refuse a document whose floors would share a storey.
+
+    Args:
+        payload: The document's ``floors`` value, whatever the client sent.
+
+    Raises:
+        ValueError: If two floors claim the same level.
+    """
+    if not isinstance(payload, list):
+        return
+    seen: set[int] = set()
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        level = _int_in(entry.get("level"), "level") or 0
+        if level in seen:
+            raise ValueError(f"two floors cannot share level {level}")
+        seen.add(level)
 
 
 @transaction.atomic
@@ -486,10 +670,24 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
     pools = _Pools(floorplan)
     pools.sync(document)
 
-    floorplan.name = document.get("name") or ""
-    floorplan.building_name = document.get("building_name") or floorplan.building_name
+    # Before anything is written, which the placement is load-bearing for.
+    # _apply_item below saves the floorplan row, and `updated` is auto_now - so
+    # a staleness check made after it would be comparing the token against a
+    # timestamp this very request had just moved, and could never match.
+    #
+    # The unique constraint on (floorplan, level) is DEFERRED - it has to be,
+    # since a reorder or a mid-stack renumber necessarily collides part-way
+    # through a save that writes one row at a time - so a genuinely duplicated
+    # level would not surface until the outer commit, as an IntegrityError the
+    # view cannot turn into a useful message. Rejecting it here makes it a 400.
+    _reject_stale(floorplan, document)
+    _reject_duplicate_levels(document.get("floors"))
+    _reject_oversized(document)
+
+    floorplan.name = _text_in(document.get("name"), "name", 255)
+    floorplan.building_name = _text_in(document.get("building_name"), "building_name", 255) or floorplan.building_name
     if "building_ref" in document:
-        floorplan.building_ref = document.get("building_ref") or floorplan.building_ref
+        floorplan.building_ref = _text_in(document.get("building_ref"), "building_ref", 255) or floorplan.building_ref
     floorplan.valid_from = _date_in(document.get("valid_from"))
     floorplan.floor_count = _int_in(document.get("floor_count"), "floor_count")
     plan_origin = document.get("plan_origin") or {}
@@ -506,12 +704,56 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
         if not _MIN_LEVEL <= level <= _MAX_LEVEL:
             raise ValueError(f"level must be between {_MIN_LEVEL} and {_MAX_LEVEL}")
         floor.level = level
-        floor.name = payload.get("name") or ""
+        designation = str(payload.get("designation") or "").strip()
+        # Refused rather than truncated, matching this module's 400-not-500
+        # style: a designation silently cut to "4A2345678" is worse than a
+        # client being told it sent something it cannot have meant.
+        if len(designation) > 8:
+            raise ValueError("designation must be 8 characters or fewer")
+        floor.designation = designation
+        floor.name = _text_in(payload.get("name"), "floor.name", 255)
         floor.elevation_meters = _float_in(payload.get("elevation_meters"), "elevation_meters")
         floor.height_meters = _float_in(payload.get("height_meters"), "height_meters")
         return floor
 
-    floors = _sync({str(f.uuid): f for f in floorplan.floors.all()}, document.get("floors"), build_floor, pools, profile)
+    # Prefetched exactly like document_for() reads it: without this, every
+    # existing wall/opening/lock/room/marker triggers its own query the
+    # moment its parent's .all() is called below, and this whole function
+    # runs on every autosave tick.
+
+    existing_floors = floorplan.floors.prefetch_related("walls__openings__locks", "rooms", "markers")
+
+    # An opening can change wall - dragging a door round a corner is an
+    # ordinary edit - so openings are matched by uuid across the whole plan
+    # rather than only within the wall they used to sit on. Matched per wall,
+    # a move reads as "deleted from one, unknown to the other": the row is
+    # destroyed and a new one created, so the opening loses its identity and
+    # its locks go with it (FloorplanLock cascades from the opening).
+    existing_openings: dict[str, FloorplanOpening] = {}
+    for existing_floor in existing_floors:
+        for existing_wall in existing_floor.walls.all():
+            for existing_opening in existing_wall.openings.all():
+                existing_openings[str(existing_opening.uuid)] = existing_opening
+    surviving_openings: set[str] = set()
+
+    # A floor payload that names no uuid means the storey at that level, not a
+    # replacement for it. Matched only by uuid, such a payload built a second
+    # floor and swept the first away as an orphan - taking its walls, openings,
+    # locks and rooms with it by cascade. Levels are unique within a plan
+    # (_reject_duplicate_levels, above), so the level identifies the storey
+    # exactly as well as its uuid does.
+    existing_by_level = {existing_floor.level: existing_floor for existing_floor in existing_floors}
+    floor_payloads = document.get("floors")
+    if isinstance(floor_payloads, list):
+        keyed: list[Any] = []
+        for floor_payload in floor_payloads:
+            match = None
+            if isinstance(floor_payload, dict) and not floor_payload.get("uuid"):
+                match = existing_by_level.get(_int_in(floor_payload.get("level"), "level") or 0)
+            keyed.append({**floor_payload, "uuid": str(match.uuid)} if match is not None else floor_payload)
+        floor_payloads = keyed
+
+    floors = _sync({str(f.uuid): f for f in existing_floors}, floor_payloads, build_floor, pools, profile)
 
     for floor_payload, floor in floors:
 
@@ -529,7 +771,7 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
                 "wall thickness",
                 FloorplanWallThickness.NORMAL,
             )
-            wall.name = payload.get("name") or ""
+            wall.name = _text_in(payload.get("name"), "wall.name", 255)
             return wall
 
         walls = _sync({str(w.uuid): w for w in floor.walls.all()}, floor_payload.get("walls"), build_wall, pools, profile)
@@ -553,14 +795,29 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
                 opening.sill_meters = _float_in(payload.get("sill_meters"), "sill_meters")
                 return opening
 
-            openings = _sync({str(o.uuid): o for o in wall.openings.all()}, wall_payload.get("openings"), build_opening, pools, profile)
+            # Only the rows this wall's payload actually claims, so _sync's
+            # own orphan sweep cannot delete one that has moved to another
+            # wall. What is genuinely gone is collected after every wall has
+            # been seen, below.
+            opening_payloads = wall_payload.get("openings") or []
+            claimed: dict[str, FloorplanOpening] = {}
+            if isinstance(opening_payloads, list):
+                for opening_payload in opening_payloads:
+                    if not isinstance(opening_payload, dict):
+                        continue
+                    opening_uuid = str(opening_payload.get("uuid") or "")
+                    if opening_uuid and opening_uuid in existing_openings:
+                        claimed[opening_uuid] = existing_openings[opening_uuid]
+            openings = _sync(claimed, opening_payloads, build_opening, pools, profile)
+            for _, kept_opening in openings:
+                surviving_openings.add(str(kept_opening.uuid))
 
             for opening_payload, opening in openings:
 
                 def build_lock(payload: dict, row: FloorplanLock | None, *, _opening=opening) -> FloorplanLock:
                     lock = row or FloorplanLock(opening=_opening)
                     lock.opening = _opening
-                    lock.name = payload.get("name") or ""
+                    lock.name = _text_in(payload.get("name"), "lock.name", 255)
                     lock.state = _choice_in(payload.get("state"), FloorplanLockState.values, "lock state", FloorplanLockState.UNKNOWN)
                     key_attributes = payload.get("key_attributes") or {}
                     if not isinstance(key_attributes, dict):
@@ -581,12 +838,18 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
             room.floor = _floor
             room.x = _required_float_in(payload.get("x"), "room.x")
             room.y = _required_float_in(payload.get("y"), "room.y")
-            room.name = payload.get("name") or ""
+            room.name = _text_in(payload.get("name"), "room.name", 255)
             room.height_meters = _float_in(payload.get("height_meters"), "height_meters")
             return room
 
         _sync({str(r.uuid): r for r in floor.rooms.all()}, floor_payload.get("rooms"), build_room, pools, profile)
 
         _sync_markers({str(m.uuid): m for m in floor.markers.all()}, floor_payload.get("markers"), floor, pools, profile, floorplan)
+
+    # Deleted last, once every wall has had its say: an opening missing from
+    # the wall it used to be on may simply have moved to another one.
+    for opening_uuid, orphan_opening in existing_openings.items():
+        if opening_uuid not in surviving_openings:
+            orphan_opening.delete()
 
     return floorplan

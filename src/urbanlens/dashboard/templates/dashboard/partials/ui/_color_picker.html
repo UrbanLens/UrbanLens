@@ -1,0 +1,22 @@
+{# Shared colour swatch picker. Same markup, classes and pickColor() call as   #}
+{# the label and pin dialogs, so a colour is chosen the same way everywhere -  #}
+{# the floorplan editor grew its own set of swatches before this existed.      #}
+{#                                                                             #}
+{# picker_id     - unique per instance; ids are derived from it                #}
+{# field_name    - hidden input's name, for form posts (optional)              #}
+{# current_color - hex to start selected, "" for none                          #}
+{# color_choices - (hex, name) pairs from the view                             #}
+<div class="color-picker" id="color-picker-{{ picker_id }}">
+    <input type="hidden" name="{{ field_name|default:'color' }}" id="color-value-{{ picker_id }}" value="{{ current_color|default:'' }}">
+    {% for hex, color_name in color_choices %}
+    <button type="button"
+            class="color-swatch{% if current_color == hex %} selected{% endif %}"
+            style="background-color: {{ hex }};"
+            data-color="{{ hex }}" title="{{ color_name }}" aria-label="{{ color_name }}"
+            onclick="pickColor('color-picker-{{ picker_id }}','color-value-{{ picker_id }}','{{ hex }}',this)"></button>
+    {% endfor %}
+    <button type="button"
+            class="color-swatch color-clear{% if not current_color %} selected{% endif %}"
+            data-color="" title="No color" aria-label="No color"
+            onclick="pickColor('color-picker-{{ picker_id }}','color-value-{{ picker_id }}','',this)"><i class="material-symbols-outlined">block</i></button>
+</div>

@@ -393,3 +393,162 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         },
     };
 }
+
+/** One of this pin's/wiki's own already-uploaded photos, as `pin.gallery.json`/`location.wiki.gallery.json` serve it. */
+export interface GalleryImage {
+    id: number;
+    url: string;
+    caption: string;
+}
+
+/** The manage-overlays "Add overlay" fields that decide whether there is anything to submit. */
+export interface OverlaySubmitFields {
+    hasFile: boolean;
+    urlValue: string;
+    imageIdValue: string;
+}
+
+/** Whether the add-overlay form actually has a source to submit - a plain
+ * function so the disabled-button logic is checkable without a DOM. */
+export function overlaySubmitEnabled(fields: OverlaySubmitFields): boolean {
+    return fields.hasFile || fields.urlValue.trim().length > 0 || fields.imageIdValue.trim().length > 0;
+}
+
+export interface ManageOverlaysDialogOptions {
+    map: L.Map;
+    control: ReturnType<typeof createMapImageOverlays>;
+    /** Closes the manage-overlays dialog once alignment starts, so it isn't sitting on top of the handles the user needs to drag. */
+    onAlignStart?: () => void;
+}
+
+/**
+ * Wire the manage-overlays dialog's window-level hooks.
+ *
+ * The dialog is server-rendered HTML that HTMX swaps in and out wholesale on
+ * every add/edit/delete, so it cannot import this module - it calls these by
+ * name instead (see `_map_overlays_list.html`). Shared by the pin/wiki map
+ * entry and the floorplan editor so both get the same behavior: the
+ * pick-from-media picker used to be duplicated, inline, directly in two page
+ * templates - and never wired up at all on the floorplan editor, where
+ * `window.ulMapOverlaySeedCorners` was also missing, silently breaking every
+ * attempt to add an overlay there (the corners field stayed empty, so the
+ * server had nowhere to place it).
+ */
+export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): void {
+    const { map, control, onAlignStart } = options;
+
+    window.ulMapOverlayStartAlign = (uuid: string) => {
+        control.startAlign(uuid);
+        onAlignStart?.();
+    };
+    window.ulMapOverlayPreviewOpacity = (uuid: string, value: string) => control.previewOpacity(uuid, Number(value));
+    // A new overlay lands covering roughly the current viewport, so aligning
+    // it is a small adjustment rather than a hunt across the world.
+    window.ulMapOverlaySeedCorners = () => {
+        const input = document.getElementById("map-overlay-initial-corners") as HTMLInputElement | null;
+        if (!input) return;
+        const bounds = map.getBounds().pad(-0.25);
+        const nw = bounds.getNorthWest();
+        const ne = bounds.getNorthEast();
+        const se = bounds.getSouthEast();
+        const sw = bounds.getSouthWest();
+        input.value = JSON.stringify([
+            [nw.lat, nw.lng],
+            [ne.lat, ne.lng],
+            [se.lat, se.lng],
+            [sw.lat, sw.lng],
+        ]);
+    };
+
+    // Re-derives the Add-overlay button's disabled state from the form's
+    // current fields - called on every input/drop/pick so it never stays
+    // clickable with nothing chosen, and turns on the instant something is.
+    window.ulMapOverlaySyncSubmitState = () => {
+        const form = document.getElementById("map-overlay-add-form") as HTMLFormElement | null;
+        const submit = document.getElementById("map-overlay-add-submit") as HTMLButtonElement | null;
+        if (!form || !submit) return;
+        const hasFile = !!form.querySelector<HTMLInputElement>('input[type="file"]')?.files?.length;
+        const urlValue = form.querySelector<HTMLInputElement>('input[name="image_url"]')?.value ?? "";
+        const imageIdValue = (document.getElementById("map-overlay-image-id") as HTMLInputElement | null)?.value ?? "";
+        submit.disabled = !overlaySubmitEnabled({ hasFile, urlValue, imageIdValue });
+    };
+
+    window.ulMapOverlayHandleDrop = (event: DragEvent, zone: HTMLElement) => {
+        event.preventDefault();
+        zone.classList.remove("is-dragover");
+        const files = event.dataTransfer?.files;
+        const input = zone.querySelector<HTMLInputElement>('input[type="file"]');
+        if (!files?.length || !input) return;
+        input.files = files;
+        window.ulMapOverlaySyncSubmitState?.();
+    };
+
+    window.ulMapOverlayChooseImage = (id: number, caption: string) => {
+        const idField = document.getElementById("map-overlay-image-id") as HTMLInputElement | null;
+        const picked = document.getElementById("map-overlay-picked-media");
+        const picker = document.getElementById("map-overlay-media-picker");
+        if (idField) idField.value = String(id);
+        if (picked) {
+            picked.textContent = `Using: ${caption || "this photo"}`;
+            picked.hidden = false;
+        }
+        if (picker) picker.hidden = true;
+        window.ulMapOverlaySyncSubmitState?.();
+    };
+
+    // Replaces the previous "grab whatever tile happens to be selected or
+    // relevant in the page's separate Media section, or just the first one if
+    // not" hack (duplicated inline in two page templates) - which had no
+    // affordance to actually choose a photo, and had nothing to grab at all on
+    // the floorplan editor page, which has no Media section. This fetches the
+    // pin's/wiki's own already-uploaded photos directly and shows them to pick
+    // from right here.
+    window.ulMapOverlayPickFromMedia = (galleryJsonUrl?: string) => {
+        const picker = document.getElementById("map-overlay-media-picker");
+        if (!picker) return;
+        if (!picker.hidden) {
+            picker.hidden = true;
+            return;
+        }
+        picker.hidden = false;
+        if (picker.dataset.loaded === "1" || !galleryJsonUrl) return;
+
+        const setMessage = (text: string): void => {
+            picker.textContent = "";
+            const message = document.createElement("p");
+            message.className = "map-overlay-manage-empty";
+            message.textContent = text;
+            picker.appendChild(message);
+        };
+        setMessage("Loading this page's photos...");
+
+        fetch(galleryJsonUrl, { credentials: "same-origin" })
+            .then((response) => response.json())
+            .then((data: { images?: GalleryImage[] }) => {
+                picker.dataset.loaded = "1";
+                const images = data.images || [];
+                if (!images.length) {
+                    setMessage("No photos uploaded here yet.");
+                    return;
+                }
+                picker.textContent = "";
+                const grid = document.createElement("div");
+                grid.className = "map-overlay-media-picker-grid";
+                for (const image of images) {
+                    const thumbButton = document.createElement("button");
+                    thumbButton.type = "button";
+                    thumbButton.className = "map-overlay-media-picker-thumb";
+                    thumbButton.title = image.caption || "Untitled photo";
+                    const thumbImg = document.createElement("img");
+                    thumbImg.src = image.url;
+                    thumbImg.alt = "";
+                    thumbImg.loading = "lazy";
+                    thumbButton.appendChild(thumbImg);
+                    thumbButton.addEventListener("click", () => window.ulMapOverlayChooseImage?.(image.id, image.caption));
+                    grid.appendChild(thumbButton);
+                }
+                picker.appendChild(grid);
+            })
+            .catch(() => setMessage("Couldn't load this page's photos."));
+    };
+}

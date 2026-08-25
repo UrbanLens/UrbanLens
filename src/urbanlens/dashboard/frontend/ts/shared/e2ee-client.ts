@@ -269,7 +269,14 @@ async function runLoginFlow(form: HTMLFormElement): Promise<void> {
     const identifier = (form.elements.namedItem("username") as HTMLInputElement).value;
     const passwordInput = form.elements.namedItem("password") as HTMLInputElement;
     const password = passwordInput.value;
-    form.classList.add("e2ee-busy");
+    // Reuses the shared .btn.is-loading spinner rather than a bespoke class:
+    // "e2ee-busy" had no CSS rule anywhere, so the ~1s synchronous Argon2id
+    // derivation below showed no feedback at all - the page just looked
+    // frozen after clicking Sign in. Never explicitly cleared: every path
+    // out of this function either navigates away or replaces the whole
+    // document with the server's re-rendered form (see below), so there is
+    // no "still loading" DOM left behind to reset.
+    form.querySelector<HTMLButtonElement>('button[type="submit"]')?.classList.add("is-loading");
 
     const paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
     if (!paramsResponse.ok) {
@@ -582,7 +589,7 @@ export async function enrollOauthIfNeeded(): Promise<boolean> {
 }
 
 function notifyEnrolled(): void {
-    window.toastr.info("Your direct messages are now end-to-end encrypted. Save your recovery key from Settings → Direct Messages.", "Encryption enabled");
+    toast.info("Your direct messages are now end-to-end encrypted. Save your recovery key from Settings → Direct Messages.", "Encryption enabled");
 }
 
 // ---------------------------------------------------------------------------

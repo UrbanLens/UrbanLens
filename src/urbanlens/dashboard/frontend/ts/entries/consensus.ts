@@ -315,6 +315,15 @@ function levelForPoints(points: number): number {
 // cannot double-count each other.
 const progression = { basePoints: 0, sessionPoints: 0 };
 
+// A competitive round's disagreement sub-phase broadcasts round.revealed
+// *twice* for the same round_id by design (see services/consensus/session.py's
+// _finish_round/resolve_vote): once with resolution "vote_open" and zero
+// points while the tiebreak vote is pending, again with the real points once
+// it resolves - so the guard has to be "same round AND same resolution
+// already credited", not just "same round", or a genuine reconnect-replay
+// duplicate would be indistinguishable from that legitimate second stage.
+let lastCreditedReveal: { roundId: number; resolution: string } | null = null;
+
 function renderProgression(): void {
     const points = progression.basePoints + progression.sessionPoints;
     const level = levelForPoints(points);
@@ -711,6 +720,7 @@ function updateSubmitEnabled(): void {
 function renderRound(round: RoundPayload, roundNumber: number): void {
     state.currentRoundId = round.round_id;
     state.currentFieldKind = round.field_kind;
+    lastCreditedReveal = null;
     state.answeredProfileIds = new Set();
     state.votedProfileIds = new Set();
 
@@ -1061,7 +1071,11 @@ function renderReveal(data: RevealBroadcast): void {
     updateScoreboardFromReveal(data.answers);
 
     const mine = data.answers.find((answer) => answer.profile_id === myProfileId);
-    if (mine) setSessionPoints(progression.sessionPoints + mine.points_awarded);
+    const alreadyCredited = lastCreditedReveal?.roundId === data.round_id && lastCreditedReveal?.resolution === data.resolution;
+    if (mine && !alreadyCredited) {
+        setSessionPoints(progression.sessionPoints + mine.points_awarded);
+        lastCreditedReveal = { roundId: data.round_id, resolution: data.resolution };
+    }
 
     const votePanel = el("cs-vote-panel");
     if (data.resolution === "vote_open" && data.vote_options?.length) {

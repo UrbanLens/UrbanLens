@@ -302,12 +302,20 @@ class PinListEditView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
         body = _parse_body(request)
+        # A bare save() writes every column from this request's snapshot,
+        # silently reverting any field a concurrent request (another tab, or
+        # the external API's own PATCH endpoint further down this file - two
+        # separate implementations editing the same row) changed in between.
+        # Scoped the same way services.wiki.wiki_edits.save_edited_fields
+        # already does for exactly this reason on a comparably shared model.
+        changed_fields: set[str] = set()
 
         name = (body.get("name") or "").strip()
         if name and name != pin_list.name:
             if PinList.objects.filter(profile=profile, name=name).exclude(pk=pin_list.pk).exists():
                 return HttpResponse("You already have a list with that name.", status=409)
             pin_list.name = name
+            changed_fields.add("name")
 
         if "description" in body:
             description = body.get("description") or ""
@@ -315,6 +323,7 @@ class PinListEditView(LoginRequiredMixin, View):
             if length_error:
                 return HttpResponse(length_error, status=400)
             pin_list.description = description
+            changed_fields.add("description")
 
         # Rule changes (which filter/boundary is active) always resync a fresh
         # snapshot immediately, even before the list is marked "smart" - the
@@ -329,6 +338,7 @@ class PinListEditView(LoginRequiredMixin, View):
             new_is_smart = str(body.get("is_smart")).strip().lower() in {"true", "1", "yes", "on"}
             is_smart_turned_on = new_is_smart and not pin_list.is_smart
             pin_list.is_smart = new_is_smart
+            changed_fields.add("is_smart")
 
         if "saved_filter_uuid" in body:
             saved_filter_uuid = (body.get("saved_filter_uuid") or "").strip()
@@ -339,6 +349,7 @@ class PinListEditView(LoginRequiredMixin, View):
             else:
                 pin_list.smart_filter = None
                 pin_list.source_saved_filter = None
+            changed_fields.update({"smart_filter", "source_saved_filter"})
             rules_changed = True
 
         if "smart_boundary" in body:
@@ -352,9 +363,11 @@ class PinListEditView(LoginRequiredMixin, View):
                     return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
             else:
                 pin_list.smart_boundary = None
+            changed_fields.add("smart_boundary")
             rules_changed = True
 
-        pin_list.save()
+        if changed_fields:
+            pin_list.save(update_fields=[*changed_fields, "updated"])
 
         if rules_changed or is_smart_turned_on:
             resync_smart_list(pin_list)

@@ -38,7 +38,7 @@ from model_bakery import baker
 
 from urbanlens.dashboard.external_api.serializers import JournalEntrySerializer
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.memories.journal import JournalEntry
@@ -187,6 +187,57 @@ class PhotoDeleteTests(_PhotoApiTestCase):
         """A 204 and the row is gone."""
         url = reverse("external_api:photos.detail", kwargs={"image_uuid": self.image.uuid})
         response = self.client.delete(url, **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
+        self.assertFalse(Image.objects.filter(pk=self.image.pk).exists())
+
+
+class PhotoDeleteAndTheWikiTests(_PhotoApiTestCase):
+    """Deleting over the API withdraws a wiki contribution only if asked.
+
+    The same rule the pin gallery follows: contributing a photo to a community
+    wiki is a deliberate act, so undoing it is another one, and a caller that
+    says nothing gets the answer that needs no action. A client has what it needs
+    to ask first - ``wiki_slug`` and ``source`` are both on the photo payload.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        self.wiki = baker.make(Wiki, location=self.image.location or baker.make("dashboard.Location", latitude=41.7, longitude=-73.9))
+        Image.objects.filter(pk=self.image.pk).update(wiki=self.wiki, source=ImageSource.UPLOAD)
+        self.image.refresh_from_db()
+
+    def _url(self) -> str:
+        return reverse("external_api:photos.detail", kwargs={"image_uuid": self.image.uuid})
+
+    def test_a_silent_delete_leaves_it_on_the_wiki(self) -> None:
+        response = self.client.delete(self._url(), **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
+        self.assertTrue(Image.objects.filter(pk=self.image.pk, wiki=self.wiki).exists(), "the API withdrew a wiki contribution nobody asked to withdraw")
+
+    def test_asking_withdraws_it(self) -> None:
+        response = self.client.delete(f"{self._url()}?from_wiki=true", **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
+        self.assertFalse(Image.objects.filter(pk=self.image.pk).exists())
+
+    def test_an_external_photo_stays_even_when_asked(self) -> None:
+        """A fetched photo was public online before we saw it - nothing to withdraw."""
+        Image.objects.filter(pk=self.image.pk).update(source=ImageSource.LINKED_URL)
+
+        response = self.client.delete(f"{self._url()}?from_wiki=true", **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
+        self.assertTrue(Image.objects.filter(pk=self.image.pk, wiki=self.wiki).exists(), "an external photo was pulled off the wiki by an API delete")
+
+    def test_a_photo_on_no_wiki_still_deletes_outright(self) -> None:
+        """The ordinary case, unchanged."""
+        Image.objects.filter(pk=self.image.pk).update(wiki=None)
+
+        response = self.client.delete(self._url(), **_bearer(self.raw_key))
+
         self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
         self.assertFalse(Image.objects.filter(pk=self.image.pk).exists())
 

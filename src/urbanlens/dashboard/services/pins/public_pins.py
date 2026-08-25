@@ -351,11 +351,10 @@ def sync_public_pin_suggestions() -> int:
         Number of suggestions created.
     """
     created = 0
-    # officially_created=True: a still-unofficial background draft (see
-    # Wiki.officially_created) must not be used to suggest a pin - by name -
-    # to every community-enabled profile site-wide before anyone has
-    # actually created the page.
-    passed = PublicPinCandidate.objects.passed().filter(location__wiki__officially_created=True).select_related("location__wiki")
+    # wiki__isnull=False: a candidate is only suggested - by name, to every
+    # community-enabled profile site-wide - once its place has a page, which
+    # is what the background task creates shortly after the first pin.
+    passed = PublicPinCandidate.objects.passed().filter(location__wiki__isnull=False).select_related("location__wiki")
     for candidate in passed:
         location = candidate.location
         wiki = location.wiki
@@ -381,13 +380,25 @@ def sync_public_pin_suggestions() -> int:
     return created
 
 
-def public_vote_context(location: Location, profile: Profile | None) -> dict | None:
+def public_vote_context(location: Location, profile: Profile | None, *, conceal: bool = False) -> dict | None:
     """Build the template context for the public-vote block on a wiki page.
 
     Returns None when nothing should render (no candidate, suspended,
     rejected, or the viewer can't vote) - ineligibility is never explained
     in the UI.
+
+    Args:
+        location: The place being rendered.
+        profile: The viewing profile.
+        conceal: When True, render nothing. The eligibility gate this block sits
+            behind requires a pinner floor, aliases, links, a meaningful name,
+            photos and markup - so the block's mere *presence* proves heavy
+            community contribution, which is what concealment exists to hide.
+            The PASSED branch returns before any profile check, so that half
+            would leak unconditionally.
     """
+    if conceal:
+        return None
     candidate = PublicPinCandidate.objects.filter(location=location).first()
     if candidate is None:
         return None

@@ -238,3 +238,41 @@ export function clampOpening(start: number, end: number, minimum = 0.02): [numbe
     const high = Math.max(Math.min(Math.max(start, end), 1), low + minimum);
     return [low, Math.min(high, 1)];
 }
+
+/**
+ * Nudge a rigid translation so one of the points it carries lands on a snap.
+ *
+ * A group being dragged - a whole wall, a whole room - has to move by one
+ * delta or it stops being the shape it was. So rather than snapping each point
+ * independently, this finds whichever carried point comes nearest a target and
+ * corrects the shared delta by that much.
+ *
+ * The caller is responsible for leaving out every wall the drag itself
+ * rewrites. A wall being stretched to follow the thing under the cursor has
+ * its corner moved every frame, so leaving it in makes the drag snap to the
+ * position it produced a frame ago, and stop moving.
+ *
+ * Args:
+ *     moved: The carried points, at their pre-drag positions.
+ *     delta: The translation asked for, in plan-local metres.
+ *     segments: Candidate geometry, already filtered by the caller.
+ *     tolerances: Metre tolerances for this zoom.
+ *
+ * Returns:
+ *     The delta to apply - corrected toward the nearest snap within reach, or
+ *     unchanged when nothing is close enough.
+ */
+export function snapTranslation(moved: readonly Pt[], delta: Pt, segments: readonly Segment[], tolerances: Tolerances): Pt {
+    if (!moved.length || !segments.length) return delta;
+    let best: { dx: number; dy: number; away: number } | null = null;
+    for (const point of moved) {
+        const target = { x: point.x + delta.x, y: point.y + delta.y };
+        const snapped = snapPoint(target, segments, tolerances);
+        if (snapped.kind === "free") continue;
+        const dx = snapped.point.x - target.x;
+        const dy = snapped.point.y - target.y;
+        const away = Math.hypot(dx, dy);
+        if (!best || away < best.away) best = { dx, dy, away };
+    }
+    return best ? { x: delta.x + best.dx, y: delta.y + best.dy } : delta;
+}

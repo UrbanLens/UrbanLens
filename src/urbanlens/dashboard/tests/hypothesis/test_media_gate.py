@@ -100,7 +100,8 @@ class MediaGateTests(TestCase):
         response = self.client.get("/media/pin_images/owned.png")
         self.assertEqual(response.status_code, 404)
 
-    def test_friend_passing_visibility_can_fetch(self):
+    def _befriend(self):
+        """An accepted friendship from the owner to a new user."""
         friend_user = _new_user()
         Friendship.objects.create(
             from_profile=self.owner,
@@ -109,10 +110,64 @@ class MediaGateTests(TestCase):
             relationship_type=FriendshipType.FRIEND,
             permissions=Permission.VIEW_PROFILE,
         )
-        self.client.force_login(friend_user)
+        return friend_user
+
+    def test_a_friend_cannot_fetch_a_photo_that_was_never_shared(self):
+        """A photo is private until its owner shares it, and being someone's
+        friend is not the same as being shown their photo.
+
+        Visibility is two gates: the photo has to have been shared to a wiki, and
+        then the uploader's setting decides which of the people who can reach
+        that wiki may see it. This test used to assert the friendship alone was
+        enough, which was the first gate missing entirely.
+        """
+        self.client.force_login(self._befriend())
+
         response = self.client.get("/media/pin_images/owned.png")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_a_friend_can_fetch_a_photo_that_was_shared(self):
+        """And with both gates open, they can - which is the point of sharing.
+
+        Both gates means both. The friendship opens the uploader's setting; the
+        friend's own pin at the place is what brings the wiki within reach. This
+        fixture used to make a wiki nobody had pinned and still expect a 200,
+        which only passed while the container gate ignored *which* wiki.
+        """
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        location = baker.make(Location, latitude=41.7361, longitude=-73.9361)
+        wiki = baker.make(Wiki, location=location)
+        Image.objects.filter(pk=self.image.pk).update(wiki=wiki)
+        friend = self._befriend()
+        baker.make(Pin, profile=friend.profile, location=location, parent_pin=None)
+        self.client.force_login(friend)
+
+        response = self.client.get("/media/pin_images/owned.png")
+
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self._get_bytes(response), _IMAGE_BYTES)
+
+    def test_a_friend_cannot_fetch_a_photo_on_a_wiki_they_cannot_reach(self):
+        """Wiki access is earned per place, and a friendship does not carry across.
+
+        The uploader's setting admits this friend; the wiki is at a place they
+        have never pinned, so the container gate is shut and the setting never
+        gets to speak.
+        """
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        wiki = baker.make(Wiki, location=baker.make(Location, latitude=47.6062, longitude=-122.3321))
+        Image.objects.filter(pk=self.image.pk).update(wiki=wiki)
+        self.client.force_login(self._befriend())
+
+        response = self.client.get("/media/pin_images/owned.png")
+
+        self.assertEqual(response.status_code, 404)
 
     def test_dm_attachment_is_participant_only(self):
         from urbanlens.dashboard.models.direct_messages.model import DirectMessage
@@ -313,3 +368,148 @@ class CommentImageMediaGateTests(TestCase):
                 file_to_stream.close()
             return data
         return response.content
+
+
+class SafetyCheckinMediaGateTests(TestCase):
+    """A check-in is a container, and the people watching it can see its photos.
+
+    The container gate reads reachability off the photo's container. A check-in
+    photo has no wiki, so a gate that asked only about wikis denied its bytes to
+    everybody but the uploader - while the gallery panel happily listed them to
+    an accepted partner, who saw a grid of broken images on the page that exists
+    to tell them somebody is overdue.
+    """
+
+    def setUp(self):
+        self._media_root = tempfile.mkdtemp(prefix="ul_media_gate_safety_")
+        self.addCleanup(shutil.rmtree, self._media_root, ignore_errors=True)
+        self._overrides = override_settings(MEDIA_ROOT=self._media_root, MEDIA_X_ACCEL=False)
+        self._overrides.enable()
+        self.addCleanup(self._overrides.disable)
+        (Path(self._media_root) / "pin_images").mkdir(parents=True)
+        (Path(self._media_root) / "pin_images" / "checkin.png").write_bytes(_IMAGE_BYTES)
+
+        self.owner_user = _new_user()
+        self.owner: Profile = self.owner_user.profile
+        self.checkin = self._make_checkin()
+        self.image = baker.make(Image, image="pin_images/checkin.png", profile=self.owner, safety_checkin=self.checkin)
+
+    def _make_checkin(self):
+        import datetime
+
+        from django.utils import timezone
+
+        return baker.make(
+            "dashboard.SafetyCheckin",
+            profile=self.owner,
+            title="Test hike",
+            checkin_by=timezone.now() + datetime.timedelta(hours=2),
+            grace_period=datetime.timedelta(hours=1),
+        )
+
+    def _fetch(self) -> int:
+        return self.client.get("/media/pin_images/checkin.png").status_code
+
+    def test_an_accepted_partner_can_fetch_a_checkin_photo(self):
+        from urbanlens.dashboard.models.safety.model import SafetyCheckinPartner, SafetyCheckinPartnerStatus
+
+        partner_user = _new_user()
+        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=partner_user.profile, invited_by=self.owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
+        self.client.force_login(partner_user)
+
+        self.assertEqual(self._fetch(), 200, "an accepted safety partner could not load the check-in's photos")
+
+    def test_an_invited_but_unaccepted_partner_cannot(self):
+        """Being asked is not the same as having accepted - mirrors partnered_with."""
+        from urbanlens.dashboard.models.safety.model import SafetyCheckinPartner, SafetyCheckinPartnerStatus
+
+        invitee_user = _new_user()
+        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=invitee_user.profile, invited_by=self.owner, status=SafetyCheckinPartnerStatus.INVITED)
+        self.client.force_login(invitee_user)
+
+        self.assertEqual(self._fetch(), 404)
+
+    def test_a_stranger_cannot_fetch_a_checkin_photo(self):
+        self.client.force_login(_new_user())
+
+        self.assertEqual(self._fetch(), 404)
+
+    def test_the_owner_can_fetch_their_own_checkin_photo(self):
+        self.client.force_login(self.owner_user)
+
+        self.assertEqual(self._fetch(), 200)
+
+
+class SafetyContactTokenPhotoTests(TestCase):
+    """A signed-out emergency contact can see the check-in's photos.
+
+    An emergency contact is frequently somebody with no account at all - that is
+    the point of the magic-link portal - so the login-gated media path can never
+    serve them. Reaching the check-in is the whole barrier: a valid token is the
+    credential, and it scopes to exactly one check-in's photos.
+    """
+
+    def setUp(self):
+        import datetime
+
+        from django.utils import timezone
+
+        self._media_root = tempfile.mkdtemp(prefix="ul_media_gate_token_")
+        self.addCleanup(shutil.rmtree, self._media_root, ignore_errors=True)
+        self._overrides = override_settings(MEDIA_ROOT=self._media_root, MEDIA_X_ACCEL=False)
+        self._overrides.enable()
+        self.addCleanup(self._overrides.disable)
+        (Path(self._media_root) / "pin_images").mkdir(parents=True)
+        (Path(self._media_root) / "pin_images" / "tok.png").write_bytes(_IMAGE_BYTES)
+        (Path(self._media_root) / "pin_images" / "other.png").write_bytes(_IMAGE_BYTES)
+
+        self.owner: Profile = _new_user().profile
+        self._now = timezone.now
+        self._delta = datetime.timedelta
+
+        self.checkin = self._checkin()
+        self.image = baker.make(Image, image="pin_images/tok.png", profile=self.owner, safety_checkin=self.checkin)
+        self.contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+
+    def _checkin(self):
+        return baker.make(
+            "dashboard.SafetyCheckin",
+            profile=self.owner,
+            title="Test hike",
+            checkin_by=self._now() + self._delta(hours=2),
+            grace_period=self._delta(hours=1),
+        )
+
+    def _url(self, token, image_id) -> str:
+        from django.urls import reverse
+
+        return reverse("safety.contact.photo", args=[token, image_id])
+
+    def test_a_signed_out_contact_can_fetch_the_photo(self):
+        response = self.client.get(self._url(self.contact.token, self.image.pk))
+
+        self.assertEqual(response.status_code, 200, "a valid magic-link token could not fetch the check-in's photo")
+        self.assertEqual(b"".join(response.streaming_content) if response.streaming else response.content, _IMAGE_BYTES)
+
+    def test_an_invalid_token_gets_nothing(self):
+        import uuid
+
+        response = self.client.get(self._url(uuid.uuid4(), self.image.pk))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_a_token_does_not_reach_another_checkins_photo(self):
+        """The token is scoped to its own check-in, not to check-in photos at large."""
+        other_image = baker.make(Image, image="pin_images/other.png", profile=self.owner, safety_checkin=self._checkin())
+
+        response = self.client.get(self._url(self.contact.token, other_image.pk))
+
+        self.assertEqual(response.status_code, 404, "a contact's token reached a photo on a different check-in")
+
+    def test_the_portal_lists_the_photo(self):
+        from django.urls import reverse
+
+        response = self.client.get(reverse("safety.contact.portal", args=[self.contact.token]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self._url(self.contact.token, self.image.pk))

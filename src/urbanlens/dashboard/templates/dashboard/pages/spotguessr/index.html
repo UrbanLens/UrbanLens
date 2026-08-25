@@ -1,15 +1,15 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load static %}
 {% load map_components %}
 
 {% block page_title %}SpotGuessr &middot; UrbanLens{% endblock %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
+{% vendor_asset "leaflet_draw_css" %}
+{% vendor_asset "leaflet_draw_js" %}
 {% endblock %}
 
 {% block hero %}

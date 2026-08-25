@@ -16,7 +16,12 @@ const TAB_FILTER_NS: Record<string, OrgNamespace> = { categories: "cat", tags: "
 class OrganizeHeader {
     private tabs = new Map<string, OrgTabConfig>();
     private activeTab: string;
+    // The persisted preference - only ever changed by an explicit view-button
+    // click (setSharedView). Rendering never reads this directly; it always
+    // goes through effectiveView(), which is what keeps a transient narrow
+    // window from being confused with the user actually asking for "list".
     private sharedView: string;
+    private lastEffectiveView: string | null = null;
     private actionsEl: HTMLElement | null = null;
     private headerActionsEl: HTMLElement | null = null;
     private filterBtn: HTMLElement | null = null;
@@ -48,8 +53,16 @@ class OrganizeHeader {
         return TAB_FILTER_NS[this.activeTab] ?? null;
     }
 
+    /** Gallery doesn't fit a narrow viewport, so a "gallery" preference
+     * displays as "list" below the breakpoint - a display-time fallback,
+     * not a substitute for the stored preference itself (see sharedView). */
+    private effectiveView(): string {
+        const isNarrow = window.matchMedia("(max-width: 767px)").matches;
+        return isNarrow && this.sharedView === "gallery" ? "list" : this.sharedView;
+    }
+
     getSharedView(): string {
-        return this.sharedView;
+        return this.effectiveView();
     }
 
     setSharedView(view: string): void {
@@ -64,6 +77,12 @@ class OrganizeHeader {
         } catch {
             /* quota or blocked storage - the view still switches, it just won't persist */
         }
+        this.renderEffectiveView();
+    }
+
+    private renderEffectiveView(): void {
+        const view = this.effectiveView();
+        this.lastEffectiveView = view;
         this.syncViewButtons(view);
         this.tabs.forEach((cfg) => cfg.applyView());
         applyAllOrgFilters();
@@ -95,7 +114,7 @@ class OrganizeHeader {
         if (this.viewToggle) this.viewToggle.setAttribute("aria-label", cfg.viewAriaLabel);
         if (this.filterBtn) this.filterBtn.title = cfg.filterTitle;
         this.syncCreateButton(cfg);
-        this.syncViewButtons(this.sharedView);
+        this.syncViewButtons(this.effectiveView());
         cfg.updateSelAllBtn();
     }
 
@@ -119,9 +138,16 @@ class OrganizeHeader {
         this.createBtn?.addEventListener("click", () => this.tabs.get(this.activeTab)?.onCreate());
     }
 
+    /**
+     * Re-render for the current viewport, without ever touching the stored
+     * preference - a resize firing continuously through a drag, or a user
+     * genuinely on a narrow device, must not overwrite a "gallery" choice
+     * made on desktop. Widening back past the breakpoint restores it with
+     * no extra bookkeeping, since sharedView itself was never changed.
+     */
     private enforceMobileGalleryFallback(): void {
-        if (!window.matchMedia("(max-width: 767px)").matches) return;
-        if (this.sharedView === "gallery") this.setSharedView("list");
+        if (this.effectiveView() === this.lastEffectiveView) return;
+        this.renderEffectiveView();
     }
 
     init(): void {

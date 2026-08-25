@@ -254,6 +254,40 @@ def visible_wiki_location_ids(profile: Profile) -> set[int]:
     return direct_ids | set(Location.objects.filter(wiki__isnull=False, place__domain_root_id__in=domains).values_list("pk", flat=True))
 
 
+#: Instance attribute the per-request memoization hangs on.
+_CACHE_ATTR = "_ul_visible_wiki_location_ids"
+
+
+def visible_wiki_location_ids_cached(profile: Profile) -> set[int]:
+    """:func:`visible_wiki_location_ids`, memoised on the profile instance.
+
+    One global search fans out to eleven providers, four of which need the
+    viewer's wiki reach. Recomputing it per provider costs the pin lookup, the
+    aggregate fixpoint and the location query four times over for an answer that
+    cannot change mid-request.
+
+    Cached on the instance rather than in a module-level dict deliberately: a
+    ``Profile`` is loaded fresh per request, so the entry cannot outlive the
+    request that made it, and nothing has to invalidate it when a pin moves.
+    Pass the *same* instance to every caller that should share the answer.
+
+    Args:
+        profile: The viewing profile.
+
+    Returns:
+        Set of Location primary keys whose Wiki is visible to *profile*.
+    """
+    cached = getattr(profile, _CACHE_ATTR, None)
+    if cached is None:
+        cached = visible_wiki_location_ids(profile)
+        # setattr rather than a direct assignment: the attribute is not declared
+        # on Profile, and assigning it directly is an error django-stubs is
+        # right to flag. Memoizing on the instance is still the point - a
+        # Profile is loaded fresh per request, so the entry cannot outlive one.
+        setattr(profile, _CACHE_ATTR, cached)
+    return cached
+
+
 def wikis_hidden_by_pin_move(pin: Pin, latitude: float, longitude: float) -> list[Wiki]:
     """Wikis the owner can see now but would lose by moving *pin* to this point.
 
@@ -296,7 +330,7 @@ def wikis_hidden_by_pin_move(pin: Pin, latitude: float, longitude: float) -> lis
     visible_ids = visible_wiki_location_ids(profile)
     if not visible_ids:
         return []
-    candidates = list(Wiki.objects.filter(location_id__in=visible_ids, officially_created=True).select_related("location", "location__place"))
+    candidates = list(Wiki.objects.filter(location_id__in=visible_ids).select_related("location", "location__place"))
     if not candidates:
         return []
 
@@ -330,12 +364,10 @@ def visible_parent_wiki(wiki: Wiki, profile: Profile) -> Wiki | None:
 def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
     """Resolve a Location and its Wiki, 404ing unless the requester can see it.
 
-    A location with no wiki yet, a location whose only wiki is still an
-    unofficial background-created draft (see ``Wiki.officially_created``), a
-    location_slug that doesn't exist at all, and a real wiki the requester
-    hasn't earned all raise the identical ``Http404`` - deliberately
-    indistinguishable, so guessing slugs can never reveal which locations
-    other users have pinned (or which have a draft quietly being enriched).
+    A location with no wiki yet, a location_slug that doesn't exist at all,
+    and a real wiki the requester hasn't earned all raise the identical
+    ``Http404`` - deliberately indistinguishable, so guessing slugs can never
+    reveal which locations other users have pinned.
 
     The wiki is found through the Location's *place*, not only through the
     Location itself, so everyone who pinned one property reaches the same page
@@ -348,7 +380,12 @@ def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Loca
         location_slug: Slug of the Location whose Wiki is being resolved.
 
     Returns:
-        Tuple of (Location, Wiki, requester's Profile).
+        Tuple of (Location, Wiki, requester's Profile). The Wiki may be a
+        **concealed projection** - a real Wiki instance, with the real primary
+        key, carrying only the field values this viewer is entitled to. It
+        refuses ``save()``/``delete()``; a write path must re-fetch the row or
+        use ``queryset.update()``. Related managers on it are *not* filtered -
+        rows are concealed separately by ``concealment.conceal_rows``.
 
     Raises:
         Http404: The location doesn't exist, has no wiki, or the requester
@@ -365,4 +402,19 @@ def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Loca
     profile, _ = Profile.objects.get_or_create(user=request.user)
     if not location_visible_to(location, profile):
         raise Http404
-    return location, wiki, profile
+
+    # Concealment is applied *here*, at the one place every wiki-scoped surface
+    # already funnels through - 56 controller call sites plus the external API's
+    # 32 handlers, all of which get it without knowing it exists.
+    #
+    # It was previously applied per call site, and that is why an adversarial
+    # review found roughly two dozen surfaces still serving real values: the
+    # ones somebody remembered were right and the rest were untouched. A rule
+    # kept in one place cannot be forgotten at the others.
+    #
+    # This narrows what a wiki *shows*. It never widens who can reach one -
+    # that decision is the place-domain rule above, and the two stay separate so
+    # concealment can never become an access-control bypass.
+    from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
+
+    return location, conceal_wiki(wiki, profile), profile

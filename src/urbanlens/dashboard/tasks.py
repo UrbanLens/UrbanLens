@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def ensure_draft_wiki_for_location(location_id: int) -> int | None:
-    """Auto-create an unofficial draft Wiki for a Location, so enrichment can get a head start.
+def ensure_wiki_for_location(location_id: int) -> int | None:
+    """Auto-create the Wiki for a Location, so enrichment can get a head start.
 
     Queued by the ``Pin`` post_save signal (``models.pin.signals``) whenever a
     pin gets a shared Location, for any community-enabled profile - covering
@@ -34,10 +34,10 @@ def ensure_draft_wiki_for_location(location_id: int) -> int | None:
     external API is touched here or by the signal that queued this - that
     only happens below, once, when the draft is first created.
 
-    The draft stays invisible to users and the external API (see
-    ``Wiki.officially_created`` and ``WikiManager.get_for_location``) until a
-    user's own "Create Wiki" click promotes it (``WikiManager.claim_for_location``)
-    - by then it's already enriched and ready to go.
+    The page is published from the moment it exists - there is no draft state
+    and nothing for a user to "create". It starts empty and fills in as
+    enrichment lands, which is what a place nobody has written up looks like
+    anyway.
 
     Args:
         location_id: PK of the Location that just gained a pin.
@@ -52,12 +52,20 @@ def ensure_draft_wiki_for_location(location_id: int) -> int | None:
 
     location = Location.objects.filter(pk=location_id).first()
     if location is None:
-        logger.info("ensure_draft_wiki_for_location: location %s no longer exists", location_id)
+        logger.info("ensure_wiki_for_location: location %s no longer exists", location_id)
         return None
 
-    wiki, created = Wiki.objects.get_or_create_draft_for_location(location)
+    wiki, created = Wiki.objects.get_or_create_for_location(location)
     if created:
         safely_enqueue_task(enrich_wiki_location, wiki.pk)
+        # Covers a Wikipedia article matched and cached for this location
+        # *before* there was a wiki to seed. The other direction - a match
+        # caching after the wiki exists - is handled by models.cache.signals.
+        # This used to hang off the "Create wiki" click, which was the moment
+        # the page appeared; that moment is here now.
+        from urbanlens.dashboard.services.wiki.wiki_seed import seed_wiki_article_from_wikipedia
+
+        seed_wiki_article_from_wikipedia(location)
     return wiki.pk
 
 
@@ -65,9 +73,8 @@ def ensure_draft_wiki_for_location(location_id: int) -> int | None:
 def enrich_wiki_location(self, wiki_id: int) -> bool:
     """Enrich a Wiki's Location with external data.
 
-    Runs either after a user clicks "Create community wiki", or right after
-    ``ensure_draft_wiki_for_location`` auto-creates an unofficial draft in the
-    background: links the Location to its Google Place, resolves a canonical
+    Runs right after ``ensure_wiki_for_location`` creates the page: links the
+    Location to its Google Place, resolves a canonical
     name when the wiki is still unnamed, and generates the location's default
     property/building boundaries. This is the only place these APIs are hit
     for a wiki - pin creation and bulk imports never call them synchronously.
@@ -657,7 +664,6 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         extract_source_url,
         extract_taken_at,
         is_camera_generated_filename,
-        stored_file_needs_transcode,
     )
     from urbanlens.dashboard.services.media.storage import get_downscale_policy
 
@@ -678,6 +684,11 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
         return None
 
+    # Dropping GPSInfo makes "what did the EXIF say" permanently unanswerable
+    # for this photo - the deliberate exception to exif_data being the surviving
+    # record of EXIF provenance. That is the point of the opt-out, not an
+    # oversight; any future coordinate-provenance work must treat a
+    # location-stripped photo as having no EXIF position rather than an unknown one.
     if strip_location and exif_data:
         exif_data.pop("GPSInfo", None)
 
@@ -716,26 +727,29 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
     new_stored_size: int | None = None
     if image.profile is not None:
         max_dimension, convert_webp = get_downscale_policy(image.profile)
-        # `stored_file_needs_transcode`: a HEIC has to be re-encoded even when the
-        # uploader's policy asks for no resize, no WebP and no GPS strip, because
-        # the stored bytes are what a plain <img src> gets and most browsers
-        # cannot render them.
-        if max_dimension is not None or convert_webp or strip_location or stored_file_needs_transcode(image.image.name or ""):
-            try:
-                new_size = downscale_stored_image(image, max_dimension, convert_webp, strip_gps=strip_location)
-            except (OSError, ValueError, PILDecompressionBombError) as exc:
-                # DecompressionBombError inherits straight from Exception, not from
-                # OSError/ValueError like the rest of Pillow's failures (Unidentified-
-                # ImageError does), so it escaped this handler and took the whole
-                # photo-processing task down with it. Pillow's own 89MP ceiling already
-                # prevents the memory exhaustion; what was missing was degrading to the
-                # same logged warning every other unprocessable image gets, leaving the
-                # upload stored and the rest of the pipeline intact.
-                logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
-            else:
-                if new_size is not None:
-                    update_fields["image"] = image.image.name
-                    new_stored_size = new_size
+        # Called unconditionally. It used to be gated on there being a resize, a
+        # conversion, a location opt-out or a HEIC to transcode - reasonable while
+        # this function existed to resize, but it is also what removes EXIF now,
+        # and "no cap, no conversion" is exactly the policy a downscale-exempt
+        # subscriber gets. Gating it left their photos carrying the block.
+        # downscale_stored_image decides for itself whether anything needs doing,
+        # including the HEIC case (`stored_file_needs_transcode`), where the stored
+        # bytes are what a plain <img src> gets and most browsers cannot render them.
+        try:
+            new_size = downscale_stored_image(image, max_dimension, convert_webp)
+        except (OSError, ValueError, PILDecompressionBombError) as exc:
+            # DecompressionBombError inherits straight from Exception, not from
+            # OSError/ValueError like the rest of Pillow's failures (Unidentified-
+            # ImageError does), so it escaped this handler and took the whole
+            # photo-processing task down with it. Pillow's own 89MP ceiling already
+            # prevents the memory exhaustion; what was missing was degrading to the
+            # same logged warning every other unprocessable image gets, leaving the
+            # upload stored and the rest of the pipeline intact.
+            logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
+        else:
+            if new_size is not None:
+                update_fields["image"] = image.image.name
+                new_stored_size = new_size
 
     return _UploadProcessResult(update_fields, coords, new_stored_size)
 
@@ -836,6 +850,13 @@ def process_image_upload(self, image_id: int) -> bool:
 
     update_fields, coords = result.update_fields, result.coords
 
+    # Unconditional, unlike the exif_data write in _process_photo_upload, which
+    # only fills a row that has none. A re-enqueued or retried run therefore
+    # replaces a manually placed position with the EXIF one.
+    # TODO: guard this once Image records which provenance its coordinates have
+    # (see the latitude/longitude comment in models/images/model.py). Left as-is
+    # deliberately: changing it without that column would trade one silent
+    # overwrite for another.
     if coords:
         lat, lng = coords
         image.latitude = Decimal(str(lat))
@@ -3309,6 +3330,118 @@ def backfill_achievement(achievement_id: int) -> int:
         return 0
 
     return evaluate_achievement_for_all(achievement)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def score_reputation_event(event_id: int) -> str:
+    """Work out what one recorded contribution was worth.
+
+    Queued from ``models.reputation.signals`` after the row is already written.
+    Deferred because establishing how badly a target needed a contribution
+    means querying that target's state, which for photos can mean walking
+    external gallery panels - by far the most expensive input in the model, and
+    exactly the cost this feature must not add to a page load.
+
+    Args:
+        event_id: PK of the ledger row to value.
+
+    Returns:
+        The stored value as a string, or a short status when nothing was.
+    """
+    from urbanlens.dashboard.models.reputation.model import ReputationEvent
+    from urbanlens.dashboard.services.reputation.scoring import recompute_total, score_event
+
+    event = ReputationEvent.objects.filter(pk=event_id).first()
+    if event is None:
+        logger.info("score_reputation_event: event %s no longer exists", event_id)
+        return "missing"
+    if event.value is not None:
+        # Already scored. acks_late means this task can be redelivered.
+        return "already_scored"
+
+    value = score_event(event)
+    recompute_total(event.profile_id)
+    return "unscorable" if value is None else str(value)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def recompute_reputation_total(profile_id: int) -> str:
+    """Rebuild one profile's cached reputation totals from the ledger.
+
+    Args:
+        profile_id: Whose totals to rebuild.
+
+    Returns:
+        The new total as a string.
+    """
+    from urbanlens.dashboard.services.reputation.scoring import recompute_total
+
+    return str(recompute_total(profile_id))
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_reputation(chunk_size: int = 500) -> int:
+    """Drain unscored ledger rows and rebuild any totals known to be stale.
+
+    The backstop for a lost enqueue. ``safely_enqueue_task`` swallows broker
+    failures and returns None, so a row can sit unscored indefinitely with
+    nothing to notice - which is survivable only because the row itself was
+    written synchronously and is therefore still there to find.
+
+    Dispatch only: rows are sliced into bounded ranges, in pk order, and each
+    range is handled by its own subtask, so a chunk that crashes costs its own
+    range rather than the whole sweep.
+
+    Args:
+        chunk_size: Maximum rows per subtask.
+
+    Returns:
+        How many subtasks were dispatched.
+    """
+    from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    chunk_size = max(1, chunk_size)
+    pks = list(ReputationEvent.objects.unscored().order_by("pk").values_list("pk", flat=True))
+
+    dispatched = 0
+    for start in range(0, len(pks), chunk_size):
+        chunk = pks[start : start + chunk_size]
+        if safely_enqueue_task(sweep_reputation_range, chunk[0], chunk[-1]) is not None:
+            dispatched += 1
+
+    for profile_id in ProfileReputation.objects.stale().values_list("profile_id", flat=True):
+        if safely_enqueue_task(recompute_reputation_total, profile_id) is not None:
+            dispatched += 1
+
+    return dispatched
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_reputation_range(start_pk: int, end_pk: int) -> int:
+    """Score every unscored ledger row with ``start_pk <= pk <= end_pk``.
+
+    Args:
+        start_pk: First row in the range, inclusive.
+        end_pk: Last row in the range, inclusive.
+
+    Returns:
+        How many rows were scored.
+    """
+    from urbanlens.dashboard.models.reputation.model import ReputationEvent
+    from urbanlens.dashboard.services.reputation.scoring import recompute_total, score_event
+
+    rows = ReputationEvent.objects.unscored().filter(pk__gte=start_pk, pk__lte=end_pk)
+    touched: set[int] = set()
+    scored = 0
+    for event in rows:
+        if score_event(event) is not None:
+            scored += 1
+        touched.add(event.profile_id)
+
+    for profile_id in touched:
+        recompute_total(profile_id)
+    return scored
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

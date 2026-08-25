@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
@@ -27,7 +27,6 @@ from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
 from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
@@ -38,11 +37,13 @@ from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locatio
 from urbanlens.dashboard.services.places.scope import scope_badge
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
+from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki, visible_parent_wiki
 from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit, save_edited_fields
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
@@ -79,13 +80,14 @@ WIKI_STAT_FIELD_META = {
 }
 
 
-def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None) -> dict:
+def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None, *, conceal: bool = False) -> dict:
     """Build the template context for one community stat item.
 
     Args:
         wiki: The wiki the vote/composite belongs to.
         field: One of :class:`WikiStatField`'s values.
         profile: The viewing profile, used to look up their own vote.
+        conceal: Whether this viewer sees the concealed form of the wiki.
 
     Returns:
         Dict with the composite, the viewer's own vote, and that field's
@@ -94,7 +96,7 @@ def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None) -> dict:
     return {
         "field": field,
         "my_vote": WikiStatVote.objects.my_vote(wiki, field, profile),
-        "composite": WikiStatVote.objects.composite(wiki, field),
+        "composite": WikiStatVote.objects.composite(wiki, field, viewer_conceals=conceal, viewer=profile),
         **WIKI_STAT_FIELD_META[field],
     }
 
@@ -108,11 +110,9 @@ class LocationWikiView(LoginRequiredMixin, View):
     def get(self, request, location_slug):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
-        # First view by someone other than the creator retires their
-        # self-service delete eligibility (see Wiki.can_be_deleted_by).
-        if wiki.created_by_id and profile.id != wiki.created_by_id and not wiki.viewed_by_other:
-            Wiki.objects.filter(pk=wiki.pk).update(viewed_by_other=True)
-            wiki.viewed_by_other = True
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+        conceal = concealment_active(wiki, profile)
 
         # Only count root pins (not detail pins), and count distinct users.
         # The exact count is never exposed - see services.wiki.community_counts.
@@ -120,8 +120,14 @@ class LocationWikiView(LoginRequiredMixin, View):
         # drift on the privacy rules (notably: first_pinned is suppressed
         # entirely while the pin count is too low to display).
         from urbanlens.dashboard.services.wiki.community_counts import wiki_community_summary
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealed_community_summary
 
-        community = wiki_community_summary(wiki, location)
+        # Everything below reads field values through this rather than the live
+        # row. It delegates for anything not concealed, so the ordinary path is
+        # unchanged and the concealed one cannot forget a field.
+        shown = conceal_wiki(wiki, profile)
+
+        community = concealed_community_summary() if conceal else wiki_community_summary(wiki, location)
         pin_count_display = {"is_low": community["pin_count_low"], "value": community["pin_count_approx"]}
         first_pinned = community["first_pinned"]
 
@@ -154,20 +160,28 @@ class LocationWikiView(LoginRequiredMixin, View):
             ("emergency", "Emergency"),
         ]
 
-        show_wiki_cover_photo = bool(profile.show_wiki_cover_photos and wiki.cover_photo_id)
+        # A cover photo is somebody's photograph, promoted by somebody's choice,
+        # and neither the act nor the promotion is recorded anywhere the
+        # provenance rules can read. Concealed viewers get the state a wiki has
+        # before anyone picks one.
+        show_wiki_cover_photo = bool(not conceal and profile.show_wiki_cover_photos and wiki.cover_photo_id)
         wiki_cover_candidates: list[dict] = []
         if show_wiki_cover_photo:
             from urbanlens.dashboard.models.images.model import Image
 
             wiki_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in Image.objects.filter(wiki=wiki).visible_to(profile).exclude(pk=wiki.cover_photo_id).order_by("-created")[:20] if img.image]
 
-        custom_layers = list(CustomLayer.objects.for_wiki(wiki).order_by("order", "created"))
+        # Markup and custom layers are hidden outright, whatever their
+        # provenance - the product rule, and the sharpest of the lot: a layer
+        # carrying entrance routes and SecurityIndicatorType markers is the
+        # single most direct statement that people go here.
+        custom_layers = [] if conceal else list(CustomLayer.objects.for_wiki(wiki).order_by("order", "created"))
 
         return render(
             request,
             "dashboard/pages/location/wiki.html",
             {
-                "wiki": wiki,
+                "wiki": shown,
                 "custom_layers": custom_layers,
                 "custom_layers_json": [layer.to_json() for layer in custom_layers],
                 "manage_layers_url": reverse("location.wiki.layers", args=[location.slug]),
@@ -175,22 +189,28 @@ class LocationWikiView(LoginRequiredMixin, View):
                 # visible_parent_wiki: linking to one they haven't earned would
                 # confirm a place exists that they cannot see.
                 "parent_wiki": visible_parent_wiki(wiki, profile),
-                "map_overlays_json": overlay_payload(MapImageOverlay.objects.for_wiki(wiki)),
+                # Georeferenced overlays are traced and positioned by hand, so an
+                # overlay existing is a contribution regardless of where the
+                # underlying image came from.
+                "map_overlays_json": [] if conceal else overlay_payload(MapImageOverlay.objects.for_wiki(wiki)),
                 "manage_overlays_url": reverse("location.wiki.overlays", args=[location.slug]),
+                "manage_overlays_historical_url": reverse("location.wiki.overlays.historical", args=[location.slug]),
                 "overlay_corners_url_template": reverse("location.wiki.overlays.corners", args=[location.slug, OVERLAY_UUID_PLACEHOLDER]),
                 "location": location,
                 "profile": profile,
                 "show_wiki_cover_photo": show_wiki_cover_photo,
                 "wiki_cover_candidates": wiki_cover_candidates,
-                "can_delete_wiki": wiki.can_be_deleted_by(profile),
                 "is_site_scope": site_scope.is_site_scope(wiki),
                 **scope_badge(wiki),
-                "wiki_comment_count": wiki.comments.count(),
+                # Counted over what this viewer can see, not over every row - a
+                # badge computed on the raw set announces the comments it is
+                # standing in front of.
+                "wiki_comment_count": (conceal_rows(wiki.comments.all(), profile) if conceal else wiki.comments.all()).count(),
                 "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
-                "wiki_stats": [_wiki_stat_context(wiki, field, profile) for field in WikiStatField.values],
-                "public_vote": public_vote_context(location, profile),
-                "boundary_vote": boundary_vote_context(location.place, profile),
+                "wiki_stats": [_wiki_stat_context(wiki, field, profile, conceal=conceal) for field in WikiStatField.values],
+                "public_vote": public_vote_context(location, profile, conceal=conceal),
+                "boundary_vote": boundary_vote_context(location.place, profile, conceal=conceal),
                 "user_pin": user_pin,
                 "other_locations": other_locations,
                 "page_name": "location-wiki",
@@ -202,15 +222,19 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "markup_border_color": profile.markup_border_color,
                 "markup_border_opacity": profile.markup_border_opacity,
                 "security_level_choices": SecurityLevel.choices,
+                # Read from `shown`: these eight feed both the About-card chips
+                # and the always-rendered Suggest-edits prefill, so reading the
+                # live row here would put concealed values back on the page
+                # through a <select>.
                 "location_security_values": [
-                    ("fences", "Fences", wiki.fences),
-                    ("alarms", "Alarms", wiki.alarms),
-                    ("cameras", "Cameras", wiki.cameras),
-                    ("security", "Security", wiki.security),
-                    ("signs", "Signs", wiki.signs),
-                    ("vps", "VPS", wiki.vps),
-                    ("plywood", "Plywood", wiki.plywood),
-                    ("locked", "Locked", wiki.locked),
+                    ("fences", "Fences", shown.fences),
+                    ("alarms", "Alarms", shown.alarms),
+                    ("cameras", "Cameras", shown.cameras),
+                    ("security", "Security", shown.security),
+                    ("signs", "Signs", shown.signs),
+                    ("vps", "VPS", shown.vps),
+                    ("plywood", "Plywood", shown.plywood),
+                    ("locked", "Locked", shown.locked),
                 ],
                 "show_map_footer": True,
             },
@@ -298,44 +322,6 @@ class WikiParcelBuildingsPanelView(LoginRequiredMixin, View):
         )
 
 
-class LocationWikiDeleteView(LoginRequiredMixin, View):
-    """Let a wiki's creator delete it, before anyone else has seen it.
-
-    DELETE /location/<slug>/wiki/delete/
-
-    Only available to the profile that created the wiki, and only while
-    ``Wiki.viewed_by_other`` is still false - see ``Wiki.can_be_deleted_by``.
-    Once eligible, deletes the wiki and its full child-wiki subtree (stashed
-    for undo, same as detail-wiki deletion) and unlinks it from the pin.
-    """
-
-    def delete(self, request, location_slug):
-        location, wiki, profile = resolve_visible_wiki(request, location_slug)
-
-        if not wiki.can_be_deleted_by(profile):
-            return JsonResponse({"error": "This wiki can no longer be deleted - it's already been viewed by someone else."}, status=403)
-
-        user_pin = location.pins.filter(profile=profile).first()
-
-        subtree = with_wiki_descendants([wiki])
-        with transaction.atomic():
-            # The stash must happen inside the same atomic block as the delete: stashing
-            # first and deleting after ensures a mid-delete failure rolls back both together,
-            # rather than leaving a committed UndoAction claiming a deletion that never
-            # actually happened. Wiki.parent_wiki is on_delete=CASCADE, so deleting just the
-            # originally-selected wiki already cascades to every descendant captured in
-            # `subtree` above in one bulk operation - no need to delete each subtree member
-            # individually.
-            stash_for_undo(WIKI_MODEL_LABEL, subtree, profile)
-            Wiki.objects.filter(pk=wiki.pk).delete()
-
-        redirect_url = reverse("pin.details", kwargs={"pin_slug": user_pin.slug}) if user_pin else reverse("map.view")
-        response = HttpResponse("", status=200)
-        response["HX-Redirect"] = redirect_url
-        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Community wiki deleted. Undo within 7 days from Settings → Undo History."}})
-        return response
-
-
 class LocationWikiEditView(LoginRequiredMixin, View):
     """Suggest (and immediately apply) a community edit to a Wiki's fields.
 
@@ -345,6 +331,8 @@ class LocationWikiEditView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug):
+        from urbanlens.dashboard.services.wiki.concealment import conceal_wiki, writable_wiki
+
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
@@ -356,8 +344,15 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         # behavior (see apply_wiki_edit's docstring, and "Messaging / external API
         # (noted 2026-07-26)" in docs/PROBLEMS.md, the strict-vs-lenient item); the
         # external API passes strict=True and gets a hard rejection instead.
+        # apply_wiki_edit mutates and saves the row it is given, so it needs the
+        # real one: resolve_visible_wiki hands back a concealed projection to a
+        # gated viewer, and saving that would persist their redacted view over
+        # what the community actually wrote.
+        target = writable_wiki(wiki)
         try:
-            edit = apply_wiki_edit(wiki, profile, body, strict=False)
+            # baseline=wiki: the dialog was prefilled from the projection and
+            # posts every field, touched or not.
+            edit = apply_wiki_edit(target, profile, body, strict=False, baseline=wiki)
         except WikiEditValidationError as exc:
             return JsonResponse({"error": exc.message}, status=400)
 
@@ -368,7 +363,9 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         # Description, dates, and security indicators all render together in the
         # "About" card - send back the freshly-rendered fragment so the client can
         # swap it in place instead of leaving edited-but-unrendered fields stale.
-        about_html = render_to_string("dashboard/partials/wiki/_wiki_about_card.html", {"wiki": wiki}, request=request)
+        # Concealed again on the way out: this fragment goes back to the viewer
+        # who just wrote, and `target` is now carrying everyone's values.
+        about_html = render_to_string("dashboard/partials/wiki/_wiki_about_card.html", {"wiki": conceal_wiki(target, profile)}, request=request)
         return JsonResponse({"ok": True, "changes": list(changes.keys()), "about_html": about_html})
 
 
@@ -379,12 +376,33 @@ def _render_history(request, location: Location, wiki: Wiki):
     successful action re-renders the up-to-date list in place, instead of
     leaving a stale row (or a raw JSON body) swapped into the DOM.
     """
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active, redact_edit_changes
+
     profile, _ = Profile.objects.get_or_create(user=request.user)
     edits = wiki.edits.select_related("editor__user", "reverted_by").order_by("-created")
+
+    conceal = concealment_active(wiki, profile)
+    if conceal:
+        # Two separate problems here. The list itself names every editor and
+        # what they changed, so it is filtered to the viewer and their friends.
+        # And each surviving row's `changes` still carries the *pre-edit* value
+        # in its "from" side - which for the viewer's own edit is whatever a
+        # stranger had written there. That half survives a perfect read gate,
+        # because it lands in content the rules promise always to show.
+        # Materialised before mutating: a queryset re-runs its query on each
+        # iteration, so redacting in place and handing the queryset to the
+        # template would render the unredacted rows from a second fetch.
+        visible_edits = list(conceal_rows(edits, profile))
+        for edit in visible_edits:
+            edit.changes = redact_edit_changes(edit.changes)
+        rows: Any = visible_edits
+    else:
+        rows = edits
+
     return render(
         request,
         "dashboard/pages/location/wiki_history.html",
-        {"location": location, "wiki": wiki, "edits": edits, "current_profile": profile},
+        {"location": location, "wiki": conceal_wiki(wiki, profile), "edits": rows, "current_profile": profile},
     )
 
 
@@ -408,25 +426,30 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, edit_id: int):
+        from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
+        target_edit = get_object_or_404(visible_rows(WikiEdit.objects.filter(wiki=wiki), wiki, profile), id=edit_id)
 
         if target_edit.reverted:
             return JsonResponse({"error": "This edit has already been reverted."}, status=400)
 
-        revert_edit, skipped_fields = revert_wiki_edit(location, wiki, profile, target_edit)
+        # Reverting writes the "from" values back, so it needs the real row -
+        # `wiki` may be a projection carrying this viewer's redacted view.
+        target = writable_wiki(wiki)
+        revert_edit, skipped_fields = revert_wiki_edit(location, target, profile, target_edit)
 
         if revert_edit is None:
             # Every field this edit touched was changed again by someone else
             # since - nothing left to revert. Don't record a no-op WikiEdit or
             # mark the original as reverted.
-            response = _render_history(request, location, wiki)
+            response = _render_history(request, location, target)
             response["HX-Trigger"] = json.dumps(
                 {"showToast": {"level": "warning", "message": f"Could not revert - every field was changed again since this edit: {', '.join(skipped_fields)}."}},
             )
             return response
 
-        response = _render_history(request, location, wiki)
+        response = _render_history(request, location, target)
         if skipped_fields:
             response["HX-Trigger"] = json.dumps(
                 {"showToast": {"level": "warning", "message": f"Reverted, but some fields were left unchanged because they were edited again since: {', '.join(skipped_fields)}."}},
@@ -450,23 +473,40 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, edit_id: int):
+        from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
+        target_edit = get_object_or_404(visible_rows(WikiEdit.objects.filter(wiki=wiki), wiki, profile), id=edit_id)
 
         if target_edit.editor_id != profile.id:
             return JsonResponse({"error": "You can only permanently delete your own edits."}, status=403)
 
+        # Both the revert and the purge below write, so both act on the real
+        # row rather than whatever this viewer is entitled to see.
+        target = writable_wiki(wiki)
+
         skipped_fields: list[str] = []
         if not target_edit.reverted:
-            revert_changes, skipped_fields = revert_edit_fields(location, wiki, target_edit)
-            save_edited_fields(wiki, revert_changes)
+            revert_changes, skipped_fields = revert_edit_fields(location, target, target_edit)
+            save_edited_fields(target, revert_changes)
+
+        # The field-revision log records every write, so the value this view
+        # exists to erase also survives there, with the editor's name on it.
+        # Purge those rows before dropping the edit, or the promise in this
+        # view's docstring stops being true - see
+        # models.abstract.versioned.purge_recorded_value.
+        from urbanlens.dashboard.models.abstract.versioned import purge_recorded_value
+
+        for field_name, diff in (target_edit.changes or {}).items():
+            if isinstance(diff, dict) and "to" in diff:
+                purge_recorded_value(target, field_name, diff["to"])
 
         revert_record = target_edit.reverted_by
         if revert_record is not None:
             revert_record.delete()
         target_edit.delete()
 
-        response = _render_history(request, location, wiki)
+        response = _render_history(request, location, target)
         if skipped_fields:
             response["HX-Trigger"] = json.dumps(
                 {"showToast": {"level": "warning", "message": f"Deleted, but some fields were left unchanged because they were edited again since: {', '.join(skipped_fields)}."}},
@@ -557,8 +597,10 @@ class WikiStatVoteView(LoginRequiredMixin, View):
         else:
             WikiStatVote.objects.clear(wiki, profile, field)
 
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
         return render(
             request,
             "dashboard/partials/pins/_wiki_stat_rating_item.html",
-            {"wiki": wiki, **_wiki_stat_context(wiki, field, profile)},
+            {"wiki": wiki, **_wiki_stat_context(wiki, field, profile, conceal=concealment_active(wiki, profile))},
         )

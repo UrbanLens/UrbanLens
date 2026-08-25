@@ -1,6 +1,6 @@
 /**
  * Icon picker widget shared by categories/tags/organize's create and bulk-edit
- * dialogs (dashboard/partials/_icon_picker.html). The partial's markup calls
+ * dialogs (dashboard/partials/ui/_icon_picker.html). The partial's markup calls
  * `IconPicker.toggle/setTab/search/pick(...)` via inline onclick/oninput
  * attributes, including markup injected later via HTMX (edit dialogs) - so
  * this stays a `window.IconPicker` global rather than an imported class,
@@ -72,7 +72,15 @@ export const IconPicker = {
 
     pick(id: string, icon: string, btn: HTMLElement | null): void {
         const input = document.getElementById(`icon-value-${id}`) as HTMLInputElement | null;
-        if (input) input.value = icon;
+        if (input) {
+            input.value = icon;
+            // Assigning .value fires nothing, so until now the only way to
+            // learn about a pick was to read the field at form-submit time.
+            // That is why this picker could only be used inside a form; a
+            // panel that has to react to a choice had no way to hear it.
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
 
         const current = document.getElementById(`icon-current-${id}`);
         if (current) {

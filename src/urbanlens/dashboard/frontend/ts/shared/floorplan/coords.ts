@@ -28,7 +28,6 @@ export interface LatLng {
 const EARTH_RADIUS_M = 6371008.8;
 
 const toRad = (deg: number): number => (deg * Math.PI) / 180;
-const toDeg = (rad: number): number => (rad * 180) / Math.PI;
 
 /**
  * Converter between plan-local metres and WGS-84 for one plan origin.
@@ -129,4 +128,83 @@ export function rotate(point: Pt, radians: number, about: Pt = { x: 0, y: 0 }): 
     const sin = Math.sin(radians);
     const d = sub(point, about);
     return { x: about.x + d.x * cos - d.y * sin, y: about.y + d.x * sin + d.y * cos };
+}
+
+/**
+ * The area-weighted centre of a ring.
+ *
+ * Not the average of the corners, which is pulled toward whichever side has
+ * more of them - an L-shaped room with a finely divided long wall has its
+ * vertex average sitting well away from its middle.
+ *
+ * Args:
+ *     ring: The polygon's corners, in order.
+ *
+ * Returns:
+ *     The centroid, which for a concave ring may lie outside it.
+ */
+export function polygonCentroid(ring: readonly Pt[]): Pt {
+    if (!ring.length) return { x: 0, y: 0 };
+    let twiceArea = 0;
+    let x = 0;
+    let y = 0;
+    for (let i = 0; i < ring.length; i++) {
+        const a = ring[i] as Pt;
+        const b = ring[(i + 1) % ring.length] as Pt;
+        const cross = a.x * b.y - b.x * a.y;
+        twiceArea += cross;
+        x += (a.x + b.x) * cross;
+        y += (a.y + b.y) * cross;
+    }
+    if (Math.abs(twiceArea) < 1e-12) {
+        // Degenerate (collinear, or zero area): the corner average is the only
+        // answer available and is as good as any.
+        const sum = ring.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), { x: 0, y: 0 });
+        return { x: sum.x / ring.length, y: sum.y / ring.length };
+    }
+    return { x: x / (3 * twiceArea), y: y / (3 * twiceArea) };
+}
+
+/**
+ * A point guaranteed to lie inside a ring.
+ *
+ * Used to place a room's seed when the author names a region by clicking it.
+ * A centroid is the natural choice and is wrong for an L-shaped room, where it
+ * can fall in the notch - outside the room it is supposed to identify, so the
+ * seed binds to nothing or, worse, to the neighbour it landed in.
+ *
+ * Args:
+ *     ring: The polygon's corners, in order.
+ *
+ * Returns:
+ *     The centroid when it is inside, and otherwise the middle of the widest
+ *     part of the ring along the line through it.
+ */
+export function interiorPoint(ring: readonly Pt[]): Pt {
+    const centre = polygonCentroid(ring);
+    if (ring.length < 3 || pointInRing(centre, ring)) return centre;
+
+    // Cast a horizontal line through the centroid and collect where it crosses
+    // the ring. Sorted, those crossings pair off into spans that alternate
+    // outside/inside, so the widest odd-indexed span is the roomiest part of
+    // the polygon at that height.
+    const crossings: number[] = [];
+    for (let i = 0; i < ring.length; i++) {
+        const a = ring[i] as Pt;
+        const b = ring[(i + 1) % ring.length] as Pt;
+        if (a.y === b.y) continue;
+        const low = Math.min(a.y, b.y);
+        const high = Math.max(a.y, b.y);
+        if (centre.y < low || centre.y >= high) continue;
+        crossings.push(a.x + ((centre.y - a.y) / (b.y - a.y)) * (b.x - a.x));
+    }
+    crossings.sort((left, right) => left - right);
+    let best: { middle: number; width: number } | null = null;
+    for (let i = 0; i + 1 < crossings.length; i += 2) {
+        const from = crossings[i] as number;
+        const to = crossings[i + 1] as number;
+        const width = to - from;
+        if (!best || width > best.width) best = { middle: (from + to) / 2, width };
+    }
+    return best ? { x: best.middle, y: centre.y } : centre;
 }

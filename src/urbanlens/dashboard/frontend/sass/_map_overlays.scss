@@ -134,6 +134,90 @@
   gap: .2rem;
 }
 
+// Matches the pin-detail gallery's own drop-to-upload affordance (cloud_upload
+// icon, "drag files here" wording - see _photo_gallery.html's #gallery-drop-overlay)
+// but scoped to this one form field rather than the whole page, since a modal
+// dialog is already open and a page-wide drop target would be the wrong target.
+.map-overlay-dropzone {
+  align-items: center;
+  background: var(--ul-grey-1);
+  border: 2px dashed var(--ul-surface-raised-border);
+  border-radius: .5rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  padding: 1rem .75rem;
+  text-align: center;
+  transition: border-color .15s, background .15s;
+
+  &:hover,
+  &.is-dragover {
+    background: var(--ul-hover-bg);
+    border-color: var(--ul-primary-color, var(--primary-color));
+  }
+}
+
+.map-overlay-dropzone-icon {
+  color: var(--ul-grey-5);
+  font-size: 1.75rem;
+}
+
+.map-overlay-dropzone-text {
+  color: var(--ul-grey-6);
+  font-size: .78rem;
+}
+
+.map-overlay-dropzone-input {
+  font-size: .75rem;
+  max-width: 100%;
+}
+
+.map-overlay-media-pick {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+
+.map-overlay-media-picker {
+  background: var(--ul-grey-1);
+  border-radius: .4rem;
+  padding: .5rem;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.map-overlay-media-picker-grid {
+  display: grid;
+  gap: .35rem;
+  grid-template-columns: repeat(auto-fill, minmax(3.5rem, 1fr));
+  max-height: 10rem;
+  overflow-y: auto;
+}
+
+.map-overlay-media-picker-thumb {
+  aspect-ratio: 1;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: .3rem;
+  cursor: pointer;
+  overflow: hidden;
+  padding: 0;
+
+  &:hover {
+    border-color: var(--ul-primary-color, var(--primary-color));
+  }
+
+  img {
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+  }
+}
+
 .map-overlay-picked-media {
   color: var(--ul-grey-5);
   font-size: .78rem;
@@ -148,13 +232,25 @@
   justify-content: center;
 }
 
+// A sibling of #map-overlays-dialog-body now (see _map_annotations_panels.html/
+// editor.html), not part of the form it used to sit inside - .ul-dialog-body
+// on this element already supplies matching padding, so only the separator
+// itself is added here.
 .map-overlay-historical {
   border-top: 1px solid var(--ul-grey-2);
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
   gap: .5rem;
-  margin-top: .75rem;
-  padding-top: .75rem;
+}
+
+.map-overlay-historical-heading {
+  color: var(--ul-grey-6);
+  font-size: .78rem;
+  font-weight: 600;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: .04em;
 }
 
 .map-overlay-historical-list {

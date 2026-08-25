@@ -62,8 +62,7 @@ def save_edited_fields(wiki: Wiki, changed_fields: Iterable[str]) -> None:
 
     A bare ``wiki.save()`` writes every column from the in-memory instance, which
     on a community-editable row means reverting whatever was committed since the
-    request loaded it - a second editor's change to a different field, or
-    ``viewed_by_other``, which the view sets through its own targeted update.
+    request loaded it - a second editor's change to a different field.
     That also silently defeats :func:`revert_edit_fields`' conflict check, which
     goes to the trouble of leaving changed-since fields alone.
 
@@ -77,7 +76,7 @@ def save_edited_fields(wiki: Wiki, changed_fields: Iterable[str]) -> None:
     wiki.save(update_fields=[*columns, "updated"])
 
 
-def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, strict: bool) -> WikiEdit | None:
+def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, strict: bool, baseline: Wiki | None = None) -> WikiEdit | None:
     """Apply a community edit to *wiki* and record it in the audit trail.
 
     Only keys in :data:`WIKI_EDITABLE_FIELDS` are considered; anything else in
@@ -89,6 +88,11 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, st
             actually changes.
         profile: The editing profile, recorded as ``WikiEdit.editor``.
         changes: Raw submitted ``{field: value}`` mapping.
+        baseline: The wiki as the submitter saw it, when that differs from the
+            row being written - a concealed projection. Change detection runs
+            against this; the audit record still keeps the stored value. Leave
+            unset and both come from *wiki*, which is what every caller outside
+            the two edit views wants.
         strict: How to treat a value that fails validation - an unrecognized
             security level, or a date that isn't ``YYYY-MM-DD``.
 
@@ -119,12 +123,29 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, st
     new_vals: dict[str, object] = {}
     audit: dict[str, dict] = {}
 
+    # The wider problem this guards against is not concealment-specific: forms
+    # here post every field rather than the changed ones, so a diff is the only
+    # thing standing between an untouched field and a write. See "forms submit
+    # and save every field" in docs/PROBLEMS.md.
+    #
+    # What the submitter was looking at, which is not always what is stored: a
+    # concealed viewer's form is prefilled from the projection they were shown,
+    # and the suggest-edits dialog posts every field whether or not it was
+    # touched. Diffing against the stored row would read each concealed
+    # placeholder as a deliberate edit and write it over the real value - one
+    # date change blanking the name, the description and all eight security
+    # indicators, with a WikiEdit naming the viewer for it.
+    shown = baseline if baseline is not None else wiki
+
     for field in WIKI_EDITABLE_FIELDS:
         if field not in changes:
             continue
         raw = changes[field]
+        # Detected against what they saw; recorded as what was actually there.
+        # The audit trail has to hold the truth, and `redact_edit_changes`
+        # already keeps the "from" side away from a viewer who may not see it.
         old_val = getattr(wiki, field, None)
-        if str(raw) == str(old_val):
+        if str(raw) == str(getattr(shown, field, None)):
             continue
 
         if field in WIKI_SECURITY_FIELDS:
@@ -285,5 +306,33 @@ def revert_wiki_edit(location: Location, wiki: Wiki, profile: Profile, target_ed
         undone_ids = list(target_edit.reverts.values_list("pk", flat=True))
         if undone_ids:
             WikiEdit.objects.filter(pk__in=undone_ids).update(reverted=False, reverted_by=None)
+            _restore_reputation_for(undone_ids)
 
     return revert_edit, skipped_fields
+
+
+def _restore_reputation_for(edit_ids: list[int]) -> None:
+    """Un-retract the ledger rows for edits whose revert was itself reverted.
+
+    Called here rather than left to the reputation signal, because the line
+    above is a queryset ``update()`` and emits no ``post_save`` - so the
+    handler watching for the flag to clear never sees it. Retraction was
+    designed as a reversible flag specifically because a revert-of-a-revert
+    puts the original edit back in force; without this the reversal half never
+    ran, and the design's justification for the flag was untrue.
+
+    Args:
+        edit_ids: WikiEdit pks whose reverts have just been undone.
+    """
+    from urbanlens.dashboard.models.reputation.meta import TargetKind
+    from urbanlens.dashboard.models.reputation.model import ReputationEvent
+    from urbanlens.dashboard.services.reputation.scoring import restore_event
+
+    rows = ReputationEvent.objects.filter(
+        rule_key="wiki_field_edit",
+        target_kind=TargetKind.WIKI_EDIT,
+        target_id__in=edit_ids,
+        retracted=True,
+    )
+    for event in rows:
+        restore_event(event)

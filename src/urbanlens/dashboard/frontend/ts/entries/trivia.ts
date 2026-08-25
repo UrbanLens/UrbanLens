@@ -147,6 +147,11 @@ let ws: LiveSocketHandle | null = null;
 let friendOptions: FriendOption[] = [];
 let totalRounds = 0;
 let sessionPoints = 0;
+// The round submitAnswer() has already credited points for via its own
+// direct response, if any - showBroadcastReveal() still has to run for
+// this round (it's the only source of every player's results table), but
+// must not award this player's own points a second time.
+let lastRevealedRoundId: number | null = null;
 
 function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number, questionIdValue?: number): string {
     let resolved = template;
@@ -644,6 +649,7 @@ function applyRevealVerdict(correct: boolean | null): void {
 
 function renderRound(round: RoundPayload): void {
     currentRound = round;
+    lastRevealedRoundId = null;
     sessionId = round.session_id;
     showPanel("trivia-round-panel");
     const index = round.sequence_index + 1;
@@ -860,7 +866,13 @@ async function submitAnswer(): Promise<void> {
             : `Not quite - the answer was "${payload.answer ?? "unknown"}".`
         : "Answer submitted - waiting for the rest of the group...";
     applyRevealVerdict(payload.revealed ? payload.is_correct : null);
-    if (payload.revealed && payload.points) setSessionPoints(sessionPoints + payload.points);
+    if (payload.revealed) {
+        // The round.revealed broadcast for this same round is still coming
+        // (it's the only source of every player's results table) - this
+        // just keeps it from crediting these points again when it arrives.
+        lastRevealedRoundId = roundId;
+        if (payload.points) setSessionPoints(sessionPoints + payload.points);
+    }
     el<HTMLButtonElement>("trivia-next-btn").hidden = !payload.revealed || isMultiplayer;
 }
 
@@ -876,7 +888,10 @@ function showBroadcastReveal(data: RoundRevealBroadcast): void {
             : `Not quite - the answer was "${data.answer}".`
         : `The answer was "${data.answer}".`;
     applyRevealVerdict(mine ? mine.is_correct : null);
-    if (mine?.is_correct && mine.points) setSessionPoints(sessionPoints + mine.points);
+    // Skipped when this round already credited via submitAnswer()'s own
+    // response (this player was the one who revealed it) - otherwise the
+    // same points land twice, once from each path.
+    if (mine?.is_correct && mine.points && lastRevealedRoundId !== data.round_id) setSessionPoints(sessionPoints + mine.points);
     renderRoundScores(data.results);
 }
 

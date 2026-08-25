@@ -59,93 +59,57 @@ class WikiLocationRelationTests(TestCase):
         self.assertEqual(wiki.name, "Unnamed Location")
 
 
-class WikiOfficiallyCreatedTests(TestCase):
-    """``Wiki.officially_created`` and the manager methods that key off it.
+class WikiLookupTests(TestCase):
+    """``get_for_location`` and ``get_or_create_for_location``.
 
-    Covers the draft/official split: a background auto-created draft
-    (``get_or_create_draft_for_location``) must stay invisible via
-    ``get_for_location`` until ``claim_for_location`` promotes it - the three
-    cases ``WikiCreationService.create_for_pin`` relies on.
+    These used to cover a draft/official split: a wiki was born invisible and a
+    user's "Create wiki" click promoted it. Wikis are published on creation now,
+    so what is left is the ordinary get-or-create contract - which is still
+    worth pinning, because ``get_or_create_for_location`` is the only path that
+    may create one and every other caller must not.
     """
 
     def _location(self, **kwargs) -> Location:
         defaults = {"official_name": "", "latitude": "40.0", "longitude": "-74.0"}
         return baker.make(Location, **{**defaults, **kwargs})
 
-    def test_default_is_officially_created(self) -> None:
+    def test_get_for_location_returns_the_wiki(self) -> None:
         loc = self._location()
         wiki = Wiki.objects.create(location=loc, name="Old Mill")
-        self.assertTrue(wiki.officially_created)
-
-    def test_get_for_location_ignores_a_draft(self) -> None:
-        loc = self._location()
-        Wiki.objects.create(location=loc, name="Draft", officially_created=False)
-        self.assertIsNone(Wiki.objects.get_for_location(loc))
-
-    def test_get_for_location_returns_an_official_wiki(self) -> None:
-        loc = self._location()
-        wiki = Wiki.objects.create(location=loc, name="Official")
         self.assertEqual(Wiki.objects.get_for_location(loc), wiki)
 
-    def test_get_or_create_draft_for_location_creates_an_unofficial_draft(self) -> None:
+    def test_get_for_location_returns_none_when_there_is_none(self) -> None:
+        self.assertIsNone(Wiki.objects.get_for_location(self._location()))
+
+    def test_get_for_location_never_creates(self) -> None:
+        """It is called on read paths; a wiki appearing from a page view is a bug."""
+        loc = self._location()
+
+        Wiki.objects.get_for_location(loc)
+
+        self.assertFalse(Wiki.objects.filter(location=loc).exists())
+
+    def test_get_or_create_names_from_the_location(self) -> None:
         loc = self._location(official_name="Old Mill")
-        wiki, created = Wiki.objects.get_or_create_draft_for_location(loc)
+        wiki, created = Wiki.objects.get_or_create_for_location(loc)
         self.assertTrue(created)
-        self.assertFalse(wiki.officially_created)
         self.assertEqual(wiki.name, "Old Mill")
 
-    def test_get_or_create_draft_for_location_is_idempotent(self) -> None:
+    def test_get_or_create_is_idempotent(self) -> None:
         loc = self._location()
-        wiki1, created1 = Wiki.objects.get_or_create_draft_for_location(loc)
-        wiki2, created2 = Wiki.objects.get_or_create_draft_for_location(loc)
-        self.assertTrue(created1)
-        self.assertFalse(created2)
-        self.assertEqual(wiki1.pk, wiki2.pk)
+        first, created_first = Wiki.objects.get_or_create_for_location(loc)
+        second, created_second = Wiki.objects.get_or_create_for_location(loc)
+        self.assertTrue(created_first)
+        self.assertFalse(created_second)
+        self.assertEqual(first.pk, second.pk)
 
-    def test_get_or_create_draft_for_location_does_not_touch_an_existing_official_wiki(self) -> None:
+    def test_get_or_create_leaves_an_existing_wiki_alone(self) -> None:
         loc = self._location()
-        official = Wiki.objects.create(location=loc, name="Official")
-        wiki, created = Wiki.objects.get_or_create_draft_for_location(loc)
+        existing = Wiki.objects.create(location=loc, name="Already here")
+        wiki, created = Wiki.objects.get_or_create_for_location(loc)
         self.assertFalse(created)
-        self.assertEqual(wiki.pk, official.pk)
-        self.assertTrue(wiki.officially_created)
-
-    def test_claim_for_location_creates_when_no_wiki_exists(self) -> None:
-        loc = self._location(official_name="Old Mill")
-        profile = baker.make("auth.User").profile
-        wiki, newly_official = Wiki.objects.claim_for_location(loc, profile)
-        self.assertTrue(newly_official)
-        self.assertTrue(wiki.officially_created)
-        self.assertEqual(wiki.created_by_id, profile.pk)
-        self.assertEqual(wiki.name, "Old Mill")
-
-    def test_claim_for_location_promotes_an_existing_draft(self) -> None:
-        loc = self._location()
-        draft, _ = Wiki.objects.get_or_create_draft_for_location(loc)
-        profile = baker.make("auth.User").profile
-
-        wiki, newly_official = Wiki.objects.claim_for_location(loc, profile)
-
-        self.assertTrue(newly_official)
-        self.assertEqual(wiki.pk, draft.pk)
-        self.assertTrue(wiki.officially_created)
-        self.assertEqual(wiki.created_by_id, profile.pk)
-        draft.refresh_from_db()
-        self.assertTrue(draft.officially_created)
-        self.assertEqual(draft.created_by_id, profile.pk)
-
-    def test_claim_for_location_leaves_an_already_official_wiki_untouched(self) -> None:
-        loc = self._location()
-        original_creator = baker.make("auth.User").profile
-        official = Wiki.objects.create(location=loc, name="Official", created_by=original_creator)
-        other_profile = baker.make("auth.User").profile
-
-        wiki, newly_official = Wiki.objects.claim_for_location(loc, other_profile)
-
-        self.assertFalse(newly_official)
-        self.assertEqual(wiki.pk, official.pk)
-        self.assertEqual(wiki.created_by_id, original_creator.pk)
-
+        self.assertEqual(wiki.pk, existing.pk)
+        self.assertEqual(wiki.name, "Already here")
 
 class EnrichWikiLocationNameTests(TestCase):
     """tasks.enrich_wiki_location's placeholder-name replacement.

@@ -203,7 +203,11 @@ class ImageVisibilityFriendTests(TestCase):
         # The viewer's own filter must not interfere with these tests.
         self.viewer.viewer_photo_filter = VisibilityChoice.ANYONE
         self.viewer.save(update_fields=["viewer_photo_filter"])
-        self.image: Image = baker.make("dashboard.Image", profile=self.uploader, pin=None, wiki=None)
+        # Shared, because that is the first gate and this file is about the
+        # second. A photo nobody shared is invisible to everyone but its owner
+        # whatever relationship they have, so testing the relationship rules on an
+        # unshared photo would only ever re-assert the first gate.
+        self.image: Image = baker.make("dashboard.Image", profile=self.uploader, pin=None, wiki=baker.make("dashboard.Wiki"))
 
     def _set_upload_visibility(self, visibility: str) -> None:
         self.uploader.photo_upload_visibility = visibility

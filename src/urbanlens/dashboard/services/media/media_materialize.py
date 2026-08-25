@@ -298,6 +298,9 @@ def materialize_media_item(
         profile=profile,
         source=django_source,
         source_url=source_url,
+        # The address actually fetched. Both are kept: the page and the file rot
+        # independently, and this function was already handed both.
+        source_media_url=url,
         media_source_key=source,
         media_item_key=item_key,
         caption=_truncated_caption(caption),

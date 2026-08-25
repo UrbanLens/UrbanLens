@@ -42,7 +42,7 @@ class PublicLocationExportTests(TestCase):
 
     def test_a_location_with_a_wiki_but_no_passed_vote_is_not_exported(self) -> None:
         """Having a wiki is not being public - wiki access is earned per viewer."""
-        Wiki.objects.create(location=self.location, name="Private Wiki", officially_created=True)
+        Wiki.objects.create(location=self.location, name="Private Wiki")
 
         self.assertEqual(_export()["locations"], [])
 
@@ -55,7 +55,7 @@ class PublicLocationExportTests(TestCase):
     def test_no_authored_wiki_content_travels_with_a_public_location(self) -> None:
         """Comments, articles and edits describe people, not places."""
         baker.make(PublicPinCandidate, location=self.location, status=PublicPinCandidateStatus.PASSED)
-        Wiki.objects.create(location=self.location, name="Public Wiki", officially_created=True)
+        Wiki.objects.create(location=self.location, name="Public Wiki")
 
         entry = _export()["locations"][0]
 

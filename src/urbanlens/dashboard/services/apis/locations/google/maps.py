@@ -1110,10 +1110,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
               reliable deferred lookup), and ``label_ids`` (list[int]) fields.
               Imports never hit external APIs synchronously; each created pin's
               ``Pin`` post_save signal (``models.pin.signals``) does queue a
-              background task that may create an unofficial draft Wiki row for
-              its Location (see ``Wiki.officially_created``), but that row
-              stays invisible until a user explicitly creates the wiki from
-              the pin detail page.
+              background task that creates the Wiki row for its Location
+              (see ``tasks.ensure_wiki_for_location``), enriched in the
+              background rather than on the import's critical path.
 
         A pin whose ``cid`` has no existing ``Location`` *and* no cached
         Places lookup is never placed from the client-supplied ``lat``/``lng``

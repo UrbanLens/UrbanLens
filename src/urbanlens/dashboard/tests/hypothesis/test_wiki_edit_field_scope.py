@@ -9,7 +9,7 @@ A wiki is the worst possible model for this. It is community-editable by
 design: concurrent editors are the normal case, not the pathological one, and
 two people editing different fields of one wiki is exactly what the feature
 invites. The row also has writers that are not edits at all - viewing a wiki
-marks ``viewed_by_other`` through a targeted ``.update()``, and the naming and
+sets ``cover_photo`` through a targeted ``.update()``, and the naming and
 consensus services write their own columns.
 
 The service already knows this hazard exists: ``revert_edit_fields`` checks each
@@ -57,15 +57,16 @@ class WikiEditFieldScopeTests(TestCase):
         self.assertEqual(self.wiki.description, "Someone else's research", "a concurrent edit to another field was reverted")
         self.assertEqual(self.wiki.name, "Mill Complex", "the edit that was actually made did not land")
 
-    def test_an_edit_does_not_reset_a_flag_written_by_another_subsystem(self) -> None:
-        """Viewing a wiki sets ``viewed_by_other`` via a targeted update; editing must not undo it."""
+    def test_an_edit_does_not_reset_a_field_written_by_another_subsystem(self) -> None:
+        """The gallery sets ``cover_photo`` through its own targeted update; editing must not undo it."""
         stale = self._snapshot()
-        Wiki.objects.filter(pk=self.wiki.pk).update(viewed_by_other=True)
+        photo = baker.make("dashboard.Image", wiki=self.wiki)
+        Wiki.objects.filter(pk=self.wiki.pk).update(cover_photo=photo)
 
         apply_wiki_edit(stale, self.editor, {"name": "Mill Complex"}, strict=True)
 
         self.wiki.refresh_from_db()
-        self.assertTrue(self.wiki.viewed_by_other, "an edit reset a flag owned by a different writer")
+        self.assertEqual(self.wiki.cover_photo_id, photo.pk, "an edit reset a field owned by a different writer")
 
     def test_a_revert_does_not_clobber_a_field_it_deliberately_skipped(self) -> None:
         """The complement to ``revert_edit_fields``' own conflict check.

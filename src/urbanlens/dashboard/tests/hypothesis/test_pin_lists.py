@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import itertools
 import json
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -33,6 +34,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.controllers import pin_lists
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
@@ -267,6 +269,45 @@ class PinListDetailInlineEditableTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
+
+
+class PinListEditConcurrentWriteTests(TestCase):
+    """PinListEditView.post must not clobber fields it never touched.
+
+    It used to end with a bare pin_list.save(), writing every column from
+    this request's in-memory snapshot - reverting any field a concurrent
+    request (another tab, or the external API's PinListDetailView.patch)
+    changed in the window between this request's load and its own save.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+
+    def test_concurrent_edit_to_another_field_survives_a_rename(self) -> None:
+        pin_list = baker.make(PinList, profile=self.profile, name="Original", description="Original description.")
+        real_get = pin_lists._get_pin_list_or_404
+
+        def load_then_inject_concurrent_write(*args, **kwargs):
+            loaded = real_get(*args, **kwargs)
+            # Simulates a second request (another tab, or the external API)
+            # committing its own change to a field this request never
+            # touches, in the window between this request's read and save.
+            PinList.objects.filter(pk=loaded.pk).update(description="Changed elsewhere")
+            return loaded
+
+        with mock.patch.object(pin_lists, "_get_pin_list_or_404", side_effect=load_then_inject_concurrent_write):
+            response = self.client.post(
+                reverse("lists.edit", kwargs={"list_slug": pin_list.slug}),
+                data=json.dumps({"name": "Renamed"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        pin_list.refresh_from_db()
+        self.assertEqual(pin_list.name, "Renamed")
+        self.assertEqual(pin_list.description, "Changed elsewhere", "a concurrent edit to another field was reverted by this request's save")
 
 
 class SelectingSavedFilterImmediatelyPopulatesListTests(TestCase):

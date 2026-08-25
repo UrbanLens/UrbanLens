@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -35,6 +35,9 @@ from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, r
 
 # Re-exported so existing imports (e.g. tests) keep resolving from this module.
 __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes", "_sanitize_number"]
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
@@ -194,8 +197,8 @@ def _render_comments(request, context: dict) -> HttpResponse:
     return render(request, "dashboard/partials/comments/comment_panel.html", context)
 
 
-def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra) -> dict:
-    top_level_qs = top_level_comment_queryset(comments_qs)
+def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_qs=None, **extra) -> dict:
+    top_level_qs = top_level_comment_queryset(comments_qs, replies_qs=replies_qs)
     # Default to the last page so the most recent activity (comments are
     # ordered oldest-to-newest) is what a viewer sees without paging back.
     page_obj = get_page(request, top_level_qs, _COMMENTS_PAGE_SIZE, default_last=True)
@@ -366,12 +369,63 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 # -- Wiki comments -------------------------------------------------------------
 
 
+def _visible_wiki_comments(wiki: Wiki, profile: Profile) -> QuerySet[Comment]:
+    """The wiki's comments as *profile* is entitled to see them.
+
+    One function rather than the same two lines at each of the three call sites:
+    the GET had them and the POST and DELETE re-renders did not, so posting a
+    comment handed a concealed viewer the whole thread that the page they were
+    looking at had just filtered.
+
+    Args:
+        wiki: The wiki whose comments are being listed.
+        profile: The viewer.
+
+    Returns:
+        A comment queryset, filtered when this viewer is concealed.
+    """
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
+
+    rows = wiki.comments.all()
+    return conceal_rows(rows, profile) if concealment_active(wiki, profile) else rows
+
+
+def _visible_wiki_reply_prefetch(wiki: Wiki, profile: Profile) -> QuerySet[Comment] | None:
+    """The queryset a concealed viewer's replies must be prefetched from.
+
+    Narrowing the top level is not enough. ``comment.replies`` is keyed on the
+    parent's primary key, so a stranger's reply to a comment the viewer *can*
+    see - their own, or a friend's - arrives in full however the top-level
+    queryset was filtered.
+
+    Args:
+        wiki: The wiki whose comments are being listed.
+        profile: The viewer.
+
+    Returns:
+        A narrowed reply queryset, or None to leave the default prefetch alone.
+    """
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
+
+    if not concealment_active(wiki, profile):
+        return None
+    return conceal_rows(Comment.objects.filter(wiki=wiki), profile)
+
+
 class WikiCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a wiki."""
 
     def get(self, request, location_slug):
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        ctx = _build_context(
+            _visible_wiki_comments(wiki, profile),
+            profile,
+            request,
+            replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
+            wiki=wiki,
+            location=wiki.location,
+            context_type="wiki",
+        )
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):
@@ -390,7 +444,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
-            parent = get_object_or_404(Comment, id=parent_id, wiki=wiki)
+            parent = get_object_or_404(_visible_wiki_comments(wiki, profile), id=parent_id)
         comment = Comment.objects.create(
             wiki=wiki,
             profile=profile,
@@ -406,7 +460,15 @@ class WikiCommentsView(LoginRequiredMixin, View):
             attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
             notify_reply(profile, parent, reply=comment)
-        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        ctx = _build_context(
+            _visible_wiki_comments(wiki, profile),
+            profile,
+            request,
+            replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
+            wiki=wiki,
+            location=wiki.location,
+            context_type="wiki",
+        )
         return _render_comments(request, ctx)
 
 
@@ -415,7 +477,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
 
     def delete(self, request, location_slug, comment_id):
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        comment = get_object_or_404(Comment, id=comment_id, wiki=wiki)
+        comment = get_object_or_404(_visible_wiki_comments(wiki, profile), id=comment_id)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map
@@ -431,7 +493,15 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         # orphaned top-level comments. Re-render the whole panel rather than just
         # removing the deleted <li>, so those replies stay visible in place
         # instead of disappearing until the next reload.
-        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        ctx = _build_context(
+            _visible_wiki_comments(wiki, profile),
+            profile,
+            request,
+            replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
+            wiki=wiki,
+            location=wiki.location,
+            context_type="wiki",
+        )
         return _render_comments(request, ctx)
 
 

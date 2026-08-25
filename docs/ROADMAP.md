@@ -602,12 +602,19 @@ Do not start these without a written design (add it to `docs/`):
   groundwork (UL-163) and a strategy-persistence schema; big but well-sketched in TODO.
 - **Offline maps** (UL-287), **native apps** (UL-72+) — out of current scope; note only.
 - **Hidden reputation/points system gating sensitive wiki content** (UL-397/UL-398) — design doc
-  at `docs/designs/reputation-and-gating.md` (draft, needs Jess's sign-off before code). Most of
-  the scoring/gating primitives already exist (Consensus points, `WikiStatVote`,
-  `SiteFeature`/`user_has_feature`, `Comment.pending_scan`) — this is largely an integration and
-  product-values design, not new infrastructure. Open conflict to resolve first: an existing
-  stated stance against admin-visible individual reputation scores (`controllers/
-  site_admin_models.py`'s docstring), which the new ask directly touches.
+  at `docs/designs/reputation-and-gating.md`, **reviewed and corrected 2026-08-24**; read its
+  "Design review" section first, which supersedes the rest.
+  - The **ledger** is being built (models, rule registry, scoring, decay, caps, retraction).
+    Correction to an earlier note here: Consensus points are *not* a usable base — see the five
+    structural reasons in the design doc's inventory. The admin-visible-score conflict was
+    resolved by Jess 2026-08-21 and does not block.
+  - The **gate** is deliberately deferred. A six-channel audit
+    (`docs/designs/reputation-gating-tells.md`, 82 verified findings) established that concealing
+    a wiki by filtering its content cannot work here: the empty state is a row the viewer *owns*,
+    `Article.wiki` is a OneToOne so the first save always collides, and a gated account gets no
+    draft or enrichment run of its own. The workable shape is a copy-on-write shadow wiki, which
+    is a materially larger build; the decision is to get real score data first and then choose.
+  - Two live oracles found by that audit are already fixed (`f15f0a3b`, `5357d400`).
 - **Facts model: topic/geography-scoped reliability** (UL-399) — the Facts model itself already
   exists and works (`dashboard/models/facts/`); missing piece is decomposing
   `ConsensusProfile.trust_score`'s single global scalar into per-category/per-region posteriors.
@@ -761,3 +768,48 @@ non-obvious behavior → `docs/NOTES.md`; TODO strikes with evidence.
   `services/auth/google_oauth.py` 39%, `consumers.py` 35%.
 - Deployment: verify the HTTPS-enforcement nginx fix (`dfb04003`) and the nginx healthcheck fix
   (`d9033b03`) are live in production; staging worker saturation still unresolved (infra-side).
+
+---
+
+## Appendix B — Floorplan photos should be media, not a private copy (asked for 2026-08-23)
+
+A photo added to a floorplan - uploaded or by URL - should also land in the media the rest of the
+site shows: a pin floorplan adds to that pin's media; a wiki floorplan adds to the wiki's media
+**and** to the contributing user's pin media. A URL should get the same treatment other external
+URLs get - submitted to the Wayback Machine, and downloaded and cached locally - so the plan still
+renders when the source goes offline.
+
+Done that way it should *simplify* floorplan photos rather than add to them: a `FloorplanReference`
+becomes a pointer at a media row instead of a second place an image lives.
+
+**The constraint that decides the schema.** Deleting the media item must not delete the floorplan's
+reference. So images stay independent of the things citing them, with orphans collected when the
+last reference goes, rather than cascading from any one owner.
+
+State of the code, checked 2026-08-23:
+
+- `Image` is already independent in the right way. It is its own model, and its links to `pin`,
+  `wiki`, `location`, `safety_checkin`, `visit`, `direct_message` and `pin_suggestion` are all
+  nullable `on_delete=SET_NULL`. Deleting a pin detaches its photos rather than destroying them.
+  Only `profile` cascades.
+- **`FloorplanReference.image` is `on_delete=CASCADE`** (`models/floorplans/model.py`), so today
+  deleting the media item *does* destroy the floorplan reference citing it. This is the one thing
+  that has to change. `FloorplanReference` already carries its own `url` and caption, so a
+  reference whose image goes away can survive as a URL-backed one rather than vanishing.
+- **`Image`'s owner links are single FKs - one pin, one wiki per row - and that is not enough.**
+  Child pins mean one photo legitimately belongs to several pins at once: a photo of a building
+  belongs to the building's pin *and* to the parent parcel's pin, and in the general case to N of
+  them. The same applies to wikis. So pin and wiki attachment both need join tables (N:N), not the
+  single nullable FKs there now. Decided 2026-08-23.
+
+  This pulls in the same direction as the constraint above rather than against it: with a join
+  table, detaching a photo from one pin is deleting a join row, the image itself is untouched, and
+  "collect it when the last reference goes" becomes a count over the join tables plus
+  `FloorplanReference` - one rule covering every kind of citation instead of a special case per
+  owner. The existing single FKs become the thing to migrate off.
+- Wayback archiving exists (`tasks.archive_link_to_wayback`) but takes a *link* model, not an
+  image. Local materialisation of a remote photo exists for the external-provider path. Neither is
+  reachable from a floorplan reference yet.
+- **Not yet checked:** whether a general orphaned-image sweep exists. Comment-image cleanup does
+  (`tests/hypothesis/test_comment_image_cleanup.py`); a global one was not found in a first pass,
+  and should be confirmed rather than assumed either way before relying on "orphans get collected".

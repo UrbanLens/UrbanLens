@@ -97,6 +97,19 @@ describe("confirmDialog", () => {
         await pending;
     });
 
+    test("a second call while one is open settles the first as cancelled instead of leaving it unresolved", async () => {
+        // Without this, the second call's resolveCurrent overwrote the
+        // first's - clicking a button could only ever resolve one of them,
+        // leaving the other's promise pending forever - and the shared
+        // <dialog> being asked to showModal() while already open throws.
+        const first = confirmDialog({ message: "First" });
+        const second = confirmDialog({ message: "Second" });
+        click("confirm-dialog-ok");
+
+        expect(await first).toBe(false);
+        expect(await second).toBe(true);
+    });
+
     test("binding is lazy, so markup added after import still works", async () => {
         // The whole reason this module resolves elements on first use: it loads from
         // the <head>, before the dialog markup exists.

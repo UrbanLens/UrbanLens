@@ -7,6 +7,7 @@
         "types": ["bun-types", "wicg-file-system-access", "google.maps"],
         "strict": true,
         "noUncheckedIndexedAccess": true,
+        "noUnusedLocals": true,
         "skipLibCheck": true,
         "noEmit": true,
         "isolatedModules": true,

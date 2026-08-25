@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink,
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.pins.pin_subresources import InvalidLinkError, LinkExistsError, create_pin_link, delete_pin_link
+from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
@@ -65,13 +66,24 @@ def _render_pin_links(request, pin: Pin) -> HttpResponse:
     )
 
 
-def _render_wiki_links(request, wiki) -> HttpResponse:
+def _render_wiki_links(request, wiki, profile) -> HttpResponse:
+    """Render the wiki links row.
+
+    Takes the profile for the same reason ``aliases._render_location_panel``
+    does - see that docstring.
+    """
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
+
+    links = wiki.links.all()
+    if concealment_active(wiki, profile):
+        links = conceal_rows(links, profile)
+
     return render(
         request,
         "dashboard/partials/pins/_pin_links_row.html",
         {
-            "wiki": wiki,
-            "links": wiki.links.all(),
+            "wiki": conceal_wiki(wiki, profile),
+            "links": links,
             "delete_url_name": "location.wiki.link.delete",
             "row_id": "wiki-links-row",
             "owner_slug": wiki.location.slug,
@@ -109,8 +121,8 @@ class LocationLinksView(LoginRequiredMixin, View):
     """GET: HTMX row listing a wiki's links.  POST: add a new link."""
 
     def get(self, request, location_slug):
-        _location, wiki, _profile = resolve_visible_wiki(request, location_slug)
-        return _render_wiki_links(request, wiki)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        return _render_wiki_links(request, wiki, profile)
 
     def post(self, request, location_slug):
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
@@ -133,13 +145,13 @@ class LocationLinksView(LoginRequiredMixin, View):
             editor=profile,
             changes={"link_added": {"from": None, "to": url}},
         )
-        return _render_wiki_links(request, wiki)
+        return _render_wiki_links(request, wiki, profile)
 
 
 class LocationLinkDeleteView(LoginRequiredMixin, View):
     def delete(self, request, location_slug, link_id):
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        link = get_object_or_404(WikiLink, id=link_id, wiki=wiki)
+        link = get_object_or_404(visible_rows(WikiLink.objects.filter(wiki=wiki), wiki, profile), id=link_id)
         link_url = link.url
         # Tombstone first: a plugin panel (Nominatim, EPA) can otherwise
         # recreate this exact link the next time its cache goes stale.
@@ -150,4 +162,4 @@ class LocationLinkDeleteView(LoginRequiredMixin, View):
             editor=profile,
             changes={"link_removed": {"from": link_url, "to": None}},
         )
-        return _render_wiki_links(request, wiki)
+        return _render_wiki_links(request, wiki, profile)

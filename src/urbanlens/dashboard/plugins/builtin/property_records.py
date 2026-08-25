@@ -195,8 +195,12 @@ def _tax_status(rows: list[dict[str, Any]]) -> dict[str, Any]:
     Returns:
         The latest year on record and how many years are marked delinquent.
     """
-    years = [row.get("tax_year") for row in rows if isinstance(row, dict) and isinstance(row.get("tax_year"), int)]
-    delinquent = sorted(row["tax_year"] for row in rows if isinstance(row, dict) and row.get("delinquent") and isinstance(row.get("tax_year"), int))
+    # Bound and narrowed in one place: testing `row.get(...)` in the condition and
+    # reading it again in the value is two lookups that a reader - and mypy - has
+    # to take on trust are the same answer.
+    entries = [row for row in rows if isinstance(row, dict)]
+    years = [year for row in entries if isinstance(year := row.get("tax_year"), int)]
+    delinquent = sorted(year for row in entries if row.get("delinquent") and isinstance(year := row.get("tax_year"), int))
     return {
         "latest_year": max(years) if years else None,
         "delinquent_years": delinquent,

@@ -46,6 +46,19 @@ themselves usually cost single-digit seconds. The consensus field-scope file
 takes 188s cold and 3.05s against a database that already exists. `--reuse-db`
 does not apply new migrations, hence `--fresh-db` when models move.
 
+**Killing a run mid-migration poisons the reusable database**, and the symptom
+names neither cause. The interrupted migration leaves its schema change applied
+but unrecorded, and the dead process leaves a Postgres session holding the
+database open, so the next `--fresh-db` cannot drop it and quietly reuses it
+instead. Every test then errors in fixture setup with pytest's internal
+`assert not self._finalizers`, which is what a failed `django_db_setup` looks
+like from the outside — the real error, `column ... already exists`, is only
+visible above the fold, and a `| tail` hides it. Diagnosed 2026-08-24 after the
+same failure had already been written off once as a flaky transient.
+`--fresh-db` now terminates sessions and drops the database itself, so it means
+what it says; if a run still fails this way, the database survived some other
+way and dropping it by hand is the fix.
+
 `--allow-drift` exists for verifying a fix by breaking it: editing the
 container's copy on purpose and expecting failures. Without it the parity guard
 refuses the run, which is otherwise exactly what you want — a file restored on
@@ -196,7 +209,7 @@ that list, each finding then handed to an adversarial verifier told to refute it
 
 ## Structural checks (CI)
 
-Five checkers guard properties that are invisible from a working copy, which is
+Eight checkers guard properties that are invisible from a working copy, which is
 exactly why they need checking — the machine that made the mistake is the one
 that cannot see it.
 
@@ -207,6 +220,9 @@ that cannot see it.
 | `bin/check_doc_line_refs.py` | A documentation citation pointing past end-of-file |
 | `bin/check_outage_not_cached.py` | A `fetch` that caches a swallowed failure as though it were an answer |
 | `bin/check_notification_choke_point.py` | A notification written around the mute preference |
+| `bin/check_versioned_writes.py` | A model half-adopting field versioning, so bulk writes go unrecorded |
+| `bin/check_signal_reachable.py` | A `post_save` subscription waiting on a field only a queryset `update()` sets |
+| `bin/check_concealed_writes.py` | A wiki resolved for reading being saved, persisting one viewer's redacted view |
 
 The last two exist because a *defect class* recurred, not because one bug did.
 `check_outage_not_cached.py` came from an outage being stored as "nothing here"
@@ -218,6 +234,38 @@ notifications go through `NotificationLog.objects.notify()`, and a deliberate
 bypass is marked `notify-bypass-ok: <why>` on the line above so the exemption
 sits where the decision is.
 
+`check_signal_reachable.py` came from three instances of one defect. Rules in
+the reputation ledger subscribed to `post_save` on `FriendInvitation`, `Wiki`
+and `WikiEdit`, whose real transitions all happen through
+`QuerySet.update()` — which emits no signal, *deliberately*, because those
+transitions are atomic compare-and-sets. Every one looked correct in review and
+none could ever fire. The check matches a subscription's watched fields against
+`.update()` calls on the same model; a deliberate case is marked
+`signal-update-ok: <ModelName> <why>`. Its limits are in its docstring, and a
+pass means "no detected gap" rather than "the subscription fires".
+
+`check_concealed_writes.py` guards the seam the concealment rework created.
+`resolve_visible_wiki` is the one gate all 99 wiki-scoped call sites pass
+through, and since concealment moved to resolve time it may return a
+*projection*: a real `Wiki` carrying only the field values one viewer may see.
+Reading one is the point; saving one writes that viewer's redacted view over
+what the community wrote. Nine write paths sat downstream of that gate across
+four modules, and every one looked correct, because a projection is a `Wiki` and
+mutating one is ordinary Django — nothing at the call site says which kind of
+row it holds. They now launder through `concealment.writable_wiki`, and a
+deliberate case is marked `concealed-write-ok: <why>`.
+
+`check_versioned_writes.py` exists for the same reason as those two: provenance
+has to be recorded at write time, and the wiki's *existing* edit history is
+already bypassed by three writers — a bulk `update()`, a bare `save()`, and one
+that omits `updated` from `update_fields`. None is visible to a `post_save`
+receiver, which is why recording is interception (`VersionedModel.save()`,
+`VersionedQuerySet.update()`/`bulk_update()`) rather than a funnel. The check
+catches the half-adopted cases that look fine in review: `versioned_fields`
+declared without the mixin, the mixin without a `VersionedQuerySet` (instance
+saves recorded, every bulk write silently not — the worse half), a missing
+`revision_model`, and a field name a rename left behind.
+
 `check_doc_line_refs.py --report-drift` additionally lists citations whose line
 exists but no longer holds what the prose claims. That half is *not* enforced:
 several name symbols that no longer exist, where the repair is rewriting the
@@ -225,6 +273,22 @@ sentence rather than the number, and a CI job should not be making that call.
 
 Note its one blind spot: it cannot tell a specimen from a claim, so prose that
 *quotes* a broken citation as an example will be flagged.
+
+### `noUnusedLocals` (`tsconfig.json`)
+
+On because nothing else catches dead TypeScript. `tsc` did not mind, ruff does
+not read TypeScript at all, and a full green suite says nothing about code that
+is never reached — a helper is written, the caller it was written for changes
+shape, and twenty lines stay behind looking load-bearing.
+
+That is not hypothetical: a metres-input helper sat unused in the floorplan
+editor for a day while three near-copies of it were written around it, because
+its intended caller had become a date input. Turning the flag on found nine
+across the whole frontend, including a type import left by a signature change
+and a value assigned only so the call that produced it looked used.
+
+Note the flag's own blind spot: it sees locals, not exports. A module-level
+`export function` nothing imports is invisible to it, and to everything else.
 
 ## Test helpers
 

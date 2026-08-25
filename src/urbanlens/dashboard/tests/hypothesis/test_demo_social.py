@@ -30,7 +30,7 @@ class DemoSocialContentTests(TestCase):
         super().setUp()
         locations = [baker.make(Location, google_place=None) for _ in range(6)]
         for location in locations:
-            Wiki.objects.create(location=location, name=location.official_name or "Wiki", officially_created=True)
+            Wiki.objects.create(location=location, name=location.official_name or "Wiki")
         with mock.patch("urbanlens.dashboard.services.demo.seeding.pool_locations", return_value=locations):
             self.owner = seed_demo_account().profile
 

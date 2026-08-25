@@ -127,6 +127,26 @@ describe("deriveFaces", () => {
         expect(result.dangling.length).toBeGreaterThan(0);
     });
 
+    test("a wall shorter than the heal gap is not bridged to itself", () => {
+        // Both ends of a short stub are dangling, and they are each other's
+        // nearest candidate - so the healer used to fold the wall onto its own
+        // midpoint, which the editor then wrote back as a zero-length wall.
+        const stub: Segment[] = [{ wallId: "stub", a: { x: 0, y: 0 }, b: { x: 0.4, y: 0 } }];
+        const result = deriveFaces(stub);
+        expect(result.healed).toEqual([]);
+        expect(result.dangling).toHaveLength(2);
+    });
+
+    test("a doorjamb stub beside a wall still heals to its neighbour, not to itself", () => {
+        const walls: Segment[] = [
+            { wallId: "jamb", a: { x: 0, y: 0 }, b: { x: 0.3, y: 0 } },
+            { wallId: "run", a: { x: 0.5, y: 0 }, b: { x: 4, y: 0 } },
+        ];
+        const result = deriveFaces(walls);
+        expect(result.healed).toHaveLength(1);
+        expect(result.healed[0]?.gap).toBeCloseTo(0.2, 6);
+    });
+
     test("an overshooting wall still encloses, and the stub does not become a room", () => {
         // The right wall runs past the top wall by 0.5 m.
         const walls: Segment[] = [
@@ -181,6 +201,32 @@ describe("deriveFaces", () => {
             b: corners[(i + 1) % corners.length] as Pt,
         }));
         expect(areas(walls)).toEqual([18]); // 6x2 bottom bar + 2x3 column above it
+    });
+
+    test("a corridor of rooms derives the right count at scale", () => {
+        // The spatial index in planarize prunes pairs that cannot meet; this
+        // pins that it prunes only those. A corridor is the shape real floors
+        // take, and the one the index actually helps.
+        const walls: Segment[] = [];
+        const rooms = 40;
+        const depth = 6;
+        const corridorWidth = 2;
+        const pitch = 4;
+        const length = rooms * pitch;
+        const height = depth * 2 + corridorWidth;
+        walls.push({ wallId: "outer-n", a: { x: 0, y: height }, b: { x: length, y: height } });
+        walls.push({ wallId: "outer-s", a: { x: 0, y: 0 }, b: { x: length, y: 0 } });
+        walls.push({ wallId: "outer-w", a: { x: 0, y: 0 }, b: { x: 0, y: height } });
+        walls.push({ wallId: "outer-e", a: { x: length, y: 0 }, b: { x: length, y: height } });
+        walls.push({ wallId: "corr-s", a: { x: 0, y: depth }, b: { x: length, y: depth } });
+        walls.push({ wallId: "corr-n", a: { x: 0, y: depth + corridorWidth }, b: { x: length, y: depth + corridorWidth } });
+        for (let i = 1; i < rooms; i++) {
+            walls.push({ wallId: `s${i}`, a: { x: i * pitch, y: 0 }, b: { x: i * pitch, y: depth } });
+            walls.push({ wallId: `n${i}`, a: { x: i * pitch, y: depth + corridorWidth }, b: { x: i * pitch, y: height } });
+        }
+
+        // Rooms down each side, plus the corridor itself.
+        expect(deriveFaces(walls).faces).toHaveLength(rooms * 2 + 1);
     });
 
     test("scales to a realistic floor without pathological slowdown", () => {

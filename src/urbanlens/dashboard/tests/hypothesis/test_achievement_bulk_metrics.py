@@ -63,11 +63,6 @@ def _seed_pins(profile: Profile, value: int) -> None:
         baker.make(Pin, profile=profile, _quantity=value)
 
 
-def _seed_wikis(profile: Profile, value: int) -> None:
-    for _ in range(value):
-        baker.make("dashboard.Wiki", created_by=profile, officially_created=True, location=_location())
-
-
 def _seed_wiki_edits(profile: Profile, value: int) -> None:
     for _ in range(value):
         wiki = baker.make("dashboard.Wiki", location=_location())
@@ -175,7 +170,6 @@ def _seed_streak(kind: str) -> Callable[[Profile, int], None]:
 
 SEEDERS: dict[str, Callable[[Profile, int], None]] = {
     "pins_created": _seed_pins,
-    "wikis_created": _seed_wikis,
     "wiki_edits": _seed_wiki_edits,
     "photos_uploaded": _seed_photos,
     "markup_maps_created": _seed_markup_maps,

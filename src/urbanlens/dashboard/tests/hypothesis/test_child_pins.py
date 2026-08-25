@@ -667,13 +667,20 @@ class PinShareBundleTests(TestCase):
         self.client.force_login(self.recipient_user)
         self.client.post(reverse("pin.share.respond", kwargs={"share_id": root_share.pk}), {"action": "accept"})
 
-        new_root = Pin.objects.get(profile=self.recipient, name="Steel Works")
-        new_child = Pin.objects.get(profile=self.recipient, name="Blast Furnace")
-        new_grandchild = Pin.objects.get(profile=self.recipient, name="Control Room")
+        # Identified by location, not by name: the sender's name for a pin no
+        # longer travels (see test_share_pin_copy_fidelity's NOT_COPIED), and the
+        # place is what the recipient actually received. Each fixture pin has its
+        # own coordinates, so this is unambiguous.
+        new_root = Pin.objects.get(profile=self.recipient, location=self.root.location)
+        new_child = Pin.objects.get(profile=self.recipient, location=self.child.location)
+        new_grandchild = Pin.objects.get(profile=self.recipient, location=self.grandchild.location)
         self.assertIsNone(new_root.parent_pin_id)
         self.assertEqual(new_child.parent_pin_id, new_root.pk)
         self.assertEqual(new_grandchild.parent_pin_id, new_child.pk)
-        self.assertEqual(new_child.icon, "factory")
+        # The shape of the bundle travels; the sender's icon does not. This used
+        # to assert the icon came too - see test_share_pin_copy_fidelity's
+        # NOT_COPIED for what stays with its owner and why.
+        self.assertNotEqual(new_child.icon, "factory")
 
     def test_reject_rejects_the_whole_bundle(self) -> None:
         self._share(include_children=True)
@@ -750,8 +757,10 @@ class PinShareSelectedChildrenTests(TestCase):
         self.client.force_login(self.recipient_user)
         self.client.post(reverse("pin.share.respond", kwargs={"share_id": root_share.pk}), {"action": "accept"})
 
-        self.assertTrue(Pin.objects.filter(profile=self.recipient, name="Blast Furnace").exists())
-        self.assertFalse(Pin.objects.filter(profile=self.recipient, name="Rolling Mill").exists())
+        # By location rather than name - the sender's name for a pin does not
+        # travel, so the place is what identifies what the recipient received.
+        self.assertTrue(Pin.objects.filter(profile=self.recipient, location=self.child_a.location).exists())
+        self.assertFalse(Pin.objects.filter(profile=self.recipient, location=self.child_b.location).exists())
 
 
 class VisitedLabelPropagationTests(TestCase):

@@ -18,7 +18,7 @@ separate defects behind one traceback:
 The rule that stands: community pages are *promoted* explicitly, never
 created official behind a user's back. A draft is different - drafts are
 already auto-created for every pinned location by
-`ensure_draft_wiki_for_location`, are invisible until claimed, and are what
+`ensure_wiki_for_location`, are invisible until claimed, and are what
 this mirrors into.
 """
 
@@ -71,12 +71,12 @@ class BuildingWikiMirrorTests(TestCase):
         self.assertEqual(created, 1, "the colliding building should be skipped and the rest still mirrored")
         self.assertTrue(wiki.child_wikis.filter(name="Building 2").exists())
 
-    def test_a_place_with_no_wiki_gains_a_draft_rather_than_nothing(self) -> None:
+    def test_a_place_with_no_wiki_gains_one_rather_than_nothing(self) -> None:
         created = pin_restructure.mirror_buildings_to_wiki(self.pin, [_building(1), _building(2)], self.profile)
 
         self.assertEqual(created, 2)
         wiki = Wiki.objects.get(location=self.location)
-        self.assertFalse(wiki.officially_created, "a mirror must not publish a community page behind the user's back")
+        self.assertEqual(wiki.child_wikis.count(), 2)
 
     def test_two_buildings_at_one_point_do_not_abort_each_other(self) -> None:
         baker.make(Wiki, location=self.location, place=self.place)

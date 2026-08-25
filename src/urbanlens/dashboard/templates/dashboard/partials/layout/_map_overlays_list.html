@@ -68,7 +68,7 @@ dialog only owns the presentation settings.
             {% endif %}
         </div>
         <input type="hidden" name="order" value="{{ row.overlay.order }}">
-        {% if not row.overlay.tile_url_template %}
+        {% if not row.overlay.tile_url_template and not row.overlay.locked %}
         <button type="button" class="btn btn--icon" title="Align on map"
                 onclick="window.ulMapOverlayStartAlign && window.ulMapOverlayStartAlign('{{ row.overlay.uuid }}')">
             <i class="material-symbols-outlined">open_with</i>
@@ -99,21 +99,28 @@ dialog only owns the presentation settings.
     <input type="text" name="name" class="map-overlay-add-name" placeholder="Name (e.g. Sanborn 1897, sheet 12)" maxlength="100">
 
     <div class="map-overlay-add-sources">
-        <label class="map-overlay-add-source">
-            <span>Upload an image</span>
-            <input type="file" name="image" accept="image/*">
+        <label class="map-overlay-dropzone" id="map-overlay-dropzone"
+               ondragover="event.preventDefault(); event.stopPropagation(); this.classList.add('is-dragover')"
+               ondragleave="this.classList.remove('is-dragover')"
+               ondrop="window.ulMapOverlayHandleDrop && window.ulMapOverlayHandleDrop(event, this)">
+            <i class="material-symbols-outlined map-overlay-dropzone-icon">cloud_upload</i>
+            <span class="map-overlay-dropzone-text">Drop an image here, or choose a file</span>
+            <input type="file" name="image" accept="image/*" class="map-overlay-dropzone-input"
+                   onchange="window.ulMapOverlaySyncSubmitState && window.ulMapOverlaySyncSubmitState()">
         </label>
         <label class="map-overlay-add-source">
             <span>...or paste an image URL</span>
-            <input type="url" name="image_url" placeholder="https://..." maxlength="1000">
+            <input type="url" name="image_url" placeholder="https://..." maxlength="1000"
+                   oninput="window.ulMapOverlaySyncSubmitState && window.ulMapOverlaySyncSubmitState()">
         </label>
-        <button type="button" class="btn map-overlay-pick-media-btn"
-                onclick="window.ulMapOverlayPickFromMedia && window.ulMapOverlayPickFromMedia()">
-            <i class="material-symbols-outlined">photo_library</i> Pick from this page's Media
-        </button>
-        <input type="hidden" name="media_url" id="map-overlay-media-url">
-        <input type="hidden" name="media_source" id="map-overlay-media-source">
-        <input type="hidden" name="media_page_url" id="map-overlay-media-page-url">
+        <div class="map-overlay-media-pick">
+            <button type="button" class="btn btn--primary" id="map-overlay-pick-media-btn"
+                    onclick="window.ulMapOverlayPickFromMedia && window.ulMapOverlayPickFromMedia('{{ gallery_json_url }}')">
+                <i class="material-symbols-outlined">photo_library</i> Pick from this page's Media
+            </button>
+            <div id="map-overlay-media-picker" class="map-overlay-media-picker" hidden></div>
+        </div>
+        <input type="hidden" name="image_id" id="map-overlay-image-id">
         <p class="map-overlay-picked-media" id="map-overlay-picked-media" hidden></p>
     </div>
 
@@ -125,18 +132,12 @@ dialog only owns the presentation settings.
     {% endcomment %}
     <input type="hidden" name="corners" id="map-overlay-initial-corners">
 
-    <button type="submit" class="btn btn--primary"
+    {# Starts disabled - nothing is picked yet on a freshly (re)rendered form. #}
+    {# window.ulMapOverlaySyncSubmitState re-derives this from the fields     #}
+    {# above on every change, so it never stays clickable with nothing to add. #}
+    <button type="submit" class="btn btn--primary" id="map-overlay-add-submit" disabled
             onclick="window.ulMapOverlaySeedCorners && window.ulMapOverlaySeedCorners()">
         <i class="material-symbols-outlined">add_photo_alternate</i> Add overlay
     </button>
 </form>
-
-<div class="map-overlay-historical">
-    <button type="button" class="btn"
-            hx-get="{{ historical_url }}"
-            hx-target="#map-overlay-historical-results" hx-swap="innerHTML">
-        <i class="material-symbols-outlined">history_edu</i> Browse georeferenced historical maps
-    </button>
-    <div id="map-overlay-historical-results"></div>
-</div>
 {% endif %}

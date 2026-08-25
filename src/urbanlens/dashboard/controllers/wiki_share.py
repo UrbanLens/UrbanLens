@@ -1,9 +1,15 @@
-"""User-initiated creation of a community wiki from the pin detail page.
+"""Sharing a pin's own content to the community wiki for its place.
 
-GET  /map/pin/<slug>/wiki/create/  → HTMX dialog listing seedable pin fields
-POST /map/pin/<slug>/wiki/create/  → create the wiki (seeded with chosen fields)
+GET  /map/pin/<slug>/wiki/share/  → HTMX dialog listing shareable pin fields
+POST /map/pin/<slug>/wiki/share/  → copy the chosen fields onto the wiki
 
-Wikis are never created automatically; this is the only creation entry point.
+This used to be the "Create community wiki" button, and creation was the part
+of it that mattered least. Every pinned location gets its page automatically,
+so what is left is the part that always needed a person: choosing which of your
+own notes, names and photos to contribute to a page other people read. That is a
+deliberate act - see ``bin/check_pin_not_published_to_wiki.py`` for the bug that
+comes from letting it happen as a side effect - so it keeps its own dialog and
+its own explicit per-field selection.
 """
 
 from __future__ import annotations
@@ -17,8 +23,8 @@ from django.views import View
 
 from urbanlens.dashboard.controllers.pin_edit import _overview_context, _pin_for_user, _pin_hero_oob
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.wiki.wiki_creation import (
-    WikiCreationService,
+from urbanlens.dashboard.services.wiki.wiki_share import (
+    WikiShareService,
     seedable_aliases,
     seedable_field_values,
     seedable_photos,
@@ -27,11 +33,11 @@ from urbanlens.dashboard.services.wiki.wiki_creation import (
 logger = logging.getLogger(__name__)
 
 
-class PinWikiCreateView(LoginRequiredMixin, View):
-    """Create the community wiki for a pin's Location, seeded from chosen pin fields."""
+class PinWikiShareView(LoginRequiredMixin, View):
+    """Share chosen fields from a pin onto the community wiki for its Location."""
 
     def get(self, request, pin_slug):
-        """Render the create-wiki dialog with the pin fields available for seeding."""
+        """Render the share dialog with the pin fields available to contribute."""
         result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
@@ -44,10 +50,9 @@ class PinWikiCreateView(LoginRequiredMixin, View):
 
         return render(
             request,
-            "dashboard/partials/pins/pin_wiki_create_dialog.html",
+            "dashboard/partials/pins/pin_wiki_share_dialog.html",
             {
                 "pin": pin,
-                # Someone may have created it since the page rendered.
                 "existing_wiki": Wiki.objects.get_for_location(pin.location),
                 "seedable_fields": seedable_field_values(pin),
                 "seedable_aliases": seedable_aliases(pin),
@@ -56,7 +61,7 @@ class PinWikiCreateView(LoginRequiredMixin, View):
         )
 
     def post(self, request, pin_slug):
-        """Create the wiki, seeding it with the fields the user selected."""
+        """Copy the fields the user selected onto the wiki."""
         result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
@@ -70,24 +75,23 @@ class PinWikiCreateView(LoginRequiredMixin, View):
         include_fields = set(request.POST.getlist("seed_fields"))
         alias_ids = {int(v) for v in request.POST.getlist("alias_ids") if v.isdigit()}
         image_ids = {int(v) for v in request.POST.getlist("image_ids") if v.isdigit()}
-        wiki, created = WikiCreationService().create_for_pin(
+        wiki, shared = WikiShareService().share_from_pin(
             pin,
             include_fields=include_fields,
             alias_ids=alias_ids,
             image_ids=image_ids,
         )
-        logger.info("User %s %s wiki %s for location %s from pin %s", request.user.id, "created" if created else "linked to existing", wiki.pk, pin.location_id, pin.pk)
+        logger.info("User %s shared %s from pin %s to wiki %s (location %s)", request.user.id, "content" if shared else "nothing", pin.pk, wiki.pk, pin.location_id)
 
         pin.refresh_from_db()
-        created_flag = "true" if created else "false"
+        shared_flag = "true" if shared else "false"
         overview_context = _overview_context(pin)
         overview_html = render(request, "dashboard/partials/pins/pin_overview_partial.html", overview_context).content.decode()
         # The Community Wiki box lives in the page hero, outside #pin-overview
-        # (this view's own hx-target) - without this OOB swap, the "Create
-        # Community Wiki" button stays stuck in its stale pre-creation state
-        # (and doesn't turn into a link to the new wiki) until a full reload.
-        # Same fix PinOverviewView already needed for the slug-backfill case.
+        # (this view's own hx-target), and shows what the pin has contributed -
+        # without this OOB swap it stays stale until a full reload. Same fix
+        # PinOverviewView already needed for the slug-backfill case.
         hero_html = _pin_hero_oob(request, pin, competing_location_count=overview_context["competing_location_count"])
         response = HttpResponse(overview_html + hero_html)
-        response["HX-Trigger"] = f'{{"wikiCreated": {{"created": {created_flag}}}}}'
+        response["HX-Trigger"] = f'{{"wikiShared": {{"shared": {shared_flag}}}}}'
         return response

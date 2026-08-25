@@ -125,14 +125,6 @@ _SUBSCRIPTIONS: tuple[_Subscription, ...] = (
         activity_kind=ActivityKind.WIKI_EDIT,
     ),
     _Subscription(
-        model_path="urbanlens.dashboard.models.wiki.model:Wiki",
-        profile_ids=_attr_ids("created_by_id"),
-        # Not created_only: wikis are born as background drafts and only count
-        # once officially_created flips, which happens on a later save.
-        triggers=frozenset({metric_registry.TRIGGER_WIKI}),
-        created_only=False,
-    ),
-    _Subscription(
         model_path="urbanlens.dashboard.models.reviews.model:Review",
         profile_ids=_attr_ids("profile_id"),
         triggers=frozenset({metric_registry.TRIGGER_REVIEW}),

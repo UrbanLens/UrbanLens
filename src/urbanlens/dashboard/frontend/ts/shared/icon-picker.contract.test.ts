@@ -23,7 +23,7 @@ import { join } from "node:path";
 
 import { IconPicker } from "./icon-picker";
 
-const PARTIAL = join(import.meta.dir, "../../../templates/dashboard/partials/_icon_picker.html");
+const PARTIAL = join(import.meta.dir, "../../../templates/dashboard/partials/ui/_icon_picker.html");
 const template = readFileSync(PARTIAL, "utf8");
 
 function buildPicker(label: string): HTMLElement {

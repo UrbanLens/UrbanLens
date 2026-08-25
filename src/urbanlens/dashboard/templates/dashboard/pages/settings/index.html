@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load static %}
 
 {% block hero %}
@@ -1628,8 +1629,8 @@
 {% endblock %}
 
 {% block scripts %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
 <script src="{% static 'dashboard/js/e2ee.js' %}"></script>
 <script src="{% static 'dashboard/js/webauthn.js' %}"></script>
 <script src="{% static 'dashboard/js/permissions.js' %}"></script>

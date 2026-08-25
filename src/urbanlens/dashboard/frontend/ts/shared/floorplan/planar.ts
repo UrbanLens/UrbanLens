@@ -166,13 +166,108 @@ function segmentIntersection(a1: Pt, a2: Pt, b1: Pt, b2: Pt): Pt | null {
  * corners, and without splitting the exterior wall there the two never share a
  * vertex and no room ever closes.
  */
+/**
+ * A uniform grid over the plan, for asking "what is near this?" cheaply.
+ *
+ * Splitting walls where they meet is two all-pairs questions - which segments
+ * cross, and which endpoints land on another segment's interior - and doing
+ * them literally is quadratic in the wall count. Two walls at opposite ends of
+ * a warehouse are compared for an intersection that no arithmetic was ever
+ * going to find.
+ *
+ * Cells are keyed by integer coordinates, and anything is registered in every
+ * cell its bounding box touches, so a query only has to look at cells the
+ * query box touches. This prunes; it never changes an answer, because two
+ * things that do not share a cell cannot have overlapping boxes.
+ */
+class Grid<T> {
+    private readonly cells = new Map<string, T[]>();
+
+    constructor(private readonly size: number) {}
+
+    private key(cx: number, cy: number): string {
+        return `${cx},${cy}`;
+    }
+
+    /** Register *value* across every cell the box touches. */
+    add(value: T, minX: number, minY: number, maxX: number, maxY: number): void {
+        const x0 = Math.floor(minX / this.size);
+        const x1 = Math.floor(maxX / this.size);
+        const y0 = Math.floor(minY / this.size);
+        const y1 = Math.floor(maxY / this.size);
+        for (let cx = x0; cx <= x1; cx++) {
+            for (let cy = y0; cy <= y1; cy++) {
+                const key = this.key(cx, cy);
+                const bucket = this.cells.get(key);
+                if (bucket) bucket.push(value);
+                else this.cells.set(key, [value]);
+            }
+        }
+    }
+
+    /** Everything registered in a cell the box touches, each returned once. */
+    near(minX: number, minY: number, maxX: number, maxY: number): Set<T> {
+        const found = new Set<T>();
+        const x0 = Math.floor(minX / this.size);
+        const x1 = Math.floor(maxX / this.size);
+        const y0 = Math.floor(minY / this.size);
+        const y1 = Math.floor(maxY / this.size);
+        for (let cx = x0; cx <= x1; cx++) {
+            for (let cy = y0; cy <= y1; cy++) {
+                for (const value of this.cells.get(this.key(cx, cy)) || []) found.add(value);
+            }
+        }
+        return found;
+    }
+}
+
+/**
+ * A cell size that keeps buckets small without making them numerous.
+ *
+ * Roughly one cell per segment across the plan's extent: too fine and a long
+ * wall is registered in hundreds of cells, too coarse and every query returns
+ * everything.
+ */
+function cellSizeFor(segments: Segment[], tolerance: number): number {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const s of segments) {
+        minX = Math.min(minX, s.a.x, s.b.x);
+        minY = Math.min(minY, s.a.y, s.b.y);
+        maxX = Math.max(maxX, s.a.x, s.b.x);
+        maxY = Math.max(maxY, s.a.y, s.b.y);
+    }
+    const extent = Math.max(maxX - minX, maxY - minY);
+    if (!Number.isFinite(extent) || extent <= 0) return Math.max(tolerance, 1);
+    return Math.max(extent / Math.max(1, Math.sqrt(segments.length)), tolerance * 4);
+}
+
 function planarize(segments: Segment[], tolerance: number): Segment[] {
     // Cut points per segment, as parameters along it.
     const cuts: number[][] = segments.map(() => []);
 
+    const cell = cellSizeFor(segments, tolerance);
+    const box = (s: Segment) => ({
+        minX: Math.min(s.a.x, s.b.x),
+        minY: Math.min(s.a.y, s.b.y),
+        maxX: Math.max(s.a.x, s.b.x),
+        maxY: Math.max(s.a.y, s.b.y),
+    });
+
+    // Crossings. Only pairs whose bounding boxes share a cell can meet, and
+    // j > i keeps each pair considered once.
+    const bySegment = new Grid<number>(cell);
     for (let i = 0; i < segments.length; i++) {
-        for (let j = i + 1; j < segments.length; j++) {
-            const si = segments[i] as Segment;
+        const b = box(segments[i] as Segment);
+        bySegment.add(i, b.minX, b.minY, b.maxX, b.maxY);
+    }
+    for (let i = 0; i < segments.length; i++) {
+        const si = segments[i] as Segment;
+        const b = box(si);
+        for (const j of bySegment.near(b.minX, b.minY, b.maxX, b.maxY)) {
+            if (j <= i) continue;
             const sj = segments[j] as Segment;
             const hit = segmentIntersection(si.a, si.b, sj.a, sj.b);
             if (!hit) continue;
@@ -181,12 +276,18 @@ function planarize(segments: Segment[], tolerance: number): Segment[] {
         }
     }
 
-    // T-junctions: an endpoint sitting on another segment's interior.
-    const endpoints: Pt[] = [];
-    for (const s of segments) endpoints.push(s.a, s.b);
+    // T-junctions: an endpoint sitting on another segment's interior. The query
+    // box is grown by the tolerance, since an endpoint that close counts as on
+    // the segment even when it is fractionally outside its box.
+    const byEndpoint = new Grid<Pt>(cell);
+    for (const s of segments) {
+        byEndpoint.add(s.a, s.a.x, s.a.y, s.a.x, s.a.y);
+        byEndpoint.add(s.b, s.b.x, s.b.y, s.b.x, s.b.y);
+    }
     for (let i = 0; i < segments.length; i++) {
         const s = segments[i] as Segment;
-        for (const p of endpoints) {
+        const b = box(s);
+        for (const p of byEndpoint.near(b.minX - tolerance, b.minY - tolerance, b.maxX + tolerance, b.maxY + tolerance)) {
             const near = projectOnSegment(p, s.a, s.b);
             if (near.distance > tolerance) continue;
             if (near.t <= 1e-9 || near.t >= 1 - 1e-9) continue;
@@ -243,7 +344,28 @@ function buildGraph(segments: Segment[], weldTolerance: number): Graph {
  * of a tidy drawing. The join is added as an extra edge rather than by moving
  * either endpoint, so what the user drew is preserved exactly.
  */
-function heal(graph: Graph, gap: number): HealedJoin[] {
+/**
+ * Whether the segment ``a``->``b`` reaches its target without running through
+ * geometry that is already there.
+ *
+ * A dangling end's nearest free neighbour is not always the one it meant: a
+ * short stub beside a longer wall is closer to that wall's *far* end than to
+ * the end beside it, and joining those two spans straight over the stub. A
+ * join that passes through another vertex is one the author would have drawn
+ * to that vertex instead.
+ */
+function joinIsClear(graph: Graph, a: number, b: number, tolerance: number): boolean {
+    const pa = graph.points[a] as Pt;
+    const pb = graph.points[b] as Pt;
+    for (let i = 0; i < graph.points.length; i++) {
+        if (i === a || i === b) continue;
+        const near = projectOnSegment(graph.points[i] as Pt, pa, pb);
+        if (near.t > 0 && near.t < 1 && near.distance <= tolerance) return false;
+    }
+    return true;
+}
+
+function heal(graph: Graph, gap: number, weldTolerance: number): HealedJoin[] {
     const degree = new Map<number, number>();
     for (const e of graph.edges) {
         degree.set(e.u, (degree.get(e.u) || 0) + 1);
@@ -261,11 +383,15 @@ function heal(graph: Graph, gap: number): HealedJoin[] {
         for (let j = i + 1; j < dangling.length; j++) {
             const b = dangling[j] as number;
             if (joined.has(b)) continue;
+            // A wall shorter than the gap has both of its own ends dangling,
+            // and they are the closest pair to each other - bridging them
+            // folds the wall onto itself instead of joining it to anything.
+            if (graph.edges.some((e) => (e.u === a && e.v === b) || (e.u === b && e.v === a))) continue;
             const d = distance(graph.points[a] as Pt, graph.points[b] as Pt);
-            if (d < bestDistance) {
-                best = b;
-                bestDistance = d;
-            }
+            if (d >= bestDistance) continue;
+            if (!joinIsClear(graph, a, b, weldTolerance)) continue;
+            best = b;
+            bestDistance = d;
         }
         if (best < 0) continue;
         joined.add(a);
@@ -367,7 +493,7 @@ export function deriveFaces(segments: Segment[], options: DeriveOptions = {}): D
 
     const split = planarize(segments, weldTolerance);
     const graph = buildGraph(split, weldTolerance);
-    const healed = heal(graph, healGap);
+    const healed = heal(graph, healGap, weldTolerance);
     const faces = extractFaces(graph, minFaceArea);
 
     const degree = new Map<number, number>();

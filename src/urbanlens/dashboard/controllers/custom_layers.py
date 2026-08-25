@@ -61,7 +61,16 @@ def _resolve_layer_owner(request: HttpRequest, pin_slug: str | None, location_sl
         return pin, CustomLayer.objects.for_pin(pin)
     if location_slug is None:
         raise Http404
-    _location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+    # Map annotation layers carry the same ruling as markup and detail pins:
+    # hidden outright for a concealed viewer, whoever made them. The wiki page
+    # already sends an empty list in its render context, but this endpoint is
+    # fetched separately after load, so concealing only the context left the map
+    # repopulating itself a moment later.
+    from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+    _location, wiki, profile = resolve_visible_wiki(request, location_slug)
+    if concealment_active(wiki, profile):
+        return wiki, CustomLayer.objects.none()
     return wiki, CustomLayer.objects.for_wiki(wiki)
 
 

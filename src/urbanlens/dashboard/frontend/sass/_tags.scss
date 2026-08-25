@@ -544,6 +544,10 @@ $org-stat-col-color-w: 2.75rem;
     color: $text-muted;
 
     i {
+        // Material's icon fonts default to 24px, which fills a 28px swatch edge
+        // to edge. Every hand-written copy of this markup inlined 1rem; the
+        // rule belongs with the swatch instead.
+        font-size: 1rem;
         color: $text-muted;
     }
 }

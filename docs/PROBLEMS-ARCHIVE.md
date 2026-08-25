@@ -11,6 +11,30 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-08-25: two views read `request.user.profile` on a possibly-anonymous user
+
+`controllers/map_overlays.py` (then :320, now :329) and `controllers/safety.py:1228` both called
+`request.user.profile` where mypy types `request.user` as `User | AnonymousUser`. Surfaced by
+running mypy across the whole `controllers/` package rather than a file at a time, which is not
+routine here.
+
+Not live: both are on `LoginRequiredMixin` views, so `request.user` is always authenticated by the
+time either line runs. It is a typing lie rather than a crash, and the trap is that removing the
+mixin - or reusing either helper from an unauthenticated path - turns it into an `AttributeError`
+with nothing pointing at the cause.
+
+The fix is not a cast. Every other view resolves the viewer as
+`Profile.objects.get_or_create(user=request.user)` (see `services/wiki/wiki_access.resolve_visible_wiki`),
+which is honest about both the type and the possibility that the profile does not exist yet. Left
+alone here because these two views are unrelated to the work that surfaced them and the change is
+behavioural, not cosmetic.
+
+**Resolved 2026-08-25.** Both now resolve the viewer as
+`Profile.objects.get_or_create(user=request.user)`, the same way every other view does - which is
+honest about the type and about the profile possibly not existing yet. `mypy` is clean across all
+85 files in `controllers/`; 53 tests over the two views pass.
+
+
 ## ~~2026-07-28: `Friendship.muted` is shared by both profiles, not per-viewer~~ - RESOLVED 2026-08-20
 
 ~~There is exactly one `Friendship` row per pair, so the `muted` boolean added in migration
@@ -7042,3 +7066,473 @@ missing five by AST scan.
 Merged into that entry to keep one record. Kept as a pointer rather than deleted, because the
 duplication is the finding: two days of prior analysis were sitting in this file, in a section the
 audit had been appending to for dozens of chunks, and were not read before acting.
+
+## ~~2026-08-23: an unnamed plan freezes the floor's name into stored data~~ - RESOLVED 2026-08-23
+
+~~`save()` sends `state.doc.name = nameInput?.value || floor().name || ""`, and~~
+~~the server stores whatever it is given (`serialization.py`, no default of its~~
+~~own). So leaving the plan name blank does not store "blank" - it stores a copy~~
+~~of the floor's name at that moment.~~
+
+~~Two consequences, both small and both real. The `placeholder="Ground floor"`~~
+~~stops applying after the first save, because the field now has a real value; and~~
+~~renaming the floor afterwards leaves the plan carrying the old name, a derived~~
+~~default that has quietly become stale data.~~
+
+~~The reason the default exists at all is that `controllers/floorplans.py:210`~~
+~~puts `plan.name` in the versions list, which needs a label. That is the only~~
+~~consumer, so the fix is contained: let the client store `""` when the field is~~
+~~empty and have the version list fall back at *display* time (floor name, then~~
+~~something like "Untitled"). It is a change to what is in the column, though, so~~
+~~existing rows carry the frozen names until something rewrites them.~~
+
+Fixed the same day. `save()` stores the field exactly as typed, blank included, and
+`renderVersions()` labels an unnamed version by its `valid_from` date rather than by
+anything derived from the floor: the floor's designation reads the same for every
+version of the same plan, which defeats the one job that list has. Rows written before
+this still carry the frozen names until something rewrites them.
+
+## RESOLVED 2026-08-21: an unpinned bun tag broke every container build
+
+`Dockerfile` installed bun with `COPY --from=oven/bun:1` - a floating major tag. Bun **1.4.0**
+dropped `bun build --format iife` (`error: Formats besides 'esm' are not implemented`), which
+`bin/build-frontend.ts` needs for the `ts/entries-classic/` bundles - the scripts loaded without
+`type=module` (`core.js`, `e2ee.js`, `webauthn.js`, `permissions.js`). The moment that tag moved,
+**every newly built container failed at `bun run build`** and crash-looped in `init.py`, with no
+local change to blame. Hosts that already had bun 1.3.x kept working, so it looked like an
+environment-specific mystery rather than a dependency bump.
+
+Found because a fresh `bin/dev_env.py create` environment would not come up (`ul_<slug>_app`
+stuck `Restarting`). This was **not** limited to dev environments - a staging or production
+rebuild would have hit exactly the same wall.
+
+Pinned to `oven/bun:1.3.14` (matching the host and `bun.lock`), with a comment saying to bump
+deliberately after checking `iife` still builds. The durable fix, if bun keeps iife removed, is
+to stop needing it: `entries-classic` exists only because those four bundles load as classic
+scripts, and the same trap in reverse is what killed the floorplan editor (see the 2026-08-21
+`type="module"` entry in ROADMAP.md, UL-405). Worth revisiting as one piece of work rather than
+carrying an exact pin forever.
+
+## RESOLVED 2026-08-19: `inspects_content` stopped the two tabs it was written to hide
+
+`ed8b3b28` ("a panel tab appears only when it has something to show") gave `photon` and
+`open_elevation` an `inspects_content` flag, so a fresh cache row holding a legitimately empty answer
+no longer counts as ready. Correct for the tab strip, which is what the commit was about.
+
+But `PinController.location_data_overview` used `is_ready` to mean *"has this source been fetched
+yet"*, and those are different questions. After the commit the two panels looked unfetched forever:
+rescheduled on every render, and - because `empty_keys` is only appended inside the `is_ready`
+branch - never reported to the client. `empty_keys` drives the `pinLocationDataEmpty` HX-Trigger,
+which is exactly what `_pin_location_data_tabs.html` uses to hide a dead tab. So the fix that
+introduced `inspects_content` prevented the two tabs it targeted from ever being hidden, and made the
+Overview poll for them indefinitely.
+
+The endpoint now reads a fresh `LocationCache` row directly and treats its presence as "asked";
+`is_ready` keeps its narrower meaning for the tab strip.
+
+**How it stayed hidden for a day:** two tests in `test_location_data_overview.py` (written 2026-07-22)
+did catch it - they assert the 204 and the full `empty_keys` set - and had been failing since the
+commit landed at 00:29. They were only noticed because a broad run happened to include that file. A
+behaviour flag that changes what an existing helper means is worth grepping for callers of that
+helper; `is_ready` had two, and only one wanted the new meaning.
+
+## RESOLVED 2026-08-20: a visit suggestion named its sender even when that sender is masked everywhere else
+
+Found by `bin/report_defect_history.py`'s incomplete-fix query, which lists fixes whose own message
+implies more instances exist. Commit `1634837e` - "the calendar importer's trip invite masks identity
+**like its sibling does**" - is exactly that phrase. `services/visits/visits.py` was another
+instance: both branches of the visit-suggestion notification interpolated `suggested_by.username`
+raw.
+
+Same reasoning as the sibling, and it is worth restating because "they're connected, so it's fine"
+is the intuition that produces this bug every time. Being connected is not sufficient permission:
+`VisibilityChoice`'s own docstring notes accepted friends qualify for every level *except* `NO_ONE`.
+And the message is stored as plain text, then picked up by push delivery and by
+`notification_text_alerts`, which builds an SMS body from the stored text - so a name masked at
+render time has already left the app.
+
+Now routed through `_suggester_name`, with four tests. Two of them fail against the previous code
+(verified by reverting), one is the anti-vacuity case, and one covers the merge-wording branch -
+the two message branches are written separately, which is how they would drift again.
+
+**Checked and deliberately left alone: the two other raw usernames near a notification write.**
+
+- `services/social/friendship.py`'s friend-request body. Naming the requester is the *point* -
+  `visibility_permits` has an `allow_pending_request` rule specifically so "asking someone to
+  connect deliberately lets them see who is asking". Routing it through the resolver would be
+  harmless for every visibility except `NO_ONE`, where it would produce "Member wants to be your
+  friend" - an anonymous request nobody can act on. That is a product decision about whether a
+  `NO_ONE` profile may send requests at all, not a masking bug.
+- `services/visits/safety.py`'s community-wiki escalation. The owner opted into notifying strangers
+  precisely so those strangers can look for them; masking the name would defeat the feature. It is
+  in `MUTE_EXEMPT_TYPES` for the same reason.
+
+## RESOLVED 2026-08-20: every `Friendship` status transition wrote the whole row, and could un-mute somebody
+
+Found by `bin/report_model_writers.py`, which ranks models by how many modules write them and lists
+the bare `save()` calls against each - `Friendship` came back with three. That report exists because
+a bare `save()` writes *every* column from a possibly-stale in-memory instance, which is harmless on
+a single-writer row and a lost update on a contested one.
+
+`Friendship` had just become contested. The mute columns added earlier the same day are written by a
+targeted `UPDATE` that deliberately leaves the instance alone (so it cannot clobber a concurrent
+accept/decline, and does not move `updated`, which the profile page renders as the friendship's
+"since" date). The status transitions did the opposite - `accept`/`decline`/`ignore`/`remove`/`block`
+and `request` all did a bare `self.save()`. So: open someone's profile page, have them mute you in
+another tab, click Remove - and their mute is gone, with nothing reporting it.
+
+**`update_fields`, not `queryset.update()`.** The latter avoids the lost update outright and also
+skips `post_save` - which the achievements system subscribes to for this model, `created_only=False`,
+specifically to see a friendship *reach* `ACCEPTED` (`models.achievements.signals`). Silencing that
+to fix a lost update trades one silent bug for another. There is a test asserting the signal still
+fires with `status` among its `update_fields`.
+
+**A second, worse instance in the same area.** `block_profile` re-points the row so the blocker owns
+`from_profile` (deliberately - direction is the only record of who blocked whom). The mute columns
+are named for the row's two *ends*, so swapping the ends without swapping them hands each person the
+other's preference: A's mute of B silently becomes B's mute of A, and neither of them did it. Now
+read before the swap and written with it, in one statement.
+
+Six tests, all verified to fail against the previous code by reverting both fixes and re-running -
+one of them (`test_a_request_does_not_clobber_a_mute`) passed either way and says so in its own
+docstring, because `request` loads the row itself and is never stale.
+
+**The report itself was sharpened in the same pass.** It listed every bare `save()`, including ones
+on an instance the same function had just *constructed* - which is an INSERT, with no earlier load
+to be stale relative to. Those buried the real findings: the `Comment` entry that looked most
+alarming (8 writers) was exactly that shape, and dismissing each costs a reader the same minute.
+`report_model_writers.py` now skips a `save()` on a name whose every assignment in that function is
+a direct `Model(...)` call - conservatively, so one `obj = Model.objects.get(...)` anywhere in the
+function and it is reported as before. That took the list from 14 flagged models to 6, and turned
+`Profile`, `Comment`, `MarkupMap` and `SafetyCheckin` from false positives into clean rows.
+
+**Also fixed, from the sharpened list:** `PinVisit`'s two visit-edit paths (pin detail and the
+Memories dialog) wrote the whole row for three fields. The contending writer is `pin_merge`, which
+re-points `pin` wholesale; the window is small (the POST re-fetches the visit scoped to its pin, so a
+merged-away visit 404s rather than being clobbered) but `update_fields` is strictly better and costs
+nothing.
+
+**Still open:** `Label` (3), `PinList` (2), `Trip`, `TripActivity` and `SavedFilter` (1 each). Each
+needs the same judgement - which columns does *another* writer touch without going through this
+instance - and that judgement is per model, not mechanical. `Friendship` was worth doing first
+because a second writer had just been added to it.
+
+## RESOLVED 2026-08-19: E2EE re-wrap recorded a KDF cost its stored blob was not made with
+
+The original entry described the client trusting server-supplied Argon2 parameters. That half was
+already fixed: `e2ee-client.ts`'s stale-password re-wrap derives with its own pinned
+`KDF_OPSLIMIT`/`KDF_MEMLIMIT`, never `bundle.kdf_*`, and the comment there explains why it must (a
+compromised server could otherwise answer `password_wrap_stale=true` with near-zero parameters and be
+handed a cheaply-attackable blob).
+
+What was left was the other end of the same change. `/rewrap` replaced `password_wrapped_secret` and
+never touched `kdf_opslimit`/`kdf_memlimit`. Enrol deliberately accepts stronger-than-default
+parameters and stores them, so a bundle enrolled above the floor kept advertising a cost its new blob
+was not made with - and the read paths use `bundle.kdf_*`. Every later password unlock then derived
+the wrong key: the device holding the cached key loops re-wrapping, a device without one loses the
+password path entirely and has only the recovery key. Permanent, and reachable through the public API
+by enrolling above the floor.
+
+`/rewrap` now records the parameters alongside the blob, applying the same floor enrol does - so the
+floor cannot be walked around one step later either. Absent parameters mean the **defaults**, not
+"unchanged": the shipped client has always wrapped with its pinned constants here, and leaving the
+bundle's own values was the bug. A recovery-only re-wrap replaces no password blob and so leaves them
+alone. Guarded by `test_e2ee_kdf_floor.RewrapKdfParametersTests`.
+
+## RESOLVED 2026-08-19: label-kind literals - and the blind spot in the scan that found them
+
+`models/labels/meta.py` defines `KIND_TAG`/`KIND_CATEGORY`/`KIND_STATUS`/`KIND_USER`/`KIND_MEDIA`.
+Every production call site now uses them. What is left below is the part worth keeping: **the scan
+that produced the original list of twenty could not see six of the sites.**
+
+It resolved choices via `Model._meta.get_field(name).choices`, which structurally cannot follow a
+lookup traversal - so `labels__kind="status"` was invisible to it, and four such sites survived
+(`models/pin/queryset.py` twice on `status` plus once on `category`, `models/wiki/queryset.py` on
+`category` and `tag`). It also missed two plain `Label(kind=...)` creates (`tasks.py`,
+`services/apis/locations/google/maps.py`) that it should have caught. All six were fixed on
+2026-08-19; the two `models/pin/model.py` sites the entry recorded as "the two that remain" had
+already been done before that.
+
+The entry's own stated risk applied most sharply to exactly the sites it could not see: a filter on
+a stale literal silently matches nothing, where a create with one silently writes a value nothing
+queries. **A future sweep of this class must grep `related__field=` traversals separately** -
+`_meta`-driven scans of this shape will keep reporting a clean list while missing them.
+
+Remaining bare literals are deliberate and must stay: `baker_recipes.py` (test fixtures) and
+`migrations/` (frozen history - a migration that imports a constant changes meaning if the constant
+does).
+
+## RESOLVED 2026-08-19: two encryption migrations disagreed about whether encrypting is reversible
+
+0048 now carries a real decrypting `reverse_code` (`decrypt_existing_preference_fields`), modelled
+on 0039's: same `gAAAA%` discriminator so plaintext rows are left alone, and the whole rollback
+aborts if any token-shaped value cannot be decrypted under the configured keys.
+
+What made this decidable rather than a standing argument: the policy had **already been written
+down**. `docs/DATA_ENCRYPTION.md`'s "Migration rollbacks decrypt" (2026-08-15) says rollbacks
+decrypt and abort rather than write garbage, and 0007 and 0039 implement it. 0048 landed two days
+later reversing to noop, which left one file contradicting a documented rule - and it was the more
+dangerous side of the pair, because noop makes `migrate dashboard 0047` *succeed* while leaving
+ciphertext in columns pre-0048 code reads as plaintext. A failure someone can act on beats a success
+that corrupts.
+
+The exemption is removed from `tests/hypothesis/test_migration_noop_reverse_guard.py`, and
+`test_migration_0039_reverse.py` now covers 0048 with the same three assertions it applies to 0039.
+
+## RESOLVED 2026-08-22: `pyproject.toml`'s mutmut test-selection pointed at the wrong file for `identity_visibility.py`
+
+`bin/run_mutation_tests.sh --results` showed all ~105 mutants in
+`services/profile/identity_visibility.py` as `no tests` rather than `killed`/`survived` - a
+different, meaningless status: mutmut never even ran a test against them. The configured
+`pytest_add_cli_args_test_selection` listed `test_identity_visibility_batch.py` for this module,
+but that file tests `Profile.visible_profile_pks`/`Friendship` batching and never imports
+`services.profile.identity_visibility` at all - confirmed by grepping its imports. The actual
+tests (`test_identity_visibility.py`, plus `test_dm_share_live_updates.py`,
+`test_map_pin_share_detection_integration.py`, and `test_query_scaling_group_members.py`, all of
+which directly import `resolve_visible_identity(ies)`) were simply missing from the list.
+
+Fixed by adding those four files to the selection (and, while already in that section of
+`pyproject.toml`, two files that were the same kind of miss for `wiki_edits.py`:
+`test_wiki_revert_of_revert.py` and the new `test_wiki_boundary_revert.py`, both of which
+directly exercise that module but weren't listed either - only `test_wiki_edit_field_scope.py`
+was). All seven newly-added files pass together as a baseline (124 tests, 98.82s).
+
+**Not independently re-verified against a fresh mutation run** (a full pass across all three
+`only_mutate` modules is expensive - see `bin/run_mutation_tests.sh`'s own "roughly one mutant per
+second" estimate, likely much longer with hundreds of Django tests per mutant); the fix is
+grounded in confirmed import analysis, not an empirical before/after kill-rate comparison. If a
+future mutation run still shows `identity_visibility.py` mutants surviving now that real tests are
+selected, that would be genuine, actionable coverage gaps - worth a closer look then.
+
+## RESOLVED 2026-08-22: `PinList`'s edit endpoints reverted concurrent edits to untouched fields
+
+Both `PinListEditView.post` (internal, HTMX-driven inline rename/description edit and smart-rule
+changes) and `PinListDetailView.patch` (external API) ended with a bare `pin_list.save()` -
+writing every column from that request's in-memory snapshot. A rename request that loaded the row
+before a concurrent request (another tab, or the other of these two independent
+implementations) changed `description`/`smart_filter`/`smart_boundary`/etc. would silently revert
+that other change the moment its own save ran, last-write-wins on the whole row rather than just
+the fields it actually touched. Same bug class as the one `services/wiki/wiki_edits.py`'s
+`save_edited_fields` already guards against on a comparably shared model.
+
+Fixed both views the same way: track a `changed_fields: set[str]` as each field is actually
+mutated, then `pin_list.save(update_fields=[*changed_fields, "updated"])` instead of a bare
+`save()` (skipped entirely when nothing changed). Confirmed the `PinListsCollectionTests.post`
+create path is not a lost-update risk - `pin_list = PinList(...)` there is a brand-new unsaved
+instance, so a bare `save()` on it is a normal create, not this bug.
+
+Proved with a new regression test per endpoint (`PinListEditConcurrentWriteTests` in
+`test_pin_lists.py`, `PinListDetailTests.test_concurrent_edit_to_another_field_survives_a_rename`
+in `test_external_api_lists.py`): each patches the view's own list-loading function with a
+`side_effect` that injects a concurrent `PinList.objects.filter(pk=...).update(description=...)`
+between that function returning and the view's `save()` - simulating the actual race rather than
+a pre-request update the view's own read would already see. Both tests fail against the old bare
+`save()` (confirmed via `git stash` on just the source files) and pass with the fix; full
+`test_pin_lists.py` + `test_external_api_lists.py` suite (97 tests) passes.
+
+Not yet investigated: the same bare-`save()` lost-update shape may exist on `Label`, `Trip`,
+`TripActivity`, `SavedFilter`, `Place`, and `Album`'s own edit endpoints - flagged as candidates
+by a fix-density read of `report_model_writers.py`'s output, not yet individually verified as
+real bugs (the `PinList` create-path false positive above shows not every bare `save()` is one).
+
+## A pool reference with no image cannot keep its identity (2026-08-23)
+
+**RESOLVED the same day.** `applyServerIds` matched a reference-pool row to the
+server's by the image it stood for, so a row with no image - a reference added by
+URL, or a `source_pool` row - had no key, kept its client-side uuid, and was
+destroyed and recreated on every save.
+
+The note here said the obvious fix did not work, and it did not: `FloorplanSource`
+and `FloorplanReference` extend `FrontendDashboardModel` rather than
+`FloorplanItem`, so they had no `sort_order`, and `ordering = ("id",)` would have
+made the order deterministic without making it match the payload - new rows are
+created after the existing ones.
+
+So they have a `sort_order` now, written from the payload index the way `_sync`
+already does for every other collection (0064_floorplan_pool_sort_order), and
+both models order by it. The pool comes back in the order it went out, the client
+matches positionally like everything else, and the image special case is gone.
+
+## The building shell is a room, but a room bounded only by shell cannot be moved (2026-08-22)
+
+Jess reported two things that turn out to be the same case, pulling in opposite
+directions: "the base floorplan is considered a room in some cases", and "when a
+room shares walls with the exterior floorplan, it is sometimes not considered a
+room for some things (like being deleted, moved, etc)."
+
+What the code did: `roomBoundaryWalls` treated a wall as the room's own only
+when it bounded no other face *and* was not exterior.
+
+The claim originally written here - "a corner room in a subdivided building
+still has its partitions, so it moves and deletes normally, that half already
+worked" - was **wrong**, and checking it rather than repeating it is what turned
+it up. In a planar subdivision *every* interior partition borders two faces, so
+"bounds no other face" is never true of one. A closet inside a building owned
+nothing at all, and the move, the turn and the delete each declined on the
+grounds that there was nothing to act on. Worse than declining, in the case of
+the drag: `start` returning false hands the gesture to Leaflet, so trying to
+move a room panned the map instead.
+
+The exterior exclusion cannot simply be dropped. Verified against planar.ts: in
+an 8x4 shell split by one partition, `west` bounds only the west face, so a
+purely topological "unique" would translate the building's west wall whenever
+that room is dragged. That was tried and reverted.
+
+**RESOLVED 2026-08-23.** Jess left the call here ("low risk to choose an
+implementation that makes sense and is consistent with other apps; I can give
+feedback after testing"), so:
+
+Nothing in the geometry separates a shed from a shell nobody has subdivided,
+and no rule was going to invent the difference - so *intent* draws the line,
+which is what other floorplan tools do too. An un-subdivided outline is not
+captioned as a room and a stray click will not mint one; right-clicking it
+offers to name it, and once named it is a room like any other. A studio flat and
+a shed are single rooms; a building you have not got round to dividing is not.
+
+"Like any other" now includes moving and deleting it, which it did not.
+`splitRoomBoundary` (shared/floorplan/rooms.ts) hands a room the partitions on
+its boundary regardless of what else they border, plus - for a face that is
+entirely exterior - the shell itself, since a closed structure's walls bound it
+and nothing else.
+
+What it never hands over is the shell of a building the room merely sits inside.
+That is the reverted bug's territory: topologically the west wall of a shell
+split by one partition bounds only the west room, and letting the room have it
+tears the side off the building.
+
+So a room's own walls move and its neighbours' reshape, and the shell stays put
+- but a partition that met the shell has to stay met, or moving a room would
+leave it unenclosed. Corners resting on a wall the room does not own slide along
+it instead of dragging it (`cornerAnchors`/`anchoredMove`), for the turn as well
+as the move.
+
+## Floorplan drags converted to Pointer Events without browser verification (2026-08-22)
+
+All five drags in the floorplan editor (wall body, room fill, opening slide,
+opening end, wall corner) moved from Leaflet mouse events to Pointer Events
+bound on each layer's own element, so that they work with a finger. Before
+this, a touch drag emitted no mouse events at all and only the Leaflet-native
+marker drag worked on a phone.
+
+**RESOLVED 2026-08-23: there is now a browser, and the conversion is verified.**
+`apt-get download` plus `dpkg-deb -x` needs no root, so the missing GTK/ATK/ALSA
+libraries are unpacked under ~/browserlibs and reached via LD_LIBRARY_PATH - see
+`bin/browser_libs.sh`. Playwright is a dev dependency, and
+`bun run test:browser` drives the real built bundle through real gestures,
+including a synthetic touch drag.
+
+That immediately paid for itself: it caught a regression the conversion had
+introduced. Pointer capture retargets `pointerup` to whatever holds it, and the
+browser fires `click` at the common ancestor of press and release - so capturing
+on the press moved the click off the wall, and **clicking a wall to select it
+had stopped working entirely** for mouse and touch alike. Capture, disabling the
+map's own dragging, and stopping propagation now all wait until the gesture has
+travelled far enough to be a drag rather than a click.
+
+One defect was caught by review before it could ship further: the first version
+bound the move/up phase to the *layer's* element. render() clears every layer
+and runs on every frame of a drag, so the drag's own first move destroyed the
+element it was bound to - releasing pointer capture and ending the gesture after
+one frame. Tracking now happens on window, with capture on the map container,
+both of which outlive render(). That is also why the old code bound to the map
+and paid for it with the listener leak.
+
+What to exercise first in a real browser, desktop and phone:
+  - dragging a wall body, and the Ctrl (network) and Alt (detach) variants
+  - dragging a room fill, and confirming a press on an *unselected* room still
+    pans the map rather than moving it
+  - dragging a wall corner and a door end - these previously had no slop, so
+    check that a tap selects without nudging
+  - that a plain tap still selects (the pointerdown handler deliberately calls
+    stopPropagation and never preventDefault, precisely so the click survives)
+  - two-finger pan and pinch-zoom over drawn geometry, which `touch-action:
+    none` on .floorplan-wall/.floorplan-room/.floorplan-opening/.floorplan-handle
+    could plausibly interfere with
+
+Known gap left in place: the wall tool's rubber-band preview still follows
+map.on("mousemove"), so on touch there is no live preview line while drawing -
+taps still place corners, because Leaflet synthesises click from a tap.
+
+## No working headless-browser path exists on this host for live UI verification (2026-08-22)
+
+Tried to drive the floorplan editor in a real browser (per the standing rule that a UX/behavior
+claim needs to be run, not just read) against a fresh `bin/dev_env.py` environment. Every cached
+Playwright Chromium build on this host - `chromium-1148`, `chromium-1228`, and both matching
+`chromium_headless_shell` revisions - fails to launch with the same error:
+`error while loading shared libraries: libatk-1.0.so.0: cannot open shared object file`. This is a
+missing system GTK dependency, not a Playwright/browser-revision mismatch (confirmed across three
+different cached revisions and both the full-chromium and headless-shell binaries). No passwordless
+sudo exists on this host to `apt-get install` the missing libraries (see `CLAUDE.local.md`), so this
+could not be worked around in-session.
+
+Practical effect: nothing in this environment can currently drive a real browser end-to-end
+(screenshot, click, read computed styles). Static code reading plus backend-level reproduction
+(a real Django test client hitting the actual view/serialization code) is the fallback, and is what
+this session used instead - see `test_floorplans.py`'s `FloorplanSessionItemIdentityTests` for an
+example of proving a frontend/backend interaction bug this way without a browser. That fallback
+cannot catch anything that only manifests in rendered layout, computed CSS, or real pointer/drag
+event sequences (exactly the class of bug the SCSS/dark-mode entries above needed a browser for).
+
+Whoever next needs actual browser automation here should either get the missing GTK libraries
+installed (a one-time host fix, needs sudo) or use `/run-skill-generator` to capture whatever
+does end up working as a committed project skill, so the next session doesn't rediscover this.
+
+**RESOLVED 2026-08-23.** The workaround this entry says could not be found: `apt-get download` and `dpkg-deb -x` need no root, so the missing GTK/ATK/ALSA
+libraries unpack under `~/browserlibs` and are reached through `LD_LIBRARY_PATH` - see `bin/browser_libs.sh`, which is a one-time per-machine step. `bun run test:browser`
+drives the real built bundle through real pointer and touch gestures. Read the advice above as history: this host *can* run a browser, and the floorplan
+editor's drag behaviour is verified in one.
+
+## ~~2026-08-23: autosave rewrites every row, and the obvious fix loses data~~ - RESOLVED 2026-08-23
+
+~~`save_document` replaces the whole document, so every wall, opening, room seed~~
+~~and marker row is written on every autosave tick - which fires on a debounce~~
+~~after each edit. A four-wall plan with one room and one marker costs 33 queries~~
+~~for a save that changes nothing (`FloorplanAutosaveCostTests` pins that as a~~
+~~ceiling); a 400-wall plan costs proportionally more. Each marker's twin `Pin`~~
+~~and its `Location` are also re-resolved and re-saved every time, firing the full~~
+~~Pin signal chain.~~
+
+~~**An attempt at the obvious fix was reverted, and anyone retrying it should read~~
+~~this first.** Skipping `row.save()` when a row's stored values are unchanged -~~
+~~snapshotting the concrete fields before the builder touches the row, comparing~~
+~~after - measurably works (33 -> 27 queries) and **silently destroys~~
+~~`FloorplanLock` rows when an opening moves between walls**~~
+~~(`FloorplanOpeningRehostTests::test_a_moved_opening_keeps_its_locks` fails).~~
+
+~~What was ruled out while chasing it, so it need not be re-done:~~
+
+~~- The lock sync itself is fine: it was instrumented, and receives~~
+~~  `existing=[<uuid>] payload=[<same uuid>]`, so the lock is matched and kept.~~
+~~- The orphan-opening sweep is fine: `existing == surviving`, nothing deleted.~~
+~~- Bisected to the single line - restoring an unconditional `row.save()` makes~~
+~~  the test pass with every other part of the change still in place.~~
+
+~~So the mechanism is somewhere between "the opening's FK change is not persisted"~~
+~~and the cascade from `FloorplanOpening` to `FloorplanLock`, and it was not worth~~
+~~shipping a data-loss risk to find out. If this is picked up again, start by~~
+~~asserting the opening's `wall_id` actually reaches the database, and treat any~~
+~~version of it as unshippable until that rehost test passes.~~
+
+~~The related idea - skipping the twin `Pin` save when nothing changed - was~~
+~~reverted with it, untested on its own. It is probably safe and should be~~
+~~attempted separately, with `FloorplanMarkerLinkedPinTests` as the guard.~~
+
+**The diagnosis above is wrong, and that is the useful part of this entry.** It sends the
+next reader after the opening's `wall_id` not reaching the database. It reaches it - the
+comparison sees `wall_id: (5783, 5788)` and saves the row.
+
+What actually happened: a floor payload naming no uuid did not match the storey it meant, so
+`_sync` built a second floor and swept the first away as an orphan - cascading through its
+walls, openings and locks. Almost nothing appeared to be lost because `save()` on a row still
+carrying its pk re-inserts it, so the blanket re-save was quietly resurrecting the subtree it
+had just destroyed. A lock nobody had edited was the one row with no reason to be saved, so it
+was the only one that stayed dead - which is why this read as "skipping saves destroys locks".
+
+Fixed by matching a floor on its level when the payload carries no uuid (levels are unique
+within a plan, `_reject_duplicate_levels`). No cascade, nothing to resurrect, and the
+row-level skip is safe: an unchanged resave costs 27 queries rather than 33, and the document
+the editor actually posts costs 29. `FloorplanAutosaveCostTests` pins both, and a new
+`test_a_floor_payload_with_no_uuid_updates_that_storey_rather_than_replacing_it` covers the
+floor behaviour directly rather than through the rehost test that found it.
+
+The twin-`Pin` half named at the end was done first and separately, as suggested.

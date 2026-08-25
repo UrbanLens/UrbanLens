@@ -178,6 +178,38 @@ entirely, operation order relative to the `AlterField` in the same migration doe
 | `Profile` | `additional_preferences`, and the seven `*_preference_other` fields (`photo_taking`, `photo_sharing`, `photo_tagging`, `photo_usage`, `friend_request`, `meetup`, `exploring_with_others`) | Free-text interaction preferences — same class as `bio`, missed in the original pass | 2026-08-15 |
 | `EmergencyContactDefault` | `label` | Names a third party who never consented to being in this database; its sibling `email` was already encrypted | 2026-08-15 |
 | `FriendInvitation` | `message` | The inviter's free-text note to someone who does not yet have an account. `email` stays plaintext — see below | 2026-08-15 |
+| `Image` | `exif_data` | The EXIF snapshot from an upload — camera make/model/serial, lens, timestamps, and GPS unless the uploader opted out of location. **The only copy**, see below | 2026-08-24 |
+
+### `Image.exif_data`: the only copy, and the first `EncryptedJSONField`
+
+Every other field here has a plaintext original somewhere — a provider to re-authorise against,
+or a user who could retype what they wrote. `Image.exif_data` does not. Since 2026-08-24 the
+upload pipeline strips the EXIF block out of the *stored file*
+(`services.media.images.downscale_stored_image`), because that file is served to everybody who
+can reach the container it was contributed to. What the photo used to carry now lives in this
+column and nowhere else, which is both why it is worth encrypting and why losing it is
+unrecoverable.
+
+Two consequences:
+
+- It is **`fail_soft=True`**, necessarily. An `Image` row loads on every gallery page, so a key
+  mismatch has to degrade one field rather than break the site.
+- It uses `EncryptedJSONField`, a subclass of `EncryptedTextField` (so
+  `rotate_field_encryption` finds it — that command discovers columns by `isinstance`). The
+  column is `text`, not `jsonb`: ciphertext is opaque, so a JSON column type would advertise
+  indexing and containment queries the encryption has already removed. **Nothing may filter on
+  its contents.**
+
+It also closes the `UndecryptableValue` gap for its own shape. That class preserves ciphertext
+across an unrelated `save()` only for fields with a *string* default, so a `null=True` field
+degrades to a bare `None` that cannot carry the ciphertext — the caveat at the end of this
+document's `fail_soft` section. `UndecryptableJSON` is an empty `dict` instead: falsy, supports
+`.get()`, reads to every consumer exactly like "no EXIF recorded", and carries `.ciphertext` so a
+save during a key-mismatch window writes the original bytes back rather than destroying them.
+
+Migration 0066 changes the column type and encrypts existing rows in place, following 0039/0048.
+Its forward pass uses a plain `EncryptedTextField`, not the JSON field: after the `AlterField`
+the column already holds JSON *text*, and the JSON field would serialise it a second time.
 
 ### `fail_soft`: which fields degrade, and what "the row is left intact" means
 

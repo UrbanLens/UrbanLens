@@ -1,3 +1,4 @@
+{% load vendor_assets %}
 <!DOCTYPE html>
 {% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 <html id="html-root" lang="{{ LANGUAGE_CODE|default:"en" }}"{% if request.user.is_authenticated %}{% with tm=request.user.profile.theme_mode %}{% if tm == "dark" %} data-theme="dark"{% elif tm == "light" %} data-theme="light"{% endif %}{% endwith %}{% if not request.user.profile.show_hover_tooltips %} class="tooltips-disabled"{% endif %}{% endif %}>
@@ -12,11 +13,11 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />
     <!-- Compiled and minified CSS -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    {% vendor_asset "fontawesome_css" %}
 
-    <script src="https://code.jquery.com/jquery-4.0.0-beta.min.js" integrity="sha384-Cm3jMWwIyV0dazzpp3V+n5HmonAQ2uoNpQCYQzGrAK1ZBIKjGgaiHq2N8ItUlBcJ" crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.js" integrity="sha384-VDls8ImYGI8SwVxpmjX2Bn27U2TcNodzTNROTusVEWO55+lmL+H9NczoQJk6mwZR" crossorigin="anonymous"></script>
+    {% vendor_asset "jquery_js" %}
+    {% vendor_asset "toastr_css" %}
+    {% vendor_asset "toastr_js" %}
 
     {% load static map_components %}
     <script src="{% static 'dashboard/js/core.js' %}"></script>
@@ -25,7 +26,7 @@
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}" />
 
     <!-- Compiled and minified JavaScript -->
-    <script src="https://unpkg.com/htmx.org@1.9.11" integrity="sha384-0gxUXCCR8yv9FM2b+U3FDbsKthCI66oH5IA9fHppQq9DDMHuMauqq1ZHBpJxQ0J0" crossorigin="anonymous"></script>
+    {% vendor_asset "htmx_js" %}
 
     <!--Let browser know website is optimized for mobile-->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -76,7 +77,11 @@
         document.body.addEventListener('htmx:configRequest', function (evt) {
             evt.detail.headers['X-CSRFToken'] = csrftoken;
         });
-        toastr.options = {
+        // Guarded because toastr is a CDN script: unguarded, a failed load threw here
+        // and took out the rest of this block - including the showToast and
+        // htmx:responseError listeners below, whose own window.toastr guards then
+        // never ran at all.
+        if (window.toastr) toastr.options = {
             positionClass: 'toast-bottom-right',
             progressBar: true,
             timeOut: 4500,
@@ -96,7 +101,7 @@
             (function () {
                 var tag = '{{ message.tags|escapejs }}';
                 var fn = _valid[tag] ? tag : 'info';
-                toastr[fn]('{{ message.message|escapejs }}');
+                if (window.toastr) toastr[fn]('{{ message.message|escapejs }}');
             }());
             {% endfor %}
         }());
@@ -108,7 +113,7 @@
             if (!d) return;
             var level = d.level;
             var fn = (level === 'success' || level === 'info' || level === 'warning' || level === 'error') ? level : 'info';
-            toastr[fn](d.message || '');
+            if (window.toastr) toastr[fn](d.message || '');
         });
 
         // Global request error notifications for HTMX and fetch/AJAX calls.
@@ -581,7 +586,9 @@
         // has for them.
         window._openCommentMapComposer = function (formOrOptions) {
             if (typeof L === 'undefined') {
-                toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
+                // Leaflet is a CDN script too, so the load failure this reports is
+                // exactly when toastr is likely missing as well.
+                if (window.toastr) toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
                 return;
             }
             var opts = (formOrOptions instanceof HTMLElement) ? { form: formOrOptions } : (formOrOptions || {});
@@ -814,16 +821,23 @@
                         });
                     })
                     .then(function (shouldDownload) {
-                        if (shouldDownload) {
-                            window.MapExport.download(_composerMap, {
-                                layers: _composerLayers,
-                                getShapes: function () { return _composerShapes; },
-                                filename: 'map-screenshot.jpg',
-                            });
-                        }
-                        _closeComposer();
+                        // Awaited, not fired-and-forgotten: this was closing the
+                        // composer (tearing down _composerSession, which owns
+                        // _composerMap) immediately after *starting* the download,
+                        // not after it finished - the tile-fetch-and-draw below
+                        // could still be reading from a map that had just been
+                        // destroyed. Caught locally so a download failure (the
+                        // save already succeeded) doesn't report as "Failed to
+                        // save map" via the outer catch.
+                        if (!shouldDownload) return;
+                        return window.MapExport.download(_composerMap, {
+                            layers: _composerLayers,
+                            getShapes: function () { return _composerShapes; },
+                            filename: 'map-screenshot.jpg',
+                        }).catch(function () { if (window.toastr) toastr.error('Map saved, but the JPEG download failed.'); });
                     })
-                    .catch(function () { toastr.error('Failed to save map.'); })
+                    .then(function () { _closeComposer(); })
+                    .catch(function () { if (window.toastr) toastr.error('Failed to save map.'); })
                     .finally(function () { _saveBtn.disabled = false; });
                 return;
             }
@@ -842,11 +856,15 @@
         // -- Download current view as JPEG -------------------------------------
         document.getElementById('cmc-download').addEventListener('click', function () {
             if (!_composerMap) return;
+            var btn = this;
+            btn.disabled = true;
             window.MapExport.download(_composerMap, {
                 layers: _composerLayers,
                 getShapes: function () { return _composerShapes; },
                 filename: 'map-screenshot.jpg',
-            });
+            })
+                .catch(function () { if (window.toastr) toastr.error('Failed to download the map image.'); })
+                .finally(function () { btn.disabled = false; });
         });
 
         // -- Clear attached map from a form ------------------------------------
@@ -864,11 +882,18 @@
             if (!downloadBtn) return;
             var cached = _viewerMaps[downloadBtn.dataset.mapId];
             if (!cached) return;
+            downloadBtn.classList.add('is-loading');
+            downloadBtn.disabled = true;
             window.MapExport.download(cached.map, {
                 layers: cached.layers,
                 getShapes: function () { return cached.shapes; },
                 filename: 'map-' + downloadBtn.dataset.mapId + '.jpg',
-            });
+            })
+                .catch(function () { if (window.toastr) toastr.error('Failed to download the map image.'); })
+                .finally(function () {
+                    downloadBtn.classList.remove('is-loading');
+                    downloadBtn.disabled = false;
+                });
         });
 
         // Wire the read-only viewer's Edit button: seeds the shared composer
@@ -883,7 +908,7 @@
             var script = document.getElementById('comment-map-data-' + mapId);
             var data = null;
             if (script) { try { data = JSON.parse(script.textContent); } catch (_) {} }
-            if (!data) { toastr.error("Couldn't load this map to edit."); return; }
+            if (!data) { if (window.toastr) toastr.error("Couldn't load this map to edit."); return; }
             var dlg = document.getElementById('comment-map-dialog-' + mapId);
             if (dlg && dlg.open) dlg.close();
             window._openCommentMapComposer({ existingData: data });
@@ -914,7 +939,7 @@
         // -- Pin my location: drop a marker instantly, no multi-click draw session needed --
         document.getElementById('cmc-pin-location').addEventListener('click', function () {
             if (!navigator.geolocation) {
-                toastr.warning('Geolocation is not available in this browser.');
+                if (window.toastr) toastr.warning('Geolocation is not available in this browser.');
                 return;
             }
             navigator.geolocation.getCurrentPosition(
@@ -928,7 +953,7 @@
                     if (_composerMap) _composerMap.panTo([pos.coords.latitude, pos.coords.longitude]);
                 },
                 function () {
-                    toastr.warning("Couldn't get your location. Check your browser's location permission.");
+                    if (window.toastr) toastr.warning("Couldn't get your location. Check your browser's location permission.");
                 },
                 { enableHighAccuracy: true, timeout: 10000 },
             );

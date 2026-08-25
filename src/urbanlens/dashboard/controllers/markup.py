@@ -70,6 +70,15 @@ def _apply_security_indicator(owner: Pin | Wiki, indicator: str) -> None:
     field = _INDICATOR_TO_FIELD.get(indicator)
     if not field:
         return
+    # The real row, for the read as much as the write. A concealed projection
+    # reports every indicator as UNKNOWN by rule, so reading one would turn this
+    # never-downgrade rule into a downgrade - a place surveyed as EVERYWHERE
+    # quietly reduced to SOME - and then the save would raise on the projection
+    # anyway, as a 500 only concealed accounts receive.
+    from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+
+    if isinstance(owner, Wiki):
+        owner = writable_wiki(owner)
     current = getattr(owner, field, SecurityLevel.UNKNOWN)
     if current in {SecurityLevel.UNKNOWN, SecurityLevel.NO}:
         setattr(owner, field, SecurityLevel.SOME)
@@ -158,8 +167,17 @@ def _resolve_owner(
         return markup_map, PinMarkup.objects.for_map(markup_map)
     if location_slug is None:
         raise Http404
-    _location, wiki, _profile = resolve_visible_wiki(request, location_slug)
-    return wiki, PinMarkup.objects.for_wiki(wiki)
+    _location, wiki, profile = resolve_visible_wiki(request, location_slug)
+    # Filtered by who drew it, not hidden outright. The reason to hide community
+    # markup is that a hand-drawn entrance route says other people have been
+    # inside and compared notes - and that reason does not cover the viewer's
+    # own drawings, which tell them nothing they did not already know. Showing
+    # someone their own work back is also the only option that does not announce
+    # the concealment: a marker you placed yourself and cannot find afterwards
+    # is a malfunction, and a malfunction only some accounts get is a tell.
+    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+    return wiki, visible_rows(PinMarkup.objects.for_wiki(wiki), wiki, profile)
 
 
 def _owner_layer_kwargs(owner: Pin | Wiki | MarkupMap) -> dict:
@@ -281,7 +299,7 @@ def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | Non
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if location is None or not location_visible_to(location, profile):
             return None
-        return Wiki.objects.filter(location=location).first()
+        return Wiki.objects.official().filter(location=location).first()
     return None
 
 
