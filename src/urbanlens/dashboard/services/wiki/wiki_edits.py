@@ -77,7 +77,7 @@ def save_edited_fields(wiki: Wiki, changed_fields: Iterable[str]) -> None:
     wiki.save(update_fields=[*columns, "updated"])
 
 
-def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, strict: bool) -> WikiEdit | None:
+def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, strict: bool, baseline: Wiki | None = None) -> WikiEdit | None:
     """Apply a community edit to *wiki* and record it in the audit trail.
 
     Only keys in :data:`WIKI_EDITABLE_FIELDS` are considered; anything else in
@@ -89,6 +89,11 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, st
             actually changes.
         profile: The editing profile, recorded as ``WikiEdit.editor``.
         changes: Raw submitted ``{field: value}`` mapping.
+        baseline: The wiki as the submitter saw it, when that differs from the
+            row being written - a concealed projection. Change detection runs
+            against this; the audit record still keeps the stored value. Leave
+            unset and both come from *wiki*, which is what every caller outside
+            the two edit views wants.
         strict: How to treat a value that fails validation - an unrecognized
             security level, or a date that isn't ``YYYY-MM-DD``.
 
@@ -119,12 +124,24 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, st
     new_vals: dict[str, object] = {}
     audit: dict[str, dict] = {}
 
+    # What the submitter was looking at, which is not always what is stored: a
+    # concealed viewer's form is prefilled from the projection they were shown,
+    # and the suggest-edits dialog posts every field whether or not it was
+    # touched. Diffing against the stored row would read each concealed
+    # placeholder as a deliberate edit and write it over the real value - one
+    # date change blanking the name, the description and all eight security
+    # indicators, with a WikiEdit naming the viewer for it.
+    shown = baseline if baseline is not None else wiki
+
     for field in WIKI_EDITABLE_FIELDS:
         if field not in changes:
             continue
         raw = changes[field]
+        # Detected against what they saw; recorded as what was actually there.
+        # The audit trail has to hold the truth, and `redact_edit_changes`
+        # already keeps the "from" side away from a viewer who may not see it.
         old_val = getattr(wiki, field, None)
-        if str(raw) == str(old_val):
+        if str(raw) == str(getattr(shown, field, None)):
             continue
 
         if field in WIKI_SECURITY_FIELDS:

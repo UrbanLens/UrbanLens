@@ -402,7 +402,9 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         # what the community actually wrote.
         target = writable_wiki(wiki)
         try:
-            edit = apply_wiki_edit(target, profile, body, strict=False)
+            # baseline=wiki: the dialog was prefilled from the projection and
+            # posts every field, touched or not.
+            edit = apply_wiki_edit(target, profile, body, strict=False, baseline=wiki)
         except WikiEditValidationError as exc:
             return JsonResponse({"error": exc.message}, status=400)
 
