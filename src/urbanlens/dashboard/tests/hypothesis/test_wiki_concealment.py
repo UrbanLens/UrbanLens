@@ -589,6 +589,10 @@ class ConcealedArticleTests(TestCase):
         shown = self._shown()
 
         self.assertEqual(shown.content, "My friend's write-up")
+        # Positive first: without it the negative below passes against the
+        # empty string baker leaves on content_html, proving only that
+        # rendering never ran.
+        self.assertIn("<p>My friend's write-up</p>", shown.content_html)
         self.assertNotIn("stranger", shown.content_html)
 
     def test_the_projection_refuses_to_be_saved(self) -> None:

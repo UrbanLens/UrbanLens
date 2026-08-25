@@ -237,6 +237,19 @@ def concealed_community_summary() -> dict[str, Any]:
 #:   photographer, so authorship is only meaningful when ``source == UPLOAD``.
 #: - ``WikiAlias`` carries its own ``source``, and the geocoder backfill writes
 #:   ``created_by=NULL`` with an official source.
+#: Models where a null actor means the account was deleted, not that nothing
+#: authored the row - so the generic "null is automatic" fallback would surface
+#: a departed stranger's contribution on the strength of them having left.
+#:
+#: ``WikiEdit`` qualifies on both counts: its ``editor`` is ``SET_NULL``, and no
+#: production path creates one without an editor, so null has exactly one
+#: meaning. ``WikiLink.created_by`` is also ``SET_NULL`` and is deliberately
+#: *not* here - ``services.locations.external_links`` creates provider links
+#: with no author, so null is genuinely ambiguous there, and the product owner
+#: ruled links low-stakes because which ones a page carries already varies with
+#: search results.
+_NULL_ACTOR_IS_A_DELETED_ACCOUNT: frozenset[str] = frozenset({"WikiEdit"})
+
 _ACTOR_FIELDS: dict[str, str] = {
     "Comment": "profile_id",
     "WikiEdit": "editor_id",
@@ -298,6 +311,9 @@ def conceal_rows(queryset: Any, viewer: Profile | None) -> Any:
     if actor_field is None:
         logger.error("conceal_rows: no provenance rule for %s; refusing to guess", model_name)
         return queryset.none()
+
+    if model_name in _NULL_ACTOR_IS_A_DELETED_ACCOUNT:
+        return queryset.filter(**{f"{actor_field}__in": allowed})
 
     return queryset.filter(Q(**{f"{actor_field}__isnull": True}) | Q(**{f"{actor_field}__in": allowed}))
 

@@ -197,8 +197,8 @@ def _render_comments(request, context: dict) -> HttpResponse:
     return render(request, "dashboard/partials/comments/comment_panel.html", context)
 
 
-def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra) -> dict:
-    top_level_qs = top_level_comment_queryset(comments_qs)
+def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_qs=None, **extra) -> dict:
+    top_level_qs = top_level_comment_queryset(comments_qs, replies_qs=replies_qs)
     # Default to the last page so the most recent activity (comments are
     # ordered oldest-to-newest) is what a viewer sees without paging back.
     page_obj = get_page(request, top_level_qs, _COMMENTS_PAGE_SIZE, default_last=True)
@@ -390,12 +390,42 @@ def _visible_wiki_comments(wiki: Wiki, profile: Profile) -> QuerySet[Comment]:
     return conceal_rows(rows, profile) if concealment_active(wiki, profile) else rows
 
 
+def _visible_wiki_reply_prefetch(wiki: Wiki, profile: Profile) -> QuerySet[Comment] | None:
+    """The queryset a concealed viewer's replies must be prefetched from.
+
+    Narrowing the top level is not enough. ``comment.replies`` is keyed on the
+    parent's primary key, so a stranger's reply to a comment the viewer *can*
+    see - their own, or a friend's - arrives in full however the top-level
+    queryset was filtered.
+
+    Args:
+        wiki: The wiki whose comments are being listed.
+        profile: The viewer.
+
+    Returns:
+        A narrowed reply queryset, or None to leave the default prefetch alone.
+    """
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
+
+    if not concealment_active(wiki, profile):
+        return None
+    return conceal_rows(Comment.objects.filter(wiki=wiki), profile)
+
+
 class WikiCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a wiki."""
 
     def get(self, request, location_slug):
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        ctx = _build_context(_visible_wiki_comments(wiki, profile), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        ctx = _build_context(
+            _visible_wiki_comments(wiki, profile),
+            profile,
+            request,
+            replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
+            wiki=wiki,
+            location=wiki.location,
+            context_type="wiki",
+        )
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):
@@ -430,7 +460,15 @@ class WikiCommentsView(LoginRequiredMixin, View):
             attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
             notify_reply(profile, parent, reply=comment)
-        ctx = _build_context(_visible_wiki_comments(wiki, profile), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        ctx = _build_context(
+            _visible_wiki_comments(wiki, profile),
+            profile,
+            request,
+            replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
+            wiki=wiki,
+            location=wiki.location,
+            context_type="wiki",
+        )
         return _render_comments(request, ctx)
 
 
@@ -455,7 +493,15 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         # orphaned top-level comments. Re-render the whole panel rather than just
         # removing the deleted <li>, so those replies stay visible in place
         # instead of disappearing until the next reload.
-        ctx = _build_context(_visible_wiki_comments(wiki, profile), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        ctx = _build_context(
+            _visible_wiki_comments(wiki, profile),
+            profile,
+            request,
+            replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
+            wiki=wiki,
+            location=wiki.location,
+            context_type="wiki",
+        )
         return _render_comments(request, ctx)
 
 

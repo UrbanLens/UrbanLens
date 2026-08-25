@@ -295,7 +295,21 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
                 # Case-insensitive lookup matches the alias uniqueness rule, so
                 # renaming to a different casing of an existing alias reuses
                 # that row instead of racing the DB constraint.
-                WikiAlias.objects.get_or_create(wiki=self, name__iexact=new_name, defaults={"name": new_name})
+                # created_by from the write context, not left null. The alias
+                # concealment rule reads `source` because created_by is null
+                # for the geocoder backfill too - so a rename alias with the
+                # default source=USER and no author matched neither branch and
+                # was concealed from everyone, including the person who had
+                # just renamed the wiki: the name showed with no alias row
+                # behind it, and re-adding it by hand hit the uniqueness
+                # constraint. The renamer is exactly who authored it.
+                from urbanlens.dashboard.models.abstract.versioning import current_write_actor
+
+                WikiAlias.objects.get_or_create(
+                    wiki=self,
+                    name__iexact=new_name,
+                    defaults={"name": new_name, "created_by_id": current_write_actor()},
+                )
             except DatabaseError:
                 logger.exception("Could not ensure alias for wiki %s name %r", self.pk, self.name)
         self._loaded_name = self.name

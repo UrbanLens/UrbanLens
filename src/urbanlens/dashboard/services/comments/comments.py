@@ -31,6 +31,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from django.db.models import Prefetch
+
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.reactions.model import Reaction
 from urbanlens.dashboard.services.notifications.comment_notifications import notify_reaction
@@ -80,7 +82,7 @@ class VisibleComment:
     replies: list[VisibleComment] = field(default_factory=list)
 
 
-def top_level_comment_queryset(comments_qs: QuerySet[Comment]) -> QuerySet[Comment]:
+def top_level_comment_queryset(comments_qs: QuerySet[Comment], replies_qs: QuerySet[Comment] | None = None) -> QuerySet[Comment]:
     """Narrow a comment queryset to top-level rows with the right joins preloaded.
 
     Shared so both callers page over an identically-shaped queryset - the
@@ -89,20 +91,36 @@ def top_level_comment_queryset(comments_qs: QuerySet[Comment]) -> QuerySet[Comme
 
     Args:
         comments_qs: All comments for one pin or wiki.
+        replies_qs: The queryset replies are prefetched from, when they need
+            narrowing that ``comments_qs`` alone does not express. Filtering the
+            top level is not enough: ``comment.replies`` is keyed on the parent's
+            primary key, so a reply survives whatever was done to the queryset
+            its parent came out of. A wiki concealed for its viewer passes the
+            same filter here that it applied to the top level.
 
     Returns:
         The top-level subset, with author/markup/reaction relations preloaded.
     """
+    if replies_qs is None:
+        reply_lookups: list[Any] = ["replies__reactions__profile", "replies__profile__user", "replies__markup_map__items"]
+    else:
+        # One Prefetch rather than the three string lookups: Django refuses a
+        # relation named both ways, and the nested relations have to hang off
+        # the narrowed queryset or they would re-widen it.
+        reply_lookups = [
+            Prefetch(
+                "replies",
+                queryset=replies_qs.select_related("profile__user", "markup_map").prefetch_related("reactions__profile", "markup_map__items"),
+            ),
+        ]
     return (
         comments_qs.filter(parent__isnull=True)
         .select_related("profile__user", "markup_map", "pin", "pin__location")
         .prefetch_related(
             "reactions__profile",
-            "replies__reactions__profile",
-            "replies__profile__user",
             # comment.map_data derives its snapshot from the markup map's items.
             "markup_map__items",
-            "replies__markup_map__items",
+            *reply_lookups,
         )
     )
 

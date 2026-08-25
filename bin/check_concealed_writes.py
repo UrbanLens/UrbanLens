@@ -52,7 +52,15 @@ WRITER_SEEDS = frozenset({"apply_wiki_edit", "revert_wiki_edit", "revert_edit_fi
 
 #: Parameter names that hold a wiki. A function saving something it was handed
 #: under another name is not something this can see; that is in the limits.
-WIKI_PARAMS = frozenset({"wiki", "target", "scope_article"})
+WIKI_PARAMS = frozenset({"wiki", "target"})
+
+#: Keyword parameters that receive a wiki deliberately *because* it may be a
+#: projection - the viewer's own view, passed in to be read rather than written.
+#: `apply_wiki_edit(baseline=...)` compares against what the submitter saw;
+#: `save_article_checked(viewer=...)` asks the conflict check the question that
+#: viewer can answer. Flagging these trains a reader to add exemptions to
+#: correct code, which is worse than the miss it would prevent.
+READ_ONLY_KWARGS = frozenset({"baseline", "viewer"})
 
 #: The call that converts a possible projection into a row safe to write.
 LAUNDER = "writable_wiki"
@@ -94,13 +102,33 @@ def _writes(fn: ast.FunctionDef, watched: set[str], writers: frozenset[str]) -> 
         if not isinstance(node, ast.Call):
             continue
         func = node.func
-        if isinstance(func, ast.Attribute) and func.attr in {"save", "delete"} and isinstance(func.value, ast.Name) and func.value.id in watched:
-            found.append((node.lineno, f"{func.value.id}.{func.attr}()"))
-            continue
+        if isinstance(func, ast.Attribute) and func.attr in {"save", "delete"}:
+            # `scope.wiki.save()` as well as `wiki.save()`. An attribute chain
+            # was invisible before, which covered every one of the article
+            # controller's resolve sites, since they all hold the wiki on a
+            # dataclass.
+            receiver = func.value
+            root = receiver
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            names = set()
+            if isinstance(receiver, ast.Name):
+                names.add(receiver.id)
+            if isinstance(root, ast.Name):
+                names.add(root.id)
+            hit = names & watched
+            if hit:
+                found.append((node.lineno, f"{sorted(hit)[0]}.{func.attr}()"))
+                continue
         called = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
         if called in writers:
-            for arg in node.args:
-                if isinstance(arg, ast.Name) and arg.id in watched:
+            # Keyword arguments count. `save_article_checked(wiki=wiki)` passes
+            # the same value as `f(wiki)` does, and only positional args were
+            # inspected until a review pointed at the gap.
+            passed = [a for a in node.args if isinstance(a, ast.Name)]
+            passed += [kw.value for kw in node.keywords if isinstance(kw.value, ast.Name) and kw.arg not in READ_ONLY_KWARGS]
+            for arg in passed:
+                if arg.id in watched:
                     found.append((node.lineno, f"{called}({arg.id}, ...)"))
     return found
 

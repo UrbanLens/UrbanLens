@@ -302,8 +302,12 @@ class LocationAliasUseView(LoginRequiredMixin, View):
         # wiki.name, not alias.name: Wiki.save() sanitizes the incoming name, so
         # the alias text and what actually got stored can differ. The toast has
         # to state what was stored or it lies about the result of the edit.
-        response["HX-Trigger"] = json.dumps({"wikiRenamed": {"name": wiki.name}})
-        return _show_toast(response, f"Renamed to “{wiki.name}”.")
+        # `target`, not `wiki`: the rename went through the real row, and the
+        # projection resolve returned still holds the pre-rename name - so this
+        # comment's own promise, that the toast states what was stored, only
+        # holds for the row that was written.
+        response["HX-Trigger"] = json.dumps({"wikiRenamed": {"name": target.name}})
+        return _show_toast(response, f"Renamed to “{target.name}”.")
 
 
 class LocationAliasToggleNicknameView(LoginRequiredMixin, View):
