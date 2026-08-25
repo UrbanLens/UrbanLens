@@ -29,7 +29,7 @@
  */
 
 import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
-import { approximateAreaSqm, containsCoordinate, EXPECTED_PARCEL_AREA_SQM, INSIDE_BOUNDARY, OUTSIDE_BOUNDARY, REPORTED_ACREAGE } from "../../lib/hrsh.js";
+import { approximateAreaSqm, containsCoordinate, EXPECTED_PARCEL_AREA_SQM, INSIDE_BOUNDARY, MEASURED_PARCEL_AREA_SQM, OUTSIDE_BOUNDARY, REPORTED_PROJECT_ACREAGE } from "../../lib/hrsh.js";
 
 skipUnlessLocationDataEnabled();
 
@@ -65,10 +65,10 @@ test.describe("Hudson River State Hospital - one property, five coordinates", ()
 
         expect(
             area,
-            `the resolved boundary covers about ${Math.round(area).toLocaleString()} m². The property is reported as ~${REPORTED_ACREAGE} ` +
-                "acres (~631,000 m²), and this range is deliberately wide - it is not checking accuracy, it is catching the two failures " +
-                "boundaries/redata.py documents for exactly this kind of site: a single building footprint chosen instead of the parcel, " +
-                "and the ~1,040-acre (4.2 km²) CRIS archaeological sensitivity zone",
+            `the resolved boundary covers about ${Math.round(area).toLocaleString()} m². REData measures this parcel at ` +
+                `${MEASURED_PARCEL_AREA_SQM.toLocaleString()} m² (33 acres) - note that is the *parcel*, not the ~${REPORTED_PROJECT_ACREAGE}-acre ` +
+                "redevelopment site the press describes, which spans several. The range is deliberately wide: it is catching a single " +
+                "building footprint chosen instead of the parcel, or the ~1,040-acre CRIS archaeological sensitivity zone",
         ).toBeGreaterThan(EXPECTED_PARCEL_AREA_SQM.min);
         expect(area).toBeLessThan(EXPECTED_PARCEL_AREA_SQM.max);
     });

@@ -22,7 +22,7 @@
  * and skips with a pointer to it. One red and thirty skips is a readable
  * report; thirty-one reds is not.
  *
- * ## Why one worker
+ * ## Why one worker, and why "worker-scoped" is not the same as "once"
  *
  * The `location` project runs with a single worker (see `playwright.config.ts`).
  * These specs share one pin on one property, and the app enforces one root pin
@@ -30,15 +30,25 @@
  * of them refused, and a worker deleting it in teardown would pull it out from
  * under the other. Parallelism here buys nothing anyway: the cost is waiting on
  * other people's APIs, not on CPU.
+ *
+ * That still does not make this setup run once. Playwright starts a **fresh
+ * worker process per spec file** when the previous one is torn down, and each
+ * fresh worker rebuilds its worker fixtures - so a seven-file directory ran the
+ * ten-minute boundary wait seven times, turning a fifteen-minute run into an
+ * hour. Measured, not theorised. The verdict is therefore cached on disk per run
+ * id: the first worker waits, the rest re-read the pin once and take the
+ * recorded answer. See {@link VERDICT_PATH}.
  */
 
 import { type APIRequestContext, type Page } from "@playwright/test";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 import { PRIMARY_ROLE, requireAccount } from "../../lib/accounts.js";
 import { ApiClient } from "../../lib/api-client.js";
-import { env } from "../../lib/env.js";
+import { env, INTEGRATION_ROOT } from "../../lib/env.js";
 import { expect, test as suiteTest } from "../../lib/fixtures.js";
-import { approximateAreaSqm, CAMPUS_CENTRE, EXPECTED_PARCEL_AREA_SQM, INSIDE_BOUNDARY, metresBetween, type Coordinate, type GeoJsonGeometry } from "../../lib/hrsh.js";
+import { approximateAreaSqm, CAMPUS_CENTRE, EXPECTED_PARCEL_AREA_SQM, INSIDE_BOUNDARY, MEASURED_PARCEL_AREA_SQM, metresBetween, type Coordinate, type GeoJsonGeometry } from "../../lib/hrsh.js";
 import { waitForOrNull } from "../../lib/waiting.js";
 
 /** Name given to the campus pin, so a leftover is identifiable. */
@@ -197,6 +207,71 @@ function isRealParcel(geometry: GeoJsonGeometry | null | undefined): boolean {
 }
 
 /**
+ * Where the parcel verdict is recorded so only one worker pays for it.
+ *
+ * The wait below is up to ten minutes and it is worker-scoped - which sounds
+ * like "once" and is not. Playwright starts a **fresh worker process per spec
+ * file**, and each one rebuilds its worker fixtures, so an eight-file directory
+ * ran that wait eight times and turned a fifteen-minute run into ninety.
+ * Measured, not theorised.
+ *
+ * The obvious key would be the run id. It does not work: `lib/env.ts` derives
+ * `runId` from the clock when `UL_E2E_RUN_ID` is unset, and **every worker
+ * computes its own** - Playwright snapshots the environment before loading the
+ * config, so setting the variable there never reaches a worker (verified by
+ * reading `/proc/<worker>/environ`). Keying on `env.runId` therefore gives every
+ * worker its own cache file and no hits at all.
+ *
+ * So the key is a fixed path and freshness is a timestamp inside the file. Any
+ * verdict written in the last {@link VERDICT_TTL_MS} belongs to the run in
+ * progress; anything older is a previous run's and is ignored, which is what
+ * stops a stale "no parcel" verdict from suppressing a real one tomorrow.
+ *
+ * Note this also means `env.resourcePrefix` differs per worker, so the suite's
+ * documented promise that a run's leftovers are greppable by run id does not
+ * currently hold - a separate defect, recorded in docs/INTEGRATION_TESTS.md.
+ */
+const VERDICT_PATH = resolve(INTEGRATION_ROOT, "reports", "campus-verdict.json");
+
+/**
+ * How long a recorded verdict is treated as belonging to the current run.
+ *
+ * Comfortably longer than one worker's wait plus the tests that follow it, and
+ * far shorter than the gap between deliberate runs.
+ */
+const VERDICT_TTL_MS = 45 * 60 * 1000;
+
+interface CachedVerdict {
+    writtenAt: number;
+    settled: boolean;
+    diagnosis: string;
+}
+
+/** The verdict from this run, or null when there is none fresh enough. */
+function readVerdict(): CachedVerdict | null {
+    try {
+        if (!existsSync(VERDICT_PATH)) {
+            return null;
+        }
+        const verdict = JSON.parse(readFileSync(VERDICT_PATH, "utf8")) as CachedVerdict;
+        return Date.now() - verdict.writtenAt < VERDICT_TTL_MS ? verdict : null;
+    } catch {
+        // A corrupt or half-written marker must not fail the run - the only cost
+        // of ignoring it is that this worker waits like the first one did.
+        return null;
+    }
+}
+
+function writeVerdict(verdict: Omit<CachedVerdict, "writtenAt">): void {
+    try {
+        mkdirSync(dirname(VERDICT_PATH), { recursive: true });
+        writeFileSync(VERDICT_PATH, JSON.stringify({ ...verdict, writtenAt: Date.now() }), "utf8");
+    } catch {
+        // Best effort. Failing to cache costs time, never correctness.
+    }
+}
+
+/**
  * Creates or adopts the campus pin and waits for its parcel geometry.
  *
  * @param request A Playwright request context.
@@ -259,6 +334,20 @@ async function buildCampus(request: APIRequestContext): Promise<CampusFixture> {
     if (isRealParcel(pin.boundary)) {
         boundary = pin.boundary;
         note("parcel geometry was already present");
+    } else if (readVerdict() !== null) {
+        // Another worker in this run already waited it out. Re-read once in case
+        // the geometry landed since, then take the recorded answer rather than
+        // spending the ten minutes again.
+        const cached = readVerdict()!;
+        const fresh = await readPin(api, pin.slug);
+        if (isRealParcel(fresh.boundary)) {
+            pin = fresh;
+            boundary = fresh.boundary;
+            note("parcel geometry had arrived since an earlier worker looked");
+        } else {
+            diagnosis = cached.diagnosis;
+            note("using the verdict an earlier worker in this run already reached");
+        }
     } else {
         note("waiting for parcel geometry...");
         const settled = await waitForOrNull(
@@ -280,13 +369,24 @@ async function buildCampus(request: APIRequestContext): Promise<CampusFixture> {
             note("parcel geometry arrived");
         } else {
             const area = pin.boundary ? Math.round(approximateAreaSqm(pin.boundary)) : 0;
+            // States what was observed and lets the reader draw the conclusion.
+            // An earlier version asserted the polygon "is the 50 m fallback
+            // circle", which was simply false - the pin had a 154,844 m²
+            // boundary from a Boundary row - and sent the investigation after
+            // the wrong thing. Say the number; do not name a cause.
             diagnosis =
-                `No parcel geometry arrived within ${BOUNDARY_WAIT_MS / 60_000} minutes. The pin's boundary is ` +
-                (pin.boundary ? `a ${pin.boundary.type} of about ${area.toLocaleString()} m², which is the 50 m fallback circle rather than a parcel.` : "null.") +
-                " Things worth checking, in the order they fail: the account's external_apis_enabled; UL_REDATA_API_URL/UL_REDATA_API_KEY on the deployment;" +
-                " whether a Celery worker is consuming the default queue; and whether generate_boundaries_for_location ever ran for this Location.";
+                `No parcel geometry passed the size check within ${BOUNDARY_WAIT_MS / 60_000} minutes. The pin's boundary is ` +
+                (pin.boundary
+                    ? `a ${pin.boundary.type} of about ${area.toLocaleString()} m², outside the ${EXPECTED_PARCEL_AREA_SQM.min.toLocaleString()}-${EXPECTED_PARCEL_AREA_SQM.max.toLocaleString()} m² range this place is expected to fall in (REData measures the parcel at ${MEASURED_PARCEL_AREA_SQM.toLocaleString()} m²).`
+                    : "null.") +
+                " Two quite different things produce this and they are worth separating: the boundary chain never running at all, and it" +
+                " running but resolving something the wrong size. Check, in order: the account's external_apis_enabled;" +
+                " UL_REDATA_API_URL/UL_REDATA_API_KEY on the deployment; whether a Celery worker consumes the default queue; and whether" +
+                " Location.place_id is set - a boundary can exist as a Boundary row while place resolution has never happened, which is a" +
+                " different defect with the same appearance here.";
             note(diagnosis);
         }
+        writeVerdict({ settled: boundary !== null, diagnosis });
     }
 
     return {

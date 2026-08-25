@@ -383,6 +383,24 @@ nothing. They still appear in each report's `a11y-advisory.txt`.
 
 Recorded so they do not have to be rediscovered:
 
+- **Every worker invents its own run id, so `resourcePrefix` is not one value.**
+  `lib/env.ts` derives `runId` from the clock when `UL_E2E_RUN_ID` is unset, and
+  each worker is a separate process that imports it again. `env.resourcePrefix`
+  is `e2e-${runId}`, so a four-worker run stamps four different prefixes on the
+  rows it creates - which means the promise above, that an interrupted run's
+  leftovers are greppable by run id, does **not** currently hold, and
+  `--purge` selecting on a single prefix can miss rows.
+
+  Setting the variable from `playwright.config.ts` does not fix it: Playwright
+  snapshots the environment before loading the config, so the mutation never
+  reaches a worker (verified by reading `/proc/<worker>/environ`). The fix is to
+  export `UL_E2E_RUN_ID` in the shell that launches the run, or to set it from
+  `globalSetup` and confirm it propagates. Until then, purge by the `e2e-`
+  prefix and the `@e2e.invalid` address rather than by run id.
+
+  Found while chasing why `specs/location/` took ninety minutes: its expensive
+  worker-scoped fixture cached its result per run id and never got a hit.
+
 - **Celery is probed, not inspected.** `specs/services/background-jobs.spec.ts`
   runs a real data export and waits for it to finish, which proves the broker,
   the worker and the result path together. There is no queue-depth or

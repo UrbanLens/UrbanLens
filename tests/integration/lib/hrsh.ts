@@ -97,32 +97,46 @@ export const CAMPUS_CENTRE: Coordinate = { label: "campus centre", latitude: 41.
 /**
  * Plausible bounds for the parcel's area, in square metres.
  *
- * **Where this comes from:** the redevelopment is consistently reported as a
- * ~156-acre property (~631,000 m²). That figure is press coverage rather than
- * a deed, so it is used to place a *range*, never as the expected value.
+ * **Grounded on a measurement, not on press coverage.** REData's authoritative
+ * boundary for 41.733181, -73.928493 is **133,964 m² (33.1 acres)**, read
+ * straight from `RedataBoundaryProvider.get_typed_boundaries` against the live
+ * service. That is the parcel the coordinate stands on.
  *
- * The range is wide on purpose - a factor of about three either way. It is not
- * trying to check the parcel is accurate; it is trying to catch the two
- * failures the boundary provider's own documentation says happen here:
+ * An earlier version of this file used the widely reported "156-acre property"
+ * figure and set the floor at 200,000 m². That was wrong in a way worth
+ * recording: 156 acres describes the whole Hudson Heritage redevelopment site,
+ * which the county splits into several parcels, and the floor it produced
+ * **rejected the correct parcel** - which made the fixture report "no geometry
+ * arrived" and skip most of this directory. Press figures describe projects;
+ * assessors describe parcels, and they are not the same unit.
  *
- * - **Far too small.** A single building footprint (~1,000-10,000 m²) or a
- *   CRIS consultation polygon selected instead of the parcel. Anything under
- *   the lower bound is not a 156-acre campus.
- * - **Absurdly too large.** The ~1,040-acre (4.2 km²) archaeological
- *   sensitivity zone, which `boundaries/redata.py` names as a candidate that
- *   has genuinely been returned for a parcel like this one.
+ * The range around the measurement is wide because it is not checking accuracy -
+ * it is catching the two failures `boundaries/redata.py` documents for this kind
+ * of site:
  *
- * A real revision to the county's parcel line will not move it outside these.
+ * - **Far too small.** A single building footprint (~1,000-10,000 m²) or a CRIS
+ *   consultation polygon chosen instead of the parcel.
+ * - **Absurdly too large.** The ~1,040-acre (4.2 km²) archaeological sensitivity
+ *   zone, which that module names as a candidate genuinely returned for a parcel
+ *   like this one.
+ *
+ * A revision to the county line, or a neighbouring parcel being merged in, will
+ * not move it outside these.
  */
-export const EXPECTED_PARCEL_AREA_SQM = { min: 200_000, max: 2_000_000 } as const;
+export const EXPECTED_PARCEL_AREA_SQM = { min: 50_000, max: 1_500_000 } as const;
+
+/** What REData actually returns for this coordinate, for failure messages. */
+export const MEASURED_PARCEL_AREA_SQM = 133_964;
 
 /**
- * The reported acreage, for failure messages only.
+ * The acreage public reporting gives the redevelopment, for context only.
  *
- * Never asserted against. It is here so that when an area assertion fails the
- * message can say what the expectation was grounded in.
+ * Never asserted against, and deliberately not used to derive
+ * {@link EXPECTED_PARCEL_AREA_SQM} - see that constant for why doing so was a
+ * mistake. Kept so a failure message can distinguish "the project" from "the
+ * parcel" when someone inevitably compares the two.
  */
-export const REPORTED_ACREAGE = 156;
+export const REPORTED_PROJECT_ACREAGE = 156;
 
 /**
  * Owner name expected on the current record.
