@@ -425,6 +425,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not place_id:
             return JsonResponse({"error": "missing place_id"}, status=400)
 
+        if not request.user.profile.external_apis_enabled:
+            return JsonResponse({"error": "disabled"}, status=403)
+
         api_key = settings.google_unrestricted_api_key
         redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
         if not api_key and not redata_configured:
