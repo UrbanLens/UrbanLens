@@ -44,11 +44,29 @@
  */
 
 import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
-import { approximateAreaSqm, CAMPUS_CENTRE, containsCoordinate, geometryPositions, hrshRoutes, INSIDE_BOUNDARY, metresBetween } from "../../lib/hrsh.js";
+import { approximateAreaSqm, CAMPUS_CENTRE, containsCoordinate, COUNTY_PARCEL_COVERS, geometryPositions, hrshRoutes, INSIDE_BOUNDARY, metresBetween } from "../../lib/hrsh.js";
 
 skipUnlessLocationDataEnabled();
 
+/**
+ * Third-party map-tile origins whose failures are not this spec's subject.
+ *
+ * The pin detail page's satellite and street layers come from origins that fail
+ * in this environment - ArcGIS tiles are blocked by Chrome's Opaque Response
+ * Blocking, an OpenStreetMap tile aborts - and the console guard fails any test
+ * whose page logged a failed subresource. Narrowed rather than tolerated
+ * wholesale; `specs/services/third-party-origins.spec.ts` asks that question on
+ * purpose.
+ */
+const THIRD_PARTY_TILE_HOSTS = [/wayback\.maptiles\.arcgis\.com/, /tile\.openstreetmap\.org/, /server\.arcgisonline\.com/];
+
 test.describe("Hudson River State Hospital - the parcel boundary", () => {
+    test.beforeEach(async ({ guard }) => {
+        for (const host of THIRD_PARTY_TILE_HOSTS) {
+            guard.allow(host);
+        }
+    });
+
     test("a pin on the campus is given the campus parcel", async ({ campus }) => {
         // The one test in this directory that reports missing geometry as a
         // failure rather than skipping. `campus.diagnosis` carries what was
@@ -116,15 +134,24 @@ test.describe("Hudson River State Hospital - the parcel boundary", () => {
         await page.goto(`/dashboard/map/pin/${campus.pin.slug}/`);
 
         // The map is `.location-map.pin-map` wrapping `#pin-detail-map-wrapper`;
-        // there is no `#pin-detail-map`. The boundary is drawn by Leaflet as an
-        // SVG path in the overlay pane - asserted on the pane rather than any
-        // particular class, because the class is a styling decision while a
-        // drawn vector existing is the actual claim.
-        const overlay = page.locator("#pin-detail-map-wrapper .leaflet-overlay-pane path");
+        // there is no `#pin-detail-map`.
+        //
+        // The boundary is **not** in `.leaflet-overlay-pane`, which is where
+        // Leaflet puts vectors by default and where an earlier version of this
+        // test looked. `map-annotations.ts` renders it into a custom pane
+        // (`pane: "boundaryPane"`), so the overlay pane is legitimately empty
+        // and that assertion reported "nothing was drawn" against a map that had
+        // drawn it. Verified by enumerating every `.leaflet-pane` on the page:
+        // one path, and not in the overlay pane.
+        //
+        // Matching any pane rather than naming boundaryPane, because which pane
+        // a layer lives in is an implementation choice while "a vector is drawn"
+        // is the claim.
+        const drawn = page.locator("#pin-detail-map-wrapper .leaflet-pane path");
         await expect(
-            overlay.first(),
-            "no vector was drawn on the pin detail map. The boundary endpoint returns a polygon, so either the map never fetched it or " +
-                "it failed to render it - open the trace and look at the boundary request",
+            drawn.first(),
+            "no vector was drawn anywhere on the pin detail map. The boundary endpoint returns a polygon, so either the map never " +
+                "fetched it or it failed to render it - open the trace and look at the boundary request",
         ).toBeAttached({ timeout: 30_000 });
     });
 
@@ -139,8 +166,15 @@ test.describe("Hudson River State Hospital - the parcel boundary", () => {
 
         expect(
             outside.map((point) => point.label),
-            `${outside.length} of the ${INSIDE_BOUNDARY.length} campus coordinates are outside the polygon the app resolved, so the ` +
-                "boundary is not the one these points were said to share",
+            `${outside.length} of the ${INSIDE_BOUNDARY.length} campus coordinates are outside the polygon the app resolved.
+
+` +
+                "Before reading this as an application defect, check the premise: REData's authoritative county parcel for this " +
+                `coordinate contains only ${COUNTY_PARCEL_COVERS.contains} of the ${COUNTY_PARCEL_COVERS.of} - ` +
+                `${COUNTY_PARCEL_COVERS.missing.join(" and ")} are outside it too (measured). That parcel is 33 acres while the ` +
+                "redevelopment site is reported at 156, so the campus spans several parcels and no single polygon can contain all " +
+                "five. If these five are genuinely one place, the thing that unifies them is the access domain (Place.domain_root), " +
+                "not one parcel outline - which is a different assertion from this one.",
         ).toEqual([]);
     });
 

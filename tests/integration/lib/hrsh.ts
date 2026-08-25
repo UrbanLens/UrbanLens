@@ -47,11 +47,28 @@ export interface Coordinate {
  * Five points inside the hospital's official parcel.
  *
  * Supplied as the requirement: a user dropping a pin on any of these has
- * pinned the same place, because the property boundary contains all five. They
- * are spread over roughly 340 m north-south and 410 m east-west - far enough
- * apart that nothing distance-based could accidentally unify them, which is the
- * point. The app must reach this answer from the parcel polygon, not from
- * proximity.
+ * pinned the same place. They are spread over roughly 340 m north-south and
+ * 410 m east-west - far enough apart that nothing distance-based could
+ * accidentally unify them, which is the point.
+ *
+ * **Measured caveat, and it belongs to the requirement rather than to the app.**
+ * REData's authoritative county parcel for the first coordinate contains only
+ * **three** of these five: `west range`, `central` and `south west`. `north east`
+ * and `east range` are outside it. That parcel is 133,964 m² (33 acres), while
+ * the Hudson Heritage site is reported at 156 acres - so the campus plainly
+ * spans several parcels, and these two points are most likely on neighbours.
+ *
+ * That matters for what "the same place" can mean here. One *parcel* cannot
+ * contain all five, so a test asserting single-parcel containment is asserting
+ * something the county data does not support. What could still unify them is the
+ * access **domain** - `Place.domain_root`, which is how a campus of several
+ * parcels is meant to answer as one - and that is a different assertion from
+ * polygon containment.
+ *
+ * Left as given rather than trimmed to three, because which coordinates belong
+ * to this site is the requirement author's call, not this file's. The containment
+ * test carries the measurement in its failure message so nobody reads it as an
+ * application defect without first checking that premise.
  */
 export const INSIDE_BOUNDARY: readonly Coordinate[] = [
     { label: "west range", latitude: 41.733181, longitude: -73.928493 },
@@ -127,6 +144,15 @@ export const EXPECTED_PARCEL_AREA_SQM = { min: 50_000, max: 1_500_000 } as const
 
 /** What REData actually returns for this coordinate, for failure messages. */
 export const MEASURED_PARCEL_AREA_SQM = 133_964;
+
+/**
+ * How many of {@link INSIDE_BOUNDARY} the county parcel actually contains.
+ *
+ * Measured against `RedataBoundaryProvider.get_typed_boundaries`. Quoted in
+ * failure messages so a containment failure is read against the right baseline:
+ * the app cannot put five points on a parcel that only covers three of them.
+ */
+export const COUNTY_PARCEL_COVERS = { of: 5, contains: 3, missing: ["north east", "east range"] } as const;
 
 /**
  * The acreage public reporting gives the redevelopment, for context only.
