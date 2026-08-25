@@ -56,6 +56,38 @@ under their 2026-08-24 entries. §2's vacuous tests were fixed in `d08a74c2`.
 
 ---
 
+## 0b. Third review, 2026-08-25 (multi-agent, adversarially verified)
+
+Six independent lenses over `d08a74c2..HEAD` — content leak, over-concealment, write safety, test
+vacuity, oracle completeness, and the structural check plus performance — each with a verifier
+whose brief was to refute. 47 findings raised, 9 refuted, 38 surviving, collapsing to nine defects.
+All nine fixed in `2f9885db..30b2eb45`.
+
+Three are worth remembering because of *how* they got past a careful author:
+
+- **The data-loss path was created by the fix that was supposed to prevent data loss.** Laundering
+  the suggest-edit write through `writable_wiki` made `apply_wiki_edit` diff a form prefilled from
+  the projection against the real row. Every untouched field read as a deliberate edit. The lesson
+  is not "check writes" — it is that a projection and its row must never be the two ends of a
+  comparison.
+- **The concealed surface was the one nobody uses.** `LocationWikiDetailPinView` — whose own
+  docstring says it is legacy and unused — was concealed; `LocationDetailPinJsonView`, which the
+  map actually fetches, was not. Reading the code confirmed the rule was stated. It did not confirm
+  the rule ran where the page goes.
+- **"All 31 handlers funnel through `resolve`" was true and insufficient.** The funnel conceals the
+  wiki's own fields; the handlers then read live related managers off the primary key. A verified
+  claim about one layer was allowed to stand in for a claim about the layer above it.
+
+Areas the review checked and found clean: `conceal_wiki`'s field substitution and its interaction
+with `resolve_fields`; `ALWAYS_UNSET` covering all eight indicators; `writable_wiki`'s fresh-row
+re-read; `conceal_rows`' fail-closed default; the fifteen by-id lookups scoped in `2f60aedc`; every
+HTML twin; and no N+1 or unbounded query anywhere in the range.
+
+Still open and unchanged: the search substring oracle and the child-wiki provenance gap, both in
+`docs/PROBLEMS.md` under their 2026-08-24 entries.
+
+---
+
 ## 1. Is the layer sound enough to keep building on?
 
 The primitives are good and the reasoning in the comments is better than the code around them — `concealed_field_values`, `visible_actor_ids`, the fuzz-cache short-circuit, the "sole voter's own value *is* the composite" note at `wiki_stat_vote/queryset.py:85-90`, the alias `is_current` inversion caught at `controllers/aliases.py:119-123`. But the layer as built is a per-call-site branch on a predicate, repeated at ten sites, over a proxy that fails **open** by delegation. `docs/designs/concealed-wiki-spec.md` §4.2/§4.3 specified the opposite — resolve-time substitution and a viewer-aware `for_wiki` — and neither was built: `resolve_visible_wiki` (`services/wiki/wiki_access.py:391-402`) still hands back the raw `Wiki`, and every `for_wiki` in the tree still takes no viewer. The predictable result is that the four surfaces that were remembered are correct and roughly two dozen that were not are wide open, including the entire Article tab, ~30 of 32 external-API wiki handlers, and every write-path re-render on the page that the GET conceals. Keep the primitives; do not add a twelfth call site. And treat the test suite as unbuilt — six of its fourteen assertions do not exercise the code they name, which is why a self-review reported this clean.
