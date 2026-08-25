@@ -72,18 +72,36 @@ def masked_editor_name(profile: Profile | None, viewer: Profile) -> str | None:
 def _article_summary(wiki: Wiki, profile: Profile) -> dict[str, Any] | None:
     """Summarize the wiki's article without shipping its full body.
 
+    Concealed for a viewer who is gated, in every part: the body it counts
+    words from, the revision it names as the edit baseline, and who it credits.
+    A summary is a description of content, so leaving it unconcealed beside
+    concealed fields reports the size and recency of a write-up the same
+    response refuses to show.
+
     Args:
         wiki: The wiki whose article to summarize.
         profile: The requesting profile, for author masking.
 
     Returns:
-        A summary dict, or None when the wiki has no article yet.
+        A summary dict, or None when this viewer has no article to see.
     """
     from urbanlens.dashboard.services.wiki.articles import get_article
+    from urbanlens.dashboard.services.wiki.concealment import conceal_article, is_concealed, visible_rows
 
-    article = get_article(wiki=wiki)
+    article = conceal_article(get_article(wiki=wiki), wiki, profile)
     if article is None:
         return None
+
+    if is_concealed(article):
+        visible = visible_rows(article.revisions.all(), wiki, profile).order_by("-created", "-pk").first()
+        return {
+            "id": article.pk,
+            "word_count": article.word_count(),
+            "updated": _isoformat_or_none(visible.created) if visible else None,
+            "last_edited_by": masked_editor_name(visible.editor if visible else None, profile),
+            "base_revision_id": visible.pk if visible else None,
+        }
+
     return {
         "id": article.pk,
         "word_count": article.word_count(),
@@ -93,12 +111,13 @@ def _article_summary(wiki: Wiki, profile: Profile) -> dict[str, Any] | None:
     }
 
 
-def _stats(wiki: Wiki, profile: Profile) -> dict[str, dict[str, Any]]:
+def _stats(wiki: Wiki, profile: Profile, *, conceal: bool = False) -> dict[str, dict[str, Any]]:
     """The four community stat composites plus the viewer's own votes.
 
     Args:
         wiki: The wiki whose stats to read.
         profile: The requesting profile, for ``my_vote``.
+        conceal: Whether this viewer sees the concealed form of the wiki.
 
     Returns:
         ``{field: {rounded, exact, count, my_vote}}`` for every stat field.
@@ -106,7 +125,7 @@ def _stats(wiki: Wiki, profile: Profile) -> dict[str, dict[str, Any]]:
     """
     stats: dict[str, dict[str, Any]] = {}
     for field in WikiStatField.values:
-        composite = WikiStatVote.objects.composite(wiki, field)
+        composite = WikiStatVote.objects.composite(wiki, field, viewer_conceals=conceal, viewer=profile)
         stats[field] = {
             "rounded": composite.rounded,
             "exact": composite.exact,
@@ -126,16 +145,29 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
             must go through first).
         location: The wiki's Location, already resolved by that same call.
         profile: The requesting profile, needed for own-vote lookup, author
-            masking, and nothing else.
+            masking, and the concealment decision.
 
     Returns:
         A JSON-serializable dict covering identity, description, dates,
         security, coordinates, boundary, aliases, links, community stats and
         counts, the article summary, and the comment count.
     """
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealed_community_summary, concealment_active
+
+    conceal = concealment_active(wiki, profile)
+    # Field values come from `shown`; row sets are filtered separately. Reading
+    # the raw row here is what let this payload drift from the HTML page, which
+    # the comment in controllers/location_wiki.py claimed could not happen.
+    shown = conceal_wiki(wiki, profile)
+
     latitude = wiki.latitude
     longitude = wiki.longitude
-    cover_photo = wiki.cover_photo
+    cover_photo = None if conceal else wiki.cover_photo
+
+    aliases = conceal_rows(wiki.aliases.all(), profile) if conceal else wiki.aliases.all()
+    links = wiki.links.order_by("order", "pk")
+    links = conceal_rows(links, profile) if conceal else links
+    comments = conceal_rows(wiki.comments.all(), profile) if conceal else wiki.comments.all()
 
     payload: dict[str, Any] = {
         # The navigable identifier: wiki routes resolve a Location, so this is
@@ -143,13 +175,13 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
         "location_slug": location.ensure_slug(),
         "wiki_slug": wiki.slug or None,
         "uuid": str(wiki.uuid),
-        "name": wiki.name,
-        "description": wiki.description or None,
-        "pin_type": wiki.pin_type,
-        "indoor_outdoor": wiki.indoor_outdoor or None,
-        "date_abandoned": _isoformat_or_none(wiki.date_abandoned),
-        "date_last_active": _isoformat_or_none(wiki.date_last_active),
-        "security": {field: getattr(wiki, field) for field, _label in SECURITY_FIELDS},
+        "name": shown.name,
+        "description": shown.description or None,
+        "pin_type": shown.pin_type,
+        "indoor_outdoor": shown.indoor_outdoor or None,
+        "date_abandoned": _isoformat_or_none(shown.date_abandoned),
+        "date_last_active": _isoformat_or_none(shown.date_last_active),
+        "security": {field: getattr(shown, field) for field, _label in SECURITY_FIELDS},
         "latitude": float(latitude) if latitude is not None else None,
         "longitude": float(longitude) if longitude is not None else None,
         "address": wiki.address or None,
@@ -158,17 +190,17 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
         # is_current comes from the shared helper rather than a local comparison
         # so this payload cannot drift from WikiAliasSerializer, which documents
         # the field, or from the delete guard, which decides what the rule means.
-        "aliases": [{"id": alias.pk, "name": alias.name, "kind": alias.kind, "source": alias.source, "is_current": alias_is_current_name(alias, wiki)} for alias in wiki.aliases.all()],
-        "links": [{"id": link.pk, "name": link.name, "url": link.url, "wayback_url": link.wayback_url or None, "order": link.order} for link in wiki.links.order_by("order", "pk")],
-        "stats": _stats(wiki, profile),
+        "aliases": [{"id": alias.pk, "name": alias.name, "kind": alias.kind, "source": alias.source, "is_current": alias_is_current_name(alias, wiki)} for alias in aliases],
+        "links": [{"id": link.pk, "name": link.name, "url": link.url, "wayback_url": link.wayback_url or None, "order": link.order} for link in links],
+        "stats": _stats(wiki, profile, conceal=conceal),
         "article": _article_summary(wiki, profile),
-        "comment_count": wiki.comments.count(),
+        "comment_count": comments.count(),
         "created": _isoformat_or_none(wiki.created),
         "updated": _isoformat_or_none(wiki.updated),
     }
 
     # pin_count_low / pin_count_approx / first_pinned / first_pinned_precision.
-    community = wiki_community_summary(wiki, location)
+    community = concealed_community_summary() if conceal else wiki_community_summary(wiki, location)
     payload.update(community)
     payload["first_pinned"] = _isoformat_or_none(community["first_pinned"])
 

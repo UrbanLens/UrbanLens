@@ -22,6 +22,51 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-08-25: forms submit and save every field, not the ones that changed
+
+Surfaced by the concealment work, where it caused real data loss, but the concealment case is one
+instance of a general pattern and fixing that instance did not fix the pattern.
+
+The shape: a dialog is prefilled from the current record, `new FormData(this)` serialises **every**
+field on submit, and the handler writes all of them back. Nothing distinguishes "the user set this
+value" from "this value was already there and the form carried it along".
+
+Why it is worth auditing before offline access and merging land, which is the point at which it
+stops being cosmetic:
+
+- **Overwrites.** Two people editing different fields of the same record round-trip each other's
+  values. Last writer wins on fields they never looked at. Today this is mostly masked because
+  `apply_wiki_edit` and friends re-diff server-side; anything that saves the payload directly does
+  not.
+- **Merge noise.** A field-level or CRDT-style merge cannot tell an unchanged carried-along value
+  from a deliberate re-assertion of the same value, so every save becomes a conflict candidate on
+  every field. Offline clients replaying a queue of these generate merges with no content in them.
+- **Modified times.** `updated` moves on records nothing changed, which corrupts recency ordering,
+  "what changed since" sync cursors, and any notification keyed on a record having been touched.
+- **Field provenance.** `models/abstract/versioned.py` records a write per field per save. A form
+  re-asserting fourteen fields records fourteen writes and re-attributes all of them to the
+  submitter - which is the re-attribution leak already fixed once inside `VersionedModel.save` by
+  diffing against a `from_db` snapshot. That snapshot defends the substrate; it defends nothing
+  that writes through another path.
+
+The concealment instance, for concreteness: the suggest-edits dialog is prefilled from the
+concealed projection and posts all fourteen fields, so a viewer changing one date submitted the
+placeholder name, an empty description and all eight security indicators as though they had typed
+them. Fixed in `2f9885db` by diffing against a baseline - the record as the submitter saw it -
+rather than by making the form honest, because the form is one of many.
+
+**Scope of the audit** (counted 2026-08-25, `src/urbanlens/dashboard`):
+
+- 28 files build a full `FormData` payload on submit;
+- 23 bare `.save()` calls in `controllers/` write every column, against 88 that scope
+  `update_fields` - so the good pattern is already the majority and the outliers are findable;
+- 17 `form.save()` ModelForm calls, which write every field in the form by default.
+
+Two directions, and they compose: make submits dirty-only (the client knows what it prefilled, so
+it can send only what differs), and make writes field-scoped (`update_fields`, which most of the
+codebase already does). The second is the safety net for anything that still posts everything, and
+is the cheaper half to finish first.
+
 ## ~~2026-08-24: the published OpenAPI document under-describes its own responses~~ - RESOLVED 2026-08-24
 
 Found by the new schemathesis suite (`tests/contract/`, `docs/CONTRACT_TESTS.md`)
@@ -114,6 +159,37 @@ because `LabelSerializer` is response-only (writes go through
 not re-add it.
 
 The whole contract suite is green: **101 passed**.
+## OPEN 2026-08-24: wiki search and autocomplete are a substring oracle for concealed content
+
+`services/global_search/providers.py` (the wiki provider's `apply_text` over `["name",
+"description", "aliases__name"]`) and `services/map_pins/autocomplete.py` (`Q(name__icontains=q) |
+Q(aliases__name__icontains=q) | Q(description__icontains=q)`) both match user-contributed wiki text
+as a substring, scoped only by `visible_wiki_location_ids_cached(profile)`.
+
+For a concealed viewer that is an oracle: type a distinctive phrase from a stranger's description
+and the wiki comes back, confirming both that the text exists and that this account is being shown
+something other than the whole row. It survives a perfect read gate on the page, because the answer
+is carried by the *result set* rather than by any field the page renders.
+
+**Why it was not fixed with the rest of the layer** (the resolve-time rework, `39eb86c4`). Every
+other surface conceals by resolving per-viewer provenance in Python - `resolve_fields` for wiki
+fields, `conceal_rows` for related rows, the newest visible `ArticleRevision` for prose. None of
+that is expressible as a SQL predicate, and search is a queryset-level substring filter over
+thousands of rows. The three obvious patches are each wrong:
+
+- **Match `name` only for concealed viewers** - the *stored* name may itself be a stranger's edit,
+  so it leaks the same way, one field further along.
+- **Drop concealed wikis from text search** - a brand-new wiki still matches on its automatic name,
+  so a place that is reachable but unfindable is a tell in the other direction.
+- **Filter results in Python after the query** - the query already applied `LIMIT`, so a page of
+  results silently shrinks in a way that varies per viewer.
+
+The real answer is a search index that carries provenance per indexed span, so a viewer's query
+matches only text they are entitled to see. That is the same substrate as the facts-with-sources
+direction (`docs/designs/versioned-content.md`), and should be built with it rather than ahead of it.
+
+Not live today: `concealment_active` returns `False`, so no account is concealed. This is what has
+to exist before that boolean can flip.
 
 ## OPEN 2026-08-21: production REData 404s on `/api/v1/public-locations/` (and `/capabilities/`)
 
@@ -149,27 +225,6 @@ formatting the repository is the intended behaviour and its output should be kep
 The only real consideration is timing, and it is mild: a full-repo format touches files other
 people may have open. Commit or stash in-flight work first if that matters, then run it and keep
 the result. Do not hand-revert formatting to keep a diff small.
-
-## RESOLVED 2026-08-21: an unpinned bun tag broke every container build
-
-`Dockerfile` installed bun with `COPY --from=oven/bun:1` - a floating major tag. Bun **1.4.0**
-dropped `bun build --format iife` (`error: Formats besides 'esm' are not implemented`), which
-`bin/build-frontend.ts` needs for the `ts/entries-classic/` bundles - the scripts loaded without
-`type=module` (`core.js`, `e2ee.js`, `webauthn.js`, `permissions.js`). The moment that tag moved,
-**every newly built container failed at `bun run build`** and crash-looped in `init.py`, with no
-local change to blame. Hosts that already had bun 1.3.x kept working, so it looked like an
-environment-specific mystery rather than a dependency bump.
-
-Found because a fresh `bin/dev_env.py create` environment would not come up (`ul_<slug>_app`
-stuck `Restarting`). This was **not** limited to dev environments - a staging or production
-rebuild would have hit exactly the same wall.
-
-Pinned to `oven/bun:1.3.14` (matching the host and `bun.lock`), with a comment saying to bump
-deliberately after checking `iife` still builds. The durable fix, if bun keeps iife removed, is
-to stop needing it: `entries-classic` exists only because those four bundles load as classic
-scripts, and the same trap in reverse is what killed the floorplan editor (see the 2026-08-21
-`type="module"` entry in ROADMAP.md, UL-405). Worth revisiting as one piece of work rather than
-carrying an exact pin forever.
 
 ## OPEN 2026-08-21: Consensus points are awarded for reverting someone else's edit, and never retracted
 
@@ -207,29 +262,6 @@ add-link dialog instead of an always-visible inline form), so a wiki that has ne
 description, dates, security indicators, or a link set on it renders no card and no way to add a
 first link short of using "Suggest Edits" to set some other field first. Pre-existing - the same
 guard gated the old inline form identically - not introduced by that fix, just still open.
-
-## RESOLVED 2026-08-19: `inspects_content` stopped the two tabs it was written to hide
-
-`ed8b3b28` ("a panel tab appears only when it has something to show") gave `photon` and
-`open_elevation` an `inspects_content` flag, so a fresh cache row holding a legitimately empty answer
-no longer counts as ready. Correct for the tab strip, which is what the commit was about.
-
-But `PinController.location_data_overview` used `is_ready` to mean *"has this source been fetched
-yet"*, and those are different questions. After the commit the two panels looked unfetched forever:
-rescheduled on every render, and - because `empty_keys` is only appended inside the `is_ready`
-branch - never reported to the client. `empty_keys` drives the `pinLocationDataEmpty` HX-Trigger,
-which is exactly what `_pin_location_data_tabs.html` uses to hide a dead tab. So the fix that
-introduced `inspects_content` prevented the two tabs it targeted from ever being hidden, and made the
-Overview poll for them indefinitely.
-
-The endpoint now reads a fresh `LocationCache` row directly and treats its presence as "asked";
-`is_ready` keeps its narrower meaning for the tab strip.
-
-**How it stayed hidden for a day:** two tests in `test_location_data_overview.py` (written 2026-07-22)
-did catch it - they assert the 204 and the full `empty_keys` set - and had been failing since the
-commit landed at 00:29. They were only noticed because a broad run happened to include that file. A
-behaviour flag that changes what an existing helper means is worth grepping for callers of that
-helper; `is_ready` had two, and only one wanted the new meaning.
 
 ## OPEN 2026-08-20: the mobile panel's `unpinned_count` still counts what the import won't create
 
@@ -435,87 +467,6 @@ not guarantee it is stable across responses.
 the current tree - re-verified 2026-08-19. `_resolved_flag` reads the `attributes` blob first and
 falls back to the top level, and has since commit `8bf86daf`; the finding described the code before
 that.
-
-## RESOLVED 2026-08-20: a visit suggestion named its sender even when that sender is masked everywhere else
-
-Found by `bin/report_defect_history.py`'s incomplete-fix query, which lists fixes whose own message
-implies more instances exist. Commit `1634837e` - "the calendar importer's trip invite masks identity
-**like its sibling does**" - is exactly that phrase. `services/visits/visits.py` was another
-instance: both branches of the visit-suggestion notification interpolated `suggested_by.username`
-raw.
-
-Same reasoning as the sibling, and it is worth restating because "they're connected, so it's fine"
-is the intuition that produces this bug every time. Being connected is not sufficient permission:
-`VisibilityChoice`'s own docstring notes accepted friends qualify for every level *except* `NO_ONE`.
-And the message is stored as plain text, then picked up by push delivery and by
-`notification_text_alerts`, which builds an SMS body from the stored text - so a name masked at
-render time has already left the app.
-
-Now routed through `_suggester_name`, with four tests. Two of them fail against the previous code
-(verified by reverting), one is the anti-vacuity case, and one covers the merge-wording branch -
-the two message branches are written separately, which is how they would drift again.
-
-**Checked and deliberately left alone: the two other raw usernames near a notification write.**
-
-- `services/social/friendship.py`'s friend-request body. Naming the requester is the *point* -
-  `visibility_permits` has an `allow_pending_request` rule specifically so "asking someone to
-  connect deliberately lets them see who is asking". Routing it through the resolver would be
-  harmless for every visibility except `NO_ONE`, where it would produce "Member wants to be your
-  friend" - an anonymous request nobody can act on. That is a product decision about whether a
-  `NO_ONE` profile may send requests at all, not a masking bug.
-- `services/visits/safety.py`'s community-wiki escalation. The owner opted into notifying strangers
-  precisely so those strangers can look for them; masking the name would defeat the feature. It is
-  in `MUTE_EXEMPT_TYPES` for the same reason.
-
-## RESOLVED 2026-08-20: every `Friendship` status transition wrote the whole row, and could un-mute somebody
-
-Found by `bin/report_model_writers.py`, which ranks models by how many modules write them and lists
-the bare `save()` calls against each - `Friendship` came back with three. That report exists because
-a bare `save()` writes *every* column from a possibly-stale in-memory instance, which is harmless on
-a single-writer row and a lost update on a contested one.
-
-`Friendship` had just become contested. The mute columns added earlier the same day are written by a
-targeted `UPDATE` that deliberately leaves the instance alone (so it cannot clobber a concurrent
-accept/decline, and does not move `updated`, which the profile page renders as the friendship's
-"since" date). The status transitions did the opposite - `accept`/`decline`/`ignore`/`remove`/`block`
-and `request` all did a bare `self.save()`. So: open someone's profile page, have them mute you in
-another tab, click Remove - and their mute is gone, with nothing reporting it.
-
-**`update_fields`, not `queryset.update()`.** The latter avoids the lost update outright and also
-skips `post_save` - which the achievements system subscribes to for this model, `created_only=False`,
-specifically to see a friendship *reach* `ACCEPTED` (`models.achievements.signals`). Silencing that
-to fix a lost update trades one silent bug for another. There is a test asserting the signal still
-fires with `status` among its `update_fields`.
-
-**A second, worse instance in the same area.** `block_profile` re-points the row so the blocker owns
-`from_profile` (deliberately - direction is the only record of who blocked whom). The mute columns
-are named for the row's two *ends*, so swapping the ends without swapping them hands each person the
-other's preference: A's mute of B silently becomes B's mute of A, and neither of them did it. Now
-read before the swap and written with it, in one statement.
-
-Six tests, all verified to fail against the previous code by reverting both fixes and re-running -
-one of them (`test_a_request_does_not_clobber_a_mute`) passed either way and says so in its own
-docstring, because `request` loads the row itself and is never stale.
-
-**The report itself was sharpened in the same pass.** It listed every bare `save()`, including ones
-on an instance the same function had just *constructed* - which is an INSERT, with no earlier load
-to be stale relative to. Those buried the real findings: the `Comment` entry that looked most
-alarming (8 writers) was exactly that shape, and dismissing each costs a reader the same minute.
-`report_model_writers.py` now skips a `save()` on a name whose every assignment in that function is
-a direct `Model(...)` call - conservatively, so one `obj = Model.objects.get(...)` anywhere in the
-function and it is reported as before. That took the list from 14 flagged models to 6, and turned
-`Profile`, `Comment`, `MarkupMap` and `SafetyCheckin` from false positives into clean rows.
-
-**Also fixed, from the sharpened list:** `PinVisit`'s two visit-edit paths (pin detail and the
-Memories dialog) wrote the whole row for three fields. The contending writer is `pin_merge`, which
-re-points `pin` wholesale; the window is small (the POST re-fetches the visit scoped to its pin, so a
-merged-away visit 404s rather than being clobbered) but `update_fields` is strictly better and costs
-nothing.
-
-**Still open:** `Label` (3), `PinList` (2), `Trip`, `TripActivity` and `SavedFilter` (1 each). Each
-needs the same judgement - which columns does *another* writer touch without going through this
-instance - and that judgement is per model, not mechanical. `Friendship` was worth doing first
-because a second writer had just been added to it.
 
 ## 2026-08-20: bug hunt over the highest fix-density modules - 9 confirmed, 4 fixed, 5 open
 
@@ -863,7 +814,6 @@ An earlier draft of this entry said `yelp` is billable, as a reason to curate. I
 `billable=True` appears 11 times in REData and none are in this registry. The real cost is upstream
 queries and quota, not money.
 
-
 ## OPEN 2026-08-19: `main` cannot start from an empty database - conflicting migrations
 
 Found by the new dev-environment tooling on its first clean run: `bin/dev_env.py create --branch
@@ -954,57 +904,110 @@ raw `Response` semantics (201-vs-200, `redirected`).
 
 **Correctness, user-visible:**
 
-- `entries/map-annotations.ts:2264` - right-click-to-delete-vertex is dead code:
+- ~~`entries/map-annotations.ts:2264` - right-click-to-delete-vertex is dead code:
   `m.on("contextmenu.rcdelete" as never, ...)` is jQuery-style event namespacing that Leaflet does
   not support, so it binds a literal event name that never fires - while the toast at :2338 tells
-  the user to right-click. The `as never` casts were the compiler flagging exactly this.
-- `entries/map-annotations.ts:1371` - `loadDetailPins` has no ok-check and **clears the existing
+  the user to right-click. The `as never` casts were the compiler flagging exactly this.~~ Fixed
+  2026-08-22: binds the real `"contextmenu"` event instead.
+- ~~`entries/map-annotations.ts:1371` - `loadDetailPins` has no ok-check and **clears the existing
   pin layer and list** on failure (console.warn only). :2558 `flushDpAutoSave` swallows validation
-  errors, so autosaved edits are silently lost. :2047 `placeMediaItemAt` has no ok-check and no
-  loading indicator for a server-side image materialize. :1643/:1712 bulk promote/delete
-  `Promise.all` paths have no `.catch`, so one failure is an unhandled rejection with the
-  selection never cleared.
+  errors, so autosaved edits are silently lost. :2047 `placeMediaItemAt` has no ok-check~~ ...
+  :1643/:1712 bulk promote/delete `Promise.all` paths have no `.catch`, so one failure is an
+  unhandled rejection with the selection never cleared. Fixed 2026-08-22, except the last part was
+  already half done: `doDeleteSelectedDp` (the `:1712` delete path) already had its `.catch(() =>
+  false)` from an earlier, unrelated change - only `doPromoteSelectedDp` (`:1643`) still needed it,
+  and now has the identical fix with a comment pointing at its already-fixed sibling. **Still
+  open**: `placeMediaItemAt` still has no loading indicator for the server-side image-materialize
+  step it waits on - not attempted here since `window.mediaApplyMaterializedDrop`'s own contract
+  (defined in the gallery/organize module) would need to be understood first, and this file has no
+  established loading-state convention for the drag-and-drop-onto-map interaction to reuse.
 - `entries/photo-location-scan.ts:207` - the `webkitdirectory` fallback path (Firefox/Safari)
   reuses an already-aborted `AbortController`, so after one Stop click **every** later scan halts
   on the first file. Also: hits accumulate across scans (re-scanning double-counts into clusters),
   and the photo uploads that run *after* the "Uploaded" toast have no progress indicator.
-- `shared/map-export.ts:270` + `themes/base.html:816` - `download()` awaits tile fetches (up to 8s
+- ~~`shared/map-export.ts:270` + `themes/base.html:816` - `download()` awaits tile fetches (up to 8s
   each) but no caller awaits it: no spinner, no toast, unhandled rejections, and the save flow
-  closes the composer mid-export so shapes project against a map being torn down.
-- `shared/markup-toolbar.ts:748` - `flushMarkupAutoSave` never checks `r.ok`, so a 400 (e.g.
+  closes the composer mid-export so shapes project against a map being torn down.~~ Fixed
+  2026-08-22: all three call sites in `base.html` now await the promise, toast on failure, and
+  disable their trigger for the duration (the read-only viewer's button gets the real `.is-loading`
+  spinner since it already has `.btn`; the composer's own bespoke `cmc-download-btn` just disables,
+  since it doesn't participate in that class and this fix didn't attempt to move it onto one). The
+  save flow now chains `_closeComposer()` onto the download's own completion instead of firing the
+  download and closing the composer in the same tick - it was the composer's `deactivate()`
+  tearing down `_composerMap` itself while `download()` was still awaiting tile fetches from it,
+  exactly contradicting the comment already in that code explaining why the close had to wait.
+- ~~`shared/markup-toolbar.ts:748` - `flushMarkupAutoSave` never checks `r.ok`, so a 400 (e.g.
   over-long label) reports success; the single pending-save slot also means editing item A then B
-  inside the 500ms debounce silently discards A's changes, and nothing flushes on unload.
+  inside the 500ms debounce silently discards A's changes~~ Fixed 2026-08-22: added the ok-check,
+  and replaced the single shared slot with a per-item-uuid map, since it turned out reachable
+  without even editing two items in sequence - `setItemLayer` (the sidebar's inline layer picker)
+  shares the same autosave path and can target a completely different item than whatever the edit
+  panel has open. **Still open**: nothing flushes pending autosaves on unload/tab-close - a
+  `beforeunload` handler can't reliably await an in-flight `fetch`, and this app's CSRF header
+  doesn't fit `navigator.sendBeacon`'s simple-request shape, so that half needs its own dedicated
+  pass rather than a quick addition here.
 - `entries/organize.ts:106,311` - the Media tab is **fully dead UI**: the template renders it
   selectable with checkboxes, a filter bar and Edit buttons, but no `OrgTabManager` is built for
   it, `ORG_FILTER_NAMESPACES`/`TAB_FILTER_NS` omit it, and the consolidated dialog opener has no
   `media-label-edit-dialog-body` case, so Edit swaps a form into a dialog nothing opens.
   Separately, `_organize_label_card.html:77` references `peopleMergeSingle`, which is defined
   nowhere in the codebase.
-- `shared/organize-filter-engine.ts:188` - `countVisibleCards` tests `card.style.display`, but
+- ~~`shared/organize-filter-engine.ts:188` - `countVisibleCards` tests `card.style.display`, but
   tree view sets `display` on the `.tag-tree-item` *wrapper*, so cross-tab match counts and the
   "N categories also match" footer count every card as visible. It duplicates `getOrgVisibleCards`
-  (:99), which gets it right.
+  (:99), which gets it right.~~ Fixed 2026-08-22: `countVisibleCards` now delegates to
+  `getOrgVisibleCards` instead of re-deriving the check.
 - `shared/map-image-overlays.ts:209` - corner drag never handles `pointercancel`; an interrupted
   touch gesture leaves `map.dragging` disabled permanently.
-- `entries/spotguessr.ts:1491` - `submitGuess` has no in-flight guard, so a double-click posts
-  twice and double-counts the session score; :840 `reportRoundTimeout` has no error handling, so a
-  failed timeout POST hangs the round forever. All three games silently null the WebSocket on
-  close with no reconnect and no "connection lost" notice.
-- `entries/trivia.ts:856` and `entries/consensus.ts:1051` - missing the round-id guard spotguessr
-  has (`lastRevealedRoundId`), so the last player to answer double-counts HUD points.
-- `shared/organize-priority.ts:69` and `shared/album-items.ts:118` - optimistic reorder with no
-  rollback on failure and no save sequencing, so two rapid drags can persist the stale order while
-  the DOM shows the new one. `shared/album-map.ts:113` is the model to copy - it rethrows after
-  toasting so the marker snaps back.
-- `shared/confirm-dialog.ts:90` - re-entrancy: opening a second dialog while one is open
+- ~~`entries/spotguessr.ts:1491` - `submitGuess` has no in-flight guard, so a double-click posts
+  twice and double-counts the session score~~ Fixed 2026-08-22: disables the submit button for the
+  duration of the request, re-enabling only on failure. **Still open**: `:840 reportRoundTimeout`
+  has no error handling, so a failed timeout POST hangs the round forever; all three games silently
+  null the WebSocket on close with no reconnect and no "connection lost" notice.
+- ~~`entries/trivia.ts:856` and `entries/consensus.ts:1051` - missing the round-id guard spotguessr
+  has (`lastRevealedRoundId`), so the last player to answer double-counts HUD points.~~ Fixed
+  2026-08-22, differently in each game because their reveal broadcasts aren't the same shape:
+  trivia.ts gets a `lastRevealedRoundId` guard matching spotguessr's, since `submitAnswer`'s own
+  response can independently credit the same round `showBroadcastReveal` will also see.
+  consensus.ts needed a **resolution-aware** guard instead
+  (`{roundId, resolution}`, not just `roundId`) - `services/consensus/session.py`'s competitive-round
+  disagreement sub-phase broadcasts `round.revealed` for the *same* round_id twice by design (once
+  `vote_open` with zero points, again once the tiebreak vote resolves with the real ones), so a
+  bare round-id guard would have silently discarded every vote-winner's actual points instead of
+  fixing anything.
+- ~~`shared/organize-priority.ts:69` and `shared/album-items.ts:118` - optimistic reorder with no
+  rollback on failure~~, so a failed save left the DOM showing an order the server never actually
+  got. Partially fixed 2026-08-22: both now capture the order at drag-start (also covers the
+  priority list's non-drag reorder paths - the order-editor and the top/bottom jump buttons) and
+  restore it if the save fails. **The "no save sequencing" half is still open, and is not just a
+  missing debounce**: since each save POSTs the *whole* order rather than a delta, chaining saves
+  so they reach the server one-at-a-time interacts badly with the rollback above - if an earlier
+  queued save fails and reverts to *its* pre-drag order, a later save that already succeeded would,
+  on its own turn in the chain, read that just-reverted DOM and re-persist the stale order as if it
+  were correct. Fixing this properly needs either a monotonic version per save (reject/ignore a
+  write older than what the server has) or reworking rollback to fall through to the *next* known
+  order rather than always "what preceded this specific drag" - either way, real design work, not
+  a quick addition.
+- ~~`shared/confirm-dialog.ts:90` - re-entrancy: opening a second dialog while one is open
   overwrites `resolveCurrent` (first promise pends forever) and `showModal()` on an open dialog
-  throws into the promise executor.
-- `shared/scroll-to-hash.ts:50` - re-scrolls on *every* `htmx:afterSettle` for the page's life, so
-  any later swap yanks the reader back to the original anchor.
-- `shared/onboarding-tour.ts:87` - auto-dismiss hooks bind only to elements present at init; HTMX
-  swaps orphan them, so dismissed cards reappear.
-- `shared/organize-header.ts:113` - a transient window resize below 768px *permanently* overwrites
-  the stored gallery view preference.
+  throws into the promise executor.~~ Fixed 2026-08-22: a call while the dialog is already open
+  now settles the earlier one as cancelled first, the same as a backdrop click would.
+- ~~`shared/scroll-to-hash.ts:50` - re-scrolls on *every* `htmx:afterSettle` for the page's life, so
+  any later swap yanks the reader back to the original anchor.~~ Fixed 2026-08-22: remembers the
+  hash it already scrolled to and only re-arms if the hash itself changes.
+- ~~`shared/onboarding-tour.ts:87` - auto-dismiss hooks bind only to elements present at init; HTMX
+  swaps orphan them, so dismissed cards reappear.~~ Fixed 2026-08-22: re-runs registration on every
+  `htmx:afterSettle` (a `WeakSet` keeps that idempotent rather than stacking a second listener onto
+  an element that survived the swap unchanged). Found and fixed the same fix's own prerequisite bug
+  while here: the doc comment says `retryEvent` fires *in addition to* `htmx:afterSettle`, but the
+  code was an `if/else` between them - Organize's own `retryEvent` (a tab-switch, not an HTMX event)
+  meant that page never listened to `htmx:afterSettle` at all, so re-registration would have gone
+  in but never actually run for any HTMX-driven update there.
+- ~~`shared/organize-header.ts:113` - a transient window resize below 768px *permanently* overwrites
+  the stored gallery view preference.~~ Fixed 2026-08-22: the mobile fallback is now purely a
+  display-time computation (`effectiveView()`) layered over the stored preference rather than a
+  call to `setSharedView()` that persisted "list" over it - widening back past the breakpoint
+  restores "gallery" automatically since the stored value was never actually touched.
 - `entries/article-wysiwyg.ts:532` - the first WYSIWYG keystroke re-serializes the whole article
   through a lossy `tiptap-markdown` parse (`html: false`), rewriting content document-wide, not
   just at the edit point. Needs round-trip tests over real saved articles before it is trusted.
@@ -2366,28 +2369,6 @@ Nothing on the remaining task list clears the bar of "worth doing without those 
 blocks are template-coupled or need a Leaflet stub. Stated per the standing instruction to
 say so plainly rather than manufacture work.
 
-## RESOLVED 2026-08-19: E2EE re-wrap recorded a KDF cost its stored blob was not made with
-
-The original entry described the client trusting server-supplied Argon2 parameters. That half was
-already fixed: `e2ee-client.ts`'s stale-password re-wrap derives with its own pinned
-`KDF_OPSLIMIT`/`KDF_MEMLIMIT`, never `bundle.kdf_*`, and the comment there explains why it must (a
-compromised server could otherwise answer `password_wrap_stale=true` with near-zero parameters and be
-handed a cheaply-attackable blob).
-
-What was left was the other end of the same change. `/rewrap` replaced `password_wrapped_secret` and
-never touched `kdf_opslimit`/`kdf_memlimit`. Enrol deliberately accepts stronger-than-default
-parameters and stores them, so a bundle enrolled above the floor kept advertising a cost its new blob
-was not made with - and the read paths use `bundle.kdf_*`. Every later password unlock then derived
-the wrong key: the device holding the cached key loops re-wrapping, a device without one loses the
-password path entirely and has only the recovery key. Permanent, and reachable through the public API
-by enrolling above the floor.
-
-`/rewrap` now records the parameters alongside the blob, applying the same floor enrol does - so the
-floor cannot be walked around one step later either. Absent parameters mean the **defaults**, not
-"unchanged": the shipped client has always wrapped with its pinned constants here, and leaving the
-bundle's own values was the bug. A recovery-only re-wrap replaces no password blob and so leaves them
-alone. Guarded by `test_e2ee_kdf_floor.RewrapKdfParametersTests`.
-
 ## OPEN 2026-08-12: a password reset does not evict an intruder who minted an API key
 
 Resetting a password invalidates every session (Django rotates the session auth hash), which is
@@ -3031,29 +3012,6 @@ particular may be exercised through the very `filter_by_criteria`-style aggregat
 look unused.
 
 ---
-
-## RESOLVED 2026-08-19: label-kind literals - and the blind spot in the scan that found them
-
-`models/labels/meta.py` defines `KIND_TAG`/`KIND_CATEGORY`/`KIND_STATUS`/`KIND_USER`/`KIND_MEDIA`.
-Every production call site now uses them. What is left below is the part worth keeping: **the scan
-that produced the original list of twenty could not see six of the sites.**
-
-It resolved choices via `Model._meta.get_field(name).choices`, which structurally cannot follow a
-lookup traversal - so `labels__kind="status"` was invisible to it, and four such sites survived
-(`models/pin/queryset.py` twice on `status` plus once on `category`, `models/wiki/queryset.py` on
-`category` and `tag`). It also missed two plain `Label(kind=...)` creates (`tasks.py`,
-`services/apis/locations/google/maps.py`) that it should have caught. All six were fixed on
-2026-08-19; the two `models/pin/model.py` sites the entry recorded as "the two that remain" had
-already been done before that.
-
-The entry's own stated risk applied most sharply to exactly the sites it could not see: a filter on
-a stale literal silently matches nothing, where a create with one silently writes a value nothing
-queries. **A future sweep of this class must grep `related__field=` traversals separately** -
-`_meta`-driven scans of this shape will keep reporting a clean list while missing them.
-
-Remaining bare literals are deliberate and must stay: `baker_recipes.py` (test fixtures) and
-`migrations/` (frozen history - a migration that imports a constant changes meaning if the constant
-does).
 
 ## CORRECTION: the `to_json()` prefetch work does not affect the map
 
@@ -3824,23 +3782,6 @@ The eight that *were* mechanically provable (anchored on a `def`/`class` the too
 uniquely) are fixed, and `check_doc_line_refs.py` now runs in CI to keep past-end-of-file citations
 at zero.
 
-## RESOLVED 2026-08-19: two encryption migrations disagreed about whether encrypting is reversible
-
-0048 now carries a real decrypting `reverse_code` (`decrypt_existing_preference_fields`), modelled
-on 0039's: same `gAAAA%` discriminator so plaintext rows are left alone, and the whole rollback
-aborts if any token-shaped value cannot be decrypted under the configured keys.
-
-What made this decidable rather than a standing argument: the policy had **already been written
-down**. `docs/DATA_ENCRYPTION.md`'s "Migration rollbacks decrypt" (2026-08-15) says rollbacks
-decrypt and abort rather than write garbage, and 0007 and 0039 implement it. 0048 landed two days
-later reversing to noop, which left one file contradicting a documented rule - and it was the more
-dangerous side of the pair, because noop makes `migrate dashboard 0047` *succeed* while leaving
-ciphertext in columns pre-0048 code reads as plaintext. A failure someone can act on beats a success
-that corrupts.
-
-The exemption is removed from `tests/hypothesis/test_migration_noop_reverse_guard.py`, and
-`test_migration_0039_reverse.py` now covers 0048 with the same three assertions it applies to 0039.
-
 ## Two tests fail only under a randomized full-suite run (2026-08-18)
 
 The full suite on `810edd7b` reported three failures. One was real and is fixed
@@ -4421,3 +4362,233 @@ One smaller deployment note from the same run, not a code defect:
   `ADVISORY_RULES` in `tests/integration/lib/a11y.ts` - so that the accessibility project is not red
   on every run before anyone has had a chance to act on it. Findings still land in each run's
   `a11y-advisory.txt`.
+## `SavedFilterDetailView.patch` has a pre-existing mypy type error (found 2026-08-22, not fixed)
+
+`external_api/views.py`, `SavedFilterDetailView.patch`: `saved_filter.color = clean_color(data["color"], default="...")` -
+mypy reports `Incompatible types in assignment (expression has type "str | None", variable has type
+"str | int | Combinable")`. Found incidentally while mypy-checking an unrelated `PinList` fix in the
+same file; not investigated or fixed - out of scope for that change. `SavedFilter.color`'s
+Django-stubs-inferred field type looks like the actual mismatch (an F-expression-shaped type rather
+than the plain `str` the field should behave as); worth a look next time this file is touched.
+
+## Five mypy errors outside the floorplan work (2026-08-23)
+
+`mypy src/urbanlens` reports five errors in four files, none of them in code
+this floorplan pass touched:
+
+- `conftest.py:50` — an unused `type: ignore` *and*, on the same line, a real
+  `setdefault` argument mismatch. The ignore is presumably why the mismatch went
+  unnoticed.
+- `services/core/text_limits.py:52` — a `"type"` attribute error
+- `plugins/builtin/property_records.py:201`
+- `external_api/views.py:2119` — `clean_color(...)` returns `str | None` into a
+  field typed `str | int | Combinable`
+
+Left alone deliberately: `external_api/views.py` has uncommitted changes from
+other work, and the rest are unrelated to this pass. Recorded here rather than
+fixed in passing, because a change to a file someone else is mid-edit on is how
+two people's work collides.
+
+The one that *was* in scope is fixed: `controllers/floorplans.py` narrowed a
+geometry with `polygon.geom_type == "MultiPolygon"`, a string comparison neither
+mypy nor a reader can use, before iterating it - and a `Polygon` is not
+iterable. It is an `isinstance` check now.
+
+## Every drag frame rebuilds every Leaflet layer - measured, and deliberately not refactored (2026-08-23)
+
+`render()` clears all four layer groups and recreates every polyline, polygon,
+marker and handle, and a drag calls it on each pointermove. The obvious answer is
+to reuse layers - `setLatLngs` on the ones that exist, create and destroy only
+what changed. **That was designed in full, adversarially reviewed, and rejected on
+the evidence.** What shipped instead was one line.
+
+**Where a 312-wall drag frame actually goes** (22.1 ms of JS): `deriveFaces` 7.7,
+wall polylines 6.0, the four `clearLayers` 4.1, room polygons 3.9, floor tabs 0.4,
+joint handles 0.00, markers 0.00.
+
+That last figure is the interesting one, and it was a lie of omission: the perf
+fixture carried `markers: []`, so every published number for this editor excluded
+markers entirely - and `markerPopupContent()` was called *eagerly* at bind time,
+building a real DOM subtree per marker per frame for a panel almost no marker is
+ever asked to show.
+
+Binding the popup lazily (`bindPopup(() => markerPopupContent(marker), ...)`) is
+one line. Measured on the same gesture with 30 markers now in the fixture:
+
+| | 4 walls | 312 walls |
+|---|---|---|
+| eager popups | 41.5 ms/move | 73.6 ms/move |
+| lazy popups | 35.7 ms/move | 58.3 ms/move |
+
+Roughly what the entire layer-reuse refactor was projected to buy, for one line
+and no new failure modes.
+
+Read those as a *pair*, not as absolutes. They were taken back to back on an
+otherwise idle machine; the same gesture inside a full `bun run test:browser`
+measures 45.1 / 67.1 because the numbers include Playwright's own per-move pipe
+cost and whatever else the machine is doing. The gap between the two rows is the
+finding, not either row on its own.
+
+**Why the refactor is not being done.** Three independent adversarial reviews of
+the design each returned *fatal*, and each on the same step:
+
+- `wallLayer` is not the wall-bodies layer. `renderOpenings()` adds door-swing
+  leaves and the opening line to it as well, and `wallLayer.clearLayers()` is the
+  only thing that ever removes those. Dropping that clear - which reuse requires -
+  leaks a set of opening paths every frame.
+- Reuse cannot extend to room fills: `deriveFaces` allocates a fresh `Face` per
+  call, whose `wallIds` are traversal-ordered and collide between the two halves
+  of a partitioned rectangle, so there is no identity to key a polygon on.
+- `handleLayer` measures 0.00 ms during a wall drag because joint handles are
+  already gated off, so reuse there buys nothing.
+- `setStyle` *merges*, so translating the current conditional style spreads into
+  it leaves a once-selected wall permanently teal; `Path.onAdd` reallocates
+  `layer._path`, so remove-and-re-add silently drops the DOM `pointerdown` and the
+  drag dies with no error.
+
+And the payoff does not justify that surface: a 40-wall plan - larger than most
+real floors - already sits inside frame budget. Reuse would recover construction
+only; `setLatLngs` still reprojects and rewrites the `d` attribute for every path
+every frame.
+
+If this is picked up again, the entry conditions are: a realistic plan (markers
+and openings included, not the walls-only fixture) measurably missing frame
+budget, and a first step that splits openings out of `wallLayer` into their own
+group **before** any clear is removed. Anything that begins by deleting
+`wallLayer.clearLayers()` is wrong.
+## Third-party CDNs: one table, and an operator switch (2026-08-23)
+
+Every third-party script and stylesheet was written out inline in whichever
+template wanted it - 77 references across 27 templates, five CDNs. Absent, each
+is a feature that silently does not work, and the guards for that were being
+added one instance at a time (toastr's missing-library fallback, the floorplan
+editor's "the map didn't load" notice).
+
+`services/core/vendor_assets.py` is now the single table, and
+`{% vendor_asset "leaflet_js" %}` the only way a template names one. Set
+`UL_VENDOR_ASSET_BASE_URL` and every asset resolves to that mirror; leave it
+unset and they resolve to the same public CDNs as before. The decision is made
+when the page is rendered, so nothing branches per call and nothing waits for a
+request to fail before trying elsewhere - a failover would mean the page has
+already paid for the timeout.
+
+Making it a table immediately surfaced three things that inline URLs had hidden:
+
+- One template asked unpkg for `leaflet/dist/leaflet.js` with **no version**,
+  which is a different library on any day the CDN publishes one.
+- Leaflet's default marker artwork was fetched from **1.7.1** while the library
+  was 1.9.4.
+- leaflet-draw was requested from **cdnjs in some templates and unpkg in
+  others** - two CDNs, one library.
+
+All three are asserted against now (`test_vendor_assets.py`), along with a
+structural check that no template names a CDN host directly, so the pattern
+cannot quietly come back.
+
+**Still outstanding, and it is deliberately not a code change.** The mirrored
+files are other projects' releases with their own licences, so they are not
+vendored into this repository; hosting them is an operator step, and until an
+instance sets `UL_VENDOR_ASSET_BASE_URL` it is still loading from public CDNs
+with the same exposure as before. What has changed is that pointing an instance
+somewhere else is now one environment variable rather than an edit to 27
+templates.
+## docker-compose.hot-reload.yml crash-loops when the checkout is not the container's uid (2026-08-23)
+
+Bringing an agent dev environment up with the hot-reload overlay puts `app` into
+a restart loop and the site answers 502:
+
+```
+File "/app/src/bin/init.py", line 335, in build_frontend
+    frontend_dir.mkdir(parents=True, exist_ok=True)
+PermissionError: [Errno 13] Permission denied:
+    '/app/src/urbanlens/dashboard/frontend/static/dashboard/css'
+```
+
+`docker cp` preserves source ownership and a bind mount exposes it directly, so
+the container's `appuser` cannot write anywhere inside the mounted tree. The
+overlay already knows this - it redirects `UL_LOG_DIR` out of the tree for
+exactly this reason, and its header explains why - but `init.py`'s
+`build_frontend()` also writes into the mounted tree on every start, and that
+was not accounted for. It only shows up where the checkout belongs to a
+different uid than the image's `appuser`, which is every environment
+`dev_env.py` creates.
+
+The overlay delegates SCSS to a `sass-watch` sidecar already, so the app
+container's own frontend build is redundant under hot reload. Teaching `init.py`
+to skip it (an env var the overlay sets) looks like the fix, rather than
+loosening permissions on the checkout.
+
+Until then, updating a `dev_env.py` environment means the documented
+`docker cp` + `chown` route rather than hot reload - and note that
+`STATIC_ROOT` is a *separate* collected tree (`src/urbanlens/frontend/static`,
+not `dashboard/frontend/static`) served by whitenoise even with `DEBUG=True`,
+so a copied-in JS bundle is not served until `collectstatic` runs.
+
+## A community quota bonus survives un-sharing the photo that earned it (2026-08-23)
+
+`services/media/quota_rewards.py` stamps `QuotaExemption.COMMUNITY_CONTRIBUTION`
+on an image once it is on a wiki, has an owner, is not cached external media, and
+has collected `SiteSettings.community_photo_quota_bonus_votes` relevance votes.
+Nothing anywhere clears `quota_exempt_reason` afterwards - grep finds no writer
+outside that grant and the 0033 backfill.
+
+So: contribute a photo to a wiki, collect the votes, then remove it from the
+wiki. The photo is private again and permanently exempt from your quota. Repeat
+for as much free storage as you care to earn.
+
+**The permanence is deliberate and the reason is good**, which is why this needs
+a careful fix rather than a revert. The module's own docstring: the reward is
+one-way "so a user who is comfortably inside their quota can't be pushed over it
+retroactively by other people changing their votes". That protects against *other
+people's* later actions. It was never meant to cover the owner withdrawing the
+contribution themselves, and those two cases are distinguishable:
+
+- votes fall below the threshold, or a voter leaves -> keep the bonus, exactly as
+  now
+- the image's own `wiki` link is removed by its owner -> the contribution that
+  earned the bonus no longer exists, so neither should the bonus
+
+Not trivially exploitable: step two needs genuine relevance votes from other
+people, so this cannot be self-served in a loop. It is a way to convert community
+goodwill into permanent private storage, not a way to mint quota from nothing.
+
+Worth deciding alongside it: the exemption is currently a boolean-ish flag on the
+row, so a photo either costs its owner nothing or costs full price. Recording the
+bonus as an amount tied to the wiki relationship (rather than a flag on the image)
+would make withdrawal a cascade rather than a sweep, and would let the UI show a
+contributor what their contributions have earned them.
+
+## Consensus photo rounds do not honour the uploader's photo visibility (2026-08-23)
+
+`services/consensus/fields.py`'s `_photo_build_round` and `_photo_build_check_round`
+pick a photo with `wiki.images.filter(...).order_by("?").first()` and never call
+`ImageQuerySet.visible_to`. So a photo whose uploader restricted who may see it
+can still be handed to a stranger as a consensus round to place on the map.
+
+This is the same class as two defects fixed the same day - `PhotoSearchProvider`
+and `OverlayMediaPickerView` - and one already recorded for
+`services.spotguessr.photos.pick_photo`. Four surfaces, one omission: a queryset
+that reaches other people's photos without asking the filter.
+
+**Its exposure shrank considerably on the same day and is worth stating.** Until
+`_owner_fields` stopped stamping the location's wiki onto every pin upload, this
+population was "every photo at this location". It is now "photos somebody
+deliberately contributed to this wiki", which is a much smaller and much more
+defensible set - the residual is that contributing a photo does not withdraw what
+its uploader said about who may see it, which the wiki gallery honours and this
+does not.
+
+**Why it is written down rather than fixed.** `build_round` is a protocol -
+`Callable[[Wiki], RoundContent | None]` on `ConsensusFieldStrategy` - so the
+viewer is not in scope at the point the photo is chosen. Honouring visibility
+means threading a viewer profile through the strategy protocol and every
+implementation of it, which is a real refactor rather than adding a call, and one
+that deserves its own change with the consensus tests watched rather than being
+folded into a privacy sweep at the end of a long session.
+
+Related, smaller, and found alongside it: `WikiMediaVoteView` scopes a submitted
+`image_id` to the location (`Image.objects.filter(pk=image_id, location=location)`)
+rather than to photos on the wiki, so a caller can record a relevance vote against
+a pin-owned photo at that location. No data comes back and no bonus can be earned
+(`refresh_community_quota_bonus` requires `wiki_id`, which a pin upload no longer
+has), so this writes a row a stranger should not be able to write and nothing more.

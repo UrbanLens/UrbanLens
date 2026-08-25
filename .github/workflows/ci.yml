@@ -120,6 +120,23 @@ jobs:
       - name: Every notification write honours the mute preference
         run: python3 bin/check_notification_choke_point.py
 
+      # Field provenance is recorded by interception, so a model that declares
+      # versioned_fields without a VersionedQuerySet records instance saves and
+      # silently drops every bulk write - which reads as working.
+      - name: Versioned models intercept every write path
+        run: python3 bin/check_versioned_writes.py
+
+      # A transition made by queryset update() emits no signal, so a post_save
+      # subscription waiting on it is dead and looks alive. Three rules in the
+      # reputation ledger shipped that way.
+      - name: Signal subscriptions are reachable
+        run: python3 bin/check_signal_reachable.py
+
+      # resolve_visible_wiki may return a concealed projection, and saving one
+      # writes a single viewer's redacted view over the community's content.
+      - name: A wiki resolved for reading is never saved
+        run: python3 bin/check_concealed_writes.py
+
       # Nothing else checks this: a model change without its migration only
       # surfaces if some test happens to touch the field, and otherwise waits
       # until the column is needed in production.

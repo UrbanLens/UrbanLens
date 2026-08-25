@@ -215,6 +215,7 @@ def floorplan_for_editing(
     pin=None,
     version_uuid: str = "",
     on_date: datetime.date | None = None,
+    allow_community: bool = False,
 ):
     """The local floorplan version a save should write into.
 
@@ -223,7 +224,8 @@ def floorplan_for_editing(
 
     - A save naming a version *this profile owns* updates it in place.
     - A save naming a *published* version updates it too, when the wiki is
-      visible here - community content is edited in place by design.
+      visible here and the caller passed *allow_community* - community
+      content is edited in place by design, but only deliberately.
     - Anything else - no uuid, an unknown uuid, a REData-origin document, or
       another user's personal version - creates a new version owned by the
       saver. The document's item uuids simply won't match the new
@@ -246,6 +248,11 @@ def floorplan_for_editing(
         pin: The pin the plan belongs to. Required when *place* is None.
         version_uuid: The plan version the document came from, if any.
         on_date: ``valid_from`` for a newly created version.
+        allow_community: Whether the caller may write a wiki-owned row in
+            place. Off by default: a whole-document save deletes by omission,
+            and the ordinary save path is reached by a debounced autosave that
+            nobody explicitly asked for. Without it a community plan forks
+            into the saver's own version instead of being overwritten.
 
     Returns:
         A saved local ``Floorplan`` row the caller may write into.
@@ -266,8 +273,11 @@ def floorplan_for_editing(
         if named is not None and named.wiki_id is None and named.profile_id == profile.pk:
             return named
         # A published plan is community content: anyone who can see the wiki
-        # edits the same row, the way every other wiki field works.
-        if named is not None and can_edit_community(named, profile):
+        # edits the same row, the way every other wiki field works - but only
+        # when the caller says it meant to. A save arriving here with a
+        # community plan's uuid and no such intent replaces the author's work
+        # with whatever happened to be on the saver's screen.
+        if named is not None and allow_community and can_edit_community(named, profile):
             return named
     return Floorplan.objects.create(
         place=place,

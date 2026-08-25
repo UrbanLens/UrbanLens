@@ -1,5 +1,5 @@
 """Undo handler for Wiki (community pages - deletable as a child/"detail" wiki, or as a
-root wiki by its creator before anyone else has viewed it; see Wiki.can_be_deleted_by).
+detail pin, which is a child wiki - see controllers.detail_pins).
 """
 
 from __future__ import annotations
@@ -37,7 +37,6 @@ _RESTORABLE_FIELDS = (
     "vps",
     "plywood",
     "locked",
-    "viewed_by_other",
 )
 
 

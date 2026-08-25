@@ -1,15 +1,14 @@
-"""Explicit, user-initiated creation of community Wikis for a pin's Location.
+"""Sharing a pin's own content to the community Wiki for its Location.
 
-The user clicks "Create community wiki" on the pin detail page and chooses
-which of their pin's fields (if any) to seed the new wiki with. The Wiki row
-itself may already exist as an unofficial draft (see
-``Wiki.officially_created`` and ``tasks.ensure_draft_wiki_for_location``,
-which auto-creates one in the background as soon as a pin gets a shared
-Location) - ``WikiManager.claim_for_location`` handles promoting that draft
-the same way as a from-scratch creation. External enrichment (Google place
-linking, name resolution, boundary generation) runs in a Celery task, either
-here or already-triggered by the draft's own creation, so pin creation and
-bulk imports never touch external APIs synchronously.
+The user picks which of their pin's fields, names and photos to contribute;
+nothing here happens without that choice. Publishing private pin content as a
+side effect of something else is the defect ``bin/check_pin_not_published_to_wiki.py``
+exists for, and a visibility setting is a control over the audience for things
+you have shared rather than consent to share them.
+
+The Wiki itself is not created here. Every pinned Location gets one
+automatically (``tasks.ensure_wiki_for_location``), enriched in the background,
+so by the time anyone shares anything there is already a page to share it to.
 """
 
 from __future__ import annotations
@@ -36,7 +35,7 @@ SECURITY_FIELDS = ("fences", "alarms", "cameras", "security", "signs", "vps", "p
 
 #: Pin scalar fields a user may copy into a newly created wiki. Keys are the
 #: tokens posted by the create-wiki dialog. Aliases and photos are seeded
-#: separately (per-item selection, see alias_ids/image_ids on create_for_pin).
+#: separately (per-item selection, see alias_ids/image_ids on share_from_pin).
 #: Name is deliberately excluded: the wiki's name is resolved from external
 #: place data (see name-resolution plugin), and the pin's own name already
 #: appears as a selectable alias via the Pin.save() name/alias invariant.
@@ -49,10 +48,10 @@ _SEEDABLE_VOTE_FIELDS = ("danger", "vulnerability")
 
 
 @dataclass(slots=True)
-class WikiCreationService:
-    """Create the community Wiki for a pin's Location, seeded from chosen pin fields."""
+class WikiShareService:
+    """Copy chosen fields, names and photos from a pin onto its Location's community Wiki."""
 
-    def create_for_pin(
+    def share_from_pin(
         self,
         pin: Pin,
         *,
@@ -74,7 +73,8 @@ class WikiCreationService:
             image_ids: PKs of the pin's own photos to also attach to the wiki.
 
         Returns:
-            Tuple of (Wiki, newly_official) - see ``WikiManager.claim_for_location``.
+            Tuple of (Wiki, shared) - `shared` is whether the caller chose
+            anything to contribute.
 
         Raises:
             ValueError: If the pin has no Location to attach a wiki to.
@@ -85,58 +85,36 @@ class WikiCreationService:
         include = {f for f in (include_fields or set()) if f in SEEDABLE_FIELDS}
         location: Location = pin.location
 
+        shared = bool(include or alias_ids or image_ids)
+
         with transaction.atomic():
-            wiki, newly_official = Wiki.objects.claim_for_location(location, pin.profile)
-            if newly_official:
-                for field in _SEEDABLE_VOTE_FIELDS:
-                    if field not in include:
-                        continue
-                    value = getattr(pin, field, 0)
-                    if value:
-                        WikiStatVote.objects.update_or_create(wiki=wiki, profile=pin.profile, field=field, defaults={"value": value})
-                self._seed_aliases(pin, wiki, alias_ids or set())
-                self._seed_photos(pin, wiki, image_ids or set())
+            # Ordinarily a no-op: the page was created when the pin was, by
+            # tasks.ensure_wiki_for_location. It creates here only when that
+            # task has not landed yet, which is a race rather than a workflow.
+            wiki, created = Wiki.objects.get_or_create_for_location(location)
+
+            # Runs on every share, not just the first. That is the difference
+            # between this and the create button it replaced: contributing is
+            # something a person does repeatedly, and there is no longer a
+            # one-time creation moment to hang it off.
+            for field in _SEEDABLE_VOTE_FIELDS:
+                if field not in include:
+                    continue
+                value = getattr(pin, field, 0)
+                if value:
+                    WikiStatVote.objects.update_or_create(wiki=wiki, profile=pin.profile, field=field, defaults={"value": value})
+            self._seed_aliases(pin, wiki, alias_ids or set())
+            self._seed_photos(pin, wiki, image_ids or set())
+            if created:
+                # Naming stays a creation-time act. Renaming a page other
+                # people read because somebody shared a photo to it would be a
+                # side effect nobody asked for.
                 self._name_from_pin(pin, wiki, alias_ids or set())
             # Link the pin (and any of the user's other pins on this location
             # that aren't linked yet) to the community wiki.
             Pin.objects.filter(pk=pin.pk).update(wiki=wiki)
 
-        def _enqueue() -> None:
-            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-            from urbanlens.dashboard.tasks import enrich_wiki_location
-
-            safely_enqueue_task(enrich_wiki_location, wiki.pk)
-
-        def _seed_article() -> None:
-            # Covers the case where a Wikipedia article was already matched
-            # and cached for this location *before* the wiki existed to seed
-            # (see models.cache.signals for the other trigger - a Wikipedia
-            # match caching *after* the wiki already exists).
-            from urbanlens.dashboard.services.wiki.wiki_seed import seed_wiki_article_from_wikipedia
-
-            seed_wiki_article_from_wikipedia(location)
-
-        def _seed_building_wikis() -> None:
-            # A wiki for a multi-building property describes the grounds; the
-            # confidently-known buildings become child wikis by default, the
-            # same structure the pin side builds (see services.pins.auto_nest).
-            # Ambiguous buildings (unresolved overlap) wait for a person.
-            from urbanlens.dashboard.plugins.builtin.parcel_buildings import confident_buildings
-            from urbanlens.dashboard.services.locations import site_scope
-            from urbanlens.dashboard.services.pins import pin_restructure
-
-            confident = confident_buildings(site_scope.parcel_buildings(location) or [])
-            if len(confident) >= site_scope.MULTI_BUILDING_THRESHOLD:
-                pin_restructure.mirror_buildings_to_wiki(pin, confident, pin.profile)
-
-        if newly_official:
-            # Re-running enrichment here is safe even for a promoted draft
-            # that was already enriched by ensure_draft_wiki_for_location -
-            # enrich_wiki_location only ever fills in what's still missing.
-            transaction.on_commit(_enqueue)
-            transaction.on_commit(_seed_article)
-            transaction.on_commit(_seed_building_wikis)
-        return wiki, newly_official
+        return wiki, shared
 
     def _name_from_pin(self, pin: Pin, wiki: Wiki, alias_ids: set[int]) -> None:
         """Name a newly-created wiki after the place, not its postal address.

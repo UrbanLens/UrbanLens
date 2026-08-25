@@ -183,6 +183,41 @@ if [ "$FAST" -eq 1 ]; then
     if [ "$FRESH_DB" -eq 1 ]; then
         DB_FLAG="--create-db"
         echo "==> rebuilding the reusable database '$DB_NAME'"
+        # --create-db alone cannot recover a half-built database. Interrupt a
+        # run mid-migration and the schema change is applied but unrecorded, and
+        # the killed process leaves a session holding the database open - so the
+        # drop fails, the rebuild silently becomes a reuse, and every subsequent
+        # run dies in fixture setup with "column ... already exists" wearing a
+        # pytest internal assertion as its error. That was misfiled as a flaky
+        # transient once already. Terminate and drop first, so "fresh" is true.
+        # -i, or the heredoc never reaches python's stdin and it exits 0 having
+        # read nothing - a silent no-op that looks exactly like success.
+        docker exec -i -e DJANGO_SETTINGS_MODULE=urbanlens.UrbanLens.settings.test "$CONTAINER" /app/.venv/bin/python - "$DB_NAME" <<'DROP_DB'
+import sys
+
+import django
+
+django.setup()
+from django.db import connection
+
+name = sys.argv[1]
+params = connection.get_connection_params()
+# psycopg2 spells it "dbname"; Django's params carry the test database, and
+# a session cannot drop the database it is connected to.
+params.pop("database", None)
+params["dbname"] = "postgres"
+# Not `with connection.Database.connect(...)`: in psycopg2 that context
+# manager opens a *transaction*, and DROP DATABASE cannot run inside one.
+maintenance = connection.Database.connect(**params)
+try:
+    maintenance.autocommit = True
+    with maintenance.cursor() as cursor:
+        cursor.execute("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s", [name])
+        cursor.execute(f'DROP DATABASE IF EXISTS "{name}"')
+finally:
+    maintenance.close()
+print(f"    dropped '{name}' if it existed", flush=True)
+DROP_DB
     else
         DB_FLAG="--reuse-db"
         # --reuse-db does not apply new migrations to an existing database, so a

@@ -36,7 +36,7 @@ class DemoLocationRoundTripTests(TestCase):
     def _publish_a_location(self) -> Location:
         location = baker.make(Location, latitude="41.700000", longitude="-73.900000", google_place=None, official_name="Passed Place")
         baker.make(PublicPinCandidate, location=location, status=PublicPinCandidateStatus.PASSED)
-        Wiki.objects.create(location=location, name="Passed Place", officially_created=True)
+        Wiki.objects.create(location=location, name="Passed Place")
         return location
 
     def _run_round_trip(self) -> None:

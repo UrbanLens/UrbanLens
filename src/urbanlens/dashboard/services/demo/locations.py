@@ -154,7 +154,7 @@ def import_location_entries(entries: list[dict[str, Any]]) -> tuple[int, int]:
 
             wiki, _ = Wiki.objects.get_or_create(
                 location=location,
-                defaults={"name": wiki_data.get("name") or entry.get("official_name") or "", "officially_created": True},
+                defaults={"name": wiki_data.get("name") or entry.get("official_name") or ""},
             )
             # Top up rather than replace: an alias a demo visitor added during
             # their session is theirs, and a refresh should not delete it.

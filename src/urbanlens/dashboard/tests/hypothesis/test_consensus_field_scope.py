@@ -52,17 +52,18 @@ class ConsensusApplyAnswerScopeTests(TestCase):
         self.assertEqual(self.wiki.name, "Mill Complex", "the answer the round decided did not land")
         self.assertEqual(self.wiki.description, "Edited while the round ran", "applying a consensus answer reverted a concurrent edit")
 
-    def test_applying_an_answer_does_not_reset_another_writer_s_flag(self) -> None:
+    def test_applying_an_answer_does_not_reset_another_writers_field(self) -> None:
         stale = self._round_snapshot()
 
-        Wiki.objects.filter(pk=self.wiki.pk).update(viewed_by_other=True)
+        photo = baker.make("dashboard.Image", wiki=self.wiki)
+        Wiki.objects.filter(pk=self.wiki.pk).update(cover_photo=photo)
 
         strategy = get_strategy(ConsensusFieldKind.WIKI_DESCRIPTION)
         strategy.apply_answer(stale, "Agreed description", self.profile, None)
 
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.description, "Agreed description")
-        self.assertTrue(self.wiki.viewed_by_other, "a consensus answer reset a flag owned by a different writer")
+        self.assertEqual(self.wiki.cover_photo_id, photo.pk, "a consensus answer reset a field owned by a different writer")
 
     def test_pin_type_still_records_that_it_was_user_provided(self) -> None:
         """The setter assigns two columns; scoping to the named field alone would drop one."""

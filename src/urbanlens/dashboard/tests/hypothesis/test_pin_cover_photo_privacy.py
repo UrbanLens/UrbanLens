@@ -79,7 +79,16 @@ class PinCoverPhotoEligibilityTests(TestCase):
         self.assertEqual(self.pin.cover_photo_id, own_image.pk)
 
     def test_visible_photo_from_the_same_location_is_still_accepted(self) -> None:
-        """The Location half of the rule keeps working for photos the viewer may see."""
+        """The Location half of the rule keeps working for photos the viewer may see.
+
+        "May see" is two gates, not one: the owner has to have shared the photo,
+        and their setting has to admit this viewer. This test used to open the
+        second only, which passed while a photo nobody had shared was reachable
+        by anyone the setting happened to admit.
+        """
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        Image.objects.filter(pk=self.other_image.pk).update(wiki=baker.make(Wiki, location=self.location))
         self.other_profile.photo_upload_visibility = VisibilityChoice.ANYONE
         self.other_profile.save(update_fields=["photo_upload_visibility"])
         self.profile.viewer_photo_filter = VisibilityChoice.ANYONE

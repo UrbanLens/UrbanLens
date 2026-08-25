@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import random
 from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.consensus.model import ConsensusFieldKind
@@ -317,16 +318,21 @@ def _photo_find_known(pool: Iterable[Wiki]) -> list[Wiki]:
 
 
 def _photo_build_round(wiki: Wiki) -> RoundContent | None:
-    image = wiki.images.filter(latitude__isnull=True, longitude__isnull=True).order_by("?").first()
-    if image is None:
+    # .all() and a Python pick, not .filter().order_by("?"): the queryset form
+    # goes back to the database, which both defeats eligibility's prefetch and -
+    # since that prefetch is where photo visibility is applied - hands back
+    # photos the player's uploaders have not admitted them to.
+    candidates = [image for image in wiki.images.all() if image.latitude is None and image.longitude is None]
+    if not candidates:
         return None
-    return RoundContent(target_image=image)
+    return RoundContent(target_image=random.choice(candidates))  # noqa: S311 - picking a round, not a key
 
 
 def _photo_build_check_round(wiki: Wiki) -> tuple[RoundContent, Any] | None:
-    image = wiki.images.filter(latitude__isnull=False, longitude__isnull=False).order_by("?").first()
-    if image is None:
+    candidates = [image for image in wiki.images.all() if image.latitude is not None and image.longitude is not None]
+    if not candidates:
         return None
+    image = random.choice(candidates)  # noqa: S311 - picking a round, not a key
     # Guaranteed non-None by the filter() above - Image.latitude/longitude
     # are ordinary nullable fields a queryset filter can't narrow statically.
     if image.latitude is None or image.longitude is None:

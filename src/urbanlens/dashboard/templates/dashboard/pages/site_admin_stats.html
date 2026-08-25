@@ -1,5 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% load vendor_assets %}
 {% block hero %}
 {% include "dashboard/partials/ui/_page_hero.html" with icon="bar_chart" title="Site Statistics" subtitle="Usage metrics and server health at a glance." modifier="top" %}
 {% endblock %}
@@ -138,7 +139,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% vendor_asset "chartjs_js" %}
 <script>
 (function () {
     var isDark = document.getElementById('html-root').getAttribute('data-theme') === 'dark';

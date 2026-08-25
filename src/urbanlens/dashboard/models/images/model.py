@@ -10,6 +10,7 @@ from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, C
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
+from urbanlens.dashboard.models.fields import EncryptedJSONField
 from urbanlens.dashboard.models.images.queryset import ImageManager
 
 if TYPE_CHECKING:
@@ -58,6 +59,9 @@ class ImageSource(TextChoices):
     """
 
     UPLOAD = "upload", "Upload"
+    #: A URL somebody pasted, whose bytes were then fetched and stored like any
+    #: upload. The address itself is kept in ``source_url``.
+    LINKED_URL = "linked_url", "Linked URL"
     YELP = "yelp", "Yelp"
     GOOGLE_IMAGES = "google_images", "Google Images"
     GOOGLE_MAPS = "google_maps", "Google Maps"
@@ -198,6 +202,14 @@ class Image(abstract.FrontendDashboardModel):
     # left blank rather than guessed at.
     author = CharField(max_length=255, null=True, blank=True)
     source_url = URLField(max_length=500, null=True, blank=True)
+    #: The address the bytes themselves came from, when that differs from the page
+    #: above. Both are kept because they rot independently: a provider's landing
+    #: page can be reorganised - or be a feed that simply moves on, as a "recent
+    #: photos" page does - while the file stays exactly where it was, and the file
+    #: can be replaced while the page still describes the picture. Storing one
+    #: threw the other away; materialize_media_item was handed both and persisted
+    #: only the page.
+    source_media_url = URLField(max_length=500, null=True, blank=True)
     copyright = CharField(max_length=255, null=True, blank=True)
     # Set only on rows materialized from the Media gallery's transient provider
     # results (see services.media.media_materialize) - the *raw* provider panel key
@@ -218,6 +230,20 @@ class Image(abstract.FrontendDashboardModel):
     # Kept separate from the `location` FK so each photo can scatter at its exact
     # capture point on the map layer; `location` records which shared place the
     # photo belongs to.
+    #
+    # KNOWN OMISSION: one pair of columns holds two different provenances - what
+    # EXIF reported, and where a person put it - with nothing in the schema
+    # recording which a given row holds. Two consequences worth knowing before
+    # writing here:
+    #   * The EXIF answer survives only in `exif_data["GPSInfo"]`, and only for
+    #     profiles that did not opt out of location metadata (tasks.py pops
+    #     GPSInfo when strip_location is set).
+    #   * tasks.process_image_upload rewrites these columns unconditionally from
+    #     EXIF, and a dozen call sites can re-enqueue it, so a re-run replaces a
+    #     manually corrected position with the EXIF one.
+    # TODO: add exif_latitude/exif_longitude (or a coordinate_source field)
+    # before any NEW writer is introduced. Placing a photo from the floorplan
+    # editor is deliberately NOT that writer until this exists.
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     # Crowd-sourced approximation of this photo's own position, from
@@ -237,6 +263,13 @@ class Image(abstract.FrontendDashboardModel):
     # angle, over time" comparison UI - not read or displayed anywhere yet.
     # Same GPS-IFD-sourced privacy opt-out as latitude/longitude: never
     # extracted for a profile with visit-history tracking off.
+    #
+    # TODO: EXIF is currently the only writer - there is no UI that sets a
+    # heading. The planned first consumer is a photo attached to a floorplan
+    # item (FloorplanReference), pointed at the thing it depicts. That UI has to
+    # declare its own reference frame, because GPSImgDirectionRef - true versus
+    # magnetic north - is not preserved (services.media.images.extract_gps_direction),
+    # so a manually set heading and an EXIF one are not directly comparable.
     direction = DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     # SHA-256 hex digest of the uploaded file, used to reject duplicate uploads.
     # Nullable because rows predating this field are backfilled lazily (in
@@ -261,10 +294,17 @@ class Image(abstract.FrontendDashboardModel):
     # never retroactively push them over quota.
     quota_exempt_reason = CharField(max_length=20, blank=True, default="", choices=QuotaExemption.choices)
     # Full EXIF metadata captured from the original upload BEFORE any
-    # downscaling or format conversion, so nothing is lost if the stored file
-    # is re-encoded. Keys are human-readable tag names; values are
-    # JSON-sanitized (rationals/bytes stringified).
-    exif_data = JSONField(null=True, blank=True)
+    # downscaling or format conversion. Keys are human-readable tag names;
+    # values are JSON-sanitized (rationals/bytes stringified).
+    #
+    # Encrypted, and the only copy: the stored file has its EXIF removed on the
+    # way in (see services.media.images.downscale_stored_image), so this column
+    # holds what the photo no longer carries - camera make, model and serial,
+    # and, unless the uploader opted out of location, where the shot was taken.
+    # fail_soft because there is nothing to re-fetch it from: a key mismatch
+    # must degrade this one field rather than break every gallery that loads a
+    # photo row. Never filter on its contents; ciphertext does not compare.
+    exif_data = EncryptedJSONField(null=True, blank=True, fail_soft=True)
     # Extracted text for a document upload: the PDF's native text layer plus
     # OCR output from any embedded raster images (see services.media.documents).
     # Searched by the Media section's search box (labels__name, caption, etc.)
@@ -309,6 +349,24 @@ class Image(abstract.FrontendDashboardModel):
         pin_suggestion_id: int | None
 
     objects = ImageManager()
+
+    @property
+    def attribution_url(self) -> str:
+        """Where to send a person to see this photo in its original context.
+
+        Prefers the provider's page, which is the one meant to be read by a
+        human, and falls back to the file itself when there is no page.
+        """
+        return self.source_url or self.source_media_url or ""
+
+    @property
+    def origin_media_url(self) -> str:
+        """Where the bytes came from, for re-fetching or comparison.
+
+        The opposite preference to :attr:`attribution_url`: a landing page is no
+        use for fetching an image, so the direct address wins when there is one.
+        """
+        return self.source_media_url or self.source_url or ""
 
     @property
     def display_url(self) -> str:

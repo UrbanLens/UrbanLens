@@ -43,7 +43,7 @@ class TentativeAnswerRaceTests(TransactionTestCase):
         self.addCleanup(enqueue.stop)
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.location = Location.objects.create(latitude=40.0, longitude=-74.0)
-        self.wiki = baker.make(Wiki, location=self.location, name="Powerhouse", officially_created=True)
+        self.wiki = baker.make(Wiki, location=self.location, name="Powerhouse")
 
     def _round_with_answer(self, text: str) -> tuple[ConsensusRound, ConsensusAnswer]:
         round_ = baker.make(ConsensusRound, wiki=self.wiki, field_kind=ConsensusFieldKind.WIKI_NAME)

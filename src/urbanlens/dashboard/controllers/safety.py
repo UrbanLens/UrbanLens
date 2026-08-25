@@ -42,6 +42,7 @@ from urbanlens.dashboard.services.visits.safety import (
     default_contacts_as_input,
     delete_checkin,
     find_community_wiki,
+    find_visible_community_wiki,
     get_active_checkin,
     get_active_checkins,
     get_or_create_preference,
@@ -68,6 +69,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from django.http import HttpRequest
+    from django.http.response import HttpResponseBase
 
 logger = logging.getLogger(__name__)
 
@@ -688,7 +690,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         checkin.ensure_slug()
         _ensure_markup_map(checkin, owner)
         contacts = list(checkin.contacts.all())
-        destination_wiki = find_community_wiki(checkin.destination_latitude, checkin.destination_longitude)
+        destination_wiki = find_visible_community_wiki(checkin.destination_latitude, checkin.destination_longitude, owner)
         last_wiki_edit, wiki_editor_count = wiki_notify_stats(destination_wiki) if destination_wiki else (None, 0)
         return render(
             request,
@@ -703,6 +705,10 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                 "contact_picker_locked": checkin.notifications_locked or viewer_is_partner,
                 "connections": get_connections(owner),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
+                # No visibility filtering: reaching the check-in is the whole
+                # gate here, and a contact identified only by email has no
+                # profile for a visibility setting to be evaluated against.
+                "photos": Image.objects.filter(safety_checkin=checkin).exclude(image="").order_by("-created"),
                 "destination_wiki": destination_wiki,
                 "last_wiki_edit": last_wiki_edit,
                 "wiki_editor_count": wiki_editor_count,
@@ -758,6 +764,11 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             "dashboard/pages/safety/community_status.html",
             {
                 "checkin": checkin,
+                # Deliberately unscoped: gated on wiki_notified_at, so the
+                # check-in has already been posted to this wiki and the
+                # association is its own content rather than a lookup. This
+                # page also serves signed-out contacts, who have no profile to
+                # scope by.
                 "wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude) if checkin.wiki_notified_at and not is_archived else None,
                 "map_attribution": _MAP_ATTRIBUTION,
                 "viewer_is_contact": is_contact,
@@ -1212,7 +1223,12 @@ class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
             lng = float(request.GET.get("destination_longitude", ""))
         except ValueError:
             lat = lng = None
-        wiki = find_community_wiki(lat, lng)
+        # Scoped to the viewer: this reads coordinates straight from the query
+        # string, so the unscoped lookup made it a wiki enumerator.
+        # get_or_create rather than the reverse accessor - see the matching note
+        # in map_overlays.OverlayMediaPickerView.
+        viewer, _ = Profile.objects.get_or_create(user=request.user)
+        wiki = find_visible_community_wiki(lat, lng, viewer)
         last_wiki_edit, wiki_editor_count = wiki_notify_stats(wiki) if wiki else (None, 0)
         return render(
             request,
@@ -1529,12 +1545,55 @@ class SafetyContactPortalView(View):
                 "contact": contact,
                 "other_contacts": checkin.contacts.exclude(pk=contact.pk),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
+                # No visibility filtering: reaching the check-in is the whole
+                # gate here, and a contact identified only by email has no
+                # profile for a visibility setting to be evaluated against.
+                "photos": Image.objects.filter(safety_checkin=checkin).exclude(image="").order_by("-created"),
                 "map_attribution": _MAP_ATTRIBUTION,
                 "is_archived": is_archived,
                 "can_unlock": False,
                 "archive_at": checkin.archive_scheduled_at,
             },
         )
+
+
+class SafetyContactPhotoView(View):
+    """Serve one check-in photo to an emergency contact, by magic-link token.
+
+    An emergency contact often has no account - that is the point of the portal -
+    so the login-gated media path can never reach them, and the photos on a
+    check-in are exactly what tells somebody whether to worry. The token is the
+    credential, and it is scoped to its own check-in: a contact on one check-in
+    cannot address a photo on another.
+
+    Deliberately not routed through ``photo_upload_visibility``. That setting
+    filters an audience the uploader published to; naming somebody as your
+    emergency contact is not publishing, and most contacts have no profile for
+    the setting to evaluate against.
+
+    GET /safety/contact/<uuid:token>/photo/<int:image_id>/
+    """
+
+    def get(self, request: HttpRequest, token: str, image_id: int) -> HttpResponseBase:
+        """Stream one photo belonging to the token's own check-in.
+
+        Args:
+            request: Incoming HTTP request.
+            token: The contact's magic-link token.
+            image_id: Primary key of the requested photo.
+
+        Returns:
+            The image bytes, or an nginx hand-off.
+
+        Raises:
+            Http404: Invalid token, or a photo that is not on this check-in.
+        """
+        from urbanlens.dashboard.controllers.media import resolve_media_path, serve_media_file
+
+        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin").by_token(token))
+        image = get_object_or_404(Image.objects.filter(pk=image_id, safety_checkin=contact.checkin).exclude(image=""))
+        rel_path, full_path = resolve_media_path(image.image.name)
+        return serve_media_file(rel_path, full_path)
 
 
 class SafetyContactMarkSafeView(View):

@@ -181,7 +181,11 @@ class WikiOptionEndpointTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.client.force_login(self.user)
-        _location_with_wiki()
+        location, _wiki = _location_with_wiki()
+        # The viewer has to have pinned the place, or the toggle correctly
+        # declines to name a wiki they cannot reach - see
+        # test_safety_wiki_option_oracle.py.
+        baker.make("dashboard.Pin", profile=self.user.profile, location=location, parent_pin=None)
 
     def test_shows_toggle_when_destination_has_a_wiki(self):
         response = self.client.get(reverse("safety.checkin.wiki_option"), {"destination_latitude": WIKI_LAT, "destination_longitude": WIKI_LNG})

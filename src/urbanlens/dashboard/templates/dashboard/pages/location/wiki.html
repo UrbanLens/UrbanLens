@@ -1,14 +1,12 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load static %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"
-    integrity="sha384-JP5UPxIO2Tm2o79Fb0tGYMa44jkWar53aBoCbd8ah0+LcCDoohTIYr+zIXyfGIJN" crossorigin="anonymous"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
+{% vendor_asset "leaflet_draw_css" %}
+{% vendor_asset "leaflet_draw_js" %}
 <script src="{% static 'js/cover-hero.js' %}"></script>
 <script src="{% static 'js/page-tabs.js' %}" defer></script>
 <script src="{% static 'js/article-editor.js' %}" defer></script>
@@ -533,6 +531,14 @@
     // -- Suggest-edits form --------------------------------------------------
     document.getElementById('wiki-edit-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        // Sends every field, not the ones that changed. The server diffs the
+        // payload against what this viewer was shown, so nothing is clobbered
+        // today - but that is a server-side repair of a client-side problem,
+        // and it stops working once edits are queued offline and merged: an
+        // unchanged carried-along value is indistinguishable from a deliberate
+        // re-assertion of the same value, so every save becomes a conflict on
+        // every field. See "forms submit and save every field" in
+        // docs/PROBLEMS.md - this form is one of 28.
         const data = {};
         new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
         fetch("{% url 'location.wiki.edit' location.slug %}", {
@@ -867,35 +873,6 @@
         cards.forEach(registerAutoDismiss);
         setTimeout(tryShow, 900);
         document.body.addEventListener('htmx:afterSettle', function () { if (!document.querySelector('.page-onboarding-card')) setTimeout(tryShow, 250); });
-    }());
-</script>
-<script>
-
-    {% comment %}
-    Picking an existing Media-gallery item as a map overlay. The manage-overlays
-    dialog is server-rendered so it can't import from the map bundle; it calls
-    this by name. Reads the tile's own data-* attributes (the same ones the
-    lightbox and album-add flows use) rather than duplicating the gallery's
-    knowledge of where an item came from.
-    {% endcomment %}
-    (function () {
-        window.ulMapOverlayPickFromMedia = function () {
-            var grid = document.getElementById('media-gallery-grid') || document.getElementById('wiki-media-grid');
-            var tile = grid && grid.querySelector('.media-item.is-selected, .media-item.media-item--relevant');
-            if (!tile) tile = grid && grid.querySelector('.media-item');
-            if (!tile) {
-                if (window.toastr) toastr.info('Open the Media section and pick a photo first.');
-                return;
-            }
-            document.getElementById('map-overlay-media-url').value = tile.dataset.mediaRemoteUrl || tile.dataset.mediaUrl || '';
-            document.getElementById('map-overlay-media-source').value = tile.dataset.mediaSource || '';
-            document.getElementById('map-overlay-media-page-url').value = tile.dataset.mediaPageUrl || '';
-            var note = document.getElementById('map-overlay-picked-media');
-            if (note) {
-                note.textContent = 'Using: ' + (tile.dataset.mediaCaption || tile.dataset.mediaSourceName || 'selected media item');
-                note.hidden = false;
-            }
-        };
     }());
 </script>
 {% endblock %}

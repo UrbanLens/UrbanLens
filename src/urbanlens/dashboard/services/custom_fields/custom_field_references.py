@@ -74,7 +74,7 @@ def referenceable_queryset(kind: str, profile: Profile) -> QuerySet:
         # resolve to distinct rows) - see visible_wiki_location_ids, the same
         # boundary-matching wiki_access.location_visible_to already uses for
         # whether a wiki page itself is reachable at all.
-        return Wiki.objects.filter(location_id__in=visible_wiki_location_ids(profile)).select_related("location")
+        return Wiki.objects.official().filter(location_id__in=visible_wiki_location_ids(profile)).select_related("location")
     if kind == "markup_map":
         return MarkupMap.objects.filter(profile=profile)
     if kind == "trip":

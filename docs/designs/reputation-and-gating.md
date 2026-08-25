@@ -1,8 +1,11 @@
 # Hidden reputation points, sensitivity-gated wiki content, and Facts reliability scoring
 
-**Status: DRAFT — needs Jess's input on the open questions in "Decisions needed" before any code
-lands.** Written 2026-08-21 from a transcribed voice memo (2026-08-20) plus a codebase survey; see
-`ROADMAP.md` UL-397/UL-398/UL-399 for the tracking tickets this design covers.
+**Status: REVISED 2026-08-24 — decisions settled, implementation started.** Written 2026-08-21
+from a transcribed voice memo (2026-08-20) plus a codebase survey, then reviewed 2026-08-24
+against `docs/PRIVACY_MODEL.md` and the nine access-control fixes that landed with it. That
+review found the original gating approach did not close the hole it was written for; see
+**Design review** immediately below, which supersedes the later sections wherever they disagree.
+See `ROADMAP.md` UL-397/UL-398/UL-399 for the tracking tickets this design covers.
 
 ## The problem
 
@@ -13,6 +16,471 @@ fix proposed is a hidden, never-user-visible reputation score that scales how mu
 new account sees, without restricting genuine community members. A second, related ask is
 extending the existing Facts reliability system so it can judge a source's trustworthiness by
 topic and geography instead of one global number.
+
+## Design review (2026-08-24) — read this before the sections below
+
+The design below was written 2026-08-21. Between then and now a privacy sweep closed nine
+access-control gaps and produced `docs/PRIVACY_MODEL.md`, which states the access model
+explicitly for the first time. Re-reading this design against that document surfaced one
+error serious enough to invalidate the original plan, plus a set of smaller corrections.
+**Where this section and the sections below disagree, this section wins.**
+
+### R1. The gate as designed does not close the hole it was written for
+
+The threat is: *pin a series of random addresses, see which ones have wikis, and you have
+confirmed which are real sites.* The design's answer is to scale **how much wiki detail** a
+low-reputation account sees.
+
+That does not work. Detail is not the oracle — **existence is**. A degraded wiki page still
+answers "yes, something is here." The probe succeeds in full, and the attacker never has to
+read a word of the content they were denied.
+
+Worse, it does not even require opening the wiki. Verified on this branch:
+
+- `templates/dashboard/partials/pins/_pin_detail_hero_body.html:57` branches on
+  `{% if pin.community_wiki %}` — a **"Community Wiki"** box with a live link when one
+  exists, a **"Create Community Wiki"** button when one does not.
+- `Pin.community_wiki` (`models/pin/model.py:738`) resolves through the *place*, so it is
+  true for anyone whose pin lands anywhere on the parcel.
+
+Pin an address, look at your own pin page, read the button text. That is the entire attack,
+and it costs one page load.
+
+**Correction:** below the threshold, a gated place must present as **undocumented** — as it
+would if nobody had ever contributed to it and this viewer were the first person there.
+
+*Corrected again 2026-08-24 (Jess).* An earlier draft of this section said "absent" and
+proposed withdrawing the wiki feature from the account entirely. That is wrong, and the
+distinction is the whole feature: **we are not hiding that a place exists. We are hiding that
+other explorers know about it and go there.** Removing the feature is *different behaviour*,
+which tells the viewer they are being throttled, which tells them something here is worth
+protecting and that they should change tactics. The camouflage is the **empty state**, and the
+wiki feature must go on working normally for the account everywhere.
+
+Two rules follow, and they are the ones to hold onto:
+
+> The gate must be **silent**. No messaging, no "unlock" copy, no visible difference in how the
+> site behaves for this account.
+
+> Visible content is **monotonically non-decreasing** per viewer. Content that appears and then
+> disappears — a reveal budget tripping, points being retracted — is a loud tell. This is what
+> makes durable per-wiki clearance (R7) load-bearing for concealment, not just anti-griefing.
+
+### R2. Sizing the gate by vulnerability turns it into a *sensitivity* oracle
+
+The design scales gate strictness by the wiki's community-voted `vulnerability`/`danger`
+composite. Combined with a per-place gate, that is strictly worse than the leak it replaces:
+pin fifty addresses, and the ones that behave differently are the ones the community has
+flagged as sensitive. The gate would rank targets for the attacker.
+
+**Correction — the governing rule for this whole feature:**
+
+> A gated place must be indistinguishable from a place nobody has documented.
+
+*Corrected 2026-08-24 (Jess).* This originally read "the gate may be visible to the user; it
+must never vary by place", and proposed being transparent about the throttle. Both halves were
+wrong. Per-place variation is **fine** — it is what the feature *is* — because the camouflage
+is the empty state, and most addresses a prober pins genuinely are undocumented, so gated and
+undocumented places are the same picture. What must never be visible is the *gate itself*.
+
+Graded hiding survives this, with one constraint: every level must look like a state a real
+wiki could naturally be in. No floorplans reads as "nobody mapped it"; no comments as "nobody
+commented". So the vulnerability rating can still scale how much is withheld.
+
+It follows that unrated wikis must fail **closed**. If only rated wikis gate, the absence of
+votes is itself the signal.
+
+### R3. ~~Two thresholds, only one of which is per-place~~ — superseded
+
+*Superseded 2026-08-24 by the corrected R1/R2 and by R14.* This section originally proposed a
+site-wide uniform `T_community` below which the community layer vanished for the account, plus
+a per-wiki `T_detail` above it. The uniform tier is dead: withdrawing the feature account-wide
+is exactly the "different behaviour" the corrected R1 rules out.
+
+What survives is the *grading*. A single per-place decision — the viewer's standing against
+this wiki's vulnerability/danger composite — chooses how much of the community's contribution
+is withheld, and every level presents as a plausible organic wiki state. One threshold, applied
+per place, not two thresholds in sequence.
+
+### R4. Prefer a low threshold plus a reveal budget over a high threshold
+
+A high `T_community` punishes genuine newcomers, who are the majority. The attack signature
+is not low reputation, it is **volume**: nobody legitimately checks four hundred addresses.
+
+Ship a low `T_community` that ordinary use clears in a session or two, and pair it with a
+per-account budget on distinct **new** wiki reveals per window. Copy
+`services/security/email_safety.py` wholesale for this — it already does cache reservation
+plus durable log rows over hour/day/month windows, with caps resolvable from `SiteSettings`
+and overridable per subscription role.
+
+### R5. The gate must be strictly subtractive, and that must be structural
+
+The clear failure mode is reputation quietly becoming a fifth clause of the place-domain
+rule — "enough points" granting a wiki the viewer never earned. The gate must only ever
+narrow a decision the existing rules already made, never widen one. Enforced by construction
+(the gate takes an already-computed result and removes from it) and by a test that asserts no
+input to the gate can turn a `False` into a `True`.
+
+### R6. Never gate a user's own content, or the two consent exceptions
+
+`ImageQuerySet.visible_to` ORs `Q(profile=viewer_profile)` before anything else; the gate
+belongs strictly inside the *shared* term. The two exceptions ruled on 2026-08-24 —
+direct messages, and safety check-ins including signed-out token holders — are consent-based
+and must not acquire a reputation check. A signed-out safety contact has no profile and
+therefore no score; any gate that reads a score must be unreachable from that path.
+
+On friends: a friend's contribution to a vulnerable wiki is still community content about a
+place, and exempting it hands anyone with an established account an unlimited supply of
+vouched sock puppets. The better shape is to let being **invited** by an established account
+feed the score — bounded by a per-inviter cap so a puppet farm is throttled — rather than
+punching a hole in the gate. Content a friend has directed at the viewer *individually* (a
+DM, a check-in) is already exempt by R6's first paragraph.
+
+### R7. Retraction must never revoke access already granted
+
+If reverting an edit can drop someone below a threshold, then reverting a rival's edits
+becomes a way to lock them out of wikis they were already reading. The score becomes a
+weapon.
+
+**Correction:** clearance is durable per `(profile, wiki)` once earned. Losing points stops
+*new* reveals; it never takes back an existing one. This must be its own record, **not** a
+`PlaceAccessGrant` — that model is clause 4 of the access rule itself, and reusing it would
+violate R5.
+
+### R8. Amplification must be weighted by the amplifier's own standing
+
+The design weights interaction by social distance only. A pool of fresh accounts upvoting
+each other is then the cheapest attack on the entire system, and it is cheaper than the
+attack the system was built to stop. Amplification from a zero-reputation account must be
+worth approximately zero.
+
+### R9. "Earn your way in locally", as written, is itself an oracle
+
+The design has a below-threshold user's markup land on a private layer *if markup already
+exists*, and grants thread visibility for the *first* comment on a wiki. Both branch on
+whether content already existed — so the user learns whether it did.
+
+**Correction: make it unconditional.** A below-threshold user's markup *always* lands on a
+private layer; their comment is *always* visible to them and to repliers. Identical
+behaviour either way, no oracle — and materially simpler to build than the conditional
+version.
+
+### R10. The ledger is itself sensitive data
+
+An append-only table of `(actor, target, time)` is a per-user map of which sensitive places
+each person has engaged with — a dataset that does not exist today. The design makes it
+admin-visible.
+
+The admin dashboard must default to aggregates. A per-user drill-down that *names targets*
+is a new exposure and should not ship in v1. `docs/PRIVACY_MODEL.md` needs a row for it.
+
+### R11. Surfaces this design predates
+
+Written 2026-08-21; the floorplan editor was rebuilt over the following two days.
+`Floorplan.wiki` is documented as "visible to everyone who can see that wiki", and a plan now
+carries doors, **locks and lock state**, plus `SecurityIndicatorType` on markup already
+covering fence / camera / alarm / guard / locked / VPS.
+
+That is the most sensitive payload on a wiki, and it postdates the "what counts as
+sensitive" list below. It is also an argument for hooking the gate into **wiki access**
+rather than maintaining a per-field list: anything that inherits wiki visibility is covered
+the day it is added, without anyone remembering to add it.
+
+### R12. Two live oracles make the gate moot until they are fixed
+
+Found while reviewing, both pre-existing and both independent of this feature:
+
+1. **`SafetyCheckinWikiOptionView` (`controllers/safety.py:1192`, routed at
+   `urls.py:1740`) is an unguarded wiki enumerator.** `LoginRequiredMixin` only; it takes
+   arbitrary `destination_latitude`/`destination_longitude` from the query string and calls
+   `find_community_wiki`, which filters on `wiki__officially_created=True` and **nothing
+   else** — no viewer, no `location_visible_to`, no domain check. The template renders the
+   wiki's **name**, a **link**, **last-edited time** and **editor count**. Any logged-in
+   account can sweep coordinates and enumerate every official wiki in the database. This is
+   strictly more powerful than the attack this whole design targets, because it does not even
+   require creating a pin.
+2. **`officially_created` is enforced per call site, not by the queryset**, and roughly nine
+   surfaces omit it — most consequentially `Location.display_name`
+   (`models/location/model.py:296`), which reads `self.wiki` unconditionally and so puts the
+   *draft's* enrichment-resolved name on every map pin while the pin page still offers
+   "Create Community Wiki". `WikiQuerySet` has no `official()` scope; adding one and routing
+   through it closes the class rather than the instance.
+
+**Neither is caused by this design, and neither can wait for it.** They ship first.
+
+### R13. The two goals are separable — ship the gate before the fair-scoring system
+
+The need/quality/amplification machinery exists to reward contribution *fairly*. The gate only
+needs to answer "is this a real participant, or an account minted ninety seconds ago" — which
+a handful of coarse, hard-to-forge signals answer well. Building all of the scorers before any
+gating means the privacy hole stays open for the entire build.
+
+Reversed below: ledger with a small signal set, then the gate, then scorer enrichment.
+
+### R14. Filtering cannot reproduce the empty state — see the tells audit
+
+> **Partly withdrawn — read R15 immediately after this.** The audit's individual
+> findings stand and are worth acting on; two of the conclusions drawn from them here
+> do not.
+
+A six-channel audit of this branch (`reputation-gating-tells.md`, 82 verified findings) asked
+what can still distinguish a gated wiki from an undocumented place. Its conclusion is that the
+approach in this document — withhold community content from the existing wiki — **cannot work
+on this codebase**, for three independently sufficient reasons:
+
+1. **The empty state is a different row, not a filtered one.** A genuine first arrival *owns*
+   the wiki: `created_by` is them, the delete button renders, their stat vote *is* the
+   composite, their edit is the entire history, `wikis_created` increments, and the create
+   endpoint answers `created: true`. Reproducing that by filtering somebody else's row means
+   faking attribution, a composite, a delete affordance that must then appear to succeed, and
+   an achievement delta — each a lie the write path eventually contradicts.
+2. **Uniqueness makes the write path undeniable.** `Article.wiki` is a `OneToOneField`
+   (verified, `models/article/model.py:65`), so the gated viewer's "blank canvas" *is* the
+   community's row and the first save conflicts every time. Aliases and links are unique per
+   wiki. A collision cannot be made to look like a creation while the created thing also
+   persists.
+3. **Warm shared state and background-work asymmetry sit outside the request path.** Other
+   users already warmed `LocationCache`, set the coordinate-keyed slides ready-marker and ran
+   boundary generation — and `get_or_create_draft_for_location` short-circuits on
+   `existing_for_location` (verified, `models/wiki/queryset.py (draft/claim code, removed 2026-08-25)`), so a gated account gets
+   **no draft and no enrichment run of its own**. That is a data-model asymmetry, not a
+   serializer one.
+
+The audit's recommended shape is a **copy-on-write shadow wiki**: route a gated viewer's whole
+interaction, read *and* write, to a private wiki row on their own Location, created and
+enriched exactly as a first arrival's would be; merge it into the community row when they
+clear the threshold. Every affordance is then genuine rather than simulated, and classes A,
+D, E, F and G close by construction instead of by vigilance.
+
+**Two residual risks no design removes, to be stated in the doc rather than discovered later:**
+un-gating is itself an oracle (probe cheaply, earn in, diff), and an attacker can age or rent
+a second account. The honest success criterion is *raising the cost of bulk automated
+probing*, not a security boundary.
+
+### R15. Corrections to R14 (Jess, 2026-08-24)
+
+R14 drew two conclusions harder than the evidence supported. Both are withdrawn.
+
+**"Article.wiki is a OneToOne so the write path is undeniable" is not an argument against
+this feature.** It is a gap the codebase has anyway. Per-viewer visibility already means the
+wiki renders differently to different people, *including at the moment they choose to edit
+it*; offline editing in the mobile client makes colliding edits to any field, article
+included, an ordinary occurrence rather than an exotic one; and a future distributed setup
+would force the same conclusion again. Articles need **merge mechanics** regardless of
+whether a reputation gate ever ships.
+
+The intended direction, noted here so it is not re-derived: distil edits into **facts**,
+which already carry sources and confidence (`dashboard/models/facts/`, with
+`recompute()` doing trust-weighted, decaying, conflict-aware resolution and a `CONTESTED`
+state for genuine disagreement), and resolve merges against that substrate — potentially
+with an AI agent, which the fact representation exists to make tractable. Not scoped here.
+The point is that this is a general problem with a general solution, not a cost this feature
+has to carry alone.
+
+**"Completely unaware is not achievable" was wrong.** The claim rested on treating the
+gated view as something that must be *fabricated*. It does not: **the variance already
+exists.** Visibility settings already mean two viewers of the same wiki see different photos,
+different comments, different everything — a wiki that looks bare because its contributors'
+settings exclude you is an ordinary, common state, not a suspicious one. The gate is another
+input to a per-viewer computation the wiki already performs, not a new illusion layered over
+a shared row. Shadow wikis would produce correct behaviour but are not needed for it, and
+their merge cost is real.
+
+**"A second aged account defeats any version of this" was also wrong**, and wrong in an
+interesting way. It assumed the gate keys on account identity or age. It should key on
+**behaviour**, which makes the outcome deterministic: two accounts doing the same thing about
+the same pin see the same bare wiki. Registering a fresh account to re-check a place
+therefore gains nothing, which is precisely the case that matters most — somebody outside the
+hobby checking one spot. Bypassing it requires genuinely earning standing, which is the tax
+working as designed rather than a hole in it.
+
+Two cases the design should be held to, in Jess's framing:
+
+1. **Register, immediately check one pin.** Must be reliable. Multiple accounts must not help,
+   because the same behaviour yields the same bare wiki every time.
+2. **Polling many places at once.** Does not need to be airtight. Most pins a prober adds have
+   no wiki at all, so the pattern surfaces quickly — plausibly before they happen to hit a
+   real spot — and because the most vulnerable places conceal first, similarly-behaving users
+   converge on similar states. Not fully guaranteed, and accepted as such: the goal is to curb
+   the behaviour, not to prove a bound.
+
+### R16. The concealment specification (Jess, 2026-08-24) — this is the design
+
+Supersedes R1's "resolve as absent", R3's tiers, and R14 entirely. **The goal, in Jess's
+words:**
+
+> Make "users have gone to this place and edited this wiki" indistinguishable from "no users
+> have gone to this place or edited this wiki".
+
+Everything else is in service of that sentence. In particular, a concealed wiki must **not**
+pretend not to exist: a wiki row is created automatically for every place, so absence is
+itself a tell.
+
+> The wiki should look like it exists in a state that it would plausibly have had when it was
+> first created.
+
+**The rules:**
+
+1. **Hide user-contributed content.**
+2. **Show automatically fetched content** — provider and enrichment data (Google, Wikipedia,
+   REData, weather, imagery, geocoding). It is public information the site relays, and a
+   brand-new wiki would already carry it.
+3. **Always unset security indicators**, whether they came from a user or an automatic source.
+4. **Always hide all markup maps and map markup.**
+5. Assess every other piece of information on the wiki against the goal.
+
+The viewer's own content is never concealed from them, as everywhere else in the app.
+
+**The unclaimed-place baseline — resolved (Jess, 2026-08-24).** An earlier draft of this
+section treated "Create Community Wiki" as the intended state for a place nobody has visited,
+and asked whether concealed wikis should match it. That was a misreading of the code.
+
+Every place gets a wiki. `tasks.ensure_draft_wiki_for_location` runs in the background off
+the pin's post_save, so the only reason `get_for_location` returns None — and the only reason
+the create affordance exists at all — is the window before that task lands. **In practice a
+user should essentially never see a create button**, and a TODO already exists to render it
+identically to the view button so the distinction is invisible from the outside.
+
+So there is no baseline mismatch to design around, and no create-path work: the target state
+for a concealed wiki is simply *a wiki that exists and renders as it would have when first
+created*. The claimed/unclaimed distinction is an implementation artefact that the product is
+already moving to hide, not a state concealment has to imitate.
+
+One thing that follows and is worth holding onto: because that button is a race-window
+artefact, **anything that makes it appear more often for a concealed viewer than for anyone
+else would be a tell.** Concealment must not route through `get_for_location` returning None.
+
+### R17. Revision-based concealment — rejected globally, adopted for two things
+
+Jess raised an alternative to per-viewer filtering: extend the undo/history work with a
+"view wiki at this revision" feature, and show a concealed viewer **the first version of the
+wiki, before any edits occurred**. Appealing because that version *is*, by construction, the
+target state — no provenance classification needed at all.
+
+**Rejected as the general mechanism**, for three reasons, in increasing order of severity:
+
+1. **There is no whole-wiki snapshot to show.** No `WikiRevision`/`WikiVersion` model exists
+   (checked). Reconstructing version 1 means replaying `WikiEdit.changes` backwards, and
+   `revert_edit_fields` already assigns **stringified** stored values, so replay is lossy for
+   anything that is not text — the audit flagged this for `cover_photo` specifically.
+2. **Related objects are not versioned at all.** Photos, comments, aliases, links, floorplans,
+   markup, child wikis, stat votes and boundaries are separate rows. "The wiki at revision 1"
+   does not exclude them; you would still filter each set per viewer, so the classification
+   work does not actually go away.
+3. **Decisive: freezing time freezes automatic content too, and that is a worse tell.**
+   Enrichment is continuous — provider media, REData panels, boundary generation, place-name
+   resolution, weather. A wiki frozen at its creation date would show *stale* provider data,
+   while a genuinely new place shows current data. That staleness is proportional to how long
+   the place has been documented, which is very close to the exact fact concealment exists to
+   hide. It also directly violates rule 2 of R16.
+
+**Adopted for two things, where it is clearly the better answer:**
+
+- **Articles.** `ArticleRevision` stores the *complete* text of each revision, not a diff
+  (`models/article/model.py:139`), so any revision is cheap to show and nothing has to be
+  replayed. More importantly the first revision may be genuinely automatic — enrichment seeds
+  articles from Wikipedia — so showing it satisfies rule 2 exactly, where hiding the article
+  outright would discard automatic content the viewer is entitled to.
+- **MIXED scalar fields** — `name`, `description`, and the other Suggest-Edits fields, where
+  enrichment and users both write and the row records no provenance. `WikiEdit.changes` is
+  `{"field": {"from": old, "to": new}}`, so the **oldest recorded `from` for a field is its
+  value before any user edited it** — i.e. the enrichment value. Rule: show the current value
+  when the field has never been user-edited, otherwise the oldest recorded `from`. This closes
+  the provenance gap with no schema change, which is what made the alternative worth taking
+  seriously.
+
+  *Corrected 2026-08-24, after the classification pass.* **This does not work for `name`, and
+  I overstated it.** `WikiEdit` is not a reliable provenance record: `LocationWikiEditDeleteView`
+  (`controllers/location_wiki.py:453`) hard-deletes an edit *and* its revert row while leaving
+  the value in place; `wiki_creation.py:177` renames a freshly-claimed wiki with a bare
+  `save()` and writes no edit at all; and `tasks.py:124` writes the enrichment name with a bulk
+  `.update()` that bypasses `save()`. Three of the four candidate channels are lossy and none
+  is authoritative.
+
+  The right fix is a column, and the codebase already demonstrates it: `Pin` carries
+  `name_is_user_provided` (`models/pin/model.py:121`), and `Wiki.pin_type` carries
+  `pin_type_is_user_provided` with **every** automatic writer honouring it and every user
+  writer setting it. `Wiki.name` simply never grew the equivalent. Until it does, blanket-
+  conceal to the automatic name — the cost is that a community name identical to the official
+  one still renders as the official one, which is harmless.
+
+  The oldest-`from` reading still holds where the edit history *is* the record — articles,
+  via `ArticleRevision`, which stores complete text per revision rather than diffs.
+
+  Note also the tension with the audit's tell #20: `WikiEdit.changes` leaking prior values into
+  the viewer's own visible history is a bug to fix, while any provenance reading uses the same
+  data server-side. Both hold; the redaction belongs at the rendering layer.
+
+  Full field-by-field detail: `concealed-wiki-spec.md`.
+
+**Worth building on its own merits.** "View wiki at this revision" is a good feature
+independently — it just is not the concealment mechanism.
+
+### R18. Forward revisions — this supersedes the provenance columns
+
+Jess: replay is backwards today; would it make sense to redesign so revisions play **forward**,
+git-style, provided the current version stays free to read?
+
+**Yes, and it is a better answer than R17's correction.** Two of my three objections to the
+revision approach were objections to *backward* replay specifically, and they do not survive
+the inversion:
+
+- *"Replay is lossy for non-text fields"* — only because it reconstructs by inverting diffs.
+  Store **full snapshots of the scalar field set** instead, which is what `ArticleRevision`
+  already does and what its docstring commends: "any revision can be viewed, diffed, or
+  restored wholesale without replaying a chain of diffs" (`models/article/model.py:143`). A
+  wiki has roughly fifteen editable fields; a snapshot is cheap. No replay, no inversion, no
+  stringification.
+- *"Freezing time freezes automatic content too"* — this was the objection that killed it, and
+  it dies once each write records **its own source**. The thing we want is not "the wiki at
+  time T". It is *"the wiki as it would be if only automatic writers had ever touched it"* —
+  which is a **filter over the log, not a point in it**, and therefore stays current as
+  enrichment continues.
+
+That second point is the whole idea. It also dissolves the MIXED problem outright rather than
+patching it: provenance stops being something we infer after the fact from lossy channels, and
+becomes a property recorded at write time. R17's recommendation of a `name_is_user_provided`
+column — and the equivalent column the classification pass wants for labels, links and child
+wikis — answers only "who wrote this last". The log answers the question we actually ask.
+
+**The design, against Jess's performance constraint.**
+
+1. **`Wiki` stays exactly as it is — the materialised real HEAD.** Normal viewers read a plain
+   row and nothing is reconstructed. This is the constraint satisfied by doing nothing.
+2. **A second materialised projection: the automatic-only HEAD.** Updated on every automatic
+   write, untouched by user writes. A concealed viewer reads *that* row. So concealed reads are
+   also O(1) — there is no replay on any read path, ever. Replay exists only for history and
+   merge, which are cold.
+3. **An append-only revision log** — one row per write, carrying a full snapshot of the scalar
+   fields, a `source` (automatic / user / system), the actor, and a parent pointer. This is the
+   git-shaped part: immutable snapshots plus a pointer to HEAD.
+4. **Related rows are not part of this.** Photos, comments, aliases, links, floorplans, child
+   wikis and stat votes are rows, not fields, and rows already carry usable provenance
+   (`Image.source`, `WikiAlias.source`, `created_by`). They keep per-row filtering. The log
+   covers the scalar fields, which is exactly where provenance is currently unrecoverable.
+
+**What has to happen first, and it is the real cost.** The architecture only holds if every
+write funnels through one place, and today they emphatically do not — `tasks.py:124` writes the
+enrichment name with a bulk `.update()` that bypasses `save()`, `wiki_creation.py:177` renames
+with a bare `save()` and no edit row, and `controllers/markup.py:76` writes a security field
+while deliberately omitting `"updated"` from `update_fields`. Funnelling wiki field writes
+through a single function is a prerequisite, is a long tail of bypass paths, and is worth doing
+on its own merits — those three bypasses are already bugs.
+
+Add a structural CI check for it, alongside the three that exist. Without one this decays back
+to the current state, which is how it got here.
+
+**Honest costs:** write amplification (two rows plus a log row per edit, on a path that is not
+hot); storage linear in edit count, bounded and prunable by collapsing old snapshots; and the
+funnelling refactor above. Against that it gives concealment for free at read time, the
+substrate the merge work needs (R15), a real "view wiki at this revision" feature, and a
+provenance record that does not have to be inferred.
+
+**Now its own design.** The generic form, the enforcement mechanism and the storage shape are
+in `versioned-content.md` — it outgrew this document, and concealment is only its first
+consumer. Three rulings from Jess landed there: generalise it from the start rather than
+building it wiki-first; get as close to a guarantee as possible that every write is logged; and
+do not store a full snapshot per edit forever.
 
 ## What already exists (read this before designing anything below)
 
@@ -406,7 +874,7 @@ The achievements system is the right template, with specific divergences:
   *current counts*, not point-in-time — they silently change when a pin is deleted. Fine as a
   multiplier or decay input; wrong as the ledger's source of truth.
 
-## Decisions needed from Jess before building
+## Decisions
 
 1. ~~**The REData reputation-scrubbing precedent.**~~ **RESOLVED 2026-08-21 (Jess):** narrowly
    scoped to REData's `GET /photos/reputation/` endpoint (an external ML-quality signal about
@@ -419,69 +887,124 @@ The achievements system is the right template, with specific divergences:
    inventory above for the five structural reasons. It reads existing signals
    (achievement metrics, activity days) as *inputs* and shares nothing else. Flagged here only so
    a future reader doesn't re-propose merging them.
-3. **How much of `need`/`quality` is tunable at runtime vs. in code.** The scorer registry
-   (see "The scoring model") settles the "not hardcoded constants" requirement structurally — a
-   scorer computes value from the target's state rather than looking up a number. What remains
-   open is whether the *coefficients* inside those scorers (how much more a first-photo is worth
-   than an Nth, the decay curve's steepness, cap sizes) live in code, in `SiteSettings`, or in an
-   admin-editable table. Recommendation: start in code with every coefficient named and in one
-   module, ship the admin dashboard, and only promote coefficients to runtime-editable once real
-   data shows which ones actually need retuning — premature admin UI for 30 knobs nobody has
-   calibrated yet is its own cost. Needs a yes/no.
-4. **Gating thresholds and exact scope of "sensitive."** The memo names marker/entrance map detail,
-   map markup/custom layers, other users' comments, and the real pinned-user count as *candidates*,
-   explicitly not a final/bounded list ("I am not necessarily sure exactly the bounds of what
-   constitutes [sensitive] information"). Needs an explicit v1 list before the gating consumer is
-   built, sized against `WikiStatVote`'s `vulnerability`/`danger` composite.
-5. **Scope of "earn your way in locally.["** The memo describes a real but subtle mechanic: a
-   user below the general threshold who makes a first-of-its-kind contribution (first comment on a
-   wiki, markup when none exists) can see that specific thread/layer and nothing else. This is
-   meaningfully harder than the general point-threshold gate and touches the markup-layer privacy
-   field from the inventory above. Consider whether v1 ships without this refinement (general gate
-   only) and adds it in a follow-up, versus building both together.
-6. **Anti-gaming scope for v1.** Edit-war/collusion detection (voiding points for a wiki edit later
-   reverted, or contributions from two colluding accounts alternating an edit back and forth) was
-   named as a goal but "an ideal world" aspiration, not a hard requirement. Decide whether v1 ships
-   with only the simple case (revert this exact edit → subtract the points it earned) or needs the
-   fuller collusion-detection pass before shipping any gating on top of the score.
+   *Note (2026-08-24):* `ConsensusProfile`'s own docstring records a decision that its points are
+   deliberately **not** a cross-game Profile stat. The new ledger does not reverse that — it is a
+   separate table with a separate purpose, and Consensus points stay exactly as they are.
+3. **Coefficient tunability.** **RESOLVED 2026-08-24 (Jess): in code.** Every coefficient named
+   and gathered in one module; ship the admin dashboard; promote individual coefficients to
+   runtime-editable only once real data shows which ones need retuning. Premature admin UI for
+   thirty uncalibrated knobs is its own cost.
+   *Two carve-outs, on the codebase's own precedent:* the **thresholds** (`T_community`,
+   `T_detail`) and the **reveal budget caps** belong in `SiteSettings` from day one, not in code.
+   They are operational safety valves, not tuning: if the gate is too tight on launch day it has
+   to be loosened without a deploy. This matches `SiteSettings.community_photo_quota_bonus_votes`
+   (newer code) rather than `points.py`'s module constants (older).
+4. **What counts as "sensitive", and the thresholds.** **PROPOSED 2026-08-24 — for Jess to
+   approve or adjust.** Restructured per R1–R3, which changes the shape of the answer: the v1
+   question is no longer "which fields do we hide" but "which of two tiers is this".
 
-## Proposed phasing (once the decisions above are made)
+   **Tier 1 — below `T_community` (site-wide, uniform, no per-place variation).** The community
+   layer does not exist for this account:
+   - wiki existence itself, everywhere it is currently surfaced: the pin hero's
+     Community-Wiki-vs-Create-Wiki branch, `has_wiki` on the detail-pins panel, wiki hits in
+     global search and in map autocomplete, `wiki_slug`/`wiki_name` on API photo payloads,
+     the safety check-in wiki-notify toggle;
+   - the wiki create/claim affordance (uniformly absent, so its absence says nothing);
+   - everything reached *through* a wiki: community photos, comments, articles, markup and
+     custom layers, floorplans, boundaries, aliases, links, stat votes, owner records.
 
-Sized to fit the batch-then-adversarial-review working style — each phase is independently
-shippable and testable before the next starts.
+   Deliberately **not** in tier 1, because none of it is community content and removing it would
+   break the product for every new user: the account's own pins, photos, notes and visits; its
+   own trips and DMs; safety check-ins; external/provider data about a place (Google, REData,
+   weather, imagery), which is public information the site merely relays.
 
-0. **Attribution gaps first** — nothing above can score cover-photo choice, child-wiki creation,
-   or boundary drawing until those record who did it (see "Blocking" above). Small, independently
-   useful, and safe to land before any scoring exists: add `WikiEdit{cover_photo}` on cover
-   changes, populate `created_by` on child wikis, populate `Boundary.profile` for wiki boundaries.
-1. **Reputation ledger + background aggregation.** The model — append-only, `DecimalField` value,
-   snapshotted scoring inputs, unique on `(rule_key, actor, target)` for idempotency, plus a
-   denormalized per-profile total — the signal-dispatch/nightly-sweep plumbing (copied from
-   `achievements/signals.py`, diverging per the blueprint above), and the simplest trigger set.
-   Wiki field edits are the natural first trigger since `WikiEdit` already carries editor,
-   target, and field-level `changes`. **Write to the new ledger only — leave Consensus points
-   entirely alone**; they are a separate visible game score (see the inventory), and the
-   double-award/revert inconsistency in them is logged separately in `docs/PROBLEMS.md`
-   (2026-08-21). No gating yet; this phase proves the pipeline works and stays off the request
+   **Tier 2 — above `T_community`, below `T_detail` (per-wiki, scaled by the
+   vulnerability/danger composite).** The wiki is visible and known to exist; what is withheld is
+   the material that helps someone *get in*:
+   - markup and custom layers carrying `SecurityIndicatorType` (fence, camera, alarm, guard,
+     locked, VPS) and entrance/route annotations;
+   - floorplans — interior geometry, doors, and lock state (R11);
+   - other users' comments;
+   - the true pinned-user count, degraded to the existing `approximate_pin_count` fuzz rather
+     than to a different-looking placeholder;
+   - community photo **captions and EXIF-derived capture metadata** (the photos themselves stay;
+     it is the "when and exactly where" that is the access hint).
+
+   **Starting thresholds.** `T_community` low enough that a genuine first session clears it, with
+   the reveal budget (R4) carrying the real anti-probing load. `T_detail` at the composite's
+   midpoint, so only wikis the community has actively flagged apply it. Both in `SiteSettings`
+   per decision 3, both to be re-tuned from the admin dashboard's real distribution once there
+   is one.
+
+5. **Scope of "earn your way in locally".** **RESOLVED 2026-08-24 (Jess): build both.** Shipped
+   with R9's correction — the local path is **unconditional**, never branching on whether content
+   already exists, because that branch is itself an oracle. A below-threshold account's markup
+   always lands on a private layer; its comment is always visible to itself and to anyone who
+   replies. Precedents to copy: `Comment.pending_scan` for reply-chain visibility,
+   `Wiki.officially_created` for the private-layer boolean the queryset filters on.
+6. **Anti-gaming scope for v1.** **PROPOSED 2026-08-24.** Ship the simple case plus the one
+   structural defence, defer the detective work:
+   - **In v1:** retraction on explicit revert (`WikiEdit.reverted` already exists and
+     `services/achievements/metrics.py` already excludes reverted edits — the precedent is
+     written); re-applicable in both directions, since a revert-of-a-revert clears the flag;
+     amplification weighted by the amplifier's own standing (R8), which removes the sock-puppet
+     ring structurally rather than by detection; per-actor and per-target caps.
+   - **Deferred:** edit-war and collusion *detection*. It is an "ideal world" goal, it is the
+     part most likely to produce false positives against real users, and R7 means a wrong verdict
+     can no longer lock anyone out of a wiki they already read — which is what made getting it
+     right urgent in the first place.
+
+## Phasing (revised 2026-08-24)
+
+Reordered per R12 and R13: close the live holes first, then build the smallest thing that
+shuts the probing attack, then enrich. Each phase is independently shippable and testable.
+
+0. **Close the two live oracles (R12).** Independent of everything below, and the gate is
+   pointless while either stands.
+   - Gate `SafetyCheckinWikiOptionView` on `location_visible_to`.
+   - Add `WikiQuerySet.official()` and route the surfaces that omit `officially_created`
+     through it — `Location.display_name` first.
+1. **Attribution gaps** — unchanged from the original plan, and still genuinely small. The
+   scorer cannot attribute cover-photo choice without the ledger snapshotting the previous
+   value at trigger time, which is a constraint on the trigger, not a migration.
+2. **The ledger + background aggregation.** Append-only, `DecimalField` value, snapshotted
+   inputs, an idempotency key (see below), and a denormalized per-profile total. Signal
+   dispatch and the nightly sweep copied from `models/achievements/signals.py`. A **small**
+   initial signal set — the coarse, hard-to-forge ones the gate actually needs: account
+   tenure, distinct activity days, non-reverted wiki edits, genuine uploads, pins created,
+   accepted invitations. No gating yet; this phase proves the pipeline stays off the request
    path.
-2. **Remaining trigger types**, each its own small batch: photo uploads (scarcity-weighted per
-   decision #3), non-friend-upvote amplification, pin count + geographic breadth (new metric),
-   logins/streaks (read from existing `ProfileActivityDay`/`ProfileStreak`), friends, donations/
-   subscriptions, invites, trips, comments/DMs (minimal weight), decay/diminishing-returns on
-   repeated same-type actions.
-3. **Sensitivity-gated wiki content**, reading the ledger from phase 1-2 and `WikiStatVote`'s
-   composite (decision #4's v1 list only). Subscription-tier bypass (near-free, see inventory)
-   ships in this phase since it's required for the gate to be safe to turn on at all.
-4. **"Earn your way in locally"** (decision #5), if scoped for v1 — the `Comment.pending_scan`
-   pattern for reply-chain visibility, and the `Wiki.officially_created`-style private-layer field
-   for markup.
-5. **Admin dashboard**: per-activity/per-month charts, breakdown by trigger type (decision #1's
-   resolution determines whether/how an individual's total is ever admin-visible).
-6. **Facts topic/geography reliability** (UL-399): decompose `ConsensusProfile.trust_score` into
-   per-category Beta-Bernoulli posteriors (mirroring the existing per-mode Glicko-2 pattern
-   already used for SpotGuessr/trivia player skill), and add a topic/category dimension to
-   `Fact`/`FactEvidence` for cross-location rollups by topic+region. Independent of phases 1-5;
-   can run in parallel once someone is free to pick it up.
+3. **The gate (`T_community`) + the reveal budget.** The tier that closes the attack. Hooked
+   into `resolve_visible_wiki` / `get_for_location` / `visible_wiki_location_ids_cached` —
+   the same authorities the 2026-08-24 sweep consolidated on, never a parallel filter.
+   Subscription bypass ships here (one `SiteFeature` value, `user_has_feature`), because the
+   gate is not safe to turn on without it.
+4. **`T_detail`** — the per-wiki, vulnerability-scaled tier, and the field list from decision 4.
+   Needs a denormalized composite on `Wiki`: it is computed per call today, at 8 queries per
+   wiki page, and the gate cannot afford that on the request path.
+5. **"Earn your way in locally"** (decision 5), unconditional per R9.
+6. **Scorer enrichment** — need/quality/amplification, decay, the remaining trigger types.
+   This is where the original design's substance lives; it improves *fairness*, and by this
+   point the privacy hole is already shut.
+7. **Admin dashboard** — aggregates by activity type and period. Per-user drill-down that
+   names targets is deliberately out of v1 (R10).
+8. **Facts topic/geography reliability** (UL-399) — independent of 0–7, can run in parallel.
+
+### Two constraints on phase 2 that came out of the survey
+
+**Idempotency is the highest-risk gap.** `CELERY_TASK_ACKS_LATE` plus
+`autoretry_for=(OSError,)` means every task can be redelivered and re-run. Achievements are
+protected by `UniqueConstraint(profile, achievement)`; an append-only ledger has no natural
+equivalent, so one must be designed in from the start — a unique tuple over
+`(actor, rule_key, target_type, target_id, period)`.
+
+**Ledger writes are synchronous; only derived work defers.** The governing precedent is
+`_record_streak_days` (`models/achievements/signals.py:180`), which is deliberately *not*
+deferred because streaks are the only metric with no source of truth outside our own tables.
+A ledger is exactly that. `safely_enqueue_task` swallows broker failures and returns `None`,
+so a deferred ledger write is silently lossy. The row is written inside the contributor's
+transaction — where a rolled-back contribution rolls its row back too — and only recomputing
+the denormalized total and re-evaluating gates goes to Celery.
 
 ## Explicitly out of scope for this doc
 

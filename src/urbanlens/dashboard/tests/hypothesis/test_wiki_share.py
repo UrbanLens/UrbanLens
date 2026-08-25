@@ -1,6 +1,6 @@
 """Tests for the explicit, user-initiated wiki creation flow.
 
-Wikis are never auto-created: ``WikiCreationService.create_for_pin`` is the
+Wikis are never auto-created: ``WikiShareService.share_from_pin`` is the
 single creation entry point, invoked by the pin detail page's "Create wiki"
 button. The user chooses which pin fields, aliases, and photos to seed the
 new wiki with; nothing is copied unless explicitly selected, and an existing
@@ -17,16 +17,16 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.aliases.model import AliasType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatVote
-from urbanlens.dashboard.services.wiki.wiki_creation import (
-    WikiCreationService,
+from urbanlens.dashboard.services.wiki.wiki_share import (
+    WikiShareService,
     seedable_aliases,
     seedable_field_values,
     seedable_photos,
 )
 
 
-class WikiCreationServiceTests(TestCase):
-    """create_for_pin seeds only chosen fields/aliases/photos and links the pin."""
+class WikiShareServiceTests(TestCase):
+    """share_from_pin seeds only chosen fields/aliases/photos and links the pin."""
 
     def setUp(self):
         self.location = baker.make("dashboard.Location", latitude="40.000000", longitude="-74.000000", official_name="Old Mill")
@@ -40,12 +40,12 @@ class WikiCreationServiceTests(TestCase):
 
     def _create(self, *, include: set[str] | None = None, alias_ids: set[int] | None = None, image_ids: set[int] | None = None) -> tuple[Wiki, bool]:
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
-            return WikiCreationService().create_for_pin(self.pin, include_fields=include, alias_ids=alias_ids, image_ids=image_ids)
+            return WikiShareService().share_from_pin(self.pin, include_fields=include, alias_ids=alias_ids, image_ids=image_ids)
 
-    def test_creates_wiki_without_seeding_by_default(self) -> None:
-        wiki, created = self._create()
+    def test_sharing_nothing_contributes_nothing(self) -> None:
+        wiki, shared = self._create()
 
-        self.assertTrue(created)
+        self.assertFalse(shared)
         self.assertEqual(wiki.location_id, self.location.pk)
         # No personal data copied: name falls back to the location's official name.
         self.assertEqual(wiki.name, "Old Mill")
@@ -90,7 +90,7 @@ class WikiCreationServiceTests(TestCase):
         pin2 = baker.make("dashboard.Pin", location=baker.make("dashboard.Location", latitude="41", longitude="-75"))
         alt2 = baker.make("dashboard.PinAlias", pin=pin2, name="Chosen Alias", kind=AliasType.ALTERNATE)
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
-            new_wiki, created = WikiCreationService().create_for_pin(pin2, alias_ids={alt2.pk})
+            new_wiki, created = WikiShareService().share_from_pin(pin2, alias_ids={alt2.pk})
         self.assertTrue(created)
         self.assertTrue(new_wiki.aliases.filter(name="Chosen Alias").exists())
 
@@ -103,21 +103,29 @@ class WikiCreationServiceTests(TestCase):
         # Still attached to the original pin too.
         self.assertEqual(image.pin_id, self.pin.pk)
 
-    def test_existing_wiki_is_never_overwritten(self) -> None:
+    def test_sharing_to_an_existing_wiki_contributes_without_renaming_it(self) -> None:
+        """The case that used to be impossible.
+
+        Seeding only ran when the click created the page, so sharing to a page
+        that already existed did nothing at all. Contributing is now something
+        a person does to a page that is already there - but naming stays a
+        creation-time act, since renaming a page other people read because
+        somebody shared a stat to it is a side effect nobody asked for.
+        """
         existing = baker.make("dashboard.Wiki", location=self.location, name="Community Name")
 
-        wiki, created = self._create(include={"danger"})
+        wiki, shared = self._create(include={"danger"})
 
-        self.assertFalse(created)
+        self.assertTrue(shared)
         self.assertEqual(wiki.pk, existing.pk)
         wiki.refresh_from_db()
         self.assertEqual(wiki.name, "Community Name")
-        self.assertEqual(WikiStatVote.objects.filter(wiki=wiki).count(), 0)
+        self.assertEqual(WikiStatVote.objects.filter(wiki=wiki, field="danger").count(), 1)
 
     def test_requires_location(self) -> None:
         self.pin.location_id = None
         with self.assertRaises(ValueError):
-            WikiCreationService().create_for_pin(self.pin)
+            WikiShareService().share_from_pin(self.pin)
 
 
 class SeedableFieldValuesTests(TestCase):

@@ -59,6 +59,24 @@ repos:
         language: system
         files: '\.py$'
         pass_filenames: false
+      - id: versioned-writes
+        name: a model that versions fields records every write path
+        entry: python3 bin/check_versioned_writes.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
+      - id: signal-reachable
+        name: no post_save subscription waits on a field only update() sets
+        entry: python3 bin/check_signal_reachable.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
+      - id: concealed-writes
+        name: a wiki resolved for reading is never saved
+        entry: python3 bin/check_concealed_writes.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
 
 # TYPESCRIPT
 -   repo: local

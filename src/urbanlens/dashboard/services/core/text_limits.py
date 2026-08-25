@@ -11,6 +11,11 @@ so the limit is enforced consistently regardless of which write path is used.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from django.db.models import Model
+
 MAX_ARTICLE_LENGTH = 200_000
 MAX_ARTICLE_EDIT_SUMMARY_LENGTH = 255
 MAX_PIN_DESCRIPTION_LENGTH = 50_000
@@ -35,7 +40,7 @@ MAX_PREFERENCE_OTHER_LENGTH = 255
 MAX_ADDITIONAL_PREFERENCES_LENGTH = 1_000
 
 
-def column_max_length(model: type, field_name: str) -> int:
+def column_max_length(model: type[Model], field_name: str) -> int:
     """The declared width of `model.field_name`'s column.
 
     Django's Model ``_meta`` API is the documented way to ask this; the
@@ -48,11 +53,21 @@ def column_max_length(model: type, field_name: str) -> int:
 
     Returns:
         The field's ``max_length``.
+
+    Raises:
+        TypeError: If the named field has no ``max_length`` - a reverse relation,
+            or a column with no declared width. Callers use the result as a
+            truncation bound, so returning ``None`` would silently become "no
+            limit" at the call site.
     """
-    return model._meta.get_field(field_name).max_length  # noqa: SLF001 - Model._meta is Django's documented metadata API
+    field = model._meta.get_field(field_name)  # noqa: SLF001 - Model._meta is Django's documented metadata API
+    max_length = getattr(field, "max_length", None)
+    if not isinstance(max_length, int):
+        raise TypeError(f"{model.__name__}.{field_name} has no max_length")
+    return max_length
 
 
-def column_length_error(model: type, field_name: str, value: str | None, field_label: str) -> str | None:
+def column_length_error(model: type[Model], field_name: str, value: str | None, field_label: str) -> str | None:
     """Return an error if `value` will not fit `model.field_name`'s column.
 
     The constants above cover `TextField`s, whose limit exists only as a Django

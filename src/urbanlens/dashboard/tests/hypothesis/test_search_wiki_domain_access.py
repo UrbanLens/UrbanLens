@@ -51,7 +51,7 @@ class _BoundaryMateFixture(TestCase):
         self.parcel = make_place(PlaceKind.PARCEL, _square(-74.0, 40.0, 0.003), name="Boundary-mate Parcel")
         self.wiki_location = Location.objects.create(latitude=40.0, longitude=-74.0, official_name="Wiki Spot")
         resolution.resolve_location_place(self.wiki_location)
-        self.wiki = baker.make(Wiki, location=self.wiki_location, place=self.parcel, name="Boundary Wiki", officially_created=True)
+        self.wiki = baker.make(Wiki, location=self.wiki_location, place=self.parcel, name="Boundary Wiki")
 
         self.mate_location = Location.objects.create(latitude=40.0005, longitude=-74.0005)
         resolution.resolve_location_place(self.mate_location)
@@ -107,11 +107,37 @@ class CommentSearchDomainAccessTests(_BoundaryMateFixture):
 
 
 class PhotoSearchDomainAccessTests(_BoundaryMateFixture):
+    """Unlike the Wiki/Article/Comment siblings above, a photo is gated by
+    ``ImageQuerySet.visible_to`` on top of the domain rule this file is about,
+    and that gate has two independent halves that both must open before a
+    stranger's photo is findable at all:
+
+    1. Container reach - the photo must be shared *into* a wiki the viewer can
+       reach (``_shared_within_reach_of``). Merely sitting at a domain-visible
+       Location is not sharing; see ``test_..._not_shared_to_the_wiki_...``.
+    2. Uploader consent - the uploader's ``photo_upload_visibility`` AND the
+       viewer's own ``viewer_photo_filter`` must *each* independently admit
+       the other (``ImageQuerySet._allowed_uploader_ids``). ``self.profile``
+       and ``content_owner`` share no pin/friend/trip, so the default
+       ANYTHING_IN_COMMON setting fails this gate on both sides regardless of
+       wiki reach; see ``test_..._without_open_visibility_...``.
+
+    Both must be satisfied for the positive case below, and each is tested in
+    isolation so a future change to either gate fails the right test.
+    """
+
     def setUp(self) -> None:
         super().setUp()
+        from urbanlens.dashboard.models.profile.model import VisibilityChoice
+
+        self.profile.viewer_photo_filter = VisibilityChoice.ANYONE
+        self.profile.save(update_fields=["viewer_photo_filter"])
+        self.content_owner.photo_upload_visibility = VisibilityChoice.ANYONE
+        self.content_owner.save(update_fields=["photo_upload_visibility"])
         self.image = baker.make(
             "dashboard.Image",
             location=self.wiki_location,
+            wiki=self.wiki,
             profile=self.content_owner,
             image="pin_images/boundary_mate_test.jpg",
             caption="a very distinctive photo caption",
@@ -126,18 +152,53 @@ class PhotoSearchDomainAccessTests(_BoundaryMateFixture):
         response = GlobalSearchEngine().search(stranger, "distinctive photo caption")
         self.assertFalse(_group_titles(response, "photos"))
 
+    def test_a_photo_only_at_the_location_not_shared_to_the_wiki_is_not_found(self) -> None:
+        """Gate 1 in isolation. Same location, same open visibility settings
+        as the photo in setUp - the only difference is the missing ``wiki=``
+        FK - and that alone must still hide it: domain reach to a *place* is
+        not the same as a deliberate contribution to its wiki."""
+        # A nonce disjoint from setUp's "a very distinctive photo caption" -
+        # sharing words with it would let this photo's absence hide behind a
+        # fuzzy/trigram match on the *other*, correctly-visible photo.
+        baker.make(
+            "dashboard.Image",
+            location=self.wiki_location,
+            profile=self.content_owner,
+            image="pin_images/boundary_mate_unshared.jpg",
+            caption="zzqqxx-unshared-nonce",
+        )
+
+        response = GlobalSearchEngine().search(self.profile, "zzqqxx-unshared-nonce")
+
+        self.assertFalse(_group_titles(response, "photos"))
+
+    def test_a_photo_shared_to_the_wiki_without_open_visibility_is_not_found(self) -> None:
+        """Gate 2 in isolation. A second photo, properly shared to the same
+        wiki this test's domain access reaches, but its uploader left at the
+        default ANYTHING_IN_COMMON setting with no pin/friend/trip in common
+        with self.profile - despite self.profile's own filter already being
+        wide open from setUp, the uploader's own restriction alone is enough
+        to keep it hidden."""
+        default_visibility_owner = baker.make(User).profile
+        # Nonce, same reason as above.
+        baker.make(
+            "dashboard.Image",
+            location=self.wiki_location,
+            wiki=self.wiki,
+            profile=default_visibility_owner,
+            image="pin_images/boundary_mate_default_vis.jpg",
+            caption="zzqqxx-defaultvis-nonce",
+        )
+
+        response = GlobalSearchEngine().search(self.profile, "zzqqxx-defaultvis-nonce")
+
+        self.assertFalse(_group_titles(response, "photos"))
+
 
 class AutocompleteWikiDomainAccessTests(_BoundaryMateFixture):
     def test_finds_wiki_via_a_boundary_mate_pin(self) -> None:
         results = search_local("Boundary Wiki", self.profile)
         self.assertTrue(any(r.title == "Boundary Wiki" for r in results))
-
-    def test_excludes_an_unofficial_draft_wiki(self) -> None:
-        Wiki.objects.filter(pk=self.wiki.pk).update(officially_created=False)
-
-        results = search_local("Boundary Wiki", self.profile)
-
-        self.assertFalse(any(r.title == "Boundary Wiki" for r in results))
 
     def test_a_profile_with_no_pin_on_the_place_does_not_find_it(self) -> None:
         stranger = baker.make(User).profile

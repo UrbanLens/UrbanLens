@@ -756,32 +756,55 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         scheduleMarkupAutoSave(item);
     }
 
-    let markupAutoSaveTimer: ReturnType<typeof setTimeout> | undefined;
-    let markupAutoSaveItem: MarkupItem | null = null;
+    // Keyed by item uuid, not a single shared slot: setItemLayer() (the
+    // sidebar's inline per-item layer picker) can schedule a save for an item
+    // that isn't even open in the edit panel, independently of whatever the
+    // panel itself just edited. A single slot meant scheduling either one
+    // cancelled and discarded whichever edit was already pending for the
+    // other - editing item A, then moving item B's layer from the sidebar
+    // before A's 500ms debounce fired, silently lost A's change forever.
+    const markupAutoSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    const markupAutoSaveItems = new Map<string, MarkupItem>();
     function scheduleMarkupAutoSave(item: MarkupItem): void {
-        clearTimeout(markupAutoSaveTimer);
-        markupAutoSaveItem = item;
-        markupAutoSaveTimer = setTimeout(flushMarkupAutoSave, 500);
+        const existingTimer = markupAutoSaveTimers.get(item.uuid);
+        if (existingTimer) clearTimeout(existingTimer);
+        markupAutoSaveItems.set(item.uuid, item);
+        markupAutoSaveTimers.set(
+            item.uuid,
+            setTimeout(() => flushMarkupAutoSave(item.uuid), 500),
+        );
     }
-    function flushMarkupAutoSave(): void {
-        clearTimeout(markupAutoSaveTimer);
-        const item = markupAutoSaveItem;
-        markupAutoSaveItem = null;
-        if (!item) return;
-        fetch(`${markupEditBase}${item.uuid}/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-            body: JSON.stringify({
-                label: item.label,
-                color: item.color,
-                border_color: item.border_color,
-                stroke_width: item.stroke_width,
-                fill_opacity: item.fill_opacity,
-                border_opacity: item.border_opacity,
-                security_indicator: item.security_indicator,
-                layer_uuid: item.layer_uuid,
-            }),
-        }).catch(() => toast.error("Failed to save annotation changes."));
+    /** Flush one item's pending save, or every pending item when no uuid is given. */
+    function flushMarkupAutoSave(uuid?: string): void {
+        const uuids = uuid ? [uuid] : Array.from(markupAutoSaveItems.keys());
+        for (const id of uuids) {
+            const timer = markupAutoSaveTimers.get(id);
+            if (timer) clearTimeout(timer);
+            markupAutoSaveTimers.delete(id);
+            const item = markupAutoSaveItems.get(id);
+            markupAutoSaveItems.delete(id);
+            if (!item) continue;
+            fetch(`${markupEditBase}${item.uuid}/`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                body: JSON.stringify({
+                    label: item.label,
+                    color: item.color,
+                    border_color: item.border_color,
+                    stroke_width: item.stroke_width,
+                    fill_opacity: item.fill_opacity,
+                    border_opacity: item.border_opacity,
+                    security_indicator: item.security_indicator,
+                    layer_uuid: item.layer_uuid,
+                }),
+            })
+                .then((r) => {
+                    // fetch only rejects on a network failure - a 400 (e.g. an
+                    // over-long label) resolved here and reported nothing.
+                    if (!r.ok) toast.error("Failed to save annotation changes.");
+                })
+                .catch(() => toast.error("Failed to save annotation changes."));
+        }
     }
 
     function openMarkupEditDialog(item: MarkupItem): void {
@@ -837,10 +860,10 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         if (!editingMarkupItem) return;
         if (!(await confirmAction({ title: "Delete Annotation", message: "Delete this annotation?", confirmLabel: "Delete" }))) return;
         // Drop any pending autosave for this item - it no longer exists to save.
-        if (markupAutoSaveItem === editingMarkupItem) {
-            clearTimeout(markupAutoSaveTimer);
-            markupAutoSaveItem = null;
-        }
+        const pendingTimer = markupAutoSaveTimers.get(editingMarkupItem.uuid);
+        if (pendingTimer) clearTimeout(pendingTimer);
+        markupAutoSaveTimers.delete(editingMarkupItem.uuid);
+        markupAutoSaveItems.delete(editingMarkupItem.uuid);
         fetch(`${markupEditBase}${editingMarkupItem.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
             .then((r) => {
                 if (!r.ok) throw new Error();

@@ -47,6 +47,14 @@ class Article(abstract.DashboardModel):
     edit trail lives in :class:`ArticleRevision`.
     """
 
+    #: True only on a concealed projection built by
+    #: ``services.wiki.concealment.conceal_article`` - a copy of this row
+    #: carrying the newest revision one viewer is entitled to see, rather than
+    #: the live one. Declared here so the distinction is visible from the model
+    #: and reading it is a plain attribute access. A row loaded from the
+    #: database is never concealed.
+    _ul_concealed: bool = False
+
     # Markdown source of the current article text.
     content = TextField(blank=True, default="", max_length=MAX_ARTICLE_LENGTH, validators=[MaxLengthValidator(MAX_ARTICLE_LENGTH)])
     # Cached sanitized HTML rendering of ``content`` - regenerated on every

@@ -546,26 +546,28 @@ def _validated_custom_icon(request: HttpRequest) -> tuple[Any, str | None]:
     return _resize_custom_icon(custom_icon), None
 
 
-def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> str | None:
+def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> tuple[bool, str | None]:
     """Update label custom_icon from POST (upload or clear).
 
     Returns:
-        A user-facing error message if the uploaded icon failed a
-        size/content-type/malware check (the icon is left unchanged), or
-        None on success.
+        A tuple of (whether custom_icon was actually touched, a user-facing
+        error message if the uploaded icon failed a size/content-type/malware
+        check - the icon is left unchanged in that case).
     """
     custom_icon, error = _validated_custom_icon(request)
     if error:
-        return error
+        return False, error
     if custom_icon:
         label.custom_icon = custom_icon
-    elif request.POST.get("clear_custom_icon"):
+        return True, None
+    if request.POST.get("clear_custom_icon"):
         # See achievements' equivalent: clearing the field does not remove the
         # stored file, so an explicitly-removed icon stayed fetchable.
         if label.custom_icon:
             label.custom_icon.delete(save=False)
         label.custom_icon = None
-    return None
+        return True, None
+    return False, None
 
 
 def _apply_kind_conversion(label: Label, new_kind: str, profile: Profile) -> bool:
@@ -764,6 +766,12 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         if new_kind != label.kind and label.is_protected:
             return HttpResponse("Protected statuses cannot be converted to another type.", status=403)
 
+        # Scoped to only the fields this form actually edits, so a bare save()
+        # never reverts a field changed concurrently by another request (e.g.
+        # the external API's LabelDetailView.patch, which can touch fields -
+        # keywords - this form has no control for at all).
+        changed_fields = ["description", "icon", "color", "order"]
+
         if not label.is_protected:
             name = request.POST.get("name", "").strip()
             if not name:
@@ -777,6 +785,7 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
             if name_error:
                 return HttpResponse(name_error, status=400)
             label.name = name
+            changed_fields.append("name")
 
         label.description = request.POST.get("description", "").strip() or None
         # Through clean_icon, like the create path: truncating to the column width
@@ -796,13 +805,18 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
                 # control is "exclude this label", so its absence means the
                 # label participates.
                 label.allow_auto_tag = "disable_auto_tag" not in request.POST
+                changed_fields.append("allow_auto_tag")
 
-        icon_error = _apply_custom_icon_from_post(label, request)
+        icon_changed, icon_error = _apply_custom_icon_from_post(label, request)
         if icon_error:
             return HttpResponse(icon_error, status=400)
+        if icon_changed:
+            changed_fields.append("custom_icon")
 
         kind_changed = _apply_kind_conversion(label, new_kind, profile)
-        label.save()
+        if kind_changed:
+            changed_fields.extend(["kind", "profile"])
+        label.save(update_fields=changed_fields)
 
         # A label's icon/color/name feed into every pin's cached map marker
         # (Pin.effective_icon, Pin.effective_color, the "statuses" list in

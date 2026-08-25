@@ -5,7 +5,7 @@ the aliases "Hudson Heritage", "Hudson River State Hospital" and "HRSH"
 explicitly selected in the dialog, produced a wiki titled "83 Hudson View Dr,
 Poughkeepsie, NY 12601, USA".
 
-``Wiki.objects.claim_for_location`` names a new wiki ``location.official_name``,
+``Wiki.objects.get_or_create_for_location`` names a new wiki ``location.official_name``,
 which for a reverse-geocoded location is the street address. That is a
 reasonable default when nothing else is known - it is used for background draft
 creation, where there is no pin - but the pin-driven path knows two better
@@ -25,7 +25,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.aliases.model import AliasType
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.wiki.wiki_creation import WikiCreationService
+from urbanlens.dashboard.services.wiki.wiki_share import WikiShareService
 
 _ADDRESS = "83 Hudson View Dr, Poughkeepsie, NY 12601, USA"
 
@@ -55,9 +55,8 @@ class WikiCreationNamingTests(TestCase):
         """
         pin = self._pin(name="HRSH")
 
-        wiki, created = WikiCreationService().create_for_pin(pin)
+        wiki, _shared = WikiShareService().share_from_pin(pin)
 
-        self.assertTrue(created)
         self.assertEqual(wiki.name, _ADDRESS, "an unshared pin name must not become the public wiki title")
 
     def test_a_chosen_alias_wins_over_the_address(self) -> None:
@@ -67,7 +66,7 @@ class WikiCreationNamingTests(TestCase):
         # reaches the public side at all, and it is what the user selects.
         alias = pin.aliases.get(name="HRSH")
 
-        wiki, _created = WikiCreationService().create_for_pin(pin, alias_ids={alias.pk})
+        wiki, _created = WikiShareService().share_from_pin(pin, alias_ids={alias.pk})
 
         self.assertEqual(wiki.name, "HRSH")
 
@@ -75,7 +74,7 @@ class WikiCreationNamingTests(TestCase):
         pin = self._pin(name=None)
         alias = self._alias(pin, "Hudson River State Hospital")
 
-        wiki, _created = WikiCreationService().create_for_pin(pin, alias_ids={alias.pk})
+        wiki, _created = WikiShareService().share_from_pin(pin, alias_ids={alias.pk})
 
         self.assertEqual(wiki.name, "Hudson River State Hospital")
 
@@ -83,7 +82,7 @@ class WikiCreationNamingTests(TestCase):
         """The claimed name stands when the user handed over nothing better."""
         pin = self._pin(name="Unnamed Location")
 
-        wiki, _created = WikiCreationService().create_for_pin(pin)
+        wiki, _created = WikiShareService().share_from_pin(pin)
 
         self.assertEqual(wiki.name, _ADDRESS)
 
@@ -92,7 +91,7 @@ class WikiCreationNamingTests(TestCase):
         pin = self._pin(name="HRSH")
         alias = self._alias(pin, "Hudson Heritage")
 
-        wiki, _created = WikiCreationService().create_for_pin(pin, alias_ids={alias.pk})
+        wiki, _created = WikiShareService().share_from_pin(pin, alias_ids={alias.pk})
 
         # Named from the alias the user selected, and that alias is still copied
         # across - naming from one must not replace seeding them.

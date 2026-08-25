@@ -35,6 +35,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.map_overlay.model import CORNERS, MapImageOverlay
 from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
@@ -84,7 +85,16 @@ def _resolve_owner(request: HttpRequest, pin_slug: str | None, location_slug: st
         return pin, MapImageOverlay.objects.for_pin(pin)
     if location_slug is None:
         raise Http404
-    _location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+    # Map annotation layers carry the same ruling as markup and detail pins:
+    # hidden outright for a concealed viewer, whoever made them. The wiki page
+    # already sends an empty list in its render context, but this endpoint is
+    # fetched separately after load, so concealing only the context left the map
+    # repopulating itself a moment later.
+    from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+    _location, wiki, profile = resolve_visible_wiki(request, location_slug)
+    if concealment_active(wiki, profile):
+        return wiki, MapImageOverlay.objects.none()
     return wiki, MapImageOverlay.objects.for_wiki(wiki)
 
 
@@ -156,6 +166,17 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
         Tuple of (Image or None, external url or ``""``, error message or None).
     """
     from urbanlens.dashboard.services.media.previews import is_web_safe
+
+    # An existing photo already on this pin/wiki, picked from the dialog's own
+    # media grid - reused directly rather than re-downloaded/materialized like
+    # a transient provider item below, since it is already a real, owned Image.
+    image_id = (request.POST.get("image_id") or "").strip()
+    if image_id:
+        owner_filter = {"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}
+        image = Image.objects.filter(pk=image_id, **owner_filter).first()
+        if image is None:
+            return None, "", "That photo could not be found."
+        return image, "", None
 
     upload = request.FILES.get("image")
     if upload is not None:
@@ -270,7 +291,11 @@ def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: MapImageOv
         {
             "rows": rows,
             "create_url": reverse(url_prefix, args=[owner_slug]),
-            "historical_url": reverse(f"{url_prefix}.historical", args=[owner_slug]),
+            # "This page's own media", for the picker - already-uploaded photos,
+            # not the multi-provider gallery. The historical-maps section lives
+            # outside this swapped fragment now (see _map_annotations_panels.html/
+            # editor.html), so it isn't re-fetched from REData on every edit here.
+            "gallery_json_url": reverse(f"{url_prefix}.media", args=[owner_slug]),
             "layers": CustomLayer.objects.filter(**_owner_kwargs(owner)).order_by("order", "id"),
             "at_limit": len(overlays) >= MAX_OVERLAYS_PER_MAP,
             "max_overlays": MAX_OVERLAYS_PER_MAP,
@@ -278,6 +303,36 @@ def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: MapImageOv
     )
     response["HX-Trigger"] = json.dumps({"ul:map-overlays-changed": {"overlays": overlay_payload(qs)}, **({"ul:toast": {"message": error, "level": "error"}} if error else {})})
     return response
+
+
+class OverlayMediaPickerView(LoginRequiredMixin, View):
+    """This pin's/wiki's own already-uploaded photos, for the manage-overlays dialog's picker.
+
+    Deliberately not ``pin.gallery.json``/``location.wiki.gallery.json``: those
+    feed the pin's own photo *map layer*, so they filter to images that already
+    have coordinates - which would hide every photo not yet geolocated,
+    including one just uploaded here for use as an overlay.
+
+    ``GET pin/<slug>/overlays/media/`` and the wiki counterpart.
+    """
+
+    def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
+        """List this owner's images, most recent first."""
+        owner, _qs = _resolve_owner(request, pin_slug, location_slug)
+        owner_filter = {"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}
+        # visible_to for the same reason the wiki gallery uses it: contributing a
+        # photo to a wiki does not withdraw what its uploader said about who may
+        # see their photos, and this picker was the one wiki photo surface that
+        # did not ask. On the pin branch it costs nothing - _resolve_owner has
+        # already scoped that to the viewer's own pin, and visible_to always
+        # includes the viewer's own images.
+        # get_or_create, not request.user.profile: the reverse accessor raises
+        # RelatedObjectDoesNotExist for a user whose profile row was never made,
+        # and it is typed against an anonymous user this LoginRequired view can
+        # never actually receive. Same resolution every other view uses.
+        viewer, _ = Profile.objects.get_or_create(user=request.user)
+        images = Image.objects.filter(**owner_filter).exclude(image="").visible_to(viewer).order_by("-created")[:60]
+        return JsonResponse({"images": [{"id": image.pk, "url": request.build_absolute_uri(image.image.url), "caption": image.caption or ""} for image in images]})
 
 
 class MapOverlayListView(LoginRequiredMixin, View):

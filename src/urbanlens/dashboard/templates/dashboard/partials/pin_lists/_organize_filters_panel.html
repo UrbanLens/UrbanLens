@@ -1,3 +1,4 @@
+{% load vendor_assets %}
 {% comment %}
 Filters tab content, lazy-loaded via HTMX into Organize's "Filters" panel (see
 organize/index.html and PinListsIndexView.get - only ever requested with an
@@ -11,11 +12,10 @@ Context:
   saved_filters             - SavedFilter queryset for the current profile
   map_center_lat/lng        - profile's default map center, for the region map
 {% endcomment %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
+{% vendor_asset "leaflet_draw_css" %}
+{% vendor_asset "leaflet_draw_js" %}
 
 <div class="pin-lists-toolbar">
     <input type="search" id="saved-filters-search" class="pin-lists-search" placeholder="Search filters..."

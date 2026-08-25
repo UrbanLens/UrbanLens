@@ -187,11 +187,11 @@ function hasAnyOrgFilter(): boolean {
 
 function countVisibleCards(ns: OrgNamespace): number {
     const cfg = NS_CONFIG[ns];
-    const rows = document.getElementById(cfg.rowsId);
-    if (!rows) return 0;
-    const inTreeView = rows.classList.contains("tag-view--tree");
-    const scope = inTreeView ? `.tag-tree-root ${cfg.cardSel}` : cfg.cardSel;
-    return Array.from(rows.querySelectorAll<HTMLElement>(scope)).filter((c) => c.style.display !== "none").length;
+    // In tree view, applyFilterForNs() hides a filtered-out card's ancestor
+    // .tag-tree-item, not the card itself - getOrgVisibleCards() already
+    // knows that (it's what filters the cross-tab search results), so this
+    // reuses it rather than re-deriving the same visibility check.
+    return getOrgVisibleCards(document.getElementById(cfg.rowsId), cfg.cardSel).length;
 }
 
 function updateCrossTabCounts(): void {

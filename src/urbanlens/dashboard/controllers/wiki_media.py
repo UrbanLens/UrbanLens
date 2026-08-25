@@ -129,7 +129,14 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
-        images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).exclude(image="").order_by("-created")[:_WIKI_PHOTOS_PREVIEW_LIMIT]
+        # Same rows the wiki gallery serves, so the same filter: `visible_to`
+        # answers "may this account see this upload at all", which is a
+        # different question from "would a brand-new wiki have carried it".
+        # Without the second one this tab hands back the uploads the gallery
+        # conceals, on the same page load.
+        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+        images = visible_rows(Image.objects.filter(wiki=wiki), wiki, profile).select_related("profile").visible_to(profile).exclude(image="").order_by("-created")[:_WIKI_PHOTOS_PREVIEW_LIMIT]
 
         scores = MediaRelevance.objects.vote_scores(location, "photos")
         my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, "photos").values_list("item_key", "is_relevant"))

@@ -30,8 +30,17 @@
     border-radius: $radius-md;
     border: 1px solid var(--ul-surface-border);
 
+    // Leaflet's own .leaflet-interactive rule sets a pointer cursor on every
+    // room/wall/marker shape, which otherwise wins over this class living on
+    // an ancestor - a non-select tool needs the crosshair to hold even while
+    // hovering a shape, since it reads as "in select mode" the moment it
+    // doesn't.
     &.is-drawing {
         cursor: crosshair;
+
+        .leaflet-interactive {
+            cursor: crosshair;
+        }
     }
 
     // Once there's an exterior wall, the basemap recedes so the plan itself
@@ -42,41 +51,47 @@
     }
 }
 
-// Floats over the map's top-right corner, matching #map-buttons (the main
-// map's own tool pill) so every map on the site puts its tools in the same
-// place - see _layout.scss's .map-buttons for the rule this mirrors.
+// Position/background/border/collapse all come from .map-buttons itself
+// (_layout.scss) - the same markup and classes as the main map's own tool
+// pill (_map_toolbar.html), so this only adds what's actually floorplan-
+// specific: the marker-kind sub-group, the active-tool state (.map-btn-icon
+// has no such state of its own - the main map signals "select mode" on the
+// map element instead, which doesn't fit a set of mutually exclusive tools),
+// and fitting the reparented leaflet-rotate control to the same icon size.
 .floorplan-toolbar {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 6px;
-    background: var(--ul-grey-0);
-    opacity: 0.92;
-    border-radius: $radius-md;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 9%);
-    border: 1px solid var(--ul-grey-3);
-    flex-wrap: wrap;
-    max-width: calc(100% - 24px);
-
-    &:hover {
-        opacity: 1;
-    }
-
-    .btn--icon {
-        width: 2.5rem;
-        height: 2.5rem;
-    }
-
     &__markers {
         display: flex;
         gap: .25rem;
         padding-left: .35rem;
         margin-left: .1rem;
         border-left: 1px solid var(--ul-grey-3);
+    }
+
+    .map-btn-icon.is-active {
+        background: var(--ul-hover-bg);
+        border-color: var(--ul-primary-color, var(--primary-color));
+        color: var(--ul-primary-color, var(--primary-color));
+        opacity: 1;
+    }
+
+    // leaflet-rotate's own control (reparented in here by floorplan-editor.ts
+    // so it reads as one more tool instead of floating over this pill) is
+    // sized and positioned for a standalone Leaflet corner control - shrink
+    // it to match everything else in the row.
+    .leaflet-control-rotate {
+        margin: 0;
+        border: 0;
+        box-shadow: none;
+
+        &.leaflet-bar {
+            border-radius: $radius-sm;
+        }
+
+        a.leaflet-control-rotate-toggle {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: $radius-sm;
+        }
     }
 }
 
@@ -216,12 +231,33 @@
     align-items: flex-start;
     gap: .25rem;
 
-    // The "+ Floor" button - a plain child, not wrapped in .floorplan-floor-tab
-    // like the others - matches their height so it doesn't stand out as
-    // bigger for having no delete button next to it.
+    // The add buttons - plain children, not wrapped in .floorplan-floor-tab
+    // like the others - match their height so they don't stand out as bigger
+    // for having no delete button next to them.
     > .btn {
         height: 2rem;
         white-space: nowrap;
+    }
+}
+
+// One at each end of the strip: the strip is the building in section, so the
+// button above the top floor adds a storey above and the one below the bottom
+// floor adds a basement. Square, and icon-only, so neither reads as a floor.
+.floorplan-floor-tab__add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    padding: 0;
+    opacity: .75;
+
+    &:hover,
+    &:focus-visible {
+        opacity: 1;
+    }
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
     }
 }
 
@@ -260,8 +296,18 @@
     }
 }
 
-.floorplan-versions[hidden] {
-    display: none;
+.floorplan-versions {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+
+    &[hidden] {
+        display: none;
+    }
+
+    .btn {
+        justify-content: flex-start;
+    }
 }
 
 // -- Map overlays -----------------------------------------------------------
@@ -276,12 +322,35 @@
     background: transparent;
     border: 0;
     box-shadow: none;
-    font-weight: 600;
-    color: #1a1a1a;
+    text-align: center;
+
+    // Zoomed out far enough, a room's name is wider than the room, and the
+    // names obscure the geometry they annotate. `visibility`, not `display`:
+    // the label has to keep its box so it can still be measured on the next
+    // pass, or it would report zero width, always "fit", and flicker back.
+    &.is-clipped {
+        visibility: hidden;
+    }
     text-shadow:
         0 0 3px #fff,
         0 0 3px #fff,
         0 1px 2px rgb(255 255 255 / 90%);
+
+    &__name {
+        display: block;
+        font-weight: 600;
+        color: #1a1a1a;
+    }
+
+    // The area is secondary to the name, not a value of equal weight next to
+    // it - a smaller, softer line underneath reads that way at a glance.
+    &__area {
+        display: block;
+        font-weight: 400;
+        font-size: .82em;
+        color: #1a1a1a;
+        opacity: .6;
+    }
 }
 
 // Live length/snap readout that follows the cursor while drawing a wall.
@@ -333,6 +402,245 @@
         color: var(--ul-grey-6);
         text-transform: capitalize;
     }
+}
+
+// Without this the browser claims a finger drag as a page scroll or a pinch
+// and never delivers pointermove, so every drag below would be mouse-only -
+// which is exactly what it was. Set on the drawn geometry rather than the map
+// container, so panning and pinch-zooming the plan itself still work.
+.floorplan-wall,
+.floorplan-room,
+.floorplan-opening,
+.floorplan-handle {
+    touch-action: none;
+}
+
+// Joints are drawn on every corner so the gesture is discoverable at all, so
+// they have to stay quiet until aimed at.
+// Announced but not shown. There is no site-wide utility for this yet; if one
+// appears, this should give way to it.
+.floorplan-page .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    border: 0;
+    clip-path: inset(50%);
+}
+
+// The canvas takes focus now, so it has to show it.
+.floorplan-map:focus-visible {
+    outline: 3px solid var(--primary-color);
+    outline-offset: -3px;
+}
+
+// Over the canvas, not in the sidebar. Below 900px the sidebar stacks under
+// the map, so anything living in it is off-screen for the whole time someone is
+// drawing - which is exactly when undo and the floor switcher are wanted.
+.floorplan-canvas-controls {
+    position: absolute;
+    z-index: 500;
+    top: 10px;
+    // Centred, because both corners are spoken for: the floor strip holds the
+    // left, and the tool pill holds the right at wide widths (_layout.scss
+    // moves it from bottom-right to top-right above the small breakpoint).
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 0.25rem;
+
+    // Under 768px the tool pill drops to the bottom of the canvas, which frees
+    // the right - and centring a row that now carries zoom as well puts it
+    // through the floor strip on a narrow screen. Corners beat a centre here:
+    // left is the strip, right is this, bottom is the pill. 768 because that is
+    // where the pill actually moves, measured rather than guessed - the
+    // editor's own single-column breakpoint is 900, and using that put this row
+    // under the pill for the whole range between them.
+    @media (max-width: 767px) {
+        left: auto;
+        right: 10px;
+        transform: none;
+    }
+
+    // Appears only with a selection, so it must not shove undo and redo
+    // sideways when it does - the two controls anyone reaches for blind.
+    &__delete {
+        margin-left: 0.25rem;
+        color: var(--color-danger, #e53);
+    }
+
+    // Leaflet's own zoom control, moved in here by the editor. Its stylesheet
+    // gives it a stacked pair with its own border and shadow; this makes it one
+    // more thing in the row instead.
+    .leaflet-control-zoom {
+        display: flex;
+        margin: 0 0 0 0.25rem;
+        border: 0;
+        box-shadow: none;
+
+        a {
+            border-radius: $radius-sm;
+        }
+    }
+}
+
+.floorplan-canvas-floors {
+    position: absolute;
+    z-index: 500;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    max-height: calc(100% - 90px);
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--ul-surface-border);
+    border-radius: 6px;
+    background: var(--ul-surface-bg, #fff);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+
+    > .floorplan-field__label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        opacity: 0.7;
+    }
+
+    // Bottom of the building at the bottom of the strip, and scrollable rather
+    // than unbounded: a tower has more storeys than a phone has screen.
+    .floorplan-floors {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        overflow-y: auto;
+        min-height: 0;
+    }
+}
+
+// Sits under the tool pill, on the same side, so a tool's settings are beside
+// the tool rather than in the sidebar - which stacks below the map on a phone,
+// exactly where you cannot reach it while drawing.
+.floorplan-tool-options {
+    position: absolute;
+    z-index: 500;
+    right: 10px;
+    bottom: 76px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    max-width: min(22rem, calc(100% - 20px));
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--ul-surface-border);
+    border-radius: 6px;
+    background: var(--ul-surface-bg, #fff);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+
+    @include up($breakpoint-sm) {
+        top: 60px;
+        right: 12px;
+        bottom: auto;
+    }
+
+    &__group {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    &__label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        opacity: 0.7;
+    }
+}
+
+// The cursor is what says a modal tool is armed, on a canvas where the tool
+// buttons are off in a corner.
+.floorplan-map.is-boxing {
+    cursor: crosshair;
+}
+
+.floorplan-map.is-rotating {
+    cursor: grab;
+
+    &:active {
+        cursor: grabbing;
+    }
+}
+
+.floorplan-details {
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--ul-surface-border);
+    padding-top: 0.5rem;
+
+    > summary {
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 600;
+        opacity: 0.75;
+        list-style-position: inside;
+    }
+
+    &[open] > summary {
+        margin-bottom: 0.5rem;
+    }
+
+    textarea.form-input {
+        resize: vertical;
+    }
+}
+
+.floorplan-joint {
+    cursor: move;
+    transition: r 80ms ease-out;
+
+    &:hover {
+        r: 7;
+    }
+}
+
+.floorplan-rotate-grip {
+    cursor: grab;
+
+    &:active {
+        cursor: grabbing;
+    }
+}
+
+.floorplan-floor-fields {
+    display: flex;
+    gap: 0.4rem;
+    width: 100%;
+    margin-top: 0.5rem;
+
+    &__code {
+        width: 4.5rem;
+        flex: 0 0 auto;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__name {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+}
+
+.floorplan-floor-tab__chip {
+    display: inline-block;
+    min-width: 1.6em;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.floorplan-floor-tab__name {
+    margin-left: 0.4em;
+    opacity: 0.85;
 }
 
 .floorplan-floor-tab {
@@ -457,6 +765,109 @@
     display: flex;
     flex-wrap: wrap;
     gap: .35rem;
+}
+
+// A door may carry several locks - a padlock, a deadbolt and a chain are three
+// separate answers - so each row is "what kind" and "is it locked", with the
+// remove control kept small enough not to read as the row's main action.
+// The pin's own photos, offered for attaching. A strip rather than a picker
+// dialog: there are rarely more than a handful, and seeing them is most of
+// deciding which one shows the wall you are looking at.
+.floorplan-photos {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+
+    &__strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .3rem;
+    }
+}
+
+// A citation whose picture is gone. The reference outlives the image on purpose
+// (deleting a photo from someone's media must not delete the plan's note about
+// it), so it needs a form that says "there was a photo here" and offers to let go
+// of it - rather than being a thumbnail that cannot be drawn.
+.floorplan-photo-missing {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .4rem;
+    padding: .25rem .35rem;
+    border: 1px dashed var(--ul-grey-4);
+    border-radius: $radius-sm;
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+
+    span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+.floorplan-photo {
+    width: 3rem;
+    height: 3rem;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: $radius-sm;
+    overflow: hidden;
+    cursor: pointer;
+    opacity: .55;
+    background: none;
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    // Attached reads as "in", not as "selected": the dimmed ones are the
+    // choices, and the lit one is part of this item now.
+    &.is-attached {
+        opacity: 1;
+        border-color: var(--primary-color, #00838f);
+    }
+
+    &:hover,
+    &:focus-visible {
+        opacity: 1;
+    }
+}
+
+.floorplan-locks {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.floorplan-lock-entry {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+}
+
+.floorplan-lock {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+
+    .form-input {
+        min-width: 0;
+    }
+
+    &__remove {
+        flex: 0 0 auto;
+        opacity: .7;
+
+        &:hover,
+        &:focus-visible {
+            opacity: 1;
+        }
+    }
 }
 
 .floorplan-connector {

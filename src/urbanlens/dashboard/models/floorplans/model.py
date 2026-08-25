@@ -54,6 +54,7 @@ from django.db.models import (
     CheckConstraint,
     DateField,
     DecimalField,
+    Deferrable,
     F,
     FloatField,
     ForeignKey,
@@ -62,6 +63,7 @@ from django.db.models import (
     OneToOneField,
     Q,
     TextChoices,
+    UniqueConstraint,
     URLField,
 )
 from django.db.models.fields import CharField, IntegerField, PositiveIntegerField, SmallIntegerField, TextField
@@ -79,10 +81,17 @@ class FloorplanWallKind(TextChoices):
     hint and renders as nothing, but participates fully in enclosing a region.
     Without it a courtyard, a loading bay, a collapsed side or an unexplored
     boundary can only be recorded by drawing a wall that is not there.
+
+    ``FENCE`` is a boundary rather than a building element - a yard, a
+    compound, the line you have to get past before the structure. A *gap* in a
+    fence is a ``VIRTUAL`` span rather than an opening, since it is a stretch
+    where nothing is built; an opening is fitted into fabric that continues,
+    which is what a ``GATE`` is.
     """
 
     EXTERIOR = "exterior", "Exterior wall"
     INTERIOR = "interior", "Interior wall"
+    FENCE = "fence", "Fence"
     VIRTUAL = "virtual", "Virtual (open edge)"
     COLLAPSED = "collapsed", "Collapsed / ruined"
 
@@ -105,6 +114,7 @@ class FloorplanOpeningKind(TextChoices):
 
     DOOR = "door", "Door"
     DOORWAY = "doorway", "Doorway (no door)"
+    GATE = "gate", "Gate"
     WINDOW = "window", "Window"
     HATCH = "hatch", "Hatch"
 
@@ -183,6 +193,12 @@ class FloorplanItem(abstract.FrontendDashboardModel):
     built_date = DateField(null=True, blank=True)
     attributes = JSONField(default=dict, blank=True)
     source = ForeignKey("dashboard.FloorplanSource", on_delete=SET_NULL, null=True, blank=True, related_name="+")
+    # The attachment path for photos of a wall, opening, room or marker: the
+    # media lives once in the plan's reference pool and any number of items
+    # point at it. Attachment is item-level, not a point on a wall - this
+    # relation carries no geometry, and a photo's own position and heading live
+    # on the linked Image (latitude/longitude/direction), whose coordinate
+    # provenance is not yet separable; see models/images/model.py.
     references = ManyToManyField("dashboard.FloorplanReference", blank=True, related_name="%(class)ss")
     labels = ManyToManyField("dashboard.Label", blank=True, related_name="floorplan_%(class)ss")
 
@@ -283,8 +299,15 @@ class FloorplanSource(abstract.FrontendDashboardModel):
     author = CharField(max_length=255, blank=True, default="")
     attributes = JSONField(default=dict, blank=True)
 
+    #: Position in the plan's own list. Written from the payload index on every
+    #: save, so the order a document is sent in is the order it comes back in -
+    #: which is what lets the editor match a pool row it has just created to the
+    #: row the server made for it.
+    sort_order = PositiveIntegerField(default=0)
+
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_sources"
+        ordering = ("sort_order", "id")
 
     def __str__(self) -> str:
         return self.title or self.author or self.url or f"source {self.pk}"
@@ -307,12 +330,19 @@ class FloorplanReference(abstract.FrontendDashboardModel):
     kind = CharField(max_length=16, choices=FloorplanReferenceKind.choices, default=FloorplanReferenceKind.OTHER)
     title = CharField(max_length=255, blank=True, default="")
     url = URLField(max_length=1000, blank=True, default="")
-    image = ForeignKey("dashboard.Image", on_delete=CASCADE, null=True, blank=True, related_name="floorplan_references")
+    # SET_NULL, not CASCADE: deleting a photo from someone's media must not reach
+    # into a floorplan and delete the citation that referred to it. The reference
+    # keeps its url and caption and goes on describing what it described.
+    image = ForeignKey("dashboard.Image", on_delete=SET_NULL, null=True, blank=True, related_name="floorplan_references")
     description = TextField(blank=True, default="")
     attributes = JSONField(default=dict, blank=True)
 
+    #: As FloorplanSource.sort_order: the payload's own order, preserved.
+    sort_order = PositiveIntegerField(default=0)
+
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_references"
+        ordering = ("sort_order", "id")
 
     def __str__(self) -> str:
         return self.title or self.url or f"reference {self.pk}"
@@ -325,16 +355,27 @@ class FloorplanFloor(FloorplanItem):
     enclose, so an outline stored here would be a second, divergent answer to
     the same question.
 
+    A storey carries three facts that are easy to conflate and must not be:
+    where it sits in the stack (``level``), what people call it on a lift
+    button (``designation``), and any nickname the author gives it (``name``).
+    Skipping a thirteenth floor by designation while the levels stay
+    contiguous is exactly the case that needs them apart.
+
     Attributes:
         floorplan: The plan version this floor belongs to.
-        level: Storey number - 0 is ground, negative below grade.
-        name: Display label ("Ground floor", "Mezzanine").
+        level: Storey number - 0 is ground, negative below grade. Contiguous
+            within a plan: stacking, the floor-below underlay and stair/lift
+            connectors all read adjacency off it.
+        designation: The lift-button code ("G", "14", "4A", "B2", "M"). Blank
+            means derive it from the level, which is the ordinary case.
+        name: Optional nickname ("Boiler level"). Never affects numbering.
         elevation_meters: The walking surface's height above sea level.
         height_meters: Floor-to-ceiling height.
     """
 
     floorplan = ForeignKey(Floorplan, on_delete=CASCADE, related_name="floors")
     level = SmallIntegerField(default=0)
+    designation = CharField(max_length=8, blank=True, default="")
     name = CharField(max_length=255, blank=True, default="")
     elevation_meters = FloatField(null=True, blank=True)
     height_meters = FloatField(null=True, blank=True)
@@ -342,9 +383,18 @@ class FloorplanFloor(FloorplanItem):
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_floors"
         ordering = ("level", "sort_order", "id")
+        constraints = [
+            # DEFERRED is load-bearing, not decoration. save_document writes
+            # floors one row at a time inside a single transaction, so a
+            # reorder that swaps two levels, or a mid-stack delete that
+            # renumbers 3 down to 2, necessarily collides part-way through.
+            # Checked at commit, those are fine; checked per statement, they
+            # are an IntegrityError.
+            UniqueConstraint(fields=["floorplan", "level"], name="floorplan_floor_unique_level", deferrable=Deferrable.DEFERRED),
+        ]
 
     def __str__(self) -> str:
-        return self.name or f"Level {self.level}"
+        return self.name or self.designation or f"Level {self.level}"
 
 
 class FloorplanWall(FloorplanItem):

@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { matrix3dForCorners } from "./map-image-overlays";
+import { matrix3dForCorners, overlaySubmitEnabled } from "./map-image-overlays";
 
 /** Parse a `matrix3d(...)` string back into its 16 column-major numbers. */
 function parseMatrix(css: string): number[] {
@@ -124,5 +124,27 @@ describe("matrix3dForCorners", () => {
         );
         const m = parseMatrix(css as string);
         expect(m.every((value) => Number.isFinite(value))).toBe(true);
+    });
+});
+
+describe("overlaySubmitEnabled", () => {
+    it("is disabled when nothing has been chosen", () => {
+        expect(overlaySubmitEnabled({ hasFile: false, urlValue: "", imageIdValue: "" })).toBe(false);
+    });
+
+    it("is enabled once a file is chosen", () => {
+        expect(overlaySubmitEnabled({ hasFile: true, urlValue: "", imageIdValue: "" })).toBe(true);
+    });
+
+    it("is enabled once a url is typed", () => {
+        expect(overlaySubmitEnabled({ hasFile: false, urlValue: "https://example.test/x.jpg", imageIdValue: "" })).toBe(true);
+    });
+
+    it("ignores a url field containing only whitespace", () => {
+        expect(overlaySubmitEnabled({ hasFile: false, urlValue: "   ", imageIdValue: "" })).toBe(false);
+    });
+
+    it("is enabled once an existing photo is picked", () => {
+        expect(overlaySubmitEnabled({ hasFile: false, urlValue: "", imageIdValue: "42" })).toBe(true);
     });
 });

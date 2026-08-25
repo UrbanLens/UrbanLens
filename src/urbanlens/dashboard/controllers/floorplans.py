@@ -17,6 +17,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.gis.geos import MultiPolygon
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -131,8 +132,11 @@ def _building_outline(pin: Pin) -> list[list[float]]:
         if polygon is None:
             continue
         # A MultiPolygon here means several detached structures; the largest is
-        # the one a floorplan is most likely about.
-        if polygon.geom_type == "MultiPolygon":
+        # the one a floorplan is most likely about. isinstance rather than
+        # geom_type, so this narrows for a reader and for the type checker
+        # instead of only for the runtime - a Polygon is not iterable, and
+        # nothing but the string said so.
+        if isinstance(polygon, MultiPolygon):
             parts = sorted(polygon, key=lambda part: part.area, reverse=True)
             if not parts:
                 continue
@@ -296,7 +300,7 @@ class FloorplanSaveView(LoginRequiredMixin, View):
             JsonResponse with the saved document, or a 400 naming the defect.
         """
         from urbanlens.dashboard.services.floorplans.resolution import floorplan_for_editing
-        from urbanlens.dashboard.services.floorplans.serialization import document_for, save_document
+        from urbanlens.dashboard.services.floorplans.serialization import StaleDocumentError, document_for, save_document
 
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
         # A plan may be placeless: not every pin resolves to a known building
@@ -317,8 +321,13 @@ class FloorplanSaveView(LoginRequiredMixin, View):
             pin=pin,
             version_uuid=str(document.get("uuid") or ""),
             on_date=_parse_date(document.get("valid_from")),
+            allow_community=bool(document.get("edit_community")),
         )
-        if floorplan.pin_id is None:
+        # A wiki-owned row is shared: parenting it to whoever happened to save
+        # it next would hand one profile's private pin the whole community
+        # plan, and mint detail pins in that account for other people's
+        # markers (see serialization._sync_linked_pin's stated invariant).
+        if floorplan.pin_id is None and floorplan.wiki_id is None:
             floorplan.pin = pin
         # Seed the plan-local origin from the pin the first time anything is
         # saved. Every coordinate in the document is metres from this point, so
@@ -328,12 +337,22 @@ class FloorplanSaveView(LoginRequiredMixin, View):
             document.setdefault("plan_origin", {"lat": float(pin.effective_latitude), "lng": float(pin.effective_longitude)})
         try:
             save_document(floorplan, document, profile=pin.profile)
+        except StaleDocumentError as exc:
+            # 409, not 400: the document is valid, it is just built on a version
+            # someone else has already replaced. The editor stops autosaving on
+            # this rather than retrying, since retrying is how the other tab's
+            # work gets destroyed.
+            return JsonResponse({"ok": False, "error": str(exc), "stale": True}, status=409)
         except ValueError as exc:
             return JsonResponse({"ok": False, "error": str(exc)}, status=400)
         # A placeless plan has no sibling versions to list: for_place(None)
         # would match every placeless plan on the site rather than none.
         versions = _version_list(place, pin.profile) if place is not None else []
-        saved = {**document_for(floorplan), "origin": "local", "versions": versions}
+        # Real provenance, not an assumption: a hardcoded "local" told the
+        # client it owned a row it had merely been allowed to edit, which hid
+        # the community banner from the next render.
+        origin = "community" if floorplan.wiki_id is not None else "local"
+        saved = {**document_for(floorplan), "origin": origin, "versions": versions}
         return JsonResponse({"ok": True, "floorplan": saved})
 
 
@@ -386,9 +405,15 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
             profile__user=self.request.user,
         )
         from urbanlens.dashboard.controllers.map_overlays import overlay_payload
+        from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES
         from urbanlens.dashboard.models.labels.model import Label
 
         context["pin"] = pin
+        # The same icon set and palette every other picker on the site uses, so
+        # a marker styled here and a detail pin styled from the pin page cannot
+        # offer different choices.
+        context["icon_categories"] = ICON_CATEGORIES
+        context["color_choices"] = COLOR_CHOICES
         context["place"] = _building_place(pin)
         context["building_choices"] = _building_choices(pin) if context["place"] is None else []
         context["outline_json"] = _building_outline(pin)

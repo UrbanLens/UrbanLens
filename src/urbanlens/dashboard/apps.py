@@ -26,6 +26,7 @@ class DashboardConfig(AppConfig):
         import urbanlens.dashboard.models.cache.signals
         import urbanlens.dashboard.models.comments.signals
         import urbanlens.dashboard.models.floorplans.signals
+        import urbanlens.dashboard.models.images.signals
         from urbanlens.dashboard.models.labels.signals import create_default_tags
         import urbanlens.dashboard.models.links.signals
         import urbanlens.dashboard.models.location.signals
@@ -54,6 +55,19 @@ class DashboardConfig(AppConfig):
         # Achievements subscribe to a dozen unrelated models, so their receivers
         # are registered from a table rather than one import per sender.
         connect_achievement_signals()
+
+        # The reputation ledger's rule_key choices are supplied by this
+        # registry, so it has to be populated before any form or admin page
+        # renders that field. Registration only builds dataclasses.
+        from urbanlens.dashboard.services.reputation.builtin_rules import register_builtin_rules
+
+        register_builtin_rules()
+
+        # Same table-driven shape as achievements, but the ledger write is
+        # synchronous - see that module's docstring.
+        from urbanlens.dashboard.models.reputation.signals import connect as connect_reputation_signals
+
+        connect_reputation_signals()
 
         # Plugin discovery only imports modules and instantiates plugin
         # classes - it must never touch the database this early.

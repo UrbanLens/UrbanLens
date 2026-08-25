@@ -66,7 +66,17 @@ export function initOrganizePriority(): void {
         edit.saveBtn.tabIndex = -1;
     }
 
-    async function savePriorityOrder(list: HTMLElement, flashItem: HTMLElement | null): Promise<void> {
+    /** Reorder failed - put the list back the way the server still has it,
+     * rather than leaving a drag/jump shown as if it landed when it didn't. */
+    function restorePriorityOrder(list: HTMLElement, previousOrder: HTMLElement[]): void {
+        previousOrder.forEach((el) => list.appendChild(el));
+        previousOrder.forEach((el, i) => {
+            const badge = priorityOrderBadge(el);
+            if (badge) badge.textContent = String(i + 1);
+        });
+    }
+
+    async function savePriorityOrder(list: HTMLElement, flashItem: HTMLElement | null, previousOrder: HTMLElement[]): Promise<void> {
         const items = Array.from(list.querySelectorAll<HTMLElement>(".priority-item[data-id]")).map((el, i) => {
             const badge = priorityOrderBadge(el);
             if (badge) badge.textContent = String(i + 1);
@@ -86,6 +96,7 @@ export function initOrganizePriority(): void {
             toast.success("Display order saved.");
         } catch (err) {
             toast.error(`Save failed: ${(err as Error).message}`);
+            restorePriorityOrder(list, previousOrder);
         }
     }
 
@@ -114,7 +125,7 @@ export function initOrganizePriority(): void {
         if (targetIdx >= remaining.length) list.appendChild(edit.item);
         else list.insertBefore(edit.item, remaining[targetIdx]!);
 
-        savePriorityOrder(list, edit.item);
+        savePriorityOrder(list, edit.item, items);
     }
 
     function cancelOrderEditor(): void {
@@ -268,13 +279,21 @@ export function initOrganizePriority(): void {
         const list = document.getElementById("priority-list");
         if (!list) return;
         prioritySortable?.destroy();
+        // Captured on drag start, not derived after the fact: two rapid
+        // drags can each fire a save while the earlier one is still in
+        // flight, and restoring a snapshot taken *before this specific
+        // drag* is what makes a failed save undo only its own change.
+        let dragStartOrder: HTMLElement[] = [];
         prioritySortable = new Sortable(list, {
             animation: 150,
             handle: ".priority-drag-handle",
             ghostClass: "priority-item--ghost",
             fallbackTolerance: 3,
+            onStart: () => {
+                dragStartOrder = priorityItems();
+            },
             onEnd: () => {
-                savePriorityOrder(list, null);
+                savePriorityOrder(list, null, dragStartOrder);
             },
         });
     }
@@ -292,9 +311,10 @@ export function initOrganizePriority(): void {
             const jumpItem = jumpBtn.closest<HTMLElement>(".priority-item");
             const list = document.getElementById("priority-list");
             if (!jumpItem || !list) return;
+            const previousOrder = priorityItems();
             if (jumpBtn.dataset.priorityJump === "top") list.insertBefore(jumpItem, list.firstElementChild);
             else list.appendChild(jumpItem);
-            savePriorityOrder(list, jumpItem);
+            savePriorityOrder(list, jumpItem, previousOrder);
             return;
         }
 

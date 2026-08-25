@@ -52,7 +52,6 @@ class MetricRegistryTests(SimpleTestCase):
         """Every metric the feature promises an admin can use exists by key."""
         expected = {
             "pins_created",
-            "wikis_created",
             "wiki_edits",
             "photos_uploaded",
             "markup_maps_created",

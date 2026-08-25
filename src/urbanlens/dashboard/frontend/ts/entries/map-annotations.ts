@@ -11,7 +11,7 @@
 import { getCsrfToken } from "../shared/csrf";
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import type { CustomLayerToggle } from "../shared/map-layers";
-import { createMapImageOverlays, type MapOverlayEntry } from "../shared/map-image-overlays";
+import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers, tileLayer } from "../shared/map-layers";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
 import { makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize } from "../shared/photo-map";
@@ -877,29 +877,15 @@ function init(): void {
     });
 
     // Hooks the manage-overlays dialog calls by name (it is server-rendered
-    // HTML, so it can't import from this module).
-    window.ulMapOverlayStartAlign = (uuid: string) => {
-        imageOverlays?.startAlign(uuid);
-        (document.getElementById("map-overlays-dialog") as HTMLDialogElement | null)?.close();
-    };
-    window.ulMapOverlayPreviewOpacity = (uuid: string, value: string) => imageOverlays?.previewOpacity(uuid, Number(value));
-    // A new overlay lands covering roughly the current viewport, so aligning
-    // it is a small adjustment rather than a hunt across the world.
-    window.ulMapOverlaySeedCorners = () => {
-        const input = document.getElementById("map-overlay-initial-corners") as HTMLInputElement | null;
-        if (!input) return;
-        const bounds = map.getBounds().pad(-0.25);
-        const nw = bounds.getNorthWest();
-        const ne = bounds.getNorthEast();
-        const se = bounds.getSouthEast();
-        const sw = bounds.getSouthWest();
-        input.value = JSON.stringify([
-            [nw.lat, nw.lng],
-            [ne.lat, ne.lng],
-            [se.lat, se.lng],
-            [sw.lat, sw.lng],
-        ]);
-    };
+    // HTML, so it can't import from this module) - shared with the floorplan
+    // editor's own copy of this dialog, see wireManageOverlaysDialog's docstring.
+    if (imageOverlays) {
+        wireManageOverlaysDialog({
+            map,
+            control: imageOverlays,
+            onAlignStart: () => (document.getElementById("map-overlays-dialog") as HTMLDialogElement | null)?.close(),
+        });
+    }
 
     // URL base for detail pin edit/delete: strip the placeholder UUID off the end.
     const dpEditBase = cfg.detailPinEditUrlTemplate.replace("00000000-0000-0000-0000-000000000000/", "");
@@ -1374,7 +1360,15 @@ function init(): void {
 
     function loadDetailPins(): void {
         fetch(cfg.detailPinsJsonUrl)
-            .then((r) => r.json())
+            .then((r) => {
+                // Without this, a server error whose body still parses as
+                // JSON (or one with no "detail_pins" key) fell through to
+                // the success branch below, which unconditionally clears
+                // the existing layer - a transient failure wiped every pin
+                // already on the map rather than leaving them alone.
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
             .then((data) => {
                 detailPinLayer.clearLayers();
                 highlightedDpUuid = null;
@@ -1450,7 +1444,10 @@ function init(): void {
                 });
                 buildDetailList();
             })
-            .catch((err) => console.warn("Could not load detail pins:", err));
+            .catch((err) => {
+                console.warn("Could not load detail pins:", err);
+                toast.error("Could not load your pins.");
+            });
     }
 
     // -- Detail pin multi-select: act on several child pins at once ------------
@@ -1645,13 +1642,20 @@ function init(): void {
         if (!uuids.length) return;
         const n = uuids.length;
         if (!(await confirmAction({ title: "Promote child pins?", message: `Promote ${n} child pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))) return;
+        // `.catch(() => false)` matters as much as the `.ok`: without it a single
+        // network failure rejects the whole Promise.all, so this function throws
+        // and the user gets no toast, no cleared selection and no refreshed list
+        // after confirming a bulk promote - see doDeleteSelectedDp() below, which
+        // needed the same fix for the same reason.
         const results = await Promise.all(
             uuids.map((uuid) => {
                 const slug = detailPins.find((d) => d.uuid === uuid)?.slug || uuid;
                 return fetch(`/dashboard/map/pin/${encodeURIComponent(slug)}/detach-parent/`, {
                     method: "POST",
                     headers: { "X-CSRFToken": getCsrfToken() },
-                }).then((r) => r.ok);
+                })
+                    .then((r) => r.ok)
+                    .catch(() => false);
             }),
         );
         const promoted = results.filter(Boolean).length;
@@ -2075,7 +2079,10 @@ function init(): void {
                 longitude: latlng.lng,
             }),
         })
-            .then((r) => r.json())
+            .then((r) => {
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                return r.json();
+            })
             .then((data) => {
                 window.mediaApplyMaterializedDrop?.(itemEl, data);
                 if (data.image_id && data.latitude != null && data.longitude != null) {
@@ -2285,8 +2292,15 @@ function init(): void {
                 const editableLayer = layer as L.Layer & { editing?: { _markerGroup?: L.LayerGroup } };
                 if (editableLayer.editing?._markerGroup) {
                     editableLayer.editing._markerGroup.eachLayer((m) => {
-                        m.off("contextmenu.rcdelete" as never);
-                        m.on("contextmenu.rcdelete" as never, (e: L.LeafletMouseEvent) => {
+                        // Leaflet's event system has no jQuery-style dot
+                        // namespacing - "contextmenu.rcdelete" was a distinct
+                        // event type nothing ever fires, so right-click
+                        // delete never worked despite the toast advertising
+                        // it. .off() with no listener removes every
+                        // "contextmenu" handler, which is what keeps repeat
+                        // calls (this runs on every EDITSTART) from stacking.
+                        m.off("contextmenu");
+                        m.on("contextmenu", (e: L.LeafletMouseEvent) => {
                             L.DomEvent.stopPropagation(e);
                             m.fire("click");
                         });
@@ -2581,7 +2595,12 @@ function init(): void {
             headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
             body: JSON.stringify(collectDpFormData()),
         })
-            .then(() => undefined)
+            .then((r) => {
+                // fetch only rejects on a network failure - a validation
+                // error (400) resolved here and was swallowed as success,
+                // so the edit looked saved while the server had discarded it.
+                if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            })
             .catch(() => toast.error("Failed to save detail pin changes."));
     }
 

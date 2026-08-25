@@ -162,7 +162,7 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.labels.meta import DEFAULT_LABEL_COLOR
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.links.model import PinLink
@@ -186,7 +186,7 @@ from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_lab
 from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label, label_conflict_message
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 from urbanlens.dashboard.services.map_pins.autocomplete import resolve_google_place, search_google_places, search_local
-from urbanlens.dashboard.services.media.images import delete_stored_file, detach_image_from_pin, detach_image_from_wiki
+from urbanlens.dashboard.services.media.images import delete_stored_file
 from urbanlens.dashboard.services.media.media_labels import MediaLabelError, set_media_labels
 from urbanlens.dashboard.services.media.media_relevance import toggle_media_vote
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
@@ -508,6 +508,33 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
     #: read and write caps each count only their own tier (see ``throttling``).
     throttle_classes = [ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle]
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {}
+
+    def initial(self, request, *args, **kwargs):
+        """Authenticate, then bind the caller as the source of any writes.
+
+        ``WriteSourceMiddleware`` cannot do this for the API. Both credential
+        kinds here are DRF authenticators, resolved in this method - so at
+        middleware time a bearer-token request still carries an
+        ``AnonymousUser``, and every write from a native app would record with
+        no actor at all. Field provenance decides what a concealed viewer sees
+        of their *own* contributions, so losing the identity here would conceal
+        an API editor's edit from the API editor.
+
+        Bound for the life of the request rather than in a context manager: DRF
+        dispatches the handler after ``initial()`` returns, so there is no block
+        to wrap. The ContextVar is per request-thread and every entry point
+        rebinds before its first write.
+        """
+        super().initial(request, *args, **kwargs)
+
+        from urbanlens.dashboard.models.abstract.versioning import WriteSource, bind_write_source
+
+        user = getattr(request, "user", None)
+        profile_id = getattr(getattr(user, "profile", None), "pk", None) if user is not None and user.is_authenticated else None
+        if profile_id is None:
+            bind_write_source(WriteSource.SYSTEM)
+        else:
+            bind_write_source(WriteSource.USER, actor=profile_id)
 
     @property
     def required_scopes(self) -> frozenset[ApiKeyScope]:
@@ -1298,25 +1325,48 @@ class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
 
     @extend_schema(responses={204: None, 404: ErrorSerializer})
     def delete(self, request: Request, image_uuid: UUID) -> Response:
-        """Delete one of the caller's own photos, file included."""
+        """Delete one of the caller's own photos, file included.
+
+        A photo the caller contributed to a community wiki is taken off their
+        own library and left on the wiki, unless ``?from_wiki=true`` says
+        otherwise - the same rule the pin gallery follows. Contributing is a
+        deliberate act, so undoing it is another one, and a client that says
+        nothing gets the answer that needs no action. Clients can ask first:
+        ``wiki_slug`` and ``source`` are both on the photo payload.
+
+        ``from_wiki`` is honoured only for an upload. A photo fetched from a URL
+        was a public resource online before this app saw it, so there is no
+        consent here to withdraw - it is removed on the wiki itself or not at
+        all, and that is enforced here rather than left to the client.
+
+        Args:
+            request: The API request; ``from_wiki=true`` also withdraws it.
+            image_uuid: UUID of the photo.
+
+        Returns:
+            204 when something was removed, 404 for a photo that is not the
+            caller's.
+        """
         image = self._get_image(request, image_uuid)
         if image is None:
             # 404 rather than 403 for someone else's photo - the same
             # no-oracle policy the rest of this API and the media gate follow.
             return Response({"error": "No such photo."}, status=404)
+
+        withdrawing = request.query_params.get("from_wiki", "").lower() in {"1", "true", "yes"} and image.source == ImageSource.UPLOAD
+        if image.wiki_id is not None and not withdrawing:
+            Image.objects.filter(pk=image.pk).update(pin=None)
+            return Response(status=204)
+
+        # Reached only when there's no wiki copy to protect, or the caller
+        # explicitly asked to withdraw it too - either way nothing is left that
+        # should keep this row alive, regardless of any pin still attached.
         # Matches controllers.photos.PhotoActionView.delete_photo: drop the
-        # stored file before the row, so deleting the row can't orphan bytes.
-        # A row also linked to a wiki (wiki_creation._seed_photos and
-        # PinGalleryBulkView's "send to wiki" repoint rather than copy) must be
-        # unlinked from the pin, not destroyed - see detach_image_from_pin. A
-        # wiki-only row with no pin still gets a full delete, same as before.
-        if image.pin_id is not None:
-            detach_image_from_pin(image)
-        elif image.wiki_id is not None:
-            detach_image_from_wiki(image)
-        else:
-            delete_stored_file(image)
-            image.delete()
+        # stored file before the row, so deleting the row can't orphan bytes -
+        # delete_stored_file has its own reference-count check for a file
+        # shared with another row (e.g. pin-to-pin sharing).
+        delete_stored_file(image)
+        image.delete()
         return Response(status=204)
 
 
@@ -1853,26 +1903,38 @@ class PinListDetailView(ExternalApiView):
         # Captured before anything is applied, so the resync decision below
         # compares the real before/after rather than assuming a change.
         before = (pin_list.is_smart, pin_list.smart_filter, pin_list.smart_boundary)
+        # A bare save() writes every column from this request's snapshot,
+        # silently reverting any field a concurrent request changed in
+        # between - including one made through PinListEditView, the other
+        # independent implementation of this same partial-update logic.
+        changed_fields: set[str] = set()
 
         if "name" in data:
             if PinList.objects.for_profile(profile).filter(name=data["name"]).exclude(pk=pin_list.pk).exists():
                 return Response({"error": "You already have a list with that name."}, status=400)
             pin_list.name = data["name"]
+            changed_fields.add("name")
         if "description" in data:
             pin_list.description = data["description"]
+            changed_fields.add("description")
         if "is_smart" in data:
             pin_list.is_smart = data["is_smart"]
+            changed_fields.add("is_smart")
         if "smart_boundary" in data:
             pin_list.smart_boundary = data["smart_boundary"]
+            changed_fields.add("smart_boundary")
         if "smart_filter" in data:
             pin_list.smart_filter = data["smart_filter"]
+            changed_fields.add("smart_filter")
         if "source_saved_filter_uuid" in data:
             pin_list.source_saved_filter = source_filter
+            changed_fields.add("source_saved_filter")
             # Pointing a list at a filter copies that filter's criteria in;
             # detaching it (null) leaves the last snapshot in place, matching
             # PinListEditView and the SET_NULL on the FK itself.
             if source_filter is not None:
                 pin_list.smart_filter = source_filter.criteria
+                changed_fields.add("smart_filter")
 
         if pin_list.smart_filter is not None:
             try:
@@ -1880,7 +1942,8 @@ class PinListDetailView(ExternalApiView):
             except CriteriaOwnershipError as exc:
                 return Response({"error": exc.safe_message}, status=400)
 
-        pin_list.save()
+        if changed_fields:
+            pin_list.save(update_fields=[*changed_fields, "updated"])
 
         after = (pin_list.is_smart, pin_list.smart_filter, pin_list.smart_boundary)
         if before != after:
@@ -2279,23 +2342,36 @@ class LabelDetailView(ExternalApiView):
         if error is not None:
             return error
 
+        # A bare save() writes every column from this request's snapshot,
+        # silently reverting any field a concurrent request changed in
+        # between - including one made through LabelEditView, the other
+        # independent implementation of this same partial-update logic.
+        changed_fields: list[str] = []
+
         if "name" in data:
             conflict = find_conflicting_label(profile=profile, name=data["name"], kind=label.kind, exclude_pk=label.pk)
             if conflict is not None:
                 return Response({"error": label_conflict_message(conflict, singular_title=label.kind.title())}, status=409)
             label.name = data["name"]
+            changed_fields.append("name")
         if "description" in data:
             label.description = data.get("description") or None
+            changed_fields.append("description")
         if "color" in data:
             label.color = clean_color(data.get("color"))
+            changed_fields.append("color")
         if "icon" in data:
             label.icon = data.get("icon") or None
+            changed_fields.append("icon")
         if "order" in data:
             label.order = data["order"]
+            changed_fields.append("order")
         if "allow_auto_tag" in data:
             label.allow_auto_tag = data["allow_auto_tag"]
+            changed_fields.append("allow_auto_tag")
         if "keywords" in data:
             label.keywords = data.get("keywords") or None
+            changed_fields.append("keywords")
 
         # Validated before anything is written. Saving first and checking the
         # hierarchy afterwards meant a PATCH combining an ordinary field with a
@@ -2307,7 +2383,14 @@ class LabelDetailView(ExternalApiView):
             return Response({"error": "That parent would create a loop in the label hierarchy."}, status=400)
 
         # `kind` is deliberately ignored on update - see LabelWriteSerializer.
-        label.save()
+        if changed_fields:
+            label.save(update_fields=changed_fields)
+            # A label's icon/color/name feed into every pin's cached map marker
+            # without touching the Pin row itself, so the client's cache-
+            # freshness check (keyed to Max(Pin.updated)) would otherwise never
+            # notice this change - same reasoning as LabelEditView's internal
+            # equivalent, missing here before this fix.
+            Pin.objects.filter(profile=profile, labels=label).update(updated=timezone.now())
 
         if "parent_uuids" in data:
             label.parents.set(parents)

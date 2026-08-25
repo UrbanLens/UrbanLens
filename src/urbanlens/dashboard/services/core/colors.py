@@ -15,7 +15,7 @@ values again at render time - neither side assumes the other ran.
 from __future__ import annotations
 
 import re
-from typing import TypeGuard
+from typing import TypeGuard, overload
 
 HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -71,6 +71,14 @@ def sanitize_optional_color(value: object, fallback: str = "") -> str:
     return value if is_hex_color(value) else fallback
 
 
+@overload
+def clean_color(value: object, *, default: str, allow_none_keyword: bool = False) -> str: ...
+
+
+@overload
+def clean_color(value: object, *, default: None = None, allow_none_keyword: bool = False) -> str | None: ...
+
+
 def clean_color(value: object, *, default: str | None = None, allow_none_keyword: bool = False) -> str | None:
     """Return ``value`` when it is a colour this application stores, else ``default``.
 
@@ -94,7 +102,10 @@ def clean_color(value: object, *, default: str | None = None, allow_none_keyword
             where it would be rendered as a CSS keyword by accident.
 
     Returns:
-        A validated colour string, or ``default``.
+        A validated colour string, or ``default``. Every return is either
+        ``default`` or a string, which is what the overloads above state: given a
+        ``str`` default this never returns ``None``, so a caller assigning the
+        result straight into a non-nullable column does not have to prove it.
     """
     if value is None:
         return default

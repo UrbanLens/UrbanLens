@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Collection
 
 from django.utils import timezone
-from PIL import Image as PILImage
+from PIL import Image as PILImage, ImageOps
 from PIL.ExifTags import GPSTAGS, TAGS
 
 if TYPE_CHECKING:
@@ -483,24 +483,25 @@ def stored_file_needs_transcode(name: str) -> bool:
     return posixpath.splitext(name or "")[1].lower() in _MUST_TRANSCODE_EXTENSIONS
 
 
-def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool, strip_gps: bool = False) -> int | None:
-    """Downscale and/or re-encode an Image's stored file in place.
+def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool) -> int | None:
+    """Downscale, re-encode, and strip EXIF from an Image's stored file in place.
 
-    The stored file is replaced only when processing actually shrinks it (or a
-    WebP conversion was requested), unless ``strip_gps`` removed an embedded
-    GPS tag - that always forces a re-save regardless of the resulting size,
-    since leaving the original file in place would defeat the point. The
-    caller is responsible for persisting ``image.image.name`` and the returned
-    size to the database - this function only touches storage.
+    The stored file is replaced when processing shrinks it, when a WebP
+    conversion was requested, **or** when it carries an EXIF block - that last
+    one regardless of the resulting size, since leaving the original in place is
+    exactly the leak. The caller persists ``image.image.name`` and the returned
+    size; this function only touches storage.
+
+    EXIF removal is unconditional and not a setting. The block identifies the
+    camera and often the place, and a stored file is served to everybody who can
+    reach the container it was contributed to. The values are kept on the
+    ``Image`` row (``exif_data``, ``latitude``/``longitude``, ``taken_at``),
+    where the app's own visibility rules apply to them.
 
     Args:
         image: The Image row whose stored file to process.
         max_dimension: Longest-edge cap in pixels, or None to keep dimensions.
         convert_webp: Whether to re-encode the file as WebP.
-        strip_gps: When True, removes any embedded GPS EXIF tag from the
-            stored file's own metadata (independent of the derived
-            ``Image.latitude``/``longitude`` fields, which the caller controls
-            separately).
 
     Returns:
         The new stored size in bytes when the file was replaced, else None.
@@ -530,22 +531,20 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
         rewriting = processable or must_transcode
         needs_resize = rewriting and max_dimension is not None and max(img.size) > max_dimension
         needs_convert = (processable and convert_webp and source_format != "WEBP") or must_transcode
-        exif_bytes = img.info.get("exif")
-        has_gps = False
-        if strip_gps:
-            # Driven off getexif() rather than info["exif"], because TIFF carries
-            # EXIF in its own native IFD and leaves info["exif"] unset - gating on
-            # that key meant a GPS-tagged TIFF was never even examined, let alone
-            # scrubbed, however explicitly the uploader had opted out.
-            exif = img.getexif()
-            if exif.get_ifd(_GPS_IFD_TAG):
-                del exif[_GPS_IFD_TAG]
-                exif_bytes = exif.tobytes()
-                has_gps = True
-        if not needs_resize and not needs_convert and not has_gps:
+        # Checked off getexif() as well as info["exif"], because TIFF carries EXIF
+        # in its own native IFD and leaves info["exif"] unset - gating on that key
+        # alone meant a tagged TIFF was never even examined.
+        has_exif = bool(img.info.get("exif")) or bool(img.getexif())
+        # A file needing neither a resize nor a conversion is still rewritten when
+        # it carries EXIF, since leaving the original in place is the whole leak.
+        if not needs_resize and not needs_convert and not has_exif:
             return None
         icc_profile = img.info.get("icc_profile")
         img.load()
+        # Orientation is the one tag that changes what the file looks like, so it
+        # is applied to the pixels here - before the block is dropped on save,
+        # and while the tag is still there to read. A no-op when absent.
+        img = ImageOps.exif_transpose(img) or img
 
     if needs_resize and max_dimension is not None:
         img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
@@ -562,21 +561,13 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
         save_kwargs.update(quality=85, optimize=True)
     elif target_format == "PNG":
         save_kwargs.update(optimize=True)
-    # PNG included: Pillow writes an eXIf chunk, and dropping the block here loses
-    # the EXIF *Orientation* tag along with everything else. Nothing rotates the
-    # pixels to compensate - this pipeline has no `exif_transpose` - so a PNG that
-    # relied on the tag came out of a downscale rendering ninety degrees wrong,
-    # silently and permanently. (JPEG/WEBP keep the tag and their pixels; TIFF loses
-    # the tag but Pillow rotates the pixels on load, so both stay correct.)
-    # Gated on the same set that decided this file was rewritable at all, not a
-    # second literal list: two lists drift the moment a format is added to one,
-    # and the failure is silent and privacy-relevant. A format that passes the
-    # rewrite check but is missing here gets re-encoded without its stripped
-    # EXIF ever reaching save() - the encoder (pillow-heif, for HEIF) carries
-    # the original EXIF through, and the GPS the user asked to remove survives
-    # a rewrite that logged success.
-    if exif_bytes and target_format in _EXIF_REWRITABLE_FORMATS:
-        save_kwargs["exif"] = exif_bytes
+    # No `exif=` is ever passed: the block is recorded on the Image row and must
+    # not travel with a file we serve to a whole wiki. Orientation was the reason
+    # it used to be re-attached, and exif_transpose above has already spent it on
+    # the pixels. Note this is an omission that has to stay an omission - Pillow
+    # writes nothing unless asked, but an encoder that carries EXIF through on its
+    # own (pillow-heif does) would need the block cleared rather than merely not
+    # supplied, which is why HEIF is transcoded rather than rewritten in place.
     if icc_profile:
         save_kwargs["icc_profile"] = icc_profile
 
@@ -584,10 +575,10 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
     img.save(buffer, format=target_format, **save_kwargs)
     new_size = buffer.tell()
 
-    # A pure resize that somehow grew the file is not worth keeping - unless
-    # stripping GPS was the whole reason we're here, in which case keeping the
+    # A pure resize that somehow grew the file is not worth keeping - unless the
+    # EXIF strip was the whole reason we're here, in which case keeping the
     # smaller-but-still-tagged original would defeat the point.
-    if not needs_convert and not has_gps and new_size >= old_size:
+    if not needs_convert and not has_exif and new_size >= old_size:
         return None
 
     from django.core.files.base import ContentFile
@@ -692,6 +683,35 @@ def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *
     return None
 
 
+def _visible_uploader_name(img: Image, viewer_profile: Profile | None) -> str:
+    """The uploader's name as this viewer is allowed to see it.
+
+    A photo can be visible while the identity behind it is not: a profile that
+    has restricted who may see it is masked everywhere else it is named - the
+    external API's ``owner_slug``, wiki edit attribution - and this gallery was
+    printing ``profile.username`` straight off the row.
+
+    Args:
+        img: The photo.
+        viewer_profile: Who is looking, or None for an anonymous request.
+
+    Returns:
+        The username, or the masked placeholder when the viewer may not see the
+        uploader's identity. Empty string when the photo has no uploader.
+    """
+    from urbanlens.dashboard.services.profile.identity_visibility import DEFAULT_MASKED_PLACEHOLDER
+
+    if img.profile is None:
+        return ""
+    if viewer_profile is not None and img.profile_id == viewer_profile.pk:
+        return img.profile.username
+    # `can_view_profile` rather than the fuller `resolve_visible_identity`: the
+    # answer wanted here is only the name, and that helper also builds an avatar
+    # and a profile URL, which is work this caller throws away - and a reverse()
+    # a caller holding an unsaved profile cannot satisfy.
+    return img.profile.username if img.profile.can_view_profile(viewer_profile) else DEFAULT_MASKED_PLACEHOLDER
+
+
 def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None) -> dict:
     """Serialize an Image to a dict suitable for a photo gallery/map layer.
 
@@ -706,20 +726,27 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
     Returns:
         Dict with id/url/caption/latitude/longitude/uploader/is_mine, plus the
         attribution fields (author/source_url/copyright/taken_at) shown in the
-        lightbox.
+        lightbox, and the two flags the pin gallery's delete prompt reads.
     """
+    from urbanlens.dashboard.models.images.model import ImageSource
+
     return {
         "id": img.pk,
         "url": request.build_absolute_uri(img.image.url),
         "caption": img.caption or "",
         "latitude": float(img.latitude) if img.latitude is not None else None,
         "longitude": float(img.longitude) if img.longitude is not None else None,
-        "uploader": img.profile.username if img.profile else "",
+        "uploader": _visible_uploader_name(img, viewer_profile),
         "is_mine": viewer_profile is not None and img.profile_id == viewer_profile.pk,
         "author": img.author or "",
         "source_url": img.source_url or "",
         "copyright": img.copyright or "",
         "taken_at": img.taken_at.isoformat() if img.taken_at else None,
+        # What the pin gallery's delete prompt needs to know: whether removing
+        # this photo from a pin would also take it off a community wiki, and
+        # whether withdrawing it from there is even the owner's to do.
+        "on_wiki": img.wiki_id is not None,
+        "uploaded": img.source == ImageSource.UPLOAD,
     }
 
 

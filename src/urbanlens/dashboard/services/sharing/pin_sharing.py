@@ -150,6 +150,35 @@ def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: 
     return share
 
 
+def _official_name_for(location) -> str | None:
+    """A name for a shared pin that does not come from the person sharing it.
+
+    What somebody called their own pin is their business - "my old school" says
+    more about them than about the building. So the sharer either names the share
+    deliberately (``PinShare.shared_name``) or the copy falls back to what the
+    outside world calls the place: the location's externally-sourced
+    ``official_name``, else an alias on its wiki that came from a provider rather
+    than from a person.
+
+    User-authored aliases are excluded for the same reason the pin's own name is.
+
+    Args:
+        location: The location the shared pin sits at, or None.
+
+    Returns:
+        An official name, or None to let the pin fall back to its location.
+    """
+    if location is None:
+        return None
+    if location.official_name:
+        return location.official_name
+
+    from urbanlens.dashboard.models.aliases.model import AliasSource, WikiAlias
+
+    alias = WikiAlias.objects.filter(wiki__location=location).exclude(source=AliasSource.USER).order_by("pk").first()
+    return alias.name if alias is not None else None
+
+
 def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin:
     """Materialise a recipient-side Pin from an accepted share.
 
@@ -184,13 +213,8 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         source_share=share,
         parent_pin=parent_pin,
         location=share.shared_location or source.location,
-        name=share.shared_name or source.name,
+        name=share.shared_name or _official_name_for(share.shared_location or source.location),
         name_is_user_provided=bool(share.shared_name) or source.name_is_user_provided,
-        icon=source.icon,
-        description=source.description,
-        priority=source.priority,
-        vulnerability=source.vulnerability,
-        danger=source.danger,
         pin_type=source.pin_type,
         # Copied alongside pin_type for the same reason name_is_user_provided is
         # copied alongside name: it is the only thing stopping the automatic
@@ -198,13 +222,7 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         pin_type_is_user_provided=source.pin_type_is_user_provided,
         # effective_icon checks custom_icon before icon, so omitting it silently
         # changed what the shared pin looked like.
-        custom_icon=source.custom_icon.name or None,
         indoor_outdoor=source.indoor_outdoor,
-        color=source.color,
-        detail_bg_color=source.detail_bg_color,
-        detail_bg_opacity=source.detail_bg_opacity,
-        detail_border_color=source.detail_border_color,
-        detail_border_opacity=source.detail_border_opacity,
         date_built=source.date_built,
         date_abandoned=source.date_abandoned,
         date_last_active=source.date_last_active,
@@ -217,7 +235,44 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         plywood=source.plywood,
         locked=source.locked,
     )
-    new_pin.labels.set(source.labels.all())
+    # vulnerability and danger are not copied either: they read like properties of
+    # the place but they are one person's rating of it, which is the owner's side
+    # of the line below.
+    #
+    # The line this whole function is drawn along: facts about the *site* travel,
+    # and the owner's relationship to it does not. Its dates and what was observed
+    # there (fences, alarms, cameras, security, signs, vps, plywood, locked)
+    # describe the place and are what a share is for. Notes, styling, icon,
+    # colour, priority and labels are one person's account of it, and stay with
+    # them.
+    #
+    # The description never travels. It is the owner's personal notes about the
+    # place - what they thought, what they saw, what they mean to do about it -
+    # and there is no way in the product for somebody to consent to passing that
+    # on. Absent a way to ask, the answer is no.
+    #
+    # Not the sharer's labels. A Label belongs to one profile, so setting them
+    # here hung the *sharer's* rows off the *recipient's* pin - which shows one
+    # person's private organising scheme to another and leaves the recipient
+    # holding references they cannot manage. Labels are per-user by design;
+    # copying them is not a privacy question so much as a category error.
+    #
+    # The pin's own styling is not copied either: how somebody chose to colour
+    # their pin is theirs, not part of the place. What travels is what is true
+    # about the site - its dates, and what was observed there (fences, alarms,
+    # cameras, security, signs, vps, plywood, locked).
+    # What travels with a photo, and what does not.
+    #
+    # Not the caption, and not exif_data: the sharer chose to show somebody a
+    # picture, which is not the same as handing over what they wrote about it or
+    # the block behind it - camera serial, timestamps, and the coordinates the
+    # shot was taken from. Consent to the image is not consent to its file.
+    #
+    # Dates, lat/lng and direction do travel, because they are what let the copy
+    # be placed on a map and set in time - the reasons a photo is worth sharing.
+    #
+    # An unattributed photo gets the sharer's name, so the recipient can see where
+    # it came from; one that already credits somebody keeps that credit.
     shared_images = list(share.images.all())
     copied_images = Image.objects.bulk_create(
         [
@@ -234,8 +289,7 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
                 media_type=image.media_type,
                 media_source_key=image.media_source_key,
                 media_item_key=image.media_item_key,
-                caption=image.caption,
-                author=image.author,
+                author=image.author or f"Shared by {share.from_profile.username}",
                 source_url=image.source_url,
                 copyright=image.copyright,
                 latitude=image.latitude,
@@ -244,7 +298,6 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
                 checksum=image.checksum,
                 taken_at=image.taken_at,
                 file_size=image.file_size,
-                exif_data=image.exif_data,
             )
             for image in shared_images
         ]

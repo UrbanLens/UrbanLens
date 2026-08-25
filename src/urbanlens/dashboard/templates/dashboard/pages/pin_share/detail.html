@@ -1,11 +1,12 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load map_components %}
 
 {% block title %}Shared Pin{% endblock %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
 {% endblock %}
 
 {% block content %}

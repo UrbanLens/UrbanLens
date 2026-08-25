@@ -46,7 +46,7 @@ class PinRelinkAccessTests(TestCase):
 
         # A place they have never discovered, with a community wiki.
         self.undiscovered = Location.objects.create(latitude=41.5, longitude=-73.5, official_name="Hudson River State Hospital")
-        self.wiki = baker.make(Wiki, location=self.undiscovered, name="Hudson River State Hospital", officially_created=True)
+        self.wiki = baker.make(Wiki, location=self.undiscovered, name="Hudson River State Hospital")
 
     def test_the_undiscovered_wiki_starts_out_of_reach(self) -> None:
         """Baseline - without this the rest of the test proves nothing."""

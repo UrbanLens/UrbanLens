@@ -28,7 +28,7 @@ import math
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.floorplans.model import Floorplan
+    from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanOpening
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,29 @@ def _overlaps(points: list[list[float]], bbox: tuple[float, float, float, float]
     lngs = [point[0] for point in points]
     lats = [point[1] for point in points]
     return not (max(lngs) < min_lng or min(lngs) > max_lng or max(lats) < min_lat or min(lats) > max_lat)
+
+
+def _opening_state(opening: FloorplanOpening) -> str:
+    """Whether this opening is presently secured, as one word.
+
+    A door may carry several locks, and the useful answer is about the door
+    rather than about any one of them: a padlock on and a deadbolt off still
+    means the door does not open. Only when every lock is known to be off does
+    the door read as unlocked; with no locks recorded, or none of them known,
+    the honest answer is that nobody has said.
+
+    Args:
+        opening: The opening, with its locks prefetched.
+
+    Returns:
+        ``"locked"``, ``"unlocked"`` or ``"unknown"``.
+    """
+    states = [lock.state for lock in opening.locks.all()]
+    if any(state == "locked" for state in states):
+        return "locked"
+    if states and all(state == "unlocked" for state in states):
+        return "unlocked"
+    return "unknown"
 
 
 def feature_collection(
@@ -134,7 +157,10 @@ def feature_collection(
         return True
 
     if "wall" in item_types:
-        walls = FloorplanWall.objects.filter(floor_id__in=floor_levels).prefetch_related("openings")
+        # Locks come with the openings, not one query per door: a renderer's
+        # first question about a door is whether it opens, and asking it per
+        # opening would be a query per opening.
+        walls = FloorplanWall.objects.filter(floor_id__in=floor_levels).prefetch_related("openings__locks")
         if kind:
             walls = walls.filter(kind=kind)
         for wall in walls:
@@ -155,7 +181,24 @@ def feature_collection(
                     # Openings ride with their wall rather than as features of
                     # their own: they have no independent position, and a
                     # renderer needs the wall to draw one at all.
-                    "openings": [{"uuid": str(opening.uuid), "kind": opening.kind, "t_start": opening.t_start, "t_end": opening.t_end, "swing": opening.swing} for opening in wall.openings.all()],
+                    "openings": [
+                        {
+                            "uuid": str(opening.uuid),
+                            "kind": opening.kind,
+                            "t_start": opening.t_start,
+                            "t_end": opening.t_end,
+                            "swing": opening.swing,
+                            "sill_meters": opening.sill_meters,
+                            # One word for what a reader wants to know about a
+                            # door, rather than the locks themselves: a lock's
+                            # type, condition and what opens it are the
+                            # document's business, and a map wants to colour a
+                            # door. Locked if any lock on it is - a door with a
+                            # padlock on and a deadbolt off is locked.
+                            "lock_state": _opening_state(opening),
+                        }
+                        for opening in wall.openings.all()
+                    ],
                 },
             }
             if not add(feature, line):

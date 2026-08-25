@@ -40,10 +40,25 @@ function findTarget(hash: string): Element | null {
     }
 }
 
+// The hash last successfully scrolled to. Without this, every later
+// htmx:afterSettle on the page - a pagination click, a like, an unrelated
+// form submit - re-ran this and yanked the reader back to the original
+// anchor, since the URL's hash stays set long after it did its job.
+let scrolledToHash = "";
+
 export function scrollToHash(): void {
     const hash = window.location.hash;
-    if (!hash) return;
-    findTarget(hash)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!hash || hash === scrolledToHash) return;
+    const target = findTarget(hash);
+    if (!target) return; // not rendered yet - a later settle will retry
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    scrolledToHash = hash;
+}
+
+/** Reset the "already scrolled here" memory. Test-only: a real page navigation
+ * already gets a fresh module instance. */
+export function resetScrollToHashForTests(): void {
+    scrolledToHash = "";
 }
 
 export function installGlobalScrollToHash(): void {

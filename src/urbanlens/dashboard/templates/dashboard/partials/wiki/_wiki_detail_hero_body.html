@@ -1,7 +1,7 @@
 {% comment %}
 Hero body for the wiki page (pages/location/wiki.html) - so this page uses
 the same shared gradient hero every other page uses instead of its own
-one-off banner. Expects `wiki`, `location`, `can_delete_wiki`, and `user_pin`
+one-off banner. Expects `wiki`, `location`, and `user_pin`
 in context.
 
 The suggest-edits/delete/back-to-pin actions and the community-wiki notice
@@ -29,16 +29,6 @@ the hero's fixed height has no room to fit everything at once that small.
         <i class="material-symbols-outlined">edit_note</i>
         Suggest edits
     </button>
-    {% if can_delete_wiki %}
-    <button type="button" class="wiki-delete-btn btn btn--danger btn--sm"
-            hx-delete="{% url 'location.wiki.delete' location.slug %}"
-            hx-confirm="Delete this community wiki? No one else has viewed it yet, so this can't be undone by anyone but you. This cannot be undone."
-            hx-target="body"
-            title="No one else has viewed this wiki yet, so you can still delete it.">
-        <i class="material-symbols-outlined">delete</i>
-        Delete wiki
-    </button>
-    {% endif %}
     {% if parent_wiki %}
     {# Wikis nest themselves (a building's inside its campus's), so a nested #}
     {# page needs a way up. Only rendered when the viewer has earned the     #}

@@ -331,19 +331,18 @@ def sync_pin_stats_to_wiki(sender: type[Pin], instance: Pin, **kwargs) -> None:
         _sync_pin_stat_to_wiki(instance.wiki_id, instance.profile_id, wiki_field, getattr(instance, pin_field))
 
 
-@receiver(post_save, sender=Pin, dispatch_uid="pin_ensure_draft_wiki")
-def ensure_draft_wiki_for_pin_location(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
-    """Queue background creation of an unofficial draft Wiki for a newly pinned Location.
+@receiver(post_save, sender=Pin, dispatch_uid="pin_ensure_wiki")
+def ensure_wiki_for_pin_location(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
+    """Queue background creation of the Wiki for a newly pinned Location.
 
     Fires for every pin-creation path (manual add, CSV/Google Maps import,
     Flickr, Immich, GPX) since it's a model-level signal rather than a
     per-importer call - that's what makes this "still happens for bulk
     imports, but in the background" without slowing any of them down: the
     enqueue itself is a cheap non-blocking broker publish (see
-    ``tasks.ensure_draft_wiki_for_location``), and the wiki stays an
-    invisible draft (see ``Wiki.officially_created``) until the user
-    explicitly clicks "Create Wiki" - default boundaries are still generated
-    lazily on first pin-detail-page view, unchanged.
+    ``tasks.ensure_wiki_for_location``). The page is published from the moment
+    it exists and fills in as enrichment lands - default boundaries are still
+    generated lazily on first pin-detail-page view, unchanged.
 
     Skipped when the triggering profile has community features disabled -
     their own action shouldn't kick off community-wiki background work for a
@@ -357,8 +356,8 @@ def ensure_draft_wiki_for_pin_location(sender: type[Pin], instance: Pin, created
 
     def _run() -> None:
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import ensure_draft_wiki_for_location
+        from urbanlens.dashboard.tasks import ensure_wiki_for_location
 
-        safely_enqueue_task(ensure_draft_wiki_for_location, location_id)
+        safely_enqueue_task(ensure_wiki_for_location, location_id)
 
     transaction.on_commit(_run)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from functools import lru_cache
 import hashlib
+import json
 import logging
 from typing import TYPE_CHECKING, Any, Self
 
@@ -273,3 +274,100 @@ class EncryptedTextField(TextField):
                     return UndecryptableValue(default, value)
                 return default
             raise InvalidToken(f"Could not decrypt {model_name}.{self.name} - field_encryption_key may have changed.") from None
+
+
+class UndecryptableJSON(dict):
+    """A ``fail_soft`` JSON read that could not be decrypted, carrying its ciphertext.
+
+    The mapping counterpart to :class:`UndecryptableValue`, and it exists for a
+    gap that class names but cannot close: ciphertext preservation only works
+    for fields whose default is a string, so a ``null=True`` field degrades to a
+    bare ``None``, which cannot carry an attribute. A JSON field has somewhere
+    to put it - an empty ``dict`` is falsy, supports ``.get()``, and reads to
+    every consumer exactly like the "no EXIF recorded" case it stands in for.
+
+    Args:
+        ciphertext: The undecryptable value exactly as read from the database.
+    """
+
+    __slots__ = ("ciphertext",)
+
+    def __init__(self, ciphertext: str) -> None:
+        super().__init__()
+        self.ciphertext = ciphertext
+
+
+#: Anything ``json.dumps`` round-trips. Named so the descriptor declarations
+#: below read as intent rather than as a widening.
+type JSONValue = dict[str, Any] | list[Any] | str | int | float | bool | None
+
+
+class EncryptedJSONField(EncryptedTextField):
+    """A JSON field whose serialised value is encrypted at rest with Fernet.
+
+    Stored as ``text`` rather than ``jsonb``: ciphertext is opaque, so the
+    database could not index or query inside it either way, and a JSON column
+    type would only advertise a capability the encryption removes. Nothing may
+    filter on the contents of one of these - by construction, not by convention.
+
+    Subclasses :class:`EncryptedTextField` so ``manage.py rotate_field_encryption``
+    picks these columns up with the rest; it discovers fields by ``isinstance``.
+
+    Reads give back whatever was stored (usually a ``dict``), ``None`` for an
+    empty column, or an empty :class:`UndecryptableJSON` when ``fail_soft`` is
+    set and no key matched.
+    """
+
+    if TYPE_CHECKING:
+        # django-stubs derives a field's attribute type from its base, which
+        # here is TextField - so without this, every read is typed `str` and
+        # every write of the dict this field exists to hold is an error. The
+        # storage type is text; the *Python* type is a JSON value, and saying
+        # so here is what stops callers having to work around a type the
+        # attribute never actually has.
+        def __get__(self, instance: Any, owner: Any) -> JSONValue: ...
+
+        def __set__(self, instance: Any, value: JSONValue) -> None: ...
+
+    def get_prep_value(self, value: object) -> str | None:
+        """Serialise then encrypt ``value`` for storage.
+
+        Args:
+            value: The JSON-serialisable value, or None.
+
+        Returns:
+            The ciphertext to store, or None.
+        """
+        # Straight back as it came, never re-encrypted - the same contract
+        # UndecryptableValue has with the parent, for the nullable case the
+        # parent cannot cover.
+        if isinstance(value, UndecryptableJSON):
+            return value.ciphertext
+        if value is None:
+            return None
+        return super().get_prep_value(json.dumps(value, separators=(",", ":"), sort_keys=True))
+
+    def from_db_value(self, value: str | None, expression: object, connection: object) -> object:
+        """Decrypt and deserialise a stored value.
+
+        Args:
+            value: The ciphertext read from the database, or None/empty.
+            expression: Unused (required by Django's field API).
+            connection: Unused (required by Django's field API).
+
+        Returns:
+            The stored object, None for an empty column, or an empty
+            :class:`UndecryptableJSON` when ``fail_soft`` swallowed a failure.
+
+        Raises:
+            InvalidToken: No configured key could decrypt it and ``fail_soft``
+                is not set.
+        """
+        decrypted = super().from_db_value(value, expression, connection)
+        if not decrypted:
+            # A non-empty column that came back empty is the fail_soft path: the
+            # parent degraded a nullable field to a bare None and dropped the
+            # ciphertext on the way. Pick it back up so a save before the key is
+            # fixed writes the original bytes rather than destroying them.
+            return UndecryptableJSON(value) if value else None
+        return json.loads(decrypted)

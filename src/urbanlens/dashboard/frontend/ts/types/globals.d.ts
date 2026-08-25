@@ -53,7 +53,10 @@ interface CommentMapComposerOptions {
 
 declare global {
     interface Window {
-        toastr: Toastr;
+        // A CDN <script> in dashboard/themes/base.html, so it is absent whenever that
+        // request does not land. shared/dialogs.ts's toast falls back; reach for it
+        // rather than window.toastr directly.
+        toastr?: Toastr;
         // Resolves "alt" when the caller offered altLabel and the user picked it - the
         // pin-delete "keep child pins" path depends on that third outcome. This was
         // declared as Promise<boolean> while the implementation could already return
@@ -70,13 +73,17 @@ declare global {
         // shared/album-items.ts; called from the server-rendered Media gallery
         // tiles, which that module doesn't own.
         albumAddExternalMedia?: (addUrl: string, media: { source: string; url: string; page_url?: string; caption?: string }) => Promise<void>;
-        // Georeferenced map image overlays. Defined by the pin/wiki map
-        // entry (entries/map-annotations.ts) and called by name from the
-        // server-rendered manage-overlays dialog, which can't import it.
+        // Georeferenced map image overlays. Defined by shared/map-image-overlays.ts's
+        // wireManageOverlaysDialog(), called from both the pin/wiki map entry and
+        // the floorplan editor, and invoked by name from the server-rendered
+        // manage-overlays dialog, which can't import either.
         ulMapOverlayStartAlign?: (uuid: string) => void;
         ulMapOverlayPreviewOpacity?: (uuid: string, value: string) => void;
         ulMapOverlaySeedCorners?: () => void;
-        ulMapOverlayPickFromMedia?: () => void;
+        ulMapOverlayPickFromMedia?: (galleryJsonUrl?: string) => void;
+        ulMapOverlayChooseImage?: (id: number, caption: string) => void;
+        ulMapOverlaySyncSubmitState?: () => void;
+        ulMapOverlayHandleDrop?: (event: DragEvent, zone: HTMLElement) => void;
     }
 
     const toastr: Toastr;

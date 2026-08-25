@@ -1,19 +1,17 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load static %}
 {% load map_components %}
 
 {% block title %}Floorplan · {{ pin.effective_name }}{% endblock %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
 {# Patches L (touch-rotate, shift+drag rotate, a rotate control) - stock Leaflet has no #}
 {# concept of map bearing at all, so this can't be a small bolt-on; must load after #}
 {# leaflet.js, since it extends L.Map/L.DomUtil in place rather than wrapping them. #}
-<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"
-    integrity="sha384-WaInCl5qKhXVwIIJ/XMxRvjzCTIkZ1uH9Evm3mNtVtfXWhJGU3EkedDBaf/037Ew" crossorigin="anonymous"></script>
+{% vendor_asset "leaflet_rotate_js" %}
 {% endblock %}
 
 {% block hero %}
@@ -66,24 +64,86 @@
 <div class="floorplan-editor">
     <div class="floorplan-editor__stage">
         <div class="floorplan-map-shell">
-            {# Floats over the map's top-right corner - same placement as the #}
-            {# main map's own tool pill (#map-buttons) - rather than a bar    #}
-            {# above the map, for a consistent "tools live on the map" feel. #}
-            <div id="floorplan-tools" class="floorplan-toolbar" role="toolbar" aria-label="Drawing tools">
-                <button type="button" class="btn btn--icon is-active" data-tool="select" aria-pressed="true" aria-label="Select" title="Select (V) · ctrl+click or shift+drag to select several">
-                    <i class="material-symbols-outlined">arrow_selector_tool</i>
+            {# Same markup/classes as the main map's own tool pill             #}
+            {# (_map_toolbar.html) - not that inclusion tag itself, since     #}
+            {# these tools are stateful (data-tool) rather than one-shot      #}
+            {# onclick actions, but the shared classes guarantee the same     #}
+            {# look, and the collapse toggle works for free (see             #}
+            {# themes/base.html's delegated .map-toolbar-collapse handler).  #}
+            {# The rotate control (leaflet-rotate, added to the map's own    #}
+            {# top-right corner) is reparented in here by floorplan-editor.ts #}
+            {# so it reads as one more tool instead of overlapping this pill. #}
+            <div id="floorplan-tools" class="map-buttons floorplan-toolbar" role="toolbar" aria-label="Drawing tools">
+                <button type="button" class="map-toolbar-collapse" aria-label="Toggle floorplan tools"
+                        data-tooltip="Collapse toolbar" data-tooltip-float="true" data-tooltip-pos="below">
+                    <i class="material-symbols-outlined">chevron_right</i>
                 </button>
-                <button type="button" class="btn btn--icon" data-tool="wall" aria-pressed="false" aria-label="Draw walls" title="Wall (W)">
-                    <i class="material-symbols-outlined">timeline</i>
-                </button>
-                <div class="floorplan-toolbar__markers" role="group" aria-label="Marker type">
-                    <button type="button" class="btn btn--icon" data-marker-kind="hazard" aria-label="Hazard marker" title="Hazard (H)"><i class="material-symbols-outlined">warning</i></button>
-                    <button type="button" class="btn btn--icon" data-marker-kind="stair" aria-label="Stair marker" title="Stair (S)"><i class="material-symbols-outlined">stairs</i></button>
-                    <button type="button" class="btn btn--icon" data-marker-kind="elevator" aria-label="Elevator marker" title="Elevator (E)"><i class="material-symbols-outlined">elevator</i></button>
+                <div class="map-buttons-content">
+                    <button type="button" class="map-btn-icon is-active" data-tool="select" aria-pressed="true" aria-label="Select"
+                            data-tooltip="Select (V) · drag to pan · ctrl+click for several · shift-drag keeps it square" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">arrow_selector_tool</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="box" aria-pressed="false" aria-label="Box select"
+                            data-tooltip="Box select (B) · drag a region" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">highlight_alt</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="rotate" aria-pressed="false" aria-label="Turn the plan"
+                            data-tooltip="Turn (T) · drag anywhere" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">rotate_90_degrees_ccw</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="wall" aria-pressed="false" aria-label="Draw walls"
+                            data-tooltip="Wall (W)" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">timeline</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="opening" aria-pressed="false" aria-label="Add an opening"
+                            data-tooltip="Opening (D) · tap a wall" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">sensor_door</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="room" aria-pressed="false" aria-label="Add room"
+                            data-tooltip="Click to generate a whole rectangular room, sized and joined from what's already drawn (R)" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">meeting_room</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="marker" aria-pressed="false" aria-label="Add a marker"
+                            data-tooltip="Marker (M) · hazard, stair or lift" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">pin_drop</i>
+                    </button>
                 </div>
             </div>
 
+            {# What the armed tool will do next. Beside the tools rather than in #}
+            {# the sidebar, which stacks below the map on a phone - the settings #}
+            {# for a tool have to be reachable while using it. Built by          #}
+            {# floorplan-editor.ts, which knows which tool is armed.             #}
+            <div id="floorplan-tool-options" class="floorplan-tool-options" role="group" aria-label="Tool options" hidden></div>
+
+            {# Undo and the floor strip live over the canvas, not in the sidebar. #}
+            {# The sidebar stacks below the map under 900px, so on a phone both  #}
+            {# were off-screen for the whole time anyone was drawing - undo in   #}
+            {# particular being the one control you need exactly when you cannot #}
+            {# scroll to find it.                                                #}
+            <div class="floorplan-canvas-controls">
+                <button type="button" id="floorplan-undo" class="btn btn--icon" disabled aria-label="Undo" data-tooltip="Undo (Ctrl+Z)" data-tooltip-float="true">
+                    <i class="material-symbols-outlined">undo</i>
+                </button>
+                <button type="button" id="floorplan-redo" class="btn btn--icon" disabled aria-label="Redo" data-tooltip="Redo (Ctrl+Shift+Z)" data-tooltip-float="true">
+                    <i class="material-symbols-outlined">redo</i>
+                </button>
+                <button type="button" id="floorplan-delete" class="btn btn--icon floorplan-canvas-controls__delete" hidden
+                        aria-label="Delete selection" data-tooltip="Delete (Del)" data-tooltip-float="true">
+                    <i class="material-symbols-outlined">delete</i>
+                </button>
+            </div>
+
+            <div class="floorplan-canvas-floors">
+                <span class="floorplan-field__label">Floors</span>
+                <div id="floorplan-floors" class="floorplan-floors"></div>
+            </div>
+
+            {# Focusable and labelled: the canvas is the editor, and until now #}
+            {# it could not be reached by keyboard at all.                      #}
             <div id="floorplan-map" class="floorplan-map"
+                 tabindex="0" role="application"
+                 aria-label="Floorplan canvas. Tab and Shift+Tab move between walls, openings, rooms and markers; arrow keys nudge what is selected; Escape leaves."
                  data-json-url="{% url 'pin.floorplan.json' pin.slug %}"
                  data-save-url="{% url 'pin.floorplan.save' pin.slug %}"
                  data-publish-url="{% url 'pin.floorplan.publish' pin.slug %}"
@@ -97,6 +157,19 @@
             {# registered alongside the standard ones (see floorplan-editor.ts). #}
             <div class="map-bottom-controls">
                 {% map_layers_panel "satellite,street,underlay" panel_id="floorplan-layers" extra_class="map-layers-panel--inline" manage_overlays_url=manage_overlays_url %}
+            </div>
+
+            {# Revealed by floorplan-editor.ts when Leaflet did not load. It is a CDN #}
+            {# script, so without this the editor is a blank rectangle and a silent #}
+            {# ReferenceError, with nothing to say the saved plan is still intact. #}
+            <div id="floorplan-unavailable" class="floorplan-empty" hidden>
+                <h2>The map didn't load.</h2>
+                <p>Check your connection and try again. Your saved plan hasn't changed.</p>
+                <div class="floorplan-empty__actions">
+                    <button type="button" class="btn btn--primary" id="floorplan-retry-load">
+                        <i class="material-symbols-outlined">refresh</i> Try again
+                    </button>
+                </div>
             </div>
 
             <div id="floorplan-empty" class="floorplan-empty">
@@ -119,6 +192,9 @@
         </div>
 
         <p id="floorplan-hint" class="floorplan-hint" aria-live="polite"></p>
+        {# Announces the selection, which is otherwise only visible as a #}
+        {# highlight on the canvas.                                      #}
+        <p id="floorplan-live" class="sr-only" aria-live="polite"></p>
     </div>
 
     <aside class="floorplan-sidebar">
@@ -128,12 +204,15 @@
         {# ordinary edit autosaves (see save()/markDirty() in floorplan-editor.ts). #}
         <div class="floorplan-sidebar__header">
             <span id="floorplan-save-status" class="floorplan-save-status" aria-live="polite"></span>
+            <button type="button" id="floorplan-retry-save" class="btn btn--sm btn--ghost" hidden>
+                <i class="material-symbols-outlined">refresh</i> Retry
+            </button>
+            <button type="button" id="floorplan-reload" class="btn btn--sm btn--primary" hidden>
+                <i class="material-symbols-outlined">sync</i> Reload
+            </button>
             <div class="floorplan-sidebar__header-actions">
-                <button type="button" id="floorplan-undo" class="btn btn--icon" disabled aria-label="Undo" title="Undo">
-                    <i class="material-symbols-outlined">undo</i>
-                </button>
                 <div class="floorplan-more-menu">
-                    <button type="button" id="floorplan-more-toggle" class="btn btn--icon" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="More">
+                    <button type="button" id="floorplan-more-toggle" class="btn btn--icon" aria-haspopup="true" aria-expanded="false" aria-label="More actions" data-tooltip="More actions" data-tooltip-float="true">
                         <i class="material-symbols-outlined">more_vert</i>
                     </button>
                     <div id="floorplan-more-list" class="floorplan-more-menu__list" hidden>
@@ -145,12 +224,23 @@
         </div>
 
         <div class="floorplan-sidebar__section">
-            <span class="floorplan-field__label">Floors</span>
-            <div id="floorplan-floors" class="floorplan-floors"></div>
-        </div>
-
-        <div class="floorplan-sidebar__section">
+            {# The strip itself is on the canvas; naming a floor is editing, and #}
+            {# belongs with the other editing rather than in a column sized for  #}
+            {# buttons.                                                          #}
+            <div id="floorplan-floor-fields"></div>
             <div id="floorplan-form" class="floorplan-form"></div>
+            {# The site's shared icon picker, rendered once and shown only while #}
+            {# a marker is selected. Server-rendered because the icon set lives  #}
+            {# in Python; the editor reads its hidden input, which now announces #}
+            {# a pick (see shared/icon-picker.ts).                               #}
+            <div id="floorplan-marker-appearance" hidden>
+                <label class="floorplan-field"><span>Icon</span>
+                    {% include 'dashboard/partials/ui/_icon_picker.html' with picker_id="floorplan-marker" field_name="marker_icon" current_icon="" %}
+                </label>
+                <label class="floorplan-field"><span>Colour</span>
+                    {% include 'dashboard/partials/ui/_color_picker.html' with picker_id="floorplan-marker" field_name="marker_color" current_color="" %}
+                </label>
+            </div>
         </div>
 
         <details class="floorplan-details-accordion">
@@ -174,6 +264,15 @@
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Image Overlays" %}
     <div id="map-overlays-dialog-body" class="custom-layers-dialog-body ul-dialog-body"
          hx-get="{{ manage_overlays_url }}" hx-trigger="load" hx-swap="innerHTML"></div>
+    {# Loads once, independent of the row-list body above - see the same #}
+    {# div's own comment in _map_annotations_panels.html. #}
+    <div class="map-overlay-historical ul-dialog-body">
+        <h4 class="map-overlay-historical-heading">Historical maps covering this location</h4>
+        <div id="map-overlay-historical-results"
+             hx-get="{% url 'pin.overlays.historical' pin.slug %}" hx-trigger="load" hx-swap="innerHTML">
+            <p class="map-overlay-manage-empty">Looking for georeferenced maps covering this spot...</p>
+        </div>
+    </div>
 </dialog>
 {% endif %}
 

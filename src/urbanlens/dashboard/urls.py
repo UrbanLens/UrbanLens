@@ -87,8 +87,8 @@ from urbanlens.dashboard.controllers import (
     visit_suggestions,
     visits,
     webauthn,
-    wiki_create,
     wiki_media,
+    wiki_share,
 )
 from urbanlens.dashboard.controllers.index import HomeOverviewView, HomeWidgetLayoutSaveView, IndexController
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
@@ -433,9 +433,9 @@ urlpatterns = [
                                 name="boundary.pin",
                             ),
                             path(
-                                "<slug:pin_slug>/wiki/create/",
-                                wiki_create.PinWikiCreateView.as_view(),
-                                name="pin.wiki.create",
+                                "<slug:pin_slug>/wiki/share/",
+                                wiki_share.PinWikiShareView.as_view(),
+                                name="pin.wiki.share",
                             ),
                             path("<slug:pin_slug>/article/", article.ArticlePanelView.as_view(), name="pin.article"),
                             path("<slug:pin_slug>/article/save/", article.ArticleSaveView.as_view(), name="pin.article.save"),
@@ -616,6 +616,11 @@ urlpatterns = [
                                 "<slug:pin_slug>/overlays/historical/",
                                 map_overlays.HistoricalMapBrowseView.as_view(),
                                 name="pin.overlays.historical",
+                            ),
+                            path(
+                                "<slug:pin_slug>/overlays/media/",
+                                map_overlays.OverlayMediaPickerView.as_view(),
+                                name="pin.overlays.media",
                             ),
                             path(
                                 "<slug:pin_slug>/overlays/<uuid:overlay_uuid>/",
@@ -1311,11 +1316,6 @@ urlpatterns = [
                     name="location.wiki",
                 ),
                 path(
-                    "<slug:location_slug>/wiki/delete/",
-                    location_wiki.LocationWikiDeleteView.as_view(),
-                    name="location.wiki.delete",
-                ),
-                path(
                     "<slug:location_slug>/wiki/edit/",
                     location_wiki.LocationWikiEditView.as_view(),
                     name="location.wiki.edit",
@@ -1406,6 +1406,11 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/overlays/historical/",
                     map_overlays.HistoricalMapBrowseView.as_view(),
                     name="location.wiki.overlays.historical",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/overlays/media/",
+                    map_overlays.OverlayMediaPickerView.as_view(),
+                    name="location.wiki.overlays.media",
                 ),
                 path(
                     "<slug:location_slug>/wiki/overlays/<uuid:overlay_uuid>/",
@@ -1732,6 +1737,7 @@ urlpatterns = [
                 path("contact/<uuid:token>/mark-safe/", safety.SafetyContactMarkSafeView.as_view(), name="safety.contact.mark_safe"),
                 path("contact/<uuid:token>/opt-out/<str:scope>/", safety.SafetyContactOptOutView.as_view(), name="safety.contact.optout"),
                 path("contact/<uuid:token>/messages/", safety.SafetyCheckinMessageView.as_view(), name="safety.contact.messages"),
+                path("contact/<uuid:token>/photo/<int:image_id>/", safety.SafetyContactPhotoView.as_view(), name="safety.contact.photo"),
                 path("contact/<uuid:token>/markup/json/", markup.SafetyContactMarkupJsonView.as_view(), name="safety.contact.markup.json"),
                 path("<slug:checkin_slug>/", safety.SafetyCheckinDetailView.as_view(), name="safety.checkin.detail"),
                 path("<uuid:checkin_uuid>/cancel/", safety.SafetyCheckinCancelView.as_view(), name="safety.checkin.cancel"),
