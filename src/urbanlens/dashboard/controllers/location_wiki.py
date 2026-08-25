@@ -171,11 +171,10 @@ class LocationWikiView(LoginRequiredMixin, View):
 
             wiki_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in Image.objects.filter(wiki=wiki).visible_to(profile).exclude(pk=wiki.cover_photo_id).order_by("-created")[:20] if img.image]
 
-        # Markup and custom layers are hidden outright, whatever their
-        # provenance - the product rule, and the sharpest of the lot: a layer
-        # carrying entrance routes and SecurityIndicatorType markers is the
-        # single most direct statement that people go here.
-        custom_layers = [] if conceal else list(CustomLayer.objects.for_wiki(wiki).order_by("order", "created"))
+        # Filtered by who created it, not hidden outright - see the matching
+        # rule (and reasoning) in controllers.custom_layers._resolve_layer_owner.
+        custom_layers = list(visible_rows(CustomLayer.objects.for_wiki(wiki), wiki, profile).order_by("order", "created"))
+        visible_layer_ids = {layer.pk for layer in custom_layers}
 
         return render(
             request,
@@ -189,10 +188,10 @@ class LocationWikiView(LoginRequiredMixin, View):
                 # visible_parent_wiki: linking to one they haven't earned would
                 # confirm a place exists that they cannot see.
                 "parent_wiki": visible_parent_wiki(wiki, profile),
-                # Georeferenced overlays are traced and positioned by hand, so an
-                # overlay existing is a contribution regardless of where the
-                # underlying image came from.
-                "map_overlays_json": [] if conceal else overlay_payload(MapImageOverlay.objects.for_wiki(wiki)),
+                # Filtered by who created it - own+friends overlays survive, an
+                # overlay filed under a now-invisible layer renders unlayered
+                # (see overlay_payload's visible_layer_ids).
+                "map_overlays_json": overlay_payload(visible_rows(MapImageOverlay.objects.for_wiki(wiki), wiki, profile), visible_layer_ids),
                 "manage_overlays_url": reverse("location.wiki.overlays", args=[location.slug]),
                 "manage_overlays_historical_url": reverse("location.wiki.overlays.historical", args=[location.slug]),
                 "overlay_corners_url_template": reverse("location.wiki.overlays.corners", args=[location.slug, OVERLAY_UUID_PLACEHOLDER]),
@@ -525,7 +524,9 @@ class PublicPinVoteView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug):
-        location, _wiki, profile = resolve_visible_wiki(request, location_slug)
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
             cast_public_vote(location, profile, request.POST.get("choice") or "")
@@ -535,7 +536,7 @@ class PublicPinVoteView(LoginRequiredMixin, View):
         return render(
             request,
             "dashboard/partials/pins/_public_pin_vote_block.html",
-            {"location": location, "public_vote": public_vote_context(location, profile)},
+            {"location": location, "public_vote": public_vote_context(location, profile, conceal=concealment_active(wiki, profile))},
         )
 
 
@@ -551,7 +552,9 @@ class BoundaryVoteView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug):
-        location, _wiki, profile = resolve_visible_wiki(request, location_slug)
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
             boundary_id = int(request.POST.get("boundary_id") or 0)
@@ -563,11 +566,15 @@ class BoundaryVoteView(LoginRequiredMixin, View):
         except BoundaryVoteError as exc:
             return JsonResponse({"error": exc.safe_message}, status=400)
 
+        # Same conceal-aware answer the GET's boundary_vote_context computes -
+        # the raw has_consensus() states that other people voted, which is
+        # exactly what boundary_vote_context(conceal=True) exists to hide.
+        vote_context = boundary_vote_context(location.place, profile, conceal=concealment_active(wiki, profile))
         return JsonResponse(
             {
                 "ok": True,
                 "my_vote_id": vote.boundary_id,
-                "has_consensus": has_consensus(location.place),
+                "has_consensus": bool(vote_context and vote_context.get("has_consensus")),
             },
         )
 

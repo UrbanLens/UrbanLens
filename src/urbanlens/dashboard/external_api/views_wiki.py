@@ -561,12 +561,28 @@ class WikiBoundaryApiView(WikiApiView):
         "POST": frozenset({ApiKeyScope.WIKI_WRITE}),
     }
 
-    def _payload(self, wiki: Any, *, pending: bool, refreshing: bool) -> dict[str, Any]:
-        """Build the boundary payload, mirroring ``controllers.boundary._wiki_boundary_payload``."""
+    def _payload(self, wiki: Any, *, pending: bool, refreshing: bool, just_drawn: tuple[str, Any] | None = None) -> dict[str, Any]:
+        """Build the boundary payload, mirroring ``controllers.boundary._wiki_boundary_payload``.
+
+        Args:
+            wiki: The wiki whose boundaries to resolve - may be a concealed
+                projection.
+            pending: Whether provider generation is still running.
+            refreshing: Whether a stale generated boundary is being refreshed.
+            just_drawn: ``(boundary_type_value, polygon)`` for a boundary this
+                same request just saved, or None - see
+                ``controllers.boundary._wiki_boundary_payload`` for why
+                concealment must not hide this request's own write from its
+                own response.
+        """
         boundaries = {}
         for boundary_type in (BoundaryType.PROPERTY, BoundaryType.BUILDING):
+            key = str(boundary_type.value)
+            if just_drawn is not None and just_drawn[0] == key:
+                boundaries[key] = {"polygon": geometry_to_geojson(just_drawn[1]), "source": "wiki"}
+                continue
             polygon, source = Boundary.objects.resolve_for_wiki(wiki, boundary_type)
-            boundaries[str(boundary_type.value)] = {"polygon": geometry_to_geojson(polygon), "source": source}
+            boundaries[key] = {"polygon": geometry_to_geojson(polygon), "source": source}
         location = wiki.location
         return {
             "latitude": float(location.latitude) if location and location.latitude is not None else None,
@@ -631,7 +647,8 @@ class WikiBoundaryApiView(WikiApiView):
 
         already_ran = boundary_generation_ran(location)
         in_flight = schedule_location_boundary_generation(location, profile)
-        return Response(self._payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran))
+        just_drawn = (boundary_type, geom) if polygon_geojson else None
+        return Response(self._payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran, just_drawn=just_drawn))
 
 
 class WikiCoverPhotoApiView(WikiApiView):
@@ -703,8 +720,8 @@ class WikiOwnershipView(PaginatedListMixin, WikiApiView):
         """Return one page of the location's shared owners this caller may see."""
         from urbanlens.dashboard.services.property.owner_access import visible_owners
 
-        location, _wiki, profile = self.resolve(request, location_slug)
-        owners = visible_owners(WikiOwner.objects.for_location(location), profile.user)
+        location, wiki, profile = self.resolve(request, location_slug)
+        owners = visible_owners(visible_rows(WikiOwner.objects.for_location(location), wiki, profile), profile.user)
         return self.paginated_response(owners, WikiOwnerSerializer, request)
 
 
@@ -727,8 +744,8 @@ class WikiPropertySalesView(PaginatedListMixin, WikiApiView):
 
         from urbanlens.dashboard.services.property.owner_access import visible_owners
 
-        location, _wiki, profile = self.resolve(request, location_slug)
-        sales = WikiPropertySale.objects.for_location(location).prefetch_related("previous_owners", "new_owners")
+        location, wiki, profile = self.resolve(request, location_slug)
+        sales = visible_rows(WikiPropertySale.objects.for_location(location), wiki, profile).prefetch_related("previous_owners", "new_owners")
         # A plain SimpleNamespace per row, not a mutated model instance -
         # `sale.previous_owners.set(...)` would persist the filtered owner
         # list to the database instead of just shaping this one response.

@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
@@ -320,17 +321,20 @@ class PinPropertySaleDeleteView(LoginRequiredMixin, View):
 # ======================================================================
 
 
-def _render_wiki_ownership_panel(request: HttpRequest, location: Location, error: str | None = None) -> HttpResponse:
+def _render_wiki_ownership_panel(request: HttpRequest, location: Location, wiki: Wiki, profile: Profile, error: str | None = None) -> HttpResponse:
     """Render the wiki page's shared Ownership card.
 
     Officially-sourced owners (looked up from county records via REData) are
     filtered out for a viewer without ``SiteFeature.PROPERTY_OWNERS`` - see
     ``services.property.owner_access``. Community-contributed rows are
-    everyone's, and are shown regardless.
+    everyone's, subject to concealment: a concealed viewer keeps owners they
+    or a friend recorded and loses everyone else's, the same rule as every
+    other user-contributed wiki row.
     """
     from urbanlens.dashboard.services.property.owner_access import visible_owners, withheld_official_count
+    from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
-    all_owners = list(WikiOwner.objects.for_location(location))
+    all_owners = list(visible_rows(WikiOwner.objects.for_location(location), wiki, profile))
     response = render(
         request,
         "dashboard/partials/pins/_ownership_panel.html",
@@ -356,40 +360,52 @@ class WikiOwnershipPanelView(LoginRequiredMixin, View):
     """GET: the wiki's shared Ownership card.  POST: add a new owner, shared with the wiki."""
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
-        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
-        return _render_wiki_ownership_panel(request, location)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        return _render_wiki_ownership_panel(request, location, wiki, profile)
 
     def post(self, request: HttpRequest, location_slug: str) -> HttpResponse:
-        location, _wiki, profile = resolve_visible_wiki(request, location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         fields = _owner_fields_from_post(request)
         if not fields["name"]:
-            return _render_wiki_ownership_panel(request, location, error="Owner name is required.")
+            return _render_wiki_ownership_panel(request, location, wiki, profile, error="Owner name is required.")
+        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
         # Same case-insensitive dedup the Sale History tab's get_or_create
         # already applies (see WikiPropertySaleTabView.post) - without it this
         # panel and that tab disagree on whether "Alice" and "alice" are the
         # same owner, producing duplicate WikiOwner rows for one real owner.
-        owner = WikiOwner.objects.for_location(location).filter(name__iexact=fields["name"]).first()
+        # Scoped through visible_rows, unlike WikiAlias's own get_or_create:
+        # that one is invisible bookkeeping never echoed back in the same
+        # response, but this result renders immediately via
+        # _render_wiki_ownership_panel - reusing a stranger's invisible row
+        # would silently swallow the submission (linked, but never rendered,
+        # since the render side already filters by visibility) and matching-
+        # vs-not is itself an existence oracle for that stranger's record. A
+        # second, duplicate-looking WikiOwner is the safe outcome here.
+        owner = visible_rows(WikiOwner.objects.for_location(location), wiki, profile).filter(name__iexact=fields["name"]).first()
         if owner is None:
             owner = WikiOwner.objects.create(created_by=profile, **fields)
         owner.locations.add(location)
-        return _render_wiki_ownership_panel(request, location)
+        return _render_wiki_ownership_panel(request, location, wiki, profile)
 
 
 class WikiOwnerUpdateView(LoginRequiredMixin, View):
     """POST: edit a shared owner (not an OFFICIAL record)."""
 
     def post(self, request: HttpRequest, location_slug: str, owner_id: int) -> HttpResponse:
-        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
-        owner = get_object_or_404(WikiOwner.objects.for_location(location), id=owner_id)
+        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        owner = get_object_or_404(visible_rows(WikiOwner.objects.for_location(location), wiki, profile), id=owner_id)
         if owner.source == OwnerSource.OFFICIAL:
-            return _render_wiki_ownership_panel(request, location, error="Official data can't be edited directly.")
+            return _render_wiki_ownership_panel(request, location, wiki, profile, error="Official data can't be edited directly.")
         fields = _owner_fields_from_post(request)
         if not fields["name"]:
-            return _render_wiki_ownership_panel(request, location, error="Owner name is required.")
+            return _render_wiki_ownership_panel(request, location, wiki, profile, error="Owner name is required.")
         for attr, value in fields.items():
             setattr(owner, attr, value)
         owner.save(update_fields=[*fields.keys(), "updated"])
-        return _render_wiki_ownership_panel(request, location)
+        return _render_wiki_ownership_panel(request, location, wiki, profile)
 
 
 class WikiOwnerRemoveView(LoginRequiredMixin, View):
@@ -398,31 +414,36 @@ class WikiOwnerRemoveView(LoginRequiredMixin, View):
     never an OFFICIAL record."""
 
     def delete(self, request: HttpRequest, location_slug: str, owner_id: int) -> HttpResponse:
-        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
-        owner = get_object_or_404(WikiOwner.objects.for_location(location), id=owner_id)
+        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        owner = get_object_or_404(visible_rows(WikiOwner.objects.for_location(location), wiki, profile), id=owner_id)
         if owner.source == OwnerSource.OFFICIAL:
-            response = _render_wiki_ownership_panel(request, location)
+            response = _render_wiki_ownership_panel(request, location, wiki, profile)
             return _show_toast(response, "Official data can't be removed directly.", level="error")
         owner_name = owner.name
         owner.locations.remove(location)
-        response = _render_wiki_ownership_panel(request, location)
+        response = _render_wiki_ownership_panel(request, location, wiki, profile)
         return _show_toast(response, f"Removed “{owner_name}” from this property.")
 
 
-def _render_wiki_sale_tab(request: HttpRequest, location: Location, error: str | None = None) -> HttpResponse:
+def _render_wiki_sale_tab(request: HttpRequest, location: Location, wiki: Wiki, profile: Profile, error: str | None = None) -> HttpResponse:
     """Render the wiki page's shared Sale History tab.
 
     Party names are filtered the same way the Ownership panel's are: a deed's
     grantor/grantee written from county records is an ``OFFICIAL`` owner, so
     leaving this tab ungated would hand back exactly what that panel withholds.
+    Concealment is a second, independent filter on top - a concealed viewer
+    keeps sale records they or a friend entered.
     """
     from urbanlens.dashboard.services.property.owner_access import sale_rows
+    from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
     response = render(
         request,
         "dashboard/partials/pins/_property_sale_tab.html",
         {
-            "sales": sale_rows(WikiPropertySale.objects.for_location(location).prefetch_related("previous_owners", "new_owners"), request.user),
+            "sales": sale_rows(visible_rows(WikiPropertySale.objects.for_location(location), wiki, profile).prefetch_related("previous_owners", "new_owners"), request.user),
             "show_official_badge": True,
             "obj_slug": location.slug,
             "url_add": "location.wiki.sales",
@@ -438,22 +459,29 @@ class WikiPropertySaleTabView(LoginRequiredMixin, View):
     """GET: the wiki's shared Sale History tab.  POST: record a new sale, shared with the wiki."""
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
-        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
-        return _render_wiki_sale_tab(request, location)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        return _render_wiki_sale_tab(request, location, wiki, profile)
 
     def post(self, request: HttpRequest, location_slug: str) -> HttpResponse:
-        location, _wiki, profile = resolve_visible_wiki(request, location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         sale_price, sale_date, price_date_error = _parse_sale_price_and_date(request)
         if price_date_error:
-            return _render_wiki_sale_tab(request, location, error=price_date_error)
+            return _render_wiki_sale_tab(request, location, wiki, profile, error=price_date_error)
 
         previous_names, new_names, names_error = _parse_sale_owner_names(request)
         if names_error:
-            return _render_wiki_sale_tab(request, location, error=names_error)
+            return _render_wiki_sale_tab(request, location, wiki, profile, error=names_error)
+
+        from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
         def get_or_create(name: str) -> WikiOwner:
-            owner = WikiOwner.objects.for_location(location).filter(name__iexact=name).first()
+            # visible_rows, not an unfiltered lookup: the sale record this
+            # helper feeds is the concealed viewer's own and therefore always
+            # rendered back to them - reusing a stranger's invisible
+            # WikiOwner would put that stranger's real name/contact directly
+            # into the concealed viewer's own, fully-visible Sale History row.
+            owner = visible_rows(WikiOwner.objects.for_location(location), wiki, profile).filter(name__iexact=name).first()
             if owner is None:
                 owner = WikiOwner.objects.create(name=name, created_by=profile)
             owner.locations.add(location)
@@ -471,17 +499,19 @@ class WikiPropertySaleTabView(LoginRequiredMixin, View):
         sale = WikiPropertySale.objects.create(location=location, created_by=profile, sale_price=sale_price, sale_date=sale_date, notes=(request.POST.get("notes") or "").strip())
         sale.previous_owners.set(previous_owners)
         sale.new_owners.set(new_owners)
-        return _render_wiki_sale_tab(request, location)
+        return _render_wiki_sale_tab(request, location, wiki, profile)
 
 
 class WikiPropertySaleDeleteView(LoginRequiredMixin, View):
     """DELETE: remove a shared sale record (never an OFFICIAL one)."""
 
     def delete(self, request: HttpRequest, location_slug: str, sale_id: int) -> HttpResponse:
-        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
-        sale = get_object_or_404(WikiPropertySale.objects.for_location(location), id=sale_id)
+        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        sale = get_object_or_404(visible_rows(WikiPropertySale.objects.for_location(location), wiki, profile), id=sale_id)
         if sale.source == OwnerSource.OFFICIAL:
-            response = _render_wiki_sale_tab(request, location)
+            response = _render_wiki_sale_tab(request, location, wiki, profile)
             return _show_toast(response, "Official data can't be removed directly.", level="error")
         sale.delete()
-        return _render_wiki_sale_tab(request, location)
+        return _render_wiki_sale_tab(request, location, wiki, profile)

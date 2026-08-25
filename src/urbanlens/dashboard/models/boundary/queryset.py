@@ -235,7 +235,14 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
         every call site remembering to ask for the right type.
 
         Args:
-            wiki: The Wiki whose boundary is being displayed.
+            wiki: The Wiki whose boundary is being displayed. When this is a
+                concealed projection (``services.wiki.concealment.is_concealed``),
+                a wiki-drawn customization is skipped in favour of the place/
+                circle fallback - a wiki-scoped ``Boundary`` row records no
+                author at all (always ``profile=None``), so unlike markup or
+                custom layers it cannot get the own-contribution treatment;
+                hiding it outright is the only option that doesn't risk
+                showing a stranger's edit back as automatic.
             boundary_type: A :class:`BoundaryType` value.
 
         Returns:
@@ -244,6 +251,7 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
         """
         from urbanlens.dashboard.models.boundary.model import BoundaryType
         from urbanlens.dashboard.services.places.scope import place_polygon
+        from urbanlens.dashboard.services.wiki.concealment import is_concealed
 
         # A wiki with no place anchor of its own still displays at a location,
         # and that location knows what it stands on - so fall back to it rather
@@ -253,7 +261,7 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
         if place is not None and scoped is None:
             return None, None
 
-        if (row := self.row_for_wiki(wiki, boundary_type)) and row.drawn_or_generated_polygon:
+        if not is_concealed(wiki) and (row := self.row_for_wiki(wiki, boundary_type)) and row.drawn_or_generated_polygon:
             return row.drawn_or_generated_polygon, "wiki"
         if scoped is not None:
             return scoped, "place"

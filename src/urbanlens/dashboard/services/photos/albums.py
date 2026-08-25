@@ -70,7 +70,26 @@ def albums_for_owner(owner: Pin | Wiki) -> QuerySet[Album]:
     return Album.objects.filter(**owner_kwargs(owner)).select_related("cover_image")
 
 
-def _visible_image_ids(image_ids: Collection[int], viewer: Profile | None) -> set[int]:
+def _owner_conceal(owner: Pin | Wiki, viewer: Profile | None) -> bool:
+    """Whether *viewer* sees the concealed form of *owner*'s wiki.
+
+    Always False for a Pin - concealment is a wiki-only concept.
+
+    Args:
+        owner: The Pin or Wiki whose albums/photos are being resolved.
+        viewer: The browsing profile, or None for anonymous.
+
+    Returns:
+        Whether album/photo visibility here must also apply concealment.
+    """
+    if isinstance(owner, Pin):
+        return False
+    from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+    return concealment_active(owner, viewer)
+
+
+def _visible_image_ids(image_ids: Collection[int], viewer: Profile | None, *, conceal: bool = False) -> set[int]:
     """Which of *image_ids* this viewer may see.
 
     Resolved in one query for the whole set - ``visible_to`` computes the
@@ -80,6 +99,10 @@ def _visible_image_ids(image_ids: Collection[int], viewer: Profile | None) -> se
     Args:
         image_ids: Candidate image primary keys.
         viewer: The browsing profile, or None for anonymous.
+        conceal: Whether to additionally narrow to what a concealed viewer of
+            the owning wiki may see (own/friends' uploads, provider photos) -
+            the Photos tab used to bypass this and hand back the gallery's
+            full upload set through the album path.
 
     Returns:
         The subset the viewer is allowed to see.
@@ -88,7 +111,12 @@ def _visible_image_ids(image_ids: Collection[int], viewer: Profile | None) -> se
 
     if not image_ids:
         return set()
-    return set(Image.objects.filter(pk__in=image_ids).visible_to(viewer).values_list("pk", flat=True))
+    qs = Image.objects.filter(pk__in=image_ids).visible_to(viewer)
+    if conceal:
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        qs = conceal_rows(qs, viewer)
+    return set(qs.values_list("pk", flat=True))
 
 
 def _order_for_display(album: Album, images: list[Image]) -> list[Image]:
@@ -121,12 +149,18 @@ def albums_with_images(owner: Pin | Wiki, viewer: Profile | None) -> list[tuple[
         ``(album, images)`` pairs in album order, each image carrying an
         ``album_item_id`` attribute for the membership row.
     """
-    albums = list(albums_for_owner(owner))
+    conceal = _owner_conceal(owner, viewer)
+    albums_qs = albums_for_owner(owner)
+    if conceal:
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        albums_qs = conceal_rows(albums_qs, viewer)
+    albums = list(albums_qs)
     if not albums:
         return []
 
     items = list(AlbumItem.objects.filter(album_id__in=[album.pk for album in albums]).select_related("image").order_by("order", "created"))
-    visible_ids = _visible_image_ids({item.image_id for item in items}, viewer)
+    visible_ids = _visible_image_ids({item.image_id for item in items}, viewer, conceal=conceal)
 
     by_album: dict[int, list[Image]] = defaultdict(list)
     for item in items:
@@ -157,10 +191,15 @@ def eligible_images_for(owner: Pin | Wiki, viewer: Profile | None) -> QuerySet[I
     from urbanlens.dashboard.models.images.model import Image
 
     scope = {"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}
-    return Image.objects.filter(**scope).visible_to(viewer).order_by("-created")
+    qs = Image.objects.filter(**scope).visible_to(viewer).order_by("-created")
+    if _owner_conceal(owner, viewer):
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        qs = conceal_rows(qs, viewer)
+    return qs
 
 
-def album_images(album: Album, viewer: Profile | None) -> list[Image]:
+def album_images(album: Album, viewer: Profile | None, owner: Pin | Wiki | None = None) -> list[Image]:
     """The photos in *album*, in the album's effective display order.
 
     Honours ``Album.manual_order``: when set, items follow the explicit order
@@ -170,6 +209,10 @@ def album_images(album: Album, viewer: Profile | None) -> list[Image]:
     Args:
         album: The album to read.
         viewer: The profile browsing, for the standard photo-visibility gate.
+        owner: The album's owner, if the caller already resolved it (every
+            controller call site does, via ``_resolve_album_owner``) - saves
+            re-deriving it through ``album.parent_pin``/``parent_wiki``,
+            which isn't select_related on any queryset this is called from.
 
     Returns:
         The album's viewer-visible photos, ordered for display. Each carries
@@ -177,7 +220,7 @@ def album_images(album: Album, viewer: Profile | None) -> list[Image]:
         row (for removal/reordering) without a second lookup.
     """
     items = list(AlbumItem.objects.for_album(album).select_related("image").order_by("order", "created"))
-    visible_ids = _visible_image_ids({item.image_id for item in items}, viewer)
+    visible_ids = _visible_image_ids({item.image_id for item in items}, viewer, conceal=_owner_conceal(owner if owner is not None else album_owner(album), viewer))
 
     images = []
     for item in items:

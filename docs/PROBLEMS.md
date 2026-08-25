@@ -159,37 +159,59 @@ because `LabelSerializer` is response-only (writes go through
 not re-add it.
 
 The whole contract suite is green: **101 passed**.
-## OPEN 2026-08-24: wiki search and autocomplete are a substring oracle for concealed content
+## OPEN 2026-08-25: sharing a pin-scoped layer to the wiki is a name-existence oracle once concealment is live
+
+Found by the fourth adversarial review round while auditing the layer/overlay own-contribution
+work below, verified real, and left alone: pre-existing, not introduced by that work, and low
+severity while `concealment_active` stays `False`.
+
+`controllers/custom_layers.py`'s `_share_layer_to_wiki` (used by `CustomLayerShareToWikiView`)
+checks for a same-name collision via `CustomLayer.objects.for_wiki(wiki).filter(name__iexact=...)`
+- unfiltered by `visible_rows` - and the toast it returns distinguishes "shared" from "already on
+the community wiki" based on whether a match was found. Once a viewer can be concealed, sharing a
+personal layer named e.g. "Tunnels" answers, via which toast comes back, whether a stranger has
+already created a same-named layer on that wiki - a small, low-stakes information leak (a layer
+name, not its contents), but the same class of defect as the WikiOwner/WikiPropertySale dedup
+oracle fixed in the same round (see the round's commit) for the same reason: an unfiltered
+existence check that's echoed back to the requester.
+
+Not fixed here because the round's scope was the own-contribution rollout and the concrete gaps
+already tracked, not a full audit of every dedup/collision check in the wiki-editing surface for
+this pattern - there may be siblings. Audit `get_or_create`/name-collision lookups scoped to a wiki
+for the same shape before the reputation-ledger threshold makes `concealment_active` return `True`
+for real accounts.
+
+## RESOLVED 2026-08-25: wiki search and autocomplete were a substring oracle for concealed content
 
 `services/global_search/providers.py` (the wiki provider's `apply_text` over `["name",
 "description", "aliases__name"]`) and `services/map_pins/autocomplete.py` (`Q(name__icontains=q) |
-Q(aliases__name__icontains=q) | Q(description__icontains=q)`) both match user-contributed wiki text
-as a substring, scoped only by `visible_wiki_location_ids_cached(profile)`.
+Q(aliases__name__icontains=q) | Q(description__icontains=q)`) both matched user-contributed wiki
+text as a substring, scoped only by `visible_wiki_location_ids_cached(profile)` - typing a
+distinctive phrase from a stranger's description would confirm both that the text exists and that
+this account was being shown something other than the whole row, surviving a perfect read gate on
+the page because the answer was carried by the *result set* rather than by any field it renders.
 
-For a concealed viewer that is an oracle: type a distinctive phrase from a stranger's description
-and the wiki comes back, confirming both that the text exists and that this account is being shown
-something other than the whole row. It survives a perfect read gate on the page, because the answer
-is carried by the *result set* rather than by any field the page renders.
+The three obvious patches were each wrong (matching `name` only still leaks one field further
+along; dropping concealed wikis from search makes a reachable place unfindable, a tell in the other
+direction; filtering results in Python after the query silently shrinks a `LIMIT`ed page per
+viewer) and the real fix - a search index carrying provenance per indexed span - needs the
+facts-with-sources substrate (`docs/designs/versioned-content.md`) that doesn't exist yet.
 
-**Why it was not fixed with the rest of the layer** (the resolve-time rework, `39eb86c4`). Every
-other surface conceals by resolving per-viewer provenance in Python - `resolve_fields` for wiki
-fields, `conceal_rows` for related rows, the newest visible `ArticleRevision` for prose. None of
-that is expressible as a SQL predicate, and search is a queryset-level substring filter over
-thousands of rows. The three obvious patches are each wrong:
+**What shipped instead, in `services/global_search/providers.py` and `services/map_pins/
+autocomplete.py`**: the SQL query over-fetches (`limit * 4` candidates, `_CONCEALMENT_OVERFETCH`)
+against the live rows exactly as before, then each candidate whose wiki is concealed for the viewer
+is re-verified in Python against the same resolved values the page itself would render
+(`concealed_field_values`, `conceal_rows` on aliases, `visible_article_revision` for article
+content, `visible_actor_ids` for comment authorship) before the result list is truncated to the
+real limit. This is not the indexed, no-overfetch answer the note above describes - it costs a
+handful of extra per-candidate reads only for wikis actually concealed for this viewer (nothing
+today, since `concealment_active` is still `False`) - and it can under-fill a page in the rare case
+where most of an over-fetched batch turns out to be concealed non-matches, which is a disclosed
+trade-off of over-fetching rather than a silent bug. Revisit if/when the facts-with-sources index
+lands; until then this closes the oracle without waiting on that substrate.
 
-- **Match `name` only for concealed viewers** - the *stored* name may itself be a stranger's edit,
-  so it leaks the same way, one field further along.
-- **Drop concealed wikis from text search** - a brand-new wiki still matches on its automatic name,
-  so a place that is reachable but unfindable is a tell in the other direction.
-- **Filter results in Python after the query** - the query already applied `LIMIT`, so a page of
-  results silently shrinks in a way that varies per viewer.
-
-The real answer is a search index that carries provenance per indexed span, so a viewer's query
-matches only text they are entitled to see. That is the same substrate as the facts-with-sources
-direction (`docs/designs/versioned-content.md`), and should be built with it rather than ahead of it.
-
-Not live today: `concealment_active` returns `False`, so no account is concealed. This is what has
-to exist before that boolean can flip.
+Still not live: `concealment_active` returns `False`, so no account is concealed and none of this
+runs its concealment branch yet.
 
 ## OPEN 2026-08-21: production REData 404s on `/api/v1/public-locations/` (and `/capabilities/`)
 

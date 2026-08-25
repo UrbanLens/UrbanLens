@@ -40,6 +40,7 @@ from urbanlens.dashboard.models.map_overlay.model import CORNERS, MapImageOverla
 from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
@@ -48,7 +49,6 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayQuerySet
-    from urbanlens.dashboard.models.wiki.model import Wiki
 
 #: Read from the column, not repeated: this truncates writes to
 #: MapImageOverlay.name, so a widened column would otherwise keep clipping at
@@ -85,17 +85,12 @@ def _resolve_owner(request: HttpRequest, pin_slug: str | None, location_slug: st
         return pin, MapImageOverlay.objects.for_pin(pin)
     if location_slug is None:
         raise Http404
-    # Map annotation layers carry the same ruling as markup and detail pins:
-    # hidden outright for a concealed viewer, whoever made them. The wiki page
-    # already sends an empty list in its render context, but this endpoint is
-    # fetched separately after load, so concealing only the context left the map
-    # repopulating itself a moment later.
-    from urbanlens.dashboard.services.wiki.concealment import concealment_active
+    # Filtered by who created it, not hidden outright - see the matching note
+    # in controllers/custom_layers.py._resolve_layer_owner.
+    from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
     _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-    if concealment_active(wiki, profile):
-        return wiki, MapImageOverlay.objects.none()
-    return wiki, MapImageOverlay.objects.for_wiki(wiki)
+    return wiki, visible_rows(MapImageOverlay.objects.for_wiki(wiki), wiki, profile)
 
 
 def _owner_kwargs(owner: Pin | Wiki) -> dict:
@@ -239,7 +234,7 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
     return None, "", "Choose an image to overlay."
 
 
-def overlay_payload(qs: MapImageOverlayQuerySet) -> list[dict]:
+def overlay_payload(qs: MapImageOverlayQuerySet, visible_layer_ids: set[int] | None = None) -> list[dict]:
     """Serialize an owner's renderable overlays for the map.
 
     Shared with the pin-detail and wiki page controllers, which embed the
@@ -247,12 +242,48 @@ def overlay_payload(qs: MapImageOverlayQuerySet) -> list[dict]:
     hand the renderer identical shapes.
 
     Args:
-        qs: An owner-scoped ``MapImageOverlay`` queryset.
+        qs: An owner-scoped ``MapImageOverlay`` queryset, already narrowed to
+            what this viewer may see (see ``_resolve_owner``).
+        visible_layer_ids: The ``CustomLayer`` pks this viewer may list, when
+            the owner is a wiki - wiki-scoped layer assignment isn't
+            restricted to an overlay's own author, so an otherwise-visible
+            overlay can still reference a layer this viewer cannot see. An
+            overlay filed under one is reported as unlayered instead. None
+            (the default) leaves every overlay's ``layer_uuid`` alone, which
+            is correct for a pin-scoped owner - concealment never applies
+            there, so every layer is always visible.
 
     Returns:
         One ``to_json()`` dict per overlay that still has an image.
     """
-    return [overlay.to_json() for overlay in qs.renderable().select_related("image", "layer").order_by("order", "id")]
+    entries = []
+    for overlay in qs.renderable().select_related("image", "layer").order_by("order", "id"):
+        entry = overlay.to_json()
+        if visible_layer_ids is not None and overlay.layer_id is not None and overlay.layer_id not in visible_layer_ids:
+            entry["layer_uuid"] = None
+        entries.append(entry)
+    return entries
+
+
+def _visible_layer_ids(owner: Pin | Wiki, request: HttpRequest) -> set[int] | None:
+    """The CustomLayer pks *request*'s viewer may see under *owner*, or None for a pin owner.
+
+    Args:
+        owner: The Pin or Wiki the overlays/layers belong to.
+        request: The current request, for the viewer.
+
+    Returns:
+        None for a pin-scoped owner (concealment never applies there, so
+        callers should leave layer references untouched); otherwise the set
+        of layer pks this viewer may list - every layer's pk when
+        concealment is off, since ``visible_rows`` is then a no-op.
+    """
+    if isinstance(owner, Pin):
+        return None
+    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+    profile, _ = Profile.objects.get_or_create(user=request.user)
+    return set(visible_rows(CustomLayer.objects.filter(**_owner_kwargs(owner)), owner, profile).values_list("pk", flat=True))
 
 
 def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: MapImageOverlayQuerySet, error: str | None = None) -> HttpResponse:
@@ -275,6 +306,7 @@ def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: MapImageOv
     is_pin = isinstance(owner, Pin)
     url_prefix = "pin.overlays" if is_pin else "location.wiki.overlays"
     owner_slug = owner.slug if is_pin else owner.location.slug
+    visible_layer_ids = _visible_layer_ids(owner, request)
 
     overlays = list(qs.select_related("image", "layer").order_by("order", "id"))
     rows = [
@@ -285,6 +317,13 @@ def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: MapImageOv
         }
         for overlay in overlays
     ]
+    # The layer picker in this dialog offers the same set _resolve_layer_owner
+    # would list for this viewer - a concealed viewer must not be offered a
+    # stranger's layer name to file an overlay under, any more than
+    # controllers.custom_layers would list it in the layers panel.
+    layers_qs = CustomLayer.objects.filter(**_owner_kwargs(owner)).order_by("order", "id")
+    if visible_layer_ids is not None:
+        layers_qs = layers_qs.filter(pk__in=visible_layer_ids)
     response = render(
         request,
         "dashboard/partials/layout/_map_overlays_list.html",
@@ -296,12 +335,12 @@ def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: MapImageOv
             # outside this swapped fragment now (see _map_annotations_panels.html/
             # editor.html), so it isn't re-fetched from REData on every edit here.
             "gallery_json_url": reverse(f"{url_prefix}.media", args=[owner_slug]),
-            "layers": CustomLayer.objects.filter(**_owner_kwargs(owner)).order_by("order", "id"),
+            "layers": layers_qs,
             "at_limit": len(overlays) >= MAX_OVERLAYS_PER_MAP,
             "max_overlays": MAX_OVERLAYS_PER_MAP,
         },
     )
-    response["HX-Trigger"] = json.dumps({"ul:map-overlays-changed": {"overlays": overlay_payload(qs)}, **({"ul:toast": {"message": error, "level": "error"}} if error else {})})
+    response["HX-Trigger"] = json.dumps({"ul:map-overlays-changed": {"overlays": overlay_payload(qs, visible_layer_ids)}, **({"ul:toast": {"message": error, "level": "error"}} if error else {})})
     return response
 
 
@@ -392,9 +431,33 @@ class MapOverlayEditView(LoginRequiredMixin, View):
             overlay.order = int(request.POST.get("order", overlay.order))
 
         layer_uuid = (request.POST.get("layer") or "").strip()
-        # Scoped to this owner's own layers, so a posted uuid can't attach the
-        # overlay to some other pin's or wiki's layer.
-        overlay.layer = CustomLayer.objects.filter(**_owner_kwargs(owner), uuid=layer_uuid).first() if layer_uuid else None
+        if layer_uuid:
+            # Scoped to this owner's own layers (so a posted uuid can't
+            # attach the overlay to some other pin's or wiki's layer) and,
+            # on a wiki, to visible_rows - the dialog's own <select> only
+            # ever offers visible options, so a posted uuid outside that set
+            # can only be a stale or crafted request.
+            layer_qs = CustomLayer.objects.filter(**_owner_kwargs(owner), uuid=layer_uuid)
+            if isinstance(owner, Wiki):
+                from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+                profile, _ = Profile.objects.get_or_create(user=request.user)
+                layer_qs = visible_rows(layer_qs, owner, profile)
+            overlay.layer = layer_qs.first()
+        elif overlay.layer_id is None or not isinstance(owner, Wiki):
+            overlay.layer = None
+        else:
+            # The form always posts this field, and the <select> that fills
+            # it only ever lists visible_layer_ids - so an empty value here
+            # is indistinguishable from a concealed viewer's own read side
+            # having nulled a real, invisible layer assignment for display
+            # (see overlay_payload's visible_layer_ids parameter) and echoed
+            # straight back by editing some other field. Only treat this as
+            # a deliberate clear when the layer being cleared was one this
+            # viewer could actually see and choose to remove.
+            visible_ids = _visible_layer_ids(owner, request)
+            if visible_ids is None or overlay.layer_id in visible_ids:
+                overlay.layer = None
 
         overlay.save(update_fields=["name", "opacity", "locked", "default_visible", "order", "layer", "updated"])
         return _render_overlay_list(request, owner, qs)

@@ -197,7 +197,7 @@ def _render_comments(request, context: dict) -> HttpResponse:
     return render(request, "dashboard/partials/comments/comment_panel.html", context)
 
 
-def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_qs=None, **extra) -> dict:
+def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_qs=None, conceal: bool = False, **extra) -> dict:
     top_level_qs = top_level_comment_queryset(comments_qs, replies_qs=replies_qs)
     # Default to the last page so the most recent activity (comments are
     # ordered oldest-to-newest) is what a viewer sees without paging back.
@@ -221,12 +221,12 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_
         {
             "comment": item.comment,
             "rendered_text": item.rendered_text,
-            "reactions": _aggregate_reactions(item.comment.reactions.all()),
+            "reactions": _aggregate_reactions(item.comment.reactions.all(), profile, conceal=conceal),
             "replies": [
                 {
                     "comment": reply.comment,
                     "rendered_text": reply.rendered_text,
-                    "reactions": _aggregate_reactions(reply.comment.reactions.all()),
+                    "reactions": _aggregate_reactions(reply.comment.reactions.all(), profile, conceal=conceal),
                 }
                 for reply in item.replies
             ],
@@ -416,12 +416,15 @@ class WikiCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a wiki."""
 
     def get(self, request, location_slug):
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         ctx = _build_context(
             _visible_wiki_comments(wiki, profile),
             profile,
             request,
             replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
+            conceal=concealment_active(wiki, profile),
             wiki=wiki,
             location=wiki.location,
             context_type="wiki",
@@ -429,6 +432,8 @@ class WikiCommentsView(LoginRequiredMixin, View):
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
@@ -465,6 +470,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
             profile,
             request,
             replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
+            conceal=concealment_active(wiki, profile),
             wiki=wiki,
             location=wiki.location,
             context_type="wiki",
@@ -476,6 +482,8 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
     """DELETE /location/<slug>/wiki/comments/<int>/delete/"""
 
     def delete(self, request, location_slug, comment_id):
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         comment = get_object_or_404(_visible_wiki_comments(wiki, profile), id=comment_id)
         if comment.profile != profile:
@@ -498,6 +506,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
             profile,
             request,
             replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
+            conceal=concealment_active(wiki, profile),
             wiki=wiki,
             location=wiki.location,
             context_type="wiki",
@@ -566,7 +575,12 @@ class TripCommentReactionView(LoginRequiredMixin, View):
 
 
 def _render_reaction_row(request, comment: Comment, profile: Profile) -> HttpResponse:
-    reactions = _aggregate_reactions(comment.reactions.all())
+    conceal = False
+    if comment.wiki is not None:
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+        conceal = concealment_active(comment.wiki, profile)
+    reactions = _aggregate_reactions(comment.reactions.all(), profile, conceal=conceal)
     return render(
         request,
         "dashboard/partials/comments/comment_reactions.html",
@@ -601,8 +615,21 @@ class _ReactionData(TypedDict):
     reacted_by: list[int]
 
 
-def _aggregate_reactions(reactions_qs) -> dict[str, _ReactionData]:
-    """Group reactions by emoji → {count, reacted_by: list of profile_ids}."""
+def _aggregate_reactions(reactions_qs, profile: Profile | None = None, *, conceal: bool = False) -> dict[str, _ReactionData]:
+    """Group reactions by emoji → {count, reacted_by: list of profile_ids}.
+
+    Args:
+        reactions_qs: The comment's reactions.
+        profile: The viewer, required when ``conceal`` is True.
+        conceal: Whether this viewer sees the concealed form of the wiki the
+            comment belongs to - a reaction is a contribution like any other,
+            so a concealed viewer's own (visible) comment must not report an
+            audience of strangers it cannot otherwise see.
+    """
+    if conceal:
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        reactions_qs = conceal_rows(reactions_qs, profile)
     result: dict[str, _ReactionData] = {}
     for r in reactions_qs.select_related("profile"):
         if r.emoji not in result:

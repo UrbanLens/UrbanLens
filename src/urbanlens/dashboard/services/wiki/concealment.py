@@ -156,30 +156,52 @@ def concealment_active(wiki: Wiki, viewer: Profile | None) -> bool:
     **Currently always False.** The threshold is a reputation score scaled by
     the wiki's community-voted vulnerability, and cannot be chosen before there
     is real score data to choose it against - the ledger is collecting that now.
+    Nothing below leaks in production today; every statement here is about the
+    day this boolean starts returning True.
 
-    What flipping it would already do, as of the resolve-time rework:
+    What flipping it does, as of the 2026-08-25 pass (verified against the
+    code, not carried over from an earlier draft of this docstring - an
+    earlier version of this paragraph was itself found stale by the second
+    adversarial review, which is the reason to distrust prose here over code):
 
     - **Wiki field values** are substituted for every surface, because
       ``wiki_access.resolve_visible_wiki`` conceals what it returns and is the
-      one gate all 99 wiki-scoped call sites pass through - including all 31
-      external API handlers, each of which calls ``WikiApiView.resolve`` as its
+      one gate all wiki-scoped call sites pass through - including every
+      external API handler, each of which calls ``WikiApiView.resolve`` as its
       first statement.
-    - **Related rows** - comments, photos, aliases, links, edit history - are
-      filtered by :func:`conceal_rows` at the eight call sites that load them.
+    - **Related rows** - comments (+ reactions), photos, aliases, links, edit
+      history, custom layers, map overlays, markup, detail pins, albums,
+      ownership/sale records - are filtered by :func:`conceal_rows` /
+      :func:`visible_rows` at their call sites, every one of them keyed on
+      the same per-model actor field (:data:`_ACTOR_FIELDS`): own+friends'
+      rows and automatic/provider rows survive, everyone else's is filtered.
+    - **The Article tab** - body, history, and by-id diff/restore - goes
+      through :func:`conceal_article` / :func:`visible_article_revision`.
     - **Writes** go to the real row via :func:`writable_wiki`, enforced by
-      ``bin/check_concealed_writes.py``.
+      ``bin/check_concealed_writes.py``; write-path re-renders and by-id
+      write endpoints (revert, alias/link/layer delete, etc.) are scoped
+      through the same viewer-aware queryset as their GET twin.
+    - **Wiki-scoped boundary customization** falls back to the place/circle
+      polygon (``Boundary.objects.resolve_for_wiki``) rather than surfacing a
+      user-drawn one - that row records no author at all, so it cannot get
+      the own-contribution treatment and is hidden outright, the same
+      ruling markup and layers had before their own-contribution fix.
 
-    What it would **not** yet cover, so nobody reads a flip as complete:
+    What it does **not** yet cover, so nobody reads a flip as complete:
 
-    - the **Article** body (``controllers/article.py``), which is entirely
-      user-contributed and would render in full;
-    - **search and autocomplete**, which match ``wiki.description`` and alias
-      names as substrings (``services/global_search/providers.py`` and
-      ``services/map_pins/autocomplete.py``) - a distinctive phrase from a
-      stranger's description is confirmable by typing it;
-    - the **markup** and **detail-pin** JSON endpoints.
+    - the **provider Image classification** in :data:`_ACTOR_FIELDS` treats
+      every non-``UPLOAD`` row as automatic, which is only as sound as every
+      writer that materializes a wiki-scoped ``Image`` without a user action -
+      audit new writers against that premise before trusting it further;
+    - the reputation-ledger **threshold formula** itself does not exist - this
+      function needs real logic, not just a flipped boolean.
 
-    Those are tracked in ``docs/designs/concealment-review-2-2026-08-24.md``.
+    Search and autocomplete (``services/global_search/providers.py``,
+    ``services/map_pins/autocomplete.py``) are also concealment-aware now: row
+    -level providers (comments, articles) filter in SQL the same way
+    :func:`conceal_rows` does; the wiki name/description/alias substring match
+    re-verifies each candidate against the concealed values before it survives
+    a page, since that match cannot be expressed as a single SQL predicate.
 
     Deliberately the only place this decision is made. The tells audit found 82
     ways a concealed wiki could give itself away, and most of the classes behind
@@ -265,6 +287,23 @@ _ACTOR_FIELDS: dict[str, str] = {
     "WikiStatVote": "profile_id",
     "Floorplan": "profile_id",
     "MarkupMap": "profile_id",
+    # Layers/overlays and reactions carry the same "own contribution is not
+    # what concealment exists to hide" reasoning as markup - see
+    # controllers/custom_layers.py and controllers/map_overlays.py. `profile`
+    # is non-null CASCADE on all three, so the isnull half of conceal_rows'
+    # generic clause never fires; that mirrors MarkupMap and is not a bug.
+    "CustomLayer": "profile_id",
+    "MapImageOverlay": "profile_id",
+    "Reaction": "profile_id",
+    "Album": "profile_id",
+    # Ownership/sale records. `created_by` is SET_NULL on account deletion -
+    # but unlike WikiEdit, `plugins.builtin.property_records` also writes real
+    # OFFICIAL-sourced rows (deed/mailing-address lookups) with no
+    # `created_by` at all, so a null actor here is genuinely ambiguous the
+    # same way WikiLink's is - the generic null-is-automatic default is the
+    # only one of the two that doesn't need to be wrong for either cause.
+    "WikiOwner": "created_by_id",
+    "WikiPropertySale": "created_by_id",
 }
 
 

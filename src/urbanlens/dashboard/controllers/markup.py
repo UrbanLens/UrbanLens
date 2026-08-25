@@ -194,6 +194,52 @@ def _owner_layer_kwargs(owner: Pin | Wiki | MarkupMap) -> dict:
     return {"pk": None}
 
 
+def _resolve_visible_layer(layer_uuid: str | None, owner: Pin | Wiki | MarkupMap, profile: Profile, owner_kwargs: dict) -> CustomLayer | None:
+    """Resolve a posted ``layer_uuid`` to a layer this profile may actually assign an item to.
+
+    Scoped by owner exactly as before (a layer belonging to a different pin/
+    wiki, or any value on the map_uuid route, resolves to None); additionally
+    scoped by ``visible_rows`` on a wiki owner, so a concealed viewer's own
+    write can't file an item under a stranger's layer - the layer they'd have
+    no way to see reflected back (the read side already nulls layer_uuid for
+    exactly this case; refusing it here keeps the write side consistent with
+    what the read side shows).
+
+    Args:
+        layer_uuid: The posted layer uuid, or a falsy value for "no layer".
+        owner: The Pin, Wiki, or MarkupMap the item belongs to.
+        profile: The requesting profile.
+        owner_kwargs: The already-computed parent_pin/parent_wiki filter dict.
+
+    Returns:
+        The resolved CustomLayer, or None.
+    """
+    if not layer_uuid:
+        return None
+    qs = CustomLayer.objects.filter(uuid=layer_uuid, **owner_kwargs)
+    if isinstance(owner, Wiki):
+        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+        qs = visible_rows(qs, owner, profile)
+    return qs.first()
+
+
+def _current_layer_is_visible(layer_id: int, owner: Pin | Wiki | MarkupMap, profile: Profile) -> bool:
+    """Whether *profile* could see the CustomLayer *layer_id* under *owner*.
+
+    Always True off a wiki - concealment is a wiki-only concept, so a Pin's
+    or MarkupMap's own layers are never filtered. Used only on the "clear
+    this item's layer" write path, to tell a deliberate clear apart from a
+    concealed viewer's edit-panel echoing back the None their own read side
+    substituted for a layer they cannot see.
+    """
+    if not isinstance(owner, Wiki):
+        return True
+    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+    return visible_rows(CustomLayer.objects.filter(pk=layer_id), owner, profile).exists()
+
+
 class MarkupJsonView(LoginRequiredMixin, View):
     """Return all markup items for a pin, location, or markup map as JSON.
 
@@ -224,9 +270,28 @@ class MarkupJsonView(LoginRequiredMixin, View):
             subtree = Pin.objects.filter(pk=owner.pk).with_descendants()
             items = PinMarkup.objects.filter(parent_pin__in=subtree).select_related("parent_pin__location", "parent_pin__location__wiki", "layer")
 
+        # A visible item can still be filed under a layer this viewer cannot
+        # see - wiki-scoped layer assignment isn't restricted to the item's
+        # own author, so "my own drawing" and "the layer I put it in" are
+        # independent visibility questions. Reusing the exact set
+        # custom_layers._resolve_layer_owner would return keeps the two
+        # surfaces from drifting: this is a no-op when concealment is off,
+        # since visible_rows then returns every layer unfiltered.
+        visible_layer_ids: set[int] | None = None
+        if location_slug is not None and isinstance(owner, Wiki):
+            from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+            profile, _ = Profile.objects.get_or_create(user=request.user)
+            visible_layer_ids = set(visible_rows(CustomLayer.objects.for_wiki(owner), owner, profile).values_list("pk", flat=True))
+
         markup_items = []
         for m in items.select_related("layer").order_by("created"):
             entry = m.to_json()
+            if visible_layer_ids is not None and m.layer_id is not None and m.layer_id not in visible_layer_ids:
+                # Ungroup rather than reference a layer this viewer cannot
+                # list - the item itself stays visible (own/friend markup is
+                # never hidden), it just renders as if filed under no layer.
+                entry["layer_uuid"] = None
             if include_children and m.parent_pin_id is not None and m.parent_pin_id != owner.pk and m.parent_pin is not None:
                 entry["owner_name"] = m.parent_pin.effective_name
             markup_items.append(entry)
@@ -305,7 +370,7 @@ def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | Non
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if location is None or not location_visible_to(location, profile):
             return None
-        return Wiki.objects.official().filter(location=location).first()
+        return Wiki.objects.filter(location=location).first()
     return None
 
 
@@ -645,9 +710,7 @@ class MarkupView(LoginRequiredMixin, View):
         # validation style (see security_indicator above).
         layer = None
         if map_uuid is None:
-            layer_uuid = body.get("layer_uuid")
-            if layer_uuid:
-                layer = CustomLayer.objects.filter(uuid=layer_uuid, **owner_kwargs).first()
+            layer = _resolve_visible_layer(body.get("layer_uuid"), owner, profile, owner_kwargs)
 
         item = PinMarkup.objects.create(
             profile=profile,
@@ -705,6 +768,7 @@ class MarkupEditView(LoginRequiredMixin, View):
         """
         owner, item = self._get_item(request, pin_slug, location_slug, markup_uuid, map_uuid)
         body = _parse_body(request)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if "geometry" in body and isinstance(body["geometry"], dict):
             geometry = body["geometry"]
@@ -729,7 +793,23 @@ class MarkupEditView(LoginRequiredMixin, View):
             item.border_opacity = safe_int(body["border_opacity"], item.border_opacity)
         if "layer_uuid" in body:
             layer_uuid = body.get("layer_uuid")
-            item.layer = CustomLayer.objects.filter(uuid=layer_uuid, **_owner_layer_kwargs(owner)).first() if layer_uuid else None
+            if layer_uuid:
+                item.layer = _resolve_visible_layer(layer_uuid, owner, profile, _owner_layer_kwargs(owner))
+            elif item.layer_id is None or _current_layer_is_visible(item.layer_id, owner, profile):
+                # A genuine clear: nothing to clear, or the layer being
+                # cleared was one this viewer could see and could
+                # therefore have deliberately chosen to remove.
+                item.layer = None
+            # else: item.layer_id names a layer this viewer cannot see - a
+            # concealed wiki hides that layer from the picker and nulls its
+            # layer_uuid on read (MarkupJsonView.get), so an empty
+            # layer_uuid here is indistinguishable from that display value
+            # being echoed straight back by an edit to some other field.
+            # Leaving the real assignment untouched is the only option that
+            # doesn't destroy it - the same class of bug as the wiki
+            # suggest-edit data loss fixed earlier this round (see
+            # docs/PROBLEMS.md's "forms post every field" entry): a display
+            # value must never be diffed/written back as the viewer's intent.
         if "security_indicator" in body:
             indicator = body.get("security_indicator") or ""
             item.security_indicator = indicator if indicator in _ALLOWED_SECURITY_INDICATORS else ""
