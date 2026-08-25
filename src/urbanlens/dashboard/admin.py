@@ -113,7 +113,12 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         (
             "Notifications - Routing",
             {
-                "fields": ["notify_pin_import_errors_email", "notify_pin_import_errors_gotify"],
+                "fields": [
+                    "notify_pin_import_errors_email",
+                    "notify_pin_import_errors_gotify",
+                    "notify_safety_checkin_archival_failed_email",
+                    "notify_safety_checkin_archival_failed_gotify",
+                ],
                 "description": "Which critical notification types are sent to which channels above.",
             },
         ),

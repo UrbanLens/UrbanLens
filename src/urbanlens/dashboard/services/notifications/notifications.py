@@ -25,6 +25,7 @@ class NotificationEvent:
     """Registered notification event keys (see ``_EVENT_CHANNEL_FIELDS``)."""
 
     PIN_IMPORT_ERROR: Final = "pin_import_error"
+    SAFETY_CHECKIN_ARCHIVAL_FAILED: Final = "safety_checkin_archival_failed"
 
 
 # Maps each event key to the SiteSettings BooleanField that controls whether it is
@@ -34,6 +35,10 @@ _EVENT_CHANNEL_FIELDS: dict[str, dict[str, str]] = {
     NotificationEvent.PIN_IMPORT_ERROR: {
         "email": "notify_pin_import_errors_email",
         "gotify": "notify_pin_import_errors_gotify",
+    },
+    NotificationEvent.SAFETY_CHECKIN_ARCHIVAL_FAILED: {
+        "email": "notify_safety_checkin_archival_failed_email",
+        "gotify": "notify_safety_checkin_archival_failed_gotify",
     },
 }
 

@@ -116,12 +116,14 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
         Excludes check-ins already archived (``archive`` one-to-one exists) -
         this is what makes ``services.visits.safety.archive_checkin`` idempotent
         across the eta-scheduled task and the periodic sweep both picking up
-        the same row.
+        the same row. Also excludes check-ins that gave up after repeated
+        archival failures (``archive_failed_at`` set) - those need a human,
+        not another sweep tick (see ``services.visits.safety.MAX_ARCHIVE_ATTEMPTS``).
 
         Returns:
             Filtered queryset.
         """
-        return self.filter(archive_scheduled_at__isnull=False, archive_scheduled_at__lte=timezone.now(), archive__isnull=True)
+        return self.filter(archive_scheduled_at__isnull=False, archive_scheduled_at__lte=timezone.now(), archive__isnull=True, archive_failed_at__isnull=True)
 
     def active(self) -> Self:
         """Return check-ins that have not yet reached a terminal status.

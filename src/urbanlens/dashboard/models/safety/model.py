@@ -262,6 +262,12 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         resolved_by_label: Display label of whoever concluded this check-in ("you", a partner's
             username, or a contact's display name) - captured for the archive payload, then
             scrubbed at archival like every other PII field on this model.
+        archive_failure_count: Consecutive ``archive_checkin`` failures (e.g. a corrupted E2EE key
+            bundle) - a successful archive removes the row from ``due_for_archival()`` for good, so
+            this only ever climbs.
+        archive_failed_at: When archival gave up after ``services.visits.safety.MAX_ARCHIVE_ATTEMPTS``
+            consecutive failures, if it ever did - excludes the row from further sweeps instead of
+            retrying forever, and flags it for manual review (see ``services.visits.safety.archive_checkin``).
     """
 
     title = CharField(max_length=200)
@@ -299,6 +305,8 @@ class SafetyCheckin(abstract.PublicDashboardModel):
     # services.visits.safety.schedule_checkin_archival/archive_checkin.
     archive_scheduled_at = DateTimeField(null=True, blank=True)
     resolved_by_label = CharField(max_length=150, blank=True, default="")
+    archive_failure_count = PositiveIntegerField(default=0)
+    archive_failed_at = DateTimeField(null=True, blank=True)
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_checkins")
     trip = ForeignKey(

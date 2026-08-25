@@ -424,6 +424,16 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Send a Gotify push notification when a pin import fails to process an uploaded file.",
         verbose_name="Pin import errors (Gotify)",
     )
+    notify_safety_checkin_archival_failed_email = BooleanField(
+        default=True,
+        help_text="Email the admin notification address when a safety check-in gives up on archival after repeated failures.",
+        verbose_name="Safety check-in archival failures (email)",
+    )
+    notify_safety_checkin_archival_failed_gotify = BooleanField(
+        default=False,
+        help_text="Send a Gotify push notification when a safety check-in gives up on archival after repeated failures.",
+        verbose_name="Safety check-in archival failures (Gotify)",
+    )
 
     # --- Google Places layer ---
 
