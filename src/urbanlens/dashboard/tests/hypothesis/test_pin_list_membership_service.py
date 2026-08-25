@@ -19,6 +19,7 @@ from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
@@ -26,6 +27,7 @@ from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 from urbanlens.dashboard.services.pins.pin_list_membership import (
     add_pins_to_list,
+    filter_matching_ids,
     remove_pins_from_list,
     reorder_list_items,
     resync_lists_for_saved_filter,
@@ -217,3 +219,26 @@ class ResyncListsForSavedFilterTests(MembershipServiceTestCase):
         resync_lists_for_saved_filter(saved)
         unrelated.refresh_from_db()
         self.assertEqual(unrelated.smart_filter, {"min_rating": 2})
+
+
+class FilterMatchingIdsExcludesChildPinsTests(MembershipServiceTestCase):
+    """``filter_matching_ids`` must exclude detail/child pins, matching every saved-filter
+    preview call site (``controllers/saved_filters.py``, which chains ``.root_pins()`` before
+    ``filter_by_criteria``). Regression for the still-live ``docs/PROBLEMS.md:585`` bug this
+    audit confirmed: without it, a child pin could enter smart-list membership even though its
+    own filter preview would never have shown it. See docs/GOALS_CODE_AUDIT.md
+    ("Lists: filter/manual reconciliation")."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin_list.is_smart = True
+        self.pin_list.smart_filter = {"name": "Bunker"}
+        self.pin_list.save(update_fields=["is_smart", "smart_filter"])
+        self.root_pin = create_pin_for_profile(self.profile, name="Bunker Alpha", latitude=40.0, longitude=-70.0).pin
+        self.child_pin = Pin.objects.create(profile=self.profile, parent_pin=self.root_pin, location=self.root_pin.location, name="Bunker Alpha Sub-room")
+
+    def test_a_root_pin_matching_the_filter_is_included(self) -> None:
+        self.assertIn(self.root_pin.pk, filter_matching_ids(self.pin_list))
+
+    def test_a_child_pin_matching_the_filter_is_excluded(self) -> None:
+        self.assertNotIn(self.child_pin.pk, filter_matching_ids(self.pin_list))

@@ -35,6 +35,7 @@ from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, Friends
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
@@ -105,6 +106,27 @@ class VisibleProfilePksAgreementTests(TestCase):
         baker.make(Pin, profile=without, location=baker.make(Location), parent_pin=None)
 
         self._assert_agrees([with_common, without])
+
+    def test_common_pin_across_different_locations_sharing_a_place(self) -> None:
+        """A pin fifty metres away on the same parcel must still count as
+        "common pin" - the same fix already proven in
+        services.pins.common_pins.pinned_place_keys, now shared by
+        _have_common_pin/visible_profile_pks/viewers_who_can_see instead of
+        each comparing raw Location rows. See docs/GOALS_CODE_AUDIT.md
+        ("Cross-pin aggregate comparison level")."""
+        place = baker.make(Place, kind=PlaceKind.PARCEL)
+        viewer_location = baker.make(Location, place=place)
+        baker.make(Pin, profile=self.viewer, location=viewer_location, parent_pin=None)
+        with_common = _profile(profile_visibility=VisibilityChoice.COMMON_PIN)
+        other_location_same_place = baker.make(Location, place=place)
+        self.assertNotEqual(viewer_location.pk, other_location_same_place.pk)
+        baker.make(Pin, profile=with_common, location=other_location_same_place, parent_pin=None)
+        without = _profile(profile_visibility=VisibilityChoice.COMMON_PIN)
+        baker.make(Pin, profile=without, location=baker.make(Location, place=baker.make(Place, kind=PlaceKind.PARCEL)), parent_pin=None)
+
+        self._assert_agrees([with_common, without])
+        self.assertTrue(with_common.can_view_profile(self.viewer), "different Location rows sharing a Place must count as a common pin")
+        self.assertIn(with_common.pk, Profile.visible_profile_pks(self.viewer, [with_common, without]))
 
     def test_common_friend(self) -> None:
         mutual = _profile()
@@ -258,6 +280,24 @@ class ViewersWhoCanSeeAgreementTests(TestCase):
         baker.make(Pin, profile=without, location=baker.make(Location), parent_pin=None)
 
         self._assert_agrees([with_common, without])
+
+    def test_common_pin_across_different_locations_sharing_a_place(self) -> None:
+        """Mirror of VisibleProfilePksAgreementTests's test of the same name -
+        the subject-side (viewers_who_can_see) batch path must be place-aware too."""
+        self._set_visibility(VisibilityChoice.COMMON_PIN)
+        place = baker.make(Place, kind=PlaceKind.PARCEL)
+        subject_location = baker.make(Location, place=place)
+        baker.make(Pin, profile=self.subject, location=subject_location, parent_pin=None)
+        with_common = _profile()
+        other_location_same_place = baker.make(Location, place=place)
+        self.assertNotEqual(subject_location.pk, other_location_same_place.pk)
+        baker.make(Pin, profile=with_common, location=other_location_same_place, parent_pin=None)
+        without = _profile()
+        baker.make(Pin, profile=without, location=baker.make(Location, place=baker.make(Place, kind=PlaceKind.PARCEL)), parent_pin=None)
+
+        self._assert_agrees([with_common, without])
+        self.assertTrue(self.subject.can_view_profile(with_common), "different Location rows sharing a Place must count as a common pin")
+        self.assertIn(with_common.pk, Profile.viewers_who_can_see(self.subject, [with_common, without]))
 
     def test_common_friend(self) -> None:
         self._set_visibility(VisibilityChoice.COMMON_FRIEND)

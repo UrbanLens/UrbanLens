@@ -497,8 +497,14 @@ class WikiAliasDetailView(WikiApiView):
     @extend_schema(responses={204: None, 404: ErrorSerializer})
     def delete(self, request: Request, location_slug: str, alias_id: int) -> Response:
         """Remove one alias, scoped to this wiki."""
+        from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, WikiAutoRemoval
+
         _location, wiki, profile = self.resolve(request, location_slug)
         alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
+        # Tombstone first, matching LocationAliasDeleteView (controllers/aliases.py) -
+        # without it, the external name-provider sync or the pin<->wiki alias-mirror
+        # signal recreates this exact name the moment either one next runs.
+        WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.ALIAS, value=alias.name)
         alias.delete()
         return Response(status=204)
 
@@ -696,6 +702,13 @@ class WikiOwnershipView(PaginatedListMixin, WikiApiView):
     Read-only this pass - see ``docs/notes/mobile_app_notes.md`` Part 7 for why
     the write side (adding/editing/unlinking an owner) is deferred rather than
     built here.
+
+    Officially-sourced owner identity/contact details are gated behind
+    ``SiteFeature.PROPERTY_OWNERS`` the same way the web UI's Ownership panel
+    is - see ``services.property.owner_access``. Filtering happens here,
+    server-side, before serialization, matching that module's own
+    requirement that a withheld record never reach a template (or, here, a
+    response body) at all.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -704,15 +717,20 @@ class WikiOwnershipView(PaginatedListMixin, WikiApiView):
 
     @extend_schema(responses={200: WikiOwnerSerializer(many=True), 404: ErrorSerializer})
     def get(self, request: Request, location_slug: str) -> Response:
-        """Return one page of the location's shared owners."""
+        """Return one page of the location's shared owners this caller may see."""
+        from urbanlens.dashboard.services.property.owner_access import visible_owners
+
         location, wiki, profile = self.resolve(request, location_slug)
-        return self.paginated_response(visible_rows(WikiOwner.objects.for_location(location), wiki, profile), WikiOwnerSerializer, request)
+        owners = visible_owners(visible_rows(WikiOwner.objects.for_location(location), wiki, profile), profile.user)
+        return self.paginated_response(owners, WikiOwnerSerializer, request)
 
 
 class WikiPropertySalesView(PaginatedListMixin, WikiApiView):
     """GET the wiki's shared Sale History tab, newest first.
 
     Read-only this pass, for the same reason as :class:`WikiOwnershipView`.
+    Party names are filtered by the same subscriber gate - see that class's
+    docstring.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -721,10 +739,30 @@ class WikiPropertySalesView(PaginatedListMixin, WikiApiView):
 
     @extend_schema(responses={200: WikiPropertySaleSerializer(many=True), 404: ErrorSerializer})
     def get(self, request: Request, location_slug: str) -> Response:
-        """Return one page of the location's shared sale records."""
+        """Return one page of the location's shared sale records, owners filtered per caller."""
+        from types import SimpleNamespace
+
+        from urbanlens.dashboard.services.property.owner_access import visible_owners
+
         location, wiki, profile = self.resolve(request, location_slug)
         sales = visible_rows(WikiPropertySale.objects.for_location(location), wiki, profile).prefetch_related("previous_owners", "new_owners")
-        return self.paginated_response(sales, WikiPropertySaleSerializer, request)
+        # A plain SimpleNamespace per row, not a mutated model instance -
+        # `sale.previous_owners.set(...)` would persist the filtered owner
+        # list to the database instead of just shaping this one response.
+        rows = [
+            SimpleNamespace(
+                id=sale.id,
+                sale_price=sale.sale_price,
+                sale_date=sale.sale_date,
+                notes=sale.notes,
+                source=sale.source,
+                previous_owners=visible_owners(sale.previous_owners.all(), profile.user),
+                new_owners=visible_owners(sale.new_owners.all(), profile.user),
+                created=sale.created,
+            )
+            for sale in sales
+        ]
+        return self.paginated_response(rows, WikiPropertySaleSerializer, request)
 
 
 class WikiLinksView(WikiApiView):
@@ -771,8 +809,14 @@ class WikiLinkDetailView(WikiApiView):
     @extend_schema(responses={204: None, 404: ErrorSerializer})
     def delete(self, request: Request, location_slug: str, link_id: int) -> Response:
         """Remove one link, scoped to this wiki."""
+        from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, WikiAutoRemoval
+
         _location, wiki, profile = self.resolve(request, location_slug)
         link = get_object_or_404(visible_rows(WikiLink.objects.filter(wiki=wiki), wiki, profile), id=link_id)
+        # Tombstone first, matching LocationLinkDeleteView (controllers/links.py) -
+        # without it, a plugin panel (Nominatim, EPA) recreates this exact link
+        # the next time its cache goes stale.
+        WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.LINK, value=link.url)
         link.delete()
         return Response(status=204)
 

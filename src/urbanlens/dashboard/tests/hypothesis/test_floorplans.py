@@ -625,6 +625,69 @@ class FloorplanResolutionTests(TestCase):
         gateway.return_value.lookup_floorplans.assert_called_once_with("parcel-uuid-1", building_ref="cris:res-1", on_date="1954-01-01")
 
 
+class ResolveFloorplanRowTests(TestCase):
+    """``resolve_floorplan_row`` - the row-returning counterpart to ``resolve_document``,
+    for callers (the GeoJSON features endpoint) that need the actual row rather than a
+    serialized document. Found missing by the round-4 FEATURES.md-vs-code audit: the
+    features endpoint only ever resolved the caller's own personal plan, so a published
+    plan was invisible there even to a viewer who could see it fine through the JSON
+    document endpoint."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        self.place = _building()
+
+    def test_none_profile_resolves_nothing(self) -> None:
+        from urbanlens.dashboard.services.floorplans.resolution import resolve_floorplan_row
+
+        Floorplan.objects.create(place=self.place, profile=self.profile, name="mine")
+
+        self.assertIsNone(resolve_floorplan_row(self.place, profile=None))
+
+    def test_a_local_plan_wins_over_a_community_one(self) -> None:
+        """Mirrors resolve_document's own local-wins precedent (test_a_local_plan_wins
+        above) - the row-returning path must agree, or a caller using each function for
+        a different endpoint of the same feature would show a different plan."""
+        from urbanlens.dashboard.services.floorplans.resolution import resolve_floorplan_row
+
+        local = Floorplan.objects.create(place=self.place, profile=self.profile, name="mine")
+
+        with mock.patch("urbanlens.dashboard.services.floorplans.resolution._community_plan") as community_plan:
+            row = resolve_floorplan_row(self.place, profile=self.profile)
+
+        self.assertEqual(row.pk, local.pk)
+        community_plan.assert_not_called()
+
+    def test_a_published_plan_is_returned_when_the_wiki_is_visible_and_no_local_plan_exists(self) -> None:
+        from urbanlens.dashboard.services.floorplans.resolution import resolve_floorplan_row
+
+        community = Floorplan.objects.create(place=self.place, wiki=baker.make("dashboard.Wiki", place=self.place), profile=baker.make(User).profile, name="theirs")
+
+        with mock.patch("urbanlens.dashboard.services.floorplans.resolution._community_plan", return_value=community):
+            row = resolve_floorplan_row(self.place, profile=self.profile)
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row.pk, community.pk)
+
+    def test_a_published_plan_is_withheld_when_the_wiki_is_not_visible(self) -> None:
+        """``_community_plan`` itself is what checks place_visible_to - returning None
+        for an unreachable wiki is exactly what a caller lacking access must see."""
+        from urbanlens.dashboard.services.floorplans.resolution import resolve_floorplan_row
+
+        baker.make(Floorplan, place=self.place, wiki=baker.make("dashboard.Wiki", place=self.place), profile=baker.make(User).profile, name="theirs")
+
+        with mock.patch("urbanlens.dashboard.services.floorplans.resolution._community_plan", return_value=None):
+            self.assertIsNone(resolve_floorplan_row(self.place, profile=self.profile))
+
+    def test_neither_local_nor_community_is_a_quiet_none(self) -> None:
+        from urbanlens.dashboard.services.floorplans.resolution import resolve_floorplan_row
+
+        with mock.patch("urbanlens.dashboard.services.floorplans.resolution._community_plan", return_value=None):
+            self.assertIsNone(resolve_floorplan_row(self.place, profile=self.profile))
+
+
 class FloorplanEndpointTests(TestCase):
     def setUp(self) -> None:
         super().setUp()

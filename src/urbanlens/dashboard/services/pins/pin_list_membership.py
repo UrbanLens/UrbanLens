@@ -180,7 +180,11 @@ def _pin_matches_filter(pin: Pin, pin_list: PinList) -> bool:
     from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria
 
     criteria = deserialize_criteria(smart_filter, pin_list.profile)
-    return Pin.objects.filter(pk=pin.pk).filter_by_criteria(criteria).exists()
+    # root_pins(): every saved-filter preview call site (controllers/saved_filters.py)
+    # excludes detail/child pins before matching criteria - omitting it here let a
+    # child pin enter smart-list membership when its own filter preview would not
+    # have shown it. See docs/GOALS_CODE_AUDIT.md ("Lists: filter/manual reconciliation").
+    return Pin.objects.filter(pk=pin.pk).root_pins().filter_by_criteria(criteria).exists()
 
 
 def _pin_in_boundary(pin: Pin, pin_list: PinList) -> bool:
@@ -219,7 +223,9 @@ def filter_matching_ids(pin_list: PinList) -> set[int]:
     from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria
 
     criteria = deserialize_criteria(pin_list.smart_filter, pin_list.profile)
-    return set(Pin.objects.filter(profile=pin_list.profile).filter_by_criteria(criteria).values_list("pk", flat=True))
+    # root_pins(): same exclusion every saved-filter preview call site applies - see the
+    # matching comment in _pin_matches_filter above.
+    return set(Pin.objects.filter(profile=pin_list.profile).root_pins().filter_by_criteria(criteria).values_list("pk", flat=True))
 
 
 def add_pins_to_list(pin_list: PinList, pins: Sequence[Pin], *, added_via: str | None = None) -> ListAddResult:

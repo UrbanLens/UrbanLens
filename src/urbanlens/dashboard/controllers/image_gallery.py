@@ -19,7 +19,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json, parse_reposition_payload
+from urbanlens.dashboard.services.media.images import delete_stored_file, detach_image_from_wiki, image_to_gallery_json, parse_reposition_payload
 from urbanlens.dashboard.services.photos.uploads import UploadRejection, upload_photo_for_owner
 from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
@@ -201,11 +201,20 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
             # must not count as references.
             batch = list(images)
             batch_pks = [image.pk for image in batch]
-            image_paths = [image.image.name for image in batch if image.image]
-            for image in batch:
+            # A row also linked to a wiki (send_to_wiki below repoints rather than
+            # copies) must be unlinked from the pin, not destroyed - see
+            # detach_image_from_pin.
+            to_destroy = [image for image in batch if image.wiki_id is None]
+            to_unlink_ids = [image.pk for image in batch if image.wiki_id is not None]
+            for image in to_destroy:
                 delete_stored_file(image, also_deleting=batch_pks)
-            images.delete()
-            return JsonResponse({"deleted": len(image_paths)})
+            Image.objects.filter(pk__in=[image.pk for image in to_destroy]).delete()
+            if to_unlink_ids:
+                Image.objects.filter(pk__in=to_unlink_ids).update(pin=None)
+            # Row count, not file count - a row with no stored file (e.g. still
+            # processing) still gets deleted and must still be counted, or the
+            # response silently undercounts what the client asked it to delete.
+            return JsonResponse({"deleted": len(to_destroy), "unlinked": len(to_unlink_ids)})
 
         if action == "send_to_wiki":
             wiki = _wiki_for_location(pin.location)
@@ -324,7 +333,6 @@ class PinImageView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404
-
         withdrawing = request.GET.get("from_wiki") == "1" and img.source == ImageSource.UPLOAD
         if img.wiki_id is not None and not withdrawing:
             Image.objects.filter(pk=img.pk).update(pin=None)
@@ -463,6 +471,5 @@ class WikiImageView(LoginRequiredMixin, View):
         img, profile = self._get_image(request, image_id, location_slug)
         if img.profile != profile:
             raise Http404
-        delete_stored_file(img)
-        img.delete()
+        detach_image_from_wiki(img)
         return HttpResponse(status=204)

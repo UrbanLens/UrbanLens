@@ -6,6 +6,7 @@ import datetime
 from uuid import uuid4
 
 from django.db import IntegrityError, transaction
+from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 import pytest
@@ -260,6 +261,89 @@ class SafetyCheckinContactByTokenTests(TestCase):
         result = SafetyCheckinContact.objects.select_related("checkin", "checkin__profile").by_token(contact.token).first()
         self.assertEqual(result, contact)
         self.assertEqual(result.checkin_id, self.checkin.pk)
+
+
+class SafetyContactPortalEscalationGateTests(TestCase):
+    """The token contact portal (and its markup JSON) must not disclose the plan, message,
+    route, or photos before the check-in has actually escalated - the token is only ever
+    emailed at escalation, but nothing previously stopped a leaked/guessed/forwarded token
+    from returning the full plan regardless of check-in state. See docs/GOALS_CODE_AUDIT.md
+    ("Safety check-ins")."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.checkin = _checkin(
+            self.profile,
+            plan_details="Meet at the north gate, follow the fence line.",
+            contact_message="Call the ranger station if I'm late.",
+        )
+        self.contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+
+    def _escalate(self):
+        self.checkin.escalated_at = timezone.now()
+        self.checkin.save(update_fields=["escalated_at", "updated"])
+
+    def test_portal_hides_the_plan_and_message_before_escalation(self):
+        response = self.client.get(reverse("safety.contact.portal", kwargs={"token": self.contact.token}))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertNotIn("Meet at the north gate", content)
+        self.assertNotIn("Call the ranger station", content)
+
+    def test_portal_shows_the_plan_and_message_once_escalated(self):
+        self._escalate()
+
+        response = self.client.get(reverse("safety.contact.portal", kwargs={"token": self.contact.token}))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn("Meet at the north gate", content)
+        self.assertIn("Call the ranger station", content)
+
+    def test_portal_hides_photos_before_escalation(self):
+        baker.make("dashboard.Image", safety_checkin=self.checkin, profile=self.profile, image="checkin_photos/trailhead.jpg")
+
+        response = self.client.get(reverse("safety.contact.portal", kwargs={"token": self.contact.token}))
+
+        self.assertNotIn("safety-photo-thumb", response.content.decode())
+
+    def test_portal_shows_photos_once_escalated(self):
+        baker.make("dashboard.Image", safety_checkin=self.checkin, profile=self.profile, image="checkin_photos/trailhead.jpg")
+        self._escalate()
+
+        response = self.client.get(reverse("safety.contact.portal", kwargs={"token": self.contact.token}))
+
+        self.assertIn("safety-photo-thumb", response.content.decode())
+
+    def test_markup_json_is_empty_before_escalation(self):
+        markup_map = baker.make("dashboard.MarkupMap", profile=self.profile)
+        self.checkin.markup_map = markup_map
+        self.checkin.save(update_fields=["markup_map", "updated"])
+        baker.make("dashboard.PinMarkup", parent_map=markup_map, profile=self.profile, markup_type="line", geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]})
+
+        response = self.client.get(reverse("safety.contact.markup.json", kwargs={"token": self.contact.token}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["markup_items"], [])
+
+    def test_markup_json_returns_items_once_escalated(self):
+        markup_map = baker.make("dashboard.MarkupMap", profile=self.profile)
+        self.checkin.markup_map = markup_map
+        self.checkin.save(update_fields=["markup_map", "updated"])
+        baker.make("dashboard.PinMarkup", parent_map=markup_map, profile=self.profile, markup_type="line", geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]})
+        self._escalate()
+
+        response = self.client.get(reverse("safety.contact.markup.json", kwargs={"token": self.contact.token}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["markup_items"]), 1)
+
+    def test_portal_is_a_404_for_an_unknown_token(self):
+        self.assertEqual(self.client.get(reverse("safety.contact.portal", kwargs={"token": uuid4()})).status_code, 404)
+
+    def test_markup_json_is_a_404_for_an_unknown_token(self):
+        self.assertEqual(self.client.get(reverse("safety.contact.markup.json", kwargs={"token": uuid4()})).status_code, 404)
 
 
 class OneActiveCheckinAtATimeTests(TestCase):

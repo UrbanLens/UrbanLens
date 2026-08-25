@@ -29,6 +29,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment, TripMembership
@@ -491,6 +492,34 @@ class TripActivityTests(_TripApiTestCase):
         self.assertTrue(row["location_hidden"])
         self.assertIsNone(row["latitude"])
         self.assertIsNone(row["longitude"])
+
+    def test_hidden_location_masks_effective_title_when_it_falls_back_to_the_pin(self) -> None:
+        """effective_title must go through the same masking as latitude/longitude.
+
+        Regression for TripActivitySerializer sourcing the raw, unmasked
+        ``activity.effective_title`` model property instead of the row's already-masked
+        ``display_title`` - see docs/GOALS_CODE_AUDIT.md ("Trip activities sourcing"). A
+        title-less, location-hidden activity used to leak the adder's private pin name
+        through this field even though latitude/longitude were correctly nulled.
+        """
+        pin = Pin.objects.create(profile=self.profile, location=self.location, name="My Secret Cabin")
+        activity = TripActivity.objects.create(trip=self.trip, location=self.location, pin=pin, added_by=self.profile, title="", location_hidden=True)
+
+        response = self._get("external_api:trips.activities", self.trip.slug)
+
+        row = next(r for r in response.json()["results"] if r["id"] == activity.id)
+        self.assertNotIn("My Secret Cabin", row["effective_title"])
+        self.assertEqual(row["effective_title"], "Secret Location")
+
+    def test_visible_activity_still_shows_its_pin_derived_title(self) -> None:
+        """The masking fix must not hide the title for activities that ARE visible."""
+        pin = Pin.objects.create(profile=self.profile, location=self.location, name="Visible Spot")
+        activity = TripActivity.objects.create(trip=self.trip, location=self.location, pin=pin, added_by=self.profile, title="")
+
+        response = self._get("external_api:trips.activities", self.trip.slug)
+
+        row = next(r for r in response.json()["results"] if r["id"] == activity.id)
+        self.assertEqual(row["effective_title"], "Visible Spot")
 
     def test_position_requires_edit_permission(self) -> None:
         """Regression guard: an invited-not-joined member could move any marker.

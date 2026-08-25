@@ -331,7 +331,13 @@ class SafetyContactMarkupJsonView(View):
             JsonResponse with ``markup_items`` list, or 404 if the token is invalid.
         """
         contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin__markup_map").by_token(token))
-        markup_map = contact.checkin.markup_map
+        checkin = contact.checkin
+        # Mirrors the plan/message/photo gate in SafetyContactPortalView's template - the
+        # route is part of the trip plan, so it must not be reachable before an incident
+        # either, even by a caller hitting this JSON endpoint directly.
+        if checkin.escalated_at is None:
+            return JsonResponse({"markup_items": []})
+        markup_map = checkin.markup_map
         if markup_map is None:
             return JsonResponse({"markup_items": []})
         items = PinMarkup.objects.for_map(markup_map)

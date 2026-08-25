@@ -15,6 +15,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 
+from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
@@ -303,7 +304,14 @@ class PinBulkEditView(LoginRequiredMixin, View):
                 Label.objects.filter(id__in=remove_ids, kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct(),
             )
             for pin in pins:
-                pin.labels.remove(*removable)
+                current_ids = set(pin.labels.filter(pk__in=[label.pk for label in removable]).values_list("pk", flat=True))
+                present = [label for label in removable if label.pk in current_ids]
+                for label in present:
+                    # Tombstone first: keyword/AI auto-tagging can otherwise silently
+                    # reattach a label a user just bulk-removed.
+                    PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LABEL, value=str(label.pk))
+                if present:
+                    pin.labels.remove(*present)
 
         reparented = 0
         parent_uuid = str(data.get("parent_uuid") or "").strip()

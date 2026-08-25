@@ -1,8 +1,11 @@
 """Assistant controller - the chat UI over services.ai.assistant (UL-293).
 
-Conversation state lives in the session (per browser, capped), never in the
-database: the chat is a scratchpad, not a record, and keeping it out of the DB
-means there's nothing to leak, export, or retain.
+Conversation state lives in the session (per browser, capped), not in a
+conversation/message table of its own: the chat is a scratchpad, not a
+record, so there's nothing to export or retain deliberately. The session
+backend is ``cached_db``, which writes through to the database, so this
+state does land in a DB row (``django_session``) - it just isn't modeled,
+queryable, or kept past the session's own expiry.
 """
 
 from __future__ import annotations

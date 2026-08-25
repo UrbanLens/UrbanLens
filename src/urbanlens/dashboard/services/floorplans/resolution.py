@@ -57,6 +57,34 @@ def resolve_document(place: Place, *, profile: Profile | None = None, on_date: d
     return _redata_document(place, on_date)
 
 
+def resolve_floorplan_row(place: Place, *, profile: Profile | None = None, on_date: datetime.date | None = None) -> Floorplan | None:
+    """The floorplan *row* (not a serialized document) a building shows, resolved by date.
+
+    Same local-then-community fallback as :func:`resolve_document`, for a
+    caller that needs the actual row to query its geometry - the GeoJSON
+    features endpoint - rather than the pre-serialized document dict. REData
+    plans have no local row to return (see :func:`_redata_document`), so a
+    caller relying on this instead of :func:`resolve_document` never sees one.
+
+    Args:
+        place: The building.
+        profile: Whose plans to consider local, and whose wiki access to
+            check for the community fallback. None resolves nothing.
+        on_date: Resolve the plan as of this date; None for current.
+
+    Returns:
+        The matching row, or None when neither side has one.
+    """
+    from urbanlens.dashboard.models.floorplans.model import Floorplan
+
+    if profile is None:
+        return None
+    local = Floorplan.objects.at(place, on_date, profile=profile)
+    if local is not None:
+        return local
+    return _community_plan(place, profile, on_date)
+
+
 def _community_plan(place: Place, profile: Profile | None, on_date: datetime.date | None):
     """The published plan for this building, when the user can see its wiki.
 

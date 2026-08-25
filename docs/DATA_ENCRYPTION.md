@@ -136,6 +136,18 @@ Never swap the key in one step — that is the data-loss path. Roll it:
    this completes cleanly. The whole run is one transaction, so a crash mid-run rolls back
    rather than leaving a half-rotated database. It reads through a raw cursor, so `fail_soft`
    fields cannot degrade to empty and be written back as such.
+
+   If the failure is a row whose key is genuinely gone — a leftover from an earlier incident,
+   not the key you are retiring — that row can never decrypt again, and waiting will not change
+   that. Re-run with `--skip-undecryptable`, which lists those rows and completes anyway:
+
+   ```bash
+   python manage.py rotate_field_encryption --skip-undecryptable
+   ```
+
+   Use it only once you have confirmed the listed rows are unrecoverable rather than a missing
+   fallback you could still supply. Everything else is rotated exactly as normal, so the retired
+   key is safe to drop; the listed rows were already unreadable before you started.
 3. **Drop the retired key** from `UL_FIELD_ENCRYPTION_KEY_FALLBACKS`. Deploy.
 
 To verify step 2 really worked, remove the old key and confirm the app still reads the data —
@@ -266,7 +278,7 @@ lookups) — left plaintext, see the "reviewed, left plaintext" table below.
 | `PinImportFailure.maps_url` | A URL the user tried to import | Core location content, per the scope statement above |
 | `django.contrib.auth.User.email/first_name/last_name` | Django's built-in auth fields | Encrypting these needs a custom auth backend/admin/social-auth-pipeline rework across all of Django auth — too invasive to be "obvious"; see Follow-ups |
 | `social_django` (`UserSocialAuth.access_token/refresh_token/id_token/extra_data`) | OAuth tokens from Google/Discord | Third-party table (`social-auth-app-django`) we don't define — see Follow-ups |
-| `oauth2_provider` (`AccessToken`/`RefreshToken`/`Grant`, `Application.client_secret`) | External-API bearer credentials | Third-party table (django-oauth-toolkit). Live, long-lived credentials stored in plaintext — strictly more dangerous than the `social_django` row above, and absent from this document until 2026-08-15. See Follow-ups |
+| `oauth2_provider` (`AccessToken`/`RefreshToken`/`Grant`) | External-API bearer credentials | Third-party table (django-oauth-toolkit). Live, long-lived credentials stored in plaintext — strictly more dangerous than the `social_django` row above, and absent from this document until 2026-08-15. See Follow-ups. (`Application.client_secret` is *not* part of this gap: django-oauth-toolkit hashes it by default, and the project's one real `Application` row is the first-party public mobile client, provisioned with a deliberately empty secret rather than a real one — see `provision_mobile_oauth_client.py`.) |
 
 ## Other stores holding the same data
 

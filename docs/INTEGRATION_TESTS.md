@@ -110,8 +110,10 @@ hour**. The suite is the burstiest client it will ever have: nearly every spec
 that needs a pin creates one, in parallel, on a single key.
 
 `ApiClient` handles the per-minute cap for you - it waits out a 429 and retries,
-honouring `Retry-After` or the delay DRF puts in the body, up to three attempts.
-That is why the test timeout is 90s rather than 60s. It deliberately does *not*
+honouring `Retry-After` or the delay DRF puts in the body, up to three attempts, capped at 70s of
+total wait (`MAX_THROTTLE_WAIT_MS`, `lib/api-client.ts`) before giving up and returning the 429 as
+one. That headroom is part of why the default per-test timeout (`UL_E2E_TIMEOUT_MS`, `lib/env.ts`)
+is 180s rather than Playwright's own 30s default. It deliberately does *not*
 chase the hourly ceiling: if 300 writes are gone the wait is tens of minutes,
 and the honest answers are to run less often, or to provision a second account
 and point a second run at it.

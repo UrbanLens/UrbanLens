@@ -78,7 +78,7 @@ def main() -> int:
     """Report every production notification write that skips ``notify()``."""
     offences: list[str] = []
     for path in sorted(SEARCH_ROOT.rglob("*.py")):
-        if "/tests/" in str(path) or "/migrations/" in str(path):
+        if "/tests/" in path.as_posix() or "/migrations/" in path.as_posix():
             continue
         text = path.read_text(encoding="utf-8")
         if _MODEL not in text:

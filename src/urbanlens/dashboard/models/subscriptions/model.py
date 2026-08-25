@@ -38,9 +38,16 @@ class SiteFeature(TextChoices):
     # which costs meaningfully more CPU than a photo upload - kept as its own
     # grant for the same reason as VIDEO_UPLOADS.
     DOCUMENT_UPLOADS = "document_uploads", "Document uploads"
-    # Nearby-facility/feature research tabs on the pin detail page (e.g. EPA's
-    # nearby-regulated-facilities list) - separate from each plugin's own
-    # unconditional "data about this exact pin" card, which everyone gets.
+    # Nearby-facility/feature research tabs on the pin detail page - separate
+    # from each plugin's own unconditional "data about this exact pin" card,
+    # which everyone gets. Today exactly one source declares this
+    # (EpaEchoNearbyPanelSource, EPA's nearby-regulated-facilities list); the
+    # newer sibling nearby-data panels added since (Cameras & Structures,
+    # Underground Structures, Permits & Violations, Reported Incidents, Water
+    # & Hydrology, Site Conditions, Fire & Disaster History) were deliberately
+    # left free - see test_panel_feature_gate.py. This flag names the concept,
+    # not every panel that could plausibly use it - check each
+    # PanelSource.required_feature, don't assume from this comment.
     NEARBY_RESEARCH = "nearby_research", "Nearby research data"
     # Owner identity/contact details UrbanLens looked up *for* the user from
     # county assessor records (via REData) - the paid data feed, and the part

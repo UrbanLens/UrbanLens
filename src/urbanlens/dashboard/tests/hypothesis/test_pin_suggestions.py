@@ -28,6 +28,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.images import JPEG_BYTES
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin_suggestions import _PAGE_SIZE
@@ -771,7 +772,7 @@ class PhotoLocationScanPhotoUploadViewTests(TestCase):
             profile=self.profile, pin=None, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.LOCAL_SCAN, visit_dates=["2024-01-01"],
         )
 
-    def _upload(self, suggestion_id, *, filename: str = "a.jpg", content: bytes = b"fake-jpeg-bytes", content_type: str = "image/jpeg"):
+    def _upload(self, suggestion_id, *, filename: str = "a.jpg", content: bytes = JPEG_BYTES, content_type: str = "image/jpeg"):
         image_file = SimpleUploadedFile(filename, content, content_type=content_type)
         return self.client.post(reverse("tools.photo_scan.upload_photo"), {"suggestion_id": suggestion_id, "image": image_file})
 
@@ -968,6 +969,22 @@ class PinSuggestionQueueViewSelectMapTests(TestCase):
     def test_empty_queue_has_no_map(self) -> None:
         response = self.client.get(reverse("memories.locations"))
         self.assertNotContains(response, 'id="pin-suggestions-map"')
+
+    def test_map_uses_the_shared_toolbar_not_the_bespoke_pill_button(self) -> None:
+        """Regression guard for the identical defect test_memories_unlogged.py
+        already fixed on the sibling visits.html page - this page still had
+        its own bespoke .pin-select-toggle pill (no layers panel or toolbar
+        styling) until now. See docs/GOALS_CODE_AUDIT.md ("Map UI consistency")."""
+        location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
+        pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
+        PinSuggestion.objects.create(profile=self.profile, pin=pin, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.IMMICH, visit_dates=["2024-01-01"], hit_count=1)
+
+        response = self.client.get(reverse("memories.locations"))
+
+        self.assertContains(response, 'id="pin-suggestions-select-toggle"')
+        self.assertContains(response, "map-btn-icon")
+        self.assertContains(response, 'id="pin-suggestions-map-buttons"')
+        self.assertNotContains(response, 'class="pin-select-toggle"')
 
 
 class PinSuggestionQueuePaginationTests(TestCase):

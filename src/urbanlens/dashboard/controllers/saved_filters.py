@@ -22,7 +22,7 @@ from urbanlens.dashboard.services.core.text_limits import column_length_error, c
 from urbanlens.dashboard.services.geo.geo import dissolve_polygons
 from urbanlens.dashboard.services.pins.pin_list_membership import resync_lists_for_saved_filter
 from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
-from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids
+from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids, pins_fingerprint
 from urbanlens.dashboard.services.undo.handlers.saved_filter import MODEL_LABEL as SAVED_FILTER_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -341,7 +341,12 @@ class SavedFilterMatchCountsView(LoginRequiredMixin, View):
         # every (candidate, active) pair below - O(F^2) query construction for
         # F saved filters). Set intersections in Python are cheap in
         # comparison, so every pair is now just an in-memory set op.
-        matching_uuids: dict[str, set[str]] = {str(f.uuid): set(get_or_compute_matching_uuids(profile, f)) for f in saved_filters}
+        # fingerprint computed once for every filter below (was previously
+        # recomputed by get_or_compute_matching_uuids on every one of these N
+        # calls - an identical DB aggregate re-run once per saved filter the
+        # profile owns, on every single toolbar toggle that hits this view).
+        fingerprint = pins_fingerprint(profile)
+        matching_uuids: dict[str, set[str]] = {str(f.uuid): set(get_or_compute_matching_uuids(profile, f, fingerprint=fingerprint)) for f in saved_filters}
 
         counts: dict[str, int] = {}
         for candidate in saved_filters:

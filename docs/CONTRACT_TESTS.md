@@ -140,13 +140,18 @@ were not provided`, because by the time it looks the key is gone.
 
 ## What the first run found
 
-- **`operationId` collisions.** `passkey_wrap_create` and
-  `passkey_wrap_destroy` are each claimed by two operations
-  (`/dashboard/e2ee/passkey-wrap/` and `.../{credential_id}/`).
-  drf-spectacular resolves this by appending `_2` to whichever it reaches
-  second, and which one loses depends on urlconf walk order — so adding a route
-  can silently rename a method downstream code calls.
-- **No authenticated operation documents a 401**, though all of them return it.
-  A generated client has no branch for the most likely failure it will meet.
+**Both fixed 2026-08-24** - kept here as the reason `test_operation_ids_are_unique` and
+`test_authenticated_operations_document_rejection` exist, not as open findings. Full history in
+`docs/PROBLEMS.md`.
 
-Both are recorded in `docs/PROBLEMS.md`.
+- **`operationId` collisions.** `passkey_wrap_create` and `passkey_wrap_destroy` were each
+  claimed by two operations (`/dashboard/e2ee/passkey-wrap/` and `.../{credential_id}/`).
+  drf-spectacular resolved this by appending `_2` to whichever it reached second, and which one
+  lost depended on urlconf walk order — so adding a route could silently rename a method
+  downstream code calls. Fixed by splitting the shared view into `E2EEPasskeyWrapView` (POST
+  only) and `E2EEPasskeyWrapItemView` (DELETE only) over one `_E2EEPasskeyWrapBase`
+  (`controllers/e2ee.py`), so no operation claims two routes.
+- **No authenticated operation documented a 401**, though all of them returned it. A generated
+  client had no branch for the most likely failure it would meet. Fixed by a postprocessing hook,
+  `external_api.schema.document_error_responses`, that `setdefault`s 401/403 on any operation
+  declaring `security` and 404 on any templated path.

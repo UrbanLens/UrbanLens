@@ -103,7 +103,7 @@ def main() -> int:
     """Report every fetch that can cache a swallowed failure."""
     offences: list[str] = []
     for path in sorted(SEARCH_ROOT.rglob("*.py")):
-        if "/tests/" in str(path) or "/migrations/" in str(path):
+        if "/tests/" in path.as_posix() or "/migrations/" in path.as_posix():
             continue
         text = path.read_text(encoding="utf-8")
         try:

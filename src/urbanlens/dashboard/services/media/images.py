@@ -785,3 +785,39 @@ def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bo
 
     image.image.delete(save=False)
     return True
+
+
+def detach_image_from_pin(image: Any) -> None:
+    """Remove ``image`` from its pin - delete the row outright only if nothing
+    else still needs it.
+
+    ``wiki_creation._seed_photos`` and ``PinGalleryBulkView``'s "send to wiki"
+    action both repoint an existing pin photo's ``wiki`` FK rather than copying
+    the row, so one ``Image`` can serve a pin and a wiki at once. A per-photo
+    delete triggered from the pin side must not destroy the wiki's copy just
+    because it shares the row - this mirrors the FK's own ``on_delete=SET_NULL``
+    behavior for whole-pin deletion, applied to a single explicit delete too.
+
+    Args:
+        image: The ``Image`` to remove from its pin.
+    """
+    if image.wiki_id is not None:
+        image.pin = None
+        image.save(update_fields=["pin", "updated"])
+        return
+    delete_stored_file(image)
+    image.delete()
+
+
+def detach_image_from_wiki(image: Any) -> None:
+    """The wiki-side mirror of ``detach_image_from_pin``.
+
+    Args:
+        image: The ``Image`` to remove from its wiki.
+    """
+    if image.pin_id is not None:
+        image.wiki = None
+        image.save(update_fields=["wiki", "updated"])
+        return
+    delete_stored_file(image)
+    image.delete()

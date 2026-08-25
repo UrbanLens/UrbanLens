@@ -529,6 +529,10 @@ class PhotoSearchProvider(SearchProvider):
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.images import Image
 
+        # visible_wiki_location_ids_cached is a superset of "locations with my own
+        # pin" (it includes those plus domain-earned wiki locations - e.g. a
+        # boundary-mate pin on a different Location row of the same place), so
+        # this only widens what was previously an exact-Location-only match.
         queryset = (
             Image.objects.filter(
                 # The third disjunct deliberately reaches other people's photos:
@@ -679,6 +683,9 @@ class ArticleSearchProvider(SearchProvider):
 
         access = Q(pin__profile=profile)
         if profile.community_enabled:
+            # wiki__location_id__in=visible_wiki_location_ids_cached: same
+            # domain-aware access rule as the wiki page itself, not just an
+            # exact-Location pin match.
             access |= Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile))
         queryset = Article.objects.filter(access).exclude(content="").select_related("pin__location__wiki", "wiki__location", "last_edited_by__user")
         if parsed.place:
@@ -1030,6 +1037,8 @@ class CommentSearchProvider(SearchProvider):
             return []
         results: list[SearchResult] = []
 
+        # wiki__location_id__in=visible_wiki_location_ids_cached: same domain-aware
+        # access rule as the wiki page itself, not just an exact-Location pin match.
         comment_qs = (
             Comment.objects.filter(
                 Q(profile=profile) | Q(pin__profile=profile) | Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile)),

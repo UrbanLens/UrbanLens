@@ -44,12 +44,15 @@ whole design:
    one property." "The most recent sale is the first row returned." "A masked
    pinned-user count never renders a bare number." These are what the specs are
    really for.
-2. **Bounds, not values.** The parcel's area is asserted to be between 200,000
-   and 2,000,000 m² - a factor of three either side of the ~156 acres public
-   reporting gives. It is not checking accuracy. It is catching the two failures
+2. **Bounds, not values.** The parcel's area is asserted to be between 50,000
+   and 1,500,000 m² - roughly half to eleven times a live REData measurement of
+   the actual parcel (133,964 m²). An earlier version of this bound used the
+   widely-reported "~156 acres" figure and set the floor at 200,000 m²; that
+   rejected the correct parcel, since REData's real measurement comes in under
+   it. It is not checking accuracy. It is catching the two failures
    `services/apis/locations/boundaries/redata.py` documents for this kind of
-   site: a single building footprint selected instead of the parcel, and the
-   ~1,040-acre CRIS archaeological sensitivity zone.
+   site: a too-small building-derived hull selected instead of the parcel, and
+   the ~1,040-acre CRIS archaeological sensitivity zone.
 3. **Questions, not verdicts.** The expected owner fragment ("Hudson Heritage")
    is the name this suite was given, and public reporting also names EFG-Saber
    Heritage SC, LLC as the entity running the redevelopment. A deed holder and a

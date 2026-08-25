@@ -39,7 +39,10 @@ from model_bakery import baker
 from urbanlens.dashboard.external_api.serializers import JournalEntrySerializer
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.images.model import Image, ImageSource
+from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.memories.journal import JournalEntry
 
@@ -189,6 +192,43 @@ class PhotoDeleteTests(_PhotoApiTestCase):
         response = self.client.delete(url, **_bearer(self.raw_key))
         self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
         self.assertFalse(Image.objects.filter(pk=self.image.pk).exists())
+
+
+class PhotoDeleteDualOwnershipTests(_PhotoApiTestCase):
+    """A photo that's also linked to a wiki (``wiki_creation._seed_photos`` and
+    ``PinGalleryBulkView``'s "send to wiki" repoint the row rather than copying
+    it) must not be destroyed just because the mobile client deleted it from
+    the caller's own photo library - the web `PinImageView`/`WikiImageView`
+    guard the same case (see test_pin_wiki_image_dual_ownership.py); this API
+    is a second, independent surface hitting the identical unconditional
+    `image.delete()` bug."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = Location.objects.create(latitude=41.0, longitude=-71.0)
+        self.pin = Pin.objects.create(profile=self.profile, location=self.location, name="Mobile dual-owned spot")
+        self.wiki = Wiki.objects.create(location=self.location)
+
+    def test_deleting_a_dual_owned_photo_unlinks_the_pin_and_keeps_the_wiki_copy(self) -> None:
+        image = _make_image(self.profile, pin=self.pin, wiki=self.wiki, location=self.location)
+        url = reverse("external_api:photos.detail", kwargs={"image_uuid": image.uuid})
+
+        response = self.client.delete(url, **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
+        self.assertTrue(Image.objects.filter(pk=image.pk, wiki=self.wiki, pin__isnull=True).exists())
+
+    def test_asking_withdraws_a_dual_owned_photo_entirely(self) -> None:
+        """?from_wiki=true must win even when a pin is still attached - the
+        pin-preserving unlink the default case does above must not silently
+        swallow an explicit request to withdraw from the wiki too."""
+        image = _make_image(self.profile, pin=self.pin, wiki=self.wiki, location=self.location, source=ImageSource.UPLOAD)
+        url = reverse("external_api:photos.detail", kwargs={"image_uuid": image.uuid})
+
+        response = self.client.delete(f"{url}?from_wiki=true", **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
+        self.assertFalse(Image.objects.filter(pk=image.pk).exists())
 
 
 class PhotoDeleteAndTheWikiTests(_PhotoApiTestCase):

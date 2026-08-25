@@ -113,10 +113,13 @@ class TOTPDevice(DashboardModel):
 
     One per account, created only once the user has confirmed a code from
     their app - an unconfirmed setup lives only in the session (see
-    ``TOTPSetupStartView``/``TOTPSetupConfirmView``) and never reaches the
-    database. ``secret`` is encrypted at rest via ``EncryptedTextField``, the
-    same mechanism already used for OAuth tokens (Flickr/Immich/Google
-    Photos) elsewhere in this app.
+    ``TOTPSetupStartView``/``TOTPSetupConfirmView``) rather than this table.
+    The session backend is ``cached_db``, which writes through to the
+    database, so the pending secret does reach a DB row, just not this one -
+    it holds no query/index/search surface the way a confirmed row does.
+    ``secret`` is encrypted at rest via ``EncryptedTextField``, the same
+    mechanism already used for OAuth tokens (Flickr/Immich/Google Photos)
+    elsewhere in this app.
 
     ``last_used_step`` blocks replay of an intercepted code: a verified
     login records the 30-second time-step it matched, and any later

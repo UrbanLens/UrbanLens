@@ -21,14 +21,18 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-def _pinned_keys(profile: Profile) -> set[tuple[str, int]]:
+def pinned_place_keys(profile: Profile) -> set[tuple[str, int]]:
     """One key per real-world thing this profile has pinned.
 
     Keyed by *place* where one is known, falling back to the exact Location
     otherwise. That is what makes the count mean what people expect it to:
     two friends who explored the same property and pinned it fifty metres
     apart used to show zero places in common, because their coordinates
-    resolved to different Location rows.
+    resolved to different Location rows. Reused by every other "do these
+    profiles/pins share a place" check in the codebase (profile common-pin
+    visibility, wiki community counts, trip common-pin visibility) rather
+    than each reimplementing the same place-vs-location fallback - see
+    docs/GOALS_CODE_AUDIT.md ("Cross-pin aggregate comparison level").
 
     Args:
         profile: The profile whose pins to key.
@@ -47,7 +51,7 @@ def common_pin_location_ids(profiles: Sequence[Profile]) -> set[int]:
 
     Two profiles count as sharing a place when their pins resolve onto the
     same real-world thing, not only when they land on the identical
-    coordinate row (see :func:`_pinned_keys`).
+    coordinate row (see :func:`pinned_place_keys`).
 
     Args:
         profiles: The profiles to intersect. Fewer than two profiles can
@@ -60,7 +64,7 @@ def common_pin_location_ids(profiles: Sequence[Profile]) -> set[int]:
     """
     if len(profiles) < 2:
         return set()
-    shared = set.intersection(*[_pinned_keys(profile) for profile in profiles])
+    shared = set.intersection(*[pinned_place_keys(profile) for profile in profiles])
     if not shared:
         return set()
 

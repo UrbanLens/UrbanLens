@@ -28,6 +28,7 @@
         </form>
     </div>
 
+    {% if checkin.escalated_at %}
     {% if checkin.contact_message %}
     <div class="card safety-contact-message">
         <p>{{ checkin.contact_message }}</p>
@@ -52,6 +53,13 @@
             <img src="{{ image.image.url }}" alt="" class="safety-photo-thumb">
             {% endfor %}
         </div>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="card safety-contact-waiting">
+        <p><i class="material-symbols-outlined">schedule</i>
+            You're listed as an emergency contact for {{ checkin.profile.username }}'s upcoming trip.
+            The trip plan, route, and photos only appear here if they don't check in on time.</p>
     </div>
     {% endif %}
 
