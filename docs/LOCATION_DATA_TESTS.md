@@ -111,7 +111,33 @@ boundary chain reads that field as "already ran". The consequence is that a pin
 on ground nobody has provisioned gets no parcel for `boundary_cache_days` (60).
 
 That one defect is upstream of most of this directory, which is why the fixture
-is built to report it once and skip the rest.
+is built to report it once and skip the rest. It is now fixed, along with two
+others found while confirming it - see `docs/PROBLEMS.md`.
+
+### Presence is not provenance
+
+The most instructive failure in this directory is one the original
+`hrsh-boundary.spec.ts` could not produce. Every assertion in it passed while
+the map drew a shape the application had **invented**: the convex hull of the
+campus pin and its own child pins, rather than any of the six scored candidates
+REData offers for the parcel. A boundary arrived, it was closed, it had real
+vertices, it was plausibly sized, it contained the pin, and it was stable across
+reads - and it was wrong.
+
+That is the general trap in this directory, and it is worth stating plainly
+because it will recur with owners, sale dates, aliases and media alike: *a
+plausible value is not a sourced value*. Where the application can synthesize a
+fallback, a test that only checks the shape of the answer will pass on the
+fallback forever. `hrsh-boundary-provenance.spec.ts` is the counterpart that
+asks where the value came from, and it is deliberately separate so the
+distinction stays visible.
+
+Its second test reconstructs the hull from live child-pin coordinates and
+compares areas rather than hard-coding one. That was not fastidiousness: the
+first version omitted the 10 m padding `_fitted_polygon` applies to each marker,
+so its reconstruction came out materially smaller than the drawn shape and the
+test **passed against known-broken data**. Any test written this way has to be
+run against the defect it describes before it is trusted.
 
 Two further things worth knowing before trusting a green run here:
 

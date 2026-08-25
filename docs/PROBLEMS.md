@@ -3891,7 +3891,7 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
-## OPEN 2026-08-24: a new pin never gets its parcel, because creation marks the lookup as already done
+## RESOLVED 2026-08-24: a new pin never gets its parcel, because creation marks the lookup as already done
 
 **Confirmed live on a clean database with production REData reachable**, not
 inferred. This is the root cause of most of what looks broken about place data
@@ -3962,6 +3962,63 @@ not make a busy parcel re-run the chain per re-resolution.
 
 Guarded by `tests/integration/specs/location/hrsh-boundary.spec.ts`, which is
 written to fail on exactly this and to say so.
+
+**Resolved.** `resolve_location_place` now stamps only when the resolved place
+actually changed, so a coordinate it resolved nothing for is left unstamped and
+`generate_location_boundaries` remains the only thing that records a genuine
+provider miss. The `resolve_locations_in` concern above is handled by the same
+condition: a re-resolution that does not move a location writes nothing at all,
+so a busy parcel does not re-run the chain per re-resolution.
+
+Two further defects were found while confirming this one, both fixed with it:
+
+- **The same function wiped the place it had just resolved.** It wrote the
+  timestamp to the database but not to the in-memory instance, and
+  `generate_location_boundaries` reads that attribute immediately afterwards to
+  decide whether to record a miss - so a freshly provisioned place could be
+  cleared straight back to `None` by `attach_location(location, None)`. This is
+  the likelier explanation for `place_id=None` alongside a stamped
+  `place_resolved_at` on rows where the chain genuinely did run.
+
+- **A boundary we invented outranked one REData gave us.** See the entry below;
+  fixing the stamp alone still left the wrong shape on the map.
+
+## RESOLVED 2026-08-24: the map drew a hull around our own child pins instead of REData's parcel
+
+Reported from the e2e deployment: "That parcel boundary is absolutely
+incorrect... it looks like a generated boundary created to ensure that all the
+pins it thinks are inside the parcel are within the boundary."
+
+That reading was right. REData answers **six** scored candidates for this parcel
+and flags one `is_suggested` (240,740 m²); the app drew the convex hull of the
+campus pin and its three child pins (measured 154,753 m² as rendered) - an
+outline of *the markers we happen to know about* rather than evidence about the
+property. It is a legitimate last resort and a bad thing to prefer: on screen it
+is indistinguishable from a surveyed parcel, and it grows and shrinks with the
+set of buildings that happen to have been imported.
+
+`BoundaryManager.resolve_for_pin` returned the pin's own `generated_polygon`
+second, ahead of the place, so geometry the chain had just fetched stayed
+invisible on the very page that fetched it. A hull carrying
+`generated_from_children` now yields whenever a provider outline exists; every
+other generated row (the pre-places location default among them) keeps the
+precedence it had, and a person's own drawing still outranks everything.
+`refit_child_pin_boundary` drops a stand-in a provider has superseded rather
+than refitting a shape nothing will draw.
+
+**Not fixed here, and deliberately.** REData currently suggests
+`ny_cris (Hudson River State Hospital, Main Building)` for these coordinates,
+which the site owner considers the wrong choice - the subdivision boundary
+`ny_cris (Hudson Heritage Development/Former Hudson River State Hospital/Property Subdivision)`
+(1,163,489 m²) is the better answer, and that selection is REData's to correct.
+UrbanLens' obligation is to draw what REData suggests rather than to invent an
+alternative, which is what this fix establishes.
+
+Guarded by `tests/integration/specs/location/hrsh-boundary-provenance.spec.ts`,
+which asserts provenance rather than presence - the older boundary spec passes
+on an invented hull, because one does arrive and is plausibly sized. Unit
+coverage for the precedence rules is in
+`dashboard/tests/hypothesis/test_redata_parcel_beats_generated_hull.py`.
 
 ## OPEN 2026-08-24: concurrent requests to `schema/` can 500
 

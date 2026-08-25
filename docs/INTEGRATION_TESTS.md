@@ -91,6 +91,9 @@ Domains covered, and the question each spec file is really asking:
 | `services/*` | Valkey, Celery, Channels, the static pipeline, headers, third-party origins. |
 | `ui/trips` | Does a trip page render the join, including the empty case? |
 | `ui/*` | Sign-in, the map, navigation, pin detail. |
+| `location/hrsh-boundary` | Does a parcel boundary ever arrive for a real place, and reach the map? |
+| `location/hrsh-boundary-provenance` | Did that boundary come from a *provider*, or did we invent it? Presence and provenance are separate questions, and the first spec passes while the second fails - see `docs/LOCATION_DATA_TESTS.md`. |
+| `location/*` | Live third-party data for one real place: place identity, buildings, wiki, media, property records, panels. Opt-in. |
 
 > **Calibration status.** Every spec here has now been run against a live
 > deployment. The seven added on 2026-08-24 were calibrated the same day: their

@@ -170,6 +170,39 @@ re-attempted.
 | The database connection pool actually running out | Needs concurrency against a real pool. See the fan-out budget above for the half that is testable. |
 | No `Strict-Transport-Security` from the TLS terminator | The header is not sent by Django at all; it belongs to infrastructure in front of it. |
 | A wiki cannot be created through the published API | Is not a defect in code that runs - it is a *missing* endpoint. Only a test written from the client's seat, asking "can I do the thing", notices an absence. |
+| The map drew a boundary we invented while REData offered six | The defect is a *disagreement between our cache and a live provider*. A unit test supplies the provider's answer itself, so it can only confirm the arrangement it already assumes. Nothing in-process can notice "REData had six candidates and we drew none of them". |
+
+---
+
+## When the fallback is the bug
+
+Worth separating from the adversarial-input class below, because the remedy is
+different and it has now cost two sessions.
+
+The boundary defect (`docs/PROBLEMS.md`, "the map drew a hull around our own
+child pins") was invisible to every existing test, unit and integration alike,
+and not because anyone was careless. `hrsh-boundary.spec.ts` asserted that a
+boundary arrives, that it is a closed polygon with real vertices, that it is
+plausibly sized, that it contains the pin, and that it is stable across reads.
+All five passed. The shape was a convex hull the application had fitted around
+its own child pins.
+
+The pattern generalises to every place this codebase synthesizes a fallback -
+the 50 m default circle, a name derived from a geocode, an owner inferred from
+the most recent sale. **Where a fallback exists, asserting the shape of the
+answer will pass on the fallback forever.** The assertion has to be about
+*provenance*: which source produced this, not whether the value looks right.
+`resolve_for_pin` returns exactly that as its second element, and the boundary
+payload publishes it as `source` - it simply was not being asked about.
+
+Two practical consequences:
+
+- When adding a location-data assertion, check whether the value under test has
+  a synthesized fallback. If it does, assert the source alongside the value.
+- A test that reconstructs what the application would have produced (to prove it
+  did *not* produce it) must be run against the real defect before being
+  trusted. The first version of the provenance check omitted a 10 m padding
+  constant and passed against known-broken data.
 
 ---
 

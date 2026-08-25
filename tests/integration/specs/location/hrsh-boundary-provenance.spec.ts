@@ -119,7 +119,14 @@ test.describe("Hudson River State Hospital - where the parcel came from", () => 
         test.skip(children.length < 2, "fewer than two child pins exist, so no hull could have been fitted around them.");
 
         const markers: Array<[number, number]> = [[campus.origin.longitude, campus.origin.latitude], ...children.map((row): [number, number] => [row.longitude, row.latitude])];
-        const hullArea = approximateAreaSqm({ type: "Polygon", coordinates: [convexHull(markers)] });
+        // Padded before hulling, because the application pads: `_fitted_polygon`
+        // buffers every marker by CHILD_BOUNDARY_PADDING_METERS and hulls the
+        // resulting rings, so a hull of the bare points is materially smaller
+        // and the comparison below silently passes. It did exactly that on the
+        // first run against known-broken data - the reason this reproduces the
+        // padding rather than approximating it.
+        const padded = markers.flatMap((marker) => ringAround(marker, CHILD_BOUNDARY_PADDING_METERS));
+        const hullArea = approximateAreaSqm({ type: "Polygon", coordinates: [convexHull(padded)] });
         const drawnArea = approximateAreaSqm(payloadPolygon(await boundaryPayload(page, campus.pin.slug)));
 
         // A convex hull of n points is not going to coincide with a surveyed
@@ -176,6 +183,26 @@ test.describe("Hudson River State Hospital - where the parcel came from", () => 
         }
     });
 });
+
+/**
+ * Metres of breathing room the application adds around each child marker.
+ *
+ * Mirrors `CHILD_BOUNDARY_PADDING_METERS` in
+ * `services/geo/child_pin_boundaries.py`. If that constant changes and this one
+ * does not, the comparison above loses its sharpness rather than failing - so
+ * the test reports the two areas it measured, which makes the drift legible.
+ */
+const CHILD_BOUNDARY_PADDING_METERS = 10;
+
+/** Points on a circle of *radius* metres around a lon/lat pair. */
+function ringAround([lon, lat]: [number, number], radius: number, segments = 16): Array<[number, number]> {
+    const metresPerDegreeLat = 111_320;
+    const metresPerDegreeLon = metresPerDegreeLat * Math.cos((lat * Math.PI) / 180);
+    return Array.from({ length: segments }, (_unused, index) => {
+        const angle = (2 * Math.PI * index) / segments;
+        return [lon + (radius * Math.cos(angle)) / metresPerDegreeLon, lat + (radius * Math.sin(angle)) / metresPerDegreeLat] as [number, number];
+    });
+}
 
 /** The property polygon from a boundary payload, or null. */
 function payloadPolygon(payload: BoundaryPayload): GeoJsonGeometry | null {
