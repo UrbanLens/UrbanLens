@@ -22,6 +22,51 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-08-25: forms submit and save every field, not the ones that changed
+
+Surfaced by the concealment work, where it caused real data loss, but the concealment case is one
+instance of a general pattern and fixing that instance did not fix the pattern.
+
+The shape: a dialog is prefilled from the current record, `new FormData(this)` serialises **every**
+field on submit, and the handler writes all of them back. Nothing distinguishes "the user set this
+value" from "this value was already there and the form carried it along".
+
+Why it is worth auditing before offline access and merging land, which is the point at which it
+stops being cosmetic:
+
+- **Overwrites.** Two people editing different fields of the same record round-trip each other's
+  values. Last writer wins on fields they never looked at. Today this is mostly masked because
+  `apply_wiki_edit` and friends re-diff server-side; anything that saves the payload directly does
+  not.
+- **Merge noise.** A field-level or CRDT-style merge cannot tell an unchanged carried-along value
+  from a deliberate re-assertion of the same value, so every save becomes a conflict candidate on
+  every field. Offline clients replaying a queue of these generate merges with no content in them.
+- **Modified times.** `updated` moves on records nothing changed, which corrupts recency ordering,
+  "what changed since" sync cursors, and any notification keyed on a record having been touched.
+- **Field provenance.** `models/abstract/versioned.py` records a write per field per save. A form
+  re-asserting fourteen fields records fourteen writes and re-attributes all of them to the
+  submitter - which is the re-attribution leak already fixed once inside `VersionedModel.save` by
+  diffing against a `from_db` snapshot. That snapshot defends the substrate; it defends nothing
+  that writes through another path.
+
+The concealment instance, for concreteness: the suggest-edits dialog is prefilled from the
+concealed projection and posts all fourteen fields, so a viewer changing one date submitted the
+placeholder name, an empty description and all eight security indicators as though they had typed
+them. Fixed in `2f9885db` by diffing against a baseline - the record as the submitter saw it -
+rather than by making the form honest, because the form is one of many.
+
+**Scope of the audit** (counted 2026-08-25, `src/urbanlens/dashboard`):
+
+- 28 files build a full `FormData` payload on submit;
+- 23 bare `.save()` calls in `controllers/` write every column, against 88 that scope
+  `update_fields` - so the good pattern is already the majority and the outliers are findable;
+- 17 `form.save()` ModelForm calls, which write every field in the form by default.
+
+Two directions, and they compose: make submits dirty-only (the client knows what it prefilled, so
+it can send only what differs), and make writes field-scoped (`update_fields`, which most of the
+codebase already does). The second is the safety net for anything that still posts everything, and
+is the cheaper half to finish first.
+
 ## OPEN 2026-08-24: two views read `request.user.profile` on a possibly-anonymous user
 
 `controllers/map_overlays.py:320` and `controllers/safety.py:1228` both call

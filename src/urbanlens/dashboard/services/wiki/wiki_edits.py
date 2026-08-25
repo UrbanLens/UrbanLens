@@ -124,6 +124,11 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, st
     new_vals: dict[str, object] = {}
     audit: dict[str, dict] = {}
 
+    # The wider problem this guards against is not concealment-specific: forms
+    # here post every field rather than the changed ones, so a diff is the only
+    # thing standing between an untouched field and a write. See "forms submit
+    # and save every field" in docs/PROBLEMS.md.
+    #
     # What the submitter was looking at, which is not always what is stored: a
     # concealed viewer's form is prefilled from the projection they were shown,
     # and the suggest-edits dialog posts every field whether or not it was

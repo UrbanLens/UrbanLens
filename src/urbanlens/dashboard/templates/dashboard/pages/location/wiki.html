@@ -531,6 +531,14 @@
     // -- Suggest-edits form --------------------------------------------------
     document.getElementById('wiki-edit-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        // Sends every field, not the ones that changed. The server diffs the
+        // payload against what this viewer was shown, so nothing is clobbered
+        // today - but that is a server-side repair of a client-side problem,
+        // and it stops working once edits are queued offline and merged: an
+        // unchanged carried-along value is indistinguishable from a deliberate
+        // re-assertion of the same value, so every save becomes a conflict on
+        // every field. See "forms submit and save every field" in
+        // docs/PROBLEMS.md - this form is one of 28.
         const data = {};
         new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
         fetch("{% url 'location.wiki.edit' location.slug %}", {
