@@ -15,7 +15,7 @@ from rest_framework.response import Response
 
 from urbanlens.dashboard.external_api.permissions import credential_grants, filter_sources_by_grants
 from urbanlens.dashboard.external_api.serializers import ErrorSerializer
-from urbanlens.dashboard.external_api.serializers_undo import UndoEntrySerializer
+from urbanlens.dashboard.external_api.serializers_undo import UndoEntrySerializer, UndoHistorySerializer
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.undo.model import UndoAction
@@ -74,7 +74,7 @@ class UndoListView(ExternalApiView):
         "GET": frozenset({ApiKeyScope.UNDO_READ}),
     }
 
-    @extend_schema(responses={200: UndoEntrySerializer(many=True)})
+    @extend_schema(responses={200: UndoHistorySerializer})
     def get(self, request: Request) -> Response:
         """Return the caller's active (non-expired) undo entries, newest first."""
         entries = list(get_undo_history(request.user.profile))

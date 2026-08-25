@@ -78,7 +78,18 @@ VENDOR_ASSETS: dict[str, VendorAsset] = {
         "https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.js",
         "sha384-VDls8ImYGI8SwVxpmjX2Bn27U2TcNodzTNROTusVEWO55+lmL+H9NczoQJk6mwZR",
     ),
-    "htmx_js": VendorAsset("script", "htmx/1.9.11/htmx.min.js", "https://unpkg.com/htmx.org@1.9.11"),
+    # Computed from the bytes unpkg actually serves for this version (which
+    # redirects to dist/htmx.min.js, 48036 bytes), not guessed - see
+    # docs/PROBLEMS.md, "HTMX is loaded from a CDN with no subresource
+    # integrity". HTMX drives essentially every interaction in this
+    # application, so this is worth the recompute-on-upgrade cost the other
+    # entries above don't pay.
+    "htmx_js": VendorAsset(
+        "script",
+        "htmx/1.9.11/htmx.min.js",
+        "https://unpkg.com/htmx.org@1.9.11",
+        "sha384-0gxUXCCR8yv9FM2b+U3FDbsKthCI66oH5IA9fHppQq9DDMHuMauqq1ZHBpJxQ0J0",
+    ),
     "jquery_js": VendorAsset(
         "script",
         "jquery/4.0.0-beta/jquery.min.js",

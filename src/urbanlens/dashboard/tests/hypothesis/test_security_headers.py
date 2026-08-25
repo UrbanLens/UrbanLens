@@ -24,6 +24,36 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 #: ``dashboard/templates/dashboard/themes/base.html`` - the template every page extends.
 BASE_TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "dashboard" / "themes" / "base.html"
 
+#: ``src/urbanlens/config/nginx/nginx.conf`` - this deployment's own proxy config.
+NGINX_CONF = Path(__file__).resolve().parents[3] / "config" / "nginx" / "nginx.conf"
+
+
+class ProxyConfigTests(SimpleTestCase):
+    """The nginx config ships in this repo, so it can be asserted on like code.
+
+    Nothing else reads this file - it is not Python, so no test had ever
+    touched it - and the integration suite found it advertising
+    ``Server: nginx/1.31.3`` to every client. A precise version is free
+    reconnaissance: it tells a scanner exactly which advisories to try before
+    sending a single interesting request.
+    """
+
+    def test_the_config_exists_where_this_test_expects_it(self) -> None:
+        """Guards the test itself: a moved file must not silently pass."""
+        self.assertTrue(NGINX_CONF.is_file(), f"{NGINX_CONF} is missing - this test would otherwise assert nothing.")
+
+    def test_server_tokens_are_off(self) -> None:
+        source = NGINX_CONF.read_text(encoding="utf-8")
+
+        # `(?m)` matters: the directive is indented inside the `http` block, and
+        # a bare `^` anchors to the start of the whole file rather than of a
+        # line - which fails against a config that is perfectly correct.
+        self.assertRegex(
+            source,
+            r"(?m)^\s*server_tokens\s+off\s*;",
+            "nginx.conf does not set `server_tokens off;`, so every response advertises the exact nginx version.",
+        )
+
 
 def parse_csp(header_value: str) -> dict[str, list[str]]:
     """Split a CSP header into ``{directive: [source, ...]}``.

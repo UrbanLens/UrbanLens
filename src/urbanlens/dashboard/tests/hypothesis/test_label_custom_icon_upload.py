@@ -18,13 +18,22 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.images import PNG_BYTES
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 
 
 def _png(name: str = "icon.png") -> SimpleUploadedFile:
-    return SimpleUploadedFile(name, b"fake-png-bytes", content_type="image/png")
+    """A real PNG.
+
+    Was `b"fake-png-bytes"`, which the upload path used to accept because
+    content sniffing failed open on anything it could not fingerprint. Photos
+    now need a positive identification, so a placeholder string is refused -
+    which is right, and means a test wanting a successful upload has to supply
+    an actual image.
+    """
+    return SimpleUploadedFile(name, PNG_BYTES, content_type="image/png")
 
 
 class LabelCreateCustomIconTests(TestCase):

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone
 
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
@@ -18,7 +20,6 @@ from urbanlens.dashboard.services.social.connections import are_connections
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-    import datetime
     from decimal import Decimal
 
     from django.contrib.gis.geos import Point as GEOSPoint
@@ -584,6 +585,23 @@ class VisitLoggingDisabledError(Exception):
         super().__init__(message)
 
 
+class VisitInFutureError(Exception):
+    """The submitted visit time has not happened yet.
+
+    The message is safe to surface to the caller.
+    """
+
+    def __init__(self, message: str = "A visit cannot be logged in the future.") -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
+#: How far ahead of this machine's clock a visit time may sit before it is
+#: refused. A client's clock is its own, and a phone a minute fast is not
+#: claiming to have visited somewhere tomorrow.
+MAX_VISIT_CLOCK_SKEW = datetime.timedelta(minutes=5)
+
+
 def create_manual_visit(pin: Pin, *, visited_at: datetime.datetime, notes: str | None = None, markup_map: MarkupMap | None = None) -> PinVisit:
     """Log a user-entered visit to a pin, with the same side effects the web form has.
 
@@ -608,9 +626,18 @@ def create_manual_visit(pin: Pin, *, visited_at: datetime.datetime, notes: str |
             Fails loudly rather than silently discarding the visit, so a sync
             client can tell a rejected write from an accepted one instead of
             retrying it forever.
+        VisitInFutureError: ``visited_at`` is more than
+            :data:`MAX_VISIT_CLOCK_SKEW` ahead of now. Checked here rather than
+            only in the API serializer because this function is the choke point
+            both the external API and the web form go through, and the damage is
+            not local: :func:`sync_last_visited` feeds ``Pin.last_visited``,
+            which is displayed and ordered by, so one mistyped year makes a pin
+            permanently the most recently visited thing its owner has.
     """
     if not visit_logging_allowed(pin.profile):
         raise VisitLoggingDisabledError
+    if visited_at > timezone.now() + MAX_VISIT_CLOCK_SKEW:
+        raise VisitInFutureError
 
     visit = PinVisit.objects.create(pin=pin, visited_at=visited_at, notes=notes, source=VisitSource.MANUAL, markup_map=markup_map)
     sync_last_visited(pin)

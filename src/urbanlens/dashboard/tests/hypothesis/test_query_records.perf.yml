@@ -1,0 +1,39 @@
+ExternalApiQueryRecordTests.test_pin_detail_query_fingerprint:
+- db: 'SELECT ... FROM "dashboard_api_key" INNER JOIN "auth_user" ON ("dashboard_api_key"."user_id" = "auth_user"."id") LEFT OUTER JOIN "dashboard_profiles" ON ("auth_user"."id" = "dashboard_profiles"."user_id") WHERE ("dashboard_api_key"."revoked_at" IS # AND "dashboard_api_key"."prefix" = # AND "auth_user"."is_active") ORDER BY "dashboard_api_key"."created" DESC LIMIT #'
+- db: 'UPDATE "dashboard_api_key" SET ... WHERE "dashboard_api_key"."id" = #'
+- db: INSERT INTO "dashboard_api_key_usage_log" (...) VALUES (...) RETURNING "dashboard_api_key_usage_log"."id"
+- db: 'SELECT "dashboard_api_key_usage_log"."id" AS "pk" FROM "dashboard_api_key_usage_log" WHERE "dashboard_api_key_usage_log"."api_key_id" = # ORDER BY "dashboard_api_key_usage_log"."created" DESC OFFSET #'
+- cache|get: throttle_external_api_burst_ApiKey:#
+- cache|set: throttle_external_api_burst_ApiKey:#
+- cache|get: throttle_external_api_read_ApiKey:#
+- cache|set: throttle_external_api_read_ApiKey:#
+- db: 'SELECT ... FROM "dashboard_user_pins" INNER JOIN "dashboard_profiles" ON ("dashboard_user_pins"."profile_id" = "dashboard_profiles"."id") INNER JOIN "dashboard_locations" ON ("dashboard_user_pins"."location_id" = "dashboard_locations"."id") LEFT OUTER JOIN "dashboard_wikis" ON ("dashboard_user_pins"."wiki_id" = "dashboard_wikis"."id") LEFT OUTER JOIN "dashboard_user_pins" T6 ON ("dashboard_user_pins"."parent_pin_id" = T6."id") LEFT OUTER JOIN "dashboard_images" ON ("dashboard_user_pins"."cover_photo_id" = "dashboard_images"."id") WHERE ("dashboard_user_pins"."slug" = # AND "dashboard_profiles"."user_id" = #) ORDER BY "dashboard_user_pins"."id" ASC LIMIT #'
+- db: 'SELECT ... FROM "dashboard_user_pins" LEFT OUTER JOIN "dashboard_user_pins" T2 ON ("dashboard_user_pins"."id" = T2."parent_pin_id") INNER JOIN "dashboard_locations" ON ("dashboard_user_pins"."location_id" = "dashboard_locations"."id") LEFT OUTER JOIN "dashboard_wikis" ON ("dashboard_locations"."id" = "dashboard_wikis"."location_id") LEFT OUTER JOIN "dashboard_wikis" T5 ON ("dashboard_user_pins"."wiki_id" = T5."id") LEFT OUTER JOIN "dashboard_user_pins" T6 ON ("dashboard_user_pins"."parent_pin_id" = T6."id") LEFT OUTER JOIN "dashboard_images" ON ("dashboard_user_pins"."cover_photo_id" = "dashboard_images"."id") WHERE "dashboard_user_pins"."id" = # GROUP BY "dashboard_user_pins"."id", "dashboard_locations"."id", "dashboard_wikis"."id", T5."id", T6."id", "dashboard_images"."id" LIMIT #'
+- db: SELECT ... FROM "dashboard_labels" INNER JOIN "dashboard_user_pins_labels" ON ("dashboard_labels"."id" = "dashboard_user_pins_labels"."label_id") WHERE "dashboard_user_pins_labels"."pin_id" IN (...) ORDER BY "dashboard_labels"."order" DESC, "dashboard_labels"."name" ASC
+- db: 'SELECT ... FROM "dashboard_label_customizations" WHERE ("dashboard_label_customizations"."profile_id" = # AND "dashboard_label_customizations"."label_id" IN (...))'
+- db: 'SELECT ... FROM "dashboard_boundaries" INNER JOIN "dashboard_user_pins" ON ("dashboard_boundaries"."pin_id" = "dashboard_user_pins"."id") LEFT OUTER JOIN "dashboard_locations" ON ("dashboard_boundaries"."location_id" = "dashboard_locations"."id") LEFT OUTER JOIN "dashboard_wikis" ON ("dashboard_boundaries"."wiki_id" = "dashboard_wikis"."id") LEFT OUTER JOIN "dashboard_locations" T5 ON ("dashboard_wikis"."location_id" = T5."id") INNER JOIN "dashboard_locations" T6 ON ("dashboard_user_pins"."location_id" = T6."id") WHERE ("dashboard_boundaries"."boundary_type" = # AND "dashboard_boundaries"."pin_id" = #) ORDER BY "dashboard_boundaries"."id" ASC LIMIT #'
+- db: 'SELECT ... FROM "dashboard_pin_notes" WHERE "dashboard_pin_notes"."pin_id" = # ORDER BY "dashboard_pin_notes"."created" DESC'
+- db: 'SELECT ... FROM "dashboard_pin_aliases" WHERE "dashboard_pin_aliases"."pin_id" = # ORDER BY "dashboard_pin_aliases"."name" ASC'
+- db: 'SELECT ... FROM "dashboard_pin_links" WHERE "dashboard_pin_links"."pin_id" = # ORDER BY "dashboard_pin_links"."order" ASC, "dashboard_pin_links"."id" ASC'
+- db: 'SELECT ... FROM "dashboard_custom_field_values" INNER JOIN "dashboard_custom_fields" ON ("dashboard_custom_field_values"."field_id" = "dashboard_custom_fields"."id") WHERE "dashboard_custom_field_values"."pin_id" = #'
+ExternalApiQueryRecordTests.test_pin_list_query_fingerprint:
+- db: 'SELECT ... FROM "dashboard_api_key" INNER JOIN "auth_user" ON ("dashboard_api_key"."user_id" = "auth_user"."id") LEFT OUTER JOIN "dashboard_profiles" ON ("auth_user"."id" = "dashboard_profiles"."user_id") WHERE ("dashboard_api_key"."revoked_at" IS # AND "dashboard_api_key"."prefix" = # AND "auth_user"."is_active") ORDER BY "dashboard_api_key"."created" DESC LIMIT #'
+- db: 'UPDATE "dashboard_api_key" SET ... WHERE "dashboard_api_key"."id" = #'
+- db: INSERT INTO "dashboard_api_key_usage_log" (...) VALUES (...) RETURNING "dashboard_api_key_usage_log"."id"
+- db: 'SELECT "dashboard_api_key_usage_log"."id" AS "pk" FROM "dashboard_api_key_usage_log" WHERE "dashboard_api_key_usage_log"."api_key_id" = # ORDER BY "dashboard_api_key_usage_log"."created" DESC OFFSET #'
+- cache|get: throttle_external_api_burst_ApiKey:#
+- cache|set: throttle_external_api_burst_ApiKey:#
+- cache|get: throttle_external_api_read_ApiKey:#
+- cache|set: throttle_external_api_read_ApiKey:#
+- db: 'SELECT ... FROM "dashboard_user_pins" LEFT OUTER JOIN "dashboard_user_pins" T3 ON ("dashboard_user_pins"."id" = T3."parent_pin_id") INNER JOIN "dashboard_locations" ON ("dashboard_user_pins"."location_id" = "dashboard_locations"."id") LEFT OUTER JOIN "dashboard_wikis" ON ("dashboard_locations"."id" = "dashboard_wikis"."location_id") LEFT OUTER JOIN "dashboard_user_pins" T6 ON ("dashboard_user_pins"."parent_pin_id" = T6."id") WHERE "dashboard_user_pins"."profile_id" = # GROUP BY "dashboard_user_pins"."id", "dashboard_locations"."id", "dashboard_wikis"."id", T6."id" ORDER BY "dashboard_user_pins"."updated" ASC, "dashboard_user_pins"."id" ASC LIMIT #'
+- db: SELECT ... FROM "dashboard_labels" INNER JOIN "dashboard_user_pins_labels" ON ("dashboard_labels"."id" = "dashboard_user_pins_labels"."label_id") WHERE "dashboard_user_pins_labels"."pin_id" IN (...) ORDER BY "dashboard_labels"."order" DESC, "dashboard_labels"."name" ASC
+- db: 'SELECT ... FROM "dashboard_label_customizations" WHERE ("dashboard_label_customizations"."profile_id" = # AND "dashboard_label_customizations"."label_id" IN (...))'
+ExternalApiQueryRecordTests.test_whoami_query_fingerprint:
+- db: 'SELECT ... FROM "dashboard_api_key" INNER JOIN "auth_user" ON ("dashboard_api_key"."user_id" = "auth_user"."id") LEFT OUTER JOIN "dashboard_profiles" ON ("auth_user"."id" = "dashboard_profiles"."user_id") WHERE ("dashboard_api_key"."revoked_at" IS # AND "dashboard_api_key"."prefix" = # AND "auth_user"."is_active") ORDER BY "dashboard_api_key"."created" DESC LIMIT #'
+- db: 'UPDATE "dashboard_api_key" SET ... WHERE "dashboard_api_key"."id" = #'
+- db: INSERT INTO "dashboard_api_key_usage_log" (...) VALUES (...) RETURNING "dashboard_api_key_usage_log"."id"
+- db: 'SELECT "dashboard_api_key_usage_log"."id" AS "pk" FROM "dashboard_api_key_usage_log" WHERE "dashboard_api_key_usage_log"."api_key_id" = # ORDER BY "dashboard_api_key_usage_log"."created" DESC OFFSET #'
+- cache|get: throttle_external_api_burst_ApiKey:#
+- cache|set: throttle_external_api_burst_ApiKey:#
+- cache|get: throttle_external_api_read_ApiKey:#
+- cache|set: throttle_external_api_read_ApiKey:#

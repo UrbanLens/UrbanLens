@@ -1026,6 +1026,15 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "v1",
     "SERVE_INCLUDE_SCHEMA": False,
     "PREPROCESSING_HOOKS": ["urbanlens.dashboard.external_api.schema.preprocess_external_api_only"],
+    # Both entries are required. Setting this key *replaces* drf-spectacular's
+    # default list rather than extending it, and the default is
+    # `postprocess_schema_enums` - drop it and every choice field inlines its
+    # enum instead of referencing a named component, which renames types in
+    # every generated client.
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "urbanlens.dashboard.external_api.schema.document_error_responses",
+    ],
     # Stable names for choice sets spectacular would otherwise hash
     # (Status0ebEnum, ...). Hashed names are derived from the *colliding set*,
     # so adding one more `status` field can renumber the rest and silently

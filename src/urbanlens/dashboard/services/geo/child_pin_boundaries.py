@@ -30,6 +30,24 @@ def _fitted_polygon(pin: Pin, children: list[Pin]) -> MultiPolygon:
     return MultiPolygon(hull, srid=4326)
 
 
+def _provider_outline(pin: Pin) -> MultiPolygon | None:
+    """The official property outline a provider has for this pin, if any.
+
+    Args:
+        pin: The pin whose place to consult.
+
+    Returns:
+        The place's property polygon, or None when no provider has offered one
+        (or the place has nothing to say about property boundaries - see
+        ``services.places.scope.place_polygon``).
+    """
+    from urbanlens.dashboard.services.places.scope import place_polygon
+
+    location = pin.location if pin.location_id else None
+    place = location.place if (location is not None and location.place_id) else None
+    return place_polygon(place, BoundaryType.PROPERTY) if place is not None else None
+
+
 @transaction.atomic
 def refit_child_pin_boundary(parent_pin_id: int | None) -> None:
     """Refit one parent's child-generated fallback after a hierarchy change.
@@ -54,6 +72,15 @@ def refit_child_pin_boundary(parent_pin_id: int | None) -> None:
     row = Boundary.objects.row_for_pin(parent, BoundaryType.PROPERTY)
     if row is not None:
         if row.polygon is not None or not row.generated_from_children:
+            return
+        if _provider_outline(parent) is not None:
+            # A provider has supplied the real outline since this stand-in was
+            # fitted, so it can never be chosen again (see
+            # ``BoundaryManager.resolve_for_pin``). Dropping it keeps the table
+            # honest and stops every hierarchy change refitting a shape nothing
+            # will draw. Safe to delete unconditionally here: the branch above
+            # has already excluded any row carrying a person's own drawing.
+            row.delete()
             return
     else:
         _polygon, source = Boundary.objects.resolve_for_pin(parent, BoundaryType.PROPERTY)

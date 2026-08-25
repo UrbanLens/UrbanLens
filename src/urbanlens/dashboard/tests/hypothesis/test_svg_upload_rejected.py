@@ -70,18 +70,32 @@ class PhotoUploadGauntletTests(TestCase):
         self.assertIsNotNone(error, "a scripted SVG must not pass the photo upload checks")
         self.assertEqual(error[1], 400)
 
-    def test_renaming_the_svg_to_jpg_does_not_smuggle_it_in_as_svg(self) -> None:
-        """Accepted, but harmless: it is stored and served as image/jpeg, not svg.
+    def test_renaming_the_svg_to_jpg_is_now_refused_outright(self) -> None:
+        """Was "accepted but harmless"; it is refused now, which is strictly better.
 
-        The point of the allowlist is the *stored extension*, because that is what
-        determines the served Content-Type. SVG bytes under a `.jpg` name are
-        inert - the browser is told image/jpeg and `nosniff` keeps it that way.
+        The extension allowlist's reasoning has not changed and is still why it
+        exists: the *stored extension* determines the served Content-Type, so
+        SVG bytes under a `.jpg` name were already inert - the browser is told
+        image/jpeg and `nosniff` keeps it that way.
+
+        What changed is the layer underneath. Photo uploads now require the bytes
+        to positively identify as an image, added after the integration suite
+        found a shell script being stored as `not-really.png`. SVG has no
+        magic-byte signature, so it fails that check too - accidentally, but
+        correctly: a file whose bytes are not an image has no business in the
+        photo library whatever it is named.
+
+        Kept as a test of the *outcome* rather than deleted, because "inert" and
+        "refused" are different guarantees and it is worth recording which one is
+        in force.
         """
         upload = SimpleUploadedFile("avatar.jpg", _SCRIPTED_SVG, content_type="image/jpeg")
 
         error = image_upload_error(upload, MediaKind.PHOTO, skip_malware_scan=True)
 
-        self.assertIsNone(error)
+        self.assertIsNotNone(error, "SVG bytes under a .jpg name were accepted into the photo library")
+        assert error is not None
+        self.assertEqual(error[1], 400)
 
     def test_a_real_png_still_uploads(self) -> None:
         """The guard must not break ordinary uploads."""

@@ -301,6 +301,40 @@ class PasskeyWrapEndpointTests(TestCase):
         self.assertEqual(proven.status_code, 200)
         self.assertFalse(E2EEPasskeyWrap.objects.filter(credential=credential).exists())
 
+    def test_delete_without_a_credential_id_is_refused_not_a_crash(self) -> None:
+        """``DELETE`` on the collection URL must answer 405, not 500.
+
+        Both routes used to resolve to one view. ``post`` took
+        ``credential_id=None`` precisely so a POST to the item URL could answer
+        405 instead of raising TypeError out of the dispatcher; ``delete`` never
+        got the same treatment, so a DELETE to the *collection* URL called a
+        handler missing a required positional argument and returned a 500.
+
+        Found by reading, while fixing the two operationId collisions these
+        double-routed methods produced in the published schema (see
+        docs/PROBLEMS.md, 2026-08-24).
+        """
+        profile = _profile()
+        _enroll(profile)
+
+        response = _client_for(profile).delete(reverse("e2ee.passkey_wrap"), content_type="application/json")
+
+        self.assertEqual(response.status_code, 405, "DELETE on the collection URL should be refused, not crash.")
+
+    def test_post_to_the_item_url_is_refused(self) -> None:
+        """The mirror of the above, and the behaviour that was already correct."""
+        profile = _profile()
+        _enroll(profile)
+        credential = _credential(profile)
+
+        response = _client_for(profile).post(
+            reverse("e2ee.passkey_wrap_delete", kwargs={"credential_id": _b64url(bytes(credential.credential_id))}),
+            data=_wrap_payload(credential),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 405)
+
     def test_delete_of_a_wrapless_credential_is_404(self) -> None:
         profile = _profile()
         _enroll(profile)

@@ -1,0 +1,138 @@
+name: Integration tests
+
+# Manual only, on purpose. This suite drives a *deployed* instance: it signs in,
+# creates rows, deletes them again, and runs a real background job. Firing that
+# on every push would mean several concurrent runs writing to one staging
+# database and blaming each other for the results.
+#
+# It also cannot be run against production, and a workflow that is only ever
+# started deliberately is the cheapest way to keep that true.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Deployment to test, e.g. https://s1.dev.urbanlens.org"
+        required: true
+        type: string
+      project:
+        description: "Which suite to run"
+        required: true
+        default: "all"
+        type: choice
+        options: [all, smoke, services, api, ui, a11y]
+      cross_browser:
+        description: "Also run Firefox, WebKit and mobile"
+        required: false
+        default: false
+        type: boolean
+      workers:
+        description: "Parallel workers"
+        required: false
+        default: "4"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run at a time per target. Two concurrent runs share the staging
+  # database and the same provisioned accounts, and would delete each other's
+  # rows mid-assertion.
+  group: integration-${{ inputs.base_url }}
+  cancel-in-progress: false
+
+jobs:
+  integration:
+    name: Integration suite
+    runs-on: ubuntu-latest
+    # Holds UL_E2E_ACCOUNTS_JSON (the manifest written by
+    # `manage.py provision_integration_env`) and, optionally, UL_E2E_REDATA_URL.
+    # Environment rather than repository secrets so the credentials for a
+    # staging instance stay scoped to it.
+    environment: staging
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install suite dependencies
+        working-directory: tests/integration
+        # `npm ci` once a package-lock.json is committed; until then the direct
+        # dependencies are pinned exactly and only transitives float.
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Type-check the suite
+        working-directory: tests/integration
+        # Cheap, and it fails in seconds rather than after a browser download
+        # when a helper's signature has drifted from its callers.
+        run: npm run typecheck
+
+      - name: Install browsers
+        working-directory: tests/integration
+        run: |
+          if [ "${{ inputs.cross_browser }}" = "true" ]; then
+            npx playwright install --with-deps chromium firefox webkit
+          else
+            npx playwright install --with-deps chromium
+          fi
+
+      - name: Write the accounts manifest
+        env:
+          ACCOUNTS_JSON: ${{ secrets.UL_E2E_ACCOUNTS_JSON }}
+        run: |
+          if [ -z "$ACCOUNTS_JSON" ]; then
+            echo "::error::The staging environment has no UL_E2E_ACCOUNTS_JSON secret."
+            echo "Run 'manage.py provision_integration_env --format json' on the target and store the output as that secret."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$ACCOUNTS_JSON" > "${RUNNER_TEMP}/e2e-accounts.json"
+
+      - name: Run the suite
+        working-directory: tests/integration
+        env:
+          UL_E2E_BASE_URL: ${{ inputs.base_url }}
+          UL_E2E_ACCOUNTS_FILE: ${{ runner.temp }}/e2e-accounts.json
+          UL_E2E_REDATA_URL: ${{ vars.UL_E2E_REDATA_URL }}
+          UL_E2E_WORKERS: ${{ inputs.workers }}
+          UL_E2E_CROSS_BROWSER: ${{ inputs.cross_browser }}
+          UL_E2E_RUN_ID: gh-${{ github.run_id }}
+          CI: "true"
+        run: |
+          if [ "${{ inputs.project }}" = "all" ]; then
+            npx playwright test
+          else
+            npx playwright test --project="${{ inputs.project }}"
+          fi
+
+      - name: Upload the report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: integration-report-${{ github.run_id }}
+          path: |
+            tests/integration/reports/html
+            tests/integration/reports/junit.xml
+            tests/integration/reports/results.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload traces from failures
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: integration-traces-${{ github.run_id }}
+          path: tests/integration/reports/artifacts
+          retention-days: 7
+          if-no-files-found: ignore

@@ -857,7 +857,17 @@ convention = "google"
 dev = [
     "bandit~=1.8.6",
     "coverage>=7.14.1,<7.16.0",
+    # Coverage of the lines a branch actually changed, rather than a whole-tree
+    # percentage that moves too slowly to mean anything on any one commit.
+    "diff-cover~=10.5.1",
     "django-debug-toolbar~=7.0.0",
+    # Records each covered view's query *fingerprint* to a checked-in .perf.yml,
+    # so an N+1 arrives as a reviewable diff. Chosen over a runtime detector
+    # (`nplusone`) because that one has not shipped since 2019, and because
+    # `django-auto-prefetch` already suppresses the access pattern such a
+    # detector watches for - which would make it quiet precisely where this
+    # codebase's N+1s actually came from. See core/tests/query_scaling.py.
+    "django-perf-rec~=4.31.0",
     "django-stubs~=6.0.5",
     "django-stubs-ext~=6.0.5",
     "faker>=40.23,<40.29",
@@ -876,7 +886,19 @@ dev = [
     "pynacl~=1.6.2",
     "pytest>=9.1.1",
     "pytest-django~=4.12.0",
+    # Installed but disabled in `addopts`; `bin/run_tests.sh --shuffle` enables it.
+    "pytest-randomly~=4.1.0",
+    # Parallel test workers. Off by default: each worker takes its own database,
+    # so the multiplier applies to database *setup* as well, and the local
+    # Postgres has been observed to fall over under exactly this load. Use it in
+    # the container, via `bin/run_tests.sh --parallel`.
+    "pytest-xdist~=3.8.0",
     "ruff~=0.15.20",
+    # Property-based conformance testing against the published OpenAPI document.
+    # The schema is a deployed artefact with generated clients depending on it,
+    # and nothing else checks that a response matches what it advertises.
+    # Drives tests/contract/; see docs/CONTRACT_TESTS.md.
+    "schemathesis~=4.25.1",
     "setuptools>=82.0.1,<83.1.0",
     "sphinx~=9.1.0",
     "sphinx-rtd-theme~=3.1.0",
@@ -923,9 +945,25 @@ ignore_missing_model_attributes = true
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "urbanlens.UrbanLens.settings.test"
-pythonpath = ["src"]
+# tests/contract is on the path so that suite's conftest and test modules can
+# share `schema_source` by plain import. It holds no `test_*` modules of its own
+# and is not in `testpaths`, so this affects imports only, never collection.
+pythonpath = ["src", "tests/contract"]
+# `tests/` is deliberately outside this. The Playwright suite under
+# tests/integration/ is not Python, and tests/contract/ needs either a running
+# deployment or an explicit opt-in to fuzzing, so neither belongs in the run
+# that a pre-commit hook or a plain `pytest` performs.
 testpaths = ["src/urbanlens"]
-addopts = "--import-mode=importlib"
+# -p no:randomly: pytest-randomly is installed but off unless asked for.
+# Shuffling was probed across three seeds on a subset and found no order
+# dependence, which is not the same as knowing all ~11,000 tests are
+# order-independent - and a plugin that reorders every run by default turns
+# that unknown into intermittent failures for everyone. `bin/run_tests.sh
+# --shuffle` turns it on deliberately.
+addopts = "--import-mode=importlib -p no:randomly"
+markers = [
+    "contract: OpenAPI conformance checks (tests/contract). Needs --contract-* options; not collected by default.",
+]
 
 [tool.coverage.run]
 source = ["."]

@@ -2845,6 +2845,13 @@ def run_scheduled_trivia_wiki_incorporation() -> dict:
 #: pin; ``Pin.slug_is_placeholder`` still has the final say on each candidate.
 _PLACEHOLDER_SLUGS = ("unnamed-location", "unnamed", "dropped-pin", "pin", "location", "place", "point", "marker", "unknown-location", "unknown")
 
+#: How old a pin must be before this sweep will change its slug.
+#:
+#: Generous on purpose. The window that matters is "somebody has this pin's
+#: detail page open", and the cost of waiting is that a legacy pin keeps a
+#: placeholder URL an hour longer - which it has already kept for months.
+_RESLUG_MIN_AGE = timedelta(hours=1)
+
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
@@ -2899,10 +2906,19 @@ def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
     # anything knew what it was keeps `unnamed-location` in its URL even after it
     # is named - reported from staging on a pin called "HRSH" with three aliases.
     # Refreshed here rather than on save: the pins that need it were named long
-    # ago, and only a slug that still reads as a placeholder is replaced, so no
-    # working link changes.
+    # ago, and only a slug that still reads as a placeholder is replaced.
+    #
+    # "So no working link changes" was the original claim here, and it is not
+    # quite true: a link can be *open*. A pin created minutes ago has its detail
+    # page rendered with the old slug baked into every HTMX panel URL, so
+    # replacing the slug underneath it 404s those panels, and the global
+    # `htmx:responseError` handler turns each into an error toast on a pin the
+    # user has just made. `tests/integration/` caught exactly that; see
+    # docs/PROBLEMS.md, 2026-08-23. The age guard restores the assumption by
+    # making it true - this sweep is for legacy data, per the docstring above,
+    # and legacy data is not five minutes old.
     reslugged = 0
-    for pin in Pin.objects.filter(slug__in=_PLACEHOLDER_SLUGS).select_related("location")[:batch_size]:
+    for pin in Pin.objects.filter(slug__in=_PLACEHOLDER_SLUGS, created__lt=timezone.now() - _RESLUG_MIN_AGE).select_related("location")[:batch_size]:
         if pin.refresh_placeholder_slug():
             reslugged += 1
     if reslugged:

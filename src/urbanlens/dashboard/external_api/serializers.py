@@ -12,12 +12,14 @@ regardless of caller.
 
 from __future__ import annotations
 
+import datetime
 import math
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -85,8 +87,6 @@ from urbanlens.dashboard.services.pins.pin_edit import EDITABLE_PIN_FIELDS
 from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS
 
 if TYPE_CHECKING:
-    import datetime
-
     from urbanlens.dashboard.models.profile.model import Profile
 
 #: Same scheme restriction as controllers.links._clean_link_input - external
@@ -683,11 +683,43 @@ class PinVisitSerializer(serializers.Serializer):
     updated = serializers.DateTimeField(read_only=True)
 
 
+#: How far ahead of the server's clock a submitted visit time may sit.
+#:
+#: Not zero, because a client's clock is its own and a phone a minute fast is
+#: not lying about anything. Small, because the point is to reject a *date*
+#: in the future rather than to accommodate one.
+MAX_VISIT_CLOCK_SKEW = datetime.timedelta(minutes=5)
+
+
 class PinVisitCreateSerializer(serializers.Serializer):
     """A manually logged visit submitted for a pin."""
 
     visited_at = serializers.DateTimeField(required=True)
     notes = serializers.CharField(max_length=MAX_VISIT_NOTES_LENGTH, required=False, allow_blank=True, allow_null=True, default=None)
+
+    def validate_visited_at(self, value: datetime.datetime) -> datetime.datetime:
+        """Refuse a visit that has not happened yet.
+
+        A visit is a record of somewhere the user has *been*. A future one has
+        no meaning the product supports - a planned outing is a trip activity,
+        which is a different model with its own scheduling - and it is not
+        inert: ``sync_last_visited`` feeds ``Pin.last_visited``, which is
+        displayed and ordered by, so one mistyped year makes a pin permanently
+        the most recently visited thing its owner has.
+
+        Args:
+            value: The submitted visit time.
+
+        Returns:
+            The value, unchanged, when it is in the past.
+
+        Raises:
+            serializers.ValidationError: The time is beyond
+                :data:`MAX_VISIT_CLOCK_SKEW` ahead of now.
+        """
+        if value > timezone.now() + MAX_VISIT_CLOCK_SKEW:
+            raise serializers.ValidationError("A visit cannot be logged in the future.")
+        return value
 
 
 class LocationSearchQuerySerializer(serializers.Serializer):
@@ -1348,6 +1380,14 @@ class SavedFilterUpdateResponseSerializer(SavedFilterSerializer):
     lists_resynced = serializers.IntegerField(read_only=True)
 
 
+#: Schema for a count that is only present when ``?with_counts=true`` was
+#: passed. See where it is used, on ``LabelSerializer``.
+_OPTIONAL_COUNT_SCHEMA = {
+    "type": "integer",
+    "description": "Only present when the request passed `with_counts=true`; each count costs a correlated subquery per label.",
+}
+
+
 class LabelSerializer(serializers.Serializer):
     """One label visible to the caller, with their own customizations applied.
 
@@ -1382,8 +1422,24 @@ class LabelSerializer(serializers.Serializer):
     parent_uuids = serializers.SerializerMethodField()
     #: Present only when the caller asked for counts (``?with_counts=true``) -
     #: they cost a correlated subquery per label.
-    pin_count = serializers.IntegerField(read_only=True, required=False)
-    location_count = serializers.IntegerField(read_only=True, required=False)
+    #:
+    #: Deliberately **not** ``read_only``, which is what keeps them optional in
+    #: the published document. drf-spectacular adds any field carrying
+    #: ``readOnly`` to the component's ``required`` list no matter what
+    #: ``required`` says, and its only off-switch
+    #: (``COMPONENT_NO_READ_ONLY_REQUIRED``) is global - turning that on to fix
+    #: two fields would make every read-only field of every component optional,
+    #: so a client could no longer rely on ``uuid`` being present anywhere. The
+    #: schema previously demanded a key the response omits unless asked for, so
+    #: a generated client with a non-optional field could not parse an ordinary
+    #: label list.
+    #:
+    #: Dropping ``read_only`` costs nothing here: this serializer is
+    #: response-only (writes go through ``LabelWriteSerializer``), so nothing
+    #: ever parses input through it. Restore ``read_only=True`` if that changes,
+    #: and solve the required-ness another way.
+    pin_count = extend_schema_field(_OPTIONAL_COUNT_SCHEMA)(serializers.IntegerField(required=False))
+    location_count = extend_schema_field(_OPTIONAL_COUNT_SCHEMA)(serializers.IntegerField(required=False))
     created = serializers.DateTimeField(read_only=True)
     updated = serializers.DateTimeField(read_only=True)
 

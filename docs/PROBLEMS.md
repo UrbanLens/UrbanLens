@@ -67,6 +67,98 @@ it can send only what differs), and make writes field-scoped (`update_fields`, w
 codebase already does). The second is the safety net for anything that still posts everything, and
 is the cheaper half to finish first.
 
+## ~~2026-08-24: the published OpenAPI document under-describes its own responses~~ - RESOLVED 2026-08-24
+
+Found by the new schemathesis suite (`tests/contract/`, `docs/CONTRACT_TESTS.md`)
+on its first run. Both are in the *published* contract, so both are paid for by
+whoever generates a client from it — the Flutter app included.
+
+**1. Two pairs of operations share an `operationId`.**
+`passkey_wrap_create` is claimed by `POST /dashboard/e2ee/passkey-wrap/` and
+`POST /dashboard/e2ee/passkey-wrap/{credential_id}/`; `passkey_wrap_destroy` by
+the two `DELETE`s. drf-spectacular does not fail on this — it appends `_2` to
+whichever operation it reaches second and logs a warning nobody reads. Which one
+loses depends on the order the urlconf is walked, so adding an unrelated route
+can move the suffix to the other operation and silently rename a method that
+downstream code calls. Fix is an explicit `operation_id` on each
+`@extend_schema`. Guarded by
+`TestDocumentShape::test_operation_ids_are_unique`.
+
+**2. No authenticated operation documents a 401**, though every one returns it
+for a request without credentials. A generated client has no branch for the most
+likely failure it will ever see, and a strict one treats the response as a
+protocol violation rather than "your token expired". The same is true of the 403
+that a scope check produces and the 404 a detail endpoint produces for an
+unknown slug. Because responses are not declared per view, the fix is one place:
+a drf-spectacular postprocessing hook, or `extend_schema(responses=...)` on the
+shared base view. Guarded by
+`TestDocumentShape::test_authenticated_operations_document_rejection`.
+
+**Both fixed 2026-08-24.**
+
+(1) became two view classes. `E2EEPasskeyWrapView` now defines only `post` and
+`E2EEPasskeyWrapItemView` only `delete`, over a shared `_E2EEPasskeyWrapBase`,
+so each `operationId` is claimed once. That also removed a **500**: `delete`
+took `credential_id` as a required positional while both URLs routed to the one
+view, so `DELETE /dashboard/e2ee/passkey-wrap/` (no id) raised `TypeError` out
+of the DRF dispatcher. `post` had been given a default precisely to avoid that;
+`delete` never was. Both combinations are now DRF's own 405. Guarded by
+`test_e2ee_passkey_unlock.py::PasskeyWrapEndpointTests::test_delete_without_a_credential_id_is_refused_not_a_crash`.
+
+(2) became `external_api.schema.document_error_responses`, a postprocessing
+hook: any operation declaring `security` documents 401 and 403, and any path
+carrying a parameter documents 404, all against a shared `ErrorResponse`
+component matching the `{"error": ...}` envelope the API actually returns. Done
+in one place because the omission was not per view. `setdefault` throughout, so
+a view that documents its own 401 keeps it.
+
+With those in, `UL_CONTRACT_STRICT=1` (status-code and content-type conformance)
+is worth trying again — it was held back only because the schema documented
+nothing but success.
+
+## ~~2026-08-24: two endpoints return a different shape than they publish~~ - RESOLVED 2026-08-24
+
+Also from the first schemathesis run, and worse than the documentation gaps
+above: these are cases where a generated client would be **wrong at runtime**,
+not merely under-informed. Neither was reachable by the existing suite, which
+asserts endpoint behaviour against hand-written expectations rather than against
+the schema.
+
+**`GET /dashboard/api/external/v1/undo/` declares an array and returns an
+object.** The schema says `{"type": "array", "items": UndoEntry}`; the endpoint
+returns `{"entries": [...], "omitted": [...]}`. A generated client iterates the
+response and gets an object, or fails to deserialize it outright. One of the two
+is wrong — the `omitted` key suggests the envelope is intentional and the
+`@extend_schema(responses=...)` was never updated to match, in which case the
+fix is the schema, but that should be confirmed against what the mobile client
+expects before changing either.
+
+**`GET /dashboard/api/external/v1/labels/` omits a field it declares
+required.** `location_count` is in the `Label` schema's `required` list and is
+absent from the serialized response. A client with a non-optional field there
+fails to parse a perfectly ordinary list of labels.
+
+**Both fixed 2026-08-24, in the schema rather than the responses** — in each
+case the code was right and the declaration was wrong.
+
+`undo/` now declares `UndoHistorySerializer`, the envelope it actually returns.
+The envelope is the correct half: `omitted` is load-bearing, and flattening the
+response to match the old declaration would have removed a client's only signal
+that its credential is missing a domain-read scope.
+
+`labels/` keeps returning the counts only for `?with_counts=true`; the two
+fields are simply no longer marked required. The mechanism is worth knowing,
+because it will catch the next person: **drf-spectacular adds every field
+carrying `readOnly` to a component's `required` list regardless of
+`required=False`**, and its only off-switch, `COMPONENT_NO_READ_ONLY_REQUIRED`,
+is global — flipping it to fix two fields would make every read-only field of
+every component optional, so a client could no longer rely on `uuid` being
+present anywhere. Dropping `read_only=True` from just those two fields is safe
+because `LabelSerializer` is response-only (writes go through
+`LabelWriteSerializer`), and that is noted at the fields so the next person does
+not re-add it.
+
+The whole contract suite is green: **101 passed**.
 ## OPEN 2026-08-24: wiki search and autocomplete are a substring oracle for concealed content
 
 `services/global_search/providers.py` (the wiki provider's `apply_text` over `["name",
@@ -3740,6 +3832,536 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
+## RESOLVED 2026-08-24: a new pin never gets its parcel, because creation marks the lookup as already done
+
+**Confirmed live on a clean database with production REData reachable**, not
+inferred. This is the root cause of most of what looks broken about place data
+for a newly pinned location: no parcel boundary, no shared-property resolution,
+no building child pins, no floorplan footprint, and a wiki with no geometry.
+
+**What happens.** `create_pin_for_profile` calls `resolve_location_place` when
+`place_resolved_at` is NULL (`services/pins/pin_creation.py:256-257`). That
+function is explicitly a cache read - its own docstring says "Never calls a
+provider - it only asks what is already known" - but it stamps the timestamp
+regardless of whether it found anything:
+
+```python
+# services/places/resolution.py:44-46
+place = Place.objects.resolve_for_point(location.latitude, location.longitude)   # may be None
+if save and (location.place_id != (place.pk if place else None) or location.place_resolved_at is None):
+    Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=timezone.now())
+```
+
+Every trigger for the provider chain reads exactly that field as "the chain has
+run":
+
+```python
+# services/locations/boundaries.py:208, in generation_status
+if location.place_resolved_at is None:
+    return False, False
+```
+
+So immediately after creation `generation_status` returns `(ran=True,
+stale=False)`, and therefore:
+
+- `schedule_location_boundary_generation` returns False - "already fresh"
+- `BoundaryPanelSource.is_ready` returns True, so the lazy panel never fetches
+- `enrich_wiki_location` skips `generate_location_boundaries`
+
+Nothing is left to run it. `Location.save()` at `models/location/model.py:462-465`
+deliberately leaves `place_resolved_at` unset *for this exact reason*, and
+`pin_creation` then sets it.
+
+**Measured**, on an empty database, pin at 41.733181, -73.928493 (Hudson River
+State Hospital):
+
+```
+AFTER CREATE: place_id=None  place_resolved_at=2026-08-24 20:14:05+00:00
+AFTER CREATE: generation_status ran=True stale=False
+AFTER CREATE: schedule_location_boundary_generation -> False
+```
+
+The data is not the problem: production REData answers this coordinate with
+parcel `c912a64b-7b07-45d4-9e51-89e80a25067f` and **33 buildings** from NY SHPO's
+CRIS inventory, complete with building numbers. Forcing
+`generate_location_boundaries(location)` by hand does produce geometry.
+
+**How long the pin stays wrong.** `generation_status` also computes staleness
+against `SiteSettings.boundary_cache_days`, which is **60**. So the chain becomes
+eligible again 60 days after the pin was created - which is indistinguishable
+from never for anyone looking at the pin they just made.
+
+**Fix, and the thing to be careful about.** The stamp should mean "a provider ran
+and this is what it found", which is what `BoundaryPanelSource.is_ready`'s own
+comment assumes ("stamped even when nothing was found, so a fruitless run
+doesn't retrigger the chain on every page view"). The narrow change is for
+`resolve_location_place` not to stamp - it is a cache read, and the field is a
+provider-run marker - leaving the stamp to `generate_location_boundaries`. The
+care needed is that `resolve_location_place` is also called from
+`resolve_locations_in` on every geometry change, so whatever replaces this must
+not make a busy parcel re-run the chain per re-resolution.
+
+Guarded by `tests/integration/specs/location/hrsh-boundary.spec.ts`, which is
+written to fail on exactly this and to say so.
+
+**Resolved.** `resolve_location_place` now stamps only when the resolved place
+actually changed, so a coordinate it resolved nothing for is left unstamped and
+`generate_location_boundaries` remains the only thing that records a genuine
+provider miss. The `resolve_locations_in` concern above is handled by the same
+condition: a re-resolution that does not move a location writes nothing at all,
+so a busy parcel does not re-run the chain per re-resolution.
+
+Two further defects were found while confirming this one, both fixed with it:
+
+- **The same function wiped the place it had just resolved.** It wrote the
+  timestamp to the database but not to the in-memory instance, and
+  `generate_location_boundaries` reads that attribute immediately afterwards to
+  decide whether to record a miss - so a freshly provisioned place could be
+  cleared straight back to `None` by `attach_location(location, None)`. This is
+  the likelier explanation for `place_id=None` alongside a stamped
+  `place_resolved_at` on rows where the chain genuinely did run.
+
+- **A boundary we invented outranked one REData gave us.** See the entry below;
+  fixing the stamp alone still left the wrong shape on the map.
+
+## RESOLVED 2026-08-24: the map drew a hull around our own child pins instead of REData's parcel
+
+Reported from the e2e deployment: "That parcel boundary is absolutely
+incorrect... it looks like a generated boundary created to ensure that all the
+pins it thinks are inside the parcel are within the boundary."
+
+That reading was right. REData answers **six** scored candidates for this parcel
+and flags one `is_suggested` (240,740 m²); the app drew the convex hull of the
+campus pin and its three child pins (measured 154,753 m² as rendered) - an
+outline of *the markers we happen to know about* rather than evidence about the
+property. It is a legitimate last resort and a bad thing to prefer: on screen it
+is indistinguishable from a surveyed parcel, and it grows and shrinks with the
+set of buildings that happen to have been imported.
+
+`BoundaryManager.resolve_for_pin` returned the pin's own `generated_polygon`
+second, ahead of the place, so geometry the chain had just fetched stayed
+invisible on the very page that fetched it. A hull carrying
+`generated_from_children` now yields whenever a provider outline exists; every
+other generated row (the pre-places location default among them) keeps the
+precedence it had, and a person's own drawing still outranks everything.
+`refit_child_pin_boundary` drops a stand-in a provider has superseded rather
+than refitting a shape nothing will draw.
+
+**Not fixed here, and deliberately.** REData currently suggests
+`ny_cris (Hudson River State Hospital, Main Building)` for these coordinates,
+which the site owner considers the wrong choice - the subdivision boundary
+`ny_cris (Hudson Heritage Development/Former Hudson River State Hospital/Property Subdivision)`
+(1,163,489 m²) is the better answer, and that selection is REData's to correct.
+UrbanLens' obligation is to draw what REData suggests rather than to invent an
+alternative, which is what this fix establishes.
+
+Guarded by `tests/integration/specs/location/hrsh-boundary-provenance.spec.ts`,
+which asserts provenance rather than presence - the older boundary spec passes
+on an invented hull, because one does arrive and is plausibly sized. Unit
+coverage for the precedence rules is in
+`dashboard/tests/hypothesis/test_redata_parcel_beats_generated_hull.py`.
+
+## OPEN 2026-08-24: concurrent requests to `schema/` can 500
+
+Two overlapping fetches of `/dashboard/api/external/v1/schema/` can produce a
+500, with the next request answering 200 normally. The traceback is inside
+drf-spectacular rather than our code:
+
+    drf_spectacular/plumbing.py:854 in _load_class
+        if any(cls.target_class.startswith(app + '.') for app in installed_apps) ...
+    AttributeError: 'NoneType' object has no attribute 'startswith'
+
+`_load_class` resolves an extension's `target_class` from a dotted string to the
+class object, in place, on first use. Two requests arriving together race over
+that mutation: one reads `target_class` after the other has replaced it (or
+while it is None), and `startswith` is not a method of either replacement. The
+app runs gevent workers, so genuinely concurrent requests to one process are
+ordinary rather than exotic.
+
+**Not caused by anything in this branch** - nothing here registers a
+drf-spectacular extension - but newly *visible*, because `tests/contract` and
+the Playwright `api` project both fetch the schema and can overlap. It is
+almost certainly long-standing.
+
+It matters because the schema is a deployed artefact: a client generating code
+against it gets an intermittent 500 with no indication that retrying would work.
+Options are to warm the extension registry at startup (fetch the schema once in
+`AppConfig.ready`, so the mutation happens before any request races), or to cache
+the generated document.
+
+Found by `tests/integration/specs/api/contract.spec.ts`, where it presents as a
+flake rather than a failure - which is the shape it would have in production too.
+
+## RESOLVED 2026-08-24: re-adding a removed friend creates a request nobody can accept
+
+Remove a friend, change your mind, and send them a friend request again. Both
+people can see the request. Neither can act on it, permanently.
+
+**What is established.** `DELETE friends/{profile_uuid}/` soft-deletes: the
+`Friendship` row survives with status `Removed`, keeping the `from_profile` it
+originally had. When a `POST friends/` later meets such a row, the request can
+end up recorded in the **old** direction - A sends to B, and B sees it as
+`status="Requested" direction="outgoing"`, an incoming request labelled as one
+they sent. `friends/{A}/accept/` then looks for an incoming request from A,
+finds none, and answers `404 Friend request not found`. Both people can see the
+request; neither can act on it.
+
+**What is not established, and is the next thing to find out.** The obvious
+mechanism - `Friendship.objects.all().between()` finding the soft-deleted row
+and reviving it without re-orienting `from_profile` - is *not sufficient on its
+own*. A test that constructs exactly that state (B befriends A, A accepts, A
+removes, A re-requests) **passes**: that revival orients correctly. Only the
+first test to run against a *previous run's* leftovers fails, so the row it
+meets must be in some further sub-state this reproduction does not recreate -
+removed-while-still-requested, or declined-then-removed, or similar. Whoever
+picks this up should dump the surviving row's full record rather than trusting
+the reconstruction above.
+
+The feed shows it plainly once you ask for the right status - the requester sees
+`direction="incoming"` for a request they sent:
+
+    requester still sees status="Removed" direction="incoming" under ?status=Removed
+    recipient still sees status="Removed" direction="outgoing" under ?status=Removed
+
+**How it was found**, because the path is instructive. It surfaced as an
+intermittent 404 in the integration suite that only ever hit the *first* test in
+the file - the one meeting the previous run's leftovers. Three plausible
+explanations were wrong: that the `message` field was implicated (isolating it
+proved the opposite - the request *with* a note accepted, the one without
+failed), that the two clients shared an account, and that `direction` was
+computed from the row rather than the viewer. What settled it was making the
+test's cleanup *prove* the relationship was gone across all eight statuses
+instead of the three it had been checking, at which point the surviving
+`Removed` row named itself.
+
+**Resolved, and the "further sub-state" above turned out not to exist.** The
+mechanism *was* simply `between()` reviving the row without re-orienting it. The
+reason the reconstruction passed is that the reconstruction was the wrong way
+round: in "B befriends A, A accepts, A removes, A re-requests", A is already the
+row's `from_profile`, so there is nothing to re-orient and the case was never
+going to fail. The failing shape needs the *other* party to re-request - A asks
+B, B accepts, B removes, **B** asks A - and that fails reliably from a clean
+slate, no leftovers required. Anyone reading the paragraph above should take it
+as a warning about reconstructions that confirm what you expected: it was
+symmetric-looking enough to seem equivalent, and being wrong about it sent the
+investigation looking for a state that was not there.
+
+**The fix** re-orients the row in `Friendship.request`, with two details that
+were not obvious from the diagnosis:
+
+- `unique_together` is `(from_profile, to_profile)`, so A->B and B->A can both
+  exist (see "reciprocal `Friendship` rows" above). Swapping a row's ends can
+  therefore collide with a real row, and the fix prefers an
+  already-correctly-oriented row when one exists rather than swapping blind.
+- `muted_by_from_profile` / `muted_by_to_profile` are **positional** - which
+  column is yours depends on which end of the row you are. Swapping the ends
+  without swapping these hands one person's mute to the other, silencing the
+  wrong party invisibly. That is a worse bug than the one being fixed, and it
+  has its own test.
+
+The suggestion to ask the same question of every status `between()` can return
+was half wrong, which is the other correction worth keeping: `can_request`
+admits `Declined` and `Removed` only. For `Blocked` and `Ignored` the correct
+behaviour is a **refusal**, and re-orienting one of those rows would have been a
+new defect. Both now have tests asserting the refusal, sitting directly beside
+the re-orientation.
+
+Guarded by `test_friendship_revival_direction.py` (7 tests), proved non-vacuous
+by reverting the fix - 3 of them fail. Originally observed by
+`tests/integration/specs/api/social.spec.ts::a request is visible to the
+recipient, and acceptance to both`, which failed only as the first test in that
+file, i.e. the one that met the previous run's leftovers.
+
+## RESOLVED 2026-08-24: a photo upload trusts the filename, not the bytes
+
+`POST /dashboard/api/external/v1/photos/` accepts a shell script sent as
+`not-really.png` with `Content-Type: image/png` and answers **201**. The file is
+stored and served back from the photo's `url` as an image.
+
+Both signals the endpoint appears to trust - the extension and the declared
+content type - are supplied by the caller, so neither is evidence of anything.
+The project already carries `filetype` as a dependency and has a malware-scan
+service, so rejecting a file whose magic bytes are not an image looks like the
+intent rather than a new feature.
+
+**It hid behind duplicate detection.** The first version of the test reused the
+same payload every run and saw a `409` on the second and later runs, which reads
+as "refused" and is really the store recognising the file it accepted the first
+time. The test now embeds the run id in the bytes so every run is a first
+upload. Anything else asserting on upload rejection should do the same.
+
+How much this matters is worth deciding rather than assuming: a browser will not
+execute a shell script served as `image/png`, so this is not remote code
+execution. What it is, is an unbounded arbitrary-file store attached to any
+account with a `photos:write` key, whose contents are served from the
+application's own origin.
+
+Found by `tests/integration/specs/services/media-storage.spec.ts`, which stays
+red until the bytes are checked.
+
+**Fixed**: `image_upload_error` now requires a *positive* image identification
+for `MediaKind.PHOTO` rather than letting sniffing fail open. Guarded by
+`test_photo_bytes_must_be_an_image.py` (11 tests).
+
+**The fix nearly caused a worse regression than the defect**, and this is the
+transferable part. Failing closed is only safe if every allowed image extension
+has a magic-byte signature the library recognises *under the same name* - and
+two did not: `filetype` reports a TIFF as `tif` and an animated PNG as `apng`,
+neither of which was in the photo allowlist. Shipping the strict check without
+noticing would have started rejecting genuine TIFF and APNG uploads, trading a
+security hole for a broken feature. It also broke eight existing tests that
+uploaded `b"photo-bytes"`, which is now correctly refused; those were moved onto
+real image bytes from a new `core/tests/images.py`. When you make a check
+stricter, ask what it now rejects that it should not.
+
+## RESOLVED 2026-08-24: a visit can be logged in the future
+
+`POST /dashboard/api/external/v1/pins/{pin_slug}/visits/` accepts a
+`visited_at` a week from now and answers **201**.
+
+A visit is a record of somewhere the user has *been*. A future one is not a
+mistake the API should store: it propagates into "last visited" everywhere that
+is displayed and ordered by, so one fat-fingered year makes a pin permanently
+the most recently visited thing the user owns. It also has no legitimate
+meaning - a planned outing is a trip activity, which is a different model with
+its own scheduling.
+
+The fix is a validator on the serializer field. Bounding it at "not after now,
+give or take clock skew" is enough; nothing needs to reason about how far in
+the past is plausible.
+
+Found by `tests/integration/specs/api/visits.spec.ts`, which also pins the
+timestamp round-trip - the neighbouring risk on that field is a deployment
+whose database or worker is set to a different timezone shifting a visit by
+hours, so it is compared as an instant rather than as a string.
+
+**Fixed in both layers**, which is the part worth noting: the serializer
+validator alone would have left `create_manual_visit` accepting a future
+timestamp from every other caller, so the bound lives on the shared service too
+(`VisitInFutureError`, `MAX_VISIT_CLOCK_SKEW = 5 minutes`) with the serializer
+rejecting early for a clean 400. Guarded by `test_visit_time_bounds.py` across
+the serializer, the service, and the endpoint.
+
+## OPEN 2026-08-24: a native client can edit a wiki but can never start one
+
+The published API exposes `GET` and `PATCH` on `wikis/{location_slug}/` and no
+`POST`. A wiki is auto-created as an invisible draft when a location appears,
+and becomes visible only when somebody promotes it through the web UI's "Create
+Wiki" action - a route that has no external-API equivalent.
+
+The effect on a client holding an API key: it can read and edit wikis that
+already exist, and can never create one, so a mobile user who pins somewhere new
+has no way to start its wiki without opening a browser. It is also why five
+tests in `tests/integration/specs/api/wiki.spec.ts` skip on a fresh deployment -
+the suite cannot manufacture the precondition through the surface it is testing.
+
+Found while writing that spec on 2026-08-24. Whether the fix is a `POST`
+endpoint or a documented "promote" action is a product decision; what should not
+stand is the current state, where the capability exists and only one of the two
+clients can reach it.
+
+## OPEN 2026-08-24: the nav bar, not the map, is what overflows at phone width
+
+The 2026-08-23 entry recorded "the map page scrolls sideways at 390px" and
+guessed the map. It is not the map. Once the overflow probe was taught to ignore
+elements clipped by an ancestor - `getBoundingClientRect` reports geometry as if
+nothing clipped it, so every Leaflet tile drawn past its own `overflow: hidden`
+container looked guilty - the real culprits came out shallowest-first:
+
+    div.app-nav-right       — right edge at 430px (viewport 390px), width 230px
+    div#nav-user.nav-user   — right edge at 430px (viewport 390px), width 140px
+    button#nav-user-btn     — right edge at 430px (viewport 390px)
+
+The navigation bar's right-hand group runs 40px past a 390px viewport. It is on
+every page; the map page is simply where it was noticed, presumably because
+other pages clip it somewhere up the tree. Fixing it is a CSS change to
+`.app-nav-right`'s layout at narrow widths, which wants doing in front of a
+browser rather than blind - but the element is now named.
+
+## OPEN 2026-08-24: three accessibility defects, found once `lang` stopped masking them
+
+Adding `lang` to the two page templates cleared ten of the a11y project's
+thirteen failures and left three genuine ones, each a different rule:
+
+- **`button-name`, critical, the home page.** `.photo-tile-btn` wraps only an
+  `<img>`, and `urbanlensMediaThumbFallback` replaces that image with an icon
+  when the file 404s - taking the button's only accessible name with it. **Fixed
+  2026-08-24** by putting `aria-label` on the button in all three places that
+  render a photo tile, so the name no longer depends on the thumbnail loading.
+- **`aria-required-children`, critical, the pin detail page.** `#media-tabs`
+  declares `role="tablist"` in markup but is filled by JavaScript, and the
+  buttons it generates carried no `role="tab"` - unlike the statically-rendered
+  article sub-tabs directly above them. It also stayed an empty tablist when
+  the media grid was absent. **Fixed 2026-08-24**: the generated buttons carry
+  `role="tab"` and `aria-selected`, and the container drops the role entirely
+  when it has nothing to put in it.
+- **`link-in-text-block`, serious, the settings page.** `a[href$="locations/"]`
+  is distinguishable from surrounding prose by colour alone. **Not fixed** - the
+  repair is an underline (or other non-colour affordance) on inline links, which
+  is a site-wide visual decision rather than a local patch.
+
+Both fixes were verified against the deployment: the pin detail page's scan is
+now clean. The home page's is not, because clearing `button-name` uncovered a
+second defect underneath it:
+
+- **`image-alt`, critical, the home page.** axe reports `.photo-tile > img` with
+  no `alt` and no `aria-label`. Both templates that render a photo tile put the
+  `<img>` inside the `.photo-tile-btn` button and do give it an `alt`, so this is
+  either a third render path or an image the thumbnail-fallback script rewrites
+  after load - `urbanlensMediaThumbFallback` is the obvious suspect, since it
+  swaps the element when a file 404s and the dev deployment has no media files.
+  Worth ten minutes in front of a browser rather than another blind edit.
+
+## OPEN (ratcheted) 2026-08-24: one pin-detail page load can exhaust the database connection pool
+
+Found by `tests/integration/` on 2026-08-24, and only visible because the
+console/network guard watches every request a page makes rather than just the
+document.
+
+Opening `/dashboard/map/pin/<slug>/` fires roughly **thirty concurrent HTMX
+requests** - one per enrichment panel, plus the media and overview fragments -
+and each one is a Django request that takes its own database connection
+(`CONN_MAX_AGE` is 0, so connections are per-request). On the dev stack, whose
+Postgres runs the default `max_connections = 100`, that tipped over: 14 requests
+in one hour failed with
+
+    django.db.utils.OperationalError: connection to server at "urbanlens_db",
+    port 5432 failed: FATAL: sorry, too many clients already
+
+The failures are spread evenly across seven different panel endpoints, one each
+- `azure-maps`, `location-data-overview`, `markup-maps`, `media/cris_building`,
+`panel/epa_echo_detail`, `panel/property_records`, `panel/redata_permits` - which
+is the signature of pool exhaustion rather than of any one panel being broken.
+Whichever panel arrives when the pool is full is the one that 500s.
+
+**How much of this is the test environment.** Some: the suite runs several
+browser workers, so more than one pin page was loading at once, and a single
+container's Postgres is smaller than a real deployment's. But the shape does not
+depend on that - a page that opens thirty connections at once needs only three
+simultaneous readers to want ninety, and the panels are the *point* of that page,
+so this is what a normal user does rather than a stress case. It is also
+user-visible when it happens: `themes/base.html`'s global `htmx:responseError`
+handler raises an error toast per failed panel.
+
+Not fixed here, because every fix is a decision rather than a repair: cap the
+client-side fan-out so panels load in waves, give the panel views a shared
+connection or move them behind one request, raise `max_connections`, or put
+pgbouncer in front. The first is the only one that helps a deployment of any
+size.
+
+**What has been done, short of fixing it.**
+`test_pin_detail_fanout_budget.py` renders the page and asserts the number of
+elements that fetch on load stays under a ceiling. It does *not* reproduce the
+exhaustion - that needs concurrency against a real pool, which a suite issuing
+one request at a time does not have - but it holds the number, which is the
+cause, and which creeps up one innocuous panel at a time. The ceiling is set
+**at** the current count, so it is a ratchet rather than an endorsement: raising
+it should take an argument, and it should come down when the real fix lands.
+
+Two measurements worth recording. The rendered count is **53**, not the ~30 seen
+above; the difference is real rather than an error in either, because some
+triggers carry a filter (`load[!window.ulSectionCollapsed(...)]`) and stay quiet
+for a collapsed section. 53 is the ceiling a user with everything expanded
+reaches, which is the number a budget should bound.
+
+Related: this is the concrete instance of the load-testing gap recorded in
+`docs/TOOLING.md` under "Evaluated, not adopted" - the integration suite found
+it by accident, which is not a substitute for looking on purpose.
+
+## PARTIALLY RESOLVED 2026-08-23: four findings from the integration suite's first real run
+
+**Status as of 2026-08-24: four of the five fixed; the map's horizontal overflow
+is the one still open.** Each fix is described inline below.
+
+Found by `tests/integration/` (see `docs/INTEGRATION_TESTS.md`) run against a dev-environment
+stack built from `feat/multi-site-health-probes`. Each is a true positive that the pytest suite
+structurally cannot see, because each is about the deployed page or the deployed proxy rather than
+about a function's behaviour. Recorded here rather than fixed, because they are application and
+infrastructure changes and the work that found them was test infrastructure.
+
+**`<html>` carries no `lang` attribute, on every page.** `themes/base.html` and
+`themes/auth_base.html` both open `<html id="html-root">`. axe reports `html-has-lang` at
+`serious` on all ten scanned pages; it is WCAG 3.1.1, and its practical effect is that a screen
+reader guesses which language to pronounce the page in. The fix is one attribute in each template,
+but the *value* is a decision - the app runs `gettext`, so `{% get_current_language %}` may be more
+correct than a hardcoded `en`.
+
+**FIXED 2026-08-24.** Both templates now carry `lang="{{ LANGUAGE_CODE|default:"en" }}"` from
+`{% get_current_language %}`, which follows the active translation rather than freezing English into
+the markup. Guarded in CI by `test_page_template_integrity.py::PageLanguageTests` - a static check
+on the template source, because neither property depends on rendering and the integration suite
+that found it runs by hand.
+
+**HTMX is loaded from a CDN with no subresource integrity.** `themes/base.html` loads
+`https://unpkg.com/htmx.org@1.9.11` with no `integrity`/`crossorigin`, while the jQuery and toastr
+tags immediately around it both have one. HTMX drives essentially every interaction in this
+application, so whoever controls that CDN response controls the app for every visitor. The
+stylesheets nearby (font-awesome, toastr's CSS) are also unpinned but are a much narrower problem;
+Google Fonts cannot be pinned at all, since it serves a different stylesheet per user agent.
+
+**FIXED 2026-08-24**, with `integrity="sha384-0gxUXCCR8yv9FM2b+U3FDbsKthCI66oH5IA9fHppQq9DDMHuMauqq1ZHBpJxQ0J0"`
+and `crossorigin="anonymous"` - computed from the bytes unpkg actually serves for that version
+(which redirects to `dist/htmx.min.js`, 48036 bytes), not guessed. **A stale hash blocks the script
+outright and the site stops responding**, so recompute it if the version ever moves.
+`test_page_template_integrity.py::SubresourceIntegrityTests` now asserts over *every* cross-origin
+`<script>` in both themes rather than that one URL, so the next unpinned tag fails too. Stylesheets
+stay out of scope for the reason given above.
+
+**A freshly created pin's detail page intermittently 404s two of its own panels.** Opening
+`/dashboard/map/pin/<slug>/` shortly after creating the pin sometimes fetches
+`.../wikipedia/` and `.../comments/` and gets 404 from both. Both routes exist and both succeed on
+a retry, so it is a race rather than a missing route. It is user-visible: `themes/base.html`'s
+global `htmx:responseError` handler raises an error toast for every non-2xx HTMX response, so the
+user sees two error toasts on a pin they have just made.
+
+**DIAGNOSED AND FIXED 2026-08-24.** The route is fine; the *slug* moves. `tasks.py`'s
+`upgrade_placeholder_pin_names` sweep calls `Pin.refresh_placeholder_slug()`, which replaces a
+slug that still reads as a placeholder (`unnamed-location`, `dropped-pin`, ...) once the pin finally
+has a real name. A pin created moments ago is exactly that case: it is created unnamed, background
+enrichment names it, the sweep reslugs it - and the detail page the user is *already looking at* has
+the old slug baked into every HTMX panel URL it rendered. Those panels 404, and the global handler
+turns each into a toast.
+
+The sweep's own comment claimed "so no working link changes", which is true of links that are
+stored and false of a link that is open. It is a **legacy-data backfill** by its docstring, so the
+fix makes that literal: it now skips pins younger than `_RESLUG_MIN_AGE` (1 hour). The pin still
+heals, just after nobody is holding a page rendered before the rename. Guarded by
+`test_placeholder_slug_refresh.py::test_the_sweep_will_not_reslug_a_pin_somebody_may_be_looking_at`,
+plus a companion asserting the guard is a delay and not an exemption.
+
+Worth knowing for any future fix here: **there is no slug history**, and ~60 call sites resolve pins
+with a bare `get_object_or_404(Pin, slug=pin_slug, ...)`. Making an old slug keep working in general
+therefore needs a stored previous slug *and* a choke point, which is why the narrow age guard was
+preferred - it removes the observed race without a migration or a 60-site sweep.
+
+**The map page scrolls sideways at phone width. STILL OPEN.** At a 390px viewport,
+`/dashboard/map/`'s `document.documentElement.scrollWidth` exceeds its `clientWidth` by 40px.
+Not fixed here: pinning down an overflow means looking at the rendered box model, and guessing at
+SCSS without a browser produces plausible edits that do not fix it. Instead the *test* was upgraded
+to do the expensive half of the diagnosis - `specs/ui/navigation.spec.ts` now enumerates every
+visible element whose right edge crosses the viewport, innermost last, and prints them in the
+failure message. The next run names the culprit instead of the symptom.
+
+One smaller deployment note from the same run, not a code defect:
+
+- nginx answers with `Server: nginx/1.31.3`. A precise version is free reconnaissance.
+  **FIXED 2026-08-24**: `server_tokens off;` in `src/urbanlens/config/nginx/nginx.conf`'s `http`
+  block - the config is in this repo, not the infrastructure one, which the original note assumed.
+  It also drops the version from nginx's own error pages. Guarded by the integration suite's
+  `services › the server does not advertise what it is running`.
+- **No `Strict-Transport-Security`, and it is the edge rather than the app.** Django's
+  `SECURE_HSTS_SECONDS` is gated on `SECURE_SSL_REDIRECT`, which `UL_UNSAFE_ALLOW_HTTP` turns off -
+  correct for an app served over plain HTTP behind a TLS terminator. But the deployment *as a
+  whole* does redirect HTTP to HTTPS (the terminator does it), and sends no HSTS with that
+  redirect, so a first visit is still strippable. The test now establishes which case it is by
+  asking whether plain HTTP is redirected before demanding the header, so it stays quiet on a
+  genuinely HTTP-only deployment and fails on this one. The fix belongs at whatever terminates
+  TLS, not in Django.
+- Colour-contrast violations are widespread (secondary text, the social sign-in buttons) and are
+  real WCAG AA failures. The suite routes that one rule to advisory rather than failing - see
+  `ADVISORY_RULES` in `tests/integration/lib/a11y.ts` - so that the accessibility project is not red
+  on every run before anyone has had a chance to act on it. Findings still land in each run's
+  `a11y-advisory.txt`.
 ## `SavedFilterDetailView.patch` has a pre-existing mypy type error (found 2026-08-22, not fixed)
 
 `external_api/views.py`, `SavedFilterDetailView.patch`: `saved_filter.color = clean_color(data["color"], default="...")` -

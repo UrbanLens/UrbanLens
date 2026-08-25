@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
+
+from urbanlens.core.tests.images import JPEG_BYTES
 from django.test import Client
 from django.urls import reverse
 from model_bakery import baker
@@ -32,7 +34,10 @@ class PhotoUploadViewContentTypeTests(TestCase):
         self.client.force_login(self.user)
 
     def test_image_upload_succeeds(self) -> None:
-        image_file = SimpleUploadedFile("photo.jpg", b"photo-bytes", content_type="image/jpeg")
+        # Real JPEG bytes: photo uploads now require a positive image
+        # identification, so a placeholder string is refused - correctly, since
+        # it is not something the product would ever accept.
+        image_file = SimpleUploadedFile("photo.jpg", JPEG_BYTES, content_type="image/jpeg")
         response = self.client.post(_UPLOAD_URL, {"image": image_file})
         self.assertEqual(response.status_code, 201)
         image = Image.objects.get(profile__user=self.user)
@@ -96,6 +101,8 @@ class PhotoUploadViewContentTypeTests(TestCase):
     def test_upload_within_max_file_size_allowed(self) -> None:
         settings_obj = SiteSettings.get_current()
         SiteSettings.objects.filter(pk=settings_obj.pk).update(max_upload_file_size_mb=1)
-        small_file = SimpleUploadedFile("photo.jpg", b"x" * 1000, content_type="image/jpeg")
+        # A real JPEG, well under the 1MB cap set above. It has to be a real one
+        # now: the size check passes first, and then the bytes are inspected.
+        small_file = SimpleUploadedFile("photo.jpg", JPEG_BYTES, content_type="image/jpeg")
         response = self.client.post(_UPLOAD_URL, {"image": small_file})
         self.assertEqual(response.status_code, 201)

@@ -641,7 +641,7 @@ def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *
     """
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.media.storage import file_size_error_for_upload
-    from urbanlens.dashboard.services.security.content_sniffing import content_type_mismatch_error, unsupported_image_extension_error
+    from urbanlens.dashboard.services.security.content_sniffing import content_type_mismatch_error, photo_is_not_an_image_error, unsupported_image_extension_error
 
     size_error = file_size_error_for_upload(file_obj.size)
     if size_error:
@@ -654,6 +654,15 @@ def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *
         extension_error = unsupported_image_extension_error(file_obj.name or "")
         if extension_error:
             return extension_error, 400
+
+        # And the bytes have to actually be an image. The general sniff below
+        # fails open on anything it cannot fingerprint, which is right for
+        # documents and wrong here - a shell script named .png is unrecognisable
+        # rather than mismatched, so it sailed through and was stored, then
+        # served back from this origin as an image.
+        not_an_image = photo_is_not_an_image_error(file_obj)
+        if not_an_image:
+            return not_an_image, 400
 
     sniff_error = content_type_mismatch_error(file_obj, declared_media_type)
     if sniff_error:

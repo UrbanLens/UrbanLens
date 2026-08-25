@@ -622,25 +622,29 @@ class E2EERewrapView(DualAuthJsonView):
         return Response({"ok": True})
 
 
-class E2EEPasskeyWrapView(DualAuthJsonView):
-    """POST/DELETE a passkey-wrapped copy of the caller's private key.
+class _E2EEPasskeyWrapBase(DualAuthJsonView):
+    """Shared credential lookup for the two passkey-wrap routes.
 
-    The blob was wrapped client-side under an HKDF of the WebAuthn ``prf``
-    output for one of the caller's own passkeys; the server stores what it
-    cannot open, exactly like the password and recovery wraps. POST upserts
-    (re-enrolling a credential replaces its wrap); DELETE removes one wrap
-    without touching the passkey itself (deleting the passkey cascades).
+    The blob these views store was wrapped client-side under an HKDF of the
+    WebAuthn ``prf`` output for one of the caller's own passkeys; the server
+    keeps what it cannot open, exactly like the password and recovery wraps.
 
-    Both methods demand the account-password proof on password-backed
-    accounts, same rationale as ``E2EERewrapView``: adding an unlock path -
-    or destroying one, which for an account whose recovery key was never
-    saved is a data-loss lever - must cost more than a bearer token.
+    Both routes demand the account-password proof on password-backed accounts,
+    same rationale as ``E2EERewrapView``: adding an unlock path - or destroying
+    one, which for an account whose recovery key was never saved is a data-loss
+    lever - must cost more than a bearer token.
+
+    **Why two view classes for one resource.** They were one class on two URLs,
+    and that cost twice. The published schema gained two operations per method,
+    whose ``operationId``s collided and which drf-spectacular resolved by
+    appending ``_2`` to whichever route it walked second - so adding an
+    unrelated route could rename a method in every generated client. And the
+    collection URL's DELETE reached a handler with a required ``credential_id``
+    and raised ``TypeError`` out of the dispatcher, i.e. a 500 on an
+    authenticated endpoint. Giving each method a view that defines only that
+    method lets DRF answer 405 for the two combinations that never existed, and
+    leaves each ``operationId`` claimed once.
     """
-
-    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
-        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
-        "DELETE": frozenset({ApiKeyScope.MESSAGES_WRITE}),
-    }
 
     def _resolve_credential(self, request: Request, credential_id_b64: str) -> WebAuthnCredential | None:
         """Resolve a base64url credential id to one of the caller's passkeys.
@@ -662,6 +666,18 @@ class E2EEPasskeyWrapView(DualAuthJsonView):
             return None
         return WebAuthnCredential.objects.filter(user=request.user, credential_id=raw_id).first()
 
+
+class E2EEPasskeyWrapView(_E2EEPasskeyWrapBase):
+    """POST a passkey-wrapped copy of the caller's private key.
+
+    Upserts: re-enrolling a credential replaces its wrap. DELETE lives on
+    :class:`E2EEPasskeyWrapItemView`, which is the item route.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
     @extend_schema(
         description=(
             "Stores (or replaces) a passkey-wrapped copy of the caller's E2EE private key. The wrap was "
@@ -670,25 +686,19 @@ class E2EEPasskeyWrapView(DualAuthJsonView):
             "see the enroll endpoint for the rationale."
         ),
     )
-    def post(self, request: Request, credential_id: str | None = None) -> Response:
+    def post(self, request: Request) -> Response:
         """Create or replace the wrap for one of the caller's passkeys.
 
         Args:
             request: JSON body with ``credential_id`` (base64url), ``prf_input``
                 (base64 32-byte PRF evaluation input), ``wrapped_secret``, and
                 ``current_password`` on password-backed accounts.
-            credential_id: Only ever supplied by the item route, which exists for
-                ``delete``. Accepted so a POST there answers 405 instead of
-                raising TypeError from the dispatcher - both routes resolve to
-                this one view, so the URL kwarg reaches whichever method runs.
 
         Returns:
             201 JSON ``{ok: true}`` on create, 200 on replace; 400 on malformed
             input or an unknown credential; 403 on bad proof; 404 when not
             enrolled.
         """
-        if credential_id is not None:
-            return Response({"error": "Use DELETE to remove a passkey wrap, or POST to the collection URL to create one."}, status=405)
         profile = _get_profile(request)
         bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:
@@ -719,6 +729,19 @@ class E2EEPasskeyWrapView(DualAuthJsonView):
         )
         logger.info("E2EE passkey wrap %s for profile %s (credential %s)", "created" if created else "replaced", profile.pk, credential.pk)
         return Response({"ok": True}, status=201 if created else 200)
+
+
+class E2EEPasskeyWrapItemView(_E2EEPasskeyWrapBase):
+    """DELETE one passkey's wrap, addressed by credential id.
+
+    The passkey itself is untouched; deleting the passkey cascades to its wrap
+    separately. POST belongs to :class:`E2EEPasskeyWrapView`, the collection
+    route, so a POST here is a 405 from DRF rather than a hand-written one.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "DELETE": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
 
     @extend_schema(
         description=(

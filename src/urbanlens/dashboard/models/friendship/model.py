@@ -139,10 +139,50 @@ class Friendship(DashboardModel):
                 logger.warning("Cannot request another friendship")
                 return None
 
+            # Re-orient the row before reviving it. Without this it keeps the
+            # ends it had when it was declined or removed, so B re-adding A is
+            # recorded as though *A* had asked - and the person it was actually
+            # sent to cannot accept it, because from their side there is no
+            # incoming request. Both people see a request neither can act on.
+            # See "re-adding a removed friend" in docs/PROBLEMS.md.
+            if friendship.from_profile_id != from_profile.pk:
+                # `unique_together` is (from_profile, to_profile), which permits
+                # A->B and B->A to both exist (see "reciprocal Friendship rows"
+                # in docs/PROBLEMS.md), so swapping this row's ends could
+                # collide with a real one. Prefer a row already pointing the
+                # right way when there is one.
+                forward = cls.objects.filter(from_profile=from_profile, to_profile=to_profile).first()
+                if forward is None:
+                    friendship.from_profile = from_profile
+                    friendship.to_profile = to_profile
+                    # These two are *positional* - which column belongs to a
+                    # viewer depends on which end of the row they are - so they
+                    # have to travel with the ends, or A's mute silently
+                    # becomes B's.
+                    friendship.muted_by_from_profile, friendship.muted_by_to_profile = (
+                        friendship.muted_by_to_profile,
+                        friendship.muted_by_from_profile,
+                    )
+                elif FriendshipStatus.can_request(forward.status):
+                    friendship = forward
+                else:
+                    logger.warning("Cannot request another friendship: reciprocal row is %s", forward.status)
+                    return None
+
             # Update the status to requested
             friendship.status = FriendshipStatus.REQUESTED
             friendship.request_message = message
-            friendship.save(update_fields=["status", "request_message", "updated"])
+            friendship.save(
+                update_fields=[
+                    "from_profile",
+                    "to_profile",
+                    "muted_by_from_profile",
+                    "muted_by_to_profile",
+                    "status",
+                    "request_message",
+                    "updated",
+                ]
+            )
         else:
             friendship = cls.objects.create(
                 from_profile=from_profile,
