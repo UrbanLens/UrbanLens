@@ -240,6 +240,8 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
         """
         from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanMarkerKind, FloorplanWallKind
         from urbanlens.dashboard.services.floorplans.features import feature_collection
+        from urbanlens.dashboard.services.floorplans.resolution import resolve_floorplan_row
+        from urbanlens.dashboard.services.wiki.wiki_access import place_visible_to
 
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
         place = _building_place(pin)
@@ -248,9 +250,17 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
 
         version_uuid = request.GET.get("version") or ""
         if version_uuid:
-            floorplan = Floorplan.objects.filter(place=place, profile=pin.profile, uuid=version_uuid).first()
+            # A specific version's uuid may name the caller's own plan or a
+            # published one - same fallback as the unversioned lookup below,
+            # just pinned to one exact row instead of "current".
+            floorplan = Floorplan.objects.filter(place=place, profile=pin.profile, uuid=version_uuid, wiki__isnull=True).first()
+            if floorplan is None and place_visible_to(place, pin.profile):
+                floorplan = Floorplan.objects.filter(place=place, uuid=version_uuid, wiki__isnull=False).first()
         else:
-            floorplan = Floorplan.objects.at(place, _parse_date(request.GET.get("date")), profile=pin.profile)
+            # Local-then-community, mirroring resolve_document() - a
+            # published plan must be reachable here too, not just through the
+            # document endpoint. See services.floorplans.resolution.
+            floorplan = resolve_floorplan_row(place, profile=pin.profile, on_date=_parse_date(request.GET.get("date")))
         if floorplan is None:
             return HttpResponse(status=204)
 

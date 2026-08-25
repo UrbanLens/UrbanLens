@@ -37,7 +37,7 @@ _CACHE_TIMEOUT = 60 * 60 * 24  # 1 day - the last-updated fingerprints in the ke
 _CACHE_KEY_TEMPLATE = "saved_filter_pins:{profile_id}:{filter_uuid}:{filter_updated}:{fingerprint}"
 
 
-def _pins_fingerprint(profile: Profile) -> str:
+def pins_fingerprint(profile: Profile) -> str:
     """Fingerprint of the profile's root pins for cache-key self-invalidation.
 
     ``Max(updated)`` alone misses deletions - removing any pin other than the
@@ -45,6 +45,13 @@ def _pins_fingerprint(profile: Profile) -> str:
     uuids would keep matching from a warm cache entry until its TTL. The pin
     count (same single aggregate query) catches that case; together they
     change on every create, edit, and delete.
+
+    Public (not module-private) so a caller resolving several filters for the
+    same profile in one request - ``_apply_toolbar_filters``,
+    ``SavedFilterMatchCountsView`` - can compute this DB aggregate once and
+    pass it to every :func:`get_or_compute_matching_uuids` call instead of
+    each call re-running it: with N saved filters that was N redundant,
+    identical queries on every toolbar toggle.
     """
     from urbanlens.dashboard.models.pin import Pin
 
@@ -54,7 +61,7 @@ def _pins_fingerprint(profile: Profile) -> str:
     return f"{stamp}:{result['total']}"
 
 
-def get_or_compute_matching_uuids(profile: Profile, saved_filter: SavedFilter) -> list[str]:
+def get_or_compute_matching_uuids(profile: Profile, saved_filter: SavedFilter, *, fingerprint: str | None = None) -> list[str]:
     """Return the profile's pin uuids matching ``saved_filter``, using a warm cache when possible.
 
     Args:
@@ -62,6 +69,9 @@ def get_or_compute_matching_uuids(profile: Profile, saved_filter: SavedFilter) -
             every query here is scoped to this profile, so this can never
             return or be primed with another user's pin data.
         saved_filter: A ``SavedFilter`` already verified to belong to ``profile``.
+        fingerprint: A pre-computed :func:`pins_fingerprint` result, for a
+            caller resolving multiple filters for the same profile in one
+            request. Computed here when omitted, for single-filter callers.
 
     Returns:
         List of pin uuid strings matching the filter's criteria.
@@ -73,7 +83,7 @@ def get_or_compute_matching_uuids(profile: Profile, saved_filter: SavedFilter) -
         profile_id=profile.pk,
         filter_uuid=saved_filter.uuid,
         filter_updated=saved_filter.updated.isoformat(),
-        fingerprint=_pins_fingerprint(profile),
+        fingerprint=fingerprint if fingerprint is not None else pins_fingerprint(profile),
     )
     cached = cache.get(key)
     if cached is not None:

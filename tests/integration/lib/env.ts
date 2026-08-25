@@ -13,6 +13,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { isProductionHost } from "./production-guard.js";
+
 export const INTEGRATION_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
@@ -133,7 +135,7 @@ const baseUrl = normaliseBaseUrl(readString("UL_E2E_BASE_URL"));
 const productionHosts = readList("UL_E2E_PRODUCTION_HOSTS", DEFAULT_PRODUCTION_HOSTS);
 const allowProduction = readBoolean("UL_E2E_ALLOW_PRODUCTION", false);
 
-if (productionHosts.includes(baseUrl.hostname.toLowerCase()) && !allowProduction) {
+if (isProductionHost(baseUrl.hostname, productionHosts) && !allowProduction) {
     throw new ConfigurationError(
         `refusing to run against "${baseUrl.hostname}", which is listed in UL_E2E_PRODUCTION_HOSTS. ` +
             "This suite writes and deletes data as a real account. Point UL_E2E_BASE_URL at staging.",

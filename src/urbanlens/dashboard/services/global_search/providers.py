@@ -366,10 +366,15 @@ class PhotoSearchProvider(SearchProvider):
 
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.images import Image
+        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
 
+        # visible_wiki_location_ids is a superset of "locations with my own pin" (it
+        # includes those plus domain-earned wiki locations - e.g. a boundary-mate
+        # pin on a different Location row of the same place), so this only widens
+        # what was previously an exact-Location-only match.
         queryset = (
             Image.objects.filter(
-                Q(profile=profile) | Q(pin__profile=profile) | Q(location__pins__profile=profile),
+                Q(profile=profile) | Q(pin__profile=profile) | Q(location_id__in=visible_wiki_location_ids(profile)),
             )
             .select_related("pin", "location__wiki", "profile")
             .exclude(image="")
@@ -440,14 +445,19 @@ class WikiSearchProvider(SearchProvider):
 
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.wiki import Wiki
+        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
 
         if not profile.community_enabled:
             return []
         # officially_created=True: an unofficial background draft (see
         # Wiki.officially_created) must stay invisible in search just like
         # everywhere else, until a user actually creates it.
+        # location_id__in=visible_wiki_location_ids(profile): the same domain-aware
+        # rule wiki_access.location_visible_to enforces for the wiki page itself -
+        # an exact-Location pin match alone missed a boundary-mate pin on a
+        # different Location row of the same place.
         queryset = Wiki.objects.filter(
-            Q(location__pins__profile=profile) | Q(created_by=profile),
+            Q(location_id__in=visible_wiki_location_ids(profile)) | Q(created_by=profile),
             officially_created=True,
         ).select_related("location")
         if parsed.place:
@@ -487,13 +497,16 @@ class ArticleSearchProvider(SearchProvider):
 
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.article import Article
+        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
 
         access = Q(pin__profile=profile)
         if profile.community_enabled:
             # officially_created=True: a draft's seeded Wikipedia article (see
             # models.cache.signals) must not leak into search before the wiki
-            # itself is user-visible.
-            access |= Q(wiki__officially_created=True) & (Q(wiki__location__pins__profile=profile) | Q(wiki__created_by=profile))
+            # itself is user-visible. wiki__location_id__in=visible_wiki_location_ids:
+            # same domain-aware access rule as the wiki page itself, not just an
+            # exact-Location pin match.
+            access |= Q(wiki__officially_created=True) & (Q(wiki__location_id__in=visible_wiki_location_ids(profile)) | Q(wiki__created_by=profile))
         queryset = Article.objects.filter(access).exclude(content="").select_related("pin__location__wiki", "wiki__location", "last_edited_by__user")
         if parsed.place:
             queryset = queryset.filter(place_filter("pin__location", parsed.place) | place_filter("wiki__location", parsed.place))
@@ -828,14 +841,17 @@ class CommentSearchProvider(SearchProvider):
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.comments import Comment
         from urbanlens.dashboard.models.trips.model import TripComment
+        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
 
         if not parsed.terms:
             return []
         results: list[SearchResult] = []
 
+        # wiki__location_id__in=visible_wiki_location_ids: same domain-aware access
+        # rule as the wiki page itself, not just an exact-Location pin match.
         comment_qs = (
             Comment.objects.filter(
-                Q(profile=profile) | Q(pin__profile=profile) | Q(wiki__location__pins__profile=profile),
+                Q(profile=profile) | Q(pin__profile=profile) | Q(wiki__location_id__in=visible_wiki_location_ids(profile)),
             )
             .filter(term_filter(parsed.terms, ["text"]))
             .filter(date_range_filter("created", parsed))

@@ -87,8 +87,13 @@ def build_trip_map_points(trip: Trip, viewer: Profile, *, include_past: bool = F
         if child_trip is not None and child_trip.id not in seen_child_acts:
             seen_child_acts.add(child_trip.id)
             child_acts = list(activity_queryset(child_trip))
+            # Same viewer-aware gate the parent trip's own activities get above (line
+            # ~57) - checking only location_hidden left a child activity hidden solely by
+            # its adder's trip_pin_location_visibility setting fully visible as a ghost
+            # marker, coordinates and real label included.
+            child_viewer_hidden = viewer_hidden_activity_ids(child_acts, viewer)
             for child_act in child_acts:
-                if child_act.location_hidden:
+                if child_act.id in child_viewer_hidden:
                     continue
                 child_coords = activity_coords(child_act)
                 if not child_coords:

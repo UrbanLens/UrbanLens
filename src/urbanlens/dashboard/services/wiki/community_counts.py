@@ -91,7 +91,11 @@ def wiki_community_summary(wiki: Wiki, location: Location) -> dict[str, Any]:
 
     Args:
         wiki: The wiki being summarized (its pk keys the count's fuzz cache).
-        location: The wiki's Location, which owns the pins being counted.
+        location: The Location the caller resolved the wiki through - may be
+            a different row than ``wiki.location`` when several Locations
+            share the wiki's Place (``resolve_visible_wiki`` allows this so
+            "everyone who pinned one property reaches the same page from
+            their own slug").
 
     Returns:
         Dict with ``pin_count_low`` (bool), ``pin_count_approx`` (int, or None
@@ -99,7 +103,19 @@ def wiki_community_summary(wiki: Wiki, location: Location) -> dict[str, Any]:
         and ``first_pinned_precision`` (always ``"month"``, so a client never
         renders the value as an exact day).
     """
-    root_pins = location.pins.filter(parent_pin__isnull=True)
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    # Place-aware: count root pins across every Location sharing this wiki's
+    # Place, not just the one Location the caller happened to resolve it
+    # through - otherwise "N users have this pinned" undercounts (and varies
+    # by which of the place's several pinned coordinates the URL names)
+    # whenever more than one Location row exists under the Place. Falls back
+    # to the single Location when it has no Place (see
+    # services.pins.common_pins.pinned_place_keys, which this mirrors).
+    if wiki.place_id is not None:
+        root_pins = Pin.objects.filter(location__place_id=wiki.place_id, parent_pin__isnull=True)
+    else:
+        root_pins = location.pins.filter(parent_pin__isnull=True)
     exact_count = root_pins.values("profile").distinct().count()
     approximate = approximate_pin_count(wiki.pk, exact_count)
     is_low = bool(approximate["is_low"])

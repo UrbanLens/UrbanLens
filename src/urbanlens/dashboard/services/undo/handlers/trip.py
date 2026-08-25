@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
 
@@ -65,6 +66,29 @@ class TripUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Trip]:
+        """Recreate trips and their membership rosters.
+
+        Raises:
+            UndoExpiredError: If the creator, or any roster member's profile,
+                was independently deleted during the retention window, since
+                recreating the row would otherwise fail with an uncaught
+                ``IntegrityError`` - both FKs are non-nullable-in-practice
+                here (``creator_id`` is only ``SET_NULL`` for a *live* trip
+                whose creator later deletes their account, never written as
+                ``None`` by this handler) or genuinely non-nullable
+                (``TripMembership.profile``).
+        """
+        # Deferred import: services.undo.service imports services.undo.handlers
+        # (which imports this module) before UndoExpiredError is defined there.
+        from urbanlens.dashboard.services.undo.service import UndoExpiredError
+
+        for entry in payload:
+            if not Profile.objects.filter(pk=entry["creator_id"]).exists():
+                raise UndoExpiredError("This trip's creator no longer exists.")
+            member_ids = [membership_entry["profile_id"] for membership_entry in entry["memberships"]]
+            if member_ids and Profile.objects.filter(pk__in=member_ids).count() != len(set(member_ids)):
+                raise UndoExpiredError("One of this trip's members no longer exists.")
+
         restored: list[Trip] = []
         for entry in payload:
             trip = Trip.objects.create(creator_id=entry["creator_id"], **entry["fields"])

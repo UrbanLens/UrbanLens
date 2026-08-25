@@ -31,10 +31,7 @@
         <div class="pin-select-map-wrap">
             <div id="pin-suggestions-map" class="pin-select-map" data-map-data-url="{% url 'memories.locations.map_data' %}"></div>
             {% map_layers_panel "street,terrain,satellite,dark" panel_id="pin-suggestions-map-layers" %}
-            <button type="button" class="pin-select-toggle" id="pin-suggestions-select-toggle" title="Drag-select multiple pins">
-                <i class="material-symbols-outlined">select_all</i>
-                <span>Select multiple</span>
-            </button>
+            {% map_toolbar "select_pin_suggestions" panel_id="pin-suggestions-map-buttons" %}
         </div>
 
         <div class="pin-suggestions-actions">

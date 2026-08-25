@@ -19,6 +19,7 @@ from django.db.models import (
     IntegerField,
     JSONField,
     OneToOneField,
+    Q,
     SlugField,
     TextChoices,
     TextField,
@@ -1008,24 +1009,22 @@ class Profile(abstract.PublicDashboardModel):
 
     @staticmethod
     def _have_common_pin(subject: Profile, other: Profile) -> bool:
-        """Return True when both profiles have pinned at least one shared Location.
+        """Return True when both profiles have pinned at least one shared place.
 
         Args:
             subject: One profile of the pair.
             other: The other profile.
 
         Returns:
-            True when the profiles' pinned location sets intersect.
+            True when the profiles' pinned places intersect - keyed by Place
+            where a pin's location has one, falling back to the exact
+            Location otherwise (see
+            ``services.pins.common_pins.pinned_place_keys``), so two pins
+            fifty metres apart on the same parcel still count as shared.
         """
-        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.services.pins.common_pins import pinned_place_keys
 
-        my_locs = set(
-            Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True),
-        )
-        their_locs = set(
-            Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True),
-        )
-        return bool(my_locs & their_locs)
+        return bool(pinned_place_keys(subject) & pinned_place_keys(other))
 
     @staticmethod
     def _have_common_friend(subject: Profile, other: Profile) -> bool:
@@ -1283,10 +1282,19 @@ class Profile(abstract.PublicDashboardModel):
         wants_trip = needs & {VisibilityChoice.COMMON_TRIP, VisibilityChoice.ANYTHING_IN_COMMON}
 
         if wants_pin:
-            viewer_locations = set(Pin.objects.filter(profile=viewer, location__isnull=False).values_list("location_id", flat=True))
-            if viewer_locations:
+            # Place-aware, not a raw Location match - two pins on the same
+            # parcel fifty metres apart must count as shared (see
+            # services.pins.common_pins.pinned_place_keys, which this mirrors
+            # in batch form rather than per-pair).
+            viewer_place_ids: set[int] = set()
+            viewer_location_ids: set[int] = set()
+            for location_id, place_id in Pin.objects.filter(profile=viewer, location__isnull=False).values_list("location_id", "location__place_id"):
+                (viewer_place_ids if place_id is not None else viewer_location_ids).add(place_id if place_id is not None else location_id)
+            if viewer_place_ids or viewer_location_ids:
                 common_pin = set(
-                    Pin.objects.filter(profile__in=pending_pks, location_id__in=viewer_locations).values_list("profile_id", flat=True),
+                    Pin.objects.filter(profile__in=pending_pks)
+                    .filter(Q(location__place_id__in=viewer_place_ids) | Q(location_id__in=viewer_location_ids))
+                    .values_list("profile_id", flat=True),
                 )
         if wants_friend:
             viewer_friends = set(
@@ -1402,9 +1410,18 @@ class Profile(abstract.PublicDashboardModel):
             wants_trip = undecided and visibility in (VisibilityChoice.COMMON_TRIP, VisibilityChoice.ANYTHING_IN_COMMON)
 
             if wants_pin:
-                subject_locations = set(Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True))
-                if subject_locations:
-                    visible |= set(Pin.objects.filter(profile_id__in=undecided, location_id__in=subject_locations).values_list("profile_id", flat=True))
+                # Place-aware, not a raw Location match - see the matching
+                # comment in visible_profile_pks above.
+                subject_place_ids: set[int] = set()
+                subject_location_ids: set[int] = set()
+                for location_id, place_id in Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", "location__place_id"):
+                    (subject_place_ids if place_id is not None else subject_location_ids).add(place_id if place_id is not None else location_id)
+                if subject_place_ids or subject_location_ids:
+                    visible |= set(
+                        Pin.objects.filter(profile_id__in=undecided)
+                        .filter(Q(location__place_id__in=subject_place_ids) | Q(location_id__in=subject_location_ids))
+                        .values_list("profile_id", flat=True),
+                    )
             if wants_friend:
                 subject_friends = set(
                     Friendship.objects.filter(from_profile=subject, status=accepted).values_list("to_profile_id", flat=True),

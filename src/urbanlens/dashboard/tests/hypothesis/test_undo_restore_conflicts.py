@@ -21,7 +21,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.models.trips.model import Trip
+from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo
 
@@ -122,3 +122,51 @@ class TripUndoConflictTests(TestCase):
             return
         self.assertEqual(len(restored), 1)
         self.assertEqual(Trip.objects.filter(name="Summer trip").count(), 2)
+
+    def test_undo_is_refused_when_the_creator_no_longer_exists(self):
+        """The creator can be independently deleted (account deletion) during the
+        retention window - restoring must refuse cleanly, not raise a bare
+        IntegrityError from the non-nullable-in-practice FK write."""
+        creator = baker.make("auth.User").profile
+        trip = Trip.objects.create(name="Summer trip", creator=creator)
+        undo_action = stash_for_undo("trip", [trip], self.profile)
+        trip.delete()
+        creator.delete()
+
+        with self.assertRaises(UndoExpiredError):
+            restore_undo_action(undo_action)
+
+        self.assertEqual(Trip.objects.filter(name="Summer trip").count(), 0)
+
+    def test_undo_is_refused_when_a_member_no_longer_exists(self):
+        """Same failure mode, one level down the roster: a fellow member's
+        account is deleted, not the creator's."""
+        member = baker.make("auth.User").profile
+        trip = Trip.objects.create(name="Group trip", creator=self.profile)
+        TripMembership.objects.create(trip=trip, profile=member, rsvp=TripMembership.RSVP_YES)
+        undo_action = stash_for_undo("trip", [trip], self.profile)
+        trip.delete()
+        member.delete()
+
+        with self.assertRaises(UndoExpiredError):
+            restore_undo_action(undo_action)
+
+        self.assertEqual(Trip.objects.filter(name="Group trip").count(), 0)
+
+    def test_an_ordinary_undo_restores_the_full_membership_roster(self):
+        """Regression guard alongside the two refusal tests above: an intact
+        roster (nobody deleted) must still come back completely."""
+        member = baker.make("auth.User").profile
+        trip = Trip.objects.create(name="Group trip", creator=self.profile)
+        TripMembership.objects.create(trip=trip, profile=member, rsvp=TripMembership.RSVP_YES, is_organizer=True)
+        undo_action = stash_for_undo("trip", [trip], self.profile)
+        trip.delete()
+
+        restored = restore_undo_action(undo_action)
+
+        self.assertEqual(len(restored), 1)
+        memberships = list(restored[0].memberships.all())
+        self.assertEqual(len(memberships), 1)
+        self.assertEqual(memberships[0].profile_id, member.pk)
+        self.assertEqual(memberships[0].rsvp, TripMembership.RSVP_YES)
+        self.assertTrue(memberships[0].is_organizer)

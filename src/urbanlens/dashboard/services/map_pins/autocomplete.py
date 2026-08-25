@@ -68,6 +68,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
 
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
 
     results: list[AutocompleteResult] = []
     q = query.strip()
@@ -129,13 +130,18 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         )
 
     # -- Wiki search (community pages) -------------------------------------------
-    # Only show wikis whose place the requesting user has pinned so results stay relevant.
+    # Only show wikis this profile has actually earned access to - the same
+    # domain-aware rule wiki_access.location_visible_to enforces for the wiki page
+    # itself, not just an exact-Location pin match (a boundary-mate pin on a
+    # different Location row of the same place earns access too). Also excludes
+    # unofficial background drafts, which must stay invisible until a user
+    # actually creates the wiki (see Wiki.officially_created).
     seen_wiki_ids: set[int] = set()
     wiki_qs = (
         Wiki.objects.filter(
             Q(name__icontains=q) | Q(aliases__name__icontains=q) | Q(description__icontains=q),
         )
-        .filter(location__pins__profile=profile)
+        .filter(location_id__in=visible_wiki_location_ids(profile), officially_created=True)
         .select_related("location")
         .distinct()[:5]
     )

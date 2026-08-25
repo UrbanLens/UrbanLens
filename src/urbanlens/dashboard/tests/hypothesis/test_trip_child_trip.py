@@ -26,6 +26,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.profile.model import VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 
 
@@ -138,3 +139,33 @@ class ChildTripGhostMarkerVisibilityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         labels = [p["label"] for p in response.json()["points"]]
         self.assertFalse(any("Secret Child Stop" in label for label in labels))
+
+    def test_child_activity_hidden_only_by_adders_privacy_setting_is_also_excluded(self) -> None:
+        """Ghost markers must respect trip_pin_location_visibility, not just location_hidden.
+
+        Regression for build_trip_map_points checking only location_hidden for child-trip
+        activities - the same viewer-aware gate the parent trip's own activities already get
+        (via viewer_hidden_activity_ids) was missing here, so an activity the adder never
+        flagged location_hidden, but whose visibility setting excludes this viewer, still
+        rendered a real marker with real coordinates. See docs/GOALS_CODE_AUDIT.md
+        ("Trip activities sourcing").
+        """
+        other_user = baker.make("auth.User")
+        other_profile = other_user.profile
+        other_profile.trip_pin_location_visibility = VisibilityChoice.NO_ONE
+        other_profile.save(update_fields=["trip_pin_location_visibility"])
+        TripMembership.objects.create(trip=self.child_trip, profile=other_profile)
+        location = baker.make(Location, official_name="Privacy-Restricted Stop", latitude=41.5, longitude=-75.5)
+        TripActivity.objects.create(
+            trip=self.child_trip,
+            added_by=other_profile,
+            title="Privacy-Restricted Stop",
+            location=location,
+            location_hidden=False,
+        )
+
+        response = self.client.get(reverse("trips.map_data", args=[self.trip.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        labels = [p["label"] for p in response.json()["points"]]
+        self.assertFalse(any("Privacy-Restricted Stop" in label for label in labels))

@@ -109,6 +109,17 @@ jobs:
       - name: Migration graph resolves in the committed tree
         run: python3 bin/check_migration_graph.py
 
+      # A pre-commit-only check is defeated by --no-verify, no hooks installed,
+      # or a hookless path like the GitHub web UI - exactly the "worked around,
+      # not fixed" friction docs/GOALS.md calls out. imports-tracked/doc-line-refs/
+      # migration-graph above already made this move; these two were the last
+      # structural pre-commit hooks still missing a CI backstop.
+      - name: No swallowed-failure result gets cached as a success
+        run: python3 bin/check_outage_not_cached.py
+
+      - name: Every notification write honours the mute preference
+        run: python3 bin/check_notification_choke_point.py
+
       # Nothing else checks this: a model change without its migration only
       # surfaces if some test happens to touch the field, and otherwise waits
       # until the column is needed in production.

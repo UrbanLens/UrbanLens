@@ -556,6 +556,21 @@ register_map_tool(
 )
 register_map_tool(
     MapToolSpec(
+        key="select_pin_suggestions",
+        icon="check_box",
+        aria_label="Select pins",
+        tooltip="Select multiple pins",
+        tooltip_pos="below",
+        # Sibling of select_unlogged_visits above - same shared PinSelectMap
+        # component, memories/locations.html's own button id. Previously a
+        # bespoke `.pin-select-toggle` pill instead of this shared component;
+        # see test_memories_unlogged.py's fix for the identical defect on the
+        # visits.html sibling page.
+        button_id="pin-suggestions-select-toggle",
+    )
+)
+register_map_tool(
+    MapToolSpec(
         key="screenshot",
         icon="photo_camera",
         aria_label="Take a screenshot",

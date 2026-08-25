@@ -129,6 +129,15 @@ services:
       retries: 3
       start_period: 30s
 
+    # This is the service that actually logs client IPs (request logging) - the
+    # backend-only services below already had this; app didn't, so its stdout log
+    # grew unbounded on any deployment relying on Docker's default driver.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
   # Dedicated ASGI (Daphne) process for WebSocket traffic only (safety check-in
   # chat, etc). `app` above keeps serving 100% of normal HTTP via gunicorn+gevent
   # unchanged - nginx routes just /ws/ to this service (see config/nginx/django.conf).
@@ -189,6 +198,16 @@ services:
       retries: 3
       start_period: 25s
 
+    # Bounds this service's own stdout/stderr (startup, errors) - the per-request
+    # access log is deliberately routed to the logs volume above instead, and
+    # still needs its own rotation (tracked separately, see docs/GOALS_CODE_AUDIT.md
+    # "Backups and logs" - this block does not cover that file).
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
   nginx:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_nginx
     image: nginxinc/nginx-unprivileged:alpine
@@ -219,6 +238,15 @@ services:
       timeout: 15s
       retries: 3
       start_period: 20s
+
+    # nginx's own access_log is deliberately routed to /tmp (see nginx.conf) rather
+    # than stdout, so this bounds its error log/startup output, not request logs -
+    # the /tmp file still needs its own rotation, tracked separately.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
 
   db:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_db

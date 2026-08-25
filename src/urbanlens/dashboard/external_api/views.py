@@ -186,7 +186,7 @@ from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_lab
 from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label, label_conflict_message
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 from urbanlens.dashboard.services.map_pins.autocomplete import resolve_google_place, search_google_places, search_local
-from urbanlens.dashboard.services.media.images import delete_stored_file
+from urbanlens.dashboard.services.media.images import delete_stored_file, detach_image_from_pin, detach_image_from_wiki
 from urbanlens.dashboard.services.media.media_labels import MediaLabelError, set_media_labels
 from urbanlens.dashboard.services.media.media_relevance import toggle_media_vote
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
@@ -1306,8 +1306,17 @@ class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
             return Response({"error": "No such photo."}, status=404)
         # Matches controllers.photos.PhotoActionView.delete_photo: drop the
         # stored file before the row, so deleting the row can't orphan bytes.
-        delete_stored_file(image)
-        image.delete()
+        # A row also linked to a wiki (wiki_creation._seed_photos and
+        # PinGalleryBulkView's "send to wiki" repoint rather than copy) must be
+        # unlinked from the pin, not destroyed - see detach_image_from_pin. A
+        # wiki-only row with no pin still gets a full delete, same as before.
+        if image.pin_id is not None:
+            detach_image_from_pin(image)
+        elif image.wiki_id is not None:
+            detach_image_from_wiki(image)
+        else:
+            delete_stored_file(image)
+            image.delete()
         return Response(status=204)
 
 

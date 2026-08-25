@@ -15,6 +15,13 @@ people's data with nothing failing.
 These tests exist to make that change deliberate. If the divergence is later
 judged wrong, they should be updated in the same commit that loosens it, with the
 product decision stated - not deleted to make a refactor pass.
+
+"This activity's location" (divergence 2) means the real-world *Place*, not the
+exact Location row - a pin on a different Location sharing the same Place still
+counts, matching every other "same place" comparison in the app (see
+``services.pins.common_pins.pinned_place_keys``). That is a fix, not a
+loosening of the divergence: an unrelated Place is still hidden exactly as
+before.
 """
 
 from __future__ import annotations
@@ -25,6 +32,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
@@ -93,6 +101,39 @@ class TripVisibilityIsStricterTests(TestCase):
         baker.make(Pin, profile=self.viewer, location=self.location)
 
         self.assertFalse(self._hidden())
+
+    def test_a_pin_on_a_different_location_sharing_this_ones_place_also_reveals_it(self) -> None:
+        """"This location" means the real-world place, not the exact coordinate
+        row - a pin fifty metres away on the same parcel must count, the same
+        fix already applied to services.pins.common_pins and
+        Profile._have_common_pin. This is *not* a re-widening of divergence 2
+        above: `elsewhere` there shares no Place with self.location, so it is
+        still correctly hidden - only a genuinely shared real-world place
+        narrows the gap. See docs/GOALS_CODE_AUDIT.md
+        ("Cross-pin aggregate comparison level")."""
+        self._set_visibility(VisibilityChoice.COMMON_PIN)
+        place = baker.make(Place, kind=PlaceKind.PARCEL)
+        self.location.place = place
+        self.location.save(update_fields=["place"])
+        boundary_mate = baker.make(Location, place=place)
+        self.assertNotEqual(boundary_mate.pk, self.location.pk)
+        baker.make(Pin, profile=self.viewer, location=boundary_mate)
+
+        self.assertFalse(self._hidden())
+
+    def test_elsewhere_still_means_a_different_place_not_just_a_different_row(self) -> None:
+        """Regression guard for divergence 2 itself: giving self.location and
+        `elsewhere` unrelated Places (rather than leaving place unset, which
+        the other divergence-2 test relies on implicitly) must still hide it."""
+        self._set_visibility(VisibilityChoice.COMMON_PIN)
+        self.location.place = baker.make(Place, kind=PlaceKind.PARCEL)
+        self.location.save(update_fields=["place"])
+        elsewhere = baker.make(Location, place=baker.make(Place, kind=PlaceKind.PARCEL))
+        baker.make(Pin, profile=self.adder, location=elsewhere)
+        baker.make(Pin, profile=self.viewer, location=elsewhere)
+
+        self.assertTrue(self._canonical(), "precondition: the shared evaluator accepts any common pin")
+        self.assertTrue(self._hidden(), "a pin at an unrelated place must not reveal this one")
 
     def test_a_deleted_adder_is_treated_as_most_restrictive(self) -> None:
         self._set_visibility(VisibilityChoice.ANYONE)

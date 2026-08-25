@@ -31,8 +31,9 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   isn't the neutral default. See `docs/NOTES.md`.
 - **"Organize this property?"** — one suggestion, shown once the first time you open a pin's detail
   page, covering both halves of the same question: create a sub pin per building here (named and
-  numbered from REData's county GIS + NY SHPO CRIS, or OpenStreetMap, and mirrored as child wikis
-  when the place already has a community wiki), and nest any of your existing *top-level* pins that
+  numbered from REData's county GIS + NY SHPO CRIS, or OpenStreetMap, and mirrored into the place's
+  community wiki - seeding an invisible draft wiki if none exists yet, so the buildings are never
+  silently dropped), and nest any of your existing *top-level* pins that
   stand inside the property boundary — useful for maps built before child pins existed. Nesting only
   re-parents; nothing is merged, renamed, or deleted. Three answers: yes, no (permanent for that
   pin, even if new buildings turn up later), or don't show again (Settings → Map → Pin Organization
@@ -380,8 +381,9 @@ All external integrations are cached (DB-backed, per-Location) and rate-limited 
 usage tracked in `ApiCallLog`/`ApiRateLimit` and toggled at `/site-admin/api-limits/`. A per-call
 cost estimate (`ApiCallLog.cost_estimate`, from `ServiceDefaults.cost_per_call`) is logged for
 services with a known published rate - `null` means "not priced," not "confirmed free," since
-most services don't have a rate configured yet. Aggregated into a 30-day cost breakdown on the
-site-admin API usage report and the public `/costs/` transparency page.
+most services don't have a rate configured yet. Aggregated into a per-service 30-day cost
+breakdown on the site-admin API usage report; the public `/costs/` transparency page (below) shows
+a coarser blended figure instead, not a per-service breakdown.
 
 Beyond on-demand fetches, an hourly **background enrichment** task drips high-value lookups
 (official names, aliases, street addresses, building boundaries) into whatever rate-limit budget
@@ -495,24 +497,31 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 
 ## Labels (Tags, Categories, Statuses, People)
 
-A single unified `Label` model (with a `kind`) backs four distinct UI concepts:
+A single unified `Label` model (with a `kind`) backs five distinct UI concepts:
 
 - **Tags** — freeform labels on pins/wikis
 - **Categories** — hierarchical classification of pins/wikis
 - **Statuses** — workflow state labels
 - **People labels** — private labels a user applies to other profiles
+- **Media labels** — labels on photos/videos/documents, for site search (own "Organize" tab,
+  `LabelImageMembershipView`)
 
-Shared features across all four: create/edit/delete, merge, hierarchical parent/child
-relationships, bulk edit and bulk convert between kinds, per-user color/icon customization
-(`LabelCustomization`) on top of shared global labels, drag-to-reorder priority, and a unified
-"Organize" management page.
+Shared features across all five: create/edit/delete, hierarchical parent/child relationships,
+generic bulk edit, per-user color/icon customization (`LabelCustomization`, genuinely per-profile),
+and a unified "Organize" management page. Two features are deliberately narrower than that: **bulk
+convert between kinds** and **drag-to-reorder priority** are restricted to Tags/Categories/Statuses
+- People and Media labels are server-side blocked from both (`_ORGANIZE_KINDS` in
+`controllers/labels.py`; converting a People label via a crafted request is explicitly guarded
+against, not just hidden in the UI). Multi-item **merge** does work for all five kinds; the
+single-item merge UI is just hidden for People/Media.
 
-Every surface where a user picks one or more labels (map filter sidebar, saved filters, bulk pin
-edit, the quick-add-pin dialog, the label merge target picker, add-labels-to-pin/location/image,
-organize page parent/child picker) shares the same search + kind-tab (Tags/Categories/Statuses/
-All) filtering UX, backed by the `createFilterPicker`/`createChipPicker` factories in
-`ts/shared/label-picker.ts` (or the equivalent bespoke picker where one predates those factories),
-plus the `@mixin tad-tabs` / `@mixin tag-dialog-list` Sass mixins for consistent styling.
+Not every label-picking surface shares one implementation. The map filter sidebar, saved-filter
+dialog, and bulk-edit dialog's label sections share the `createFilterPicker`/`createChipPicker`
+factories in `ts/shared/label-picker.ts` and its search + kind-tab filtering UX. The quick-add-pin
+dialog, the label merge target picker, add-labels-to-pin/location/image, and the organize page's
+parent/child picker are separate, bespoke implementations that predate those factories - one of
+them (the organize page's picker) doesn't even share the `@mixin tad-tabs` styling, by its own
+code comment ("underline style, not pill buttons").
 
 ## Notifications
 
@@ -551,11 +560,17 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
   with "Don't show again" opt-out per tooltip
 - Login lockout after repeated failed attempts
 - **External API keys** (Settings → Security → API keys): create/revoke/view API keys that let a
-  third-party application act on the user's behalf with an extremely limited, scoped grant -
-  currently reading only the owner's uuid and creating pins through the exact same
-  `services.pins.pin_creation.create_pin_for_profile` path the map UI uses. Keys are hashed
-  (never stored in plaintext, like backup codes) and revocation takes effect immediately.
-  See `dashboard/external_api/` and the REST API section above.
+  third-party application act on the user's behalf with a scoped grant, drawn from a ~30-value
+  `ApiKeyScope` vocabulary (pins, photos, wikis, trips, messaging, friends, notifications, safety
+  check-ins, lists, labels, custom fields, undo, panels, assistant, games, search, device scans,
+  and more) covering 100+ endpoints under `dashboard/external_api/` - grown well past this
+  feature's original "read uuid, create pins" scope as mobile-app parity work landed. A freshly
+  issued personal-access-token key's default grant (`PROFILE_READ`, `PINS_READ`, `PINS_WRITE`,
+  `PUSH_MANAGE`) already covers reading/patching/deleting the owner's own pins, not just creating
+  one. OAuth2 clients (PKCE) can additionally be user-consented into scopes a bare PAT key cannot
+  hold (e.g. `messages:*`) - see `OAUTH2_ONLY_SCOPES`. Keys are hashed (never stored in plaintext,
+  like backup codes) and revocation takes effect immediately. See `dashboard/external_api/` and
+  the REST API section above.
 
 ## Undo / Data Safety
 
@@ -630,12 +645,18 @@ admin grant. Per role, a site admin can independently enable any combination of:
 - **Fixed price**: a flat $/month.
 - **Pay-what-you-want (PWYW)**: the user picks any amount at or above Stripe's own $0.50 minimum;
   any nonzero pledge holds the role (e.g. a generic "support the site" role).
-- **PWYW with a dynamic threshold**: same as above, but the role's features are only granted in
-  billing cycles where the pledge meets or exceeds the site's *current* cost-per-user
+- **PWYW with a dynamic threshold**: same as above, but the role's features are gated by
+  `threshold_met`, a stored flag comparing the pledge against the site's *current* cost-per-user
   (`services.admin.cost_tracking.cost_per_user()`, the same figure shown on `/costs/`) - the
-  "pay over the running cost to get VIP" case. Recomputed at each successful charge, on the user's
-  own billing anniversary, so a pledge that used to clear the bar can silently stop granting
-  access without the subscription itself changing status.
+  "pay over the running cost to get VIP" case. Recomputed on every successful charge and other
+  qualifying Stripe webhook events, plus a nightly sweep (`sync_stripe_subscriptions`, all
+  subscriptions, not per-user-anniversary) as a safety net for missed deliveries - so a pledge
+  that used to clear the bar can silently stop granting access (Stripe's own `status` stays
+  unchanged) within about a day even without a webhook. **Banked overpayment can extend access
+  past that point**: a lump-sum or higher-than-threshold pledge accrues a usage-ledger runway
+  (`has_banked_access`) that keeps granting the role's features for a time even after the current
+  pledge stops clearing the threshold, or after the subscription is canceled outright - see
+  `services/billing/banking.py`.
 - A static PWYW minimum is also available as a non-dynamic alternative to the cost-per-user gate.
 
 Managed from **Settings → Membership** (checkout, pledge updates, cancellation, and a link to
@@ -692,20 +713,23 @@ for the boundary rationale:
   `MapController.post_add_pin` instead, not this router) and a `reviews`
   `create_or_update` action for the star-rating widget.
 - **External, API-key-authenticated**, under `/dashboard/api/external/v1/`. Lets a third-party
-  application act on a user's behalf with an extremely limited, scoped grant - see "External API
-  keys" under Account & Auth below. Independently versioned and never shares serializers/viewsets
-  with the internal surface.
+  application act on a user's behalf with a scoped grant - see "External API keys" under Account
+  & Auth below. Independently versioned and never shares serializers/viewsets with the internal
+  surface.
 
 ## Direct Messaging
 
 - End-to-end encrypted 1:1 direct messages and named group chats
-- **Group-chat scope (deliberate, as of 2026-07-18):** group chats support text (plaintext or
-  E2EE), pin sharing (one provenance-tracked PinShare per member), rename, creator-managed
-  membership, per-member mute, and unread tracking. They intentionally do *not* yet have 1:1
-  parity for: reactions, image attachments, replies/quotes, map attachments, coordinate/address
-  detection, disappearing messages, typing indicators, read receipts, or delete-for-self (only
-  the sender's delete-for-everyone exists). A group whose creator leaves becomes permanently
-  unmanaged (no ownership transfer). Extending any of these is a product decision, not a bug fix.
+- **Group-chat scope (deliberate, as of 2026-07-18; reactions added 2026-07-29):** group chats
+  support text (plaintext or E2EE), pin sharing (one provenance-tracked PinShare per member),
+  rename, creator-managed membership, per-member mute, unread tracking, and **message reactions**
+  (`Reaction.group_message`, with live WebSocket broadcast - reachable via the external/mobile API
+  today; the web UI's group-chat thread has no reaction picker or live-update handler yet, unlike
+  the 1:1 thread's). They still intentionally do *not* have 1:1 parity for: image attachments,
+  replies/quotes, map attachments, coordinate/address detection, disappearing messages, typing
+  indicators, read receipts, or delete-for-self (only the sender's delete-for-everyone exists). A
+  group whose creator leaves becomes permanently unmanaged (no ownership transfer). Extending any
+  of these is a product decision, not a bug fix.
 - Rich compose toolbar: image attachment, share location/map, share pin, @mention, emoji. The
   map composer dialog has two tabs - draw a new map, or choose one of your existing maps (search
   by title) - both attach the same way
@@ -761,8 +785,9 @@ play, all three guess modes.** Everything below the line is not yet built.
   `Image.effective_latitude`/`effective_longitude` until a real coordinate takes over - see the
   design doc's "Crowd-sourced photo coordinates"
 - Eligibility engine: a location is only ever offered if it's pinned by every *joined*
-  participant (an invited-but-not-yet-accepted player never gates this) — no exceptions, no
-  caching across sessions
+  participant (an invited-but-not-yet-accepted player never gates this) — no exceptions. A short
+  prewarm cache (`services/spotguessr/prewarm.py`, up to 20 minutes) may pre-pick a location ahead
+  of when it's shown, but only after it already passed this same eligibility check
 - Scoring: geodesic point distance when a photo/Street View shot has its own coordinates,
   geodesic distance to the location's effective property boundary (0 inside it) otherwise
   (always the boundary rule for Named Place) — real PostGIS `ST_Distance`, not an approximation
@@ -875,16 +900,27 @@ name, description, alias, or a photo's coordinates — and the player supplies i
 registry driving round generation and answer application lives in `services/consensus/fields.py`,
 so a new answerable field is a registry entry rather than new game code.
 
-- **Solo and competitive modes.** Solo applies an answer the instant it is submitted. The
-  competitive mode races participants and resolves disagreement by vote; when a vote cannot settle
-  it, the answer lands in a cross-session *tentative* pool that later sessions can confirm
-  (`ConsensusTentativeAnswer`)
-- **Trust, not just points.** `ConsensusProfile` carries a Beta-Bernoulli posterior
-  (`trust_alpha`/`trust_beta`) updated from trust-check rounds — rounds whose answer is already
-  known — starting from a weakly-informative prior so a new player is neither trusted nor
-  distrusted. That posterior weights how much a player's answer counts. Points and levels are
-  Consensus-only and deliberately not shared with SpotGuessr/Trivia's Glicko-2 ratings, and are
-  awarded for out-of-game manual wiki edits too (`models/wiki_edit/signals.py`)
+- **Solo and competitive modes.** Solo applies an answer to the live wiki the instant it is
+  submitted, no trust check. Competitive mode races participants and resolves disagreement by a
+  plain one-vote-per-participant tally, applying the winning value the same unconditional way the
+  instant the round resolves; an unsettled vote is meant to land in a cross-session *tentative*
+  pool that later sessions can confirm (`ConsensusTentativeAnswer`), but **nothing currently
+  promotes a tentative row to applied** - `record_tentative_answers` accumulates `support_count`
+  across sessions, and the `PENDING → APPLIED/DISMISSED` lifecycle the model defines is otherwise
+  dead code (no controller, task, or admin path ever drives it past `PENDING`). An unsettled
+  disagreement today just accumulates support forever rather than ever resolving. See
+  `docs/FEATURES_CODE_AUDIT.md`'s Consensus section for the open question this raises.
+- **Trust, tracked but not yet gating the write.** `ConsensusProfile` carries a real Beta-Bernoulli
+  posterior (`trust_alpha`/`trust_beta`) updated from trust-check rounds — rounds whose answer is
+  already known — starting from a weakly-informative prior so a new player is neither trusted nor
+  distrusted. That posterior is genuinely consulted in two places: how often a trust-check round is
+  injected, and the confidence weight attached to a `FactEvidence` row (a separate metadata layer
+  read by AI article-writing and Consensus's own recheck-round picker). It does **not** currently
+  weight or gate which answers get applied to the live wiki fields (`Wiki.name`/`description`/etc.)
+  - a brand-new or actively-distrusted account's answer overwrites those fields with exactly the
+  same immediacy as a maximally-trusted veteran's. Points and levels are Consensus-only and
+  deliberately not shared with SpotGuessr/Trivia's Glicko-2 ratings, and are awarded for out-of-game
+  manual wiki edits too (`models/wiki_edit/signals.py`)
 - **Session flow** under `games/consensus/`: home, friends, start, lobby, invite, join, begin,
   round, answer, vote, end — with `ws/consensus/session/<id>/` pushing round and resolution
   updates, and a stall sweep (`sweep_stalled_consensus_sessions`) reclaiming abandoned sessions

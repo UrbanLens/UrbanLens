@@ -35,7 +35,7 @@ from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
 from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
-from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids
+from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids, pins_fingerprint
 from urbanlens.dashboard.services.security.redact import redact_secret
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -144,8 +144,11 @@ def _apply_toolbar_filters(query: PinQuerySet, profile: Profile, raw_ids: str) -
     if not ids:
         return query
     saved_filters = SavedFilter.objects.filter(profile=profile, uuid__in=ids)
+    # Computed once for every filter below, not once per filter - see
+    # pins_fingerprint's docstring for why that matters.
+    fingerprint = pins_fingerprint(profile)
     for saved_filter in saved_filters:
-        matching_uuids = get_or_compute_matching_uuids(profile, saved_filter)
+        matching_uuids = get_or_compute_matching_uuids(profile, saved_filter, fingerprint=fingerprint)
         query = query.filter(uuid__in=matching_uuids)
     return query
 
@@ -814,11 +817,25 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         pin.save(update_fields=[*touched, "updated"])
 
         if label_ids:
+            from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
+            from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
             from urbanlens.dashboard.models.labels.model import KIND_USER as _KIND_USER
 
             # visible_to: same foreign-label-id guard as post_add_pin.
-            pin.labels.set(Label.objects.exclude(kind=_KIND_USER).visible_to(request.user.profile).filter(id__in=label_ids))
+            new_labels = Label.objects.exclude(kind=_KIND_USER).visible_to(request.user.profile).filter(id__in=label_ids)
+            new_ids = set(new_labels.values_list("pk", flat=True))
+            removed = pin.labels.filter(kind__in={KIND_TAG, KIND_CATEGORY, KIND_STATUS}).exclude(pk__in=new_ids)
+            for label in removed:
+                # Tombstone first: keyword/AI auto-tagging can otherwise silently
+                # reattach a label a user just removed via the map's quick-edit dialog.
+                PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LABEL, value=str(label.pk))
+            pin.labels.set(new_labels)
         elif "label_ids" in request.POST:
+            from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
+            from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
+
+            for label in pin.labels.filter(kind__in={KIND_TAG, KIND_CATEGORY, KIND_STATUS}):
+                PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LABEL, value=str(label.pk))
             pin.labels.clear()
 
         return JsonResponse({"ok": True, "pin_slug": pin.slug or str(pin.uuid)})

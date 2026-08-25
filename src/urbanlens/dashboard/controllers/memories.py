@@ -25,6 +25,7 @@ from urbanlens.dashboard.controllers.visits import (
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.routes.model import Route
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
@@ -129,6 +130,38 @@ def _attachment_label_url(kind: str, host: Any, *, markup_map: MarkupMap) -> tup
         recipient = host.recipient if host.sender_id == markup_map.profile_id else host.sender
         return f"Direct message to {recipient.username}", reverse("messages.conversation", args=[recipient.slug])
     return None, None
+
+
+def _safe_incoming_place_label(pin_shares: list[PinShare]) -> tuple[Pin | None, str]:
+    """The pin (if safe to show) and display label for one Sharing-page "received" group.
+
+    ``PinShareStatus.DETECTED`` shares (auto-recorded from a shared map, a DM, or a trip
+    activity - see the status's own docstring) are "never actionable, never materialize a
+    Pin": the recipient never explicitly agreed to see anything about them, unlike an
+    EXPLICIT share awaiting accept/reject, where a preview of the current pin name is the
+    whole point. Reading ``PinShare.place_label``/``.pin`` unconditionally for a group made
+    up entirely of DETECTED shares put the sharer's live, currently-editable pin (name,
+    and via the pin.share.detail link, more) in front of a recipient who never consented to
+    see it - and kept tracking it live, since nothing here was ever a snapshot. When a group
+    is entirely DETECTED shares, this falls back to the snapshotted ``Location`` instead,
+    the same one every other pin-less share already resolves through.
+
+    Args:
+        pin_shares: Every incoming share grouped under one pin/location key.
+
+    Returns:
+        ``(pin, label)`` - matching ``(share.pin, share.place_label)`` whenever the group has
+        at least one non-DETECTED share, otherwise ``(None, <location-derived label>)``.
+    """
+    if any(share.status != PinShareStatus.DETECTED for share in pin_shares):
+        share = pin_shares[0]
+        return share.pin, share.place_label
+    location = pin_shares[0].shared_location
+    if location is None:
+        return None, "a location"
+    if location.display_name and location.display_name != "Unnamed Location":
+        return None, location.display_name
+    return None, location.address or f"{location.latitude}, {location.longitude}"
 
 
 def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]:
@@ -829,7 +862,10 @@ class MemoriesSharingView(LoginRequiredMixin, View):
             key = ("pin", share.pin_id) if share.pin_id is not None else ("location", share.location_id)
             incoming_shares_by_pin.setdefault(key, []).append(share)
 
-        incoming_share_groups: list[_IncomingShareGroup] = [{"pin": pin_shares[0].pin, "place_label": pin_shares[0].place_label, "shares": pin_shares} for pin_shares in incoming_shares_by_pin.values()]
+        incoming_share_groups: list[_IncomingShareGroup] = []
+        for pin_shares in incoming_shares_by_pin.values():
+            pin, place_label = _safe_incoming_place_label(pin_shares)
+            incoming_share_groups.append({"pin": pin, "place_label": place_label, "shares": pin_shares})
 
         incoming_map_shares = MarkupMapShare.objects.filter(to_profile=profile).select_related("markup_map", "from_profile__user").order_by("-created")
 
