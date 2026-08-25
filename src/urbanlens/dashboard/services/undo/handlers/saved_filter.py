@@ -10,7 +10,7 @@ from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-_RESTORABLE_FIELDS = ("name", "icon", "criteria", "order")
+_RESTORABLE_FIELDS = ("name", "icon", "criteria", "order", "color", "opacity")
 
 #: Registry key for this handler. Exposed as a module-level constant so call
 #: sites can import it (``from ...handlers.saved_filter import MODEL_LABEL``)
