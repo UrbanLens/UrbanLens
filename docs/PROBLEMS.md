@@ -67,30 +67,6 @@ it can send only what differs), and make writes field-scoped (`update_fields`, w
 codebase already does). The second is the safety net for anything that still posts everything, and
 is the cheaper half to finish first.
 
-## OPEN 2026-08-24: child wikis (detail pins) record no creator
-
-Both paths that create a child wiki leave `created_by` unset -
-`controllers/detail_pins.py`'s POST handler and `services/pins/pin_wiki_sync.py`'s
-send-pins-to-wiki - so a detail pin carries no answer to "who put this here".
-
-The field-revision substrate does not close the gap. `Wiki.objects.create()` records its writes
-under `current_write_source()`, which is `SYSTEM` outside a request or task; the pin-sync path
-therefore attributes user-derived markers to the system, and anything reading provenance from the
-revisions would show a stranger's entrance marker to a concealed viewer as though a provider had
-placed it.
-
-The consequence today is that concealment has to hide detail pins outright rather than filter them
-to the viewer's own and their friends', which is what every other related row gets. That is
-conservative and consistent with the markup ruling, but it is coarser than the rules elsewhere and
-would hide a viewer's *own* detail pins from them once the gate is live.
-
-**Setting `created_by` is not a one-line fix**, which is why it was not done in passing.
-`models/reputation/signals.py` awards reputation on `officially_created and created_by_id is not
-None`, and `services/undo/handlers/wiki.py` round-trips the field; `models/wiki/queryset.py`'s
-`claim_for_location` is currently its only writer, so the field presently means "who claimed this
-place's wiki", not "who created this row". Giving it a second meaning needs the reputation rule and
-the undo handler checked against it first.
-
 ## OPEN 2026-08-24: wiki search and autocomplete are a substring oracle for concealed content
 
 `services/global_search/providers.py` (the wiki provider's `apply_text` over `["name",

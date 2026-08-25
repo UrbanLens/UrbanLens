@@ -172,6 +172,9 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
                 unmatched_wikis.remove(existing)
                 continue
             child_wiki = Wiki.objects.create(
+                # The pin's owner placed this, by sending their pins to the
+                # wiki - see the matching note in controllers/detail_pins.py.
+                created_by_id=child.profile_id,
                 # A detail pin is never left at the LOCATION_MARKER default -
                 # the dialog's Type select excludes it, and auto-classification
                 # only ever lands on BUILDING or the POINT_OF_INTEREST fallback.

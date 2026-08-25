@@ -251,6 +251,14 @@ def concealed_community_summary() -> dict[str, Any]:
 _NULL_ACTOR_IS_A_DELETED_ACCOUNT: frozenset[str] = frozenset({"WikiEdit"})
 
 _ACTOR_FIELDS: dict[str, str] = {
+    # A child Wiki is a detail pin. Null means mirrored from building data
+    # (services.pins.pin_restructure), which a brand-new wiki would carry, so
+    # the generic null-is-automatic rule is right here.
+    "Wiki": "created_by_id",
+    # Markup items record who drew them. A concealed viewer keeps their own
+    # drawings and their friends' - see the note in controllers/markup.py about
+    # why that does not reopen what hiding markup was for.
+    "PinMarkup": "profile_id",
     "Comment": "profile_id",
     "WikiEdit": "editor_id",
     "WikiLink": "created_by_id",

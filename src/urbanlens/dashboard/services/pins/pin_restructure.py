@@ -587,6 +587,11 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
                 logger.info("mirror_buildings_to_wiki: skipping %s - a wiki marker already occupies its point", building_name(building) or "building")
                 continue
             child = Wiki.objects.create(
+                # created_by deliberately unset: these are mirrored from
+                # building data, not placed by anyone. That is what makes null
+                # mean "automatic" for a detail pin, and so what lets a
+                # concealed viewer keep seeing them - a brand-new wiki carries
+                # its buildings.
                 name=building_name(building) or wiki.name,
                 pin_type=PinType.BUILDING,
                 pin_type_is_user_provided=False,

@@ -253,13 +253,18 @@ def _wikis_created(profile: Profile) -> int:
 
     # Drafts are auto-created in the background for any pinned location, so
     # counting them would award "wikis created" for merely dropping a pin.
-    return Wiki.objects.filter(created_by=profile, officially_created=True).count()
+    # parent_wiki__isnull excludes detail pins, which are child Wiki rows - see
+    # the note in _wikis_created_bulk, whose filter this has to match.
+    return Wiki.objects.filter(created_by=profile, officially_created=True, parent_wiki__isnull=True).count()
 
 
 def _wikis_created_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-    return _grouped_count(Wiki.objects.filter(created_by_id__in=profile_ids, officially_created=True), "created_by_id")
+    # parent_wiki__isnull: a detail pin is a child Wiki row and would otherwise
+    # count as a community page created. See the matching note in
+    # models/reputation/signals.py.
+    return _grouped_count(Wiki.objects.filter(created_by_id__in=profile_ids, officially_created=True, parent_wiki__isnull=True), "created_by_id")
 
 
 def _photos_uploaded(profile: Profile) -> int:

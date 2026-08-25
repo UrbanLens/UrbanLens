@@ -129,7 +129,13 @@ _SUBSCRIPTIONS: tuple[_Subscription, ...] = (
     _Subscription(
         model_path="urbanlens.dashboard.models.wiki.model:Wiki",
         rule_key="wiki_created",
-        qualifies=lambda wiki: wiki.officially_created and wiki.created_by_id is not None,
+        # parent_wiki_id is None: a child wiki is a *detail pin* - a marked
+        # entrance or hazard on a wiki's map - not a community page somebody
+        # created. `officially_created` does not separate them, because it
+        # defaults True and neither detail-pin creation path overrides it, so
+        # without this clause recording who placed a detail pin would award
+        # wiki-creation reputation for each one.
+        qualifies=lambda wiki: wiki.officially_created and wiki.parent_wiki_id is None and wiki.created_by_id is not None,
         profile_id=lambda wiki: wiki.created_by_id,
         wiki_id=lambda wiki: wiki.pk,
         # Not created_only: a draft being promoted is an update.

@@ -168,17 +168,16 @@ def _resolve_owner(
     if location_slug is None:
         raise Http404
     _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-    # Markup is hidden outright for a concealed viewer - not filtered by who
-    # drew it, the way comments and photos are. A hand-drawn entrance route or
-    # a marked hole in a fence says people have been inside and compared notes,
-    # which is the exact fact concealment exists to withhold, and it says it
-    # whoever drew it. Ruled on directly by the product owner; see
-    # docs/designs/concealed-wiki-spec.md.
-    from urbanlens.dashboard.services.wiki.concealment import concealment_active
+    # Filtered by who drew it, not hidden outright. The reason to hide community
+    # markup is that a hand-drawn entrance route says other people have been
+    # inside and compared notes - and that reason does not cover the viewer's
+    # own drawings, which tell them nothing they did not already know. Showing
+    # someone their own work back is also the only option that does not announce
+    # the concealment: a marker you placed yourself and cannot find afterwards
+    # is a malfunction, and a malfunction only some accounts get is a tell.
+    from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
-    if concealment_active(wiki, profile):
-        return wiki, PinMarkup.objects.none()
-    return wiki, PinMarkup.objects.for_wiki(wiki)
+    return wiki, visible_rows(PinMarkup.objects.for_wiki(wiki), wiki, profile)
 
 
 def _owner_layer_kwargs(owner: Pin | Wiki | MarkupMap) -> dict:

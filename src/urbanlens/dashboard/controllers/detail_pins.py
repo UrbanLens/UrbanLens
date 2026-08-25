@@ -319,15 +319,16 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
             return JsonResponse({"detail_pins": []})
         # This is the endpoint the wiki page's Leaflet map actually fetches
         # (wiki.html's data-detail-pins-json-url, loaded at map init), so it
-        # carries the same ruling as the panel below and as markup: detail pins
-        # are hidden outright for a concealed viewer. Concealing the panel and
-        # not this would have left every marker drawing on the map while the
-        # page around it said the place was untouched.
-        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+        # carries the same rule as the panel below.
+        #
+        # Filtered by who placed them, not hidden wholesale. A concealed viewer
+        # keeps their own markers and their friends', plus the ones mirrored
+        # from building data - because a viewer whose own detail pin vanished
+        # would know immediately that something was different about their
+        # account, which is the one thing this feature must never tell them.
+        from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
-        if concealment_active(wiki, profile):
-            return JsonResponse({"detail_pins": []})
-        child_wikis = wiki.child_wikis.order_by("pin_type", "name")
+        child_wikis = visible_rows(wiki.child_wikis.all(), wiki, profile).order_by("pin_type", "name")
         return JsonResponse({"detail_pins": [cw.to_detail_json() for cw in child_wikis]})
 
 
@@ -339,22 +340,13 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+        from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        # Detail pins are map annotations - a marked entrance, a hazard, a way
-        # in - and they are hidden outright for a concealed viewer for the same
-        # reason markup is: they say people have surveyed this place and shared
-        # what they found, whoever placed them.
-        #
-        # Hidden rather than filtered to the viewer's own and their friends',
-        # which is what every other related row gets, because a child wiki
-        # records no creator: neither creation path sets `created_by`, and the
-        # field-revision substrate attributes the pin-sync path to SYSTEM, which
-        # would read as automatic and show a stranger's markers. Filtering needs
-        # provenance on the row first - see "child wikis (detail pins) record no
-        # creator" in docs/PROBLEMS.md.
-        child_wikis = wiki.child_wikis.none() if concealment_active(wiki, profile) else wiki.child_wikis.order_by("pin_type", "name")
+        # Same filter as the JSON endpoint above: a concealed viewer keeps their
+        # own detail pins and their friends', and the ones mirrored from
+        # building data, and loses strangers'.
+        child_wikis = visible_rows(wiki.child_wikis.all(), wiki, profile).order_by("pin_type", "name")
         return render(
             request,
             "dashboard/partials/pins/location_detail_pins_panel.html",
@@ -405,6 +397,13 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": name_error}, status=400)
         pin_type, pin_type_chosen = _requested_pin_type(body)
         child_wiki = Wiki.objects.create(
+            # Who placed it. Nothing recorded this before, which is why
+            # concealment had to hide detail pins wholesale rather than show a
+            # viewer their own - and a concealed viewer whose own marker
+            # vanished would have learned something was different immediately.
+            # Awarding is filtered on parent_wiki elsewhere, so this does not
+            # count as creating a community page.
+            created_by=profile,
             name=child_name,
             description=body.get("description") or None,
             pin_type=pin_type,

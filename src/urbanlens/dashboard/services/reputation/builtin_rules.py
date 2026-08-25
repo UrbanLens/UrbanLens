@@ -175,7 +175,10 @@ def _score_invite(invitation: Any | None) -> ScoreResult | None:
 
 def _score_wiki_created(wiki: Wiki | None) -> ScoreResult | None:
     """Score promoting a place to a real community wiki."""
-    if wiki is None or not wiki.officially_created or wiki.created_by_id is None:
+    # The scorer re-checks what the subscription already filtered on, so a row
+    # written before that filter existed - or by any future path that skips it -
+    # scores zero rather than awarding a page creation for a detail pin.
+    if wiki is None or not wiki.officially_created or wiki.parent_wiki_id is not None or wiki.created_by_id is None:
         return None
     base = coefficients.BASE_VALUES["wiki_created"]
     return ScoreResult(value=base, inputs={"base": str(base)})
