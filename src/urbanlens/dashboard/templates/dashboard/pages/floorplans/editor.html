@@ -16,7 +16,7 @@
 
 {% block hero %}
 {% url 'pin.details' pin.slug as pin_url %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="architecture" title="Floorplan" subtitle=pin.effective_name modifier="top" back_url=pin_url back_label="Back to pin" %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="architecture" title="Floorplan" subtitle=pin.effective_name modifier="top" back_url=pin_url back_label="Back to pin" title_suffix_template="dashboard/partials/ui/_page_explainer_anchor.html" explainer_id="floorplan-first-walls" %}
 {% endblock %}
 
 {% block subnav %}
@@ -57,6 +57,8 @@
 </div>
 {% endif %}
 
+{% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="floorplan-first-walls" kicker="Getting started" heading="Start by drawing the exterior walls." body="Arm the Wall tool and trace the building's outline. Once it's closed, rooms are generated automatically from the enclosed space, and the room, opening, and box-select tools become available." %}
+
 <div id="floorplan-origin-banner" class="floorplan-origin-banner" hidden>
     From REData. Saving creates your own version.
 </div>
@@ -64,6 +66,13 @@
 <div class="floorplan-editor">
     <div class="floorplan-editor__stage">
         <div class="floorplan-map-shell">
+            {# Groups the drawing tools and the tool-options panel below them   #}
+            {# into one flex stack, so the second always clears the first      #}
+            {# regardless of how many rows either wraps to on a narrow phone -  #}
+            {# a fixed pixel offset between two things that can each reflow     #}
+            {# independently is exactly the bug _layout.scss's "Mobile map      #}
+            {# bottom dock" comment describes for the main map's own toolbars.  #}
+            <div class="floorplan-toolbar-stack">
             {# Same markup/classes as the main map's own tool pill             #}
             {# (_map_toolbar.html) - not that inclusion tag itself, since     #}
             {# these tools are stateful (data-tool) rather than one-shot      #}
@@ -107,14 +116,32 @@
                             data-tooltip="Marker (M) · hazard, stair or lift" data-tooltip-float="true">
                         <i class="material-symbols-outlined">pin_drop</i>
                     </button>
+                    {# A one-shot action, not a mode - no data-tool, wired on its own #}
+                    {# in floorplan-editor.ts, and it opens the same dialog as the    #}
+                    {# floor strip's "Add floor" button, prefilled to copy this floor. #}
+                    <button type="button" class="map-btn-icon" id="floorplan-copy-floor" aria-label="Copy this floor to a new one"
+                            data-tooltip="Copy this floor to a new one" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">content_copy</i>
+                    </button>
                 </div>
             </div>
 
             {# What the armed tool will do next. Beside the tools rather than in #}
             {# the sidebar, which stacks below the map on a phone - the settings #}
             {# for a tool have to be reachable while using it. Built by          #}
-            {# floorplan-editor.ts, which knows which tool is armed.             #}
-            <div id="floorplan-tool-options" class="floorplan-tool-options" role="group" aria-label="Tool options" hidden></div>
+            {# floorplan-editor.ts, which knows which tool is armed. .map-buttons #}
+            {# for the same button styling and collapse behaviour as every other #}
+            {# toolbar (see themes/base.html's delegated .map-toolbar-collapse   #}
+            {# handler) - positioned just under the drawing tools rather than    #}
+            {# overlapping them.                                                 #}
+            <div id="floorplan-tool-options" class="map-buttons floorplan-tool-options" role="group" aria-label="Tool options" hidden>
+                <button type="button" class="map-toolbar-collapse" aria-label="Toggle tool options"
+                        data-tooltip="Collapse" data-tooltip-float="true" data-tooltip-pos="below">
+                    <i class="material-symbols-outlined">chevron_right</i>
+                </button>
+                <div id="floorplan-tool-options-content" class="map-buttons-content"></div>
+            </div>
+            </div>{# /.floorplan-toolbar-stack #}
 
             {# Undo and the floor strip live over the canvas, not in the sidebar. #}
             {# The sidebar stacks below the map under 900px, so on a phone both  #}
@@ -134,9 +161,18 @@
                 </button>
             </div>
 
-            <div class="floorplan-canvas-floors">
-                <span class="floorplan-field__label">Floors</span>
-                <div id="floorplan-floors" class="floorplan-floors"></div>
+            {# Bottom right, horizontal - the same corner and layout as the main #}
+            {# map's saved-filters toolbar (_saved_filters_toolbar.html). .map- #}
+            {# buttons for identical button styling and the collapse toggle    #}
+            {# "for free"; the position override that keeps it bottom-right at #}
+            {# every breakpoint (rather than flipping to top-right on desktop  #}
+            {# like the drawing tools) lives in _floorplans.scss.              #}
+            <div id="floorplan-floors-panel" class="map-buttons floorplan-canvas-floors" role="group" aria-label="Floors">
+                <button type="button" class="map-toolbar-collapse" aria-label="Toggle floor list"
+                        data-tooltip="Floors" data-tooltip-float="true" data-tooltip-pos="above">
+                    <i class="material-symbols-outlined">chevron_right</i>
+                </button>
+                <div id="floorplan-floors" class="map-buttons-content floorplan-floors"></div>
             </div>
 
             {# Focusable and labelled: the canvas is the editor, and until now #}
@@ -156,7 +192,7 @@
             {# map). "Show floor below" is this page's own custom toggle,    #}
             {# registered alongside the standard ones (see floorplan-editor.ts). #}
             <div class="map-bottom-controls">
-                {% map_layers_panel "satellite,street,underlay" panel_id="floorplan-layers" extra_class="map-layers-panel--inline" manage_overlays_url=manage_overlays_url %}
+                {% map_layers_panel "satellite,street,underlay,grid" panel_id="floorplan-layers" extra_class="map-layers-panel--inline" manage_overlays_url=manage_overlays_url %}
             </div>
 
             {# Revealed by floorplan-editor.ts when Leaflet did not load. It is a CDN #}

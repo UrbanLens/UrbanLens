@@ -18,6 +18,7 @@ html,body{margin:0}
 </head><body>
 <div id="floorplan-origin-banner" hidden></div>
 <div class="floorplan-editor"><div class="floorplan-editor__stage"><div class="floorplan-map-shell">
+  <div class="floorplan-toolbar-stack">
   <div id="floorplan-tools" class="map-buttons"><div class="map-buttons-content">
     <button class="map-btn-icon is-active" data-tool="select" aria-label="Select (V)" data-tooltip="Select (V)"></button>
     <button class="map-btn-icon" data-tool="box" aria-label="Box select (B)" data-tooltip="Box select (B)"></button>
@@ -26,19 +27,24 @@ html,body{margin:0}
     <button class="map-btn-icon" data-tool="opening" aria-label="Opening (D)" data-tooltip="Opening (D)"></button>
     <button class="map-btn-icon" data-tool="room" aria-label="Room (R)" data-tooltip="Room (R)"></button>
     <button class="map-btn-icon" data-tool="marker" aria-label="Marker (M)" data-tooltip="Marker (M)"></button>
+    <button class="map-btn-icon" id="floorplan-copy-floor" aria-label="Copy this floor to a new one" data-tooltip="Copy this floor to a new one"></button>
   </div></div>
+  <div id="floorplan-tool-options" class="map-buttons floorplan-tool-options" hidden>
+    <button class="map-toolbar-collapse" aria-label="Toggle tool options"><i class="material-symbols-outlined">chevron_right</i></button>
+    <div id="floorplan-tool-options-content" class="map-buttons-content"></div>
+  </div>
+  </div>
   <div id="floorplan-map" class="floorplan-map" tabindex="0" role="application" aria-label="Floorplan canvas. Tab and Shift+Tab move between walls, openings, rooms and markers; arrow keys nudge what is selected; Escape leaves."
        data-json-url="/json" data-save-url="/save" data-publish-url="/publish"
        data-lat="41.733" data-lng="-73.928"></div>
-  <div id="floorplan-tool-options" hidden></div>
   <div class="floorplan-canvas-controls">
     <button id="floorplan-undo" aria-label="Undo" data-tooltip="Undo (Ctrl+Z)" disabled></button>
     <button id="floorplan-redo" aria-label="Redo" data-tooltip="Redo (Ctrl+Shift+Z)" disabled></button>
     <button id="floorplan-delete" aria-label="Delete selection" data-tooltip="Delete (Del)" hidden></button>
   </div>
-  <div class="floorplan-canvas-floors">
-    <span class="floorplan-field__label">Floors</span>
-    <div id="floorplan-floors" class="floorplan-floors"></div>
+  <div id="floorplan-floors-panel" class="map-buttons floorplan-canvas-floors">
+    <button class="map-toolbar-collapse" aria-label="Toggle floor list"><i class="material-symbols-outlined">chevron_right</i></button>
+    <div id="floorplan-floors" class="map-buttons-content floorplan-floors"></div>
   </div>
   <div class="map-bottom-controls"><div id="floorplan-layers"></div></div>
   <div id="floorplan-empty"><button id="floorplan-start-outline"></button><button id="floorplan-start-rectangle"></button></div>

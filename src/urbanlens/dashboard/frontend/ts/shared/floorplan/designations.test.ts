@@ -164,7 +164,7 @@ describe("contiguousLevels", () => {
 });
 
 describe("contiguousLevels renumbering an inserted half-storey", () => {
-    /** How duplicateFloor places a copy: half a storey above its source. */
+    /** How addFloor places a copy: half a storey off its source's level. */
     const stack = (levels: number[]): Array<{ level: number; tag: string }> => levels.map((level) => ({ level, tag: String(level) }));
 
     test("a copy half a storey up lands directly above its source", () => {

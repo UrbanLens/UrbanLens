@@ -17,11 +17,11 @@
  * author drew.
  */
 
-import { type Pt, add, angleOf, distance, projectOnSegment, scale, sub } from "./coords";
+import { type Pt, add, angleOf, distance, projectOnSegment, rotate, scale, sub } from "./coords";
 import type { Segment } from "./planar";
 
 /** Which rule placed a point, for the on-screen readout. */
-export type SnapKind = "free" | "endpoint" | "wall" | "extension" | "angle" | "length";
+export type SnapKind = "free" | "endpoint" | "wall" | "extension" | "angle" | "length" | "grid";
 
 export interface Snap {
     point: Pt;
@@ -52,6 +52,14 @@ export const ANGLE_CAPTURE_RADIANS = (7 * Math.PI) / 180;
 export const LENGTH_STEP_METERS = 0.25;
 
 /**
+ * Grid line spacing, and the grid-snap step - the same value as
+ * LENGTH_STEP_METERS, deliberately: a drawn grid, a length rounded by an
+ * angle snap, and a point snapped to the grid should all agree on what "one
+ * unit" means, rather than introduce a second, different notion of it.
+ */
+export const GRID_SPACING_METERS = LENGTH_STEP_METERS;
+
+/**
  * Once a snap has taken, the pointer must travel this multiple of the
  * tolerance to break it. Without the margin a cursor sitting near the boundary
  * flickers between snapped and free every frame.
@@ -74,6 +82,11 @@ const free = (point: Pt): Snap => ({ point, kind: "free", label: "" });
  *         against a building that does not face north.
  *     suspended: True while the author holds the suspend key; returns the
  *         cursor untouched so an intentional off-grid point is possible.
+ *     grid: Spacing and tolerance to snap to the visible grid, or null when
+ *         the grid is off. Tried last, since it is - like the angle snap -
+ *         a fallback for "no real geometry nearby," and only one fallback
+ *         should win; unlike the angle snap it needs no previous point, so
+ *         it can also catch the very first point of a new chain.
  *
  * Returns:
  *     Where the point lands and which rule put it there.
@@ -82,7 +95,12 @@ export function snapPoint(
     cursor: Pt,
     segments: readonly Segment[],
     tolerances: Tolerances,
-    { from = null, axisRadians = 0, suspended = false }: { from?: Pt | null; axisRadians?: number; suspended?: boolean } = {},
+    {
+        from = null,
+        axisRadians = 0,
+        suspended = false,
+        grid = null,
+    }: { from?: Pt | null; axisRadians?: number; suspended?: boolean; grid?: { spacing: number; tolerance: number } | null } = {},
 ): Snap {
     if (suspended) return free(cursor);
 
@@ -119,7 +137,27 @@ export function snapPoint(
         const angled = snapToAngle(from, cursor, axisRadians);
         if (angled) return angled;
     }
+
+    // 5. Still nothing - the grid, if it's on.
+    if (grid) {
+        const gridded = snapToGrid(cursor, axisRadians, grid.spacing, grid.tolerance);
+        if (gridded) return gridded;
+    }
     return free(cursor);
+}
+
+/**
+ * The nearest grid intersection, in the plan's own (possibly rotated) axis.
+ *
+ * Rotating into axis-space before rounding, then back, is what keeps the
+ * grid square to the drawing axis rather than to true north - the same
+ * reasoning `snapToAngle` uses for right angles.
+ */
+function snapToGrid(cursor: Pt, axisRadians: number, spacing: number, tolerance: number): Snap | null {
+    const local = rotate(cursor, -axisRadians);
+    const nearest = { x: Math.round(local.x / spacing) * spacing, y: Math.round(local.y / spacing) * spacing };
+    if (distance(local, nearest) > tolerance) return null;
+    return { point: rotate(nearest, axisRadians), kind: "grid", label: "grid" };
 }
 
 /**

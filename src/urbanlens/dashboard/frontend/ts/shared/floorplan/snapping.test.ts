@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { Pt } from "./coords";
 import type { Segment } from "./planar";
-import { ANGLE_STEP_RADIANS, clampOpening, parameterAlong, shouldRelease, snapPoint, snapTranslation, tolerancesFor } from "./snapping";
+import { ANGLE_STEP_RADIANS, GRID_SPACING_METERS, clampOpening, parameterAlong, shouldRelease, snapPoint, snapTranslation, tolerancesFor } from "./snapping";
 
 const TOL = { endpoint: 0.5, wall: 0.35, extension: 0.35 };
 
@@ -105,6 +105,62 @@ describe("snapPoint", () => {
 
     test("no walls and no chain in progress is always free", () => {
         expect(snapPoint({ x: 1, y: 2 }, [], TOL).kind).toBe("free");
+    });
+
+    describe("grid", () => {
+        const GRID = { spacing: GRID_SPACING_METERS, tolerance: 0.1 };
+
+        test("off (the default) never snaps to a grid intersection", () => {
+            const snap = snapPoint({ x: 1.02, y: 1.98 }, [], TOL);
+            expect(snap.kind).toBe("free");
+        });
+
+        test("a cursor near an intersection lands exactly on it", () => {
+            const snap = snapPoint({ x: 1.02, y: 1.98 }, [], TOL, { grid: GRID });
+            expect(snap.kind).toBe("grid");
+            expect(snap.point).toEqual({ x: 1, y: 2 });
+        });
+
+        test("too far from any intersection is left alone", () => {
+            const snap = snapPoint({ x: 1.12, y: 2 }, [], TOL, { grid: GRID });
+            expect(snap.kind).toBe("free");
+        });
+
+        test("an existing corner still wins over the grid", () => {
+            const snap = snapPoint({ x: 0.05, y: 0.02 }, [wall(0, 0, 10, 0)], TOL, { grid: GRID });
+            expect(snap.kind).toBe("endpoint");
+            expect(snap.point).toEqual({ x: 0, y: 0 });
+        });
+
+        test("squaring to the axis still wins over the grid, when both apply", () => {
+            // (1, 0.01) is both a near-horizontal drag from the origin and
+            // within reach of the (1, 0) grid intersection - angle is tried first.
+            const snap = snapPoint({ x: 1, y: 0.01 }, [], TOL, { from: { x: 0, y: 0 }, grid: GRID });
+            expect(snap.kind).toBe("angle");
+        });
+
+        test("catches the first point of a chain, which the angle rule cannot", () => {
+            // No `from`, so snapToAngle never runs - the grid is the only rule
+            // left standing that can act with no wall and no chain in progress.
+            const snap = snapPoint({ x: 2.03, y: -1.02 }, [], TOL, { grid: GRID });
+            expect(snap.kind).toBe("grid");
+            expect(snap.point).toEqual({ x: 2, y: -1 });
+        });
+
+        test("the grid rotates with the drawing axis", () => {
+            const angle = (30 * Math.PI) / 180;
+            // The intersection one spacing along the rotated x-axis.
+            const target: Pt = { x: Math.cos(angle) * GRID_SPACING_METERS, y: Math.sin(angle) * GRID_SPACING_METERS };
+            const snap = snapPoint({ x: target.x + 0.01, y: target.y - 0.01 }, [], TOL, { axisRadians: angle, grid: GRID });
+            expect(snap.kind).toBe("grid");
+            expect(snap.point.x).toBeCloseTo(target.x, 6);
+            expect(snap.point.y).toBeCloseTo(target.y, 6);
+        });
+
+        test("suspending snapping suppresses the grid too", () => {
+            const snap = snapPoint({ x: 1.02, y: 1.98 }, [], TOL, { grid: GRID, suspended: true });
+            expect(snap.kind).toBe("free");
+        });
     });
 });
 

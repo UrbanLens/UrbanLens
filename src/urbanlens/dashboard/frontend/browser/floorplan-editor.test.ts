@@ -908,10 +908,14 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
-    test("a tap that dismisses a popup does not also draw", async () => {
-        // The click path has always known this: a click whose only job was to
-        // close an open popup should not also act on the map. The flag it
-        // consults was set on mousedown, which a finger never fires.
+    test("switching tools closes a marker's open popup instead of leaving it to eat the next tap", async () => {
+        // A popup that outlived a switch away from Select used to eat the
+        // very next click as "just dismissing that" - including a click on a
+        // newly-armed drawing tool that had every intention of doing
+        // something else, which read to a user as their first tap on a new
+        // tool silently doing nothing. Closing the popup as part of the
+        // switch removes the stale state instead of working around it per
+        // click.
         await openEditor({ width: 1200, height: 800 }, true);
         await page.locator('[data-tool="marker"]').click();
         const frame = await page.locator("#floorplan-map").boundingBox();
@@ -928,51 +932,45 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.waitForFunction(() => document.querySelectorAll(".leaflet-popup").length === 1, undefined, { timeout: 5000 });
 
         await page.locator('[data-tool="wall"]').click();
-        const dashed = () => page.evaluate(() => document.querySelectorAll('#floorplan-map path[stroke-dasharray="5 5"]').length);
-        expect(await dashed()).toBe(0);
+        // The switch itself closed it - there is nothing left standing for
+        // the next tap to be mistaken for dismissing.
+        await page.waitForFunction(() => document.querySelectorAll(".leaflet-popup").length === 0, undefined, { timeout: 5000 });
 
+        const dashed = () => page.evaluate(() => document.querySelectorAll('#floorplan-map path[stroke-dasharray="5 5"]').length);
         const at = { x: frame.x + 480, y: frame.y + frame.height - 90 };
         const cdp = await page.context().newCDPSession(page);
         await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: at.x, y: at.y }] });
         await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
         await settle();
 
-        expect(await dashed()).toBe(0);
+        // With no stale popup to eat it, the tap does its actual job.
+        expect(await dashed()).toBe(1);
         await page.close();
     });
 
     test("the floor strip adds where it says it will, basements included", async () => {
-        // The strip is the building seen from the side. There used to be one
-        // "+ Floor" button, at the bottom, which added a floor at the top - and
-        // no way to make a basement at all, which is half of what a plan of a
-        // derelict building needs.
+        // One "Add floor" button now opens a dialog to choose the direction -
+        // there used to be two buttons (above/below) and no way to tell them
+        // apart except by which end of the strip they sat at.
         await openEditor();
         const strip = "#floorplan-floors";
         const chips = () => page.evaluate((sel) => Array.from(document.querySelectorAll(`${sel} .floorplan-floor-tab__chip`)).map((n) => (n.textContent ?? "").trim()), strip);
         expect(await chips()).toEqual(["G"]);
 
-        await page.locator(`${strip} [aria-label="Add floor above"]`).click();
-        await settle();
+        const addFloorVia = async (where: "Above" | "Below") => {
+            await page.locator(`${strip} [aria-label="Add floor"]`).click();
+            const dialog = page.locator(".floorplan-add-floor-dialog");
+            await dialog.locator(`button:text-is("${where}")`).click();
+            await dialog.locator('button:text-is("Add floor")').click();
+            await settle();
+        };
+
+        await addFloorVia("Above");
         // Highest first: the strip reads top-of-building downwards.
         expect(await chips()).toEqual(["1", "G"]);
 
-        await page.locator(`${strip} [aria-label="Add floor below"]`).click();
-        await settle();
+        await addFloorVia("Below");
         expect(await chips()).toEqual(["1", "G", "B1"]);
-
-        // And each button sits at the end of the strip it acts on.
-        const order = await page.evaluate((sel) => {
-            const host = document.querySelector(sel as string) as HTMLElement;
-            const y = (node: Element | null) => (node ? node.getBoundingClientRect().top : Number.NaN);
-            return {
-                above: y(host.querySelector('[aria-label="Add floor above"]')),
-                top: y(host.querySelector(".floorplan-floor-tab")),
-                bottom: y(host.querySelectorAll(".floorplan-floor-tab")[2] ?? null),
-                below: y(host.querySelector('[aria-label="Add floor below"]')),
-            };
-        }, strip);
-        expect(order.above).toBeLessThan(order.top);
-        expect(order.below).toBeGreaterThan(order.bottom);
         await page.close();
     });
 
@@ -1088,16 +1086,20 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         };
 
         // Start a chain, then aim at an existing corner, which is snappable.
-        await page.mouse.click(wall.left + 40, wall.top + 40);
-        const snapped = await readout(wall.left, wall.top);
+        // The bottom-left one, not the top-left: the floating tool-options
+        // panel legitimately covers part of the canvas near the top-right of
+        // the map, and a corner tucked under it would make this a test of
+        // panel layout rather than of snapping.
+        await page.mouse.click(wall.left + 40, wall.bottom - 40);
+        const snapped = await readout(wall.left, wall.bottom);
         expect(snapped).toContain("·");
 
         await page.keyboard.down("`");
-        const free = await readout(wall.left + 1, wall.top + 1);
+        const free = await readout(wall.left + 1, wall.bottom - 1);
         expect(free).not.toContain("·");
 
         await page.keyboard.up("`");
-        const again = await readout(wall.left, wall.top);
+        const again = await readout(wall.left, wall.bottom);
         expect(again).toContain("·");
         await page.close();
     });
@@ -1111,16 +1113,19 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await openEditor();
         const wall = await planExtent();
         await page.locator('[data-tool="wall"]').click();
-        await page.mouse.click(wall.left + 40, wall.top + 40);
+        // The bottom-left corner, not the top-left: see the same note in the
+        // previous test - the floating tool-options panel legitimately
+        // covers part of the canvas near the top-right of the map.
+        await page.mouse.click(wall.left + 40, wall.bottom - 40);
 
         await page.keyboard.down("`");
-        await page.mouse.move(wall.left, wall.top);
+        await page.mouse.move(wall.left, wall.bottom);
         await settle();
         // Focus goes elsewhere while the key is still down, so no keyup ever
         // arrives for it.
         await page.evaluate(() => window.dispatchEvent(new FocusEvent("blur")));
-        await page.mouse.move(wall.left + 1, wall.top + 1);
-        await page.mouse.move(wall.left, wall.top);
+        await page.mouse.move(wall.left + 1, wall.bottom - 1);
+        await page.mouse.move(wall.left, wall.bottom);
         await settle();
 
         const readout = await page.evaluate(() => document.querySelector(".floorplan-measure")?.textContent ?? "");
@@ -1368,7 +1373,13 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         const before = await wallCount();
         expect(before).toBeGreaterThan(4);
 
-        await page.locator('#floorplan-floors [aria-label="Duplicate this floor"]').click();
+        // The toolbar's copy tool opens the add-floor dialog prefilled to
+        // copy the active floor, above it by default - submitting as-is
+        // reproduces the old dedicated "duplicate" button exactly.
+        await page.locator("#floorplan-copy-floor").click();
+        const dialog = page.locator(".floorplan-add-floor-dialog");
+        expect(await dialog.locator("select").inputValue()).not.toBe("");
+        await dialog.locator('button:text-is("Add floor")').click();
         await settle();
 
         // A new storey above, and it is the one being shown - without checking
@@ -1398,10 +1409,13 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
                 ]),
             );
         // Two empty storeys on top of the named ground floor.
-        await page.locator('#floorplan-floors [aria-label="Add floor above"]').click();
-        await settle();
-        await page.locator('#floorplan-floors [aria-label="Add floor above"]').click();
-        await settle();
+        const dialog = page.locator(".floorplan-add-floor-dialog");
+        for (let i = 0; i < 2; i++) {
+            await page.locator('#floorplan-floors [aria-label="Add floor"]').click();
+            await dialog.locator('button:text-is("Above")').click();
+            await dialog.locator('button:text-is("Add floor")').click();
+            await settle();
+        }
         expect(await strip()).toEqual([
             ["2", ""],
             ["1", ""],
@@ -1410,7 +1424,10 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
 
         await page.locator('#floorplan-floors button:has(.floorplan-floor-tab__chip:text-is("G"))').click();
         await settle();
-        await page.locator('#floorplan-floors [aria-label="Duplicate this floor"]').click();
+        // The copy toolbar tool defaults to "Above" and prefills the active
+        // (now "G") floor as the copy source.
+        await page.locator("#floorplan-copy-floor").click();
+        await dialog.locator('button:text-is("Add floor")').click();
         await settle();
 
         // The copy carries the source's nickname, so it is the one sitting
@@ -1582,7 +1599,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await openEditor();
         const plan = await planExtent();
 
-        // A storey's own dimensions, on the floor panel.
+        // A storey's own dimensions, on the floor panel - behind the "Floor
+        // details" disclosure, since neither is needed to draw a floor.
+        await page.locator("#floorplan-floor-fields .floorplan-details-accordion summary").click();
         const ceiling = page.locator('#floorplan-floor-fields input[aria-label="Ceiling height"]');
         await ceiling.fill("2.4");
         await page.locator('#floorplan-floor-fields input[aria-label="Ground level"]').fill("41.5");
@@ -1646,6 +1665,35 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await settle();
         expect(await page.locator(".floorplan-wall").count()).toBe(0);
         expect(await page.evaluate(() => (document.getElementById("floorplan-empty") as HTMLElement).hidden)).toBe(false);
+        await page.close();
+    });
+
+    test("room, opening and box-select are disabled until a boundary exists", async () => {
+        // A room can't be generated with no enclosed geometry, an opening has
+        // no wall to cut into, and a box selection has nothing to select -
+        // offering them on a boundary-less floor is what made a first
+        // floorplan confusing to start.
+        const disabledness = () =>
+            page.evaluate(() =>
+                Object.fromEntries(
+                    ["room", "opening", "box"].map((tool) => [tool, (document.querySelector(`[data-tool="${tool}"]`) as HTMLButtonElement).disabled]),
+                ),
+            );
+
+        await openEditor({ width: 1200, height: 800 }, false, "empty");
+        expect(await disabledness()).toEqual({ room: true, opening: true, box: true });
+        // Select and rotate are never gated - there is always something to
+        // select (or nothing, which select already handles), and turning an
+        // empty canvas is harmless.
+        expect(await page.evaluate(() => (document.querySelector('[data-tool="select"]') as HTMLButtonElement).disabled)).toBe(false);
+
+        await page.locator("#floorplan-start-rectangle").click();
+        await settle();
+        expect(await disabledness()).toEqual({ room: false, opening: false, box: false });
+
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        expect(await disabledness()).toEqual({ room: true, opening: true, box: true });
         await page.close();
     });
 
@@ -1889,15 +1937,31 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         const chips = () => page.evaluate((sel) => [...document.querySelectorAll(`${sel} .floorplan-floor-tab__chip`)].map((n) => (n.textContent ?? "").trim()), strip);
         const named = () => page.evaluate((sel) => [...document.querySelectorAll(`${sel} .floorplan-floor-tab`)].map((tab) => `${(tab.querySelector(".floorplan-floor-tab__chip")?.textContent ?? "").trim()}:${(tab.querySelector(".floorplan-floor-tab__name")?.textContent ?? "").trim()}`), strip);
 
-        await page.locator(`${strip} [aria-label="Add floor above"]`).click();
-        await settle();
-        await page.locator(`${strip} [aria-label="Add floor above"]`).click();
-        await settle();
+        const dialog = page.locator(".floorplan-add-floor-dialog");
+        for (let i = 0; i < 2; i++) {
+            await page.locator(`${strip} [aria-label="Add floor"]`).click();
+            await dialog.locator('button:text-is("Above")').click();
+            await dialog.locator('button:text-is("Add floor")').click();
+            await settle();
+        }
         expect(await chips()).toEqual(["2", "1", "G"]);
+
+        // A plain .click() intermittently reports this freshly-rebuilt strip's
+        // buttons as covered by the panel's own collapse toggle, even though
+        // their own measured boxes do not overlap it - a stale hit-test frame
+        // in this host's chrome-headless-shell, not a real layering bug (the
+        // same coordinates, clicked directly, land correctly). Clicking the
+        // measured centre point sidesteps the actionability check that trips
+        // on it.
+        const clickAt = async (locator: ReturnType<typeof page.locator>) => {
+            const box = await locator.boundingBox();
+            if (!box) throw new Error("not rendered");
+            await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        };
 
         // Name the top storey, so the assertion after the delete is about which
         // storey survived rather than about how many did.
-        await page.locator(`${strip} .floorplan-floor-tab`).first().locator("button").first().click();
+        await clickAt(page.locator(`${strip} .floorplan-floor-tab`).first().locator("button").first());
         await settle();
         await page.locator(".floorplan-floor-fields__name").fill("Attic");
         await page.locator(".floorplan-floor-fields__name").blur();
@@ -1906,13 +1970,13 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
 
         // Delete the middle one. Its control only appears on the storey being
         // viewed, which is deliberate - so select it first.
-        await page.locator(`${strip} .floorplan-floor-tab`).nth(1).locator("button").first().click();
+        await clickAt(page.locator(`${strip} .floorplan-floor-tab`).nth(1).locator("button").first());
         await settle();
-        page.once("dialog", (dialog) => {
-            expect(dialog.message()).toContain("removes everything drawn on it");
-            void dialog.accept();
+        page.once("dialog", (confirmDialog) => {
+            expect(confirmDialog.message()).toContain("removes everything drawn on it");
+            void confirmDialog.accept();
         });
-        await page.locator(`${strip} .floorplan-floor-tab`).nth(1).locator(".floorplan-floor-tab__delete").click();
+        await clickAt(page.locator(`${strip} .floorplan-floor-tab`).nth(1).locator(".floorplan-floor-tab__delete"));
         await settle();
 
         // The attic is still the attic; it is simply the first storey up now.
@@ -2117,6 +2181,105 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // that says only the connected walls moved.
         expect(Math.abs(after.left + after.width - (before.left + before.width))).toBeLessThanOrEqual(2);
         expect(Math.abs(after.top + after.height - (before.top + before.height))).toBeLessThanOrEqual(2);
+        await page.close();
+    });
+
+    test("dragging a wall's midpoint splits it into two, at that corner", async () => {
+        // A bend added to a straight run, without redrawing the whole wall
+        // from scratch - the inverse of removing a joint's point, below.
+        await openEditor();
+        const wallCount = () => page.locator(".floorplan-wall").count();
+        expect(await wallCount()).toBe(4);
+        const before = await planExtent();
+
+        // Selected walls only offer this handle - it sits exactly at the
+        // wall's own midpoint, which is also the natural place to click the
+        // wall itself, so select from a point off-centre first.
+        await page.mouse.click(before.grab.x - 30, before.grab.y);
+        await settle();
+
+        const midpoint = await page.evaluate(() => {
+            const handles = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-wall-midpoint"));
+            const boxes = handles.map((n) => n.getBoundingClientRect());
+            return boxes[0] ? { x: boxes[0].left + boxes[0].width / 2, y: boxes[0].top + boxes[0].height / 2, count: handles.length } : null;
+        });
+        expect(midpoint, "no midpoint handle on the selected wall").not.toBeNull();
+        expect(midpoint!.count).toBe(1);
+
+        await page.mouse.move(midpoint!.x, midpoint!.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(midpoint!.x, midpoint!.y - step * 5);
+        await page.mouse.up();
+        await settle();
+
+        expect(await wallCount()).toBe(5);
+        const after = await planExtent();
+        // The bend pulled the top edge up and out, and left the rest of the
+        // box alone - the sides it did not touch stayed where they were.
+        expect(before.top - after.top).toBeGreaterThan(20);
+        expect(Math.abs(after.left - before.left)).toBeLessThanOrEqual(2);
+        expect(Math.abs(after.width - before.width)).toBeLessThanOrEqual(2);
+        await page.close();
+    });
+
+    test("removing a joint's point merges the two walls that met there", async () => {
+        // The corner disappears, and what met there becomes one wall running
+        // straight between the two far ends.
+        await openEditor();
+        const wallCount = () => page.locator(".floorplan-wall").count();
+        expect(await wallCount()).toBe(4);
+
+        const corner = await page.evaluate(() => {
+            const joints = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-joint"));
+            const boxes = joints.map((n) => n.getBoundingClientRect());
+            const best = boxes.sort((a, b) => a.left + a.top - (b.left + b.top))[0];
+            return best ? { x: best.left + best.width / 2, y: best.top + best.height / 2 } : null;
+        });
+        expect(corner, "no joint handles").not.toBeNull();
+
+        await page.mouse.click(corner!.x, corner!.y, { button: "right" });
+        await page.waitForSelector("text=Remove this point", { timeout: 10000 });
+        await page.locator(".floorplan-context-menu >> text=Remove this point").click();
+        await settle();
+
+        expect(await wallCount()).toBe(3);
+        // The menu is gone once it has been used, same as every other one.
+        expect(await page.locator(".floorplan-context-menu").count()).toBe(0);
+        await page.close();
+    });
+
+    test("removing a joint refuses when a door or window sits on either wall", async () => {
+        await openEditor();
+        const plan = await planExtent();
+        // Cut a door into the wall nearest the grab point, then find the
+        // joint at one of that wall's own ends.
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+
+        const corner = await page.evaluate((grab) => {
+            const joints = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-joint"));
+            const boxes = joints.map((n) => ({ el: n, box: n.getBoundingClientRect() }));
+            const nearest = boxes.sort((a, b) => {
+                const da = Math.hypot(a.box.left - grab.x, a.box.top - grab.y);
+                const db = Math.hypot(b.box.left - grab.x, b.box.top - grab.y);
+                return da - db;
+            })[0];
+            return nearest ? { x: nearest.box.left + nearest.box.width / 2, y: nearest.box.top + nearest.box.height / 2 } : null;
+        }, plan.grab);
+        expect(corner, "no joint handles").not.toBeNull();
+
+        const wallCount = () => page.locator(".floorplan-wall").count();
+        const before = await wallCount();
+        await page.mouse.click(corner!.x, corner!.y, { button: "right" });
+        await page.waitForSelector("text=Remove this point", { timeout: 10000 });
+        await page.locator(".floorplan-context-menu >> text=Remove this point").click();
+        await settle();
+
+        // Refused, not silently ignored: the wall count is untouched.
+        expect(await wallCount()).toBe(before);
         await page.close();
     });
 

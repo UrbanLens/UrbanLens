@@ -231,18 +231,18 @@
     align-items: flex-start;
     gap: .25rem;
 
-    // The add buttons - plain children, not wrapped in .floorplan-floor-tab
-    // like the others - match their height so they don't stand out as bigger
-    // for having no delete button next to them.
+    // The add button - a plain child, not wrapped in .floorplan-floor-tab
+    // like the others - matches their height so it doesn't stand out as
+    // bigger for having no delete button next to it.
     > .btn {
         height: 2rem;
         white-space: nowrap;
     }
 }
 
-// One at each end of the strip: the strip is the building in section, so the
-// button above the top floor adds a storey above and the one below the bottom
-// floor adds a basement. Square, and icon-only, so neither reads as a floor.
+// Opens the add-floor dialog (position and copy source are asked there, not
+// encoded in which button was clicked). Square, and icon-only, so it doesn't
+// read as a floor itself.
 .floorplan-floor-tab__add {
     display: flex;
     align-items: center;
@@ -364,6 +364,9 @@
     width: auto !important;
     height: auto !important;
     margin-left: 10px;
+    // It trails the cursor while drawing a wall - never let it steal the
+    // click the cursor is aiming at the map underneath.
+    pointer-events: none;
 }
 
 // A background circle around the glyph, same treatment as detail-pin markers
@@ -444,26 +447,14 @@
     position: absolute;
     z-index: 500;
     top: 10px;
-    // Centred, because both corners are spoken for: the floor strip holds the
-    // left, and the tool pill holds the right at wide widths (_layout.scss
-    // moves it from bottom-right to top-right above the small breakpoint).
-    left: 50%;
-    transform: translateX(-50%);
+    // The floor strip no longer lives up here (it is bottom-right at every
+    // breakpoint, matching the main map's saved-filters toolbar), so this
+    // corner is free at every width now too - no more centring to dodge it,
+    // and no more fighting the drawing-tools pill for width budget as it
+    // grows a button. One position, not two juggled across a breakpoint.
+    left: 10px;
     display: flex;
     gap: 0.25rem;
-
-    // Under 768px the tool pill drops to the bottom of the canvas, which frees
-    // the right - and centring a row that now carries zoom as well puts it
-    // through the floor strip on a narrow screen. Corners beat a centre here:
-    // left is the strip, right is this, bottom is the pill. 768 because that is
-    // where the pill actually moves, measured rather than guessed - the
-    // editor's own single-column breakpoint is 900, and using that put this row
-    // under the pill for the whole range between them.
-    @media (max-width: 767px) {
-        left: auto;
-        right: 10px;
-        transform: none;
-    }
 
     // Appears only with a selection, so it must not shove undo and redo
     // sideways when it does - the two controls anyone reaches for blind.
@@ -487,61 +478,76 @@
     }
 }
 
+// Bottom right, horizontal, matching the main map's own saved-filters
+// toolbar (.map-saved-filters-toolbar, _layout.scss) - same idea, same
+// override technique: .map-buttons for identical background/border/shadow/
+// button styling and the collapse toggle "for free", pinned bottom-right at
+// every breakpoint (unlike .map-buttons, which flips to top-right on desktop)
+// since it is not a drawing tool that belongs beside the ones in the corner.
 .floorplan-canvas-floors {
-    position: absolute;
-    z-index: 500;
-    top: 10px;
-    left: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    max-height: calc(100% - 90px);
-    padding: 0.4rem 0.5rem;
-    border: 1px solid var(--ul-surface-border);
-    border-radius: 6px;
-    background: var(--ul-surface-bg, #fff);
-    box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+    top: auto !important;
+    bottom: 28px !important;
+    right: 10px !important;
+    max-width: min(70vw, 26rem);
 
-    > .floorplan-field__label {
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        opacity: 0.7;
-    }
-
-    // Bottom of the building at the bottom of the strip, and scrollable rather
-    // than unbounded: a tower has more storeys than a phone has screen.
+    // Bottom-most of the canvas's bottom-right stack (see the mobile rule
+    // below), so nothing needs to make room below it.
     .floorplan-floors {
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
+        align-items: center;
         gap: 0.25rem;
-        overflow-y: auto;
-        min-height: 0;
+        overflow-x: auto;
+        min-width: 0;
     }
 }
 
-// Sits under the tool pill, on the same side, so a tool's settings are beside
-// the tool rather than in the sidebar - which stacks below the map on a phone,
-// exactly where you cannot reach it while drawing.
-.floorplan-tool-options {
+// Groups the drawing tools and the tool-options panel below them, so the
+// second always clears the first regardless of how many rows either wraps
+// to on a narrow phone (adding an eighth tool button was enough to make
+// #floorplan-tools itself wrap at 320px) - a fixed pixel offset between two
+// things that can each reflow independently is exactly the failure mode the
+// main map's own "Mobile map bottom dock" section in _layout.scss describes,
+// solved there with a measured custom property; solved here structurally
+// instead, since the panels have no scroll container to break out of.
+.floorplan-toolbar-stack {
     position: absolute;
-    z-index: 500;
+    z-index: 1000; // matches .map-buttons' own, so it stacks consistently with .floorplan-canvas-floors
     right: 10px;
-    bottom: 76px;
+    bottom: 90px; // clears .floorplan-canvas-floors: 28px + one row + 8px gap
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    max-width: min(22rem, calc(100% - 20px));
-    padding: 0.4rem 0.5rem;
-    border: 1px solid var(--ul-surface-border);
-    border-radius: 6px;
-    background: var(--ul-surface-bg, #fff);
-    box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+    flex-direction: column-reverse; // #floorplan-tools stays nearest the floor strip
+    align-items: flex-end;
+    gap: 8px;
+    max-width: calc(100% - 20px);
+
+    // .map-buttons is position:absolute by default, so it can float solo
+    // elsewhere on the site - reset to participate in this stack's normal
+    // flex flow instead, which is what makes the "clears however tall its
+    // sibling turned out to be" behaviour work without measuring anything.
+    > .map-buttons {
+        position: static;
+    }
 
     @include up($breakpoint-sm) {
-        top: 60px;
+        top: 12px;
         right: 12px;
         bottom: auto;
+        flex-direction: column; // #floorplan-tools first, tool options below it
+    }
+}
+
+// Beside the canvas rather than in the sidebar, which stacks below the map
+// on a phone, exactly where it cannot be reached while drawing.
+.floorplan-tool-options {
+    max-width: min(22rem, calc(100% - 20px));
+
+    // The base .map-buttons-content is a single unwrapped row, sized for a
+    // handful of icon buttons - this panel's rows are option groups with
+    // text labels, wider and more numerous, so they need to wrap.
+    .map-buttons-content {
+        flex-wrap: wrap;
+        row-gap: 0.25rem;
     }
 
     &__group {
@@ -601,6 +607,17 @@
 
     &:hover {
         r: 7;
+    }
+}
+
+// Dragging one splits its wall in two - "copy" reads closer to "this adds
+// something" than the joint handle's "move" does.
+.floorplan-wall-midpoint {
+    cursor: copy;
+    transition: r 80ms ease-out;
+
+    &:hover {
+        r: 6;
     }
 }
 
@@ -700,13 +717,14 @@
     }
 }
 
-// Rubber-band box select, drawn over the map container while dragging.
+// Rubber-band box select, drawn over the map container while dragging - the
+// same orange as everything else selection touches (walls, rooms, openings).
 .floorplan-box-select {
     position: absolute;
     z-index: 1000;
     pointer-events: none;
-    background: rgb(0 131 143 / 12%);
-    border: 1px dashed #00838f;
+    background: rgb(245 124 0 / 12%);
+    border: 1px dashed #f57c00;
 }
 
 // Right-click menu for walls/rooms/markers/openings and empty map space.

@@ -1292,9 +1292,7 @@ class Profile(abstract.PublicDashboardModel):
                 (viewer_place_ids if place_id is not None else viewer_location_ids).add(place_id if place_id is not None else location_id)
             if viewer_place_ids or viewer_location_ids:
                 common_pin = set(
-                    Pin.objects.filter(profile__in=pending_pks)
-                    .filter(Q(location__place_id__in=viewer_place_ids) | Q(location_id__in=viewer_location_ids))
-                    .values_list("profile_id", flat=True),
+                    Pin.objects.filter(profile__in=pending_pks).filter(Q(location__place_id__in=viewer_place_ids) | Q(location_id__in=viewer_location_ids)).values_list("profile_id", flat=True),
                 )
         if wants_friend:
             viewer_friends = set(
@@ -1418,9 +1416,7 @@ class Profile(abstract.PublicDashboardModel):
                     (subject_place_ids if place_id is not None else subject_location_ids).add(place_id if place_id is not None else location_id)
                 if subject_place_ids or subject_location_ids:
                     visible |= set(
-                        Pin.objects.filter(profile_id__in=undecided)
-                        .filter(Q(location__place_id__in=subject_place_ids) | Q(location_id__in=subject_location_ids))
-                        .values_list("profile_id", flat=True),
+                        Pin.objects.filter(profile_id__in=undecided).filter(Q(location__place_id__in=subject_place_ids) | Q(location_id__in=subject_location_ids)).values_list("profile_id", flat=True),
                     )
             if wants_friend:
                 subject_friends = set(

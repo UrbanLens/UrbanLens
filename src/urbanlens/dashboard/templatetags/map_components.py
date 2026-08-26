@@ -263,6 +263,17 @@ register_map_layer(
 )
 register_map_layer(
     MapLayerSpec(
+        key="grid",
+        kind="custom",
+        label="Grid",
+        aria_label="Show a measurement grid, and snap to it",
+        tooltip="Show grid",
+        icon="grid_4x4",
+        button_id="floorplan-grid-button",
+    )
+)
+register_map_layer(
+    MapLayerSpec(
         key="nearby",
         kind="custom",
         label="Nearby Pins",

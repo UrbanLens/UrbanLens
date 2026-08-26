@@ -47,12 +47,12 @@ import { CONNECTOR_KINDS, connectorCandidates } from "../shared/floorplan/connec
 import { OPENING_SWINGS, doorLeaves, rehostOpening, swings } from "../shared/floorplan/openings";
 import { type RoomBoundary, splitRoomBoundary } from "../shared/floorplan/rooms";
 import { applyServerIds, snapshotForSend } from "../shared/floorplan/sync";
-import { contiguousLevels, deriveDesignations } from "../shared/floorplan/designations";
+import { GROUND_LABEL, contiguousLevels, deriveDesignations } from "../shared/floorplan/designations";
 import { type DragModifiers, DragGesture, constrainToAxis, modifiersOf, snapRotation } from "../shared/floorplan/drag";
 import { installGlobalIconPicker } from "../shared/icon-picker";
 import { History } from "../shared/floorplan/history";
 import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar";
-import { PIXEL_TOLERANCES, clampOpening, snapPoint, snapTranslation } from "../shared/floorplan/snapping";
+import { GRID_SPACING_METERS, PIXEL_TOLERANCES, clampOpening, snapPoint, snapTranslation } from "../shared/floorplan/snapping";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers } from "../shared/map-layers";
 
@@ -86,7 +86,10 @@ type SelectionItem =
 /** Marker kinds that can join floors together. */
 
 const WALL_STYLE: Record<string, { color: string; weight: number; dashArray?: string }> = {
-    exterior: { color: "#263238", weight: 5 },
+    // Same blue as a building's boundary on the pin detail page - it plays
+    // the same role here: the building's own outline, not a property line
+    // (that's "fence", below) and not a partition (that's "interior").
+    exterior: { color: "#1d4ed8", weight: 5 },
     interior: { color: "#546e7a", weight: 3 },
     // Finely dotted and warmer than the greys: a boundary, drawn as something
     // other than the building. Distinct from virtual's long dashes and
@@ -141,7 +144,7 @@ function markerIcon(marker: Marker, selected: boolean): L.DivIcon {
     const size = 22;
     const pad = 5;
     const total = size + pad * 2;
-    const ring = selected ? "outline:3px solid #00838f;outline-offset:2px;" : "";
+    const ring = selected ? "outline:3px solid #f57c00;outline-offset:2px;" : "";
     return L.divIcon({
         className: "floorplan-marker",
         html: `<span style="background:#fff;border:2px solid ${color};${ring}" class="floorplan-marker__badge"><span class="material-symbols-outlined" style="color:${color};font-size:${size}px;">${glyph}</span></span>`,
@@ -299,6 +302,7 @@ function boot(): void {
         faces: [] as Face[],
         versions: [] as VersionSummary[],
         showUnderlay: false,
+        showGrid: false,
         /** The plan could not be fetched, so what is on screen is not it. */
         loadFailed: false,
         /**
@@ -337,6 +341,13 @@ function boot(): void {
                     render();
                 },
             },
+            grid: {
+                isActive: () => state.showGrid,
+                toggle: () => {
+                    state.showGrid = !state.showGrid;
+                    renderGrid();
+                },
+            },
         },
     });
 
@@ -368,6 +379,11 @@ function boot(): void {
     });
 
     let projection = new PlanProjection({ lat, lng });
+    // First, so it always paints beneath everything else - it depends only
+    // on the viewport and the drawing axis, never on state.doc, so it is
+    // redrawn on pan/zoom/rotate (see renderGrid()) rather than on every
+    // render().
+    const gridLayer = L.layerGroup().addTo(map);
     const wallLayer = L.layerGroup().addTo(map);
     const roomLayer = L.layerGroup().addTo(map);
     const markerLayer = L.layerGroup().addTo(map);
@@ -406,6 +422,11 @@ function boot(): void {
             wall: PIXEL_TOLERANCES.wall * mpp,
             extension: PIXEL_TOLERANCES.extension * mpp,
         };
+    }
+
+    /** The grid-snap option for snapPoint(), or null while the grid is off. */
+    function gridOption(): { spacing: number; tolerance: number } | null {
+        return state.showGrid ? { spacing: GRID_SPACING_METERS, tolerance: tolerances().endpoint } : null;
     }
 
     /**
@@ -722,6 +743,24 @@ function boot(): void {
         if (redoButton) redoButton.disabled = !history.canRedo;
     }
 
+    /**
+     * Disable tools that have nothing to work with on a boundary-less floor.
+     *
+     * A room can only be generated from enclosed geometry, an opening only
+     * cuts into a wall, and a box selection has nothing to select - offering
+     * them before there is a single exterior wall is what made a first
+     * floorplan confusing to start. Disabled rather than removed (contrast
+     * the rotate tool above, which never becomes usable and is removed
+     * outright): these three do become usable, as soon as a boundary exists.
+     */
+    function updateToolAvailability(current: Floor): void {
+        const hasBoundary = current.walls.some((wall) => wall.kind === "exterior");
+        for (const tool of ["room", "opening", "box"] as const) {
+            const button = document.querySelector<HTMLButtonElement>(`[data-tool="${tool}"]`);
+            if (button) button.disabled = !hasBoundary;
+        }
+    }
+
     /** Adopt a document restored from either direction of the history. */
     /** The plan name and date, which live in static markup rather than in a panel
      * renderSidebar() rebuilds - so every path that changes the document has to
@@ -911,7 +950,7 @@ function boot(): void {
             const polygon = L.polygon(face.ring.map(toLatLng), {
                 className: "floorplan-room",
                 ...(seed ? ROOM_FILL : UNBOUND_FILL),
-                ...(roomSelected ? { color: "#00838f", weight: 4, fillColor: "#00838f", fillOpacity: 0.28 } : {}),
+                ...(roomSelected ? { color: "#f57c00", weight: 4, fillColor: "#f57c00", fillOpacity: 0.16 } : {}),
             }).addTo(roomLayer);
             // An un-subdivided outline gets no label. It is the building, and
             // captioning it "Unnamed room" is the same wrong claim as letting a
@@ -1076,7 +1115,7 @@ function boot(): void {
                 const line = L.polyline([toLatLng(along(s0)), toLatLng(along(s1))], {
                     className: "floorplan-wall",
                     ...style,
-                    ...(selected ? { color: "#00838f", weight: (style?.weight || 3) + 2 } : {}),
+                    ...(selected ? { color: "#f57c00", weight: (style?.weight || 3) + 2 } : {}),
                 }).addTo(wallLayer);
                 line.on("click", (event) => {
                     if (state.tool !== "select") return;
@@ -1193,7 +1232,10 @@ function boot(): void {
         // After the walls, so a joint sits on top of the lines it belongs to.
         // Not while dragging: they are one DOM node per corner, and whatever is
         // being dragged has already been grabbed.
-        if (state.tool === "select" && !activeDrags) renderJointHandles(current);
+        if (state.tool === "select" && !activeDrags) {
+            renderJointHandles(current);
+            renderMidpointHandles(current);
+        }
 
         markerNodes.clear();
         for (const marker of current.markers) {
@@ -1234,6 +1276,7 @@ function boot(): void {
         renderFloorTabs();
         updateDeleteButton();
         updateEmptyState(current);
+        updateToolAvailability(current);
         scheduleRoomLabelFit();
     }
 
@@ -1395,7 +1438,7 @@ function boot(): void {
             for (const leaf of doorLeaves(wall, opening)) {
                 L.polyline(leaf.map(toLatLng), {
                     className: "floorplan-door-swing",
-                    color: openingSelected ? "#00838f" : "#fb8c00",
+                    color: openingSelected ? "#f57c00" : "#fb8c00",
                     weight: 1.5,
                     opacity: openingSelected ? 0.9 : 0.5,
                     interactive: false,
@@ -1403,7 +1446,7 @@ function boot(): void {
             }
             const line = L.polyline([toLatLng(at(opening.t_start)), toLatLng(at(opening.t_end))], {
                 className: "floorplan-opening",
-                color: openingSelected ? "#00838f" : isWindow ? "#1e88e5" : "#fb8c00",
+                color: openingSelected ? "#f57c00" : isWindow ? "#1e88e5" : "#fb8c00",
                 weight: openingSelected ? 9 : 6,
                 opacity: openingSelected || isWindow ? 1 : 0.45,
             })
@@ -1573,6 +1616,46 @@ function boot(): void {
     }
 
     /**
+     * The visible measurement grid, squared to the plan's own drawing axis.
+     *
+     * Depends only on the viewport and the axis, never on state.doc, so it
+     * is regenerated on pan/zoom/rotate rather than inside render() - a wall
+     * moving does not change where the grid falls, and rebuilding it on
+     * every drag frame would be pure waste.
+     */
+    function renderGrid(): void {
+        gridLayer.clearLayers();
+        if (!state.showGrid) return;
+        const axisRadians = (state.doc.rotation_degrees * Math.PI) / 180;
+        // Into axis-space before finding the extent, so the grid squares to
+        // the drawing axis rather than to true north - the same reasoning
+        // snapToAngle (and now snapToGrid) uses for right angles.
+        const corners = [map.getBounds().getNorthWest(), map.getBounds().getNorthEast(), map.getBounds().getSouthEast(), map.getBounds().getSouthWest()].map((ll) =>
+            rotate(toLocal(ll), -axisRadians),
+        );
+        const minX = Math.min(...corners.map((p) => p.x));
+        const maxX = Math.max(...corners.map((p) => p.x));
+        const minY = Math.min(...corners.map((p) => p.y));
+        const maxY = Math.max(...corners.map((p) => p.y));
+
+        // Coarsen rather than draw thousands of lines when zoomed out far
+        // enough to see a whole neighbourhood - the grid stays useful as a
+        // scale reference instead of either vanishing or freezing the tab.
+        let spacing = GRID_SPACING_METERS;
+        const MAX_LINES = 400;
+        while ((maxX - minX) / spacing + (maxY - minY) / spacing > MAX_LINES) spacing *= 2;
+
+        const lines: Array<[[number, number], [number, number]]> = [];
+        for (let x = Math.floor(minX / spacing) * spacing; x <= maxX; x += spacing) {
+            lines.push([toLatLng(rotate({ x, y: minY }, axisRadians)), toLatLng(rotate({ x, y: maxY }, axisRadians))]);
+        }
+        for (let y = Math.floor(minY / spacing) * spacing; y <= maxY; y += spacing) {
+            lines.push([toLatLng(rotate({ x: minX, y }, axisRadians)), toLatLng(rotate({ x: maxX, y }, axisRadians))]);
+        }
+        L.polyline(lines, { color: "#90a4ae", weight: 1, opacity: 0.35, interactive: false }).addTo(gridLayer);
+    }
+
+    /**
      * A handle for turning a selected room.
      *
      * The room tool builds rectangles squared to the plan's own axis, which is
@@ -1595,8 +1678,8 @@ function boot(): void {
         const axis = (state.doc.rotation_degrees * Math.PI) / 180;
         const gripAt = { x: pivot.x + Math.cos(axis - Math.PI / 2) * reach, y: pivot.y + Math.sin(axis - Math.PI / 2) * reach };
 
-        L.polyline([toLatLng(pivot), toLatLng(gripAt)], { color: "#00838f", weight: 1, dashArray: "3 3", interactive: false }).addTo(handleLayer);
-        const grip = L.circleMarker(toLatLng(gripAt), { radius: 7, color: "#00838f", fillColor: "#fff", fillOpacity: 1, weight: 2, className: "floorplan-handle floorplan-rotate-grip" }).addTo(handleLayer);
+        L.polyline([toLatLng(pivot), toLatLng(gripAt)], { color: "#f57c00", weight: 1, dashArray: "3 3", interactive: false }).addTo(handleLayer);
+        const grip = L.circleMarker(toLatLng(gripAt), { radius: 7, color: "#f57c00", fillColor: "#fff", fillOpacity: 1, weight: 2, className: "floorplan-handle floorplan-rotate-grip" }).addTo(handleLayer);
 
         let turning: { start: number; walls: Map<Wall, { a: Pt; b: Pt }>; seedAt: Pt; anchors: CornerAnchors } | null = null;
         bindDrag(grip.getElement(), {
@@ -1840,12 +1923,23 @@ function boot(): void {
             const onSelection = joint.ends.some((entry) => selectedWalls.has(wallId(entry.wall)));
             const handle = L.circleMarker(toLatLng(joint.point), {
                 radius: onSelection ? 6 : 3.5,
-                color: "#00838f",
+                color: "#f57c00",
                 fillColor: "#fff",
                 fillOpacity: 1,
                 weight: onSelection ? 2 : 1,
                 className: "floorplan-handle floorplan-joint",
             }).addTo(handleLayer);
+
+            handle.on("contextmenu", (event) => {
+                L.DomEvent.stop(event);
+                closeContextMenu();
+                const menu = buildJointContextMenu(joint);
+                const original = event.originalEvent as MouseEvent;
+                menu.style.left = `${original.clientX}px`;
+                menu.style.top = `${original.clientY}px`;
+                document.body.appendChild(menu);
+                contextMenuEl = menu;
+            });
 
             // Captured on the first move: the ends are read off the geometry as
             // it stands now, and re-reading them mid-drag would pick up walls
@@ -1871,7 +1965,7 @@ function boot(): void {
                         const squared = constrainToAxis({ x: local.x - joint.point.x, y: local.y - joint.point.y }, (state.doc.rotation_degrees * Math.PI) / 180);
                         aimed = { x: joint.point.x + squared.x, y: joint.point.y + squared.y };
                     }
-                    const snapped = snapPoint(aimed, others, tolerances(), { suspended: snapOff() });
+                    const snapped = snapPoint(aimed, others, tolerances(), { suspended: snapOff(), grid: gridOption() });
                     for (const entry of moving) {
                         if (entry.end === "a") {
                             entry.wall.ax = snapped.point.x;
@@ -1885,6 +1979,74 @@ function boot(): void {
                 },
                 end: (moved) => {
                     moving = null;
+                    if (moved) markDirty();
+                },
+            });
+        }
+    }
+
+    /**
+     * A handle at a selected wall's own middle - dragging it splits the
+     * wall in two, so a bend can be added to a straight run without
+     * redrawing it.
+     *
+     * Selected walls only, not every wall on the floor: the handle sits
+     * exactly at the wall's own midpoint, which is also the most natural
+     * place to click the wall itself - drawing it unconditionally stole
+     * that click from every unselected wall's ordinary selection. Requiring
+     * a select first costs one extra click on the rare "split it right
+     * away" path and avoids that on every other click near a wall's middle.
+     *
+     * A wall with an opening is skipped: an opening is stored as a fraction
+     * along its wall, and deciding what a split does to one that straddles
+     * the cut is a design question nobody asked for here - remove the
+     * opening first.
+     */
+    function renderMidpointHandles(current: Floor): void {
+        for (const wall of current.walls) {
+            if (wall.openings.length) continue;
+            if (!isSelected({ kind: "wall", wall })) continue;
+            const mid = { x: (wall.ax + wall.bx) / 2, y: (wall.ay + wall.by) / 2 };
+            const handle = L.circleMarker(toLatLng(mid), {
+                radius: 3,
+                color: "#f57c00",
+                fillColor: "#fff",
+                fillOpacity: 0.6,
+                weight: 1,
+                className: "floorplan-handle floorplan-wall-midpoint",
+            }).addTo(handleLayer);
+
+            // Set on the first move: the wall is split right there, and every
+            // move after that is an ordinary two-wall joint drag on the
+            // corner the split just created.
+            let split: { near: Wall; far: Wall } | null = null;
+            bindDrag(handle.getElement(), {
+                start: () => state.tool === "select",
+                move: ({ local, modifiers }) => {
+                    if (!split) {
+                        checkpoint();
+                        const near: Wall = { ...wall, uuid: nextLocalId(), bx: mid.x, by: mid.y, openings: [] };
+                        const far: Wall = { ...wall, uuid: nextLocalId(), ax: mid.x, ay: mid.y, openings: [] };
+                        current.walls = current.walls.filter((item) => item !== wall);
+                        current.walls.push(near, far);
+                        split = { near, far };
+                    }
+                    const carried = new Set([wallId(split.near), wallId(split.far)]);
+                    const others = wallSegments(current).filter((segment) => !carried.has(segment.wallId));
+                    let aimed = local;
+                    if (modifiers.constrain) {
+                        const squared = constrainToAxis({ x: local.x - mid.x, y: local.y - mid.y }, (state.doc.rotation_degrees * Math.PI) / 180);
+                        aimed = { x: mid.x + squared.x, y: mid.y + squared.y };
+                    }
+                    const snapped = snapPoint(aimed, others, tolerances(), { suspended: snapOff(), grid: gridOption() });
+                    split.near.bx = snapped.point.x;
+                    split.near.by = snapped.point.y;
+                    split.far.ax = snapped.point.x;
+                    split.far.ay = snapped.point.y;
+                    renderSoon();
+                },
+                end: (moved) => {
+                    split = null;
                     if (moved) markDirty();
                 },
             });
@@ -2063,7 +2225,7 @@ function boot(): void {
         if (target.closest(".leaflet-marker-icon, .floorplan-handle, .leaflet-popup, .leaflet-control, .floorplan-context-menu")) return;
         map.dragging.disable();
         wallDragStartPixel = map.mouseEventToContainerPoint(event);
-        wallDragStartLocal = snapPoint(toLocal(map.containerPointToLatLng(wallDragStartPixel)), wallSegments(floor()), tolerances(), { suspended: snapOff() }).point;
+        wallDragStartLocal = snapPoint(toLocal(map.containerPointToLatLng(wallDragStartPixel)), wallSegments(floor()), tolerances(), { suspended: snapOff(), grid: gridOption() }).point;
         wallDragActive = false;
     });
     map.getContainer().addEventListener("mousemove", (event: MouseEvent) => {
@@ -2080,6 +2242,7 @@ function boot(): void {
             from: wallDragStartLocal,
             suspended: snapOff(),
             axisRadians: (state.doc.rotation_degrees * Math.PI) / 180,
+            grid: gridOption(),
         });
         wallDragLine?.remove();
         wallDragLine = L.polyline([toLatLng(wallDragStartLocal), toLatLng(snapped.point)], { color: "#00acc1", weight: 3, dashArray: "5 5" }).addTo(ghostLayer);
@@ -2091,6 +2254,7 @@ function boot(): void {
                 from: wallDragStartLocal,
                 suspended: snapOff(),
                 axisRadians: (state.doc.rotation_degrees * Math.PI) / 180,
+                grid: gridOption(),
             });
             state.drawing = [wallDragStartLocal, snapped.point];
             commitChain();
@@ -2175,6 +2339,64 @@ function boot(): void {
         const count = Math.max(state.multi.length, 1);
         addAction(count > 1 ? `Delete ${count} items` : "Delete", deleteSelection);
         return menu;
+    }
+
+    /** The one action a joint handle offers, on its own small menu - a joint is not a SelectionItem, so it does not go through buildContextMenu. */
+    function buildJointContextMenu(joint: { point: Pt; ends: Array<{ wall: Wall; end: "a" | "b" }> }): HTMLUListElement {
+        const menu = document.createElement("ul");
+        menu.className = "floorplan-context-menu";
+        const entry = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "Remove this point";
+        button.addEventListener("click", () => {
+            removeJoint(joint);
+            closeContextMenu();
+        });
+        entry.appendChild(button);
+        menu.appendChild(entry);
+        return menu;
+    }
+
+    /**
+     * Remove a corner where exactly two walls meet, merging them into one.
+     *
+     * Only the simple case is offered: three or more walls, or a wall's own
+     * free end, has no single "the point" to remove without also deciding
+     * what happens to the others. An opening would need to move onto the
+     * merged wall or be dropped outright - a decision nobody asked for here,
+     * so it is refused rather than guessed at, the same as the midpoint
+     * handle that creates a joint like this one refuses to split a wall that
+     * already has one.
+     */
+    function removeJoint(joint: { point: Pt; ends: Array<{ wall: Wall; end: "a" | "b" }> }): void {
+        if (joint.ends.length !== 2) {
+            toast.info("This point can only be removed where exactly two walls meet.");
+            return;
+        }
+        const [first, second] = joint.ends as [{ wall: Wall; end: "a" | "b" }, { wall: Wall; end: "a" | "b" }];
+        if (first.wall.openings.length || second.wall.openings.length) {
+            toast.info("Remove the door, window, or gate here first.");
+            return;
+        }
+        if (first.wall.kind !== second.wall.kind) {
+            toast.info("These two walls are different kinds and can't be merged.");
+            return;
+        }
+        checkpoint();
+        const current = floor();
+        const boundBefore = boundSeeds(current);
+        const far = (entry: { wall: Wall; end: "a" | "b" }): Pt => (entry.end === "a" ? wallEnd(entry.wall) : wallStart(entry.wall));
+        const farFirst = far(first);
+        const farSecond = far(second);
+        const merged: Wall = { uuid: nextLocalId(), kind: first.wall.kind, thickness: first.wall.thickness, ax: farFirst.x, ay: farFirst.y, bx: farSecond.x, by: farSecond.y, openings: [] };
+        current.walls = current.walls.filter((wall) => wall !== first.wall && wall !== second.wall);
+        current.walls.push(merged);
+        pruneOrphanedSeeds(current, boundBefore);
+        pruneUnusedReferences();
+        clearSelection();
+        renderSidebar();
+        markDirty();
     }
 
     function showContextMenu(event: L.LeafletMouseEvent, item: SelectionItem | null): void {
@@ -2496,6 +2718,7 @@ function boot(): void {
             from,
             suspended: snapOff(),
             axisRadians: (state.doc.rotation_degrees * Math.PI) / 180,
+            grid: gridOption(),
         });
         state.cursor = snapped.point;
         state.snapKind = snapped.label;
@@ -2513,6 +2736,15 @@ function boot(): void {
         map.getContainer().addEventListener(type, (raw) => {
             const event = raw as PointerEvent;
             if (state.tool !== "wall") return;
+            // Mouse already gets a continuous pointermove while it hovers, so
+            // pointerdown adds nothing for it - and redrawing the ghost layer
+            // there was the bug: tearing down and rebuilding its SVG elements
+            // mid-mousedown broke the browser's click synthesis for the very
+            // point that mousedown was placing, so every corner after the
+            // first silently failed to add. Touch has no hover - pointerdown
+            // is the only event that arrives before a finger has moved, so it
+            // still needs to aim there.
+            if (type === "pointerdown" && event.pointerType === "mouse") return;
             aimWallPreview(map.mouseEventToLatLng(event));
         });
     }
@@ -2582,6 +2814,7 @@ function boot(): void {
                 from,
                 suspended: snapOff(),
                 axisRadians: (state.doc.rotation_degrees * Math.PI) / 180,
+                grid: gridOption(),
             });
             // Clicking the chain's own origin closes the loop and finishes.
             const origin = state.drawing[0];
@@ -2737,6 +2970,11 @@ function boot(): void {
     // A zoom changes what fits without changing anything worth re-rendering.
     map.on("zoomend", () => scheduleRoomLabelFit());
 
+    // The grid depends only on the viewport and the axis, both of which
+    // these three events cover between them - never on state.doc, so it is
+    // not part of render()'s own document-driven redraw.
+    map.on("moveend zoomend rotate", renderGrid);
+
     map.on("rotate", () => {
         const bearing = map.getBearing();
         // Also fires for the load-time setBearing() that restores a saved
@@ -2764,7 +3002,9 @@ function boot(): void {
         // that both detaches a wall and disables snapping is a key whose effect
         // nobody can predict. Bare, so it works mid-drag - snapping is not
         // latched, only the mode is.
-        if (event.key === "`") state.suspendSnap = true;
+        // `code` too: on layouts where the grave key is a dead/compose key or
+        // shifts to a different character, `.key` alone never sees a backtick.
+        if (event.key === "`" || event.code === "Backquote") state.suspendSnap = true;
         const onCanvas = document.activeElement === mapEl || mapEl.contains(document.activeElement);
 
         // Tab steps through the plan while the canvas has focus. Taking Tab is
@@ -2886,7 +3126,7 @@ function boot(): void {
     );
 
     document.addEventListener("keyup", (event) => {
-        if (event.key === "`") state.suspendSnap = false;
+        if (event.key === "`" || event.code === "Backquote") state.suspendSnap = false;
     });
     // A held key whose keyup lands on somebody else - alt-tab, a system
     // shortcut, the browser's own find bar - never reaches the keyup above, and
@@ -3102,8 +3342,9 @@ function boot(): void {
     }
 
     function renderToolOptions(): void {
-        const host = document.getElementById("floorplan-tool-options");
-        if (!host) return;
+        const panel = document.getElementById("floorplan-tool-options");
+        const host = document.getElementById("floorplan-tool-options-content");
+        if (!panel || !host) return;
         host.replaceChildren();
 
         /**
@@ -3197,13 +3438,24 @@ function boot(): void {
             host.appendChild(wrap);
         }
 
-        host.hidden = host.childElementCount === 0;
+        panel.hidden = host.childElementCount === 0;
     }
 
     function setTool(tool: Tool): void {
         if (state.drawing.length) commitChain();
+        // A marker's popup auto-opens when it's placed and stays open across
+        // a tool switch. Without closing it here, the first click after
+        // switching to e.g. the wall tool is read as "dismiss that popup"
+        // (see popupOpenAtPointerDown below) and silently drops the corner
+        // the click was meant to place.
+        map.closePopup();
+        popupOpenAtPointerDown = false;
         state.tool = tool;
-        for (const button of document.querySelectorAll<HTMLButtonElement>("#floorplan-tools button")) {
+        // [data-tool], not every button: the collapse toggle and the
+        // one-shot "copy this floor" action live in the same row but are
+        // not tools, and stamping aria-pressed="false" on a non-toggle
+        // button announces it as an unpressed toggle to a screen reader.
+        for (const button of document.querySelectorAll<HTMLButtonElement>("#floorplan-tools button[data-tool]")) {
             button.classList.toggle("is-active", button.dataset.tool === tool);
             button.setAttribute("aria-pressed", String(button.dataset.tool === tool));
         }
@@ -3222,7 +3474,7 @@ function boot(): void {
                       : tool === "opening"
                         ? "Tap a wall to cut the opening showing above"
                         : tool === "wall"
-                    ? "Click to place corners · click the first corner to close · Esc finishes · hold ` to ignore snapping"
+                    ? "Click to place corners · click the first corner to close, or click the last one again to finish open-ended · Esc finishes · hold ` to ignore snapping"
                     : tool === "room"
                       ? "Click to generate a rectangular room, sized and joined from what's already drawn"
                         : tool === "marker"
@@ -3231,6 +3483,11 @@ function boot(): void {
         }
         renderToolOptions();
         renderSidebar();
+        // Joint and midpoint handles only ever show in select mode, and
+        // nothing else re-renders the canvas on a tool switch by itself - so
+        // without this, switching to select left them absent until some
+        // unrelated edit happened to redraw the floor.
+        render();
     }
 
     // ------------------------------------------------------------- sidebar
@@ -3256,7 +3513,7 @@ function boot(): void {
         const code = document.createElement("input");
         code.className = "form-input floorplan-floor-fields__code";
         code.value = item.designation || "";
-        code.placeholder = labels.get(item) || "";
+        code.placeholder = designationPlaceholder(item, labels);
         code.maxLength = 8;
         code.setAttribute("aria-label", "Floor number or code");
         code.addEventListener("input", () => {
@@ -3272,7 +3529,7 @@ function boot(): void {
             renderFloorTabs(true);
             // Left out of that redraw, and this placeholder is the derived label,
             // which clearing the designation hands back control of.
-            code.placeholder = floorLabels().get(item) || "";
+            code.placeholder = designationPlaceholder(item, floorLabels());
         });
         row.appendChild(code);
 
@@ -3292,64 +3549,176 @@ function boot(): void {
         host.appendChild(row);
 
         // Floor-to-ceiling, and the walking surface's height above sea level.
-        // Both are stored per storey and neither was ever asked for; the first
-        // is what makes a section drawing possible at all, and the second is
-        // what ties a basement to the ground outside it.
+        // Both are stored per storey, but neither is needed to draw a floor,
+        // so they sit behind a disclosure rather than in the main flow - the
+        // same "Add more details" idiom the sidebar already uses below for
+        // the plan's own name/date/versions, distinctly labelled since this
+        // one is scoped to the floor rather than the whole plan.
         const key = `floor:${item.uuid || item.level}`;
-        host.appendChild(
+        const advanced = document.createElement("details");
+        advanced.className = "floorplan-details-accordion";
+        const advancedToggle = document.createElement("summary");
+        advancedToggle.textContent = "Floor details";
+        advanced.appendChild(advancedToggle);
+        const advancedBody = document.createElement("div");
+        advancedBody.className = "floorplan-sidebar__section";
+        advancedBody.appendChild(
             metresField("Ceiling height", item.height_meters, "Metres, floor to ceiling", key, (next) => {
                 item.height_meters = next;
             }),
         );
-        host.appendChild(
+        advancedBody.appendChild(
             metresField("Ground level", item.elevation_meters, "Metres above sea level", key, (next) => {
                 item.elevation_meters = next;
             }),
         );
+        advanced.appendChild(advancedBody);
+        host.appendChild(advanced);
     }
 
     /**
-     * Add a storey at the top or the bottom of the stack.
+     * Add a storey, optionally copying another floor's walls and rooms onto
+     * it.
      *
      * Args:
-     *     where: "above" puts it over the highest floor, "below" makes a
-     *         basement under the lowest.
+     *     where: With no copy source, "above" puts it over the highest
+     *         floor and "below" makes a basement under the lowest - the
+     *         whole stack's own top/bottom, there being no floor for "above"
+     *         to be relative to. With a copy source, relative to *that*
+     *         floor instead: a copy belongs next to what it came from, not
+     *         necessarily at the top of the building.
+     *     copyFrom: A floor to copy the full layout from, or null for a
+     *         blank one. Half a storey off its source's level, because
+     *         normaliseFloors renumbers the whole stack contiguously by
+     *         sorted level straight afterwards, landing the copy between its
+     *         source and whatever used to sit on the chosen side of it.
      */
-    function addFloor(where: "above" | "below"): void {
+    function addFloor(where: "above" | "below", copyFrom: Floor | null): void {
         checkpoint();
-        const levels = state.doc.floors.map((item) => item.level);
-        const level = where === "above" ? (levels.length ? Math.max(...levels) : -1) + 1 : (levels.length ? Math.min(...levels) : 1) - 1;
-        const added: Floor = { level, name: "", walls: [], rooms: [], markers: [] };
+        let level: number;
+        if (copyFrom) {
+            level = copyFrom.level + (where === "above" ? 0.5 : -0.5);
+        } else {
+            const levels = state.doc.floors.map((item) => item.level);
+            level = where === "above" ? (levels.length ? Math.max(...levels) : -1) + 1 : (levels.length ? Math.min(...levels) : 1) - 1;
+        }
+        const added: Floor = { level, name: copyFrom?.name || "", walls: [], rooms: [], markers: [] };
+        if (copyFrom) {
+            const copied = copyFloorContents(copyFrom, { rooms: true, markers: false });
+            added.walls = copied.walls;
+            added.rooms = copied.rooms;
+        }
         state.doc.floors.push(added);
         // Renumbers the stack and makes the new floor the active one. A
         // basement does not shift the storey anyone calls the ground: the datum
         // is whichever floor is nearest it, which the new one is not.
         normaliseFloors(added);
-        // The nearest drawn storey's shell first, the building outline only
-        // when there is none to copy - a plan's other floors follow its own
-        // exterior, not the provider's footprint.
-        if (!seedShellFrom(added)) seedFromOutline(added);
         markDirty();
         renderSidebar();
+        if (copyFrom) fitToContent();
     }
 
-    /** Copy one floor's walls (and optionally its room names) onto another. */
-    function duplicateFloor(source: Floor): void {
-        checkpoint();
-        // Directly above the floor it came from, not on top of the building.
-        // Half a storey, because normaliseFloors renumbers the whole stack
-        // contiguously by sorted level straight afterwards: the copy lands
-        // between its source and whatever used to sit above it, and everything
-        // from there up moves one storey higher.
-        const added: Floor = { level: source.level + 0.5, name: source.name, designation: "", walls: [], rooms: [], markers: [] };
-        const copied = copyFloorContents(source, { rooms: true, markers: false });
-        added.walls = copied.walls;
-        added.rooms = copied.rooms;
-        state.doc.floors.push(added);
-        normaliseFloors(added);
-        markDirty();
-        renderSidebar();
-        fitToContent();
+    /**
+     * Build and show the "add a floor" dialog, resolving once it is
+     * dismissed.
+     *
+     * Args:
+     *     prefill: A floor to preselect as the copy source - the active
+     *         floor, when opened from the toolbar's "Copy this floor" tool.
+     *         Left unset for the floor strip's own "Add floor" button, which
+     *         defaults to a blank floor: a silent, automatic copy read as the
+     *         floor doing nothing when clicked, which is what asking for this
+     *         dialog in the first place was about.
+     *
+     * Returns:
+     *     The choice, or null if the dialog was cancelled.
+     */
+    function pickNewFloor(prefill: Floor | null): Promise<{ where: "above" | "below"; copyFrom: Floor | null } | null> {
+        return new Promise((resolve) => {
+            const dialog = document.createElement("dialog");
+            dialog.className = "ul-dialog floorplan-add-floor-dialog";
+
+            const header = document.createElement("div");
+            header.className = "dialog-header";
+            const heading = document.createElement("h3");
+            heading.textContent = "Add a floor";
+            header.appendChild(heading);
+
+            const body = document.createElement("div");
+            body.className = "ul-dialog-body";
+
+            let where: "above" | "below" = "above";
+            const aboveBtn = document.createElement("button");
+            aboveBtn.type = "button";
+            const belowBtn = document.createElement("button");
+            belowBtn.type = "button";
+            const setWhere = (next: "above" | "below") => {
+                where = next;
+                aboveBtn.className = `btn btn--sm${where === "above" ? " btn--primary" : " btn--ghost"}`;
+                aboveBtn.setAttribute("aria-pressed", String(where === "above"));
+                belowBtn.className = `btn btn--sm${where === "below" ? " btn--primary" : " btn--ghost"}`;
+                belowBtn.setAttribute("aria-pressed", String(where === "below"));
+            };
+            aboveBtn.textContent = "Above";
+            belowBtn.textContent = "Below";
+            aboveBtn.addEventListener("click", () => setWhere("above"));
+            belowBtn.addEventListener("click", () => setWhere("below"));
+            setWhere("above");
+            const posRow = document.createElement("div");
+            posRow.className = "floorplan-add-floor-dialog__choice";
+            posRow.append(aboveBtn, belowBtn);
+            body.appendChild(field("Position", posRow));
+
+            const labels = floorLabels();
+            const floorKey = (item: Floor): string => item.uuid || String(item.level);
+            const copySelect = select(
+                [
+                    { value: "", label: "Nothing - start blank" },
+                    ...state.doc.floors.map((item) => ({
+                        value: floorKey(item),
+                        label: `${labels.get(item) || item.level}${item.name ? ` – ${item.name}` : ""}`,
+                    })),
+                ],
+                prefill ? floorKey(prefill) : "",
+                () => {},
+            );
+            body.appendChild(field("Copy layout from", copySelect));
+
+            const footer = document.createElement("div");
+            footer.className = "dialog-footer";
+            const cancelBtn = document.createElement("button");
+            cancelBtn.type = "button";
+            cancelBtn.className = "btn btn--ghost";
+            cancelBtn.textContent = "Cancel";
+            const addBtn = document.createElement("button");
+            addBtn.type = "button";
+            addBtn.className = "btn btn--primary";
+            addBtn.textContent = "Add floor";
+            footer.append(cancelBtn, addBtn);
+
+            dialog.append(header, body, footer);
+            document.body.appendChild(dialog);
+
+            const cleanup = (result: { where: "above" | "below"; copyFrom: Floor | null } | null) => {
+                dialog.close();
+                dialog.remove();
+                resolve(result);
+            };
+            cancelBtn.addEventListener("click", () => cleanup(null));
+            addBtn.addEventListener("click", () => {
+                const copyFrom = copySelect.value ? state.doc.floors.find((item) => floorKey(item) === copySelect.value) || null : null;
+                cleanup({ where, copyFrom });
+            });
+            dialog.addEventListener("cancel", () => cleanup(null));
+
+            dialog.showModal();
+        });
+    }
+
+    /** Open the add-floor dialog and act on its result, if not cancelled. */
+    async function promptAddFloor(prefill: Floor | null): Promise<void> {
+        const choice = await pickNewFloor(prefill);
+        if (choice) addFloor(choice.where, choice.copyFrom);
     }
 
     function deleteFloor(index: number): void {
@@ -3402,20 +3771,17 @@ function boot(): void {
     }
 
     /**
-     * Start a new floor from the nearest existing one's shell.
+     * Ghost text for the blank floor-code input.
      *
-     * A storey's exterior is almost always the storey below's exterior, and
-     * re-tracing it by hand for every floor is the bulk of the work in a
-     * multi-storey building.
+     * Everywhere else, "G" is the right label for the ground datum. But as
+     * placeholder text in a field labelled "Floor number or code", a bare
+     * letter reads as broken rather than as a hint - so an empty ground floor
+     * illustrates with a number instead. Leaving the field blank still
+     * resolves to "G" once saved; only the hint text differs.
      */
-    function seedShellFrom(target: Floor): boolean {
-        const others = state.doc.floors.filter((item) => item !== target && item.walls.some((wall) => wall.kind === "exterior"));
-        if (!others.length) return false;
-        const nearest = others.reduce((best, item) => (Math.abs(item.level - target.level) < Math.abs(best.level - target.level) ? item : best));
-        const shell: Floor = { ...nearest, walls: nearest.walls.filter((wall) => wall.kind === "exterior") };
-        const copied = copyFloorContents(shell, { rooms: false, markers: false });
-        target.walls.push(...copied.walls);
-        return copied.walls.length > 0;
+    function designationPlaceholder(item: Floor, labels: Map<Floor, string>): string {
+        const label = labels.get(item) || "";
+        return label === GROUND_LABEL ? "1" : label;
     }
 
     /**
@@ -3479,33 +3845,19 @@ function boot(): void {
             }
             host.appendChild(tab);
         });
-        // One at each end of the strip, because the strip is the building seen
-        // from the side: the button above the top floor adds a floor above, the
-        // one below the bottom floor adds a basement. There was only ever one,
-        // it sat at the bottom, and it added to the top - so the strip said the
-        // opposite of what it did, and a basement could not be made at all.
-        const addButton = (where: "above" | "below"): HTMLButtonElement => {
-            const button = document.createElement("button");
-            button.type = "button";
-            button.className = "btn btn--sm btn--ghost floorplan-floor-tab__add";
-            button.innerHTML = '<i class="material-symbols-outlined">add</i>';
-            const label = where === "above" ? "Add floor above" : "Add floor below";
-            button.setAttribute("aria-label", label);
-            button.setAttribute("data-tooltip", label);
-            button.setAttribute("data-tooltip-pos", "right");
-            button.addEventListener("click", () => addFloor(where));
-            return button;
-        };
-        host.prepend(addButton("above"));
-        host.appendChild(addButton("below"));
-
-        const duplicate = document.createElement("button");
-        duplicate.type = "button";
-        duplicate.className = "btn btn--sm btn--ghost";
-        duplicate.innerHTML = '<i class="material-symbols-outlined">content_copy</i>';
-        duplicate.setAttribute("aria-label", "Duplicate this floor");
-        duplicate.addEventListener("click", () => duplicateFloor(floor()));
-        host.appendChild(duplicate);
+        // One button rather than the previous above/below/duplicate three:
+        // which end of the stack, and whether to start from another floor's
+        // layout, are both asked in the dialog it opens instead of being
+        // guessed from which of three icons got clicked.
+        const add = document.createElement("button");
+        add.type = "button";
+        add.className = "btn btn--sm btn--ghost floorplan-floor-tab__add";
+        add.innerHTML = '<i class="material-symbols-outlined">add</i>';
+        add.setAttribute("aria-label", "Add floor");
+        add.setAttribute("data-tooltip", "Add floor");
+        add.setAttribute("data-tooltip-pos", "right");
+        add.addEventListener("click", () => void promptAddFloor(null));
+        host.appendChild(add);
 
         // Left alone when the redraw was asked for by one of these fields: the
         // commit fires on the way out of one and into the next, so replacing them
@@ -4755,6 +5107,9 @@ function boot(): void {
     for (const button of document.querySelectorAll<HTMLButtonElement>("[data-tool]")) {
         button.addEventListener("click", () => setTool((button.dataset.tool as Tool) || "select"));
     }
+    // A one-shot action beside the drawing tools, not one of them - it does
+    // not arm a mode, so it carries no [data-tool] and is wired on its own.
+    document.getElementById("floorplan-copy-floor")?.addEventListener("click", () => void promptAddFloor(floor()));
     // Kept working for anything that still renders one; the toolbar's own
     // marker-kind buttons now live in the tool options panel.
     for (const button of document.querySelectorAll<HTMLButtonElement>("[data-marker-kind]")) {
