@@ -152,3 +152,61 @@ class ConversationListQueryScalingTests(TestCase):
             f"the conversation list ran {small} queries for {_FIRST_BATCH} conversations and {large} for "
             f"{_FIRST_BATCH + _SECOND_BATCH} - it is querying per conversation.",
         )
+
+
+class ConversationLastMessageReactionPrefetchTests(TestCase):
+    """conversations_for/group_conversations_for must prefetch each row's
+    last_message reactions (and, for groups, shares).
+
+    ``build_direct_message_payload``/``build_group_message_payload`` (the
+    external API's inbox serializers) call ``reaction_summary(message)``
+    (and, for groups, ``message.share_for(viewer)``) for every row's
+    ``last_message`` - both read ``.reactions.all()``/``.shares.all()``,
+    which must already be populated by the time they run or each conversation
+    costs its own extra query. Asserted directly against the service
+    functions (not the full external API round trip) so this stays scoped to
+    the prefetch fix itself, rather than folding in the unrelated per-message
+    identity/location-mention costs the view layer also pays.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.me = baker.make(User).profile
+
+    def test_dm_last_message_reactions_are_prefetched(self) -> None:
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+        from urbanlens.dashboard.models.reactions.model import Reaction
+        from urbanlens.dashboard.services.messaging.direct_messages import conversations_for
+
+        partner = baker.make(User).profile
+        message = DirectMessage.objects.create(sender=partner, recipient=self.me, body="hi")
+        Reaction.objects.create(profile=self.me, emoji="👍", direct_message=message)
+
+        rows = conversations_for(self.me)
+        self.assertEqual(len(rows), 1)
+        with CaptureQueriesContext(connection) as ctx:
+            reactions = list(rows[0]["last_message"].reactions.all())
+        self.assertEqual(len(reactions), 1)
+        self.assertEqual(len(ctx.captured_queries), 0, "reactions were not prefetched on conversations_for's last_message")
+
+    def test_group_last_message_reactions_and_shares_are_prefetched(self) -> None:
+        from urbanlens.dashboard.models.reactions.model import Reaction
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat, create_group_message, group_conversations_for
+
+        member = baker.make(User).profile
+        Profile.objects.filter(pk__in=[self.me.pk, member.pk]).update(direct_message_visibility=VisibilityChoice.ANYONE)
+        self.me.refresh_from_db()
+        member.refresh_from_db()
+        group = create_group_chat(self.me, "Crew", [member])
+        message = create_group_message(member, group, "hi")
+        Reaction.objects.create(profile=self.me, emoji="👍", group_message=message)
+
+        rows = group_conversations_for(self.me)
+        self.assertEqual(len(rows), 1)
+        with CaptureQueriesContext(connection) as ctx:
+            reactions = list(rows[0]["last_message"].reactions.all())
+            shares = list(rows[0]["last_message"].shares.all())
+        self.assertEqual(len(reactions), 1)
+        self.assertEqual(shares, [])
+        self.assertEqual(len(ctx.captured_queries), 0, "reactions/shares were not prefetched on group_conversations_for's last_message")
