@@ -947,10 +947,7 @@ def group_conversations_for(profile: Profile) -> list[dict[str, Any]]:
     # Needed by the external API's build_group_message_payload, which reads
     # reaction_summary(message) and message.share_for(viewer) for every row's
     # last_message.
-    last_message_by_group: dict[int, GroupMessage] = {
-        message.group_id: message
-        for message in GroupMessage.objects.filter(pk__in=last_ids).select_related("sender", "sender__user").prefetch_related("reactions__profile", "shares")
-    }
+    last_message_by_group: dict[int, GroupMessage] = {message.group_id: message for message in GroupMessage.objects.filter(pk__in=last_ids).select_related("sender", "sender__user").prefetch_related("reactions__profile", "shares")}
     unread_counts = dict(GroupMessage.objects.filter(unread).values_list("group_id").annotate(count=Count("id")).order_by())
 
     # The sidebar preview shows the last sender's name - resolve it through the

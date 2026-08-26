@@ -183,14 +183,7 @@ class OpenHistoricalMapGateway(Gateway):
             OpenHistoricalMapUnavailableError: The request failed outright
                 (network/timeout/malformed response).
         """
-        query = (
-            "[out:json][timeout:15];\n"
-            "(\n"
-            f'  nwr(around:{radius_meters},{latitude},{longitude})["start_date"];\n'
-            f'  nwr(around:{radius_meters},{latitude},{longitude})["end_date"];\n'
-            ");\n"
-            "out tags;"
-        )
+        query = f'[out:json][timeout:15];\n(\n  nwr(around:{radius_meters},{latitude},{longitude})["start_date"];\n  nwr(around:{radius_meters},{latitude},{longitude})["end_date"];\n);\nout tags;'
         payload = self._query(query)
         elements = payload.get("elements")
         elements = elements if isinstance(elements, list) else []
