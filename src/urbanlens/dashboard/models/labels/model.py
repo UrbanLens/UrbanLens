@@ -16,6 +16,7 @@ from django.db.models import (
     IntegerField,
     ManyToManyField,
     Min,
+    Q,
     TextField,
     UniqueConstraint,
     UUIDField,
@@ -149,7 +150,12 @@ class Label(abstract.FrontendDashboardModel):
         This resolves the same numbers in a fixed three queries by loading the
         edge list once and doing the traversal in Python, then seeding each
         instance's memo so the template filter and every later call read it
-        without touching the database.
+        without touching the database. The edge list is scoped to labels
+        owned by *labels*' own profile(s), plus global labels, rather than
+        the whole site's - nothing lets one profile's label parent/child
+        another's, so a rendered label's subtree can never reach an edge
+        outside that set, and this never has to load every other profile's
+        unrelated hierarchy to answer it.
 
         Safe to skip: any label not primed still computes itself on demand, so
         callers that render a single label need not change.
@@ -163,12 +169,18 @@ class Label(abstract.FrontendDashboardModel):
         if not labels:
             return
 
-        # One query for the full edge list. The subtree of a rendered label can
-        # reach labels outside the rendered set (a tag's child that this kind's
-        # filter excluded), so this deliberately spans every label rather than
-        # only the ones on screen.
+        # One query for the edge list, scoped to the profile(s) that own the
+        # rendered labels (plus global labels) instead of every profile's
+        # private hierarchy site-wide. The subtree of a rendered label can
+        # reach labels outside the rendered set (a tag's child that this
+        # kind's filter excluded), so this still spans every label owned by
+        # the relevant profile(s), not only the ones on screen.
+        owning_profile_ids = {label.profile_id for label in labels if label.profile_id is not None}
+        visible_edges = Q(from_label__profile_id__isnull=True) | Q(to_label__profile_id__isnull=True)
+        if owning_profile_ids:
+            visible_edges |= Q(from_label__profile_id__in=owning_profile_ids) | Q(to_label__profile_id__in=owning_profile_ids)
         children_by_parent: dict[int, list[int]] = {}
-        for child_id, parent_id in cls.parents.through.objects.values_list("from_label_id", "to_label_id"):
+        for child_id, parent_id in cls.parents.through.objects.filter(visible_edges).values_list("from_label_id", "to_label_id"):
             children_by_parent.setdefault(parent_id, []).append(child_id)
 
         def descendants(root: int) -> set[int]:

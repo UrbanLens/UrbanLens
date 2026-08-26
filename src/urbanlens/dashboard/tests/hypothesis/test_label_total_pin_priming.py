@@ -127,6 +127,19 @@ class LabelTotalPinPrimingTests(TestCase):
         self.assertEqual(len(large.captured_queries), len(small.captured_queries))
         self.assertLessEqual(len(large.captured_queries), 3)
 
+    def test_edge_query_is_scoped_by_profile_not_unfiltered(self) -> None:
+        """Regression: the edge-list query had no WHERE clause at all, fetching
+        every profile's label hierarchy site-wide just to prime one label."""
+        label = self._label("solo")
+        self._pin_on(label)
+
+        with CaptureQueriesContext(connection) as ctx:
+            Label.prime_total_pin_counts([label])
+
+        edge_queries = [q["sql"] for q in ctx.captured_queries if "dashboard_labels_parents" in q["sql"]]
+        self.assertEqual(len(edge_queries), 1)
+        self.assertIn("profile_id", edge_queries[0], "edge-list query has no profile scoping - it fetches the whole site's hierarchy")
+
     def test_priming_an_empty_list_touches_nothing(self) -> None:
         with CaptureQueriesContext(connection) as ctx:
             Label.prime_total_pin_counts([])
