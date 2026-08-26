@@ -20,7 +20,7 @@ from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.fields import EncryptedTextField
 
-_migration = importlib.import_module("urbanlens.dashboard.migrations.0039_encrypt_contact_and_note_fields")
+_migration = importlib.import_module("urbanlens.dashboard.migrations.0030_v0_7_0")
 
 
 class Migration0039ReverseTests(SimpleTestCase):
@@ -49,7 +49,7 @@ class Migration0039ReverseTests(SimpleTestCase):
         self.assertIs(token_ops[0].reverse_code, migration_0007.decrypt_existing_tokens)
 
 
-_migration_0048 = importlib.import_module("urbanlens.dashboard.migrations.0048_encrypt_preference_and_contact_label")
+_migration_0048 = importlib.import_module("urbanlens.dashboard.migrations.0030_v0_7_0")
 
 
 class Migration0048ReverseTests(SimpleTestCase):

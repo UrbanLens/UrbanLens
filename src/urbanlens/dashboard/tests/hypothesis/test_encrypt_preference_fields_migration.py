@@ -24,7 +24,7 @@ from urbanlens.dashboard.models.friendship.invitation.model import FriendInvitat
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import EmergencyContactDefault
 
-_migration = import_module("urbanlens.dashboard.migrations.0048_encrypt_preference_and_contact_label")
+_migration = import_module("urbanlens.dashboard.migrations.0030_v0_7_0")
 encrypt_existing_preference_fields = _migration.encrypt_existing_preference_fields
 
 
