@@ -45,7 +45,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.measure import D
-from django.db import DatabaseError
+from django.db import DatabaseError, transaction
 
 from urbanlens.dashboard.models.pin_share.exposure import ExposureSource, LocationExposure
 
@@ -111,12 +111,21 @@ def record_share_exposure(share: PinShare, *, source: ExposureSource = ExposureS
     if find_profile_pin_near_location(share.to_profile_id, location) is not None:
         return None
     try:
-        exposure, _created = LocationExposure.objects.record(
-            profile_id=share.to_profile_id,
-            location_id=location.pk,
-            share_id=share.pk,
-            source=source,
-        )
+        # Its own savepoint, scoped to just this write: callers (the share
+        # dialog, DM/map detection, trip activities) never wrap their own
+        # multi-write sequences in atomic() specifically so that a failure
+        # here - swallowed below - can't mark a wider transaction broken and
+        # turn a tolerated bookkeeping gap into a hard 500 on the share
+        # itself. Nesting atomic() here anyway means this write is still
+        # genuinely all-or-nothing, and stays safe even if a future caller
+        # does run inside its own atomic().
+        with transaction.atomic():
+            exposure, _created = LocationExposure.objects.record(
+                profile_id=share.to_profile_id,
+                location_id=location.pk,
+                share_id=share.pk,
+                source=source,
+            )
     except DatabaseError:
         logger.exception("Could not record exposure for share %s", share.pk)
         return None
