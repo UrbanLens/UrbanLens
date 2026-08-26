@@ -13,7 +13,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
+from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind, QuotaExemption
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.model import PinShare, PinShareStatus
@@ -81,6 +81,16 @@ class SharedImageCopyFidelityTests(TestCase):
         original = Image.objects.get(profile=self.sender)
         self.assertEqual(original.source, ImageSource.WIKIMEDIA)
         self.assertEqual(original.pin_id, self.pin.pk)
+
+    def test_the_copy_is_exempt_from_the_recipients_storage_quota(self):
+        """The copy points at the sender's already-stored file (see this module's
+        docstring and ``image=image.image.name`` in create_pin_from_share) - it
+        occupies no storage of the recipient's own to charge quota for."""
+        from urbanlens.dashboard.services.media.storage import get_storage_used_bytes
+
+        copied = self._share_image(file_size=5_000_000)
+        self.assertEqual(copied.quota_exempt_reason, QuotaExemption.SHARED_COPY)
+        self.assertEqual(get_storage_used_bytes(self.recipient), 0)
 
 
 class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
