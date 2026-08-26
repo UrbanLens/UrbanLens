@@ -252,6 +252,39 @@ function islandPlan(): unknown {
     };
 }
 
+/** A square building split down the middle into two named rooms sharing one partition. */
+function duplexPlan(): unknown {
+    const wall = (kind: string, ax: number, ay: number, bx: number, by: number) => ({ kind, thickness: "normal", ax, ay, bx, by, openings: [] });
+    return {
+        uuid: "plan-duplex",
+        name: "duplex",
+        valid_from: null,
+        origin: "local",
+        plan_origin: { lat: 41.733, lng: -73.928 },
+        rotation_degrees: 0,
+        floors: [
+            {
+                uuid: "floor-1",
+                level: 0,
+                designation: "",
+                name: "Ground",
+                walls: [
+                    wall("exterior", 0, 0, 10, 0),
+                    wall("exterior", 10, 0, 10, 10),
+                    wall("exterior", 10, 10, 0, 10),
+                    wall("exterior", 0, 10, 0, 0),
+                    wall("interior", 5, 0, 5, 10),
+                ],
+                rooms: [
+                    { name: "West", x: 2.5, y: 5 },
+                    { name: "East", x: 7.5, y: 5 },
+                ],
+                markers: [],
+            },
+        ],
+    };
+}
+
 /** A plan with nothing drawn on it yet - what a new building starts as. */
 function emptyPlan(): unknown {
     return {
@@ -318,7 +351,11 @@ let server: ReturnType<typeof Bun.serve>;
  * Served over HTTP rather than injected: the bundle is a module that imports a
  * chunk by relative URL, which cannot resolve without a real origin.
  */
-async function openEditor(viewport = { width: 1200, height: 800 }, hasTouch = false, plan: "square" | "grid" | "closet" | "island" | "empty" | "community" | "empty-unsaved" = "square"): Promise<void> {
+async function openEditor(
+    viewport = { width: 1200, height: 800 },
+    hasTouch = false,
+    plan: "square" | "grid" | "closet" | "island" | "duplex" | "empty" | "community" | "empty-unsaved" = "square",
+): Promise<void> {
     page = await browser.newPage({ viewport, hasTouch });
     page.on("pageerror", (error) => console.error("PAGEERROR", String(error).slice(0, 300)));
     page.on("console", (message) => {
@@ -462,6 +499,7 @@ beforeAll(async () => {
             if (path === "/json-grid") return servePlan(gridPlan());
             if (path === "/json-closet") return servePlan(closetPlan());
             if (path === "/json-island") return servePlan(islandPlan());
+            if (path === "/json-duplex") return servePlan(duplexPlan());
             if (path === "/json-empty") return servePlan(emptyPlan());
             // Never saved: no uuid, so nothing to fork or publish yet.
             if (path === "/json-unsaved") {
@@ -700,11 +738,12 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             await settle();
 
             const overlaps = await page.evaluate(() => {
-                // The zoom control is not on this list any more because it is
-                // not a free-floating control any more - it lives inside
-                // .floorplan-canvas-controls, which is, and a child always
-                // "overlaps" its parent.
-                const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls"];
+                // Leaflet's own zoom control is on this list too - it is no
+                // longer reparented into .floorplan-canvas-controls (undo and
+                // redo moved into #floorplan-tools instead), so it is once
+                // again a free-floating control that could collide with the
+                // rest, same as on every other map.
+                const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls", ".leaflet-control-zoom"];
                 const boxes = selectors
                     .map((selector) => ({ selector, node: document.querySelector(selector) }))
                     .filter((entry) => entry.node && !(entry.node as HTMLElement).hidden)
@@ -1289,6 +1328,98 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
+    test("moving a room detaches the wall it shares with its neighbour, rather than dragging the neighbour's side of it too", async () => {
+        // splitRoomBoundary correctly counts a shared partition as "unique" to
+        // both rooms that border it - right for delete, where removing it
+        // merges the neighbour in, but wrong for a move: dragging the west
+        // room used to drag the partition (and the east room's own side of
+        // it) along, tearing a piece off a room nobody selected.
+        await openEditor({ width: 1200, height: 800 }, false, "duplex");
+        // Identified as the rightmost fill rather than "the other of two":
+        // once west's own edge detaches and slides away from the partition,
+        // the vacated strip between the two is itself a newly enclosed
+        // (unnamed) region - a real, correct third fill in this model, not a
+        // symptom to assert away. East, at the far side, is unaffected either
+        // way and stays identifiable as whichever fill is furthest right.
+        const eastBox = async (): Promise<{ left: number; top: number; width: number; height: number } | null> =>
+            page.evaluate(() => {
+                const rooms = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room")).map((n) => n.getBoundingClientRect());
+                if (!rooms.length) return null;
+                const east = rooms.reduce((a, b) => (a.left > b.left ? a : b));
+                return { left: Math.round(east.left), top: Math.round(east.top), width: Math.round(east.width), height: Math.round(east.height) };
+            });
+        const before = await eastBox();
+        expect(before, "no room fill found").not.toBeNull();
+
+        const west = await page.evaluate(() => {
+            const rooms = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room")).map((n) => n.getBoundingClientRect());
+            const room = rooms.reduce((a, b) => (a.left < b.left ? a : b));
+            return { x: room.left + room.width / 2, y: room.top + room.height / 2 };
+        });
+        await page.mouse.click(west.x, west.y);
+        await settle();
+        await page.mouse.move(west.x, west.y);
+        await page.mouse.down();
+        // West, away from the shared partition - snapping against it (an
+        // unmoved wall) would otherwise mask a detach failure as "it snapped
+        // back to where it started".
+        for (let step = 1; step <= 10; step++) await page.mouse.move(west.x - step * 4, west.y);
+        await page.mouse.up();
+        await settle();
+
+        const after = await eastBox();
+        expect(after, "the east room's fill vanished").not.toBeNull();
+        // The neighbour, and the wall that bounds it, never moved - only the
+        // west room's own new copy of that wall did.
+        expect(Math.abs(after!.left - before!.left)).toBeLessThanOrEqual(1);
+        expect(Math.abs(after!.top - before!.top)).toBeLessThanOrEqual(1);
+        expect(Math.abs(after!.width - before!.width)).toBeLessThanOrEqual(1);
+        expect(Math.abs(after!.height - before!.height)).toBeLessThanOrEqual(1);
+        await page.close();
+    });
+
+    test("a room drag stops rather than let one room's area cover another's", async () => {
+        // The west room's own walls are free to move once detached from the
+        // shared partition (previous test) - free enough, without a check,
+        // to be dragged clean across the building and over the east room.
+        await openEditor({ width: 1200, height: 800 }, false, "duplex");
+        const eastBox = async (): Promise<{ left: number; width: number } | null> =>
+            page.evaluate(() => {
+                const rooms = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room")).map((n) => n.getBoundingClientRect());
+                if (rooms.length !== 2) return null;
+                const east = rooms.reduce((a, b) => (a.left > b.left ? a : b));
+                return { left: Math.round(east.left), width: Math.round(east.width) };
+            });
+        const east = await eastBox();
+        expect(east, "no two-room fill found").not.toBeNull();
+
+        const west = await page.evaluate(() => {
+            const rooms = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room")).map((n) => n.getBoundingClientRect());
+            const room = rooms.reduce((a, b) => (a.left < b.left ? a : b));
+            return { x: room.left + room.width / 2, y: room.top + room.height / 2 };
+        });
+        await page.mouse.click(west.x, west.y);
+        await settle();
+        await page.mouse.move(west.x, west.y);
+        await page.mouse.down();
+        // Aimed well past the east room's far side - if the guard did nothing
+        // this would land the west room's fill on top of, or past, the east
+        // room's own bounding box.
+        for (let step = 1; step <= 30; step++) await page.mouse.move(west.x + step * 20, west.y);
+        await page.mouse.up();
+        await settle();
+
+        const westAfter = await page.evaluate(() => {
+            const rooms = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room")).map((n) => n.getBoundingClientRect());
+            const room = rooms.reduce((a, b) => (a.left < b.left ? a : b));
+            return { left: Math.round(room.left), right: Math.round(room.right) };
+        });
+        // West stopped short of east's own left edge - it never tunnelled
+        // into or past the room next door.
+        expect(westAfter.right).toBeLessThanOrEqual(east!.left + 1);
+        await page.close();
+    });
+
     test("undo takes back a typed name in one press, and the drag before it in the next", async () => {
         // "Undo sometimes undoes one thing, sometimes a group" is the report.
         // Both are right, and the rule is what has to be predictable: a run of
@@ -1599,12 +1730,14 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await openEditor();
         const plan = await planExtent();
 
-        // A storey's own dimensions, on the floor panel - behind the "Floor
-        // details" disclosure, since neither is needed to draw a floor.
-        await page.locator("#floorplan-floor-fields .floorplan-details-accordion summary").click();
-        const ceiling = page.locator('#floorplan-floor-fields input[aria-label="Ceiling height"]');
+        // A storey's own dimensions, behind the sidebar's one "Add more
+        // details" disclosure - shared with the plan's own name/date/
+        // versions rather than a second disclosure of its own, since neither
+        // is needed to draw a floor.
+        await page.locator(".floorplan-details-accordion summary").click();
+        const ceiling = page.locator('#floorplan-floor-advanced-fields input[aria-label="Ceiling height"]');
         await ceiling.fill("2.4");
-        await page.locator('#floorplan-floor-fields input[aria-label="Ground level"]').fill("41.5");
+        await page.locator('#floorplan-floor-advanced-fields input[aria-label="Ground level"]').fill("41.5");
         await settle();
 
         // A window's sill, on the opening panel.
@@ -1632,7 +1765,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.keyboard.press("Escape");
         await settle();
         expect(await ceiling.inputValue()).toBe("2.4");
-        expect(await page.locator('#floorplan-floor-fields input[aria-label="Ground level"]').inputValue()).toBe("41.5");
+        expect(await page.locator('#floorplan-floor-advanced-fields input[aria-label="Ground level"]').inputValue()).toBe("41.5");
         await page.close();
     });
 
@@ -1734,7 +1867,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // Under 900px the sidebar stacks below a map that is 72vh tall, so the
         // Delete button living there is below the fold for the whole time
         // anyone is drawing - and a phone has no Delete key either. Same
-        // reasoning that put undo and the floor strip on the canvas.
+        // reasoning that put the floor strip on the canvas.
         //
         // Structural rather than positional: which container the control
         // belongs to is the claim, and it holds at every width.
@@ -1749,7 +1882,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.mouse.click(plan.grab.x, plan.grab.y);
         await settle();
         expect(await hidden()).toBe(false);
-        // It lives with undo, on the canvas, not in a panel that scrolls away.
+        // On the canvas, not in a panel that scrolls away.
         expect(await page.evaluate(() => Boolean(document.getElementById("floorplan-delete")?.closest(".floorplan-canvas-controls")))).toBe(true);
 
         const before = await page.locator(".floorplan-wall").count();
@@ -1786,16 +1919,17 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         }
     });
 
-    test("the zoom buttons live with the other canvas controls", async () => {
-        // Not in one of Leaflet's corners. Every corner belongs to something
-        // whose position changes with width, and each width where they
-        // rearrange is another chance for two of them to land on each other -
-        // which happened twice, at 320 and then at 768, chasing a free corner
-        // that does not exist at every size.
+    test("the zoom buttons render exactly like every other map's", async () => {
+        // Leaflet's own default top-left control, untouched - the same
+        // classes and position as the main map, rather than reparented into
+        // a custom row with its own override CSS. The floor strip that once
+        // collided with this corner is bottom-right at every breakpoint now,
+        // so nothing else claims it.
         await openEditor();
-        expect(await page.evaluate(() => Boolean(document.querySelector(".floorplan-canvas-controls .leaflet-control-zoom")))).toBe(true);
+        expect(await page.evaluate(() => Boolean(document.querySelector(".leaflet-top.leaflet-left .leaflet-control-zoom")))).toBe(true);
+        expect(await page.evaluate(() => Boolean(document.querySelector(".floorplan-canvas-controls .leaflet-control-zoom")))).toBe(false);
 
-        // And it still zooms, which is the thing reparenting could break.
+        // And it still zooms, which is the thing reparenting used to risk.
         // Zoom out rather than in: the plan is fitted on load, which can leave
         // zoom-in already at the maximum and disabled.
         const span = async (): Promise<number> => (await planExtent()).width;
@@ -1816,6 +1950,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         saves.lastValidFrom = null;
         await openEditor();
 
+        // Plan name and date live behind "Add more details".
+        await page.locator(".floorplan-details-accordion summary").click();
         await page.locator("#floorplan-name").fill("Boiler house");
         for (let waited = 0; waited < 40 && saves.attempts === 0; waited++) await page.waitForTimeout(250);
         expect(saves.attempts, "typing a plan name never saved it").toBeGreaterThan(0);
@@ -1844,6 +1980,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.locator(".floorplan-floor-fields__name").fill("Boiler floor");
         for (let waited = 0; waited < 40 && saves.attempts === 0; waited++) await page.waitForTimeout(250);
 
+        // Plan name and the version list live behind "Add more details".
+        await page.locator(".floorplan-details-accordion summary").click();
         saves.lastName = "unset";
         await page.locator("#floorplan-name").fill("");
         for (let waited = 0; waited < 40 && saves.lastName === "unset"; waited++) await page.waitForTimeout(250);
@@ -1866,6 +2004,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         // DOM at save time instead of ever being written into it.
         saves.lastName = "unset";
         await openEditor();
+        // The plan name lives behind "Add more details".
+        await page.locator(".floorplan-details-accordion summary").click();
         const nameField = page.locator("#floorplan-name");
         const before = await nameField.inputValue();
 
@@ -2026,7 +2166,9 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             await page.goto(`http://127.0.0.1:${server.port}/?${query}`, { waitUntil: "load" });
             await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
 
-            // Any edit at all; the plan name is the cheapest one that saves.
+            // Any edit at all; the plan name is the cheapest one that saves -
+            // it lives behind "Add more details".
+            await page.locator(".floorplan-details-accordion summary").click();
             await page.locator("#floorplan-name").fill("turned");
             for (let waited = 0; waited < 40 && saves.lastRotation === -1; waited++) await page.waitForTimeout(250);
             expect(saves.lastRotation, `saved a different angle than it opened with (${query})`).toBeCloseTo(30, 6);
@@ -2756,6 +2898,8 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         expect(await page.evaluate(() => (document.getElementById("floorplan-undo") as HTMLButtonElement).disabled), "nothing to undo before switching").toBe(false);
         const wallsBefore = await page.locator(".floorplan-wall").count();
 
+        // The version list lives behind "Add more details".
+        await page.locator(".floorplan-details-accordion summary").click();
         await page.locator("#floorplan-versions button").filter({ hasText: "after the fire" }).click();
         await page.waitForFunction((was) => document.querySelectorAll(".floorplan-wall").length !== was, wallsBefore, { timeout: 15000 });
         await settle();

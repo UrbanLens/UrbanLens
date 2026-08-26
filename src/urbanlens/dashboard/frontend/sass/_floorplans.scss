@@ -143,8 +143,7 @@
     min-height: 1.2em;
 }
 
-.floorplan-origin-banner,
-.floorplan-building-hint {
+.floorplan-origin-banner {
     display: flex;
     align-items: center;
     gap: .6rem;
@@ -158,12 +157,6 @@
 
     &[hidden] {
         display: none;
-    }
-
-    &__choices {
-        display: inline-flex;
-        gap: .35rem;
-        flex-wrap: wrap;
     }
 }
 
@@ -442,39 +435,22 @@
 
 // Over the canvas, not in the sidebar. Below 900px the sidebar stacks under
 // the map, so anything living in it is off-screen for the whole time someone is
-// drawing - which is exactly when undo and the floor switcher are wanted.
+// drawing - which is exactly when a delete control is wanted. Bottom-left,
+// not top-left: Leaflet's own default zoom control lives there now (undo and
+// redo moved into the top-right drawing-tools toolbar, and zoom is no longer
+// reparented - see floorplan-editor.ts), and this is the one corner nothing
+// else in the editor claims at either width.
 .floorplan-canvas-controls {
     position: absolute;
     z-index: 500;
-    top: 10px;
-    // The floor strip no longer lives up here (it is bottom-right at every
-    // breakpoint, matching the main map's saved-filters toolbar), so this
-    // corner is free at every width now too - no more centring to dodge it,
-    // and no more fighting the drawing-tools pill for width budget as it
-    // grows a button. One position, not two juggled across a breakpoint.
+    top: auto;
+    bottom: 10px;
     left: 10px;
     display: flex;
     gap: 0.25rem;
 
-    // Appears only with a selection, so it must not shove undo and redo
-    // sideways when it does - the two controls anyone reaches for blind.
     &__delete {
-        margin-left: 0.25rem;
         color: var(--color-danger, #e53);
-    }
-
-    // Leaflet's own zoom control, moved in here by the editor. Its stylesheet
-    // gives it a stacked pair with its own border and shadow; this makes it one
-    // more thing in the row instead.
-    .leaflet-control-zoom {
-        display: flex;
-        margin: 0 0 0 0.25rem;
-        border: 0;
-        box-shadow: none;
-
-        a {
-            border-radius: $radius-sm;
-        }
     }
 }
 
@@ -520,6 +496,14 @@
     align-items: flex-end;
     gap: 8px;
     max-width: calc(100% - 20px);
+    // #floorplan-tools and .floorplan-tool-options are right-aligned within
+    // this box (align-items: flex-end) and are rarely the same width, so the
+    // box itself - sized to its widest child - has empty space down its
+    // narrower side. That space is not a button; a click there must fall
+    // through to the map underneath rather than be swallowed by this
+    // wrapper, which is what re-enabling pointer-events on the two children
+    // (below) is for.
+    pointer-events: none;
 
     // .map-buttons is position:absolute by default, so it can float solo
     // elsewhere on the site - reset to participate in this stack's normal
@@ -527,6 +511,7 @@
     // sibling turned out to be" behaviour work without measuring anything.
     > .map-buttons {
         position: static;
+        pointer-events: auto;
     }
 
     @include up($breakpoint-sm) {
@@ -542,19 +527,47 @@
 .floorplan-tool-options {
     max-width: min(22rem, calc(100% - 20px));
 
-    // The base .map-buttons-content is a single unwrapped row, sized for a
-    // handful of icon buttons - this panel's rows are option groups with
-    // text labels, wider and more numerous, so they need to wrap.
-    .map-buttons-content {
-        flex-wrap: wrap;
-        row-gap: 0.25rem;
+    // This panel is anchored to the bottom of the canvas and grows upward on
+    // a phone (.floorplan-toolbar-stack), and one choice per line (below)
+    // makes it taller than the old wrapped row ever was - tall enough, on a
+    // narrow phone, to reach up and cover Leaflet's own top-left zoom
+    // control (position: topleft, untouched - see floorplan-editor.ts).
+    // Capped with its own scrollbar there rather than letting that happen;
+    // desktop has the width to spare and sits on the opposite (top-right)
+    // side of the map from zoom, so it is left free to grow.
+    @include down($breakpoint-sm) {
+        .map-buttons-content {
+            max-height: 7.5rem;
+            overflow-y: auto;
+        }
     }
 
+    // The base .map-buttons-content is a row of icon buttons - this panel's
+    // rows are option groups (a label plus one choice per line, below), so
+    // the groups themselves stack in a column instead. Not row + wrap +
+    // flex-basis: 100%: asking a flex item for 100% of a shrink-to-fit row's
+    // own width is circular, and Chromium resolves it by growing the row to
+    // this panel's own max-width - on a wide desktop map that put the panel
+    // far enough over the canvas to swallow clicks meant for a wall. A
+    // column has no such width to ask for; it is simply as wide as its
+    // widest child, same as the row was meant to be.
+    .map-buttons-content {
+        flex-direction: column;
+        align-items: flex-start;
+        row-gap: 0.4rem;
+    }
+
+    // One choice per line ("Exterior wall", "Fence", ...) reads as the list
+    // of options it is, rather than several jammed onto one overflowing row.
     &__group {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
+        flex-direction: column;
+        align-items: flex-start;
         gap: 0.25rem;
+
+        .btn {
+            justify-content: flex-start;
+        }
     }
 
     &__label {

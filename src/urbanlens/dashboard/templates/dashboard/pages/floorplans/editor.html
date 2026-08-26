@@ -38,25 +38,6 @@
 
 {% block content %}
 <div class="floorplan-page">
-{# The editor always opens. A plan does not have to belong to a building the #}
-{# providers know about - most derelict structures have no outline anywhere - #}
-{# so a known building is offered as a shortcut, never as a gate.            #}
-{% if place is None and building_choices %}
-<div class="floorplan-building-hint card card--secondary">
-    <span>
-        <i class="material-symbols-outlined">architecture</i>
-        Drawing a plan for this pin. Buildings mapped separately here:
-    </span>
-    <span class="floorplan-building-hint__choices">
-        {% for building in building_choices %}
-        {% if building.pin_slug %}
-        <a class="btn btn--sm btn--ghost" href="{% url 'pin.floorplan' building.pin_slug %}">{{ building.name }}</a>
-        {% endif %}
-        {% endfor %}
-    </span>
-</div>
-{% endif %}
-
 {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="floorplan-first-walls" kicker="Getting started" heading="Start by drawing the exterior walls." body="Arm the Wall tool and trace the building's outline. Once it's closed, rooms are generated automatically from the enclosed space, and the room, opening, and box-select tools become available." %}
 
 <div id="floorplan-origin-banner" class="floorplan-origin-banner" hidden>
@@ -123,6 +104,17 @@
                             data-tooltip="Copy this floor to a new one" data-tooltip-float="true">
                         <i class="material-symbols-outlined">content_copy</i>
                     </button>
+                    {# One-shot actions too, not modes - styled identically to every #}
+                    {# other button in this toolbar rather than living apart on the  #}
+                    {# canvas, which is the only thing that made them look different. #}
+                    <button type="button" class="map-btn-icon" id="floorplan-undo" disabled aria-label="Undo"
+                            data-tooltip="Undo (Ctrl+Z)" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">undo</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" id="floorplan-redo" disabled aria-label="Redo"
+                            data-tooltip="Redo (Ctrl+Shift+Z)" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">redo</i>
+                    </button>
                 </div>
             </div>
 
@@ -143,18 +135,11 @@
             </div>
             </div>{# /.floorplan-toolbar-stack #}
 
-            {# Undo and the floor strip live over the canvas, not in the sidebar. #}
-            {# The sidebar stacks below the map under 900px, so on a phone both  #}
-            {# were off-screen for the whole time anyone was drawing - undo in   #}
-            {# particular being the one control you need exactly when you cannot #}
-            {# scroll to find it.                                                #}
+            {# The delete button lives over the canvas, not in the sidebar. The  #}
+            {# sidebar stacks below the map under 900px, so on a phone it would  #}
+            {# be off-screen for the whole time anyone was drawing - exactly     #}
+            {# when a selection is most likely to need deleting.                 #}
             <div class="floorplan-canvas-controls">
-                <button type="button" id="floorplan-undo" class="btn btn--icon" disabled aria-label="Undo" data-tooltip="Undo (Ctrl+Z)" data-tooltip-float="true">
-                    <i class="material-symbols-outlined">undo</i>
-                </button>
-                <button type="button" id="floorplan-redo" class="btn btn--icon" disabled aria-label="Redo" data-tooltip="Redo (Ctrl+Shift+Z)" data-tooltip-float="true">
-                    <i class="material-symbols-outlined">redo</i>
-                </button>
                 <button type="button" id="floorplan-delete" class="btn btn--icon floorplan-canvas-controls__delete" hidden
                         aria-label="Delete selection" data-tooltip="Delete (Del)" data-tooltip-float="true">
                     <i class="material-symbols-outlined">delete</i>
@@ -282,6 +267,13 @@
         <details class="floorplan-details-accordion">
             <summary>Add more details</summary>
             <div class="floorplan-sidebar__section">
+                {# This floor's ceiling height / ground level - populated by #}
+                {# renderFloorFields() in floorplan-editor.ts, and rebuilt   #}
+                {# whenever the active floor changes. Plan-wide fields below #}
+                {# it are static markup instead, since they don't change     #}
+                {# with the floor; both live in the one disclosure so there  #}
+                {# is a single "more details" to open, not two.              #}
+                <div id="floorplan-floor-advanced-fields"></div>
                 <label class="floorplan-field"><span>Plan name</span>
                     <input class="form-input" type="text" id="floorplan-name" placeholder="Ground floor"></label>
                 <label class="floorplan-field"><span>Date</span>

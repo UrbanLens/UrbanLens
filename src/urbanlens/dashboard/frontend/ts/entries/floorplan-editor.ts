@@ -14,7 +14,7 @@
 
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
-import { PlanProjection, type Pt, distance, interiorPoint, projectOnSegment, rotate } from "../shared/floorplan/coords";
+import { PlanProjection, type Pt, distance, interiorPoint, pointInRing, projectOnSegment, rotate } from "../shared/floorplan/coords";
 import {
     type Floor,
     type Lock,
@@ -241,11 +241,10 @@ function boot(): void {
     // the rotate control's arrow on desktop. shiftKeyRotate is shift+*wheel*,
     // not shift+drag, so it does not collide with the constrain modifier.
     const map = L.map("floorplan-map", {
-        // Not Leaflet's default top-left: that corner holds the floor strip,
-        // and Leaflet's control z-index beats it, so the zoom buttons sat on
-        // top of the highest floor's tab and swallowed its clicks. Bottom-left
-        // is the one corner nothing else in this editor claims at either width.
-        zoomControl: false,
+        // Leaflet's own default top-left zoom control, left exactly as every
+        // other map on the site renders it (same corner, same classes) - the
+        // floor strip that once collided with it there is bottom-right at
+        // every breakpoint now, so this corner is free.
         doubleClickZoom: false,
         attributionControl: false,
         boxZoom: false,
@@ -262,15 +261,6 @@ function boot(): void {
     // anywhere, press Escape to leave - and the wheel gesture (shift+wheel,
     // untouched) stays as the shortcut for people who know it.
     map.getContainer().querySelector(".leaflet-control-rotate")?.remove();
-
-    // Rehomed into the canvas controls rather than left in one of Leaflet's
-    // corners. Every corner is spoken for by something whose position changes
-    // with width - the floor strip, the tool pill, the layers panel - and each
-    // width where they rearrange is another chance for two of them to land on
-    // each other. Two already did. Inside a flex row that lays them out, zoom
-    // cannot collide with anything at any width.
-    const zoom = L.control.zoom({ position: "bottomleft" }).addTo(map);
-    document.querySelector(".floorplan-canvas-controls")?.appendChild(zoom.getContainer() as HTMLElement);
 
     // Declared before createMapLayers below: its "underlay" custom toggle
     // reads state.showUnderlay synchronously while the panel builds its
@@ -1016,7 +1006,15 @@ function boot(): void {
             // that's already the selection. Shift no longer excuses it: that
             // used to hand the press to a shift+drag box-select, which is what
             // made the constrain modifier unreachable here.
-            let roomDrag: { local: Pt; boundary: NonNullable<ReturnType<typeof roomBoundaryWalls>>; origins: Map<Wall, { ax: number; ay: number; bx: number; by: number }>; anchors: CornerAnchors; seedOrigin: Pt } | null = null;
+            let roomDrag: {
+                local: Pt;
+                boundary: RoomBoundary;
+                origins: Map<Wall, { ax: number; ay: number; bx: number; by: number }>;
+                anchors: CornerAnchors;
+                seedOrigin: Pt;
+                /** Last translation that did not overlap another room - held onto so an over-far drag freezes instead of tunnelling through. */
+                lastSafe: Pt;
+            } | null = null;
             bindDrag(polygon.getElement(), {
                 start: (event) => {
                     if (state.tool !== "select" || !seed) return false;
@@ -1036,10 +1034,21 @@ function boot(): void {
                     if (!roomDrag) {
                         const boundary = roomBoundaryWalls(bound);
                         if (!boundary) return;
-                        const origins = new Map<Wall, { ax: number; ay: number; bx: number; by: number }>();
-                        for (const wall of [...boundary.unique, ...boundary.shared]) origins.set(wall, { ax: wall.ax, ay: wall.ay, bx: wall.bx, by: wall.by });
-                        roomDrag = { local, boundary, origins, anchors: cornerAnchors(boundary), seedOrigin: { x: bound.x, y: bound.y } };
                         checkpoint();
+                        // A wall this room only borders (see splitRoomBoundary)
+                        // never moves, so it is already safe to drag against.
+                        // A wall classified as this room's own can still be a
+                        // neighbouring room's only wall on that side - detach a
+                        // copy for the move so the original, and the neighbour
+                        // it still bounds, stay exactly where they were.
+                        const detached = detachSharedWalls(current, boundary, state.faces);
+                        const moving: RoomBoundary = { face: boundary.face, unique: detached, shared: boundary.shared };
+                        const origins = new Map<Wall, { ax: number; ay: number; bx: number; by: number }>();
+                        for (const wall of [...moving.unique, ...moving.shared]) origins.set(wall, { ax: wall.ax, ay: wall.ay, bx: wall.bx, by: wall.by });
+                        // Anchored against the original (pre-detach) boundary -
+                        // detaching only swaps which wall object a corner moves
+                        // with, not where that corner rests at gesture start.
+                        roomDrag = { local, boundary: moving, origins, anchors: cornerAnchors(boundary), seedOrigin: { x: bound.x, y: bound.y }, lastSafe: { x: 0, y: 0 } };
                     }
                     const { boundary, origins, seedOrigin } = roomDrag;
                     let dx = local.x - roomDrag.local.x;
@@ -1064,6 +1073,42 @@ function boot(): void {
                     const snapped = snapDragTranslation(corners, { x: dx, y: dy }, carried);
                     dx = snapped.x;
                     dy = snapped.y;
+                    // A room's own walls can still swing into a room that was
+                    // never adjacent to begin with (dragged clean across a
+                    // hall). Freeze at the last translation that did not land
+                    // inside another already-occupied room, rather than let
+                    // one room's area cover another's.
+                    //
+                    // A freshly detached wall starts exactly on the boundary
+                    // it used to share, which a plain point-in-polygon test
+                    // cannot reliably call either way - so each candidate
+                    // corner is nudged a hair toward the room's own moving
+                    // seed before testing, which reads a touching wall as
+                    // "still this room's side" and a wall that has actually
+                    // crossed the line as inside the neighbour, same as it
+                    // would look either a frame earlier or a frame later.
+                    const drag = roomDrag;
+                    const candidate: Pt[] = [];
+                    for (const corner of corners) candidate.push(anchoredMove(corner, dx, dy, drag));
+                    const NUDGE_METERS = 0.05;
+                    const seedCandidate: Pt = { x: seedOrigin.x + dx, y: seedOrigin.y + dy };
+                    const nudged = candidate.map((corner) => {
+                        const towardX = seedCandidate.x - corner.x;
+                        const towardY = seedCandidate.y - corner.y;
+                        const len = Math.hypot(towardX, towardY);
+                        if (len < 1e-9) return corner;
+                        const shift = Math.min(NUDGE_METERS, len);
+                        return { x: corner.x + (towardX / len) * shift, y: corner.y + (towardY / len) * shift };
+                    });
+                    const others = occupiedFaces(current, state.faces)
+                        .filter((entry) => entry.room !== bound)
+                        .map((entry) => entry.face);
+                    if (others.some((face) => nudged.some((point) => pointInRing(point, face.ring)))) {
+                        dx = roomDrag.lastSafe.x;
+                        dy = roomDrag.lastSafe.y;
+                    } else {
+                        roomDrag.lastSafe = { x: dx, y: dy };
+                    }
                     for (const wall of boundary.unique) {
                         const orig = origins.get(wall) as { ax: number; ay: number; bx: number; by: number };
                         const a = anchoredMove({ x: orig.ax, y: orig.ay }, dx, dy, roomDrag);
@@ -2578,7 +2623,6 @@ function boot(): void {
      * top of it) is what "joined with the nearest other walls" means here.
      */
     function placeRoomAt(center: Pt): void {
-        checkpoint();
         const current = floor();
         // Whatever the click landed inside, before anything new is added -
         // usually nothing yet (open floor), sometimes the whole exterior
@@ -2605,6 +2649,21 @@ function boot(): void {
         const snapTolerance = tolerances();
         const corners = rawCorners.map((corner) => snapPoint(corner, segments, snapTolerance, { suspended: snapOff() }).point);
 
+        // The rectangle above is sized and snapped from nearby geometry, but
+        // nothing so far stops it landing on top of a room that already
+        // exists elsewhere on the floor - refuse rather than lay two rooms'
+        // worth of area on top of each other. The face being subdivided
+        // (usually the open shell, or the room already clicked into once) is
+        // not a blocker; every other already-bound room is.
+        const blockers = occupiedFaces(current, state.faces)
+            .filter((entry) => entry.face !== containerFace)
+            .map((entry) => entry.face);
+        if (blockers.some((face) => polygonOverlapsFace(corners, face))) {
+            toast.info("There's already a room there — try a different spot.");
+            return;
+        }
+
+        checkpoint();
         const doorSide = learnedDoorSide(current, containerFace);
         const bounds: Bounds = {
             minX: Math.min(...corners.map((p) => p.x)),
@@ -3550,30 +3609,25 @@ function boot(): void {
 
         // Floor-to-ceiling, and the walking surface's height above sea level.
         // Both are stored per storey, but neither is needed to draw a floor,
-        // so they sit behind a disclosure rather than in the main flow - the
-        // same "Add more details" idiom the sidebar already uses below for
-        // the plan's own name/date/versions, distinctly labelled since this
-        // one is scoped to the floor rather than the whole plan.
+        // so they sit in the sidebar's one "Add more details" disclosure
+        // (editor.html) alongside the plan's own name/date/versions, rather
+        // than behind a second disclosure of their own - two collapsed
+        // sections for "more detail" read as one too many.
         const key = `floor:${item.uuid || item.level}`;
-        const advanced = document.createElement("details");
-        advanced.className = "floorplan-details-accordion";
-        const advancedToggle = document.createElement("summary");
-        advancedToggle.textContent = "Floor details";
-        advanced.appendChild(advancedToggle);
-        const advancedBody = document.createElement("div");
-        advancedBody.className = "floorplan-sidebar__section";
-        advancedBody.appendChild(
-            metresField("Ceiling height", item.height_meters, "Metres, floor to ceiling", key, (next) => {
-                item.height_meters = next;
-            }),
-        );
-        advancedBody.appendChild(
-            metresField("Ground level", item.elevation_meters, "Metres above sea level", key, (next) => {
-                item.elevation_meters = next;
-            }),
-        );
-        advanced.appendChild(advancedBody);
-        host.appendChild(advanced);
+        const advancedHost = document.getElementById("floorplan-floor-advanced-fields");
+        if (advancedHost) {
+            advancedHost.replaceChildren();
+            advancedHost.appendChild(
+                metresField("Ceiling height", item.height_meters, "Metres, floor to ceiling", key, (next) => {
+                    item.height_meters = next;
+                }),
+            );
+            advancedHost.appendChild(
+                metresField("Ground level", item.elevation_meters, "Metres above sea level", key, (next) => {
+                    item.elevation_meters = next;
+                }),
+            );
+        }
     }
 
     /**
@@ -4484,6 +4538,86 @@ function boot(): void {
         const face = faceForSeed({ x: room.x, y: room.y }, state.faces);
         if (!face) return null;
         return splitRoomBoundary(face, floor().walls);
+    }
+
+    /**
+     * Every already-bound room on this floor, one entry per occupied face.
+     *
+     * `faces` is a parameter rather than always reading `state.faces` because
+     * a caller mid-drag (one frame stale, same tradeoff render() already
+     * documents) needs a consistent snapshot rather than whatever the next
+     * render happens to recompute.
+     */
+    function occupiedFaces(current: Floor, faces: readonly Face[]): Array<{ room: RoomSeed; face: Face }> {
+        const seen = new Set<Face>();
+        const result: Array<{ room: RoomSeed; face: Face }> = [];
+        for (const room of current.rooms) {
+            const face = faceForSeed({ x: room.x, y: room.y }, faces);
+            if (face && !seen.has(face)) {
+                seen.add(face);
+                result.push({ room, face });
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Nudge each point of a ring slightly toward its own centroid.
+     *
+     * A corner snapped flush onto a neighbour's wall sits exactly on that
+     * neighbour's boundary - sometimes exactly on one of its vertices - and a
+     * plain point-in-polygon test is not reliable there; ray casting can call
+     * a point on an edge or at a vertex either way. Eroding the ring first
+     * moves every point a few centimetres into its own interior, so two
+     * rooms that only join at a shared wall no longer read as overlapping,
+     * while a genuine overlap (which reaches well past the boundary) still
+     * does.
+     */
+    function eroded(ring: readonly Pt[]): Pt[] {
+        const EROSION_METERS = 0.05;
+        const cx = ring.reduce((sum, p) => sum + p.x, 0) / ring.length;
+        const cy = ring.reduce((sum, p) => sum + p.y, 0) / ring.length;
+        return ring.map((p) => {
+            const dx = cx - p.x;
+            const dy = cy - p.y;
+            const len = Math.hypot(dx, dy);
+            if (len < 1e-9) return p;
+            const shrink = Math.min(EROSION_METERS, len * 0.25);
+            return { x: p.x + (dx / len) * shrink, y: p.y + (dy / len) * shrink };
+        });
+    }
+
+    /** Whether a simple polygon (a room rectangle, a face's own ring) genuinely overlaps a face - not merely touches its boundary. */
+    function polygonOverlapsFace(corners: readonly Pt[], face: Face): boolean {
+        if (eroded(corners).some((p) => pointInRing(p, face.ring))) return true;
+        if (eroded(face.ring).some((p) => pointInRing(p, corners))) return true;
+        return false;
+    }
+
+    /**
+     * Split off this room's own copy of any wall it merely shares with a
+     * neighbouring room, so a move drags only the moving room's geometry.
+     *
+     * splitRoomBoundary classifies every non-exterior boundary wall as this
+     * room's "unique" - correct for delete, where removing a shared partition
+     * legitimately merges the neighbour in. A move is different: dragging the
+     * room must not tear that same wall out from under the room next door, so
+     * whichever of the room's own walls also bounds another already-occupied
+     * face (not just open, unenclosed space) is cloned here. The clone
+     * travels with this room; the original stays exactly where it was,
+     * still bounding the neighbour.
+     */
+    function detachSharedWalls(current: Floor, boundary: RoomBoundary, faces: readonly Face[]): Wall[] {
+        const neighbours = occupiedFaces(current, faces)
+            .filter((entry) => entry.face !== boundary.face)
+            .map((entry) => entry.face);
+        return boundary.unique.map((wall) => {
+            const id = wallId(wall);
+            if (!neighbours.some((face) => face.wallIds.includes(id))) return wall;
+            const clone: Wall = { ...wall, uuid: nextLocalId(), openings: wall.openings.map((opening) => ({ ...opening, uuid: nextLocalId() })) };
+            current.walls.push(clone);
+            return clone;
+        });
     }
 
     /**
