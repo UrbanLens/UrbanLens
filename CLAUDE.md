@@ -61,6 +61,18 @@ The purpose of mypy is to find bugs and improve code quality, not to silence war
 
 Common development commands should be added to `pyproject.toml` scripts, `package.json`, and/or VSCode tasks.
 
+## Git Workflow
+
+Commit every batch of changes as its own commit, without waiting to be asked - a "batch" is one
+logically complete unit of work (one fix, one feature increment, one doc update), the same
+granularity already used throughout this repo's history.
+
+Push after each commit (or small group of commits) without asking for confirmation first, as long
+as the current branch isn't `main` - which it never should be; work happens on feature branches.
+Plain `git push` only: never force-push, never push directly to `main`, and never skip hooks
+(`--no-verify`) to force a commit or push through - if a hook fails, fix the underlying issue
+instead.
+
 ## Project Structure
 
 ```
