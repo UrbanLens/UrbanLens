@@ -202,6 +202,27 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
 
         self.assertEqual(created, 0)
 
+    def test_candidate_pin_is_row_locked_while_creating_the_visit(self):
+        """Regression test: two concurrent imports of the same track (e.g. the same
+        GPX file uploaded twice) previously raced get_or_create's own SELECT with no
+        locking at all - closed by locking the candidate pin around the
+        check-then-create, same idiom as apply_pin_share_response."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        raw_points = [
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=12)),
+        ]
+        route = self._saved_route(raw_points)
+
+        with CaptureQueriesContext(connection) as queries:
+            created = detect_dwells_and_create_visits(route, raw_points, self.profile)
+
+        self.assertEqual(created, 1)
+        self.assertTrue(any("FOR UPDATE" in q["sql"].upper() for q in queries.captured_queries))
+
 
 class DwellVisitProvenanceTests(DetectDwellsAndCreateVisitsTests):
     """A dwell detected in an uploaded track file is an *import*, not a live device ping.

@@ -98,21 +98,27 @@ class MediaKind(TextChoices):
 class QuotaExemption(TextChoices):
     """Why a stored file's bytes don't count against its uploader's quota.
 
-    The empty default means "counts normally". Both exemptions exist to avoid
-    charging a user for storage the whole community benefits from:
+    The empty default means "counts normally".
 
     ``EXTERNAL_MEDIA`` is a locally cached copy of someone else's photo, kept
     so the gallery doesn't depend on a provider's URL staying alive. The
     person who happened to upvote it didn't author it and shouldn't pay for
-    caching it.
+    caching it - storage the whole community benefits from.
 
     ``COMMUNITY_CONTRIBUTION`` is a user's own photo, shared to a wiki, that
     enough other people marked relevant - the quota bonus is the reward for
     contributing it. See ``services.media.quota_rewards``.
+
+    ``SHARED_COPY`` is a recipient's copy of a photo accepted from a pin
+    share: it points at the same stored file as the sender's row
+    (``services.sharing.pin_sharing.create_pin_from_share``) rather than a
+    second copy of the bytes, so it occupies no storage of the recipient's
+    own to charge them for.
     """
 
     EXTERNAL_MEDIA = "external_media", "Cached external media"
     COMMUNITY_CONTRIBUTION = "community", "Community-valued contribution"
+    SHARED_COPY = "shared_copy", "Copy of a shared photo"
 
 
 class Image(abstract.FrontendDashboardModel):
@@ -286,9 +292,11 @@ class Image(abstract.FrontendDashboardModel):
     # process_image_upload; usage sums simply skip unmeasured rows until then.
     file_size = BigIntegerField(null=True, blank=True)
     # Why this row's bytes don't count against its profile's storage quota
-    # (empty = they do). See services.media.quota_rewards, which is the only
-    # thing that should set it, and QuotaExemption for what each value means.
-    # Materialized rather than recomputed because the community-contribution
+    # (empty = they do). Set at creation by whichever path produced a row that
+    # owns no exclusive storage of its own - services.media.media_materialize
+    # (EXTERNAL_MEDIA), services.media.quota_rewards (COMMUNITY_CONTRIBUTION),
+    # services.sharing.pin_sharing (SHARED_COPY) - see QuotaExemption for what
+    # each value means. Materialized rather than recomputed because the community-contribution
     # case is a one-way reward: a photo that earned its exemption keeps it
     # even if voters later change their minds, so a user's stored photos can
     # never retroactively push them over quota.

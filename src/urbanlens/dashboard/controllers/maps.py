@@ -425,6 +425,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not place_id:
             return JsonResponse({"error": "missing place_id"}, status=400)
 
+        if not request.user.profile.external_apis_enabled:
+            return JsonResponse({"error": "disabled"}, status=403)
+
         api_key = settings.google_unrestricted_api_key
         redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
         if not api_key and not redata_configured:
@@ -457,7 +460,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not request.user.profile.external_apis_enabled:
             return JsonResponse({"available": False, "reason": "disabled"})
 
-        api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key
+        # Server-to-server call - must use the unrestricted key. The domain-restricted
+        # key is HTTP-referrer-locked to urbanlens.org and 403s on every backend request,
+        # since Google only honors that restriction when a browser sends a Referer header.
+        api_key = settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"available": False, "reason": "no_key"})
 

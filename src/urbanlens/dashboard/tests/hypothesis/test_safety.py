@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyCheckinContact,
     SafetyCheckinMessage,
     SafetyCheckinStatus,
+    SafetyContactOptOut,
     SafetyContactOptOutScope,
 )
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
@@ -30,6 +31,7 @@ from urbanlens.dashboard.services.visits.safety import (
     get_active_checkins,
     is_contact_opted_out,
     mark_found_safe,
+    record_contact_opt_out,
 )
 
 
@@ -517,3 +519,33 @@ class SafetyContactOptOutBlocksNotificationTests(TestCase):
             contact_profile=None,
         )
         self.assertTrue(is_contact_opted_out(None, "contact@example.com", owner=self.owner))
+
+
+class RecordContactOptOutDedupTests(TestCase):
+    """record_contact_opt_out's docstring promises repeat clicks (or an email client's
+    link-scanner prefetching the confirm GET) don't create duplicate rows - previously
+    unenforced at the DB level, so a get_or_create race could insert two."""
+
+    def setUp(self):
+        self.owner = baker.make("auth.User").profile
+        self.checkin = _checkin(self.owner)
+        self.contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+
+    def test_repeat_calls_do_not_duplicate_a_checkin_scoped_opt_out(self):
+        record_contact_opt_out(self.contact, SafetyContactOptOutScope.CHECKIN)
+        record_contact_opt_out(self.contact, SafetyContactOptOutScope.CHECKIN)
+
+        self.assertEqual(SafetyContactOptOut.objects.filter(email="contact@example.com", scope=SafetyContactOptOutScope.CHECKIN, checkin=self.checkin).count(), 1)
+
+    def test_a_second_identical_row_is_rejected_at_the_database(self) -> None:
+        """Direct proof the constraint - not just the service function's own call
+        pattern - is what prevents the duplicate."""
+        record_contact_opt_out(self.contact, SafetyContactOptOutScope.CHECKIN)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            SafetyContactOptOut.objects.create(
+                contact_profile=None,
+                email="contact@example.com",
+                scope=SafetyContactOptOutScope.CHECKIN,
+                owner=None,
+                checkin=self.checkin,
+            )

@@ -26,7 +26,10 @@ Covers the exposure model end to end:
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.contrib.auth.models import User
+from django.db import DatabaseError, transaction
 from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
@@ -100,6 +103,69 @@ class ExposureRecordingTests(_ProvenanceTestCase):
         self._share(self.sarah_pin, "sarah", "john", status=PinShareStatus.ALREADY_PINNED)
         onward = self._share(john_pin, "john", "kim")
         self.assertIsNone(onward.parent_share_id)
+
+
+class ExposureRecordingFailureIsolationTests(_ProvenanceTestCase):
+    """A DatabaseError recording the exposure is swallowed inside its own nested
+    atomic() savepoint (docs/PROBLEMS.md - naively wrapping the whole share-creation
+    view in atomic() would otherwise convert this tolerated bookkeeping gap into a
+    hard 500 for the entire share; nesting just this write keeps it genuinely
+    all-or-nothing without risking that).
+    """
+
+    def _pending_share(self) -> PinShare:
+        return PinShare.objects.create(
+            pin=self.sarah_pin,
+            location=self.sarah_pin.location,
+            from_profile=self.profiles["sarah"],
+            to_profile=self.profiles["john"],
+            status=PinShareStatus.PENDING,
+        )
+
+    def test_a_database_error_recording_the_exposure_is_swallowed(self):
+        share = self._pending_share()
+
+        with mock.patch("urbanlens.dashboard.models.pin_share.exposure.LocationExposure.objects.record", side_effect=DatabaseError("boom")):
+            result = record_share_exposure(share)
+
+        self.assertIsNone(result)
+        self.assertFalse(LocationExposure.objects.filter(share=share).exists())
+
+    def test_the_swallowed_failure_does_not_poison_an_outer_transaction(self):
+        """The precise scenario the nested atomic() protects against: a caller that
+        wraps its own multi-write sequence in atomic() must still be able to write
+        after record_share_exposure swallows a DatabaseError, rather than hit
+        TransactionManagementError from an outer transaction Django marked broken.
+
+        Needs a *real* DB-level failure, not a synthetic ``side_effect`` exception -
+        Postgres only aborts the transaction/savepoint for an error it actually
+        raised, so a bare mocked exception that never touches the DB wouldn't
+        exercise the thing being protected against. A duplicate (profile, location,
+        share) triple gets there via a genuine IntegrityError against
+        ``db_locexp_one_per_pfl_loc_share`` - unlike a bogus FK target, a unique
+        constraint is never deferrable, so it is guaranteed to raise immediately.
+        """
+        share = self._pending_share()
+        location = share.shared_location
+        LocationExposure.objects.create(profile_id=share.to_profile_id, location_id=location.pk, share_id=share.pk, source=ExposureSource.SHARE_RECEIVED)
+
+        def _violate_unique(*, profile_id, location_id, share_id, source):
+            return LocationExposure.objects.create(profile_id=profile_id, location_id=location_id, share_id=share_id, source=source)
+
+        with transaction.atomic():
+            with mock.patch("urbanlens.dashboard.models.pin_share.exposure.LocationExposure.objects.record", side_effect=_violate_unique):
+                result = record_share_exposure(share)
+            self.assertIsNone(result)
+            # If the failed INSERT had escaped record_share_exposure's own atomic()
+            # savepoint, Postgres would leave this outer transaction aborted and
+            # this write would raise TransactionManagementError instead of
+            # succeeding.
+            share.message = "still writable"
+            share.save(update_fields=["message"])
+
+        share.refresh_from_db()
+        self.assertEqual(share.message, "still writable")
+        self.assertEqual(LocationExposure.objects.filter(share=share).count(), 1)
 
 
 class ExposureResolutionTests(_ProvenanceTestCase):

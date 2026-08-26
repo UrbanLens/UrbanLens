@@ -23,6 +23,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, column_length_error, text_length_error
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
@@ -32,6 +33,7 @@ from urbanlens.dashboard.services.undo.handlers.pin_list import MODEL_LABEL as P
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,13 @@ logger = logging.getLogger(__name__)
 _BULK_ADD_CONFIRM_THRESHOLD = 100
 
 _ITEMS_PANEL_TEMPLATE = "dashboard/partials/pin_lists/_items_panel.html"
+_ITEMS_ROWS_TEMPLATE = "dashboard/partials/pin_lists/_items_rows.html"
+
+#: Rows rendered per page of the items list - matches the height-based
+#: "revealed" HTMX pagination the Memories gallery uses (see
+#: controllers.photos.MemoriesPhotosView/_GALLERY_PAGE_SIZE), reused here
+#: rather than inventing a second pagination scheme for the same page shape.
+_ITEMS_PAGE_SIZE = 50
 
 
 def _get_pin_list_or_404(list_slug: str, profile: Profile) -> PinList:
@@ -80,29 +89,40 @@ def _default_trip_name_for_list(pin_list: PinList) -> str:
     return f'Trip from the "{pin_list.name}" list'
 
 
-def _list_items_with_labels(pin_list: PinList) -> list[PinListItem]:
+def _list_items_queryset(pin_list: PinList) -> QuerySet[PinListItem]:
     """Ordered list items with their pin's labels prefetched (icon/color/tag chips need these).
 
     Matches the same prefetch shape the main map's bulk pin endpoints use
     (see maps.py) so ``Pin.effective_icon``/``effective_color`` and the tag
     chip list resolve without N+1 queries.
 
-    ``pin__location__wiki`` and ``pin__reviews`` are part of that shape, and were
-    missing while this docstring already claimed there were no N+1s:
+    ``pin__location__wiki`` and ``pin__reviews`` are part of that shape:
     ``_pin_map_marker_data`` reads ``Pin.effective_name`` (which falls through to
     ``Location.display_name``, and that reads the linked ``Wiki``) and
     ``Pin.rating`` (which reads ``reviews``). Both model properties document the
-    prefetch they need in their own docstrings. The page has no pagination, so
-    the cost was two queries per pin over a list of unbounded length.
+    prefetch they need in their own docstrings.
+
+    Returned as a queryset (not materialized), so a caller that only needs
+    one page of rows (``PinListItemsPageView``) can paginate it at the
+    database level instead of always pulling every item on the list.
     """
-    return list(
+    return (
         pin_list.items.select_related("pin", "pin__location", "pin__location__wiki")
         .prefetch_related(
             Prefetch("pin__labels", queryset=Label.objects.exclude(kind=KIND_USER).order_by("-order", "name")),
             "pin__reviews",
         )
-        .order_by("order"),
+        .order_by("order")
     )
+
+
+def _list_items_with_labels(pin_list: PinList) -> list[PinListItem]:
+    """Every item on the list, fully prefetched - see :func:`_list_items_queryset`.
+
+    Used where the full set is genuinely needed regardless of pagination -
+    the overview map plots every pin on the list, not just the current page.
+    """
+    return list(_list_items_queryset(pin_list))
 
 
 def _pin_map_marker_data(pin: Pin) -> dict[str, Any]:
@@ -136,9 +156,24 @@ def _items_map_data(items: list[PinListItem]) -> list[dict[str, Any]]:
     return [_pin_map_marker_data(item.pin) for item in items if item.pin.effective_latitude and item.pin.effective_longitude]
 
 
-def _render_items_panel(request: HttpRequest, pin_list: PinList) -> HttpResponse:
+def _paginated_items_context(request: HttpRequest, pin_list: PinList) -> dict[str, Any]:
+    """Build the items/page_obj/items_map_data context shared by the detail page and items panel.
+
+    ``items_map_data`` is built from the *full*, unpaginated list - the
+    overview map plots every pin on the list regardless of which page of
+    rows is currently rendered. ``items``/``page_obj`` are the first page of
+    that same already-materialized list, sliced in Python rather than
+    re-querying, so this costs no more than the unpaginated render did.
+    Later pages are fetched at the database level by
+    :class:`PinListItemsPageView` instead of repeating this full fetch.
+    """
     items = _list_items_with_labels(pin_list)
-    return render(request, _ITEMS_PANEL_TEMPLATE, {"pin_list": pin_list, "items": items, "items_map_data": _items_map_data(items)})
+    page_obj = get_page(request, items, _ITEMS_PAGE_SIZE)
+    return {"items": page_obj.object_list, "page_obj": page_obj, "items_map_data": _items_map_data(items)}
+
+
+def _render_items_panel(request: HttpRequest, pin_list: PinList) -> HttpResponse:
+    return render(request, _ITEMS_PANEL_TEMPLATE, {"pin_list": pin_list, **_paginated_items_context(request, pin_list)})
 
 
 def _show_toast(response: HttpResponse, message: str, level: str = "success") -> HttpResponse:
@@ -251,7 +286,6 @@ class PinListDetailView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
-        items = _list_items_with_labels(pin_list)
         saved_filters = list(profile.saved_filters.all())
         trips = list(Trip.objects.filter(profiles=profile).order_by("name"))
         return render(
@@ -259,8 +293,7 @@ class PinListDetailView(LoginRequiredMixin, View):
             "dashboard/pages/pin_lists/detail.html",
             {
                 "pin_list": pin_list,
-                "items": items,
-                "items_map_data": _items_map_data(items),
+                **_paginated_items_context(request, pin_list),
                 "saved_filters": saved_filters,
                 "trips": trips,
                 **profile.get_map_center_template_context(),
@@ -399,6 +432,24 @@ class PinListItemsView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
         return _render_items_panel(request, pin_list)
+
+
+class PinListItemsPageView(LoginRequiredMixin, View):
+    """One page of a list's item rows, for infinite scroll past the first page.
+
+    GET /lists/<uuid>/items/page/?page=N
+
+    Unlike :class:`PinListItemsView` (which re-renders the whole panel, map
+    data included), this paginates ``_list_items_queryset`` directly at the
+    database level - the "load more" sentinel only needs more rows, not a
+    fresh map sync, so it never re-fetches the full, unpaginated list.
+    """
+
+    def get(self, request: HttpRequest, list_slug: str) -> HttpResponse:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
+        page_obj = get_page(request, _list_items_queryset(pin_list), _ITEMS_PAGE_SIZE)
+        return render(request, _ITEMS_ROWS_TEMPLATE, {"pin_list": pin_list, "items": page_obj.object_list, "page_obj": page_obj})
 
 
 class PinListAddPinsView(LoginRequiredMixin, View):

@@ -96,12 +96,17 @@ class UnresolvedMergeConflictError(ValueError):
 class PinMergeCollisionError(ValueError):
     """Raised when a merge cannot proceed without destroying data.
 
-    Only one situation produces this: a child pin that has to be detached to
-    top level (because re-parenting it under the survivor would close a loop)
-    cannot be, since another top-level pin already occupies its location.
-    Continuing would leave that child parented to the pin about to be deleted,
-    and ``Pin.parent_pin`` CASCADEs - taking the child, and the survivor
-    somewhere beneath it, with it.
+    Two situations produce this, both because leaving a pin parented to
+    ``loser`` would let ``Pin.parent_pin``'s CASCADE take it - and anything
+    nested beneath it, survivor included - out with ``loser.delete()``:
+
+    - A child pin has to be detached to top level (because re-parenting it
+      under the survivor would close a loop), but another top-level pin
+      already occupies its location.
+    - The survivor is itself one of loser's direct children and has to move
+      to loser's own parent, but another top-level pin already occupies the
+      survivor's location (only possible when that parent is None, i.e. the
+      survivor would become a new top-level pin).
 
     ``safe_message`` is safe to surface directly to the caller.
     """
@@ -225,9 +230,18 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
     pointed at ``loser`` would let ``loser.delete()``'s ``CASCADE`` on
     ``parent_pin`` destroy that child, and everything nested beneath it,
     survivor included.
+
+    When survivor is itself one of loser's direct children, it is re-pointed
+    at loser's own parent instead of being left alone - the same CASCADE would
+    otherwise take survivor down with the loser it is supposed to absorb.
     """
     for child in list(loser.detail_pins.all()):
         if child.pk == survivor.pk:
+            survivor.parent_pin = loser.parent_pin
+            if not _save_within_savepoint(survivor, ["parent_pin", "updated"]):
+                raise PinMergeCollisionError(
+                    f"Cannot merge: survivor pin {survivor.pk} has to move to the loser's own parent to avoid being deleted with it, but another top-level pin already occupies its location.",
+                )
             continue
         if child.would_create_cycle(survivor):
             logger.warning("Pin merge: detaching child pin %s to root - re-parenting under the survivor would create a cycle.", child.pk)

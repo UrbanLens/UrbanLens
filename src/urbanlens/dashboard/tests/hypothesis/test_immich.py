@@ -545,6 +545,14 @@ class ImportImmichPhotosTaskTests(TestCase):
             )
         self.assertEqual(counts, {"imported": 1, "failed": 1, "skipped": 0})
 
+    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no
+        locking at all, unlike every interactive upload path (see
+        per_profile_upload_lock's docstring)."""
+        with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+            self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
+        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+
     def test_visit_id_by_asset_attaches_to_that_visit_without_creating_another(self) -> None:
         """Regression test for accept_pin_suggestion's photo-import wiring (services/pin_suggestions.py)."""
         target_visit = baker.make_recipe("dashboard.pin_visit", pin=self.pin, source=VisitSource.HISTORY)

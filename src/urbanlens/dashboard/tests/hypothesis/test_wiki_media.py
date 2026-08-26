@@ -184,6 +184,17 @@ class WikiMediaVoteViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         queue_vote.assert_not_called()
 
+    def test_voting_with_a_pin_owned_image_id_at_the_same_location_is_ignored(self) -> None:
+        """A photo that was only ever uploaded to a Pin (never sent to the
+        wiki) must not be votable through the wiki just because it shares the
+        wiki's Location - the lookup has to scope to the wiki's own attached
+        media, not merely to the location."""
+        pin_only_image = Image.objects.create(image=SimpleUploadedFile("pin-only.jpg", b"y", content_type="image/jpeg"), location=self.location, profile=self.profile)
+        with mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote:
+            response = self._vote({"source": "photos", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True, "image_id": pin_only_image.pk})
+        self.assertEqual(response.status_code, 200)
+        queue_vote.assert_not_called()
+
     def test_clearing_a_vote_does_not_queue_a_redata_vote(self) -> None:
         image = Image.objects.create(image=SimpleUploadedFile("shared.jpg", b"bytes", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile)
         _mark(self.profile, self.location, "photos", "a", is_relevant=True)

@@ -54,7 +54,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.urls import reverse
 
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
@@ -281,6 +281,10 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
                 pin=new_pin,
                 location=new_pin.location,
                 profile=share.to_profile,
+                # Points at the sender's own stored file rather than a second copy of
+                # the bytes (see this block's comment above), so it costs the recipient
+                # no storage of their own to charge quota for.
+                quota_exempt_reason=QuotaExemption.SHARED_COPY,
                 # Both of these carry a default that quietly misdescribes the copy when
                 # omitted: source would file a shared Wikimedia photo under the
                 # recipient's own uploads (and into the wrong Media tab), and media_type

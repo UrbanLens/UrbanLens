@@ -25,6 +25,7 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models import F
 from django.urls import reverse
 from model_bakery import baker
 
@@ -186,6 +187,64 @@ class LocationHitWeightTests(TestCase):
         suggestion_lat = float(suggestion.latitude)
         unweighted_midpoint = (heavy_lat + light_lat) / 2
         self.assertLess(abs(suggestion_lat - heavy_lat), abs(suggestion_lat - unweighted_midpoint))
+
+
+class HitCountRaceConditionTests(TestCase):
+    """hit_count is updated via F() so a concurrent ingest can't clobber it (see
+    _upsert_matched_suggestion/_upsert_new_pin_suggestion - two overlapping scans for one
+    profile, e.g. a repeated Immich sweep overlapping a local-scan upload, is the documented
+    case)."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
+        self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
+
+    def test_matched_suggestion_survives_a_write_racing_between_read_and_save(self) -> None:
+        """A second ingest's increment lands between this ingest's read and its save - a
+        plain `existing.hit_count += weight` would silently overwrite it; the F() expression
+        must not."""
+        ingest_location_hits(self.profile, [_hit(40.0001, -74.0, "2024-01-01")], origin=PinSuggestionOrigin.IMMICH)
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(suggestion.hit_count, 1)
+
+        injected = {"done": False}
+
+        def racing_weight_of(hits):
+            if not injected["done"]:
+                injected["done"] = True
+                # Stands in for the other concurrent worker: commits its own increment
+                # after this ingest has already read hit_count=1 into its `existing`
+                # instance, but before this ingest's own save runs.
+                PinSuggestion.objects.filter(pk=suggestion.pk).update(hit_count=F("hit_count") + 100)
+            return sum(hit.weight for hit in hits)
+
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions._weight_of", side_effect=racing_weight_of):
+            ingest_location_hits(self.profile, [_hit(40.0001, -74.0, "2024-01-02")], origin=PinSuggestionOrigin.IMMICH)
+
+        suggestion.refresh_from_db()
+        self.assertEqual(suggestion.hit_count, 1 + 100 + 1)
+
+    def test_new_pin_suggestion_survives_a_write_racing_between_read_and_save(self) -> None:
+        """Same race as above, for the unmatched/new-pin-cluster branch."""
+        ingest_location_hits(self.profile, [_hit(41.0, -76.0, "2024-02-01")], origin=PinSuggestionOrigin.LOCAL_SCAN)
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(suggestion.hit_count, 1)
+
+        injected = {"done": False}
+
+        def racing_weight_of(hits):
+            if not injected["done"]:
+                injected["done"] = True
+                PinSuggestion.objects.filter(pk=suggestion.pk).update(hit_count=F("hit_count") + 100)
+            return sum(hit.weight for hit in hits)
+
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions._weight_of", side_effect=racing_weight_of):
+            ingest_location_hits(self.profile, [_hit(41.0001, -76.0001, "2024-02-02")], origin=PinSuggestionOrigin.LOCAL_SCAN)
+
+        suggestion.refresh_from_db()
+        self.assertEqual(suggestion.hit_count, 1 + 100 + 1)
 
 
 def _dt(day: str) -> datetime.datetime:
@@ -1264,6 +1323,17 @@ class AttachSuggestionPhotosTests(TestCase):
         self.assertEqual(image.profile_id, self.profile.pk)
         self.assertIsNone(image.pin_id)
         self.assertTrue(image.checksum)
+
+    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no
+        locking at all, unlike every interactive upload path (see
+        per_profile_upload_lock's docstring)."""
+        with (
+            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()),
+            mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire,
+        ):
+            attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
+        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
 
     def test_never_exceeds_max_suggestion_photos(self) -> None:
         urls = [f"https://example.test/photo-{i}.jpg" for i in range(MAX_SUGGESTION_PHOTOS + 5)]

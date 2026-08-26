@@ -11,6 +11,7 @@ import datetime
 import json
 import os
 from typing import TYPE_CHECKING
+from unittest import mock
 
 from django.urls import reverse
 from django.utils import timezone
@@ -31,7 +32,8 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyContactOptOut,
     SafetyContactOptOutScope,
 )
-from urbanlens.dashboard.services.visits.safety import _seal_archive_payload, archive_checkin, schedule_checkin_archival
+from urbanlens.dashboard.services.notifications.notifications import NotificationEvent
+from urbanlens.dashboard.services.visits.safety import MAX_ARCHIVE_ATTEMPTS, _seal_archive_payload, archive_checkin, schedule_checkin_archival
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -224,6 +226,71 @@ class ArchiveCheckinTests(TestCase):
         self.assertEqual(contact.contact_profile_id, contact_profile.pk)
         self.assertEqual(opt_out.contact_profile_id, contact_profile.pk)
         self.assertEqual(opt_out.checkin_id, self.checkin.pk)
+
+
+class ArchiveCheckinFailureCapTests(TestCase):
+    """archive_checkin's give-up-after-MAX_ARCHIVE_ATTEMPTS backstop for a checkin whose
+    archival keeps failing (docs/PROBLEMS.md: a corrupted MessagingKeyBundle.public_key
+    otherwise fails the same way on every 5-minute sweep forever, with no cap or alert).
+    """
+
+    def setUp(self):
+        self.owner = _profile()
+        self.checkin = _checkin(self.owner)
+        # Wrong-length key: fails nacl.public.PublicKey the same deterministic way a
+        # genuinely corrupted key would, on every attempt.
+        _enroll(self.owner, public_key=b"too-short-to-be-a-real-x25519-key")
+
+    def test_a_failed_attempt_raises_and_records_one_failure(self):
+        with self.assertRaises(Exception):
+            archive_checkin(self.checkin)
+
+        self.checkin.refresh_from_db()
+        self.assertEqual(self.checkin.archive_failure_count, 1)
+        self.assertIsNone(self.checkin.archive_failed_at)
+
+    def test_gives_up_after_max_attempts_and_is_excluded_from_future_sweeps(self):
+        self.checkin.archive_scheduled_at = timezone.now() - datetime.timedelta(minutes=1)
+        self.checkin.save(update_fields=["archive_scheduled_at"])
+
+        for _ in range(MAX_ARCHIVE_ATTEMPTS):
+            with self.assertRaises(Exception):
+                archive_checkin(self.checkin)
+
+        self.checkin.refresh_from_db()
+        self.assertEqual(self.checkin.archive_failure_count, MAX_ARCHIVE_ATTEMPTS)
+        self.assertIsNotNone(self.checkin.archive_failed_at)
+        self.assertNotIn(self.checkin.pk, list(SafetyCheckin.objects.due_for_archival().values_list("pk", flat=True)))
+
+    def test_does_not_alert_before_the_cap_is_reached(self):
+        with mock.patch("urbanlens.dashboard.services.notifications.notifications.notify") as mock_notify:
+            for _ in range(MAX_ARCHIVE_ATTEMPTS - 1):
+                with self.assertRaises(Exception):
+                    archive_checkin(self.checkin)
+
+        mock_notify.assert_not_called()
+
+    def test_alerts_the_admin_exactly_once_when_giving_up(self):
+        with mock.patch("urbanlens.dashboard.services.notifications.notifications.notify") as mock_notify:
+            for _ in range(MAX_ARCHIVE_ATTEMPTS):
+                with self.assertRaises(Exception):
+                    archive_checkin(self.checkin)
+
+        mock_notify.assert_called_once()
+        args, _kwargs = mock_notify.call_args
+        self.assertEqual(args[0], NotificationEvent.SAFETY_CHECKIN_ARCHIVAL_FAILED)
+
+    def test_further_calls_past_the_cap_do_not_keep_incrementing(self):
+        for _ in range(MAX_ARCHIVE_ATTEMPTS):
+            with self.assertRaises(Exception):
+                archive_checkin(self.checkin)
+
+        with mock.patch("urbanlens.dashboard.services.notifications.notifications.notify") as mock_notify, self.assertRaises(Exception):
+            archive_checkin(self.checkin)
+
+        self.checkin.refresh_from_db()
+        self.assertEqual(self.checkin.archive_failure_count, MAX_ARCHIVE_ATTEMPTS + 1)
+        mock_notify.assert_not_called()
 
 
 class ChatBlockedAfterArchivalTests(TestCase):

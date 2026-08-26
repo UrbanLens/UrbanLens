@@ -215,6 +215,7 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
         is turned off, even though the route itself still saves.
     """
     from django.contrib.gis.measure import D
+    from django.db import transaction
     from geopy.distance import geodesic
 
     from urbanlens.dashboard.models.pin.model import Pin
@@ -275,12 +276,18 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
             # import as GEOLOCATION both mislabelled it in the UI ("Geolocation"
             # rather than "Imported") and claimed a provenance whose own setting
             # had no say over it.
-            _, was_created = PinVisit.objects.get_or_create(
-                pin=pin,
-                visited_at=dwell_start,
-                source=VisitSource.HISTORY,
-                defaults={"route": route},
-            )
+            # Locks the candidate pin so two concurrent imports of the same track (the
+            # same GPX file uploaded twice) can't both pass get_or_create's SELECT
+            # before either commits its INSERT - same "lock parent, re-check inside"
+            # idiom as pin_sharing.apply_pin_share_response.
+            with transaction.atomic():
+                Pin.objects.select_for_update().get(pk=pin.pk)
+                _, was_created = PinVisit.objects.get_or_create(
+                    pin=pin,
+                    visited_at=dwell_start,
+                    source=VisitSource.HISTORY,
+                    defaults={"route": route},
+                )
             if was_created:
                 sync_last_visited(pin)
                 created += 1

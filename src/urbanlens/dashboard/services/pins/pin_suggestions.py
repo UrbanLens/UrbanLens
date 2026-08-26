@@ -25,6 +25,7 @@ from urllib.parse import urlparse
 
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
+from django.db.models import F
 import requests
 
 from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
@@ -37,7 +38,7 @@ from urbanlens.dashboard.models.profile.model import _haversine_km
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.media.images import compute_checksum, delete_stored_file
 from urbanlens.dashboard.services.media.media_materialize import fetch_with_revalidated_redirects
-from urbanlens.dashboard.services.media.storage import quota_error_for_upload
+from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError
 from urbanlens.dashboard.services.visits.visits import add_visited_status, find_pin_containing_point, resolve_location_for_point, sync_last_visited, visit_logging_allowed
 
@@ -392,7 +393,10 @@ def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHi
     existing = PinSuggestion.objects.filter(profile=profile, pin=pin, status=PinSuggestionStatus.PENDING).first()
     if existing is not None:
         existing.visit_dates = _merge_dates(existing.visit_dates, dates)
-        existing.hit_count += _weight_of(hits)
+        # F() rather than += : two concurrent ingests (e.g. an Immich sweep overlapping
+        # a local-scan upload) both reading the same pre-update hit_count would otherwise
+        # have one increment lost to the other's save.
+        existing.hit_count = F("hit_count") + _weight_of(hits)
         existing.sample_assets = _merge_sample_assets(existing.sample_assets, hits)
         existing.suggested_aliases = _merge_aliases(existing.suggested_aliases, hits)
         existing.suggested_links = _merge_links(existing.suggested_links, hits)
@@ -412,6 +416,7 @@ def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHi
                 "updated",
             ]
         )
+        existing.refresh_from_db(fields=["hit_count"])
         return existing
     return PinSuggestion.objects.create(
         profile=profile,
@@ -450,7 +455,8 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
     existing = _find_nearby_pending_new_pin_suggestion(pending_candidates, latitude, longitude)
     if existing is not None:
         existing.visit_dates = _merge_dates(existing.visit_dates, dates)
-        existing.hit_count += _weight_of(cluster)
+        # F() rather than += : see the matching comment in _upsert_matched_suggestion.
+        existing.hit_count = F("hit_count") + _weight_of(cluster)
         existing.sample_assets = _merge_sample_assets(existing.sample_assets, cluster)
         existing.suggested_aliases = _merge_aliases(existing.suggested_aliases, cluster)
         existing.suggested_links = _merge_links(existing.suggested_links, cluster)
@@ -473,6 +479,7 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
                 "updated",
             ]
         )
+        existing.refresh_from_db(fields=["hit_count"])
         return existing
     created = PinSuggestion.objects.create(
         profile=profile,
@@ -683,22 +690,23 @@ def attach_suggestion_photos(suggestion: PinSuggestion, photo_urls: list[str], p
         if not content or len(content) > _MAX_PHOTO_DOWNLOAD_BYTES:
             logger.warning("Suggestion photo %s was empty or too large - skipped.", url)
             continue
-        if quota_error_for_upload(profile, len(content)):
-            logger.info("Skipped suggestion photo %s - profile %s is over its storage quota.", url, profile.pk)
-            break
+        with per_profile_upload_lock(profile):
+            if quota_error_for_upload(profile, len(content)):
+                logger.info("Skipped suggestion photo %s - profile %s is over its storage quota.", url, profile.pk)
+                break
 
-        file_obj = ContentFile(content, name=_filename_from_url(url))
-        checksum = compute_checksum(file_obj)
-        file_obj.seek(0)
-        image = Image.objects.create(
-            image=file_obj,
-            profile=profile,
-            source=ImageSource.EXTERNAL_API,
-            source_url=url,
-            checksum=checksum,
-            file_size=len(content),
-            pin_suggestion=suggestion,
-        )
+            file_obj = ContentFile(content, name=_filename_from_url(url))
+            checksum = compute_checksum(file_obj)
+            file_obj.seek(0)
+            image = Image.objects.create(
+                image=file_obj,
+                profile=profile,
+                source=ImageSource.EXTERNAL_API,
+                source_url=url,
+                checksum=checksum,
+                file_size=len(content),
+                pin_suggestion=suggestion,
+            )
         created.append(image)
         room -= 1
     return created

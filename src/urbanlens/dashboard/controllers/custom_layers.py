@@ -374,19 +374,22 @@ class CustomLayerShareToWikiView(LoginRequiredMixin, View):
 
         Returns:
             Re-rendered layer list with a ``showToast`` HX-Trigger describing
-            the outcome (shared, already shared, or no wiki yet).
+            the outcome (shared, or no wiki yet).
         """
         owner, qs, layer = _get_layer(request, pin_slug, None, layer_uuid)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        wiki_layer, created = _share_layer_to_wiki(layer, profile)
+        wiki_layer, _created = _share_layer_to_wiki(layer, profile)
         response = _render_layer_list(request, owner, qs)
         if wiki_layer is None:
             toast = {"level": "info", "message": "This property has no community wiki yet."}
-        elif created:
-            toast = {"level": "success", "message": f'Shared "{layer.name}" to the community wiki.'}
         else:
-            toast = {"level": "info", "message": f'"{layer.name}" is already on the community wiki.'}
+            # Deliberately identical whether this created a new wiki layer or
+            # reused a same-named one already there: distinguishing the two
+            # would let a caller learn, from the toast alone, whether some
+            # other user had already created a same-named layer on this wiki
+            # - a name-existence oracle once viewer concealment is live.
+            toast = {"level": "success", "message": f'"{layer.name}" is on the community wiki.'}
         triggers = json.loads(response["HX-Trigger"])
         triggers["showToast"] = toast
         response["HX-Trigger"] = json.dumps(triggers)

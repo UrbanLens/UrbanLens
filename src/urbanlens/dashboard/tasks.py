@@ -1225,7 +1225,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
     from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
 
     counts = {"imported": 0, "skipped": 0, "failed": 0}
@@ -1252,23 +1252,25 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
         if checksum in existing_checksums:
             counts["skipped"] += 1
             continue
-        if quota_error_for_upload(profile, len(content)):
-            counts["failed"] += 1
-            continue
 
-        target_visit_id = (visit_id_by_asset or {}).get(asset_id)
-        target_visit = PinVisit.objects.filter(pk=target_visit_id, pin=pin).first() if target_visit_id else None
+        with per_profile_upload_lock(profile):
+            if quota_error_for_upload(profile, len(content)):
+                counts["failed"] += 1
+                continue
 
-        image = Image.objects.create(
-            image=ContentFile(content, name=filename),
-            pin=pin,
-            location=pin.location,
-            profile=profile,
-            checksum=checksum,
-            file_size=len(content),
-            source_url=account.asset_web_url(asset_id),
-            visit=target_visit,
-        )
+            target_visit_id = (visit_id_by_asset or {}).get(asset_id)
+            target_visit = PinVisit.objects.filter(pk=target_visit_id, pin=pin).first() if target_visit_id else None
+
+            image = Image.objects.create(
+                image=ContentFile(content, name=filename),
+                pin=pin,
+                location=pin.location,
+                profile=profile,
+                checksum=checksum,
+                file_size=len(content),
+                source_url=account.asset_web_url(asset_id),
+                visit=target_visit,
+            )
         if target_visit is None:
             log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
@@ -1802,7 +1804,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
     from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
 
     counts = {"imported": 0, "skipped": 0, "failed": 0}
@@ -1829,20 +1831,22 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
         if checksum in existing_checksums:
             counts["skipped"] += 1
             continue
-        if quota_error_for_upload(profile, len(content)):
-            counts["failed"] += 1
-            continue
 
-        image = Image.objects.create(
-            image=ContentFile(content, name=filename),
-            pin=pin,
-            location=pin.location,
-            profile=profile,
-            source=ImageSource.FLICKR,
-            checksum=checksum,
-            file_size=len(content),
-            source_url=account.photo_web_url(photo_id),
-        )
+        with per_profile_upload_lock(profile):
+            if quota_error_for_upload(profile, len(content)):
+                counts["failed"] += 1
+                continue
+
+            image = Image.objects.create(
+                image=ContentFile(content, name=filename),
+                pin=pin,
+                location=pin.location,
+                profile=profile,
+                source=ImageSource.FLICKR,
+                checksum=checksum,
+                file_size=len(content),
+                source_url=account.photo_web_url(photo_id),
+            )
         log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
         existing_checksums.add(checksum)
@@ -1893,7 +1897,7 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
     counts = {"imported": 0, "skipped": 0, "failed": 0}
     profile = Profile.objects.filter(pk=profile_id).first()
@@ -1928,23 +1932,25 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
         if checksum in existing_checksums:
             counts["skipped"] += 1
             continue
-        if quota_error_for_upload(profile, len(content)):
-            counts["failed"] += 1
-            continue
 
-        image = Image.objects.create(
-            image=ContentFile(content, name=filename),
-            pin=pin,
-            wiki=wiki,
-            location=location,
-            profile=profile,
-            source=ImageSource.FLICKR,
-            caption=photo.title or "",
-            author=photo.author,
-            source_url=photo_web_url(album.owner_nsid, photo.id),
-            checksum=checksum,
-            file_size=len(content),
-        )
+        with per_profile_upload_lock(profile):
+            if quota_error_for_upload(profile, len(content)):
+                counts["failed"] += 1
+                continue
+
+            image = Image.objects.create(
+                image=ContentFile(content, name=filename),
+                pin=pin,
+                wiki=wiki,
+                location=location,
+                profile=profile,
+                source=ImageSource.FLICKR,
+                caption=photo.title or "",
+                author=photo.author,
+                source_url=photo_web_url(album.owner_nsid, photo.id),
+                checksum=checksum,
+                file_size=len(content),
+            )
         safely_enqueue_task(process_image_upload, image.pk)
         existing_checksums.add(checksum)
         counts["imported"] += 1
@@ -1991,7 +1997,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
     from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
 
     counts = {"imported": 0, "skipped": 0, "failed": 0}
@@ -2031,19 +2037,21 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
         if checksum in existing_checksums:
             counts["skipped"] += 1
             continue
-        if quota_error_for_upload(profile, len(content)):
-            counts["failed"] += 1
-            continue
 
-        image = Image.objects.create(
-            image=ContentFile(content, name=cached_item.get("filename") or f"{item_id}.jpg"),
-            pin=pin,
-            location=pin.location,
-            profile=profile,
-            checksum=checksum,
-            file_size=len(content),
-            source_url=media_item_web_url(item_id),
-        )
+        with per_profile_upload_lock(profile):
+            if quota_error_for_upload(profile, len(content)):
+                counts["failed"] += 1
+                continue
+
+            image = Image.objects.create(
+                image=ContentFile(content, name=cached_item.get("filename") or f"{item_id}.jpg"),
+                pin=pin,
+                location=pin.location,
+                profile=profile,
+                checksum=checksum,
+                file_size=len(content),
+                source_url=media_item_web_url(item_id),
+            )
         log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
         existing_checksums.add(checksum)

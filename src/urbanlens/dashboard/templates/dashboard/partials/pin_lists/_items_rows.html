@@ -1,0 +1,35 @@
+{% comment %}
+One page of a pin list's item rows. Included for page 1 (from _items_panel.html)
+and returned directly for later pages (PinListItemsPageView) - the trailing
+sentinel <div> lazy-loads the next page via HTMX when scrolled into view,
+same pattern as _photo_grid.html's gallery pagination.
+Context: pin_list, items (PinListItem page slice, already ordered), page_obj
+(the Django Page - has_next/next_page_number drive the sentinel below).
+{% endcomment %}
+{% for item in items %}
+<div class="pin-list-item" data-id="{{ item.id }}">
+    <span class="pin-list-item-drag-handle" title="Drag to reorder">
+        <i class="material-symbols-outlined">drag_indicator</i>
+    </span>
+    <a class="pin-list-item-link" href="{% url 'pin.details' item.pin.slug %}">
+        <span class="pin-list-item-swatch" style="background:{{ item.pin.effective_color|default:'#5a96ff' }}"></span>
+        <span class="pin-list-item-name">{{ item.pin.effective_name }}</span>
+    </a>
+    {% if item.added_via != 'manual' %}
+    <span class="pin-list-item-provenance" title="{{ item.get_added_via_display }}">
+        <i class="material-symbols-outlined">auto_awesome</i>
+    </span>
+    {% endif %}
+    <button type="button" class="pin-list-item-remove" aria-label="Remove from list"
+            hx-post="{% url 'lists.items.remove' pin_list.slug item.id %}"
+            hx-target="#pin-list-items" hx-swap="outerHTML"
+            hx-confirm="Remove &quot;{{ item.pin.effective_name }}&quot; from this list?">
+        <i class="material-symbols-outlined">close</i>
+    </button>
+</div>
+{% endfor %}
+{% if page_obj.has_next %}
+<div class="pin-list-item-sentinel"
+     hx-get="{% url 'lists.items.page' pin_list.slug %}?page={{ page_obj.next_page_number }}"
+     hx-trigger="revealed" hx-swap="outerHTML"></div>
+{% endif %}

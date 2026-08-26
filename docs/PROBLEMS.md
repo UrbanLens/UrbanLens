@@ -67,152 +67,6 @@ it can send only what differs), and make writes field-scoped (`update_fields`, w
 codebase already does). The second is the safety net for anything that still posts everything, and
 is the cheaper half to finish first.
 
-## ~~2026-08-24: the published OpenAPI document under-describes its own responses~~ - RESOLVED 2026-08-24
-
-Found by the new schemathesis suite (`tests/contract/`, `docs/CONTRACT_TESTS.md`)
-on its first run. Both are in the *published* contract, so both are paid for by
-whoever generates a client from it — the Flutter app included.
-
-**1. Two pairs of operations share an `operationId`.**
-`passkey_wrap_create` is claimed by `POST /dashboard/e2ee/passkey-wrap/` and
-`POST /dashboard/e2ee/passkey-wrap/{credential_id}/`; `passkey_wrap_destroy` by
-the two `DELETE`s. drf-spectacular does not fail on this — it appends `_2` to
-whichever operation it reaches second and logs a warning nobody reads. Which one
-loses depends on the order the urlconf is walked, so adding an unrelated route
-can move the suffix to the other operation and silently rename a method that
-downstream code calls. Fix is an explicit `operation_id` on each
-`@extend_schema`. Guarded by
-`TestDocumentShape::test_operation_ids_are_unique`.
-
-**2. No authenticated operation documents a 401**, though every one returns it
-for a request without credentials. A generated client has no branch for the most
-likely failure it will ever see, and a strict one treats the response as a
-protocol violation rather than "your token expired". The same is true of the 403
-that a scope check produces and the 404 a detail endpoint produces for an
-unknown slug. Because responses are not declared per view, the fix is one place:
-a drf-spectacular postprocessing hook, or `extend_schema(responses=...)` on the
-shared base view. Guarded by
-`TestDocumentShape::test_authenticated_operations_document_rejection`.
-
-**Both fixed 2026-08-24.**
-
-(1) became two view classes. `E2EEPasskeyWrapView` now defines only `post` and
-`E2EEPasskeyWrapItemView` only `delete`, over a shared `_E2EEPasskeyWrapBase`,
-so each `operationId` is claimed once. That also removed a **500**: `delete`
-took `credential_id` as a required positional while both URLs routed to the one
-view, so `DELETE /dashboard/e2ee/passkey-wrap/` (no id) raised `TypeError` out
-of the DRF dispatcher. `post` had been given a default precisely to avoid that;
-`delete` never was. Both combinations are now DRF's own 405. Guarded by
-`test_e2ee_passkey_unlock.py::PasskeyWrapEndpointTests::test_delete_without_a_credential_id_is_refused_not_a_crash`.
-
-(2) became `external_api.schema.document_error_responses`, a postprocessing
-hook: any operation declaring `security` documents 401 and 403, and any path
-carrying a parameter documents 404, all against a shared `ErrorResponse`
-component matching the `{"error": ...}` envelope the API actually returns. Done
-in one place because the omission was not per view. `setdefault` throughout, so
-a view that documents its own 401 keeps it.
-
-With those in, `UL_CONTRACT_STRICT=1` (status-code and content-type conformance)
-is worth trying again — it was held back only because the schema documented
-nothing but success.
-
-## ~~2026-08-24: two endpoints return a different shape than they publish~~ - RESOLVED 2026-08-24
-
-Also from the first schemathesis run, and worse than the documentation gaps
-above: these are cases where a generated client would be **wrong at runtime**,
-not merely under-informed. Neither was reachable by the existing suite, which
-asserts endpoint behaviour against hand-written expectations rather than against
-the schema.
-
-**`GET /dashboard/api/external/v1/undo/` declares an array and returns an
-object.** The schema says `{"type": "array", "items": UndoEntry}`; the endpoint
-returns `{"entries": [...], "omitted": [...]}`. A generated client iterates the
-response and gets an object, or fails to deserialize it outright. One of the two
-is wrong — the `omitted` key suggests the envelope is intentional and the
-`@extend_schema(responses=...)` was never updated to match, in which case the
-fix is the schema, but that should be confirmed against what the mobile client
-expects before changing either.
-
-**`GET /dashboard/api/external/v1/labels/` omits a field it declares
-required.** `location_count` is in the `Label` schema's `required` list and is
-absent from the serialized response. A client with a non-optional field there
-fails to parse a perfectly ordinary list of labels.
-
-**Both fixed 2026-08-24, in the schema rather than the responses** — in each
-case the code was right and the declaration was wrong.
-
-`undo/` now declares `UndoHistorySerializer`, the envelope it actually returns.
-The envelope is the correct half: `omitted` is load-bearing, and flattening the
-response to match the old declaration would have removed a client's only signal
-that its credential is missing a domain-read scope.
-
-`labels/` keeps returning the counts only for `?with_counts=true`; the two
-fields are simply no longer marked required. The mechanism is worth knowing,
-because it will catch the next person: **drf-spectacular adds every field
-carrying `readOnly` to a component's `required` list regardless of
-`required=False`**, and its only off-switch, `COMPONENT_NO_READ_ONLY_REQUIRED`,
-is global — flipping it to fix two fields would make every read-only field of
-every component optional, so a client could no longer rely on `uuid` being
-present anywhere. Dropping `read_only=True` from just those two fields is safe
-because `LabelSerializer` is response-only (writes go through
-`LabelWriteSerializer`), and that is noted at the fields so the next person does
-not re-add it.
-
-The whole contract suite is green: **101 passed**.
-## OPEN 2026-08-25: sharing a pin-scoped layer to the wiki is a name-existence oracle once concealment is live
-
-Found by the fourth adversarial review round while auditing the layer/overlay own-contribution
-work below, verified real, and left alone: pre-existing, not introduced by that work, and low
-severity while `concealment_active` stays `False`.
-
-`controllers/custom_layers.py`'s `_share_layer_to_wiki` (used by `CustomLayerShareToWikiView`)
-checks for a same-name collision via `CustomLayer.objects.for_wiki(wiki).filter(name__iexact=...)`
-- unfiltered by `visible_rows` - and the toast it returns distinguishes "shared" from "already on
-the community wiki" based on whether a match was found. Once a viewer can be concealed, sharing a
-personal layer named e.g. "Tunnels" answers, via which toast comes back, whether a stranger has
-already created a same-named layer on that wiki - a small, low-stakes information leak (a layer
-name, not its contents), but the same class of defect as the WikiOwner/WikiPropertySale dedup
-oracle fixed in the same round (see the round's commit) for the same reason: an unfiltered
-existence check that's echoed back to the requester.
-
-Not fixed here because the round's scope was the own-contribution rollout and the concrete gaps
-already tracked, not a full audit of every dedup/collision check in the wiki-editing surface for
-this pattern - there may be siblings. Audit `get_or_create`/name-collision lookups scoped to a wiki
-for the same shape before the reputation-ledger threshold makes `concealment_active` return `True`
-for real accounts.
-
-## RESOLVED 2026-08-25: wiki search and autocomplete were a substring oracle for concealed content
-
-`services/global_search/providers.py` (the wiki provider's `apply_text` over `["name",
-"description", "aliases__name"]`) and `services/map_pins/autocomplete.py` (`Q(name__icontains=q) |
-Q(aliases__name__icontains=q) | Q(description__icontains=q)`) both matched user-contributed wiki
-text as a substring, scoped only by `visible_wiki_location_ids_cached(profile)` - typing a
-distinctive phrase from a stranger's description would confirm both that the text exists and that
-this account was being shown something other than the whole row, surviving a perfect read gate on
-the page because the answer was carried by the *result set* rather than by any field it renders.
-
-The three obvious patches were each wrong (matching `name` only still leaks one field further
-along; dropping concealed wikis from search makes a reachable place unfindable, a tell in the other
-direction; filtering results in Python after the query silently shrinks a `LIMIT`ed page per
-viewer) and the real fix - a search index carrying provenance per indexed span - needs the
-facts-with-sources substrate (`docs/designs/versioned-content.md`) that doesn't exist yet.
-
-**What shipped instead, in `services/global_search/providers.py` and `services/map_pins/
-autocomplete.py`**: the SQL query over-fetches (`limit * 4` candidates, `_CONCEALMENT_OVERFETCH`)
-against the live rows exactly as before, then each candidate whose wiki is concealed for the viewer
-is re-verified in Python against the same resolved values the page itself would render
-(`concealed_field_values`, `conceal_rows` on aliases, `visible_article_revision` for article
-content, `visible_actor_ids` for comment authorship) before the result list is truncated to the
-real limit. This is not the indexed, no-overfetch answer the note above describes - it costs a
-handful of extra per-candidate reads only for wikis actually concealed for this viewer (nothing
-today, since `concealment_active` is still `False`) - and it can under-fill a page in the rare case
-where most of an over-fetched batch turns out to be concealed non-matches, which is a disclosed
-trade-off of over-fetching rather than a silent bug. Revisit if/when the facts-with-sources index
-lands; until then this closes the oracle without waiting on that substrate.
-
-Still not live: `concealment_active` returns `False`, so no account is concealed and none of this
-runs its concealment branch yet.
-
 ## OPEN 2026-08-21: production REData 404s on `/api/v1/public-locations/` (and `/capabilities/`)
 
 Verified live against a fresh dev environment (`a962bf8`, `--redata production`, the default as of
@@ -274,17 +128,6 @@ currently no way to know how many points a given edit produced. Both are address
 design (`docs/designs/reputation-and-gating.md`), but that is a separate, hidden score; whether
 the *visible* Consensus game score should also change is its own question.
 
-## OPEN 2026-08-21: a wiki with zero description/dates/security/links has no way to add its first link
-
-`_wiki_about_card.html`'s outer guard - `{% if wiki.description or wiki.date_abandoned or
-wiki.effective_date_last_active or wiki.links.exists %}` - renders nothing at all, including the
-links row, when every one of those is empty. The only "add a link" entry point lives inside that
-row (see the `dialog_id` docs on `_pin_links_row.html`, fixed 2026-08-21 to open the shared
-add-link dialog instead of an always-visible inline form), so a wiki that has never had a
-description, dates, security indicators, or a link set on it renders no card and no way to add a
-first link short of using "Suggest Edits" to set some other field first. Pre-existing - the same
-guard gated the old inline form identically - not introduced by that fix, just still open.
-
 ## OPEN 2026-08-20: the mobile panel's `unpinned_count` still counts what the import won't create
 
 `ParcelBuildingsPanelSource.api_payload` derives `unpinned_count` as
@@ -304,6 +147,16 @@ is neither - rather than only changing the total.
 
 Until then a mobile client can advertise one more unpinned building than the dialog will offer, and
 importing will report having created fewer than advertised.
+
+**Re-investigated 2026-08-25, confirmed still open and still deliberate**, not an oversight to
+sweep up in passing: the payload ships its `buildings` rows *alongside* the count, so any fix that
+changes what the count derives from without also changing the row shape (a third state alongside
+pinned/unpinned) makes the two disagree inside one response with no way for a client to tell which
+rows the number refers to. That's a mobile API contract change, which is exactly the shortcut a
+prior pass already considered and rejected for this reason - re-applying it now would reintroduce
+the same disagreement. No existing test exercises the blocked-building scenario
+(`test_panel_api_interface.py::ParcelBuildingsApiPayloadTests`). Needs a product decision on the
+row shape before this can move, not another attempt at the same one-line fix.
 
 ## OPEN 2026-08-19: performance and ops defects found but not fixed
 
@@ -332,7 +185,11 @@ Fixed 2026-08-19. `_list_items_with_labels` now selects `pin__location__wiki` an
 same prefetch shape the main map's bulk pin endpoints use ... without N+1 queries", and both model
 properties involved (`Pin.rating`, `Location.display_name`) document in their own docstrings exactly
 which prefetch they need. Three accurate comments, and the code between them still missed two
-relations. The page remains unpaginated.
+relations. ~~The page remains unpaginated.~~ **Fixed 2026-08-25** (`582458d3`): item rows now
+paginate at 50/page via the same height-based "revealed" HTMX pattern the Memories gallery uses, a
+trailing sentinel div lazy-loading the next page through a new `PinListItemsPageView`. The overview
+map still plots every pin on the list regardless of pagination, since map data was never the
+expensive part.
 
 ~~**Pin merge suggestion cards issue 8 `COUNT` queries each.**~~ Fixed 2026-08-19 by annotating the
 four counts on `pending_merge_suggestions`, with `distinct=True` on each - the four joins multiply
@@ -490,7 +347,7 @@ the current tree - re-verified 2026-08-19. `_resolved_flag` reads the `attribute
 falls back to the top level, and has since commit `8bf86daf`; the finding described the code before
 that.
 
-## 2026-08-20: bug hunt over the highest fix-density modules - 9 confirmed, 4 fixed, 5 open
+## 2026-08-20: bug hunt over the highest fix-density modules - 9 confirmed, 8 fixed, 1 open
 
 `bin/report_defect_history.py` ranks files by the share of their commits that are fixes, on the
 premise that where bugs have been found is where bugs are. Five parallel readers took the top of
@@ -543,27 +400,38 @@ be somewhere a template cannot reach past.
 
 ### Confirmed, not yet fixed
 
-- **`merge_pins` cannot complete when the survivor is the loser's direct child** (`pin_merge.py`
-  :230): `_reparent_children` skips the survivor rather than detaching it, so the survivor keeps
-  `parent_pin = loser` and the loser's delete CASCADEs it away - a 500, every time, unfixable from
-  the UI. Reachable through `repair_legacy_pin_coordinates`, whose `existing_pin` lookup is not
-  restricted to root pins. The fix is to re-point the survivor at the loser's own parent, raising
-  `PinMergeCollisionError` on a unique-constraint collision exactly as the cycle branch beside it
-  already does.
 - **Building-place provisioning passes REData's *unfiltered* parcel cache** (`pin_restructure.py`
   :385 and :503): the dialog filters to `buildings_on_property`, the POST does not, so off-property
   records - up to ~2,500 for a parcel inside a broad survey zone - become Places inside this
   parcel's wiki access domain. Needs a re-read of the wiki-domain consequence before fixing; the
   provisioning side was rewritten on 2026-08-19 and this entry has not been re-checked against it.
+
+### Fixed, 2026-08-25
+
+- **`merge_pins` cannot complete when the survivor is the loser's direct child** (`pin_merge.py`
+  :230): `_reparent_children` skipped the survivor rather than detaching it, so the survivor kept
+  `parent_pin = loser` and the loser's delete CASCADEd it away - a 500, every time. **Fixed**
+  (`7d019e0c`): re-points the survivor at the loser's own parent, raising `PinMergeCollisionError`
+  on a unique-constraint collision exactly as the cycle branch beside it already did. 4 new tests.
 - **Smart lists evaluate a saved filter's criteria without `root_pins()`** (`pin_list_membership.py`
-  :222), so a list derived from a filter includes detail pins the filter's own preview excludes -
-  the same filter reports different counts in two places.
-- **`prime_total_pin_counts` fetches the whole site's label-hierarchy edge table** with no filter
-  (`models/labels/model.py:171`), three times per Organize page load.
-- **Undoing a deleted saved filter drops its colour and opacity** - `_RESTORABLE_FIELDS` omits them,
-  so the filter returns untinted. Low, but its own round-trip sweep cannot see it, because
-  model_bakery leaves fields with defaults unset and the sweep therefore compares default to
-  default.
+  :222) - **already fixed, stale entry.** `_pin_matches_filter`/`filter_matching_ids` both already
+  chain `.root_pins()` before `.filter_by_criteria(criteria)`, landed in commit `88707a2d`
+  (2026-07-30) without this doc being reconciled afterward. Every other `filter_by_criteria(` call
+  site was cross-checked and already does the same.
+- **`prime_total_pin_counts` fetches the whole site's label-hierarchy edge table** with no filter,
+  three times per Organize page load. **Half fixed** (`ee18ee2f`): the query is now scoped to the
+  rendered labels' own profile(s) plus global labels instead of the whole site. **The "three times
+  per page load" half does not reproduce**: the Organize page's initial GET defers every kind's
+  real pin-count query entirely (`OrganizeStatsDeferralTests`), and each of the three label-kind
+  panels only fires its `hx-get` on a genuine user-initiated tab switch (`revealed` trigger, one
+  panel unhidden at a time) - not redundant work within one page load. Deduping across those
+  separate requests would need a new cross-request cache invalidated on label/hierarchy edits, a
+  materially larger change not clearly justified since the query is already cheap and profile-scoped.
+- **Undoing a deleted saved filter drops its colour and opacity** - `_RESTORABLE_FIELDS` omitted
+  them, so the filter returned untinted. **Fixed** (`59f9f55b`): both fields added to
+  `_RESTORABLE_FIELDS`. Its own round-trip sweep couldn't see this class of bug because
+  model_bakery leaves default-valued fields unset (default compares equal to default); a dedicated
+  `test_saved_filter_undo.py` builds a filter with explicit non-default values instead.
 
 ### Refuted, and worth recording
 
@@ -1092,31 +960,6 @@ inline JavaScript across 131 template `<script>` blocks - `map/index.html` alone
 `location/index.html` 1,284, `base.html` 1,116. Several audited bugs sit on the inline side of a
 TS/template seam; that is where bugs collect, because the types stop there.
 
-## NOTE 2026-08-11: do not naively wrap `PinShareCreateView.post` in `transaction.atomic`
-
-`ATOMIC_REQUESTS` is unset, so views run in autocommit. `controllers/pin_sharing.py:137` performs
-a related sequence - stamp the pin's origin share, create the `PinShare`, `share.images.set(...)`,
-`record_share_exposure(share)`, optionally share the attached markup map, then create child-pin
-shares - with no transaction. A partial failure can leave a `PinShare` with no `LocationExposure`,
-which is the provenance invariant `CLAUDE.md` calls out.
-
-**Wrapping the view in `atomic()` would make this worse, not better.**
-`share_provenance.record_share_exposure` deliberately catches `DatabaseError`, logs, and returns
-None (`share_provenance.py:119`) so a bookkeeping failure doesn't fail the user's share. Inside an
-`atomic()` block Django marks the transaction broken as soon as a `DatabaseError` occurs, and every
-subsequent query raises `TransactionManagementError` - so the naive fix converts a tolerated,
-logged degradation into a hard 500 on the share itself, and takes the markup-map and child-pin
-shares down with it.
-
-If atomicity is wanted here, the swallow has to move inside its own nested `atomic()` first, so
-the savepoint absorbs the error and the outer transaction survives. Recording this because
-"multi-write view with no transaction" looks like an obvious omission and is not.
-
-The same audit over all of `controllers/` flagged 18 methods with 3+ direct writes and no
-transaction, but the count is inflated by dispatchers: the top hit
-(`controllers/settings.py:159`, "18 writes") is a 15-branch `if/elif` on `section` where exactly
-one branch runs. Only paths whose writes share an invariant are worth looking at.
-
 ## Coverage note (not a defect): 20 of 32 notification types have no per-type delivery control
 
 Measured 2026-08-11: 32 `NotificationType` values, 13 preference stems, 12 of which match a type.
@@ -1313,68 +1156,56 @@ that doc for anything not listed here, including all "improvement"-grade and mai
 findings). This section curates only the highest-severity/highest-impact items into this file's
 convention; the full ranked list per feature area is more complete.
 
-**SSRF: Immich server URL is user-controlled with no private-IP/scheme guard.**
-`models/immich/model.py:83` (`ImmichAccount.server_url`, via `forms/immich_form.py`) accepts any
-well-formed URL with no loopback/private/link-local restriction. `controllers/immich.py:108-110`
-(`ImmichSettingsView.post`) pings it server-side before saving, and later flows
-(`get_map_markers`/`get_asset_thumbnail`/`get_asset_original`) proxy the response back to the
-browser. Any authenticated user can point `server_url` at internal infrastructure
-(`http://169.254.169.254/`, `http://localhost:6379/`, an internal admin panel) and use the
-ping/thumbnail endpoints as an authenticated blind-SSRF oracle. Self-hosted-by-design feature, so
-risk is single-tenant, but worth a scheme/private-IP guard in `clean_server_url`.
+**SSRF: Immich server URL is user-controlled with no private-IP/scheme guard.** ~~Any authenticated
+user can point `server_url` at internal infrastructure and use the ping/thumbnail endpoints as an
+authenticated blind-SSRF oracle.~~ **Already fixed, stale entry** (re-checked 2026-08-25):
+`forms/immich_form.py`'s `ImmichAccountForm.clean_server_url` calls the shared
+`services.security.url_safety.ensure_public_http_url(url)` and raises on any loopback/private/
+link-local/reserved/CGNAT target; `ImmichSettingsView.post` only ever builds the candidate
+`ImmichAccount` from the already-validated `cleaned_data`, and no other path constructs one.
 
 **SSRF: `services/security/url_safety.py`'s IP blocklist misses RFC 6598 CGNAT space.**
-`is_blocked_address` (`url_safety.py:28-22`) checks `is_private`/`is_loopback`/`is_link_local`/
-`is_reserved`/`is_multicast` but not the `100.64.0.0/10` Carrier-Grade-NAT range — verified
-`ipaddress.ip_address("100.64.0.5")` returns `False` for every one of those checks. Many cloud
-providers route internal-only infra (AWS NAT gateways, GCP internal LBs) through this range, so a
-user-supplied URL resolving there sails through `ensure_public_http_url` unblocked. This is the
-*only* IP-range guard for AI link extraction (`services/ai/link_extraction.py`), pin-suggestion
-photo download (`services/pins/pin_suggestions.py`), and media materialization
-(`services/media/media_materialize.py`) — one missed CIDR range is a gap in three subsystems at once.
+~~`is_blocked_address` checks `is_private`/`is_loopback`/`is_link_local`/`is_reserved`/
+`is_multicast` but not the `100.64.0.0/10` Carrier-Grade-NAT range.~~ **Already fixed, stale
+entry** (re-checked 2026-08-25): `url_safety.py` now defines `_CGNAT_NETWORK =
+ipaddress.ip_network("100.64.0.0/10")` and checks it explicitly, traced to commit `86e55aa1`.
+8 live tests pass in `test_push_endpoint_ssrf.py`, including `test_cgnat_address_is_refused`.
 
 **Decompression-bomb protection in the full-archive importer only checks forgeable declared
-sizes.** `services/import_export/import_data.py:290-296` sums each ZIP member's *declared* `file_size` against a
-ceiling, then calls `zf.extractall()` unbounded. `file_size` in ZIP headers is attacker-controlled;
-Python's `zipfile` only detects a declared-vs-actual mismatch via CRC32 *after* a member is fully
-decompressed and written to disk. A crafted archive well within the 500MB upload cap
-(`controllers/tools.py:330`) with forged small `file_size` fields but highly compressible payloads
-can decompress to hundreds of GB before the mismatch is caught. The project's own
-`services/import_export/archive_extractor.py:_extract_zip` (lines 299-311) already guards this correctly (caps
-each member read, rejects on overrun) — `import_data.py` just doesn't reuse it. A companion gap:
-`services/import_formats/gpx.py:41` / `gpx_tracks.py:140` parse GPX XML via `gpxpy` with no
-`defusedxml` wrapper (unlike `osm_xml.py`, which correctly uses one) — a latent XXE surface since
-`lxml` is installed and `gpxpy` prefers it.
+sizes.** ~~`import_data.py` sums each ZIP member's *declared* `file_size` against a ceiling, then
+calls `zf.extractall()` unbounded... A companion gap: GPX parsing has no `defusedxml` wrapper.~~
+**Already fixed, stale entry** (re-checked 2026-08-25), both halves. Extraction now goes through
+`_extract_zip_members_bounded`, which streams each member in capped chunks and enforces the
+ceiling against actual decompressed bytes, aborting mid-stream on overrun, and skips symlink
+entries the same way `archive_extractor.py` does. `gpx.py`/`gpx_tracks.py` both pre-parse with
+`defusedxml.ElementTree.fromstring` before handing vetted text to `gpxpy`, matching `osm_xml.py`'s
+pattern; no other `gpxpy` call site parses untrusted input. Traced to commits `86e55aa1`,
+`a2743a29`, `abb0f30d`/`10121f18`, all already ancestors of HEAD.
 
 **WebSocket consumers crash on any binary frame, leaking channel-layer group membership.**
-Every consumer in `dashboard/consumers.py` (lines 54, 133, 409, 599, 733) declares
-`async def receive(self, text_data):` with no `bytes_data` parameter. Channels' base
-`AsyncWebsocketConsumer` calls `receive(bytes_data=...)` for any binary WS frame, raising an
-uncaught `TypeError` that propagates out of the ASGI coroutine — `disconnect()`/`group_discard()`
-never runs, so the dead `channel_name` stays registered in whatever group(s) it had joined. Any
-client (buggy library, proxy, or deliberate probe) sending one binary frame on `ws/notifications/`,
-`ws/messages/`, or either safety-checkin socket kills the connection ungracefully. Affects all five
-consumer classes identically — fix once at the base-class level.
+~~Every consumer declares `async def receive(self, text_data):` with no `bytes_data` parameter...
+raising an uncaught `TypeError`.~~ **Already fixed, stale entry** (re-checked 2026-08-25): all
+five consumer `receive()` methods in `consumers.py` now declare `bytes_data=None` and begin with
+`if text_data is None: return`, so a binary-only frame no longer raises and `disconnect()`/
+`group_discard()` runs normally.
 
 **Two rate-limit/quota checks with the same non-atomic check-then-act race**, each independently
-discovered:
-- `services/core/rate_limiter.py:341-491` — `check_rate_limit` (COUNT) and `log_api_call` (INSERT) are
-  separate operations with no locking; concurrent requests can all pass the check before any log,
-  breaching even Nominatim's hard 1 req/sec ToS limit under a handful of simultaneous pin-detail loads.
-- `services/security/email_safety.py:106-111` (`email_rate_limit_error`) — same shape for outbound
-  friend-invite/visit-invite emails (`controllers/friendship.py:533-570`,
-  `services/visits/visit_invites.py:82-109`); concurrent requests can exceed the configured hourly/daily/
-  monthly cap arbitrarily.
-Both need either `select_for_update()` around the count+log pair or an atomic increment
-(`cache.add()`-style) rather than read-then-write.
+discovered. **Already fixed, stale entry** (re-checked 2026-08-25): `rate_limiter.py`'s general
+limiter path (the one this entry names, "used e.g. for Nominatim calls") now goes through
+`_reserve_call`/`_finalize_call`, locking the service's `ApiRateLimit` row via `select_for_update()`
+inside `transaction.atomic()`, and every `Gateway` subclass's session is wired to it; a few direct
+AI-service callers not named in this entry (`vision.py`, `trivia/*`, `article_expansion.py`) still
+call `check_rate_limit`/`log_api_call` separately. `email_safety.py`'s `email_rate_limit_error` now
+reserves an in-flight slot via atomic `cache.add()`+`cache.incr()` before counting it against the
+window. Both covered by existing tests (`ReserveCallMinIntervalTests`, `EmailLimitResolutionTests`).
 
 **AI provider token/cost accounting is silently doubled for 2 of 3 wired providers.**
-`services/ai/gateway.py:385-391` calls `self.receive_tokens(message)` in the shared
-`send_prompt`/`send_prompt_list`, but `services/ai/anthropic.py:117` and `services/ai/openai.py:121`
-*also* call `self.receive_tokens(body)` inside their own `_parse_response()` — double-counting the
-same response. `services/ai/cloudflare.py`'s parser correctly does *not* self-call, proving the
-other two are a regression rather than by design. Every assistant-chat, document-import, vision-keyword,
-and auto-tag cost/token estimate for Anthropic and OpenAI is currently ~2x actual.
+~~`services/ai/gateway.py` calls `self.receive_tokens(message)`... but `anthropic.py` and
+`openai.py` *also* call `self.receive_tokens(body)` inside their own `_parse_response()`.~~
+**Already fixed, stale entry** (re-checked 2026-08-25): neither provider's `_parse_response` calls
+`receive_tokens` any more - both just log and return, matching `cloudflare.py`'s shape. Exhaustive
+grep for `receive_tokens|send_tokens` under `services/ai/` finds zero call sites outside
+`gateway.py`.
 
 **~~Friend-request-visibility bypass via the email-invite path.~~ FIXED - this entry was stale
 (verified 2026-07-27).** It described `invite_by_email` checking only
@@ -1384,41 +1215,45 @@ of the controller into `services/social/friendship.py:invite_by_email`, which ru
 cases this entry correctly flagged as untested are now covered; see the resolved friend-invite
 entry above, including the UX consequence the fix carries.
 
-**`common_pin_count` is shown regardless of its own visibility gate.**
-`controllers/userprofile.py:157-158` + `templates/pages/profile/index.html:66-77` — the *count* of
-shared pins between two profiles is computed and rendered unconditionally; only the link to the
-detail page is gated by `can_view_common_pins_with` (default `FRIENDS`). Any two logged-in
-strangers see e.g. "3 Places in Common" even when the setting says only friends should know the
-overlap exists at all.
+**`common_pin_count` is shown regardless of its own visibility gate.** ~~The *count* of shared
+pins between two profiles is computed and rendered unconditionally; only the link to the detail
+page is gated by `can_view_common_pins_with`.~~ **Already fixed by prior, unrelated work** (found
+stale on re-check 2026-08-25 - a genuinely resolved defect this doc hadn't caught up to):
+`controllers/userprofile.py`'s `_add_common_context` now computes `common_pins_permitted =
+profile.can_view_common_pins_with(my_profile)` and sets `context["common_pin_count"]` to `None`
+when denied; the template only renders the "Places in Common" block when that's truthy. Covered by
+`test_shared_visited_respects_privacy.py`.
 
 **Login-lockout is keyed on the raw submitted string, not the resolved account — brute-force is
 bypassable.** `controllers/account.py:51-58,623-634,657-692` keys failed-attempt/lockout counters
 by the literal POSTed "username" value, but `EmailOrUsernameModelBackend`
 (`services/auth/auth_backend.py:14-36`) resolves that same field against primary email, verified
-secondary email, and Gmail dot/plus-normalized variants before authenticating. An attacker can
-brute-force one account indefinitely by rotating through equivalent-but-textually-distinct login
-strings (`victim@gmail.com`, `vic.tim@gmail.com`, `v.ictim+x@gmail.com`, a secondary email — each
-gets its own untripped counter). `test_email_login.py` proves the login path treats these as
-identical; no equivalent test exists for the lockout path.
+secondary email, and Gmail dot/plus-normalized variants before authenticating. **The lockout logic
+itself was already fixed by unrelated prior work** (`_lockout_key_for_identifier`/
+`_resolve_login_user`/`_raw_lockout_key` mirror the backend's normalization exactly); what this
+entry correctly flagged as missing - "no equivalent test exists for the lockout path" - **is now
+covered, added 2026-08-25** (`cc0e7f42`): an end-to-end test that 5 failed attempts across three
+Gmail-equivalent identifiers locks the account against a 6th, never-before-used equivalent
+identifier, plus a direct unit test that all three variants collapse to the same lockout key.
 
 **`Label` kind-conversion has no branch for converting to Category — silently orphans the row.**
-`controllers/labels.py:547-478` (`_apply_kind_conversion`) handles converting to Status/Tag but has
-no branch for `new_kind == KIND_CATEGORY`. Converting a global Tag to a Category via the standard
-edit form leaves `label.profile=None`, but Category lookups use exact-match `.for_profile()` with
-no global fallback — the label vanishes from every Organize > Categories listing, and
-`_can_modify_label` returns `False` for any non-tag label with `profile=None`, making the row
-**permanently un-editable and un-deletable through the UI** (recoverable only via direct DB access).
+~~`_apply_kind_conversion` handles converting to Status/Tag but has no branch for `new_kind ==
+KIND_CATEGORY`... permanently un-editable and un-deletable through the UI.~~ **Already fixed,
+stale entry** (re-checked 2026-08-25): `controllers/labels.py`'s `_apply_kind_conversion` already
+has a `new_kind in (KIND_STATUS, KIND_CATEGORY)` branch that sets `label.profile = profile`,
+landed in the same 2026-07-30 release-merge commit (`abb0f30d`) this entry itself traces to - the
+finding and its fix landed together and the doc was never reconciled. Covered by
+`test_label_kind_conversion.py`.
 
 **Safety check-in escalation can re-email every emergency contact on any partial failure.**
-`services/visits/safety.py:1920-981` (`escalate_checkin`) loops all contacts unconditionally (no
-`notified_at__isnull=True` filter) and only saves `status`/`escalated_at` *after* the whole loop
-completes. If anything raises mid-loop (bad email address, a non-SMTP/OSError mail-backend
-exception), the checkin never flips to `OVERDUE`, so the next 5-minute beat tick re-matches it and
-re-emails every contact already notified — including real emergency contacts during an actual
-safety incident. Compare `_resolve_as_found_safe` (line 1038-1044), which correctly flips status
-*before* its own contact loop for exactly this reason. Compounding gap: the three checkin beat
-tasks (`tasks.py:1629-1671`) run every 5 minutes with no locking, unlike the `RUN_LOCK_CACHE_KEY`
-pattern already established elsewhere in the same file for this exact problem.
+~~`escalate_checkin` loops all contacts unconditionally (no `notified_at__isnull=True` filter) and
+only saves status *after* the whole loop completes.~~ **Already fixed, stale entry** (re-checked
+2026-08-25): `services/visits/safety.py`'s `escalate_checkin` already loops
+`checkin.contacts.filter(notified_at__isnull=True)` and saves `notified_at` immediately after each
+successful send, inside the per-contact loop - landed in commit `86e55aa1` (2026-08-02), after the
+finding but before this doc was reconciled. The "compounding gap" aside about beat-task locking is
+also stale: `tasks.py` now has an explicit run-lock guard per checkin type. Covered by
+`test_escalate_checkin_notifies_contacts_without_resolving`.
 
 **Undefined CSS custom-property references silently disable dark-mode theming in ~10 SCSS files.**
 `var(--text, …)`, `var(--text-muted, …)`, `var(--ul-surface-alt, …)`, `var(--ul-accent, …)`, and
@@ -1612,37 +1447,6 @@ tokens to a fixed light-on-dark scheme (like `_tokens.scss`'s `$ui-fp-*`/`$ui-li
 pattern for the map filter panel) or making the sidebar itself genuinely theme-aware. Worth a
 manual dark-mode check of `/setup` before shipping.
 
-## Safety check-in partners: two residual gaps found during a fresh-eyes feature review (2026-07-25)
-
-A full review of the partner/live-location/post-resolution-encryption feature (two independent
-review agents, backend-correctness and frontend-security) found and fixed nine issues directly
-in `services/visits/safety.py`/`consumers.py`/`tasks.py`/`models/safety/model.py` (archival payload not
-capturing/severing `destination_location`/`trip`/`markup_map`/`markup_maps`, `archive_checkin`
-non-atomicity, chat messages postable after archival, three TOCTOU races, a missing index, an
-N+1, and no live-connection revocation on partner removal - all covered by new tests in
-`test_safety_archival.py`/`test_safety_partners.py`/`test_safety_live_location.py`/`test_safety.py`).
-Two narrower items were identified but deliberately left open:
-
-- **Blocking a partner doesn't revoke their existing access.** ~~`Profile.are_blocked` creation has
-  no signal wired to `SafetyCheckinPartner` cleanup~~ **RESOLVED 2026-08-17 (chunk 580).**
-  `block_profile` now calls `remove_checkin_partner` for every `SafetyCheckinPartner` row between
-  the two profiles in either direction, which was this entry's own prescription - that helper
-  already deletes the row *and* force-closes any live WebSocket, so nothing new was needed beyond
-  calling it. Outstanding invitations are revoked alongside accepted rows, an unaccepted invite
-  being an offer of exactly the access in question. Covered by
-  `test_block_revokes_safety_partner.py`, including that an unrelated partner on the same check-in
-  is untouched. The deferral here was review scope, not principle.
-- **A malformed/corrupted `MessagingKeyBundle.public_key` makes `archive_checkin` fail forever,
-  loudly but without escalation.** `archive_checkin` now isolates one checkin's failure from
-  others in the 5-minute sweep (a bad row no longer blocks the rest of the batch) and every
-  attempt is logged via `logger.exception`, but there's still no cap or alerting on repeated
-  failures for the *same* checkin - it will silently retry and re-fail every 5 minutes
-  indefinitely if a specific owner's key bundle is genuinely corrupt, with only a log line as the
-  trail. Not expected to happen in practice (enrollment writes a fresh valid key), but there's no
-  guard against it happening anyway (e.g. a future data-migration bug). Worth a "give up and flag
-  for manual review after N failed attempts" backstop if this class of bug ever surfaces in
-  practice.
-
 ## Full-codebase audit: re-verification pass (2026-07-25)
 
 After the initial 35-unit audit (above) was worked through fix-by-fix in an earlier session, six
@@ -1731,13 +1535,19 @@ full per-unit detail):
   code (queryset already filters it); `GroupMessage` still carries no images/markup_map/
   location_mentions/reply_to fields; `GameSessionConsumer`/`TriviaSessionConsumer` are still
   near-duplicate classes with no shared base, no per-connection rate limiting on any WS `receive()`.
-- **Unit 24/25**: the SpotGuessr/Trivia `eligible_locations()`/`eligible_questions()` retry loops
-  still re-run the full query on every attempt instead of computing the eligible set once; no
-  moderation UI exists for AI-flagged trivia questions (decided against, not just unbuilt - see
-  `docs/designs/drafts/trivia.md`'s "Known gaps"); Trivia gained a leave/kick path plus
-  stall-handling parity with SpotGuessr on 2026-07-25 (`services.trivia.session.leave_session`/
-  `kick_participant`/`force_reveal_round`/`end_session_now`) - SpotGuessr itself still has no
-  leave/cancel/kick path once a lobby exists.
+- **Unit 24/25**: ~~the SpotGuessr/Trivia `eligible_locations()`/`eligible_questions()` retry loops
+  still re-run the full query on every attempt instead of computing the eligible set once~~ -
+  **already fixed, stale entry** (re-checked 2026-08-25): resolved well before this audit, by
+  commit `d02fce8a` (2026-08-06, "Unit 24/25: resolve SpotGuessr round eligibility once instead of
+  per retry"). `services/spotguessr/session.py`'s `generate_round_content` resolves
+  `eligible_locations(...)` once into a plain id list before its retry loop, narrowing each
+  attempt against `Location.objects.filter(pk__in=eligible_ids)` rather than re-running the
+  multi-join query; Trivia's `get_or_create_round` already called `eligible_questions()` exactly
+  once per round outside any loop. No moderation UI exists for AI-flagged trivia questions
+  (decided against, not just unbuilt - see `docs/designs/drafts/trivia.md`'s "Known gaps"); Trivia
+  gained a leave/kick path plus stall-handling parity with SpotGuessr on 2026-07-25
+  (`services.trivia.session.leave_session`/`kick_participant`/`force_reveal_round`/
+  `end_session_now`) - SpotGuessr itself still has no leave/cancel/kick path once a lobby exists.
 - **Unit 31**: `_dark.scss` is still ~1100 lines of per-selector overrides (the role-pill fix above
   removed one duplicate, not the pattern); `_pin_lists.scss` still has 3 sibling raw-hex danger-red
   controls without dark overrides (`.pin-list-more-menu-danger`, `.saved-filter-delete-btn`, and its
@@ -1831,24 +1641,20 @@ but re-check them then rather than assuming:
 
 ## Messaging / external API (noted 2026-07-26, during the mobile v2 messaging API build)
 
-- **WebSocket credential auth does no per-scope check.** `ApiKeyAuthMiddleware` (see
-  `src/urbanlens/dashboard/websocket_auth.py` and its use in `UrbanLens/asgi.py`) authenticates
+- **WebSocket credential auth does no per-scope check.** ~~`ApiKeyAuthMiddleware`... authenticates
   a WebSocket connection from any valid, unrevoked credential and then grants blanket access -
-  it never consults the connection's scopes. So a token issued with, say, only `pins:read`
-  can still open `ws/messages/` and `ws/notifications/` and receive live direct-message and
-  notification payloads, which is precisely the data `OAUTH2_ONLY_SCOPES` restricts to
-  user-consented OAuth2 tokens on the HTTP side. The HTTP messaging endpoints added in
-  `external_api/views_messaging.py` enforce `messages:read`/`messages:write` correctly; the
-  socket path is the remaining hole, and it currently undercuts that enforcement because the
-  same data is reachable over the socket without the scope.
-  **Deliberately not fixed in that pass** (scope control - it touches three consumers and
-  their tests, and a mistake there disconnects working *web* clients, whose session auth flows
-  through the same middleware). **Fix shape**: give each consumer a required-scope declaration
-  and have the middleware/consumer `close()` with a 4403-style code when a credential-authed
-  connection lacks it, leaving session-authed connections (`request.auth is None`) untouched -
-  the same session-or-credential split `external_api/mixins.py:IsSessionAuthenticated` already
-  draws for HTTP. Needs tests for: scoped token accepted, under-scoped token rejected, session
-  unaffected, PAT rejected outright on messaging sockets.
+  it never consults the connection's scopes.~~ **Already fixed, stale entry** (re-checked
+  2026-08-25): `consumers.py` now has a `CredentialScopeMixin` (L84-172) providing
+  `credential_allows(*scopes)`, used identically to `external_api`'s `credential_grants`/
+  `OAUTH2_ONLY_SCOPES` logic - exactly the "Fix shape" this entry prescribed. Every consumer's
+  `connect()` calls it before joining any channel-layer group and closes with 4404 on failure:
+  `UserNotificationConsumer` requires `NOTIFICATIONS_READ`, `DirectMessageConsumer` requires
+  `MESSAGES_READ`/`MESSAGES_WRITE`, `SafetyCheckinChatConsumer` requires `SAFETY_READ`/
+  `SAFETY_WRITE`, and the shared `_ParticipantSessionConsumer` (Game/Trivia/Consensus) requires
+  `GAMES_READ`/`GAMES_WRITE`. Session-authenticated connections are unaffected by design. There is
+  also a periodic re-validation loop that closes a socket if its credential is later revoked/
+  expired, beyond what this entry asked for. Covered by `test_websocket_credential_scopes.py`
+  across exactly the four cases named above.
 
 - **Markup-map attachments bypass share provenance.** Attaching a `MarkupMap` to a direct
   message (`create_direct_message(markup_map_uuid=...)`, and the `send_message_with_share`
@@ -1866,22 +1672,16 @@ but re-check them then rather than assuming:
 
 - **Three pre-existing mypy errors surface whenever anything type-checks the external API's view
   module** (found 2026-07-26 while adding the lists/labels external endpoints; none are caused by
-  that work, and all three live in files it does not touch):
-  - `dashboard/models/boundary/queryset.py:87` - `"GEOSGeometry" has no attribute "exterior_ring"`
-    in `buffer_point_by_meters`. `Point.buffer()` is typed as returning the `GEOSGeometry` base
-    class, but the code relies on the result actually being a `Polygon`. Wants a narrowing
-    `assert isinstance(circle, Polygon)` (or a typed helper) rather than a `cast` - the runtime
-    assumption is genuinely unchecked today.
-  - `dashboard/forms/search.py:176` - `resolve_reference(...)` is handed `self.profile`, typed
-    `Profile | None`, where a non-optional `Profile` is expected. Either `SearchForm.profile`
-    should be non-optional or this branch needs an explicit None guard; as written, a form built
-    without a profile would fail here at runtime.
-  - `dashboard/controllers/trip.py:481` - `existing_ids.add(trip.creator_id)` where `creator_id`
-    is `int | None`, so a trip with no creator would insert `None` into a `set[int]`.
-
-  All three look like real latent bugs rather than annotation noise, which is why they are logged
-  here instead of silenced. They don't fail today because mypy isn't run across these paths
-  together - they only appear once `external_api/views.py` pulls them into one type-check graph.
+  that work, and all three live in files it does not touch) - **already fixed, stale entry**
+  (re-checked 2026-08-25, fresh `mypy --no-incremental src/urbanlens` reports zero errors in 861
+  files): `dashboard/models/boundary/queryset.py:85` (`buffer_point_by_meters`) now has
+  `if not isinstance(circle, Polygon): raise TypeError(...)` before using the result, the exact
+  narrowing check this entry asked for rather than a `cast`; `dashboard/forms/search.py:178`
+  (`SearchForm._clean_reference_field`) now has `if self.profile is None: raise
+  forms.ValidationError(...)` before the call that needed a non-optional `Profile`; and
+  `dashboard/controllers/trip.py` no longer contains the pattern at all - the `creator_id` usages
+  left are plain `trip.creator_id == profile.id` comparisons, refactored away rather than merely
+  guarded.
 
 - **Pin-detail's `wiki_slug` was unusable for navigating to a wiki (FIXED in this pass).**
   `services/pins/pin_detail.py::build_pin_detail` set `payload["wiki_slug"] = wiki.slug`, which reads
@@ -1919,21 +1719,12 @@ but re-check them then rather than assuming:
   `wiki.html` renders the pre-truncated date rather than reaching into a Pin instance.
 
 - **`MapController.resolve_place` does not honor the `external_apis_enabled` profile toggle**
-  (`src/urbanlens/dashboard/controllers/maps.py:384-408`). Its sibling
-  `autocomplete_places` (same file, line ~361) *does* check
-  `request.user.profile.external_apis_enabled` and returns `{"disabled": true}` when the user
-  has turned external lookups off - but `resolve_place`, which is called the moment the user
-  *selects* one of those suggestions, checks only whether an API key/REData is configured. So a
-  user who has opted out of external API calls still triggers a Google Places **Details** call
-  (billable, and a privacy leak of what they searched for) on selection. Repro: set
-  `Profile.external_apis_enabled = False`, GET
-  `/dashboard/map/resolve-place/?place_id=<any>` -> still hits the provider. Fix: add the same
-  `if not request.user.profile.external_apis_enabled: return ... 403` guard the external API's
-  `PlaceResolveView` now applies
-  (`src/urbanlens/dashboard/external_api/views.py`, `PlaceResolveView.get`). Noted while
-  building the external `locations/resolve/` endpoint, which deliberately does *not* reproduce
-  the omission; the internal path was left alone to keep that change out of an already large
-  API-surface commit.
+  (`src/urbanlens/dashboard/controllers/maps.py:384-408`). ~~Its sibling `autocomplete_places`...
+  does check `request.user.profile.external_apis_enabled`... but `resolve_place`... checks only
+  whether an API key/REData is configured.~~ **Fixed 2026-08-25** (`6bdf7e7e`): added the same
+  `if not request.user.profile.external_apis_enabled: return ... 403` guard immediately after the
+  missing-`place_id` check, mirroring the pattern `external_api/views.py::PlaceResolveView.get`
+  and `streetview_check` already use. Guarded by `test_resolve_place_blocked_when_external_apis_disabled`.
 
 - **`test_spotguessr_geo_bonus.BonusPointsForGuessTests::test_geocode_failure_earns_nothing_without_raising`
   fails on a polluted cache, not on the code under test**
@@ -1952,19 +1743,13 @@ but re-check them then rather than assuming:
 
 - **The inbox list serializes each conversation's last message with no reaction/share
   prefetch** (`src/urbanlens/dashboard/services/messaging/direct_messages.py::conversations_for`,
-  `src/urbanlens/dashboard/services/messaging/group_chats.py::group_conversations_for`). Each row's
-  `last_message` is rendered through `build_direct_message_payload` /
-  `build_group_message_payload`, which read `message.reactions.all()` (and, for groups,
-  `message.share_for(viewer)`), so a page of N conversations issues ~2N extra queries. Both
-  builders are correct; the missing piece is a prefetch on the *selected* last messages.
-  It cannot simply be added to the existing queries: `group_conversations_for` scans every
-  visible message across every group in order to pick the newest per group, so prefetching
-  there would pull reactions for the whole history rather than for the N rows actually
-  rendered. The fix is a second, id-bounded `prefetch_related_objects()` call over the
-  already-selected `last_message` instances. Pre-existing on the 1:1 side; noted while adding
-  reactions/`pin_share_id` to the group payload (`external_api/serializers_messaging.py`),
-  which gave the group side the same shape. The thread endpoints - where a page is 50 messages
-  rather than 1 - already prefetch, so this is an inbox-only cost.
+  `src/urbanlens/dashboard/services/messaging/group_chats.py::group_conversations_for`) - a page of
+  N conversations issued ~2N extra queries reading `message.reactions.all()`/`message.share_for(viewer)`
+  on each `last_message`. **Fixed 2026-08-25** (`20507627`): both functions already resolved
+  `last_message` via a second, id-bounded query separate from the wider per-group scan, so the fix
+  was adding `prefetch_related('reactions__profile')` (plus `'shares'` for groups) onto those
+  already-scoped queries, rather than onto the message-history-wide scan. The thread endpoints -
+  where a page is 50 messages rather than 1 - already prefetched, so this was an inbox-only cost.
 
 - **`test_avatar_colors.GroupMemberSearchAvatarColorTests::test_results_get_distinct_colors`
   returns 0 results where it expects 4**
@@ -1991,9 +1776,16 @@ but re-check them then rather than assuming:
   placed from here on, but existing rows carry no signal that could be used to repair them:
   a data migration would have to guess. Impact on a legacy row is bounded and inverted from
   the original P0 - the true blocker gets a 404 from `unblock_profile`/`remove_friend` and
-  must re-block to normalize the row, and the blocked party can lift it. Worth a one-off
-  audit query (`Friendship.objects.filter(status="Blocked", created__lt=<deploy>)`) rather
-  than an automated migration.
+  must re-block to normalize the row, and the blocked party can lift it.
+  **The suggested audit query is now a real tool, added 2026-08-25** (`6057e154`):
+  `manage.py audit_inverted_friendship_blocks --before YYYY-MM-DD`, a read-only management
+  command with no default `--before` (deliberately - the fix's actual deploy date to a given
+  production database is something only a human can know) that reports `BLOCKED` rows created
+  before that date, flagging ones that show a sign of having been reused from a pre-existing
+  relationship (a stored `request_message`, or an `updated` timestamp meaningfully after
+  `created`) versus rows provably created directly as a block. Never writes - there is no stored
+  signal that could prove a row is actually inverted, so an automated migration was never on the
+  table. 9 new tests.
 
 ## 2026-07-28: `services/consensus/fields.py` - 9 pre-existing `[has-type]` mypy errors
 
@@ -2051,6 +1843,48 @@ open each key's Credentials page and change "Application restrictions" from "HTT
 APIs the key may call) untouched. Requires Cloud Console access neither this session nor the
 REData session had. Confirm both keys - UrbanLens's Custom Search/Image Search key and REData's
 Places API (New) key may or may not be the same underlying Google Cloud project/key.
+
+### Follow-up (2026-08-25): fixed - wrong key was being called, not a Console misconfiguration
+
+Got Cloud Console access (`gcloud`, project `urban-lens`, number `940182089833` - both keys live
+in the same project, confirmed by key-string lookup against the production `.env` values on
+Damballa). `google_images.py`/`GoogleImageSearchGateway`, the caller originally cited above, no
+longer exists in the codebase; today the only live caller on the UrbanLens side is
+`maps.py::streetview_check`.
+
+**First attempt was wrong and was reverted.** Read `UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY` and
+`RD_GOOGLE_MAPS_API_KEY` as *the* two keys, and "fixed" the 403 by stripping the domain-restricted
+key's referrer restriction in Console. That defeats the point of a domain-restricted key existing
+at all and was caught in review. Reverted it back to its original `HTTP referrers: *.urbanlens.org`
+restriction and original four API targets - untouched, as it should be.
+
+**Actual root cause**: `UL_GOOGLE_MAPS_API_KEY` naming aside, UrbanLens already has a correctly-
+configured unrestricted server key - `UL_GOOGLE_UNRESTRICTED_API_KEY` - and it turns out to be the
+*same underlying Google key* as REData's `RD_GOOGLE_MAPS_API_KEY` (identical key string). It
+already had no application restriction and already listed both
+`street-view-image-backend.googleapis.com` and `customsearch.googleapis.com` among its API
+targets - nothing to fix in Console on that key. Renamed its Console display name from generic
+"Places / Search API Key (no referrer restrictions)" to "UrbanLens/REData Server-Side Key
+(unrestricted, no referrer)" so its purpose reads unambiguously next to the domain-restricted one.
+
+The bug was purely in `maps.py::streetview_check`: `api_key = settings.google_domain_restricted_api_key
+or settings.google_unrestricted_api_key` tried the wrong key first for a server-to-server call.
+Fixed to use `settings.google_unrestricted_api_key` directly. Also fixed `setup.py`'s "Google
+Street View" and "Google Search" integration-status entries, which pointed at
+`UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY` - both are server-side features and were documenting the
+wrong key from the start, which is presumably how this bug got written in the first place.
+
+Live-verified with the production key values directly against Google: unrestricted key ->
+`streetview/metadata` returns `status: OK`; domain-restricted key against the same endpoint
+correctly comes back `REQUEST_DENIED` (never had that API in its target list - proof it was never
+the right key for this call, referrer restriction aside).
+
+**Still open, unrelated to key selection**: the "Google Search" (Custom Search) feature has no
+calling code yet, and independently 403s (`PERMISSION_DENIED: This project does not have the
+access to Custom Search JSON API`) with *either* key, even with `customsearch.googleapis.com`
+enabled project-wide - reproduced against both keys, so it isn't an API-key config problem at all.
+Likely a Programmable Search Engine (cx `85435ec2...`) linkage issue. Not investigated further
+since nothing in production calls it yet.
 
 ## 2026-07-31: REData's `/api/v1/parcels/lookup/` is in an OOM/WORKER-TIMEOUT crash loop on chiron
 
@@ -2227,43 +2061,6 @@ presentation attributes.
 Had I "fixed" the nine panels the first run flagged, I would have added meaningless attributes to
 correct code and called it an improvement. A validation rule asserted against the whole existing
 codebase gets corrected by it; one asserted against a couple of hand-picked examples does not.
-
-## Deleting your own photo silently broke it for everyone you shared it with (2026-08-07)
-
-Found while auditing the quota feature (recently changed on this branch). The quota work
-itself is sound - usage is always computed live rather than cached, so there is no staleness
-bug; `materialize_media_item` really does stamp `EXTERNAL_MEDIA`; `_save_enriched_image`
-attaches no profile so it is charged to nobody; and the quota is enforced on 15+ upload
-paths. A scan for `Image`-creating functions with no quota guard returned only three, two of
-which are correct by design.
-
-The third was `create_pin_from_share`, and following it up found something worse than a
-quota gap.
-
-**The bug.** Sharing a pin copies its photos by assigning the *same* storage key
-(`image=image.image.name`) - the bytes are deliberately not duplicated, so one file backs
-several `Image` rows. But every deletion path called `image.image.delete(save=False)`, which
-removes that file outright, with nothing checking whether another row still points at it.
-
-So: share a pin, the recipient accepts, you later delete that photo from your own gallery -
-and the recipient's copy becomes a broken image. No error, no log line, and the recipient's
-row still exists so nothing looks wrong until the image fails to load.
-
-Fixed with `services.media.images.delete_stored_file`, which removes the file only when no
-other row references it, and takes an `also_deleting` set so a bulk delete does not count
-rows inside its own batch as references. Routed all seven deletion sites through it
-(pin gallery, wiki gallery, bulk gallery delete, organize queue, safety check-in, two
-external-API endpoints, and the DM hard-delete task). Five tests, including two that guard
-against over-correcting: an unshared photo's file must still be deleted, and the file must
-go once the last row referencing it goes.
-
-**Not changed, deliberately.** The recipient of a share is charged full quota for a file that
-consumes no new storage, and share acceptance is the one `Image`-creating path with no quota
-check at all - so accepting shares can silently push someone over quota, after which their
-own uploads are refused with an error about photos they did not upload. Whether to exempt
-those rows, charge them, or block the accept is a product/billing decision, and
-`QuotaExemption` is explicitly scoped to "storage the whole community benefits from", which a
-received share is not. Flagged rather than decided.
 
 ## Account deletion and the constraint-recreate class: both clean (2026-08-07)
 
@@ -2452,30 +2249,16 @@ so an upload slower than the 30s timeout - already having lost the lock to its s
 *that* upload's lock on the way out. It now uses the token-checked release from
 `services.core.locks` (see the 2026-08-12 sweep-lock entry; same defect, same fix).
 
-## LOW 2026-08-13: two more `get_or_create` sites state a uniqueness they do not enforce
-
-Follow-up to the `Label` work, re-running the corrected sweep (one that understands functional
-constraints, `field_id` vs `field`, related managers and `**kwargs` unpacking - the first version was
-wrong all four ways). Besides `Label`, which is now fixed, two sites remain where the code's stated
-intent is not backed by a constraint:
-
-- `services/visits/safety.py:471` - `SafetyContactOptOut.objects.get_or_create(contact_profile, email,
-  scope, owner, checkin)`. The docstring says these calls "don't create duplicate rows"; the model
-  has no unique constraint, so two clicks on an opt-out magic link (or an email client prefetching
-  it) can insert two.
-- `services/import_formats/gpx_tracks.py:266` - `PinVisit.objects.get_or_create(pin, visited_at,
-  source)`. Same shape: re-importing the same track is deduplicated by the `get`, but two concurrent
-  imports are not.
-
-**Neither is worth changing on its own evidence.** `blocks_notification` answers a boolean from
-existence, so a duplicate opt-out row suppresses notifications exactly as one does; and a duplicate
-visit needs two imports of the same track running at once. Recorded because both would be caught for
-free by a `UniqueConstraint` if either model is touched for another reason, and because the *stated*
-guarantee currently rests on nothing.
-
-Not a finding: `services/facts/evidence.py:95` looked identical (`Fact.objects.get_or_create(key=...)`
-against constraints on `('key','location')`, `('image','key')`, `('key','wiki')`) but supplies the
-second half via `**lookup`, which the static sweep cannot see. It is correct.
+**Partially addressed 2026-08-25** (`bf9c31b0`). The six-call-site asymmetry named above is closed:
+all seven background call sites (one more than counted here - `import_data.py` has two distinct
+sites, `_import_photos` and `_restore_overlay_image`, not one) now wrap their check-then-create in
+`per_profile_upload_lock`, matching the interactive-path pattern exactly. **This is still only the
+same partial, fail-open mitigation every interactive path already has** - it narrows the race
+window but does not bound a true concurrent fan-out, exactly as this entry says above. The real
+fix - a dedicated running-total column - is unchanged and still a design decision, not a refactor:
+Jess's 2026-08-25 sign-off on this entry said she didn't follow the "running-total column"
+proposal and wants it re-explained before any implementation, so that half stays open pending that
+conversation.
 
 ## OPEN 2026-08-13: ~187 write routes have no test that names them
 
@@ -2752,11 +2535,20 @@ each call site's existing default
 rather than raising, since these come from palette pickers and a non-colour is a malformed
 request; `"none"` is permitted only where it means "no border".
 
-Left for a future pass: the model fields themselves are still permissive
-(`MarkupShape.color`/`border_color` have no `choices`, `Label.color` has choices Django will not
-enforce on `save()`). Validation now happens at every known entry point, but a new write path
-added without `clean_color` would reintroduce the gap. A `validators=[...]` on the fields, or a
-custom field type, would make it structural rather than conventional.
+~~Left for a future pass: the model fields themselves are still permissive (`MarkupShape.color`/
+`border_color` have no `choices`)~~ - **`MarkupShape` (`PinMarkup`) side fixed 2026-08-25**,
+investigated per a "note if already fine" instruction and found already structurally closed:
+`PinMarkup.save()` calls `self.coerce_colors()` (running `sanitize_hex_color`/
+`sanitize_optional_color` on both fields) before `super().save()`, and `PinMarkupQuerySet.bulk_create`
+- the one write path that bypasses `.save()` - separately calls it on every object before
+delegating to Django's real `bulk_create`. This is the *stronger* of the two remedies this entry
+proposed: a plain `validators=[...]` would not have closed the gap on its own, since Django only
+runs field validators inside `full_clean()`, which none of these write paths call. Covered by
+`PinMarkupColorStorageTests`/`PinMarkupBulkCreateColorTests` (`test_markup_colors.py`).
+
+**`Label.color` is still open** - it has `choices=COLOR_CHOICES` but no equivalent `save()`-level
+coercion, so a value bypassing form validation could still slip past. Not addressed here; this
+entry's title still applies to that one field.
 
 ---
 
@@ -3032,37 +2824,6 @@ have no callers anywhere, in any file, including their own.
 Worth doing properly with a call-graph rather than a name grep, since the test-only 26 in
 particular may be exercised through the very `filter_by_criteria`-style aggregators that make them
 look unused.
-
----
-
-## CORRECTION: the `to_json()` prefetch work does not affect the map
-
-Claimed repeatedly during the 2026-08-14 audit, and wrong: that fixing `Pin.to_json()`'s prefetch
-behaviour reduced the map's per-pin query cost.
-
-**The map does not use `Pin.to_json()`.** Its payload is built by `services/map_pins/payload.py`,
-which annotates the rating with a `Subquery`:
-
-    latest_rating = Review.objects.filter(pin_id=OuterRef("pk")).order_by("-created").values("rating")[:1]
-    ... .annotate(map_rating=Subquery(latest_rating), child_count=Count("detail_pins", distinct=True))
-
-That is already query-flat and does not touch `Pin.rating` or `Pin.to_json()` at all. The map was
-never paying the cost that was measured.
-
-What the work actually did:
-
-- **`Pin.to_json()`** has **no production callers** - the only textual match outside tests is a
-  *comment* in `pin_lists.py:100`. The measured 4-queries-per-pin was real, and was being paid by
-  nothing. The method is now correct if it is ever used, which is worth something but is not a
-  performance win.
-- **`Pin.rating`** *is* live: `models/pin/serializer.py:73` exposes it, so the DRF path pays one
-  query per pin unless the caller prefetches `reviews`. The `.latest()` -> `max(...)` change makes
-  that path *capable* of being flat; whether the serializer's queryset prefetches `reviews` was not
-  checked, and is the actual open question.
-
-The measurement was sound; the attribution was not. A query-count test over a method proves what
-that method costs, not that anything calls it - and `to_json()` looked like the map's serialiser
-because a comment elsewhere said so.
 
 ---
 
@@ -3433,33 +3194,6 @@ describing the problem in general words ("the report", "option (a)", "the trips 
 best example in the codebase is `services/messaging/direct_message_shares.py`, which quotes its
 entry's title verbatim.
 
-## Note 2026-08-14: `SECRET_KEY` falls back to a per-process random key with no environment guard
-
-Found by audit chunk 441. **No hardcoded secrets exist** - all 11 secret-named settings read from the
-environment, and `EMAIL_HOST_PASSWORD` defaults to `""` rather than a weak value. One line deserves
-a second look:
-
-```python
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or get_random_secret_key()
-```
-
-A random fallback is the right instinct - far better than a checked-in default someone forgets to
-override. But it is **generated per process**, and nothing branches on `ENVIRONMENT_NAME` (defined
-eight lines below) to require the variable outside local development. Consequences if
-`DJANGO_SECRET_KEY` is ever unset in a multi-process deployment:
-
-- gunicorn workers, the Daphne ASGI process and each Celery worker get **different keys**, so a
-  session or signed value created by one is invalid to the others - presenting as random logouts
-  rather than a configuration error;
-- `EncryptedTextField` derives from `SECRET_KEY` when `UL_FIELD_ENCRYPTION_KEY` is unset (see
-  `docs/DATA_ENCRYPTION.md`), so encrypted columns written under a random key become unreadable on
-  the next restart.
-
-**Not observed - this is a hazard, not an incident.** Production presumably sets the variable, and
-`.env` handling is in place. The cheap hardening is a startup check: if `ENVIRONMENT_NAME` is not
-local/development and `DJANGO_SECRET_KEY` is unset, raise `ImproperlyConfigured` rather than
-generating one. That converts a silent, confusing failure into a loud one at boot.
-
 ## Reference 2026-08-16: why two callers of one function legitimately catch different exceptions
 
 Chunk 537 worked the rest of chunk 536's divergence list - the sweep that found the archived
@@ -3714,38 +3448,6 @@ feature exists anywhere in the codebase - worth correcting whichever way this is
 owner decisions, but never written here until now - which is what made it worth catching: a filed
 item that lives only in a narrative report is not filed.)
 
-## `.dockerignore` does not exclude `.env`, so deploy-host image builds bake the secrets in
-
-Found 2026-08-17 reading the Dockerfile, which had not been examined. `.dockerignore` lists caches,
-`node_modules`, `docs/`, virtualenvs and editor directories - but not `.env`. The Dockerfile then does
-`COPY --chown=appuser:appuser . /app`, copying the whole build context.
-
-`.env` is correctly gitignored (`.gitignore:53`) and is 3.3 KB of real secrets on this host:
-`DJANGO_SECRET_KEY`, database credentials, `UL_FIELD_ENCRYPTION_KEY`, Stripe keys, OAuth client
-secrets and API keys for the plugin fleet. Keeping it out of git and then copying it into the image
-undoes most of the benefit.
-
-**Scope, stated precisely, because it is narrower than it first looks.** Images published to
-`ghcr.io` by `.github/workflows/publish.yml` are built from `actions/checkout`, which produces a
-clean git checkout - `.env` is gitignored and therefore absent, so **published images do not contain
-it**. The exposure is images built *on the deploy host*, which is exactly how `bin/deploy.sh` builds
-them (`docker compose up --build`). There, anyone who can read the image can usually already read
-`.env` on the same filesystem, so the practical gap is narrow: `docker save`/export of that image, or
-Docker-daemon access without filesystem access.
-
-**Not fixed here**, and the reason is worth recording because it is not squeamishness:
-`settings/app.py` deliberately loads `Path(DEFAULT_ROOT, ".env")` - the Pydantic settings read that
-file from disk, with a comment explaining where it lives relative to `src/`. `docker-compose.yml`
-supplies configuration through `environment:` blocks rather than `env_file:`, so the baked copy is
-*probably* redundant, but "probably" is not enough to justify a change that could alter how a
-production container resolves its configuration, in an environment where I cannot run the real
-deployment to find out.
-
-**`.git` is a different matter and is *not* a defect.** It is also copied in, and that is deliberate:
-`core/version.py` shells out to git to compare the deployed commit against upstream, and the
-Dockerfile configures `git config --system safe.directory /app` for development images so that keeps
-working. Excluding `.git` would break the version check. Noting it explicitly so nobody "fixes" it.
-
 ## `npm run git-squash` is a force-deploy with none of `deploy.sh`'s guards (minor)
 
 Noted 2026-08-17 while confirming that `gunicorn.conf.py` is actually loaded. `package.json` defines:
@@ -3771,19 +3473,26 @@ Not changed: it is a convenience script in `package.json`, its behaviour may be 
 author wants at a terminal, and `bin/deploy.sh` already exists as the safe path. Recorded so the
 difference between the two is a choice rather than a surprise.
 
-### Pin suggestion `hit_count` is a read-modify-write (noted 2026-08-17)
+### Pin suggestion `hit_count` is a read-modify-write (noted 2026-08-17) - lost-increment half fixed 2026-08-25
 
 `services/pins/pin_suggestions.py`'s `_upsert_matched_suggestion` and
-`_upsert_new_pin_suggestion` do `existing.hit_count += _weight_of(...)` and save, and their caller
+`_upsert_new_pin_suggestion` did `existing.hit_count += _weight_of(...)` and save, and their caller
 `ingest_location_hits` takes no lock. Two concurrent ingests for one profile - a repeated Immich
 sweep overlapping a local-scan upload, which the function's own docstring names as the case it
-handles - lose an increment, and can also both miss on the check-then-act and create duplicate
-pending suggestions for the same pin.
+handles - could lose an increment, and can also both miss on the check-then-act and create
+duplicate pending suggestions for the same pin.
 
-Left unfixed deliberately: unlike the ledger/wiki/rating cases, `PinSuggestion` rows are per-profile,
-so contention needs one user running two scans at once, and the damage is an undercounted ranking
-signal rather than lost money, a reverted edit, or a discarded rating period. Worth an `F()`
-expression plus a unique constraint if suggestion quality is ever reported as flaky.
+**The lost-increment half is fixed** (`996b481f`): both call sites now do `existing.hit_count =
+F("hit_count") + _weight_of(...)`, compiling to a single atomic UPDATE, with
+`existing.refresh_from_db(fields=["hit_count"])` immediately after per Django's guidance for
+F()-expression fields (the object is reused across multiple clusters within one
+`ingest_location_hits` call). **The duplicate-pending-suggestion half from the same check-then-act
+race is still open** - scope was deliberately limited to the named `hit_count` pattern; the other
+merged fields (`visit_dates`, `sample_assets`, `suggested_aliases`/`links`) are still Python-side
+list/JSON read-modify-writes, unaddressed. Left unfixed deliberately, as originally: `PinSuggestion`
+rows are per-profile, so contention needs one user running two scans at once, and the remaining
+damage is a duplicate low-stakes suggestion row rather than lost money or a discarded rating
+period.
 
 
 ### Fourteen documentation citations still point at the wrong line (noted 2026-08-17)
@@ -3854,333 +3563,22 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
-## RESOLVED 2026-08-24: a new pin never gets its parcel, because creation marks the lookup as already done
+## NOT A DEFECT (premise stale, corrected 2026-08-25): a native client can edit a wiki but can never start one
 
-**Confirmed live on a clean database with production REData reachable**, not
-inferred. This is the root cause of most of what looks broken about place data
-for a newly pinned location: no parcel boundary, no shared-property resolution,
-no building child pins, no floorplan footprint, and a wiki with no geometry.
+~~The published API exposes `GET` and `PATCH` on `wikis/{location_slug}/` and no `POST`... a
+mobile user who pins somewhere new has no way to start its wiki without opening a browser.~~
 
-**What happens.** `create_pin_for_profile` calls `resolve_location_place` when
-`place_resolved_at` is NULL (`services/pins/pin_creation.py:256-257`). That
-function is explicitly a cache read - its own docstring says "Never calls a
-provider - it only asks what is already known" - but it stamps the timestamp
-regardless of whether it found anything:
+**Jess, 2026-08-25 (decision-doc item 21): "'Creating a wiki' is now a deprecated concept. Wikis
+are automatically created for places in the background, without any user interaction. This is not
+a gap, and no new REST API endpoints should exist to create wikis."** This entry's premise -
+that wiki creation is a user-initiated action a client should be able to reach - no longer holds;
+do not build a `POST` create-wiki endpoint.
 
-```python
-# services/places/resolution.py:44-46
-place = Place.objects.resolve_for_point(location.latitude, location.longitude)   # may be None
-if save and (location.place_id != (place.pk if place else None) or location.place_resolved_at is None):
-    Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=timezone.now())
-```
-
-Every trigger for the provider chain reads exactly that field as "the chain has
-run":
-
-```python
-# services/locations/boundaries.py:208, in generation_status
-if location.place_resolved_at is None:
-    return False, False
-```
-
-So immediately after creation `generation_status` returns `(ran=True,
-stale=False)`, and therefore:
-
-- `schedule_location_boundary_generation` returns False - "already fresh"
-- `BoundaryPanelSource.is_ready` returns True, so the lazy panel never fetches
-- `enrich_wiki_location` skips `generate_location_boundaries`
-
-Nothing is left to run it. `Location.save()` at `models/location/model.py:462-465`
-deliberately leaves `place_resolved_at` unset *for this exact reason*, and
-`pin_creation` then sets it.
-
-**Measured**, on an empty database, pin at 41.733181, -73.928493 (Hudson River
-State Hospital):
-
-```
-AFTER CREATE: place_id=None  place_resolved_at=2026-08-24 20:14:05+00:00
-AFTER CREATE: generation_status ran=True stale=False
-AFTER CREATE: schedule_location_boundary_generation -> False
-```
-
-The data is not the problem: production REData answers this coordinate with
-parcel `c912a64b-7b07-45d4-9e51-89e80a25067f` and **33 buildings** from NY SHPO's
-CRIS inventory, complete with building numbers. Forcing
-`generate_location_boundaries(location)` by hand does produce geometry.
-
-**How long the pin stays wrong.** `generation_status` also computes staleness
-against `SiteSettings.boundary_cache_days`, which is **60**. So the chain becomes
-eligible again 60 days after the pin was created - which is indistinguishable
-from never for anyone looking at the pin they just made.
-
-**Fix, and the thing to be careful about.** The stamp should mean "a provider ran
-and this is what it found", which is what `BoundaryPanelSource.is_ready`'s own
-comment assumes ("stamped even when nothing was found, so a fruitless run
-doesn't retrigger the chain on every page view"). The narrow change is for
-`resolve_location_place` not to stamp - it is a cache read, and the field is a
-provider-run marker - leaving the stamp to `generate_location_boundaries`. The
-care needed is that `resolve_location_place` is also called from
-`resolve_locations_in` on every geometry change, so whatever replaces this must
-not make a busy parcel re-run the chain per re-resolution.
-
-Guarded by `tests/integration/specs/location/hrsh-boundary.spec.ts`, which is
-written to fail on exactly this and to say so.
-
-**Resolved.** `resolve_location_place` now stamps only when the resolved place
-actually changed, so a coordinate it resolved nothing for is left unstamped and
-`generate_location_boundaries` remains the only thing that records a genuine
-provider miss. The `resolve_locations_in` concern above is handled by the same
-condition: a re-resolution that does not move a location writes nothing at all,
-so a busy parcel does not re-run the chain per re-resolution.
-
-Two further defects were found while confirming this one, both fixed with it:
-
-- **The same function wiped the place it had just resolved.** It wrote the
-  timestamp to the database but not to the in-memory instance, and
-  `generate_location_boundaries` reads that attribute immediately afterwards to
-  decide whether to record a miss - so a freshly provisioned place could be
-  cleared straight back to `None` by `attach_location(location, None)`. This is
-  the likelier explanation for `place_id=None` alongside a stamped
-  `place_resolved_at` on rows where the chain genuinely did run.
-
-- **A boundary we invented outranked one REData gave us.** See the entry below;
-  fixing the stamp alone still left the wrong shape on the map.
-
-## RESOLVED 2026-08-24: the map drew a hull around our own child pins instead of REData's parcel
-
-Reported from the e2e deployment: "That parcel boundary is absolutely
-incorrect... it looks like a generated boundary created to ensure that all the
-pins it thinks are inside the parcel are within the boundary."
-
-That reading was right. REData answers **six** scored candidates for this parcel
-and flags one `is_suggested` (240,740 m²); the app drew the convex hull of the
-campus pin and its three child pins (measured 154,753 m² as rendered) - an
-outline of *the markers we happen to know about* rather than evidence about the
-property. It is a legitimate last resort and a bad thing to prefer: on screen it
-is indistinguishable from a surveyed parcel, and it grows and shrinks with the
-set of buildings that happen to have been imported.
-
-`BoundaryManager.resolve_for_pin` returned the pin's own `generated_polygon`
-second, ahead of the place, so geometry the chain had just fetched stayed
-invisible on the very page that fetched it. A hull carrying
-`generated_from_children` now yields whenever a provider outline exists; every
-other generated row (the pre-places location default among them) keeps the
-precedence it had, and a person's own drawing still outranks everything.
-`refit_child_pin_boundary` drops a stand-in a provider has superseded rather
-than refitting a shape nothing will draw.
-
-**Not fixed here, and deliberately.** REData currently suggests
-`ny_cris (Hudson River State Hospital, Main Building)` for these coordinates,
-which the site owner considers the wrong choice - the subdivision boundary
-`ny_cris (Hudson Heritage Development/Former Hudson River State Hospital/Property Subdivision)`
-(1,163,489 m²) is the better answer, and that selection is REData's to correct.
-UrbanLens' obligation is to draw what REData suggests rather than to invent an
-alternative, which is what this fix establishes.
-
-Guarded by `tests/integration/specs/location/hrsh-boundary-provenance.spec.ts`,
-which asserts provenance rather than presence - the older boundary spec passes
-on an invented hull, because one does arrive and is plausibly sized. Unit
-coverage for the precedence rules is in
-`dashboard/tests/hypothesis/test_redata_parcel_beats_generated_hull.py`.
-
-## OPEN 2026-08-24: concurrent requests to `schema/` can 500
-
-Two overlapping fetches of `/dashboard/api/external/v1/schema/` can produce a
-500, with the next request answering 200 normally. The traceback is inside
-drf-spectacular rather than our code:
-
-    drf_spectacular/plumbing.py:854 in _load_class
-        if any(cls.target_class.startswith(app + '.') for app in installed_apps) ...
-    AttributeError: 'NoneType' object has no attribute 'startswith'
-
-`_load_class` resolves an extension's `target_class` from a dotted string to the
-class object, in place, on first use. Two requests arriving together race over
-that mutation: one reads `target_class` after the other has replaced it (or
-while it is None), and `startswith` is not a method of either replacement. The
-app runs gevent workers, so genuinely concurrent requests to one process are
-ordinary rather than exotic.
-
-**Not caused by anything in this branch** - nothing here registers a
-drf-spectacular extension - but newly *visible*, because `tests/contract` and
-the Playwright `api` project both fetch the schema and can overlap. It is
-almost certainly long-standing.
-
-It matters because the schema is a deployed artefact: a client generating code
-against it gets an intermittent 500 with no indication that retrying would work.
-Options are to warm the extension registry at startup (fetch the schema once in
-`AppConfig.ready`, so the mutation happens before any request races), or to cache
-the generated document.
-
-Found by `tests/integration/specs/api/contract.spec.ts`, where it presents as a
-flake rather than a failure - which is the shape it would have in production too.
-
-## RESOLVED 2026-08-24: re-adding a removed friend creates a request nobody can accept
-
-Remove a friend, change your mind, and send them a friend request again. Both
-people can see the request. Neither can act on it, permanently.
-
-**What is established.** `DELETE friends/{profile_uuid}/` soft-deletes: the
-`Friendship` row survives with status `Removed`, keeping the `from_profile` it
-originally had. When a `POST friends/` later meets such a row, the request can
-end up recorded in the **old** direction - A sends to B, and B sees it as
-`status="Requested" direction="outgoing"`, an incoming request labelled as one
-they sent. `friends/{A}/accept/` then looks for an incoming request from A,
-finds none, and answers `404 Friend request not found`. Both people can see the
-request; neither can act on it.
-
-**What is not established, and is the next thing to find out.** The obvious
-mechanism - `Friendship.objects.all().between()` finding the soft-deleted row
-and reviving it without re-orienting `from_profile` - is *not sufficient on its
-own*. A test that constructs exactly that state (B befriends A, A accepts, A
-removes, A re-requests) **passes**: that revival orients correctly. Only the
-first test to run against a *previous run's* leftovers fails, so the row it
-meets must be in some further sub-state this reproduction does not recreate -
-removed-while-still-requested, or declined-then-removed, or similar. Whoever
-picks this up should dump the surviving row's full record rather than trusting
-the reconstruction above.
-
-The feed shows it plainly once you ask for the right status - the requester sees
-`direction="incoming"` for a request they sent:
-
-    requester still sees status="Removed" direction="incoming" under ?status=Removed
-    recipient still sees status="Removed" direction="outgoing" under ?status=Removed
-
-**How it was found**, because the path is instructive. It surfaced as an
-intermittent 404 in the integration suite that only ever hit the *first* test in
-the file - the one meeting the previous run's leftovers. Three plausible
-explanations were wrong: that the `message` field was implicated (isolating it
-proved the opposite - the request *with* a note accepted, the one without
-failed), that the two clients shared an account, and that `direction` was
-computed from the row rather than the viewer. What settled it was making the
-test's cleanup *prove* the relationship was gone across all eight statuses
-instead of the three it had been checking, at which point the surviving
-`Removed` row named itself.
-
-**Resolved, and the "further sub-state" above turned out not to exist.** The
-mechanism *was* simply `between()` reviving the row without re-orienting it. The
-reason the reconstruction passed is that the reconstruction was the wrong way
-round: in "B befriends A, A accepts, A removes, A re-requests", A is already the
-row's `from_profile`, so there is nothing to re-orient and the case was never
-going to fail. The failing shape needs the *other* party to re-request - A asks
-B, B accepts, B removes, **B** asks A - and that fails reliably from a clean
-slate, no leftovers required. Anyone reading the paragraph above should take it
-as a warning about reconstructions that confirm what you expected: it was
-symmetric-looking enough to seem equivalent, and being wrong about it sent the
-investigation looking for a state that was not there.
-
-**The fix** re-orients the row in `Friendship.request`, with two details that
-were not obvious from the diagnosis:
-
-- `unique_together` is `(from_profile, to_profile)`, so A->B and B->A can both
-  exist (see "reciprocal `Friendship` rows" above). Swapping a row's ends can
-  therefore collide with a real row, and the fix prefers an
-  already-correctly-oriented row when one exists rather than swapping blind.
-- `muted_by_from_profile` / `muted_by_to_profile` are **positional** - which
-  column is yours depends on which end of the row you are. Swapping the ends
-  without swapping these hands one person's mute to the other, silencing the
-  wrong party invisibly. That is a worse bug than the one being fixed, and it
-  has its own test.
-
-The suggestion to ask the same question of every status `between()` can return
-was half wrong, which is the other correction worth keeping: `can_request`
-admits `Declined` and `Removed` only. For `Blocked` and `Ignored` the correct
-behaviour is a **refusal**, and re-orienting one of those rows would have been a
-new defect. Both now have tests asserting the refusal, sitting directly beside
-the re-orientation.
-
-Guarded by `test_friendship_revival_direction.py` (7 tests), proved non-vacuous
-by reverting the fix - 3 of them fail. Originally observed by
-`tests/integration/specs/api/social.spec.ts::a request is visible to the
-recipient, and acceptance to both`, which failed only as the first test in that
-file, i.e. the one that met the previous run's leftovers.
-
-## RESOLVED 2026-08-24: a photo upload trusts the filename, not the bytes
-
-`POST /dashboard/api/external/v1/photos/` accepts a shell script sent as
-`not-really.png` with `Content-Type: image/png` and answers **201**. The file is
-stored and served back from the photo's `url` as an image.
-
-Both signals the endpoint appears to trust - the extension and the declared
-content type - are supplied by the caller, so neither is evidence of anything.
-The project already carries `filetype` as a dependency and has a malware-scan
-service, so rejecting a file whose magic bytes are not an image looks like the
-intent rather than a new feature.
-
-**It hid behind duplicate detection.** The first version of the test reused the
-same payload every run and saw a `409` on the second and later runs, which reads
-as "refused" and is really the store recognising the file it accepted the first
-time. The test now embeds the run id in the bytes so every run is a first
-upload. Anything else asserting on upload rejection should do the same.
-
-How much this matters is worth deciding rather than assuming: a browser will not
-execute a shell script served as `image/png`, so this is not remote code
-execution. What it is, is an unbounded arbitrary-file store attached to any
-account with a `photos:write` key, whose contents are served from the
-application's own origin.
-
-Found by `tests/integration/specs/services/media-storage.spec.ts`, which stays
-red until the bytes are checked.
-
-**Fixed**: `image_upload_error` now requires a *positive* image identification
-for `MediaKind.PHOTO` rather than letting sniffing fail open. Guarded by
-`test_photo_bytes_must_be_an_image.py` (11 tests).
-
-**The fix nearly caused a worse regression than the defect**, and this is the
-transferable part. Failing closed is only safe if every allowed image extension
-has a magic-byte signature the library recognises *under the same name* - and
-two did not: `filetype` reports a TIFF as `tif` and an animated PNG as `apng`,
-neither of which was in the photo allowlist. Shipping the strict check without
-noticing would have started rejecting genuine TIFF and APNG uploads, trading a
-security hole for a broken feature. It also broke eight existing tests that
-uploaded `b"photo-bytes"`, which is now correctly refused; those were moved onto
-real image bytes from a new `core/tests/images.py`. When you make a check
-stricter, ask what it now rejects that it should not.
-
-## RESOLVED 2026-08-24: a visit can be logged in the future
-
-`POST /dashboard/api/external/v1/pins/{pin_slug}/visits/` accepts a
-`visited_at` a week from now and answers **201**.
-
-A visit is a record of somewhere the user has *been*. A future one is not a
-mistake the API should store: it propagates into "last visited" everywhere that
-is displayed and ordered by, so one fat-fingered year makes a pin permanently
-the most recently visited thing the user owns. It also has no legitimate
-meaning - a planned outing is a trip activity, which is a different model with
-its own scheduling.
-
-The fix is a validator on the serializer field. Bounding it at "not after now,
-give or take clock skew" is enough; nothing needs to reason about how far in
-the past is plausible.
-
-Found by `tests/integration/specs/api/visits.spec.ts`, which also pins the
-timestamp round-trip - the neighbouring risk on that field is a deployment
-whose database or worker is set to a different timezone shifting a visit by
-hours, so it is compared as an instant rather than as a string.
-
-**Fixed in both layers**, which is the part worth noting: the serializer
-validator alone would have left `create_manual_visit` accepting a future
-timestamp from every other caller, so the bound lives on the shared service too
-(`VisitInFutureError`, `MAX_VISIT_CLOCK_SKEW = 5 minutes`) with the serializer
-rejecting early for a clean 400. Guarded by `test_visit_time_bounds.py` across
-the serializer, the service, and the endpoint.
-
-## OPEN 2026-08-24: a native client can edit a wiki but can never start one
-
-The published API exposes `GET` and `PATCH` on `wikis/{location_slug}/` and no
-`POST`. A wiki is auto-created as an invisible draft when a location appears,
-and becomes visible only when somebody promotes it through the web UI's "Create
-Wiki" action - a route that has no external-API equivalent.
-
-The effect on a client holding an API key: it can read and edit wikis that
-already exist, and can never create one, so a mobile user who pins somewhere new
-has no way to start its wiki without opening a browser. It is also why five
-tests in `tests/integration/specs/api/wiki.spec.ts` skip on a fresh deployment -
-the suite cannot manufacture the precondition through the surface it is testing.
-
-Found while writing that spec on 2026-08-24. Whether the fix is a `POST`
-endpoint or a documented "promote" action is a product decision; what should not
-stand is the current state, where the capability exists and only one of the two
-clients can reach it.
+**Follow-up still needed, not done here** (re-scoping test code is a separate piece of work from
+a docs cleanup pass): the five tests in `tests/integration/specs/api/wiki.spec.ts` that skip on a
+fresh deployment assumed a create-wiki endpoint should exist to manufacture their precondition.
+They test an outdated assumption and need to be re-scoped against however a wiki actually becomes
+visible now (background auto-creation, not a client action) - not simply un-skipped.
 
 ## OPEN 2026-08-24: the nav bar, not the map, is what overflows at phone width
 
@@ -4384,38 +3782,6 @@ One smaller deployment note from the same run, not a code defect:
   `ADVISORY_RULES` in `tests/integration/lib/a11y.ts` - so that the accessibility project is not red
   on every run before anyone has had a chance to act on it. Findings still land in each run's
   `a11y-advisory.txt`.
-## `SavedFilterDetailView.patch` has a pre-existing mypy type error (found 2026-08-22, not fixed)
-
-`external_api/views.py`, `SavedFilterDetailView.patch`: `saved_filter.color = clean_color(data["color"], default="...")` -
-mypy reports `Incompatible types in assignment (expression has type "str | None", variable has type
-"str | int | Combinable")`. Found incidentally while mypy-checking an unrelated `PinList` fix in the
-same file; not investigated or fixed - out of scope for that change. `SavedFilter.color`'s
-Django-stubs-inferred field type looks like the actual mismatch (an F-expression-shaped type rather
-than the plain `str` the field should behave as); worth a look next time this file is touched.
-
-## Five mypy errors outside the floorplan work (2026-08-23)
-
-`mypy src/urbanlens` reports five errors in four files, none of them in code
-this floorplan pass touched:
-
-- `conftest.py:50` — an unused `type: ignore` *and*, on the same line, a real
-  `setdefault` argument mismatch. The ignore is presumably why the mismatch went
-  unnoticed.
-- `services/core/text_limits.py:52` — a `"type"` attribute error
-- `plugins/builtin/property_records.py:201`
-- `external_api/views.py:2119` — `clean_color(...)` returns `str | None` into a
-  field typed `str | int | Combinable`
-
-Left alone deliberately: `external_api/views.py` has uncommitted changes from
-other work, and the rest are unrelated to this pass. Recorded here rather than
-fixed in passing, because a change to a file someone else is mid-edit on is how
-two people's work collides.
-
-The one that *was* in scope is fixed: `controllers/floorplans.py` narrowed a
-geometry with `polygon.geom_type == "MultiPolygon"`, a string comparison neither
-mypy nor a reader can use, before iterating it - and a `Polygon` is not
-iterable. It is an `isinstance` check now.
-
 ## Every drag frame rebuilds every Leaflet layer - measured, and deliberately not refactored (2026-08-23)
 
 `render()` clears all four layer groups and recreates every polyline, polygon,
@@ -4608,9 +3974,9 @@ implementation of it, which is a real refactor rather than adding a call, and on
 that deserves its own change with the consensus tests watched rather than being
 folded into a privacy sweep at the end of a long session.
 
-Related, smaller, and found alongside it: `WikiMediaVoteView` scopes a submitted
-`image_id` to the location (`Image.objects.filter(pk=image_id, location=location)`)
-rather than to photos on the wiki, so a caller can record a relevance vote against
-a pin-owned photo at that location. No data comes back and no bonus can be earned
-(`refresh_community_quota_bonus` requires `wiki_id`, which a pin upload no longer
-has), so this writes a row a stranger should not be able to write and nothing more.
+~~Related, smaller, and found alongside it: `WikiMediaVoteView` scopes a submitted `image_id` to
+the location rather than to photos on the wiki, so a caller can record a relevance vote against a
+pin-owned photo at that location.~~ **Fixed 2026-08-25** (`8bd766a3`): the lookup now filters on
+`wiki=wiki` instead of `location=location`. Guarded by
+`test_voting_with_a_pin_owned_image_id_at_the_same_location_is_ignored`. The main entry above
+(Consensus photo rounds ignoring uploader visibility) is unrelated and still open.

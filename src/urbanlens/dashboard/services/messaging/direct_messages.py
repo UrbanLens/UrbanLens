@@ -1160,8 +1160,12 @@ def conversations_for(profile: Profile, *, only_unread: bool = False) -> list[di
     # prefetch_related("images"): without it, a last message with no body
     # (image-only or map-only send) makes the `message_preview` template tag's
     # `images.exists()` fallback issue its own query per such row - an N+1
-    # across the sidebar's conversation list.
-    last_messages = DirectMessage.objects.filter(pk__in=[row["last_message_id"] for row in rows]).prefetch_related("images").in_bulk()
+    # across the sidebar's conversation list. "reactions__profile" is the same
+    # fix for the external API's build_direct_message_payload, which reads
+    # reaction_summary(message) for every row's last_message - already
+    # id-bounded by the pk__in above, so this costs one extra query total,
+    # not one per conversation.
+    last_messages = DirectMessage.objects.filter(pk__in=[row["last_message_id"] for row in rows]).prefetch_related("images", "reactions__profile").in_bulk()
     muted_sender_ids = set(DirectMessageMute.objects.filter(viewer=profile).values_list("sender_id", flat=True))
 
     # Resolved once for the whole list: display_identity_for asks whether this

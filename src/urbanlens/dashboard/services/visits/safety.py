@@ -12,7 +12,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, transaction
-from django.db.models import Count
+from django.db.models import Count, F
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -1003,6 +1003,15 @@ def schedule_checkin_archival(checkin: SafetyCheckin) -> None:
     safely_enqueue_task(archive_safety_checkin, checkin.pk, countdown=countdown)
 
 
+#: Consecutive archival failures after which archive_checkin() gives up on a checkin
+#: instead of letting the periodic sweep retry it forever - e.g. a corrupted
+#: MessagingKeyBundle.public_key fails the same way on every attempt, and nothing
+#: about retrying again changes that. Unlike the "no key bundle yet" case below
+#: (expected to self-resolve at the owner's next login), an exception here means
+#: something is actually broken and needs a human, not five more minutes.
+MAX_ARCHIVE_ATTEMPTS = 5
+
+
 def archive_checkin(checkin: SafetyCheckin) -> None:
     """Encrypt a resolved check-in's PII, sealed to only the owner's E2EE key, and scrub the plaintext.
 
@@ -1012,6 +1021,12 @@ def archive_checkin(checkin: SafetyCheckin) -> None:
     without archiving or scrubbing anything; the periodic sweep
     (``tasks.sweep_due_safety_checkin_archival``) retries every 5 minutes until
     a bundle appears.
+
+    A failure past that point (e.g. a corrupted ``public_key``) is re-raised after
+    recording it - the caller already logs it via ``logger.exception`` - but after
+    ``MAX_ARCHIVE_ATTEMPTS`` consecutive failures on the same checkin, gives up,
+    alerts the site admin, and stops offering the row to future sweeps (see
+    ``_register_archive_failure``).
 
     Args:
         checkin: The check-in due for archival.
@@ -1026,32 +1041,62 @@ def archive_checkin(checkin: SafetyCheckin) -> None:
         logger.warning("Safety checkin %s is due for archival, but owner %s has no E2EE key bundle yet - will retry", checkin.uuid, checkin.profile_id)
         return
 
-    with transaction.atomic():
-        # select_for_update() makes the countdown-scheduled task and the periodic sweep
-        # sequential instead of racing: the loser blocks here until the winner commits,
-        # then sees the archive already exists and returns - never a double-create on the
-        # unique archive row, and never a torn read of the payload (see below). Re-checking
-        # idempotency on the *locked* row, not the possibly-already-checked `checkin`
-        # argument, is what actually makes this correct - the top-of-function check above
-        # is just a fast path to skip the lock/bundle-lookup entirely in the common case.
-        locked_checkin = SafetyCheckin.objects.select_for_update().get(pk=checkin.pk)
-        if hasattr(locked_checkin, "archive"):
-            return
-        # Building the payload and sealing it while holding the row lock (rather than
-        # before starting the transaction) closes a narrower gap: a chat message posted
-        # in the window between "read the payload" and "scrub the messages table" would
-        # otherwise be captured by neither - not sealed into the archive, and silently
-        # blanked by the scrub with no record anywhere.
-        ciphertext, nonce, sealed_key = _seal_archive_payload(_build_archive_payload(locked_checkin), bundle.public_key)
-        SafetyCheckinArchive.objects.create(
-            checkin=locked_checkin,
-            ciphertext=ciphertext,
-            nonce=nonce,
-            sealed_key=sealed_key,
-            key_bundle_version=bundle.version,
-        )
-        _scrub_checkin_pii(locked_checkin)
+    try:
+        with transaction.atomic():
+            # select_for_update() makes the countdown-scheduled task and the periodic sweep
+            # sequential instead of racing: the loser blocks here until the winner commits,
+            # then sees the archive already exists and returns - never a double-create on the
+            # unique archive row, and never a torn read of the payload (see below). Re-checking
+            # idempotency on the *locked* row, not the possibly-already-checked `checkin`
+            # argument, is what actually makes this correct - the top-of-function check above
+            # is just a fast path to skip the lock/bundle-lookup entirely in the common case.
+            locked_checkin = SafetyCheckin.objects.select_for_update().get(pk=checkin.pk)
+            if hasattr(locked_checkin, "archive"):
+                return
+            # Building the payload and sealing it while holding the row lock (rather than
+            # before starting the transaction) closes a narrower gap: a chat message posted
+            # in the window between "read the payload" and "scrub the messages table" would
+            # otherwise be captured by neither - not sealed into the archive, and silently
+            # blanked by the scrub with no record anywhere.
+            ciphertext, nonce, sealed_key = _seal_archive_payload(_build_archive_payload(locked_checkin), bundle.public_key)
+            SafetyCheckinArchive.objects.create(
+                checkin=locked_checkin,
+                ciphertext=ciphertext,
+                nonce=nonce,
+                sealed_key=sealed_key,
+                key_bundle_version=bundle.version,
+            )
+            _scrub_checkin_pii(locked_checkin)
+    except Exception:
+        _register_archive_failure(checkin)
+        raise
     _broadcast_checkin_archived(checkin)
+
+
+def _register_archive_failure(checkin: SafetyCheckin) -> None:
+    """Count one archival failure and give up on the checkin past ``MAX_ARCHIVE_ATTEMPTS``.
+
+    Mirrors ``services.notifications.push``'s ``failure_count``/revocation pattern:
+    ``F()`` keeps the increment race-free against a concurrent attempt, and the
+    give-up write is conditioned on the count actually having reached the cap so
+    it only fires - and alerts - once.
+
+    Args:
+        checkin: The check-in whose archival attempt just failed.
+    """
+    SafetyCheckin.objects.filter(pk=checkin.pk).update(archive_failure_count=F("archive_failure_count") + 1)
+    gave_up = SafetyCheckin.objects.filter(pk=checkin.pk, archive_failure_count__gte=MAX_ARCHIVE_ATTEMPTS, archive_failed_at__isnull=True).update(archive_failed_at=timezone.now())
+    if not gave_up:
+        return
+
+    from urbanlens.dashboard.services.notifications.notifications import NotificationEvent, notify
+
+    logger.error("Safety checkin %s failed to archive %d times in a row; giving up and flagging for manual review", checkin.pk, MAX_ARCHIVE_ATTEMPTS)
+    notify(
+        NotificationEvent.SAFETY_CHECKIN_ARCHIVAL_FAILED,
+        subject="A safety check-in failed to archive",
+        message=(f"Safety checkin {checkin.pk} failed to archive {MAX_ARCHIVE_ATTEMPTS} times in a row and will not be retried automatically. Check the app logs for details."),
+    )
 
 
 def _build_archive_payload(checkin: SafetyCheckin) -> dict:
