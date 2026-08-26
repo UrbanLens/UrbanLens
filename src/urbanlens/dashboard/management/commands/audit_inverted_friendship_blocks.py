@@ -67,11 +67,7 @@ class Command(BaseCommand):
         if cutoff_date is None:
             raise CommandError(f"--before must be an ISO date (YYYY-MM-DD), got {options['before']!r}")
 
-        candidates = (
-            Friendship.objects.filter(status=FriendshipStatus.BLOCKED, created__date__lt=cutoff_date)
-            .select_related("from_profile__user", "to_profile__user")
-            .order_by("created")
-        )
+        candidates = Friendship.objects.filter(status=FriendshipStatus.BLOCKED, created__date__lt=cutoff_date).select_related("from_profile__user", "to_profile__user").order_by("created")
         total = candidates.count()
         if total == 0:
             self.stdout.write(f"No BLOCKED Friendship rows created before {cutoff_date.isoformat()}. Nothing to review.")
