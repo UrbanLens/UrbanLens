@@ -26,6 +26,7 @@ from django.db.models import (
     PositiveIntegerField,
     Q,
     TextField,
+    UniqueConstraint,
     UUIDField,
 )
 from django.db.models.fields import CharField, DateTimeField
@@ -540,6 +541,21 @@ class SafetyContactOptOut(abstract.DashboardModel):
                     | (Q(scope=SafetyContactOptOutScope.GLOBAL) & Q(owner__isnull=True) & Q(checkin__isnull=True))
                 ),
                 name="db_safety_contact_optout_scope_fields_match",
+            ),
+            # nulls_distinct=False so two opt-outs for the same target that both leave
+            # email/owner/checkin null (as every row does on at least one of those,
+            # per the two constraints above) are still caught - same reasoning as
+            # Label's uq_label_profile_name_kind_ci. Without it, a double-submitted
+            # opt-out link (or an email client prefetching the confirm GET) races
+            # record_contact_opt_out's get_or_create into two identical rows.
+            UniqueConstraint(
+                "contact_profile",
+                "email",
+                "scope",
+                "owner",
+                "checkin",
+                name="uq_safety_contact_optout_target_scope",
+                nulls_distinct=False,
             ),
         ]
 
