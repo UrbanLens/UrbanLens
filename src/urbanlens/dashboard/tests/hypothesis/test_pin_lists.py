@@ -118,6 +118,82 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
         self.assertIn("disabled", content[tag_start:tag_end])
 
 
+class PinListDetailPaginationTests(TestCase):
+    """The list-detail page's item rows are paginated; the overview map is not.
+
+    Regression: the page rendered every item on the list with no pagination
+    at all, so a large list cost an unbounded amount of HTML/DOM. Patches
+    ``_ITEMS_PAGE_SIZE`` down to a small number rather than seeding 50+ real
+    pins, since the pagination logic itself is what's under test.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+        self.pin_list = baker.make(PinList, profile=self.profile, name="Big List")
+
+    def _add_pins(self, count: int) -> list[Pin]:
+        pins = [_make_pin(self.profile, name=f"Pin {i}") for i in range(count)]
+        for order, pin in enumerate(pins):
+            PinListItem.objects.create(pin_list=self.pin_list, pin=pin, order=order, added_via=PinListItem.ADDED_MANUAL)
+        return pins
+
+    def test_detail_page_only_renders_one_page_of_rows(self) -> None:
+        """Checks the *row* markup specifically - the map data blob legitimately
+        embeds every pin's name regardless of pagination (see the map-data test
+        below), so a bare substring check on the whole page would false-positive."""
+        pins = self._add_pins(5)
+        with mock.patch.object(pin_lists, "_ITEMS_PAGE_SIZE", 3):
+            response = self.client.get(reverse("lists.detail", kwargs={"list_slug": self.pin_list.slug}))
+        content = response.content.decode()
+        for pin in pins[:3]:
+            self.assertIn(f'<span class="pin-list-item-name">{pin.effective_name}</span>', content)
+        for pin in pins[3:]:
+            self.assertNotIn(f'<span class="pin-list-item-name">{pin.effective_name}</span>', content)
+
+    def test_detail_page_sentinel_points_at_the_next_page(self) -> None:
+        self._add_pins(5)
+        with mock.patch.object(pin_lists, "_ITEMS_PAGE_SIZE", 3):
+            response = self.client.get(reverse("lists.detail", kwargs={"list_slug": self.pin_list.slug}))
+        page_url = reverse("lists.items.page", kwargs={"list_slug": self.pin_list.slug})
+        self.assertContains(response, f'hx-get="{page_url}?page=2"')
+        self.assertContains(response, 'hx-trigger="revealed"')
+
+    def test_no_sentinel_when_the_list_fits_on_one_page(self) -> None:
+        self._add_pins(2)
+        with mock.patch.object(pin_lists, "_ITEMS_PAGE_SIZE", 3):
+            response = self.client.get(reverse("lists.detail", kwargs={"list_slug": self.pin_list.slug}))
+        self.assertNotContains(response, "pin-list-item-sentinel")
+
+    def test_items_page_view_returns_the_remaining_rows(self) -> None:
+        pins = self._add_pins(5)
+        with mock.patch.object(pin_lists, "_ITEMS_PAGE_SIZE", 3):
+            response = self.client.get(reverse("lists.items.page", kwargs={"list_slug": self.pin_list.slug}), {"page": 2})
+        content = response.content.decode()
+        for pin in pins[3:]:
+            self.assertIn(pin.effective_name, content)
+        for pin in pins[:3]:
+            self.assertNotIn(pin.effective_name, content)
+        # Page 2 is the last page - no further sentinel.
+        self.assertNotIn("pin-list-item-sentinel", content)
+
+    def test_items_page_view_404s_for_another_profiles_list(self) -> None:
+        other_list = baker.make(PinList, profile=baker.make(User).profile, name="Not Mine")
+        response = self.client.get(reverse("lists.items.page", kwargs={"list_slug": other_list.slug}), {"page": 2})
+        self.assertEqual(response.status_code, 404)
+
+    def test_overview_map_data_includes_every_pin_despite_pagination(self) -> None:
+        pins = self._add_pins(5)
+        with mock.patch.object(pin_lists, "_ITEMS_PAGE_SIZE", 3):
+            response = self.client.get(reverse("lists.detail", kwargs={"list_slug": self.pin_list.slug}))
+        content = response.content.decode()
+        map_data_json = content.split('id="pin-list-items-map-data"', 1)[1].split(">", 1)[1].split("</script>", 1)[0]
+        map_data = json.loads(map_data_json)
+        self.assertEqual({point["name"] for point in map_data}, {pin.effective_name for pin in pins})
+
+
 class PinListExportViewTests(TestCase):
     """POST /lists/<slug>/export/ downloads every pin on the list (UL-377)."""
 

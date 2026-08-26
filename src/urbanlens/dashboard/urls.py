@@ -1046,6 +1046,7 @@ urlpatterns = [
                 path("<slug:list_slug>/edit/", pin_lists.PinListEditView.as_view(), name="lists.edit"),
                 path("<slug:list_slug>/delete/", pin_lists.PinListDeleteView.as_view(), name="lists.delete"),
                 path("<slug:list_slug>/items/", pin_lists.PinListItemsView.as_view(), name="lists.items"),
+                path("<slug:list_slug>/items/page/", pin_lists.PinListItemsPageView.as_view(), name="lists.items.page"),
                 path("<slug:list_slug>/items/add/", pin_lists.PinListAddPinsView.as_view(), name="lists.items.add"),
                 path("<slug:list_slug>/items/<int:item_id>/remove/", pin_lists.PinListRemoveItemView.as_view(), name="lists.items.remove"),
                 path("<slug:list_slug>/items/reorder/", pin_lists.PinListReorderView.as_view(), name="lists.items.reorder"),
