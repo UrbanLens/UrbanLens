@@ -25,6 +25,7 @@ from urllib.parse import urlparse
 
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
+from django.db.models import F
 import requests
 
 from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
@@ -392,7 +393,10 @@ def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHi
     existing = PinSuggestion.objects.filter(profile=profile, pin=pin, status=PinSuggestionStatus.PENDING).first()
     if existing is not None:
         existing.visit_dates = _merge_dates(existing.visit_dates, dates)
-        existing.hit_count += _weight_of(hits)
+        # F() rather than += : two concurrent ingests (e.g. an Immich sweep overlapping
+        # a local-scan upload) both reading the same pre-update hit_count would otherwise
+        # have one increment lost to the other's save.
+        existing.hit_count = F("hit_count") + _weight_of(hits)
         existing.sample_assets = _merge_sample_assets(existing.sample_assets, hits)
         existing.suggested_aliases = _merge_aliases(existing.suggested_aliases, hits)
         existing.suggested_links = _merge_links(existing.suggested_links, hits)
@@ -412,6 +416,7 @@ def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHi
                 "updated",
             ]
         )
+        existing.refresh_from_db(fields=["hit_count"])
         return existing
     return PinSuggestion.objects.create(
         profile=profile,
@@ -450,7 +455,8 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
     existing = _find_nearby_pending_new_pin_suggestion(pending_candidates, latitude, longitude)
     if existing is not None:
         existing.visit_dates = _merge_dates(existing.visit_dates, dates)
-        existing.hit_count += _weight_of(cluster)
+        # F() rather than += : see the matching comment in _upsert_matched_suggestion.
+        existing.hit_count = F("hit_count") + _weight_of(cluster)
         existing.sample_assets = _merge_sample_assets(existing.sample_assets, cluster)
         existing.suggested_aliases = _merge_aliases(existing.suggested_aliases, cluster)
         existing.suggested_links = _merge_links(existing.suggested_links, cluster)
@@ -473,6 +479,7 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
                 "updated",
             ]
         )
+        existing.refresh_from_db(fields=["hit_count"])
         return existing
     created = PinSuggestion.objects.create(
         profile=profile,
