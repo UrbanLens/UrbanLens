@@ -505,6 +505,20 @@ class RoundTripPhotosTests(TestCase):
         self.assertFalse(Image.objects.filter(profile=self.importer).exists())
         self.assertTrue(any("storage quota" in w for w in result.warnings))
 
+    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no
+        locking at all, unlike every interactive upload path (see
+        per_profile_upload_lock's docstring)."""
+        from unittest import mock
+
+        row = {"uuid": "8a4f0a53-1111-4f77-9111-00000000000a", "filename": "mill.jpg"}
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
+            with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+                self._import(temp_dir)
+
+        acquire.assert_called_once_with(f"upload-quota-lock:{self.importer.pk}", 30)
+
     def test_labels_reattach_via_label_uuid_map(self) -> None:
         label = ensure_label(profile=self.importer, name="Abandoned", kind="tag")
         row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000007", "filename": "mill.jpg", "label_uuids": ["8a4f0a53-3333-4f77-9111-000000000001"]}
@@ -538,6 +552,34 @@ class RoundTripPhotosTests(TestCase):
         # a falsy (None) caption round-trips to None, never to an empty string.
         self.assertEqual(image.caption, caption or None)
         self.assertEqual(result.created.get("photos"), 1)
+
+
+class RestoreOverlayImageQuotaLockTests(TestCase):
+    """MapAnnotationsImport._restore_overlay_image re-enters storage through the same
+    quota check a fresh upload gets (see RoundTripPhotosTests's class docstring)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.importer = baker.make(User).profile
+
+    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no
+        locking at all, unlike every interactive upload path (see
+        per_profile_upload_lock's docstring)."""
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            overlays_dir = os.path.join(temp_dir, "map_annotations")
+            os.makedirs(overlays_dir, exist_ok=True)
+            with open(os.path.join(overlays_dir, "overlay.png"), "wb") as fh:
+                fh.write(b"fake-png-bytes")
+
+            ctx = import_data.ImportContext(profile=self.importer, data_dir=temp_dir, result=import_data.ImportResult(), pin_uuid_map={}, label_uuid_map={})
+            with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+                image = import_data.MapAnnotationsImport()._restore_overlay_image({"filename": "overlay.png"}, ctx)
+
+        self.assertIsNotNone(image)
+        acquire.assert_called_once_with(f"upload-quota-lock:{self.importer.pk}", 30)
 
 
 class RoundTripTripsTests(TestCase):

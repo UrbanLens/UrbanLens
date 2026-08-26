@@ -1265,6 +1265,17 @@ class AttachSuggestionPhotosTests(TestCase):
         self.assertIsNone(image.pin_id)
         self.assertTrue(image.checksum)
 
+    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no
+        locking at all, unlike every interactive upload path (see
+        per_profile_upload_lock's docstring)."""
+        with (
+            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()),
+            mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire,
+        ):
+            attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
+        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+
     def test_never_exceeds_max_suggestion_photos(self) -> None:
         urls = [f"https://example.test/photo-{i}.jpg" for i in range(MAX_SUGGESTION_PHOTOS + 5)]
         with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()):

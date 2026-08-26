@@ -304,6 +304,14 @@ class ImportFlickrPhotosTaskTests(TestCase):
             counts = tasks.import_flickr_photos(self.pin.pk, self.profile.pk, ["42"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
 
+    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no
+        locking at all, unlike every interactive upload path (see
+        per_profile_upload_lock's docstring)."""
+        with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+            self._run(["42"], {"42": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
+        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+
 
 class GetFlickrAccountTests(TestCase):
     """FlickrAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
