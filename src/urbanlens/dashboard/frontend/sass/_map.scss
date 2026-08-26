@@ -373,6 +373,64 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
+// -- Beta time slider (OpenHistoricalMap overlay) --------------------------
+// Sits below .map-wrapper in normal document flow (a sibling, not part of
+// .map-bottom-controls, which is absolutely positioned over the tiles) - see
+// _temporal_imagery_slider.html and shared/temporal-imagery.ts. Server-side
+// gated to beta users with dated OHM coverage nearby, so this never renders
+// for anyone else.
+.temporal-imagery-slider {
+    // Rung 2: one step raised above the rung-1 .location-map card it sits
+    // in, so the pill reads as its own control rather than blending into
+    // the card background (see _surfaces.scss's elevation-ladder docs).
+    @include surface($radius: $radius-full, $rung: 2);
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    margin-top: .6rem;
+    padding: .55rem 1rem;
+    min-height: 40px;
+    box-sizing: border-box;
+    box-shadow: var(--ul-shadow-sm);
+
+    &__icon {
+        flex-shrink: 0;
+        font-size: 1.2rem;
+        color: var(--ul-grey-6);
+        transition: color .15s;
+    }
+
+    &__input {
+        flex: 1;
+        min-width: 0;
+        margin: 0 !important; // override the bare input[type=range] 15px 0 default above
+    }
+
+    &__label {
+        flex-shrink: 0;
+        min-width: 3.4rem;
+        text-align: right;
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--ul-grey-7);
+        font-variant-numeric: tabular-nums;
+    }
+
+    // A fetch is in flight - dims the input and spins the icon (reusing
+    // _layout.scss's shared @keyframes spin) rather than resizing or
+    // reflowing anything, so scrubbing never causes a layout jump.
+    &--loading {
+        .temporal-imagery-slider__icon {
+            color: var(--ul-accent-amber);
+            animation: spin 1.2s linear infinite;
+        }
+
+        .temporal-imagery-slider__input {
+            opacity: .6;
+        }
+    }
+}
+
 // - Map Dialogs
 .map-dialog {
     @include surface($radius: 8px, $rung: null);

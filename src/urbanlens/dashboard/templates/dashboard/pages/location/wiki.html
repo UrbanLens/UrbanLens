@@ -178,6 +178,7 @@
             <div class="map-wrapper">
                 {% include "dashboard/partials/layout/_map_annotations_panels.html" %}
             </div>
+            {% include "dashboard/partials/layout/_temporal_imagery_slider.html" %}
         </div>
 
         {# Labels/categories hidden: global categories no longer exist #}
@@ -494,7 +495,9 @@
      data-photo-gallery-json-url="{{ photo_gallery_json_url }}"
      data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
      data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
-     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
+     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"
+     data-temporal-years="{{ temporal_slider_years|join:',' }}"
+     data-temporal-imagery-url-template="{{ temporal_imagery_url_template }}"></div>
 <script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script>
     // -- External-data panels: handle 204 (no data) --------------------------

@@ -21,6 +21,7 @@ from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.controllers.map_overlays import OVERLAY_UUID_PLACEHOLDER, overlay_payload
+from urbanlens.dashboard.controllers.temporal_imagery import TEMPORAL_YEAR_PLACEHOLDER
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
@@ -31,6 +32,7 @@ from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_featu
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
 from urbanlens.dashboard.services.search.search import format_search_date, search_web
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
@@ -289,6 +291,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "manage_overlays_url": reverse("pin.overlays", args=[pin.slug]),
                 "manage_overlays_historical_url": reverse("pin.overlays.historical", args=[pin.slug]),
                 "overlay_corners_url_template": reverse("pin.overlays.corners", args=[pin.slug, OVERLAY_UUID_PLACEHOLDER]),
+                "temporal_slider_years": temporal_slider_years(pin.location, request.user) if pin.location_id else [],
+                "temporal_imagery_url_template": reverse("pin.temporal_imagery", args=[pin.slug, TEMPORAL_YEAR_PLACEHOLDER]),
                 "profile": profile,
                 "parent_pin": pin.parent_pin,
                 "has_child_pins": pin.detail_pins.exists(),

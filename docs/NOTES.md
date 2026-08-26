@@ -510,6 +510,23 @@ Two things that look like they could be simplified but can't:
 which is why the external-URL path rejects PDFs/TIFFs and tells the user to upload instead (the
 upload path runs through the normal media pipeline).
 
+## OpenHistoricalMap: cache aggressively, don't treat it as a live dependency
+
+OHM's public Overpass fork (`services/apis/locations/open_historical_map.py`) is volunteer-run
+infrastructure with no formal SLA or published rate-limit policy, and a real history of being
+overwhelmed - the only hard number it publishes is a 2-concurrent-request limit. This integration
+deliberately leans on `LocationCache` rather than calling Overpass live: coverage/year discovery is
+proactively backfilled the same way boundary data is, and each year's GeoJSON is cached
+essentially forever (past OHM data for a given year doesn't change). Don't "fix" this into
+something snappier without keeping that constraint in mind - a naive per-request Overpass call is
+exactly the pattern that gets this fork's users rate-limited or blocked.
+
+One consequence worth knowing before touching the source-string scheme: `LocationCache`'s unique
+key is the `(location, source)` pair alone - `query_key` is descriptive metadata, not part of
+lookup. Per-year feature caching therefore gives each requested year its own `source` string
+(`f"ohm_features_{year}"`) rather than one `source` with a `query_key` per year. It looks like it
+could be collapsed into a single source + query_key; it can't, without breaking per-year lookup.
+
 ## Decisions from the 2026-07-23 session (reconstructed 2026-08-15)
 
 Six code comments cite "decision 2026-07-23, docs/PROBLEMS.md" for decisions that were never in

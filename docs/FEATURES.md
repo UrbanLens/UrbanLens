@@ -190,6 +190,14 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   opacity/visibility/layer controls. Tiles stream through UrbanLens's own authenticated proxy
   (`controllers/historical_map_tiles.py`; 200s and definitive 404s cached, institutional outages
   never cached) so REData's API key stays server-side
+- **OpenHistoricalMap time slider** (beta) — a compact time slider below the map on pin-detail and
+  wiki pages lets a beta user scrub through years and see OpenHistoricalMap's dated vector data
+  (roads, buildings, land-use tagged with `start_date`/`end_date`) overlaid on the live map, for
+  locations where OHM has nearby dated coverage. Gated by `SiteFeature.BETA_FEATURES`; the slider
+  is hidden entirely, not shown disabled, when there's no coverage or the viewer lacks beta access
+  - a deliberate stopgap ahead of REData's own future temporal-imagery endpoints (see
+  `plugins.builtin.satellite_imagery`'s module docstring for the pattern this follows). See
+  `services/apis/locations/open_historical_map.py`
 
 
 ## Building Floorplans

@@ -22,6 +22,7 @@ from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.controllers.map_overlays import OVERLAY_UUID_PLACEHOLDER, overlay_payload
+from urbanlens.dashboard.controllers.temporal_imagery import TEMPORAL_YEAR_PLACEHOLDER
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
@@ -32,6 +33,7 @@ from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVot
 from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.geo.boundary_voting import BoundaryVoteError, boundary_vote_context, cast_boundary_vote, has_consensus
 from urbanlens.dashboard.services.locations import site_scope
+from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
 from urbanlens.dashboard.services.pins.public_pins import PublicVoteError, cast_public_vote, public_vote_context
 from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
 from urbanlens.dashboard.services.places.scope import scope_badge
@@ -195,6 +197,8 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "manage_overlays_url": reverse("location.wiki.overlays", args=[location.slug]),
                 "manage_overlays_historical_url": reverse("location.wiki.overlays.historical", args=[location.slug]),
                 "overlay_corners_url_template": reverse("location.wiki.overlays.corners", args=[location.slug, OVERLAY_UUID_PLACEHOLDER]),
+                "temporal_slider_years": temporal_slider_years(location, request.user),
+                "temporal_imagery_url_template": reverse("location.wiki.temporal_imagery", args=[location.slug, TEMPORAL_YEAR_PLACEHOLDER]),
                 "location": location,
                 "profile": profile,
                 "show_wiki_cover_photo": show_wiki_cover_photo,

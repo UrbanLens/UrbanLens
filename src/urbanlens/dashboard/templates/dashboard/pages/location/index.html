@@ -179,6 +179,7 @@
             {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="detailpins" actions=detail_pin_bulk_actions %}
 
         </div>
+        {% include "dashboard/partials/layout/_temporal_imagery_slider.html" %}
         <div class="map-resize-handle" id="pin-detail-map-resize-handle"
              title="Drag to resize the map" role="separator" aria-orientation="horizontal"
              aria-label="Resize map"></div>
@@ -1097,7 +1098,9 @@
      data-media-relevance-url="{% url 'pin.media.relevance' pin.slug %}"
      data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
      data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
-     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
+     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"
+     data-temporal-years="{{ temporal_slider_years|join:',' }}"
+     data-temporal-imagery-url-template="{{ temporal_imagery_url_template }}"></div>
 <script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script>
 

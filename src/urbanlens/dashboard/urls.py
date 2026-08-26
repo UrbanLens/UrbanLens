@@ -77,6 +77,7 @@ from urbanlens.dashboard.controllers import (
     site_admin_costs,
     site_admin_models,
     spotguessr,
+    temporal_imagery,
     thanks,
     tools,
     trip,
@@ -636,6 +637,11 @@ urlpatterns = [
                                 "<slug:pin_slug>/overlays/<uuid:overlay_uuid>/delete/",
                                 map_overlays.MapOverlayDeleteView.as_view(),
                                 name="pin.overlays.delete",
+                            ),
+                            path(
+                                "<slug:pin_slug>/temporal/<int:year>/",
+                                temporal_imagery.TemporalImageryFeaturesView.as_view(),
+                                name="pin.temporal_imagery",
                             ),
                             path(
                                 "<slug:pin_slug>/overview/",
@@ -1426,6 +1432,11 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/overlays/<uuid:overlay_uuid>/delete/",
                     map_overlays.MapOverlayDeleteView.as_view(),
                     name="location.wiki.overlays.delete",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/temporal/<int:year>/",
+                    temporal_imagery.TemporalImageryFeaturesView.as_view(),
+                    name="location.wiki.temporal_imagery",
                 ),
                 path(
                     "<slug:location_slug>/wiki/comments/",

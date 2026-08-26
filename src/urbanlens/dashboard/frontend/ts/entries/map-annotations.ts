@@ -15,6 +15,7 @@ import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry 
 import { createMapLayers, tileLayer } from "../shared/map-layers";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
 import { makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize } from "../shared/photo-map";
+import { createTemporalImagerySlider } from "../shared/temporal-imagery";
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");
@@ -116,6 +117,11 @@ function readConfig(el: HTMLElement) {
         markupFillOpacity: d.markupFillOpacity ? Number.parseInt(d.markupFillOpacity, 10) : 87,
         markupBorderOpacity: d.markupBorderOpacity ? Number.parseInt(d.markupBorderOpacity, 10) : 100,
         showOnboardingTips: d.showOnboardingTips === "1",
+        // Beta-only time slider (see shared/temporal-imagery.ts) - empty unless
+        // the viewer has SiteFeature.BETA_FEATURES and this location has dated
+        // OHM coverage nearby (temporal_slider_years() decides both server-side).
+        temporalYears: (d.temporalYears || "").split(",").filter(Boolean).map(Number),
+        temporalImageryUrlTemplate: d.temporalImageryUrlTemplate || "",
     };
 }
 
@@ -723,6 +729,23 @@ function init(): void {
             ...customLayerToggles,
         },
     });
+
+    // -- Beta time slider: OpenHistoricalMap overlay ------------------------
+    // Below the map, not in .map-bottom-controls (which overlays the tiles).
+    // Absent from the DOM entirely unless the viewer has BETA_FEATURES and
+    // this location has dated OHM coverage nearby (see readConfig() above and
+    // _temporal_imagery_slider.html's server-side gate).
+    if (cfg.temporalYears.length > 0) {
+        const temporalSliderContainer = document.getElementById("temporal-imagery-slider");
+        if (temporalSliderContainer) {
+            createTemporalImagerySlider(map, {
+                container: temporalSliderContainer,
+                years: cfg.temporalYears,
+                urlTemplate: cfg.temporalImageryUrlTemplate,
+                onError: (message) => toast.error?.(message),
+            });
+        }
+    }
 
     // Manage Layers dialog changes (create/rename/recolor/reorder/delete) fire
     // this event with the fresh layer list (see custom_layers.py's
