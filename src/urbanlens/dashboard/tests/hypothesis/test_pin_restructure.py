@@ -555,6 +555,58 @@ class BuildingImportPanelActionTests(TestCase):
         self.assertIn("already has a pin", response["HX-Trigger"])
 
 
+class MissingBuildingsParcelBoundaryTests(TestCase):
+    """REData's own ``is_on_property`` flag isn't guaranteed to agree with our
+    own parcel boundary (``plugins.builtin.parcel_buildings._building_within``'s
+    own docstring says as much) - a building it marks on-property but which
+    our boundary doesn't actually contain must not be suggested. The user can
+    still pin it by hand; it just should not be offered as a suggestion.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.location = _make_location()
+        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
+        # Narrower than _parcel_polygon(): Tool Shed and Main Hall are inside,
+        # the nameless building (#22, further east at -73.92960) is not - even
+        # though every one of _BUILDINGS carries no is_on_property flag at all
+        # (REData's default "yes").
+        boundary = MultiPolygon(
+            Polygon(((-73.940, 41.725), (-73.9298, 41.725), (-73.9298, 41.740), (-73.940, 41.740), (-73.940, 41.725))),
+            srid=4326,
+        )
+        official_geometry(self.location, boundary)
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+
+    def test_a_building_outside_the_boundary_is_not_offered(self) -> None:
+        missing = pin_restructure.missing_buildings(self.pin)
+        self.assertEqual({building["name"] for building in missing}, {"Tool Shed", "Main Hall"})
+
+    def test_the_import_dialog_omits_it(self) -> None:
+        response = self.client.get(reverse("pin.buildings.import", kwargs={"pin_slug": self.pin.slug}))
+        self.assertContains(response, 'name="building_keys"', count=2)
+        self.assertContains(response, "Add 2 buildings")
+
+    def test_the_panel_buttons_count_matches_what_the_dialog_would_add(self) -> None:
+        """The button's own promise - see PinController.parcel_buildings - must
+        never offer to add more than the dialog it opens actually will."""
+        response = self.client.get(reverse("pin.parcel_buildings", kwargs={"pin_slug": self.pin.slug}))
+        self.assertEqual(response.context["unpinned_count"], 2)
+
+    def test_a_building_already_pinned_outside_the_boundary_still_shows_on_the_property_panel(self) -> None:
+        """The boundary gate is for *suggestions* only - a building the owner
+        already pinned by hand stays visible regardless of where the parcel
+        data says it sits (see building_rows' own boundary_polygon docstring)."""
+        nameless = next(b for b in _BUILDINGS if b["building_number"] == "22")
+        baker.make(Pin, profile=self.user.profile, parent_pin=self.pin, location=_make_location(latitude=nameless["latitude"], longitude=nameless["longitude"]), name="Building 22")
+
+        response = self.client.get(reverse("pin.parcel_buildings", kwargs={"pin_slug": self.pin.slug}))
+        names = {row["name"] or row["building_number"] for row in response.context["rows"]}
+        self.assertIn("22", names)
+
+
 class BuildingUnderExistingRootPinTests(TestCase):
     """A building whose centroid already carries one of the owner's *top-level* pins.
 

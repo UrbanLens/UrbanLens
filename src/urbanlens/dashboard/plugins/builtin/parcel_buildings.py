@@ -371,7 +371,7 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None,
             # the same pin would otherwise claim several neighbouring
             # footprints and leave real ones looking unpinned.
             unmatched.remove(child)
-        elif boundary_polygon is not None and not _building_within(building, boundary_polygon):
+        elif boundary_polygon is not None and not building_within_boundary(building, boundary_polygon):
             continue
         geometry = building_footprint_geojson(building)
         sources = record_sources(building)
@@ -400,12 +400,20 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None,
     return _tree_ordered(rows)
 
 
-def _building_within(building: dict[str, Any], boundary_polygon: GEOSGeometry) -> bool:
+def building_within_boundary(building: dict[str, Any], boundary_polygon: GEOSGeometry) -> bool:
     """Whether an unpinned building actually sits on the given boundary.
 
     Prefers the building's own footprint (an intersection test, so a
     structure straddling the boundary edge still counts) and falls back to
     its centroid when the provider published only a point.
+
+    A provider's own "on property" opinion (REData's ``is_on_property``,
+    which :func:`buildings_on_property` filters on) is not guaranteed to
+    agree with our own boundary - see this module's docstring - so this is
+    the check both :func:`building_rows` (the property panel) and
+    ``services.pins.pin_restructure.missing_buildings`` (the "add unpinned
+    buildings" dialog, and the button count that promises what it will do)
+    run against a *suggestion*, not against something already pinned by hand.
 
     Args:
         building: One cached building record.
