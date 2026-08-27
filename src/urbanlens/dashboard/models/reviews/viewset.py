@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.reviews.serializer import ReviewSerializer
-from urbanlens.dashboard.services.reviews import upsert_review
+from urbanlens.dashboard.services.pins.reviews import upsert_review
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class ReviewViewSet(mixins.UpdateModelMixin, mixins.DestroyModelMixin, viewsets.
             # ids cannot be enumerated by probing this endpoint.
             return Response({"detail": "Pin not found."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Validate first, then delegate the upsert to services.reviews so this
+        # Validate first, then delegate the upsert to services.pins.reviews so this
         # and the external API share one implementation of the
         # one-rating-per-(profile, pin) rule.
         review = Review.objects.for_pair(profile, pin).first()

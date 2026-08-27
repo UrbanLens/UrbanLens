@@ -1,11 +1,21 @@
-"""Azure Maps plugin: reverse geocoding/POI panel, satellite imagery, and place names.
+"""Azure Maps plugin: reverse geocoding/POI panel and place names.
 
-Azure Maps is Microsoft's actively-maintained geospatial platform - the
-intended replacement for the now-legacy Bing Maps Imagery API this codebase
-also integrates (see ``plugins.builtin.satellite_imagery`` /
-``services.apis.locations.bing_maps``). One Azure Maps subscription key
-authenticates every product area used here (Search, Geocoding, Render), all
-wrapped by the gateways in ``services.apis.locations.azure``.
+Azure Maps is Microsoft's actively-maintained geospatial platform. One Azure
+Maps subscription key authenticates every product area used here (Search,
+Geocoding), wrapped by the gateways in ``services.apis.locations.azure``.
+
+``AzureMapsPanelSource`` is deliberately kept direct-only: it combines a
+reverse-geocode call *and* a nearest-POI search into one cached payload, and
+REData has no single endpoint that does both (its geocode domain doesn't do
+POI search, and its points-of-interest domain has no ``azure_maps``
+provider) - splitting this panel across two REData calls with only one
+migrated would be a worse, inconsistent middle ground.
+
+This plugin's other half - static aerial/satellite imagery
+(``AzureMapsRenderGateway``) - has been retired: it was a single
+current-image-per-call fit for REData's ``/imagery/`` contract, now served
+by ``RedataSatelliteProvider`` alongside the other REData imagery providers
+(see ``plugins.builtin.satellite_imagery``).
 """
 
 from __future__ import annotations
@@ -13,15 +23,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource, PanelApiKind, info_card
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind, info_card
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 
 class AzureMapsPanelSource(LocationCachePanelSource):
@@ -130,30 +139,28 @@ class AzureMapsNameProvider(NameProvider):
 
 
 class AzureMapsPlugin(UrbanLensPlugin):
-    """Azure Maps geocoding, POI search, and satellite imagery for pinned locations."""
+    """Azure Maps geocoding and POI search for pinned locations."""
 
     name: ClassVar[str] = "azure_maps"
     verbose_name: ClassVar[str] = "Azure Maps"
-    description: ClassVar[str] = (
-        "Microsoft Azure Maps integration: reverse-geocoded address and nearby POI details on the pin detail page, static aerial/satellite imagery in the satellite carousel, and place-name candidates. Requires an Azure Maps subscription key."
-    )
+    description: ClassVar[str] = "Microsoft Azure Maps integration: reverse-geocoded address and nearby POI details on the pin detail page, and place-name candidates. Requires an Azure Maps subscription key."
     author: ClassVar[str] = "UrbanLens"
-    # Alongside the other satellite-imagery/name-resolution plugins (Google
-    # Maps is 10, Google Places is 10); Azure sits just after them.
+    # Alongside the other name-resolution plugins (Google Maps is 10, Google
+    # Places is 10); Azure sits just after them.
     order: ClassVar[int] = 15
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Azure Maps Search/Geocoding/Render APIs.
+        """Rate-limit defaults for the Azure Maps Search/Geocoding APIs.
 
-        All three product areas share one subscription key and one quota, so
-        they share a single ``azure_maps`` service key/rate-limit row too.
+        Both product areas share one subscription key and one quota, so they
+        share a single ``azure_maps`` service key/rate-limit row too.
         """
         return {
             "azure_maps": ServiceDefaults(
-                display_name="Azure Maps (Search/Geocoding/Render)",
+                display_name="Azure Maps (Search/Geocoding)",
                 calls_per_minute=50,
                 calls_per_day=2500,
-                notes="Free tier: 5,000 transactions/month (Gen1 S0 / Gen2 pay-as-you-go) shared across Search, Geocoding, and Render.",
+                notes="Free tier: 5,000 transactions/month (Gen1 S0 / Gen2 pay-as-you-go) shared across Search and Geocoding.",
             ),
         }
 
@@ -164,9 +171,3 @@ class AzureMapsPlugin(UrbanLensPlugin):
     def get_name_providers(self) -> list[NameProvider]:
         """Contribute Azure Maps' POI/address names as place-name candidates."""
         return [AzureMapsNameProvider()]
-
-    def get_satellite_providers(self) -> list[SatelliteViewProvider]:
-        """Contribute Azure Maps static aerial/satellite imagery."""
-        from urbanlens.dashboard.services.apis.locations.azure.render import AzureMapsRenderGateway
-
-        return [AzureMapsRenderGateway()]

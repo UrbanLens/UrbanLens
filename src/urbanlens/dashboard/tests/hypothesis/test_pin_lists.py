@@ -25,20 +25,23 @@ from __future__ import annotations
 
 import itertools
 import json
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.controllers import pin_lists
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.filter_criteria import serialize_form_criteria
+from urbanlens.dashboard.services.search.filter_criteria import serialize_form_criteria
 
 _db_settings = settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much])
 
@@ -113,6 +116,82 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
         tag_start = content.rindex("<button", 0, markup_btn_start)
         tag_end = content.index(">", markup_btn_start)
         self.assertIn("disabled", content[tag_start:tag_end])
+
+
+class PinListDetailPaginationTests(TestCase):
+    """The list-detail page's item rows are paginated; the overview map is not.
+
+    Regression: the page rendered every item on the list with no pagination
+    at all, so a large list cost an unbounded amount of HTML/DOM. Patches
+    ``_ITEMS_PAGE_SIZE`` down to a small number rather than seeding 50+ real
+    pins, since the pagination logic itself is what's under test.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+        self.pin_list = baker.make(PinList, profile=self.profile, name="Big List")
+
+    def _add_pins(self, count: int) -> list[Pin]:
+        pins = [_make_pin(self.profile, name=f"Pin {i}") for i in range(count)]
+        for order, pin in enumerate(pins):
+            PinListItem.objects.create(pin_list=self.pin_list, pin=pin, order=order, added_via=PinListItem.ADDED_MANUAL)
+        return pins
+
+    def test_detail_page_only_renders_one_page_of_rows(self) -> None:
+        """Checks the *row* markup specifically - the map data blob legitimately
+        embeds every pin's name regardless of pagination (see the map-data test
+        below), so a bare substring check on the whole page would false-positive."""
+        pins = self._add_pins(5)
+        with mock.patch.object(pin_lists, "_ITEMS_PAGE_SIZE", 3):
+            response = self.client.get(reverse("lists.detail", kwargs={"list_slug": self.pin_list.slug}))
+        content = response.content.decode()
+        for pin in pins[:3]:
+            self.assertIn(f'<span class="pin-list-item-name">{pin.effective_name}</span>', content)
+        for pin in pins[3:]:
+            self.assertNotIn(f'<span class="pin-list-item-name">{pin.effective_name}</span>', content)
+
+    def test_detail_page_sentinel_points_at_the_next_page(self) -> None:
+        self._add_pins(5)
+        with mock.patch.object(pin_lists, "_ITEMS_PAGE_SIZE", 3):
+            response = self.client.get(reverse("lists.detail", kwargs={"list_slug": self.pin_list.slug}))
+        page_url = reverse("lists.items.page", kwargs={"list_slug": self.pin_list.slug})
+        self.assertContains(response, f'hx-get="{page_url}?page=2"')
+        self.assertContains(response, 'hx-trigger="revealed"')
+
+    def test_no_sentinel_when_the_list_fits_on_one_page(self) -> None:
+        self._add_pins(2)
+        with mock.patch.object(pin_lists, "_ITEMS_PAGE_SIZE", 3):
+            response = self.client.get(reverse("lists.detail", kwargs={"list_slug": self.pin_list.slug}))
+        self.assertNotContains(response, "pin-list-item-sentinel")
+
+    def test_items_page_view_returns_the_remaining_rows(self) -> None:
+        pins = self._add_pins(5)
+        with mock.patch.object(pin_lists, "_ITEMS_PAGE_SIZE", 3):
+            response = self.client.get(reverse("lists.items.page", kwargs={"list_slug": self.pin_list.slug}), {"page": 2})
+        content = response.content.decode()
+        for pin in pins[3:]:
+            self.assertIn(pin.effective_name, content)
+        for pin in pins[:3]:
+            self.assertNotIn(pin.effective_name, content)
+        # Page 2 is the last page - no further sentinel.
+        self.assertNotIn("pin-list-item-sentinel", content)
+
+    def test_items_page_view_404s_for_another_profiles_list(self) -> None:
+        other_list = baker.make(PinList, profile=baker.make(User).profile, name="Not Mine")
+        response = self.client.get(reverse("lists.items.page", kwargs={"list_slug": other_list.slug}), {"page": 2})
+        self.assertEqual(response.status_code, 404)
+
+    def test_overview_map_data_includes_every_pin_despite_pagination(self) -> None:
+        pins = self._add_pins(5)
+        with mock.patch.object(pin_lists, "_ITEMS_PAGE_SIZE", 3):
+            response = self.client.get(reverse("lists.detail", kwargs={"list_slug": self.pin_list.slug}))
+        content = response.content.decode()
+        map_data_json = content.split('id="pin-list-items-map-data"', 1)[1].split(">", 1)[1].split("</script>", 1)[0]
+        map_data = json.loads(map_data_json)
+        self.assertEqual({point["name"] for point in map_data}, {pin.effective_name for pin in pins})
 
 
 class PinListExportViewTests(TestCase):
@@ -268,6 +347,45 @@ class PinListDetailInlineEditableTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class PinListEditConcurrentWriteTests(TestCase):
+    """PinListEditView.post must not clobber fields it never touched.
+
+    It used to end with a bare pin_list.save(), writing every column from
+    this request's in-memory snapshot - reverting any field a concurrent
+    request (another tab, or the external API's PinListDetailView.patch)
+    changed in the window between this request's load and its own save.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+
+    def test_concurrent_edit_to_another_field_survives_a_rename(self) -> None:
+        pin_list = baker.make(PinList, profile=self.profile, name="Original", description="Original description.")
+        real_get = pin_lists._get_pin_list_or_404
+
+        def load_then_inject_concurrent_write(*args, **kwargs):
+            loaded = real_get(*args, **kwargs)
+            # Simulates a second request (another tab, or the external API)
+            # committing its own change to a field this request never
+            # touches, in the window between this request's read and save.
+            PinList.objects.filter(pk=loaded.pk).update(description="Changed elsewhere")
+            return loaded
+
+        with mock.patch.object(pin_lists, "_get_pin_list_or_404", side_effect=load_then_inject_concurrent_write):
+            response = self.client.post(
+                reverse("lists.edit", kwargs={"list_slug": pin_list.slug}),
+                data=json.dumps({"name": "Renamed"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        pin_list.refresh_from_db()
+        self.assertEqual(pin_list.name, "Renamed")
+        self.assertEqual(pin_list.description, "Changed elsewhere", "a concurrent edit to another field was reverted by this request's save")
+
+
 class SelectingSavedFilterImmediatelyPopulatesListTests(TestCase):
     """Picking a saved filter must show matching pins right away, not only after also enabling "is_smart"."""
 
@@ -324,7 +442,7 @@ class SmartListLabelChangeResyncTests(TestCase):
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
-        self.exclude_label = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Demolished")
+        self.exclude_label = ensure_label( kind=KIND_TAG, profile=self.profile, name="Demolished")
         self.pin_list = baker.make(
             PinList,
             profile=self.profile,
@@ -614,3 +732,77 @@ class PinListItemQuerySetTests(TestCase):
         PinListItem.objects.create(pin_list=self.other_list, pin=pin)
 
         self.assertIsNone(PinListItem.objects.membership(self.pin_list, pin))
+
+
+class PinListCreateRefusalContractTests(TestCase):
+    """What `lists.create` says when it refuses, which two pages now depend on.
+
+    The map and location pages' "create a list and add these pins" button used
+    to call `r.json()` on every response, in a chain with no `.catch`. This
+    endpoint answers a duplicate name with **409 and a plain-text sentence**,
+    not JSON - so `r.json()` threw into an unhandled rejection and the button
+    did nothing at all: no toast, no closed dialog, name still in the box. That
+    is the likeliest failure this feature has.
+
+    Both callers now go through `ulSendJson`, which surfaces a short plain-text
+    body as the error message (see `fetch-json.ts`). These tests pin the half
+    of that contract the server owns: the status, and a body worth showing.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def _create(self, **body):
+        return self.client.post(
+            reverse("lists.create"),
+            data=json.dumps(body),
+            content_type="application/json",
+            headers={"accept": "application/json"},
+        )
+
+    def test_a_duplicate_name_is_refused_with_409(self) -> None:
+        PinList.objects.create(profile=self.profile, name="Water towers")
+        response = self._create(name="Water towers")
+        self.assertEqual(response.status_code, 409)
+
+    def test_the_refusal_body_is_a_sentence_a_toast_can_show(self) -> None:
+        PinList.objects.create(profile=self.profile, name="Water towers")
+        body = self._create(name="Water towers").content.decode()
+
+        self.assertIn("already have a list with that name", body)
+        # `fetch-json.ts` only surfaces a short, single-line, markup-free body.
+        self.assertNotIn("<", body)
+        self.assertNotIn("\n", body.strip())
+        self.assertLessEqual(len(body), 200)
+
+    def test_a_duplicate_name_creates_nothing(self) -> None:
+        PinList.objects.create(profile=self.profile, name="Water towers")
+        self._create(name="Water towers")
+        self.assertEqual(PinList.objects.filter(profile=self.profile, name="Water towers").count(), 1)
+
+    def test_another_profiles_list_does_not_block_the_name(self) -> None:
+        other = baker.make(User).profile
+        PinList.objects.create(profile=other, name="Water towers")
+
+        response = self._create(name="Water towers")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(PinList.objects.filter(profile=self.profile, name="Water towers").exists())
+
+    def test_a_blank_name_is_refused_with_a_showable_sentence(self) -> None:
+        response = self._create(name="   ")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("required", response.content.decode())
+
+    def test_success_returns_the_uuid_the_caller_adds_pins_with(self) -> None:
+        """Anti-vacuity: the happy path the two callers chain onto must still work."""
+        response = self._create(name="Water towers")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(str(PinList.objects.get(profile=self.profile, name="Water towers").uuid), payload["uuid"])

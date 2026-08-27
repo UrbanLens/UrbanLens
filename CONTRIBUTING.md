@@ -40,7 +40,21 @@ UrbanLens's codebase is open under AGPL, but location data, coordinates, and sit
 1. Fork the repo and create a branch off `main`.
 2. Reference the relevant Jira issue (e.g. `UL-123`) in your branch name or commit message where applicable.
 3. Keep PRs scoped — one logical change per PR.
-4. Make sure `basedpyright` and existing tests pass before submitting.
+4. Run the checks CI enforces before submitting - these are what will fail your PR:
+
+   ```bash
+   uv run ruff check --fix src/urbanlens   # lint (note: tests/, settings/ and migrations/ are excluded)
+   uv run ruff format --check src
+   uv run mypy src                          # needs GDAL; run it in the app container if your host lacks it
+   uv run pytest src/urbanlens/dashboard/tests   # set a unique UL_TEST_DB_NAME
+   bun run typecheck && bun run test:ts     # the TypeScript suite
+   python3 bin/check_imports_tracked.py     # every committed import must resolve in the committed tree
+   ```
+
+   `pre-commit` runs the lint, typecheck and TypeScript tests for you if you have it installed.
+
+   (`package.json` also defines a `lint` script running `pyright`, which is not part of the CI
+   gate - a passing or failing pyright run tells you nothing about whether your PR will merge.)
 5. Open a pull request with a clear description of what changed and why.
 
 ## Questions

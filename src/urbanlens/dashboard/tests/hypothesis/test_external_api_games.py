@@ -37,12 +37,13 @@ from urbanlens.dashboard.external_api.views_games import SpotGuessrRoundView
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image, MediaKind
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind, GameRound, GameSession, GameSessionStatus, Guess, SpotGuessrMode
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_multiplayer_session, start_solo_session
 
 _coordinate_counter = count()
@@ -226,6 +227,24 @@ class SpotGuessrSessionCreateTests(_SpotGuessrApiTestCase):
         response = self._post("external_api:games.spotguessr.sessions", body={"geo_bounds": {"nonsense": True}})
         self.assertEqual(response.status_code, 400)
         self.assertIn("fields", response.json())
+
+    def test_label_id_is_persisted_on_the_session_config(self) -> None:
+        label = baker.make(Label, name="Factories", profile=self.profile)
+        Pin.objects.get(profile=self.profile, location=self.location).labels.add(label)
+        response = self._post("external_api:games.spotguessr.sessions", body={"label_id": label.pk})
+        self.assertEqual(response.status_code, 201, response.content)
+        session = GameSession.objects.get(pk=response.json()["session_id"])
+        self.assertEqual(session.config["label_id"], label.pk)
+
+    def test_a_nonexistent_label_id_is_a_400(self) -> None:
+        response = self._post("external_api:games.spotguessr.sessions", body={"label_id": 999_999})
+        self.assertEqual(response.status_code, 400)
+
+    def test_another_profiles_private_label_id_is_a_400(self) -> None:
+        """Guards against using this endpoint to probe for another profile's private labels."""
+        someone_elses_label = baker.make(Label, name="Someone else's spots", profile=self.other_profile)
+        response = self._post("external_api:games.spotguessr.sessions", body={"label_id": someone_elses_label.pk})
+        self.assertEqual(response.status_code, 400)
 
     def test_nothing_eligible_is_a_409_and_creates_no_session(self) -> None:
         """The internal endpoint answers 200 for this; a 200 meaning "did not happen" is a wart."""

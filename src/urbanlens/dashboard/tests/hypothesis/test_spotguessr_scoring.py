@@ -22,6 +22,8 @@ from urbanlens.dashboard.services.spotguessr.scoring import (
     resolve_target,
 )
 
+from .place_helpers import official_geometry
+
 _coordinate_counter = count()
 
 
@@ -116,26 +118,14 @@ class DistanceForGuessTests(TestCase):
 
     def test_guess_inside_the_boundary_scores_zero_distance(self) -> None:
         polygon = _square(-73.76, 42.65, size=0.02)
-        baker.make(
-            Boundary,
-            location=self.location,
-            boundary_type=BoundaryType.PROPERTY,
-            generated_polygon=polygon,
-            generated_at=timezone.now(),
-        )
+        official_geometry(self.location, polygon)
         inside_point = Point(-73.75, 42.66, srid=4326)
         distance = distance_for_guess(self.location, inside_point, target_is_point=False, target_point=None)
         self.assertEqual(distance, 0.0)
 
     def test_guess_outside_the_boundary_scores_a_positive_distance(self) -> None:
         polygon = _square(-73.76, 42.65, size=0.001)
-        baker.make(
-            Boundary,
-            location=self.location,
-            boundary_type=BoundaryType.PROPERTY,
-            generated_polygon=polygon,
-            generated_at=timezone.now(),
-        )
+        official_geometry(self.location, polygon)
         far_point = Point(-73.0, 42.0, srid=4326)
         distance = distance_for_guess(self.location, far_point, target_is_point=False, target_point=None)
         self.assertGreater(distance, 0.0)

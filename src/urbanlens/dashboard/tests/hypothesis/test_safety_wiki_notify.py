@@ -25,8 +25,8 @@ from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinStatus
-from urbanlens.dashboard.services.mentions import render_comment_text
-from urbanlens.dashboard.services.safety import escalate_checkin, find_community_wiki, post_checkin_to_community_wiki
+from urbanlens.dashboard.services.notifications.mentions import render_comment_text
+from urbanlens.dashboard.services.visits.safety import escalate_checkin, find_community_wiki, post_checkin_to_community_wiki
 
 WIKI_LAT = 40.0
 WIKI_LNG = -74.0
@@ -181,7 +181,11 @@ class WikiOptionEndpointTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.client.force_login(self.user)
-        _location_with_wiki()
+        location, _wiki = _location_with_wiki()
+        # The viewer has to have pinned the place, or the toggle correctly
+        # declines to name a wiki they cannot reach - see
+        # test_safety_wiki_option_oracle.py.
+        baker.make("dashboard.Pin", profile=self.user.profile, location=location, parent_pin=None)
 
     def test_shows_toggle_when_destination_has_a_wiki(self):
         response = self.client.get(reverse("safety.checkin.wiki_option"), {"destination_latitude": WIKI_LAT, "destination_longitude": WIKI_LNG})

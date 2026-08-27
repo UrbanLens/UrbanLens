@@ -2,9 +2,9 @@
 
 Covers three layers:
 
-- ``services.geo.dissolve_polygons`` - the merge-overlapping-polygons helper.
+- ``services.geo.geo.dissolve_polygons`` - the merge-overlapping-polygons helper.
 - ``Pin.objects.filter_by_criteria``'s ``include_regions``/``exclude_regions`` handling.
-- ``services.filter_criteria``'s (de)serialization round-trip for regions.
+- ``services.search.filter_criteria``'s (de)serialization round-trip for regions.
 """
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
@@ -22,8 +23,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
-from urbanlens.dashboard.services.geo import dissolve_polygons
+from urbanlens.dashboard.services.geo.geo import dissolve_polygons
+from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
 
 
 def _square(lng: float, lat: float, delta: float) -> Polygon:
@@ -232,8 +233,8 @@ class SavedFilterLabelPickerTests(TestCase):
         self.user = baker.make(User)
         self.client.force_login(self.user)
         self.profile = self.user.profile
-        self.selected_label = Label.objects.create(profile=self.profile, name="Abandoned", kind="tag")
-        self.other_label = Label.objects.create(profile=self.profile, name="Active", kind="tag")
+        self.selected_label = ensure_label(profile=self.profile, name="Abandoned", kind="tag")
+        self.other_label = ensure_label(profile=self.profile, name="Active", kind="tag")
 
     def test_new_filter_dialog_renders_all_labels_unselected(self) -> None:
         response = self.client.get(reverse("saved_filters.new"))

@@ -3,142 +3,6 @@
 
 // -- Pin list membership panel (on pin detail page) ---------------------------
 
-.pinlist-panel {
-    @include surface;
-    overflow: hidden;
-}
-
-.pinlist-panel-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0.75rem 1rem;
-    background: var(--ul-surface-border);
-    font-weight: 600;
-    font-size: 0.9rem;
-    color: var(--ul-grey-8);
-
-    i {
-        font-size: 1.1rem;
-        color: var(--primary-color);
-    }
-}
-
-.pinlist-panel-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-.pinlist-panel-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 0.6rem 1rem;
-    border-bottom: 1px solid var(--ul-surface-border);
-    transition: background 0.1s;
-
-    &:last-child {
-        border-bottom: none;
-    }
-
-    &:hover {
-        background: var(--ul-hover-bg);
-    }
-
-    &.is-member {
-        background: var(--ul-hover-bg-primary);
-    }
-}
-
-.pinlist-panel-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: var(--ul-surface-raised);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    overflow: hidden;
-
-    i {
-        font-size: 1rem;
-        color: var(--primary-color);
-    }
-
-    .pinlist-panel-icon-img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-}
-
-.pinlist-panel-name {
-    flex: 1;
-    font-size: 0.9rem;
-    color: $text-primary;
-}
-
-.pinlist-toggle-form {
-    display: inline;
-}
-
-.pinlist-toggle-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 4px;
-    display: flex;
-    align-items: center;
-    color: $text-muted;
-    border-radius: 50%;
-    transition: background 0.12s, color 0.12s;
-
-    i {
-        font-size: 1.25rem;
-    }
-
-    &:hover {
-        background: $color-blue-50;
-        color: var(--primary-color);
-    }
-
-    &.is-active {
-        color: var(--primary-color);
-    }
-}
-
-.pinlist-panel-empty {
-    padding: 1rem;
-    font-size: 0.85rem;
-    color: var(--ul-grey-6);
-    text-align: center;
-
-    a {
-        color: var(--primary-color);
-    }
-}
-
-.pinlist-panel-manage {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0.6rem 1rem;
-    font-size: 0.8rem;
-    color: var(--ul-grey-6);
-    text-decoration: none;
-    background: var(--ul-surface-border);
-    transition: color 0.12s;
-
-    i {
-        font-size: 1rem;
-    }
-
-    &:hover {
-        color: var(--primary-color);
-    }
-}
 
 // -- Tags (replaces pin lists) -------------------------------------------------
 
@@ -331,6 +195,31 @@ dialog.tag-create-card.ul-dialog {
         border-color: var(--ul-grey-1a);
         font-style: italic;
     }
+}
+
+// Pin/total-pins stat placeholders shown while the Organize page's initial
+// paint is still waiting on its follow-up HTMX request for real counts.
+@keyframes tag-stat-skeleton-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .4; }
+}
+
+.tag-stat-loading {
+    display: inline-block;
+    width: 1.6em;
+    height: .95em;
+    border-radius: 999px;
+    background: var(--ul-grey-4);
+    animation: tag-stat-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.tag-card-stat-loading {
+    display: inline-block;
+    width: 1.6em;
+    height: .88rem;
+    border-radius: 4px;
+    background: var(--ul-grey-4);
+    animation: tag-stat-skeleton-pulse 1.4s ease-in-out infinite;
 }
 
 .tag-color-dot {
@@ -527,7 +416,9 @@ $org-stat-col-color-w: 2.75rem;
     .organize-label-rows.tag-view--list .tag-card-view,
     .organize-label-rows.tag-view--tree .tag-card-view {
         overflow: hidden;
-        transition: padding-bottom 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+        // Un-delayed: leaving hover collapses the row back down immediately,
+        // even mid-way through a delayed grow (see below).
+        transition: padding-bottom 0.16s ease;
 
         .tag-card-actions {
             position: absolute;
@@ -536,17 +427,23 @@ $org-stat-col-color-w: 2.75rem;
             opacity: 0;
             transform: translateY(6px);
             pointer-events: none;
-            transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: opacity 0.14s ease, transform 0.14s ease;
         }
 
+        // Hover-intent: growing the row and sliding the actions in both
+        // carry a short delay, so a cursor merely passing over a row
+        // mid-scroll never triggers the animation - only a pointer that
+        // actually lingers does.
         &:hover,
         &:focus-within {
             padding-bottom: 3.1rem;
+            transition: padding-bottom 0.24s cubic-bezier(0.4, 0, 0.2, 1) 0.15s;
 
             .tag-card-actions {
                 opacity: 1;
                 transform: translateY(0);
                 pointer-events: auto;
+                transition: opacity 0.18s ease 0.15s, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1) 0.15s;
             }
         }
     }
@@ -647,6 +544,10 @@ $org-stat-col-color-w: 2.75rem;
     color: $text-muted;
 
     i {
+        // Material's icon fonts default to 24px, which fills a 28px swatch edge
+        // to edge. Every hand-written copy of this markup inlined 1rem; the
+        // rule belongs with the swatch instead.
+        font-size: 1rem;
         color: $text-muted;
     }
 }
@@ -921,6 +822,8 @@ $org-stat-col-color-w: 2.75rem;
 // overflow: visible is provided by @include dialog-base, keeping icon-picker panels visible.
 .tag-edit-dialog {
     @include dialog-base(52em);
+    @include tad-tabs;
+    @include tag-dialog-list;
 }
 
 .tag-edit-dialog-body {
@@ -940,6 +843,17 @@ $org-stat-col-color-w: 2.75rem;
 // -- Tag merge dialog form -----------------------------------------------------
 .tag-merge-form {
     padding: 1.25rem;
+
+    // .tag-dialog-list (via @include tag-dialog-list on .tag-edit-dialog) assumes
+    // a bounded flex ancestor to scroll within, which this plain form doesn't have -
+    // give it its own bordered, capped-height box instead.
+    .tag-dialog-list {
+        max-height: 220px;
+        border: 1px solid var(--ul-surface-raised-border);
+        border-radius: 8px;
+        margin-top: .4rem;
+        padding: .35rem;
+    }
 }
 
 .tag-merge-source {
@@ -2425,7 +2339,8 @@ $org-stat-col-color-w: 2.75rem;
     animation: priority-order-row-saved .6s ease-out;
 }
 
-.priority-edit-btn {
+.priority-edit-btn,
+.priority-delete-btn {
     margin-left: auto;
     flex-shrink: 0;
     display: flex;
@@ -2450,6 +2365,18 @@ $org-stat-col-color-w: 2.75rem;
     .material-icons {
         font-size: 1.05rem;
         pointer-events: none;
+    }
+}
+
+// Only the first of the two claims the free space, so the pair sits together
+// at the end of the row rather than being pushed apart.
+.priority-delete-btn {
+    margin-left: 0;
+
+    &:hover {
+        background: rgba($color-red-500, .1);
+        border-color: $color-red-300;
+        color: $color-red-600;
     }
 }
 
@@ -3020,11 +2947,7 @@ $org-stat-col-color-w: 2.75rem;
 
 .org-bulk-btn {
     @include btn-ghost;
-    min-height: 34px;
-    padding: 6px 14px;
     border-radius: 999px;
-    font-size: .82rem;
-    font-weight: 600;
     border: 1px solid var(--ul-surface-raised-border);
     background: var(--ul-surface-raised);
 
@@ -3033,58 +2956,12 @@ $org-stat-col-color-w: 2.75rem;
         font-size: .95rem;
     }
 
-    &:disabled {
-        opacity: .4;
-        cursor: not-allowed;
+    &--delete:hover:not(:disabled) {
+        color: $color-red-500;
+        border-color: color-mix(in srgb, $color-red-500 20%, transparent);
     }
 }
 
-.org-bulk-btn--edit:hover:not(:disabled) {
-    background: color-mix(in srgb, $primary-color 10%, var(--ul-surface-raised));
-    border-color: color-mix(in srgb, $primary-color 35%, transparent);
-    color: var(--primary-color);
-}
-
-.org-bulk-btn--merge {
-    &:disabled {
-        box-shadow: none;
-        cursor: not-allowed;
-    }
-}
-
-.org-bulk-btn--delete {
-    color: $color-red-500;
-    border-color: color-mix(in srgb, $color-red-500 20%, transparent);
-
-    &:hover:not(:disabled) {
-        background: color-mix(in srgb, $color-red-500 10%, var(--ul-surface-raised));
-        border-color: color-mix(in srgb, $color-red-500 35%, transparent);
-        color: $color-red-600;
-    }
-}
-
-// -- Pin list utilities ------------------------------------------------------
-.pinlist-form-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 1rem;
-}
-
-.pinlist-empty {
-    text-align: center;
-    padding: 3rem 1rem;
-    color: $text-muted;
-
-    i {
-        font-size: 3rem;
-        display: block;
-        margin-bottom: 0.75rem;
-    }
-
-    p {
-        margin: 0;
-    }
-}
 
 // -- Organize page: responsive rules ------------------------------------------
 
@@ -3096,29 +2973,46 @@ $org-stat-col-color-w: 2.75rem;
     }
 }
 
-// Organize rows expose destructive/edit actions only while the row is being used.
+// Organize rows expose destructive/edit actions only while the row is being
+// used - but only on hover-capable, fine-pointer devices (mouse/trackpad).
+// Touch devices have no reliable persistent hover, so the mobile-first
+// baseline is "visible"; hiding-until-hover is an enhancement layered on
+// top for devices that can actually hover.
+@media (hover: hover) and (pointer: fine) {
+    .organize-page {
+        .tag-card-actions,
+        .tag-row-actions,
+        .priority-edit-btn,
+        .priority-delete-btn,
+        .priority-jump-actions {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.12s ease;
+        }
+
+        // Hover-intent: the reveal transition carries a short delay so a
+        // cursor passing over a row mid-scroll (hover flickering on/off in
+        // well under 150ms as the page scrolls under a stationary pointer)
+        // never triggers it. Leaving hover reverts instantly via the
+        // un-delayed transition above.
+        .tag-card:hover .tag-card-actions,
+        .tag-card:focus-within .tag-card-actions,
+        .tag-row:hover .tag-row-actions,
+        .tag-row:focus-within .tag-row-actions,
+        .priority-item:hover .priority-edit-btn,
+        .priority-item:focus-within .priority-edit-btn,
+        .priority-item:hover .priority-delete-btn,
+        .priority-item:focus-within .priority-delete-btn,
+        .priority-item:hover .priority-jump-actions,
+        .priority-item:focus-within .priority-jump-actions {
+            opacity: 1;
+            pointer-events: auto;
+            transition: opacity 0.18s ease 0.15s;
+        }
+    }
+}
+
 .organize-page {
-    .tag-card-actions,
-    .tag-row-actions,
-    .priority-edit-btn,
-    .priority-jump-actions {
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.12s ease;
-    }
-
-    .tag-card:hover .tag-card-actions,
-    .tag-card:focus-within .tag-card-actions,
-    .tag-row:hover .tag-row-actions,
-    .tag-row:focus-within .tag-row-actions,
-    .priority-item:hover .priority-edit-btn,
-    .priority-item:focus-within .priority-edit-btn,
-    .priority-item:hover .priority-jump-actions,
-    .priority-item:focus-within .priority-jump-actions {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
     .priority-jump-actions {
         display: inline-flex;
         align-items: center;
@@ -3173,22 +3067,6 @@ $org-stat-col-color-w: 2.75rem;
 
 .organize-page .org-filter-bar.open {
     animation: org-filter-bar-open 0.15s ease;
-}
-
-// -- Touch devices: always-visible row actions ---------------------------------
-// On touch devices there is no hover state; keep action buttons permanently
-// visible at reduced opacity so they remain discoverable.
-
-@media (hover: none) and (pointer: coarse) {
-    .organize-page {
-        .tag-card-actions,
-        .tag-row-actions,
-        .priority-edit-btn,
-        .priority-jump-actions {
-            opacity: 0.6 !important;
-            pointer-events: auto !important;
-        }
-    }
 }
 
 

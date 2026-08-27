@@ -1,0 +1,289 @@
+# What is public, what is private
+
+**Status: DRAFT — written to be corrected.** This document states what the code
+*currently enforces* and what I believe the *intent* is. Where those differ, it says so.
+Jess: correct the **Ruling** columns and answer the numbered questions at the end. Once
+corrected, this becomes the checklist for sweeping the project so the rules are codified
+and enforced everywhere.
+
+Verified against `@release/v_0_7_0` on 2026-08-24.
+
+---
+
+## 1. The core rule
+
+Everything a user creates is **private by default**. It becomes visible to another user
+only when **both** of these hold:
+
+1. **The container gate.** The owner deliberately shared the item into a *container*
+   (a wiki, a trip, a DM, ...) and the viewer can reach that container.
+2. **The settings gate.** The owner's visibility settings greenlight *that viewer*.
+
+These are conjunctive. Access to the container is not enough; permissive settings are
+not enough. Both, every time.
+
+**The one exception: direct messages.** Sending someone a photo *is* the act of consent,
+so the settings gate is skipped for the recipient of a DM. (A separate per-pair
+`DirectMessageImagePermission` handshake still applies — the recipient must accept images
+from that sender.)
+
+### What this rule rejects
+
+A user with a pin at the same location as me is **not** thereby entitled to see the
+photos I attached to *my* pin there. Having a pin in common is a fact about the world;
+it is not consent. My photos stay private until I put them on the wiki myself.
+
+---
+
+## 2. The containers
+
+`Image` has seven container foreign keys. Each is a distinct answer to "who can reach
+this?", and the container gate has to enumerate all seven:
+
+| Container | Who can reach it | Settings gate applies? |
+|---|---|---|
+| `pin` | the owner only — a pin is a personal record, not a container | n/a — never shared by being on a pin |
+| `wiki` | anyone with wiki access (§3) | **yes** |
+| `location` | not a share by itself | n/a |
+| `trip` (via activities) | trip members | **yes** |
+| `direct_message` | the recipient | **no — sending is consent** |
+| `safety_checkin` | anyone who can see the check-in, **including signed-out token contacts** | **no** |
+| `visit` | owner only, as far as verified | n/a |
+| `pin_suggestion` | the suggestion's owner | n/a |
+
+> **Known gap.** `ImageQuerySet.visible_to` currently treats `wiki__isnull=False` as the
+> whole of "shared". That is simultaneously **too narrow** (a photo shared to a trip or a
+> check-in reads as unshared) and **too broad** (it never asks whether the viewer can reach
+> *that particular* wiki). See §6.
+
+---
+
+## 3. Wiki access
+
+Wiki access is **not** "has a pin there". It is a place-domain rule with four clauses
+(`services/wiki/wiki_access.py`) — a viewer reaches a wiki if any hold:
+
+1. they have a pin on the wiki's exact `Location`;
+2. they have a pin whose place shares the wiki's `Place.domain_root_id` (the parcel, or
+   any building on it);
+3. the domain is reachable through `MEMBER_OF` aggregate places, resolved by a fixpoint
+   capped at `MAX_EARNING_ROUNDS = 16`;
+4. a `PlaceAccessGrant` row grants it.
+
+This is deliberate: **users must discover a location before they can see its wiki.**
+
+A wiki the caller has not earned access to must return **404, never 403** — a 403 confirms
+the wiki exists, which leaks the location.
+
+---
+
+## 4. The settings gate
+
+`VisibilityChoice`, least → most restrictive: `ANYONE` (logged in) · `ANYTHING_IN_COMMON`
+· `COMMON_PIN` · `COMMON_FRIEND` · `COMMON_TRIP` · `FRIENDS` · `NO_ONE`.
+`ANYTHING_IN_COMMON` = a common pin **or** a common friend **or** a common trip. Accepted
+friends qualify for every option except `NO_ONE`.
+
+| Setting | Default | Governs |
+|---|---|---|
+| `profile_visibility` | ANYTHING_IN_COMMON | who sees the profile |
+| `comment_visibility` | ANYTHING_IN_COMMON | who sees your comments |
+| `friend_request_visibility` | ANYONE | who may send you a friend request |
+| `photo_upload_visibility` | ANYTHING_IN_COMMON | **who sees photos you contribute to locations** |
+| `viewer_photo_filter` | ANYTHING_IN_COMMON | whose photos *you* want to see (outside → blurred) |
+| `trip_pin_location_visibility` | ANYTHING_IN_COMMON | who sees the real coordinates of a pin you add as a trip activity (others see only the name) |
+| `contact_visibility` | FRIENDS | phone, Signal, Discord, WhatsApp, Telegram, Matrix |
+| `direct_message_visibility` | ANYTHING_IN_COMMON | who may DM you |
+| `online_status_visibility` | FRIENDS | online indicator in DMs |
+| `read_receipt_visibility` | FRIENDS | read receipts |
+| `typing_indicator_visibility` | FRIENDS | typing indicator |
+| `common_pins_visibility` | FRIENDS | which specific pins you share with a viewer (**both** sides must allow) |
+
+`viewer_photo_filter` is **courtesy-only**. It is set by the *receiving* user about what they
+want shown to them, so it never grants sight of anything and never gates anyone else's access —
+its job is to stop unsolicited explicit images.
+
+`photo_upload_visibility` is a limit on **who, among people who can already reach the
+container, may see the photo**. It is *not* permission to publish a pin photo to a wiki.
+Nothing in the product currently asks for that permission except putting the photo on the
+wiki yourself.
+
+When `community_enabled` is False, the community-gated settings are forced to `NO_ONE`
+and the wiki-sync booleans to False.
+
+All contact fields are stored in `EncryptedTextField`.
+
+---
+
+## 5. Pin data: what a share carries
+
+Sharing a pin shares **the coordinates and a small set of objective facts about the
+site** — not your record of it. Rulings below are Jess's.
+
+**Shared** — objective, not personal:
+`location` · `pin_type`, `pin_type_is_user_provided` · `indoor_outdoor` ·
+`date_built`, `date_abandoned`, `date_last_active` ·
+`fences`, `alarms`, `cameras`, `security`, `signs`, `vps`, `plywood`, `locked`
+
+**Name** — only with explicit consent. The sharer may supply `shared_name`; otherwise the
+recipient's pin is named from an **official** `WikiAlias` (`source != USER`), never from
+the sharer's own label.
+
+**Never shared:**
+
+| Field | Why |
+|---|---|
+| `description` | the owner's personal notes; nothing in the product lets somebody consent to passing them on |
+| `vulnerability`, `danger` | personal ratings about the site, not facts about it |
+| `icon`, `color`, `custom_icon`, `priority` | personal styling and triage |
+| labels / detail styling | personal organisation |
+| photos | opt-in only, per §1 |
+| `parent_pin` | the sharer's own tree. Sharing a pin that has a parent should **ask** the sharer how to handle it; the sharer's parent must never be passed through to the recipient |
+
+**Photos, when a share does carry them:** keep `taken_at`/dates, `latitude`/`longitude`,
+`direction`. Drop `caption` and `exif_data`. `author` becomes the existing author, or
+`"Shared by {username}"` when unset.
+
+---
+
+## 6. Where the code diverges today — the worklist
+
+1. **`ImageQuerySet.visible_to` implements one container, not seven** (§2), and never
+   checks reachability of the specific wiki. This is the largest open gap.
+2. ~~**Five inline reimplementations of wiki access**~~ — **four fixed 2026-08-24**; the fifth
+   was never one. `models/article/queryset.py`, `services/global_search/providers.py` (×4) and
+   `services/map_pins/autocomplete.py` now ask `visible_wiki_location_ids_cached`. They had all
+   restated clause one of four ("a pin on the exact location"), and three added a `created_by`
+   clause the authority does not have — wrong in both directions, and both visible to users: a
+   pin sharing the place's domain opened the page but found nothing in search, and a creator
+   with no pin was offered results whose page answers 404.
+   `services/consensus/eligibility.py` is **not** a reimplementation — it is a deliberate game
+   rule (visited-pinned only, per the Consensus design spec), stricter than access and a subset
+   of it.
+3. ~~**Consensus photo rounds** do not apply `visible_to`~~ — **fixed 2026-08-24**, and it did
+   not need the protocol change I expected. `eligibility` already prefetches `images` and already
+   has the profile, so filtering *that* prefetch fixes every strategy at once. Two bugs were
+   stacked: `_photo_build_round` used `wiki.images.filter(...)`, which skipped visibility *and*
+   defeated the prefetch — the misuse eligibility's own comment warns about.
+4. **`exif_data` is a plain `JSONField`.** Intent: encrypt it at rest and strip it from the
+   image file. *Stripping done 2026-08-24* — the block now comes off every stored file
+   unconditionally, with `exif_transpose` applied first so nothing renders rotated. Two follow-ons
+   found while doing it: the strip was gated on the uploader's downscale policy, so a
+   downscale-exempt subscriber kept the block entirely; and photos already in storage needed a
+   scrub, which `manage.py strip_exif_from_stored_photos` does (`--dry-run` first).
+   *Encryption at rest done 2026-08-24* — `EncryptedJSONField` and migration 0066, which also
+   moves the column from `jsonb` to `text`. See docs/DATA_ENCRYPTION.md.
+5. **`ocr_text` is a plain `TextField`** — derived text from a possibly-private photo.
+   *Audited 2026-08-24 (ruling 4): reachable only through `PhotoSearchProvider`, whose results
+   pass through `visible_to`.* Left unencrypted deliberately: unlike `exif_data` it is a search
+   field, and ciphertext does not match.
+6. **Existing profiles** predate the stricter photo default and still need migrating.
+7. **Nit:** `pin_sharing.py:217` sets `name_is_user_provided=True` when the name actually
+   came from an official alias rather than from the sharer.
+
+### The reputation ledger (new, 2026-08-24)
+
+`ReputationEvent` is a new dataset with a privacy weight of its own, and it did not
+exist before this date. Each row records **who contributed what, to which wiki, and
+when** — so the table as a whole is a per-user map of which places, including
+sensitive ones, a person has engaged with. Nothing like it existed previously;
+`WikiEdit` comes closest but is per-wiki rather than per-person, and carries no
+aggregate.
+
+Rules it inherits, and the ones it needs of its own:
+
+- **Never user-visible.** The score is hidden by design — a visible score is a score
+  people optimise, which defeats what it is for. There is no user-facing surface and
+  none should be added.
+- **`inputs` must stay boring.** The scorer snapshots the target's state into the row
+  for auditability. It must not accumulate anything that would be a problem to keep:
+  no free text, no coordinates, no names. Today it holds base values, a need tier, and
+  boolean metadata flags.
+- **The admin surface, when built, defaults to aggregates.** Per-activity and
+  per-period breakdowns are the point of it. A per-user drill-down that *names the
+  targets* is a different thing — it would let a site admin read off which sensitive
+  locations a named user has visited — and is deliberately out of v1. See R10 in
+  `designs/reputation-and-gating.md`.
+- **`lifetime_earned` never decreases.** Not a privacy rule but a safety one, recorded
+  here because it constrains any future consumer: anything granting durable standing
+  must read it rather than `total`, so that reverting somebody's contributions cannot
+  be used to strip access they already had.
+
+### Not a divergence — designed, not yet built
+
+The hidden reputation gate — defeating "pin a random address and check whether a wiki
+exists" probing — is **still not implemented, and the ledger that would feed it now is.**
+See `docs/designs/reputation-and-gating.md`, whose Design review section supersedes the
+rest of it.
+
+What changed 2026-08-24: the gate's original shape (withhold community content from the
+existing wiki) was found not to work here. The camouflage has to be the *empty state* —
+a gated place must look like one nobody has documented — and an audit of every observable
+channel (`designs/reputation-gating-tells.md`, 82 verified findings) established that
+filtering cannot reproduce it, because the empty state is a row the viewer *owns*. The
+gate architecture is deliberately deferred until there is real score data.
+
+**No read path consults any reputation signal today**, and that remains true with the
+ledger built — it has no consumer. Four things use adjacent vocabulary and are not it:
+`wiki_access.py`'s "earned access" (the place-domain rule, binary);
+`ConsensusProfile.trust_score` (a Beta posterior that weights *fact evidence at
+submission* — all 28 references are confined to consensus/facts, none on a read path);
+`ProfileTrust` (a private 1–5 star rating one viewer keeps about another); and wiki
+`vulnerability` (a consensus-*voted* field, which the design does intend to use as the
+gate's sizing input).
+
+---
+
+## 7. Rulings (Jess, 2026-08-24)
+
+Answers to the questions this document was written to ask. Each names the work it implies.
+
+1. **Trips.** A pin photo attached to a trip activity **is** shared to a container for all trip
+   members — **and** it must still pass the owner's visibility settings before any particular
+   member sees it. Both gates, as everywhere except DMs and check-ins.
+   → *Done 2026-08-24:* trip clause added to the settings-gated term, as a subquery on activity
+   pin ids (a join would repeat a row per activity).
+
+2. **Check-ins.** Photos on a safety check-in are **not** subject to `photo_upload_visibility`,
+   because it makes no sense for safety contacts who have no account at all. They are visible to
+   **anyone who can see the check-in, including signed-out token holders**. Reaching the check-in
+   is the only barrier.
+   → *Done 2026-08-24:* the portal now lists the check-in's photos, and
+   `safety.contact.photo` serves their bytes to a valid magic-link token, scoped to that token's
+   own check-in. The nginx hand-off was extracted from `MediaGateView` rather than reimplemented.
+
+3. **`viewer_photo_filter`.** Courtesy-only, as read. It is controlled by the *receiving* user, so
+   it has nothing to do with gating that user's access — it exists to stop unsolicited explicit
+   images. It never grants sight of anything.
+
+4. **Derived data.** `ocr_text`, `checksum`, and `redata_confidence` **inherit the privacy of the
+   photo they came from.**
+   → *Verified 2026-08-24, nothing to fix:* `checksum` is only ever used for owner-scoped dedup
+   (`profile=profile`, or within one check-in) and is never serialized; `ocr_text` is a
+   `PhotoSearchProvider` search field whose results pass through `visible_to`;
+   `redata_confidence` is a sort key on querysets that already apply `visible_to`.
+
+5. **Location.** The model is a coordinate plus official data about that coordinate, existing so
+   other things can link to it rather than restating it. It **must not be queryable on its own** —
+   not through the REST API, not through search, not any other way, because that would let a user
+   fuzz which coordinates are attached to things. Serving coordinates *alongside* a model the
+   caller may see is fine.
+   → *Verified 2026-08-24:* structurally satisfied. The DRF router registers only `PinViewSet`,
+   there is no Location search provider, and `/locations/search/` is autocomplete over the
+   caller's **own pins** plus external places, not a Location query. Nothing to fix; worth a
+   structural check so it stays that way.
+
+6. **Deletion.** For a photo **the user uploaded**, deleting it somewhere other than the wiki
+   **prompts**: "delete from the wiki too?" Silence means no — it stays. For **external photos**
+   (fetched from a URL) there is **no prompt at all**; they stay on the wiki unless the user goes
+   to the wiki and deletes it there, because a public resource that already exists online is not
+   a consent question.
+   → *Done 2026-08-24:* the pin gallery detaches instead of dropping the row, and the wiki
+   keeps the photo unless `?from_wiki=1` says otherwise — honoured only for uploads. Deleting
+   from a pin used to destroy the row outright, withdrawing the contribution silently from a
+   screen that never mentions the wiki. *The external API's photo delete follows the same rule as of the same
+   day* — `?from_wiki=true`, uploads only, enforced server-side. A client can ask first:
+   `wiki_slug` and `source` were already on the photo payload.
+
+7. **Earned credit.** **Not now** — finish the work above first. The design in
+   `docs/designs/reputation-and-gating.md` stays parked.

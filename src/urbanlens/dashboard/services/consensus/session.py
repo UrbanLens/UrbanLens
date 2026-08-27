@@ -102,7 +102,7 @@ def invite_to_session(session: ConsensusSession, host: Profile, invitee: Profile
         ConsensusError: if the caller isn't the host, the session has
             already started, or ``invitee`` isn't a friend of the host.
     """
-    from urbanlens.dashboard.services.connections import are_connections
+    from urbanlens.dashboard.services.social.connections import are_connections
 
     if session.host_profile_id != host.pk:
         raise ConsensusError("Only the host can invite players.")
@@ -127,10 +127,10 @@ def _notify_invite(host: Profile, invitee: Profile, session: ConsensusSession) -
 
     from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     host_name = resolve_visible_identity(invitee, host)["display_name"]
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=invitee,
         source_profile=host,
         status=Status.UNREAD,

@@ -1,0 +1,74 @@
+@use 'variables' as *;
+
+// -- Public running-costs transparency page -------------------------------------
+//
+// Reuses the wide `.ul-page-hero` and the eyebrow/title/lead section shell
+// established by Thanks & Credits (_thanks.scss is scoped to `.page-thanks`
+// only, so this page needs its own copy of that shell under `.page-costs`),
+// plus the fully-global KPI card and `.card`/`.card-header` chart-card
+// components the site-admin cost tracker already uses (_admin.scss /
+// _layout.scss) so the public numbers read the same way the admin sees them
+// internally.
+
+.page-costs {
+
+    > div.container {
+        max-width: 100%;
+    }
+
+    .attr-section-inner {
+        max-width: 110rem;
+        margin: 0 auto;
+        padding: 0 1.5rem;
+    }
+
+    .attr-section {
+        padding: 3.5rem 0;
+    }
+
+    .attr-section-label {
+        font-size: .68rem;
+        font-weight: 700;
+        letter-spacing: .14em;
+        text-transform: uppercase;
+        color: $color-indigo-500;
+        margin-bottom: .65rem;
+    }
+
+    .attr-section-title {
+        font-size: clamp(1.5rem, 2.5vw, 2rem);
+        font-weight: 700;
+        letter-spacing: -.02em;
+        color: var(--ul-grey-8);
+        margin: 0 0 .85rem;
+    }
+
+    .attr-section-lead {
+        font-size: 1rem;
+        line-height: 1.65;
+        color: var(--ul-grey-6);
+        max-width: 72rem;
+        margin: 0 0 2rem;
+    }
+
+    // KPI row - reuses the fully-global .stats-kpi-* components from
+    // _admin.scss (already used by the site-admin cost tracker) so the
+    // public headline numbers match the admin's own at a glance.
+    .stats-kpi-grid {
+        margin-bottom: 2.25rem;
+    }
+
+    .costs-chart-card {
+        margin-bottom: 0;
+
+        .card-header .material-symbols-outlined {
+            color: $color-indigo-500;
+            opacity: 1;
+        }
+    }
+
+    .stats-chart-wrap {
+        height: 20rem;
+        padding: 1.25rem 1rem .5rem;
+    }
+}

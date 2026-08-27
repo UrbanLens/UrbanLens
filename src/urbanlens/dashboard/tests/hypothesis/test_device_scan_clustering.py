@@ -36,6 +36,8 @@ from urbanlens.dashboard.services.device_scan.clustering import (
     weighted_radius_meters,
 )
 
+from .place_helpers import official_geometry
+
 _LAT = st.floats(min_value=-80, max_value=80, allow_nan=False, allow_infinity=False)
 _LNG = st.floats(min_value=-170, max_value=170, allow_nan=False, allow_infinity=False)
 _WEIGHT = st.floats(min_value=1e-6, max_value=1000, allow_nan=False, allow_infinity=False)
@@ -164,7 +166,7 @@ class _ClusteringDbTestCase(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.wiki_location = Location.objects.create(latitude=0.0, longitude=0.0)
-        Boundary.objects.create(location=self.wiki_location, generated_polygon=_square(0.0, 0.0, 0.01))
+        official_geometry(self.wiki_location, _square(0.0, 0.0, 0.01))
         self.wiki = baker.make(Wiki, location=self.wiki_location)
         self.device, _created = ScannedDevice.objects.get_or_create_for_mac("AA:BB:CC:DD:EE:FF")
         self.upload = DeviceScanUpload.objects.create()
@@ -332,3 +334,58 @@ class AbsenceReportTests(_ClusteringDbTestCase):
         self.assertEqual(markers[0].pk, marker.pk)
         self.assertEqual(markers[0].status, MarkerStatus.ACTIVE)
         self.assertEqual(markers[0].absence_streak, 0)
+
+
+class AbsenceReportConcurrencyTests(_ClusteringDbTestCase):
+    """Two users' absence reports for one marker must both count.
+
+    `process_device_scan_upload` claims each *upload* atomically, so the same
+    physical report can never be applied twice. What that does not cover is two
+    *different* uploads naming the same marker, processed by different workers:
+    the old `marker.absence_streak += 1` read both from the same stored value
+    and wrote the same result, losing one report and delaying the escalation
+    the counter exists to trigger.
+    """
+
+    def _make_marker(self) -> WikiDeviceMarker:
+        return WikiDeviceMarker.objects.create(
+            wiki=self.wiki,
+            device=self.device,
+            centroid=Point(0.0, 0.0, srid=4326),
+            first_observed_at=timezone.now(),
+            last_observed_at=timezone.now(),
+        )
+
+    def test_two_reports_from_equally_stale_instances_both_count(self) -> None:
+        marker = self._make_marker()
+        one = WikiDeviceMarker.objects.get(pk=marker.pk)
+        two = WikiDeviceMarker.objects.get(pk=marker.pk)
+
+        record_absence_report(one)
+        record_absence_report(two)
+
+        marker.refresh_from_db()
+        self.assertEqual(marker.absence_streak, 2, "an absence report was lost - the streak was written from a stale read")
+
+    def test_the_threshold_is_reached_even_when_every_report_is_stale(self) -> None:
+        marker = self._make_marker()
+        for _ in range(ABSENCE_STREAK_THRESHOLD):
+            record_absence_report(WikiDeviceMarker.objects.get(pk=marker.pk))
+
+        marker.refresh_from_db()
+        self.assertEqual(marker.absence_streak, ABSENCE_STREAK_THRESHOLD)
+        self.assertEqual(marker.status, MarkerStatus.PRESUMED_REMOVED)
+
+    def test_an_absence_report_does_not_revert_a_concurrent_detection(self) -> None:
+        """The status write must not carry a stale value back over a fresh one."""
+        marker = self._make_marker()
+        WikiDeviceMarker.objects.filter(pk=marker.pk).update(status=MarkerStatus.STALE)
+        stale_instance = WikiDeviceMarker.objects.get(pk=marker.pk)
+        # A detection lands between that read and the absence report below.
+        WikiDeviceMarker.objects.filter(pk=marker.pk).update(status=MarkerStatus.ACTIVE)
+
+        record_absence_report(stale_instance)
+
+        marker.refresh_from_db()
+        self.assertEqual(marker.status, MarkerStatus.ACTIVE, "the absence report reverted a status it never read")
+        self.assertEqual(marker.absence_streak, 1)

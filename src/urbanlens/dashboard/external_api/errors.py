@@ -46,7 +46,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from django.http import Http404
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, ParseError
 from rest_framework.views import exception_handler as drf_exception_handler
 
 if TYPE_CHECKING:
@@ -59,6 +59,20 @@ NOT_FOUND_BODY = {"error": "Not found."}
 
 #: The umbrella message accompanying a field-level validation failure.
 INVALID_REQUEST_MESSAGE = "Invalid request."
+
+#: The single message every unparseable request body renders, regardless of
+#: where DRF discovers it. A malformed body doesn't only surface from a view's
+#: own ``request.data``/``request.POST`` access - ``OAuth2Authentication``
+#: (django-oauth-toolkit) unconditionally calls ``oauthlib_core.verify_request``
+#: during authentication for *every* request reaching a dual-auth view, credential
+#: or plain session alike, and that inspects ``request.POST`` looking for a
+#: form-encoded access token. On a DRF ``Request`` that access runs the
+#: configured body parser, so the same ``ParseError`` a handler's own try/except
+#: would normally catch instead escapes from ``perform_authentication`` - before
+#: the view method, and any body-parsing guard it wrote, ever runs. Handling it
+#: here catches both paths uniformly instead of leaking DRF's raw parser message
+#: whenever the earlier one wins the race.
+MALFORMED_JSON_BODY_MESSAGE = "Malformed JSON body"
 
 
 def uniform_exception_handler(exc: Exception, context: dict[str, Any]) -> Response | None:
@@ -82,6 +96,14 @@ def uniform_exception_handler(exc: Exception, context: dict[str, Any]) -> Respon
     # attached upstream can never survive into the response.
     if isinstance(exc, (Http404, NotFound)):
         response.data = dict(NOT_FOUND_BODY)
+        return response
+
+    # Same reasoning as the 404 collapse above: discard whatever message DRF's
+    # parser attached (its exact wording depends on which parser ran and where
+    # in the request cycle it failed - see MALFORMED_JSON_BODY_MESSAGE) so every
+    # unparseable body renders identically regardless of cause.
+    if isinstance(exc, ParseError):
+        response.data = {"error": MALFORMED_JSON_BODY_MESSAGE}
         return response
 
     data = response.data

@@ -209,9 +209,20 @@ class LocationLinkViewTests(TestCase):
         response = self.client.get(reverse("location.wiki.links", args=[self.location.slug]))
         self.assertContains(response, "No links yet.")
 
-    def test_still_uses_its_own_inline_add_form_not_the_pin_pages_dialog(self) -> None:
-        """The wiki page's inline reveal-form UX is unaffected by the pin page's
-        add-link-dialog conversion - use_dialog is unset here."""
+    def test_uses_the_shared_add_link_dialog_not_an_inline_form(self) -> None:
+        """Regression guard: the row used to always-reveal its own inline
+        add-form, whose Cancel button only hid the form (not the row) and
+        whose CSS (`display: inline-flex`) had equal specificity to - and so
+        defeated - the `hidden` attribute on it, leaving the "Site name"/URL
+        fields visible before the user ever clicked "add a link" at all. See
+        _pin_link_add_dialog.html, now shared with the pin details page."""
         response = self.client.get(reverse("location.wiki.links", args=[self.location.slug]))
-        self.assertContains(response, 'class="pin-link-add-form"')
-        self.assertNotContains(response, "pin-link-add-dialog")
+        self.assertContains(response, "document.getElementById('wiki-link-add-dialog').showModal()")
+        self.assertNotContains(response, 'class="pin-link-add-form"')
+
+    def test_row_keeps_its_field_label(self) -> None:
+        """Unlike the pin page's standalone Links card (which has its own
+        card-header title), the wiki row is one field among several with no
+        title of its own, so it still needs the "Links" label."""
+        response = self.client.get(reverse("location.wiki.links", args=[self.location.slug]))
+        self.assertContains(response, '<span class="field-label">Links</span>')

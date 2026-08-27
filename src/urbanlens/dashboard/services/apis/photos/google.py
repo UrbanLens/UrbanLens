@@ -4,7 +4,7 @@ All calls operate on *one user's own* Google Photos library using tokens from
 that user's :class:`~urbanlens.dashboard.models.google_photos.GooglePhotosAccount`
 row - there is no site-wide grant. Google's Photos Library API stopped
 exposing GPS coordinates and broad library search entirely (see
-``docs/plugins.md`` / this session's Immich research); the **Picker API** is
+``docs/designs/plugins.md`` / this session's Immich research); the **Picker API** is
 the only sanctioned mechanism left, and it's fundamentally a different shape:
 the user picks photos in Google's own UI (``pickerUri``), we poll a session
 until they're done, then list whatever they picked - there is no server-side
@@ -20,8 +20,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.utils import timezone
 
-from urbanlens.dashboard.services import google_oauth
-from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.auth import google_oauth
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:

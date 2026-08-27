@@ -3,7 +3,7 @@
 The browser gets live notifications over the Channels WebSocket
 (``models.notifications.signals``); a native app in the background does not
 hold a socket open, so it registers a push destination here instead and the
-server delivers through it (``services.push``). UnifiedPush - an app-chosen,
+server delivers through it (``services.notifications.push``). UnifiedPush - an app-chosen,
 self-hostable push server such as ntfy - is the default transport, matching
 the project's self-hosted ethos and keeping an F-Droid build free of Play
 Services; an FCM row kind exists for a future Play-Store build flavor and is
@@ -35,7 +35,7 @@ class PushDevice(abstract.FrontendDashboardModel):
     can send to that device, so it is never exposed through any read API.
 
     Delivery bookkeeping: ``failure_count`` counts *consecutive* failed
-    dispatches; after ``services.push.MAX_CONSECUTIVE_FAILURES`` the device is
+    dispatches; after ``services.notifications.push.MAX_CONSECUTIVE_FAILURES`` the device is
     auto-revoked (dead endpoints otherwise accumulate forever - apps get
     uninstalled without unregistering). A successful delivery resets the count.
     """
@@ -64,6 +64,22 @@ class PushDevice(abstract.FrontendDashboardModel):
         constraints = [
             UniqueConstraint(fields=["profile", "address"], name="db_push_device_unique_address"),
         ]
+
+    @property
+    def dispatch_enabled(self) -> bool:
+        """Whether ``services.notifications.push`` will actually send to this device.
+
+        Only UnifiedPush is dispatched. FCM rows are accepted and stored for a
+        future Play-flavor client, but skipped at send time because no FCM
+        sender exists yet (it needs a Google service-account credential), so a
+        registered FCM device receives silence rather than an error. Read
+        surfaces expose this so a client can say so instead of implying
+        delivery works.
+
+        Returns:
+            True when this device's transport is dispatched today.
+        """
+        return self.transport == PushTransport.UNIFIEDPUSH
 
     def __str__(self) -> str:
         status = "revoked" if self.revoked_at else "active"

@@ -20,6 +20,7 @@ import logging
 import os
 import tempfile
 from typing import TYPE_CHECKING, Any
+import zipfile
 
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
@@ -36,6 +37,10 @@ SUPPORTED_DOCUMENT_EXTENSIONS = frozenset({"txt", "docx"})
 # The character limit itself is admin-adjustable via SiteSettings.ai_document_import_max_chars
 # (see _get_max_document_chars) - this is only the fallback used if that field is unset.
 MAX_DOCUMENT_BYTES = 2 * 1024 * 1024  # 2 MB
+#: Ceiling on what a .docx may decompress to. Generous by design - the text
+#: limit below is 20,000 characters, so a genuine document is orders of
+#: magnitude under this and only a bomb comes near it.
+MAX_DOCUMENT_UNCOMPRESSED_BYTES = 20 * 1024 * 1024  # 20 MB
 DEFAULT_MAX_DOCUMENT_CHARS = 20_000
 MAX_EXTRACTED_PINS = 200
 
@@ -80,6 +85,45 @@ def is_supported_document_filename(filename: str) -> bool:
     return ext in SUPPORTED_DOCUMENT_EXTENSIONS
 
 
+def _reject_oversized_docx(filename: str, data: bytes) -> None:
+    """Refuse a ``.docx`` whose contents decompress far past anything readable.
+
+    ``MAX_DOCUMENT_BYTES`` bounds the bytes uploaded, which is the same thing as
+    the text length for ``.txt`` - and is not, for the one supported format that
+    is a compressed archive. A 2 MB ``.docx`` is a ZIP whose ``document.xml`` can
+    decompress to gigabytes (XML repeats, and repetition is what compresses), and
+    ``python-docx`` materialises the whole part before this module gets a chance
+    to measure the extracted text. So the character limit is checked after the
+    memory has already been spent.
+
+    Checked against the sizes declared in the ZIP directory, without
+    decompressing. That is sound in both directions: CPython's ``zipfile``
+    bounds a read by the declared size and then fails the CRC, so an understated
+    declaration cannot smuggle bytes past this check - it makes ``python-docx``
+    read a truncated part and raise, which the caller already handles. (Verified
+    on 3.12; see the matching note in ``import_export.archive_extractor``.)
+
+    Args:
+        filename: Uploaded filename, for the error message.
+        data: Raw ``.docx`` bytes.
+
+    Raises:
+        DocumentTooLargeError: The archive declares more uncompressed content
+            than any document with a 20,000-character text limit could need.
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            declared = sum(info.file_size for info in archive.infolist())
+    except zipfile.BadZipFile:
+        # Not a readable ZIP at all - let python-docx produce the "could not
+        # parse" path rather than inventing a size complaint about it.
+        return
+    if declared > MAX_DOCUMENT_UNCOMPRESSED_BYTES:
+        raise DocumentTooLargeError(
+            f"'{filename}' expands to too much content for AI import ({declared:,} bytes uncompressed, max {MAX_DOCUMENT_UNCOMPRESSED_BYTES:,}). Please upload a smaller file.",
+        )
+
+
 def extract_text(filename: str, data: bytes) -> str | None:
     """Extract plain text from an uploaded ``.txt`` or ``.docx`` file.
 
@@ -90,6 +134,10 @@ def extract_text(filename: str, data: bytes) -> str | None:
     Returns:
         Extracted text, or None if the file is empty, unreadable, or an
         unsupported type.
+
+    Raises:
+        DocumentTooLargeError: A ``.docx`` declares more uncompressed content
+            than :data:`MAX_DOCUMENT_UNCOMPRESSED_BYTES`.
     """
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
@@ -102,6 +150,7 @@ def extract_text(filename: str, data: bytes) -> str | None:
         return text.strip() or None
 
     if ext == "docx":
+        _reject_oversized_docx(filename, data)
         try:
             from docx import Document
 

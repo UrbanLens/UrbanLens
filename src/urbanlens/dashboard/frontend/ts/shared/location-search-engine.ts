@@ -1072,6 +1072,13 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
 
     suggestions.addEventListener("mousedown", (e) => e.preventDefault());
     suggestions.addEventListener("wheel", (e) => e.stopPropagation(), { passive: true });
+    // The dropdown is an internal scroller sitting inside the Leaflet map
+    // container, which claims touch drags for map panning - so on a phone the
+    // list could not be scrolled past its first few results. `wheel` above
+    // already guards the desktop equivalent; these are its touch counterparts.
+    // (#filter-panel / #pin-list-panel guard themselves the same way.)
+    suggestions.addEventListener("touchstart", (e) => e.stopPropagation(), { passive: true });
+    suggestions.addEventListener("touchmove", (e) => e.stopPropagation(), { passive: true });
 
     historyBtn?.addEventListener("click", () => {
         const hist = getHistory();

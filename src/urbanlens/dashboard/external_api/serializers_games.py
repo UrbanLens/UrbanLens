@@ -37,6 +37,12 @@ if TYPE_CHECKING:
 #:
 #: ``image_url`` is the media-gate URL for the round's photo; fetching it needs
 #: ``media:read`` in addition to ``games:read``, exactly as any other photo does.
+#:
+#: ``street_view_lat``/``street_view_lng`` are a deliberate exception to "never
+#: the answer before a guess" - see ``services.spotguessr.street_view.StreetViewPanorama``'s
+#: docstring. A native client renders its own interactive panorama from them the
+#: same way the web client does; ``street_view_image`` stays listed alongside as
+#: a fallback for a client that would rather not embed a Maps SDK at all.
 ROUND_PAYLOAD_FIELDS: tuple[str, ...] = (
     "round_id",
     "session_id",
@@ -49,6 +55,8 @@ ROUND_PAYLOAD_FIELDS: tuple[str, ...] = (
     "image_url",
     "display_text",
     "street_view_image",
+    "street_view_lat",
+    "street_view_lng",
 )
 
 #: Exactly the keys an external client may see for its own guess's result. The
@@ -134,7 +142,7 @@ class FriendRatingSerializer(serializers.Serializer):
     """One friend's visible rating, with their identity already resolved for the viewer.
 
     ``display_name`` and ``profile_slug`` come from
-    ``services.identity_visibility.resolve_visible_identity``, so a friend who
+    ``services.profile.identity_visibility.resolve_visible_identity``, so a friend who
     restricts profile visibility is masked here exactly as they are everywhere
     else rather than being named because they happen to play a game.
     """
@@ -188,6 +196,28 @@ class SpotGuessrSessionCreateSerializer(serializers.Serializer):
     #: to have the server parse it again is a needless round trip and an easy
     #: source of double-encoding bugs.
     geo_bounds = serializers.JSONField(required=False, allow_null=True)
+    label_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+
+    def validate_label_id(self, value: int | None) -> int | None:
+        """Reject a label id the caller's own profile can't actually use.
+
+        Mirrors ``controllers.spotguessr._validate_label_id``: an unresolvable id
+        (nonexistent, or someone else's private label) reads as the same 400 either
+        way, so this can't be used to probe for the existence of another profile's
+        labels.
+
+        Raises:
+            rest_framework.serializers.ValidationError: When the id doesn't resolve to
+                a label visible to the requesting profile.
+        """
+        from urbanlens.dashboard.models.labels.model import Label
+
+        if value is None:
+            return None
+        profile = self.context["request"].user.profile
+        if not Label.objects.location_labels().visible_to(profile).filter(pk=value).exists():
+            raise serializers.ValidationError("Unknown label.")
+        return value
 
     def validate_geo_bounds(self, value: Any) -> dict | None:
         """Reject anything that isn't a GEOS-parseable GeoJSON geometry.
@@ -239,6 +269,8 @@ class SpotGuessrRoundSerializer(serializers.Serializer):
     image_url = serializers.CharField(read_only=True, required=False)
     display_text = serializers.CharField(read_only=True, required=False, allow_null=True)
     street_view_image = serializers.CharField(read_only=True, required=False, allow_null=True)
+    street_view_lat = serializers.FloatField(read_only=True, required=False)
+    street_view_lng = serializers.FloatField(read_only=True, required=False)
 
 
 class SpotGuessrSessionCreateResponseSerializer(serializers.Serializer):

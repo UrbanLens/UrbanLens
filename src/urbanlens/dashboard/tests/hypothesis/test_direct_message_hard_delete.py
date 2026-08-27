@@ -15,6 +15,8 @@ from __future__ import annotations
 import datetime
 
 from django.contrib.auth.models import User
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -149,6 +151,65 @@ class HardDeleteExpiredDirectMessagesTaskTests(TestCase):
         self.assertEqual(hard_delete_expired_direct_messages(), 0)
 
 
+class HardDeleteBatchingTests(TestCase):
+    """A backlog is drained in batches, not pulled into one `IN (...)` list.
+
+    Steady state is one hour of expiries and fits in a single batch; the case
+    this covers is the backlog - a retention-policy change, or the beat worker
+    having been down - where the due set can approach the size of the whole
+    read message history.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+
+    def _due(self, count: int) -> list[DirectMessage]:
+        return [
+            _make_message(
+                self.sender,
+                self.recipient,
+                sender_delete_after=MessageRetentionChoice.WHEN_READ,
+                read_at=timezone.now(),
+                body=f"message {i}",
+            )
+            for i in range(count)
+        ]
+
+    def test_a_backlog_larger_than_one_batch_is_fully_drained(self) -> None:
+        self._due(5)
+        self.assertEqual(hard_delete_expired_direct_messages(batch_size=2), 5)
+        self.assertEqual(DirectMessage.objects.count(), 0)
+
+    def test_the_drain_takes_several_passes_rather_than_one(self) -> None:
+        """The invariant batching buys: no query is handed the whole due set."""
+        self._due(5)
+        with CaptureQueriesContext(connection) as captured:
+            hard_delete_expired_direct_messages(batch_size=2)
+        deletes = [q["sql"] for q in captured.captured_queries if q["sql"].startswith("DELETE") and "dashboard_direct_messages" in q["sql"]]
+        self.assertGreater(len(deletes), 1, "five due messages went out in one DELETE - the batch size was not applied")
+
+    def test_max_per_run_leaves_the_remainder_for_the_next_run(self) -> None:
+        self._due(5)
+        self.assertEqual(hard_delete_expired_direct_messages(batch_size=2, max_per_run=3), 3)
+        self.assertEqual(DirectMessage.objects.count(), 2)
+        self.assertEqual(hard_delete_expired_direct_messages(batch_size=2, max_per_run=3), 2)
+        self.assertEqual(DirectMessage.objects.count(), 0)
+
+    def test_images_on_messages_in_a_later_batch_are_still_deleted(self) -> None:
+        messages = self._due(4)
+        images = [baker.make(Image, profile=self.sender, direct_message=message, pin=None) for message in messages]
+        hard_delete_expired_direct_messages(batch_size=2)
+        self.assertFalse(Image.objects.filter(pk__in=[image.pk for image in images]).exists())
+
+    def test_not_yet_due_messages_survive_a_batched_drain(self) -> None:
+        self._due(3)
+        keeper = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, read_at=timezone.now())
+        hard_delete_expired_direct_messages(batch_size=1)
+        self.assertEqual(list(DirectMessage.objects.values_list("pk", flat=True)), [keeper.pk])
+
+
 class WhenReadFirstOpenTests(TestCase):
     """A "delete as soon as read" message is readable exactly once on a cold open.
 
@@ -235,7 +296,7 @@ class SidebarPreviewTombstoneTests(TestCase):
         self.assertContains(response, "This message is no longer available")
 
     def test_deleted_for_everyone_message_is_not_in_the_sidebar_preview(self) -> None:
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
         message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET)
         delete_message_for_everyone(message, self.sender)
@@ -245,7 +306,7 @@ class SidebarPreviewTombstoneTests(TestCase):
         self.assertContains(response, "Message deleted")
 
     def test_the_sender_still_sees_their_own_deleted_message_in_their_own_sidebar(self) -> None:
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
         message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET)
         delete_message_for_everyone(message, self.sender)

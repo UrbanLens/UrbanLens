@@ -18,7 +18,7 @@ either present in a sibling implementation or easy to reintroduce:
    across every wiki in the database.
 
 Everything here also inherits the surface-wide anti-enumeration guarantee from
-``services.wiki_access.resolve_visible_wiki``; see
+``services.wiki.wiki_access.resolve_visible_wiki``; see
 ``test_external_api_wiki_oracle.py`` for the exhaustive version of that.
 """
 
@@ -36,7 +36,7 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import WikiAlias
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
 from urbanlens.dashboard.tests.hypothesis.test_external_api_wiki_oracle import disable_throttling, grant_wiki_scopes
 

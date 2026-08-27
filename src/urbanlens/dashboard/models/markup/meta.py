@@ -78,3 +78,20 @@ class SecurityIndicatorType(TextChoices):
     PLYWOOD = "plywood", "Plywood"
     LOCKED = "locked", "Locked"
     VPS = "vps", "VPS"
+
+
+#: Curated Material Symbols icon choices offered for a CustomLayer's button
+#: (mirrors the small, purpose-picked list used for detail_pin_icon_choices
+#: in controllers/pin.py, rather than Label's much larger emoji ICON_CATEGORIES).
+CUSTOM_LAYER_ICON_CHOICES = [
+    ("layers", "Layers"),
+    ("route", "Route"),
+    ("terrain", "Terrain"),
+    ("warning", "Warning"),
+    ("explore", "Explore"),
+    ("place", "Place"),
+    ("hiking", "Hiking"),
+    ("construction", "Construction"),
+    ("water", "Water"),
+    ("landscape", "Landscape"),
+]

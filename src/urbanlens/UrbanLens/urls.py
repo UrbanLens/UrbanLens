@@ -34,6 +34,7 @@ from urbanlens.dashboard.controllers.health import HealthController
 from urbanlens.dashboard.controllers.index import IndexController
 from urbanlens.dashboard.controllers.media import MediaGateView
 from urbanlens.dashboard.urls import urlpatterns as dashboard_urls
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -93,12 +94,25 @@ urlpatterns = [
     path("verify-email/<uuid:token>/", VerifyEmailView.as_view(), name="verify_email"),
     path("resend-verification/", ResendVerificationView.as_view(), name="resend_verification"),
     path("dashboard/", include(dashboard_urls), name="dashboard"),
-    # OAuth2 provider (django-oauth-toolkit): authorize/token/revoke plus the
-    # logged-in application-management views. Native clients (the mobile app)
-    # register a *public* application here and authenticate with PKCE; the
-    # tokens are honored only by the external API (see external_api.views).
+    # OAuth2 provider (django-oauth-toolkit). Native clients (the mobile app)
+    # register a *public* application here and authenticate with PKCE
+    # (PKCE_REQUIRED is on globally); the tokens are honored only by the external
+    # API (see external_api.views).
+    #
+    # This mounts django-oauth-toolkit's *whole* URL set, which is wider than the
+    # authorize/token/revoke + application-management it is reached for: it also
+    # exposes token introspection, the RFC 8628 device-code endpoints,
+    # and the OpenID discovery documents. Neither of the first two is reachable
+    # in practice today - no application is registered with the device grant, and
+    # `introspect` is not among OAUTH2_PROVIDER["SCOPES"], so no token can carry
+    # it - but they are mounted, so narrow this include if that stops being true.
     path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
+    # Split probes for orchestrators and load balancers. /health/ above stays
+    # as-is because the compose healthchecks depend on its exact behaviour.
+    path("health/live", HealthController.as_view({"get": "live"}), name="health-live"),
+    path("health/ready", HealthController.as_view({"get": "ready"}), name="health-ready"),
+    path("health/primary", HealthController.as_view({"get": "primary"}), name="health-primary"),
     path("", IndexController.as_view(), name="index"),
     # Authenticated media gate - replaces the old unconditional
     # `*static(MEDIA_URL, ...)` entry (which only ever served files when
@@ -108,6 +122,18 @@ urlpatterns = [
     # streams the file (dev) or X-Accel-Redirects to nginx (production).
     # Must stay ahead of the 404 catch-all below.
     path("media/<path:path>", MediaGateView.as_view(), name="media"),
+]
+
+# The demo login exists only on a demo instance. Registered conditionally rather
+# than guarded inside the view, so an instance holding real data has no such URL
+# to reach at all - a guard is a line somebody can move, an absent route is not.
+# It must be appended before the catch-all below, which swallows everything.
+if app_settings.demo_mode:
+    from urbanlens.dashboard.controllers.demo import DemoLoginView
+
+    urlpatterns += [path("demo/start/", DemoLoginView.as_view(), name="demo.start")]
+
+urlpatterns += [
     # 404 catch-all - must be last. Anything not explicitly routed above (including
     # Django/library default URLs we haven't deliberately wired up) lands here.
     re_path(".*", _render_404_page, name="404"),

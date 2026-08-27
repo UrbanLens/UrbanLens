@@ -8,7 +8,7 @@ Friendship transitions follow strict rules:
   block   → BLOCKED     (re-request blocked)
 
 Mute is deliberately absent from that list: it is not a transition. It sets
-``Friendship.muted`` and leaves ``status`` untouched, because muting an
+the caller's own mute column and leaves ``status`` untouched, because muting an
 accepted friend must not stop them being a friend. See
 ``test_friendship_mute_flag`` for that behaviour and the bug it replaced.
 
@@ -22,11 +22,10 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
-from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
@@ -146,17 +145,17 @@ class FriendshipBlockMuteTests(TestCase):
         friendship = _make_requested(self.profile_a, self.profile_b)
         friendship.accept()
 
-        friendship.mute()
+        friendship.mute(self.profile_a)
 
         friendship.refresh_from_db()
-        self.assertTrue(friendship.muted)
+        self.assertTrue(friendship.is_muted_by(self.profile_a))
         self.assertEqual(friendship.status, FriendshipStatus.ACCEPTED)
 
     def test_mute_does_not_block_re_request(self) -> None:
         """Muting is not a rejection, so it must not close the re-request door."""
         friendship = _make_requested(self.profile_a, self.profile_b)
         friendship.decline()
-        friendship.mute()
+        friendship.mute(self.profile_b)
 
         friendship.refresh_from_db()
         self.assertTrue(FriendshipStatus.can_request(friendship.status))
@@ -187,9 +186,8 @@ class FriendshipUniqueConstraintTests(TestCase):
 
     def test_duplicate_friendship_raises_integrity_error(self) -> None:
         _make_requested(self.profile_a, self.profile_b)
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                _make_requested(self.profile_a, self.profile_b)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            _make_requested(self.profile_a, self.profile_b)
 
     def test_reversed_direction_does_not_conflict(self) -> None:
         """A→B and B→A are separate friendship rows (unique_together is directional)."""

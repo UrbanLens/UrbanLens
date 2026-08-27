@@ -1,0 +1,93 @@
+{% comment %}
+A single pending PinImportFailure card - a pin from an import whose Google
+Maps CID never resolved to a location. This is always a gap in Google's own
+place data, or a lookup that didn't finish in time - never a defect in the
+import itself, so the copy here must keep framing it that way. The owner can
+place the pin themselves with an address or coordinates, or remove it.
+
+Built on the same .pin-suggestion-card shell as _pin_suggestion_card.html so
+these cards blend into the same grid rather than reading as a distinct
+section. Dismiss posts directly like "Not a match"; placing a pin opens a
+small dialog for the address/coordinates form, like the new-pin create
+dialog. Both actions target this card by id, swapping outerHTML: success
+returns an empty response (the card vanishes, with a toast - a "View pin"
+link on resolve - and `refreshQueue` keeps the rest of the page in sync); an
+error response (invalid coordinates, or place creation failing) re-renders
+this same card plus an error toast.
+
+Context:
+  failure - the pending PinImportFailure
+{% endcomment %}
+<article class="pin-suggestion-card pin-import-failure-card" id="pin-import-failure-card-{{ failure.pk }}">
+    <div class="pin-suggestion-card-body">
+        <div class="pin-suggestion-card-meta">
+            <span class="ul-badge ul-badge--neutral">{{ failure.get_reason_display }}</span>
+        </div>
+
+        <p class="pin-suggestion-card-prompt">
+            <strong>{{ failure.name|default:"Untitled place" }}</strong>
+        </p>
+
+        {% if failure.description %}
+        <p class="pin-suggestion-card-description">{{ failure.description|truncatewords:40 }}</p>
+        {% endif %}
+
+        <p class="pin-suggestion-card-dates">Google couldn't place this pin automatically.</p>
+
+        <div hx-get="{% url 'memories.locations.import_failures.guess' failure.pk %}"
+             hx-trigger="revealed once" hx-swap="outerHTML"></div>
+
+        <div class="pin-suggestion-card-actions">
+            <button type="button" class="btn btn--sm btn--primary"
+                    onclick="document.getElementById('pin-import-failure-place-dialog-{{ failure.pk }}').showModal()">
+                <i class="material-symbols-outlined">place</i>
+                Place pin
+            </button>
+            <button type="button" class="btn btn--sm btn--ghost"
+                    hx-post="{% url 'memories.locations.import_failures.dismiss' failure.pk %}"
+                    hx-target="#pin-import-failure-card-{{ failure.pk }}" hx-swap="outerHTML">
+                <i class="material-symbols-outlined">close</i>
+                Remove
+            </button>
+        </div>
+    </div>
+
+    <dialog id="pin-import-failure-place-dialog-{{ failure.pk }}" class="pin-import-failure-place-dialog ul-dialog" aria-labelledby="dialog-title-place-pin">
+        {% include "dashboard/partials/ui/_dialog_header.html" with title="Place Pin" %}
+        <div class="ul-dialog-body">
+            <p class="pin-import-failure-dialog-caption">
+                {% if failure.reason == "no_location_found" %}
+                Google doesn't have enough data to place this pin on the map automatically.
+                {% else %}
+                The live location lookup didn't finish for this pin - this isn't a problem with your import.
+                {% endif %}
+                Enter an address or coordinates to place it yourself.
+            </p>
+            <form hx-post="{% url 'memories.locations.import_failures.resolve' failure.pk %}"
+                  hx-target="#pin-import-failure-card-{{ failure.pk }}" hx-swap="outerHTML">
+                {% csrf_token %}
+                <div class="form-row">
+                    <label for="pin-import-failure-address-{{ failure.pk }}">Address</label>
+                    <input type="text" id="pin-import-failure-address-{{ failure.pk }}" name="address"
+                           placeholder="123 Main St, Springfield" autocomplete="off">
+                </div>
+                <div class="form-row form-row--two-col">
+                    <div>
+                        <label for="pin-import-failure-latitude-{{ failure.pk }}">Latitude</label>
+                        <input type="text" id="pin-import-failure-latitude-{{ failure.pk }}" name="latitude"
+                               inputmode="decimal" placeholder="40.7128" autocomplete="off">
+                    </div>
+                    <div>
+                        <label for="pin-import-failure-longitude-{{ failure.pk }}">Longitude</label>
+                        <input type="text" id="pin-import-failure-longitude-{{ failure.pk }}" name="longitude"
+                               inputmode="decimal" placeholder="-74.0060" autocomplete="off">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn--primary">Place Pin</button>
+                    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+</article>

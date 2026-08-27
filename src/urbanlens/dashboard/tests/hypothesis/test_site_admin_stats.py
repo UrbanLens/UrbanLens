@@ -28,7 +28,7 @@ from urbanlens.dashboard.controllers.site_admin import (
 )
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.site_settings.meta import EnvironmentOverrideChoice
-from urbanlens.dashboard.services.site_admin import add_user_to_site_admin_group
+from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
 
 # -- _monthly_series -----------------------------------------------------------
 
@@ -301,7 +301,7 @@ class SiteAdminHomeViewTests(TestCase):
 
     def test_home_page_does_not_collect_infrastructure_stats(self) -> None:
         with mock.patch(
-            "urbanlens.dashboard.services.infrastructure_stats.collect_infrastructure_service_stats",
+            "urbanlens.dashboard.services.admin.infrastructure_stats.collect_infrastructure_service_stats",
         ) as collect:
             response = self.client.get(reverse("site_admin_home"))
         self.assertEqual(response.status_code, 200)
@@ -334,14 +334,14 @@ class SiteAdminHomeViewTests(TestCase):
         self.assertIn("git_branch", response.context)
 
     def test_status_partial_reports_unhealthy_count(self) -> None:
-        from urbanlens.dashboard.services.infrastructure_stats import InfrastructureServiceStat
+        from urbanlens.dashboard.services.admin.infrastructure_stats import InfrastructureServiceStat
 
         fake_services = (
             InfrastructureServiceStat(key="postgres", name="PostgreSQL", icon="storage", status="healthy", status_label="Connected", metrics=()),
             InfrastructureServiceStat(key="valkey", name="Valkey", icon="memory", status="unhealthy", status_label="Down", metrics=()),
         )
         with mock.patch(
-            "urbanlens.dashboard.services.infrastructure_stats.collect_infrastructure_service_stats",
+            "urbanlens.dashboard.services.admin.infrastructure_stats.collect_infrastructure_service_stats",
             return_value=fake_services,
         ):
             response = self.client.get(reverse("site_admin_home_status"))

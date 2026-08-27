@@ -58,7 +58,7 @@ def reaction_summary(message: Any) -> list[dict[str, Any]]:
     Relies on the caller having `prefetch_related("reactions__profile")` on
     the message queryset to avoid N+1 queries across a thread.
     """
-    from urbanlens.dashboard.services.direct_messages import reaction_summary as _reaction_summary
+    from urbanlens.dashboard.services.messaging.direct_messages import reaction_summary as _reaction_summary
 
     return _reaction_summary(message)
 
@@ -107,7 +107,11 @@ def message_preview(message: Any, viewer_id: int) -> str:
     if message.body:
         return message.body[:80]
     images = getattr(message, "images", None)
-    if images is not None and images.exists():
+    # .all(), not .exists(): the conversation-list queryset prefetches "images"
+    # precisely to make this check free, and .exists() ignores a prefetch cache and
+    # issues its own query - so the prefetch was paying for rows and preventing
+    # nothing.
+    if images is not None and images.all():
         return "📷 Photo"
     if getattr(message, "markup_map_id", None):
         return "🗺️ Map"
@@ -160,32 +164,12 @@ def first_pin_directions_url(map_data: Any) -> str | None:
 def tag_total_pins(tag: Label) -> int:
     """Return this label's pin count plus every descendant's pin count (full subtree).
 
-    Walks the full multi-level hierarchy via ``Label.get_label_and_descendants``
-    (BFS, cycle-safe) rather than only direct children, matching how map/pin
-    filtering actually expands a parent label to its whole subtree.
+    Usage: {{ label|tag_total_pins }}
 
-    Uses the annotated ``pin_count`` for this label when available (set by
-    ``LabelQuerySet.with_pin_counts()``); falls back to a DB query otherwise.
-    Descendant counts beyond the prefetched direct children are always summed
-    via a single aggregate query, since only the direct-children prefetch
-    carries its own annotation.
+    Thin template wrapper over ``Label.total_pin_count`` - see there for how the
+    ``with_pin_counts()`` annotation is reused and the result memoized.
     """
-    from django.db.models import Count
-
-    from urbanlens.dashboard.models.labels.model import Label as _Label
-
-    total = getattr(tag, "pin_count", None)
-    if total is None:
-        total = tag.pins.count()
-    if tag.pk is None:
-        return total
-
-    descendant_ids = _Label.get_label_and_descendants(tag.pk) - {tag.pk}
-    if not descendant_ids:
-        return total
-
-    descendant_total = _Label.objects.filter(id__in=descendant_ids).aggregate(total=Count("pins"))["total"] or 0
-    return total + descendant_total
+    return tag.total_pin_count()
 
 
 @register.filter
@@ -308,7 +292,7 @@ def distance(distance_km: Any, units: str = "km") -> str:
         A formatted string like ``"12.3 km"`` or ``"7.6 mi"``, or "" if the
         input is not a number.
     """
-    from urbanlens.dashboard.services.units import format_distance
+    from urbanlens.dashboard.services.core.units import format_distance
 
     try:
         value = float(distance_km)
@@ -345,6 +329,28 @@ def is_material_icon(value: str | None) -> bool:
     Usage: {% if tag.icon|is_material_icon %}
     """
     return bool(value and re.match(r"^[a-z0-9_]+$", str(value)))
+
+
+@register.filter
+def hex_to_rgba(hex_value: str | None, opacity_pct: int | str = 100) -> str:
+    """Convert a ``#RRGGBB`` hex color plus a 0-100 opacity into a CSS ``rgba(...)`` string.
+
+    Used to tint a swatch/thumbnail background from a user-chosen accent color at a
+    given opacity, e.g. saved filter buttons and custom layer thumbnails.
+
+    Usage: style="background:{{ filter.color|hex_to_rgba:filter.opacity }}"
+
+    Returns:
+        An ``rgba(r,g,b,a)`` string, or ``""`` if ``hex_value`` isn't a valid hex color.
+    """
+    if not hex_value or not re.match(r"^#[0-9a-fA-F]{6}$", str(hex_value)):
+        return ""
+    try:
+        alpha = max(0, min(100, int(opacity_pct))) / 100
+    except (TypeError, ValueError):
+        alpha = 1.0
+    r, g, b = (int(hex_value[i : i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({r},{g},{b},{alpha})"
 
 
 @register.filter
@@ -458,3 +464,43 @@ def tooltip_label(
         Context dict for ``_tooltip_label.html``.
     """
     return {"label": label, "help": help_text, "pos": pos, "wide": wide}
+
+
+@register.simple_tag
+def subscription_role_choices():
+    """Return every subscription role, for the invite-a-friend dialog's role picker.
+
+    Usage: {% subscription_role_choices as subscription_roles %}
+    """
+    from urbanlens.dashboard.models.subscriptions import SubscriptionRole
+
+    return SubscriptionRole.objects.all()
+
+
+@register.simple_tag
+def trip_name_ideas(count: int = 12) -> list[str]:
+    """Return generated trip names for the create-trip dialog's placeholder rotation.
+
+    Usage: ``{% trip_name_ideas as trip_name_ideas %}``
+
+    A tag rather than view context because the dialog is included from two pages
+    (the trips list and the overview), and the names come from the same generator
+    that fills in a blank submission server-side - a second, hand-maintained list
+    in the template would drift away from what the server actually names trips.
+    """
+    from urbanlens.dashboard.services.trips.trip_names import trip_name_suggestions
+
+    return trip_name_suggestions(count)
+
+
+@register.filter
+def pin_type_icon(pin_type: str) -> str:
+    """The Material Symbols glyph for a ``PinType`` value.
+
+    Usage: ``{{ pin.pin_type|pin_type_icon }}``. Backed by the single mapping
+    on the enum itself, so the detail-pin list, the child-wiki list, and the
+    scope badge on both detail pages can't drift apart.
+    """
+    from urbanlens.dashboard.models.pin.model import PIN_TYPE_ICONS
+
+    return PIN_TYPE_ICONS.get(pin_type, "push_pin")

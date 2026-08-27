@@ -62,6 +62,8 @@ Context:
         data-copyright="{{ img.copyright|default:'' }}"
         data-source-url="{{ img.source_url|default:'' }}"
         data-taken-at="{{ img.taken_at|date:'c'|default:'' }}"
+        data-on-wiki="{% if img.wiki_id %}true{% else %}false{% endif %}"
+        data-uploaded="{% if img.source == 'upload' %}true{% else %}false{% endif %}"
         onmouseenter="galleryHover({{ img.pk }}, true)"
         onmouseleave="galleryHover({{ img.pk }}, false)">
       {% if img.profile == profile %}
@@ -151,7 +153,7 @@ Context:
 {# -- Import a public Flickr album by URL - the pin detail page's own copy  #}
 {# of this dialog lives in location/index.html instead, alongside its      #}
 {# "Import Photos" button at the Media-section level. #}
-<dialog id="flickr-album-dialog" class="ul-dialog"></dialog>
+<dialog id="flickr-album-dialog" class="ul-dialog" aria-label="Flickr album"></dialog>
 {% endif %}
 
 {# -- Full-page drop overlay (shown when user drags files onto the page) ------- #}
@@ -173,6 +175,7 @@ Context:
   var UPLOAD_URL = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% elif context_type == "safety" %}{% url "safety.checkin.gallery" checkin.slug|default:checkin.uuid %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
   var REPOSITION_BASE = '{% if context_type == "pin" %}{% url "pin.gallery" pin.slug %}{% elif context_type == "safety" %}{% url "safety.checkin.gallery" checkin.slug|default:checkin.uuid %}{% else %}{% url "location.wiki.gallery" location.slug %}{% endif %}';
   var CSRF_TOKEN = '{{ csrf_token }}';
+  var CONTEXT_TYPE = '{{ context_type }}';
 
   // Build an ordered list of image ids for lightbox navigation.
   var _items = Array.from(document.querySelectorAll('.gallery-item')).map(function (el) {
@@ -312,7 +315,7 @@ Context:
   // Upload/delete mutate the grid directly (no htmx refetch, see comment above)
   // but previously left the header's photo-count badge showing its value as of
   // last page load - keep it in sync with the same direct DOM edit.
-  function _updateGalleryCountBadge(delta) {
+  function _updateGalleryCountLabel(delta) {
     var header = document.querySelector('#photo-gallery .card-header');
     if (!header) return;
     var badge = header.querySelector('.badge');
@@ -343,6 +346,8 @@ Context:
     li.dataset.copyright = img.copyright || '';
     li.dataset.sourceUrl = img.source_url || '';
     li.dataset.takenAt = img.taken_at || '';
+    li.dataset.onWiki = img.on_wiki ? 'true' : 'false';
+    li.dataset.uploaded = img.uploaded === false ? 'false' : 'true';
     li.addEventListener('mouseenter', function () { galleryHover(img.id, true); });
     li.addEventListener('mouseleave', function () { galleryHover(img.id, false); });
 
@@ -374,24 +379,50 @@ Context:
       id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true,
       author: img.author || '', copyright: img.copyright || '', sourceUrl: img.source_url || '', takenAt: img.taken_at || '',
     });
-    _updateGalleryCountBadge(1);
+    _updateGalleryCountLabel(1);
   }
 
   // -- Delete -----------------------------------------------------------------
   window.galleryDelete = function (imgId) {
-    if (!confirm('Delete this photo?')) return;
-    fetch(REPOSITION_BASE + imgId + '/', {
+    var tile = document.getElementById('gallery-item-' + imgId);
+    var onWiki = CONTEXT_TYPE === 'pin' && tile && tile.dataset.onWiki === 'true';
+    var uploaded = tile && tile.dataset.uploaded === 'true';
+    var withdraw = false;
+
+    if (!onWiki) {
+      if (!confirm('Delete this photo?\n\nThis cannot be undone - the file is removed permanently.')) return;
+    } else if (!uploaded) {
+      // Fetched from a URL: it was a public resource online before we saw it,
+      // so there is nothing here to withdraw and nothing to ask about. Taking
+      // it off the wiki is done on the wiki.
+      if (!confirm('Remove this photo from your pin?\n\nIt stays on the community wiki - remove it there if you want it gone from the wiki too.')) return;
+    } else {
+      if (!confirm('Remove this photo from your pin?\n\nYou also contributed it to the community wiki. It stays there unless you say otherwise on the next prompt.')) return;
+      // Cancel keeps it on the wiki. Silence is not consent to withdraw a
+      // contribution, so the safe answer is the one that needs no action.
+      withdraw = confirm('Also remove it from the community wiki?\n\nOK removes it from the wiki as well, permanently.\nCancel leaves it on the wiki.');
+    }
+
+    fetch(REPOSITION_BASE + imgId + '/' + (withdraw ? '?from_wiki=1' : ''), {
       method: 'DELETE',
       headers: { 'X-CSRFToken': CSRF_TOKEN },
     }).then(function (r) {
-      if (r.status === 204) {
-        var el = document.getElementById('gallery-item-' + imgId);
-        if (el) el.remove();
-        _items = _items.filter(function (i) { return i.id !== imgId; });
-        if (window._galleryRemoveMarker) window._galleryRemoveMarker(imgId);
-        _updateGalleryCountBadge(-1);
-        if (window.toastr) toastr.success('Photo deleted.');
+      if (r.status !== 204) {
+        // Silence here is the worst possible answer: the user has just
+        // confirmed a "this cannot be undone" prompt, and a tile that stays
+        // put with no message reads as a delete that quietly failed *or* one
+        // that quietly worked - they cannot tell which.
+        if (window.toastr) toastr.error('Could not delete that photo.');
+        return;
       }
+      var el = document.getElementById('gallery-item-' + imgId);
+      if (el) el.remove();
+      _items = _items.filter(function (i) { return i.id !== imgId; });
+      if (window._galleryRemoveMarker) window._galleryRemoveMarker(imgId);
+      _updateGalleryCountLabel(-1);
+      if (window.toastr) toastr.success(onWiki && !withdraw ? 'Removed from this pin. Still on the wiki.' : 'Photo deleted.');
+    }).catch(function () {
+      if (window.toastr) toastr.error('Could not delete that photo.');
     });
   };
 

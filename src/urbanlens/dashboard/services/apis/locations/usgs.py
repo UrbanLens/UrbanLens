@@ -9,7 +9,7 @@ from typing import Any, ClassVar
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.apis.locations.base import create_bbox_str
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)

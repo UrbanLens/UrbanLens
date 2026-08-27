@@ -142,6 +142,16 @@
     .material-symbols-outlined {
         font-size: 16px;
     }
+
+    &:before {
+        display: none;
+    }
+
+}
+
+// Override default checkbox styles for the pin-select-box
+[type=checkbox]+span.pin-select-box:not(.lever):not(.ul-switch__track) {
+    padding-left: 0;
 }
 
 .pin-select-cb:checked + .pin-select-box {

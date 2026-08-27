@@ -4,7 +4,7 @@ The push body's bounds are the interesting part. ``child_pin_uuids`` is
 ``min_length=1`` because an empty list is never a meaningful request - the
 internal controller answers 400 for it, and silently succeeding with
 ``created: 0`` would let a buggy client believe it had synced. It is
-``max_length=500`` to match ``services.pin_wiki_sync.MAX_SYNC_ITEMS``, which the
+``max_length=500`` to match ``services.pins.pin_wiki_sync.MAX_SYNC_ITEMS``, which the
 service applies by *slicing*: without the bound here, a 10,000-entry list would
 be accepted, quietly truncated to 500, and reported as a success the client
 could not distinguish from a complete one.
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from urbanlens.dashboard.services.pin_wiki_sync import MAX_SYNC_ITEMS
+from urbanlens.dashboard.services.pins.pin_wiki_sync import MAX_SYNC_ITEMS
 
 
 class PinWikiSyncPushSerializer(serializers.Serializer):

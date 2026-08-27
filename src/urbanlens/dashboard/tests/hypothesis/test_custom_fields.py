@@ -19,7 +19,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.export import _export_custom_fields
+from urbanlens.dashboard.services.import_export.export import _export_custom_fields
 
 
 class CustomFieldTestsBase(TestCase):
@@ -42,7 +42,7 @@ class CustomFieldValueParsingTests(SimpleTestCase):
     def _value(self, field_type: str) -> CustomFieldValue:
         return CustomFieldValue(field=CustomField(field_type=field_type))
 
-    @given(st.decimals(allow_nan=False, allow_infinity=False, min_value=Decimal("-999999999"), max_value=Decimal("999999999"), places=6))
+    @given(st.decimals(allow_nan=False, allow_infinity=False, min_value=Decimal(-999999999), max_value=Decimal(999999999), places=6))
     @hypothesis_settings(max_examples=25, deadline=None)
     def test_number_round_trip(self, number: Decimal) -> None:
         value = self._value(CustomFieldType.NUMBER)
@@ -202,7 +202,7 @@ class PinCustomFieldPanelTests(CustomFieldTestsBase):
 
         self.client.post(url, {"value": "12"})
         value = CustomFieldValue.objects.get(field=field, pin=self.pin)
-        self.assertEqual(value.value_number, Decimal("12"))
+        self.assertEqual(value.value_number, Decimal(12))
 
         self.client.post(url, {"value": "14.5"})
         value.refresh_from_db()
@@ -311,11 +311,11 @@ class CustomFieldMapFilterTests(CustomFieldTestsBase):
 
         self.brick_pin = baker.make(Pin, profile=self.profile, name="Brick Factory", name_is_user_provided=True)
         CustomFieldValue.objects.create(field=self.text_field, pin=self.brick_pin, value_text="red brick")
-        CustomFieldValue.objects.create(field=self.number_field, pin=self.brick_pin, value_number=Decimal("3"))
+        CustomFieldValue.objects.create(field=self.number_field, pin=self.brick_pin, value_number=Decimal(3))
 
         self.steel_pin = baker.make(Pin, profile=self.profile, name="Steel Mill", name_is_user_provided=True)
         CustomFieldValue.objects.create(field=self.text_field, pin=self.steel_pin, value_text="steel")
-        CustomFieldValue.objects.create(field=self.number_field, pin=self.steel_pin, value_number=Decimal("12"))
+        CustomFieldValue.objects.create(field=self.number_field, pin=self.steel_pin, value_number=Decimal(12))
         CustomFieldValue.objects.create(field=self.date_field, pin=self.steel_pin, value_date=date(2026, 6, 1))
 
     def _filtered(self, form_data: dict) -> set[str]:
@@ -407,7 +407,7 @@ class CustomFieldExportTests(CustomFieldTestsBase):
         stars_field = CustomField.objects.create(
             profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Photogenic", field_type=CustomFieldType.NUMBER, style=CustomFieldStyle.STARS,
         )
-        CustomFieldValue.objects.create(field=stars_field, pin=self.pin, value_number=Decimal("4"))
+        CustomFieldValue.objects.create(field=stars_field, pin=self.pin, value_number=Decimal(4))
 
         with tempfile.TemporaryDirectory() as temp_dir:
             _export_custom_fields(self.profile, temp_dir)
@@ -477,7 +477,7 @@ class NewTypeValueParsingTests(SimpleTestCase):
     def test_set_value_clears_other_typed_columns(self) -> None:
         value = self._value(CustomFieldType.CHECKBOX)
         value.value_text = "stale"
-        value.value_number = Decimal("7")
+        value.value_number = Decimal(7)
         value.set_value("true")
         self.assertEqual(value.value_text, "")
         self.assertIsNone(value.value_number)
@@ -798,7 +798,7 @@ class NewTypeCriteriaRoundTripTests(CustomFieldTestsBase):
     """serialize_form_criteria / deserialize_criteria for the new criterion shapes."""
 
     def test_round_trip_preserves_new_shapes(self) -> None:
-        from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
+        from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
 
         select_field = CustomField.objects.create(
             profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Access", field_type=CustomFieldType.SELECT, config={"choices": ["Open", "Locked"]},
@@ -916,7 +916,7 @@ class ReferenceFieldTests(CustomFieldTestsBase):
         self.assertEqual(names, {"Old Mill"})
 
     def test_reference_criteria_round_trip(self) -> None:
-        from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
+        from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
 
         field = self._reference_field("pin")
         other_pin = baker.make(Pin, profile=self.profile, name="Boiler House", name_is_user_provided=True)

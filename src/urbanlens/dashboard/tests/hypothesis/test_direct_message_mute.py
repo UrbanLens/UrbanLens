@@ -9,7 +9,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.direct_messages import conversations_for, create_direct_message
+from urbanlens.dashboard.services.messaging.direct_messages import conversations_for, create_direct_message
 
 
 def _profile() -> Profile:

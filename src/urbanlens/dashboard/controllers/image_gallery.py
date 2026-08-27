@@ -13,14 +13,16 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
-from urbanlens.dashboard.models.images.model import Image, MediaKind
+from urbanlens.dashboard.models.images.attachment import ImageAttachment
+from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json, image_upload_error, parse_reposition_payload
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.media.images import delete_stored_file, detach_image_from_wiki, image_to_gallery_json, parse_reposition_payload
+from urbanlens.dashboard.services.photos.uploads import UploadRejection, upload_photo_for_owner
+from urbanlens.dashboard.services.wiki.concealment import visible_rows
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -35,6 +37,57 @@ _GALLERY_PAGE_SIZE = 12
 def _wiki_for_location(location: Location | None) -> Wiki | None:
     """Return the community Wiki for a Location, or None when it has no wiki yet."""
     return Wiki.objects.get_for_location(location)
+
+
+def create_uploaded_photo(request: HttpRequest, owner: Pin | Wiki, profile: Profile) -> tuple[Image | None, JsonResponse]:
+    """Store the request's uploaded photo against *owner*.
+
+    Shared by the pin gallery, the wiki gallery, and an album's upload button so
+    all three answer with the same body and the same status codes - the client
+    code that renders an uploaded tile is shared too, and would otherwise have
+    to special-case whichever surface drifted.
+
+    Args:
+        request: The upload request; reads the ``image`` file and ``caption``.
+        owner: The Pin or Wiki to attach the photo to.
+        profile: The uploading profile.
+
+    Returns:
+        Tuple of (the created Image or None, the response to return). Callers
+        that need the row - to file it somewhere else - take the first element
+        rather than re-parsing the response body.
+    """
+    image_file = request.FILES.get("image")
+    if not image_file:
+        return None, JsonResponse({"error": "No image provided."}, status=400)
+
+    result = upload_photo_for_owner(owner, profile, image_file, request.POST.get("caption", ""))
+    if isinstance(result, UploadRejection):
+        return None, JsonResponse({"error": result.message}, status=result.status)
+
+    # Imported here rather than at module scope: dashboard.tasks pulls in the
+    # service layer, which imports this module back.
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import process_image_upload
+
+    safely_enqueue_task(process_image_upload, result.pk)
+    return result, JsonResponse(image_to_gallery_json(result, request, profile), status=201)
+
+
+def store_uploaded_photo(request: HttpRequest, owner: Pin | Wiki, profile: Profile) -> JsonResponse:
+    """Store the request's uploaded photo against *owner* and return the gallery JSON.
+
+    Args:
+        request: The upload request; reads the ``image`` file and ``caption``.
+        owner: The Pin or Wiki to attach the photo to.
+        profile: The uploading profile.
+
+    Returns:
+        201 with ``image_to_gallery_json`` on success, or the rejection's own
+        status with an ``error`` message.
+    """
+    _image, response = create_uploaded_photo(request, owner, profile)
+    return response
 
 
 # -- Pin gallery --------------------------------------------------------------
@@ -96,39 +149,7 @@ class PinGalleryView(LoginRequiredMixin, View):
         """Upload an image to a pin. Rejects a file the uploader already has on this pin."""
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        image_file = request.FILES.get("image")
-        if not image_file:
-            return JsonResponse({"error": "No image provided."}, status=400)
-
-        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
-        if upload_error:
-            message, status = upload_error
-            return JsonResponse({"error": message}, status=status)
-
-        checksum = compute_checksum(image_file)
-        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
-            return JsonResponse({"error": "You already uploaded this photo to this pin."}, status=409)
-
-        with per_profile_upload_lock(profile):
-            quota_error = quota_error_for_upload(profile, image_file.size)
-            if quota_error:
-                return JsonResponse({"error": quota_error}, status=413)
-
-            img = Image.objects.create(
-                image=image_file,
-                pin=pin,
-                wiki=_wiki_for_location(pin.location),
-                location=pin.location,
-                profile=profile,
-                caption=request.POST.get("caption", "").strip() or None,
-                checksum=checksum,
-                file_size=image_file.size,
-            )
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import process_image_upload
-
-        safely_enqueue_task(process_image_upload, img.pk)
-        return JsonResponse(image_to_gallery_json(img, request, profile), status=201)
+        return store_uploaded_photo(request, pin, profile)
 
 
 class PinGalleryJsonView(LoginRequiredMixin, View):
@@ -175,18 +196,40 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
             # Collect the stored file paths first, then delete the underlying
             # storage files (Django has no bulk API for that) followed by a
             # single bulk DB delete, instead of one DELETE per row.
-            image_paths = list(images.values_list("image", flat=True))
-            for path in image_paths:
-                if path:
-                    default_storage.delete(path)
-            images.delete()
-            return JsonResponse({"deleted": len(image_paths)})
+            # Same reference rule as delete_stored_file: a shared photo's file
+            # backs several rows, and the whole batch is going, so rows inside it
+            # must not count as references.
+            batch = list(images)
+            batch_pks = [image.pk for image in batch]
+            # A row also linked to a wiki (send_to_wiki below repoints rather than
+            # copies) must be unlinked from the pin, not destroyed - see
+            # detach_image_from_pin.
+            to_destroy = [image for image in batch if image.wiki_id is None]
+            to_unlink_ids = [image.pk for image in batch if image.wiki_id is not None]
+            for image in to_destroy:
+                delete_stored_file(image, also_deleting=batch_pks)
+            Image.objects.filter(pk__in=[image.pk for image in to_destroy]).delete()
+            if to_unlink_ids:
+                Image.objects.filter(pk__in=to_unlink_ids).update(pin=None)
+            # Row count, not file count - a row with no stored file (e.g. still
+            # processing) still gets deleted and must still be counted, or the
+            # response silently undercounts what the client asked it to delete.
+            return JsonResponse({"deleted": len(to_destroy), "unlinked": len(to_unlink_ids)})
 
         if action == "send_to_wiki":
             wiki = _wiki_for_location(pin.location)
             if wiki is None:
                 return JsonResponse({"error": "Create a community wiki for this location first."}, status=400)
-            count = images.exclude(wiki=wiki).update(wiki=wiki)
+            # The deliberate act. Uploading to a pin no longer puts a photo on the
+            # location's wiki, so this is the only way one gets there - and it is
+            # recorded as an attachment as well as an FK, because the attachment is
+            # what says a person chose to contribute this.
+            from urbanlens.dashboard.services.photos.attachment import attach_to_wiki
+
+            sending = list(images.exclude(wiki=wiki))
+            for image in sending:
+                attach_to_wiki(image, wiki, added_by=profile)
+            count = images.filter(pk__in=[image.pk for image in sending]).update(wiki=wiki)
             return JsonResponse({"updated": count})
 
         return JsonResponse({"error": "Unknown action."}, status=400)
@@ -214,6 +257,7 @@ class PinCoverPhotoView(LoginRequiredMixin, View):
                 Location).
         """
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
             data = json.loads(request.body)
             image_id = data.get("image_id")
@@ -227,8 +271,12 @@ class PinCoverPhotoView(LoginRequiredMixin, View):
 
         # Any image tied to this pin's own gallery, or already associated
         # with its Location (e.g. a Media-gallery item materialized via
-        # "send to wiki" or a prior cover-photo pick), is eligible.
-        image = get_object_or_404(Image, pk=image_id)
+        # "send to wiki" or a prior cover-photo pick), is eligible - but only
+        # among photos this viewer may see, since every pin upload stamps
+        # Image.location and two users pinning the same place therefore share
+        # a location id. `visible_to` is applied to the single-row queryset so
+        # its per-uploader visibility pass stays scoped to that one uploader.
+        image = get_object_or_404(Image.objects.filter(pk=image_id).visible_to(profile))
         if image.pin_id != pin.pk and image.location_id != pin.location_id:
             raise Http404
         pin.cover_photo = image
@@ -257,11 +305,41 @@ class PinImageView(LoginRequiredMixin, View):
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
     def delete(self, request: HttpRequest, pin_slug: str, image_id: int) -> HttpResponse:
+        """Take a photo off this pin, and off the wiki only if asked.
+
+        Contributing a photo to a community wiki is a deliberate act, so undoing
+        it has to be one too. This screen never mentions the wiki, and it used to
+        drop the ``Image`` row outright - which withdrew the contribution
+        silently. Now the wiki keeps the photo unless the owner says otherwise;
+        silence means no.
+
+        ``?from_wiki=1`` is that explicit answer, and it is honoured only for a
+        photo the owner uploaded. One fetched from a URL was a public resource
+        online before this app saw it, so there is no consent here to withdraw -
+        removing it is something you do on the wiki itself.
+
+        Args:
+            request: Incoming request; ``from_wiki=1`` also withdraws it.
+            pin_slug: Slug of the pin the photo is being removed from.
+            image_id: Primary key of the photo.
+
+        Returns:
+            204, whichever branch ran.
+
+        Raises:
+            Http404: The photo does not belong to the requester.
+        """
         img = self._get_image(image_id, pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404
-        img.image.delete(save=False)
+        withdrawing = request.GET.get("from_wiki") == "1" and img.source == ImageSource.UPLOAD
+        if img.wiki_id is not None and not withdrawing:
+            Image.objects.filter(pk=img.pk).update(pin=None)
+            ImageAttachment.objects.filter(image=img, pin__slug=pin_slug).delete()
+            return HttpResponse(status=204)
+
+        delete_stored_file(img)
         img.delete()
         return HttpResponse(status=204)
 
@@ -273,10 +351,26 @@ class WikiGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the wiki page."""
 
     def _get_context(self, request: HttpRequest, location_slug: str) -> dict:
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
+
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).order_by("-created")
+        # A third gate, on top of the container and settings gates visible_to
+        # already applies. Provider media stays - a fresh wiki carries it - and
+        # uploads survive only from the viewer or a friend. Paginated *after*
+        # filtering, or the page count reports the photos it is standing in
+        # front of.
+        if concealment_active(wiki, profile):
+            images = conceal_rows(images, profile)
         page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
-        return {"location": location, "wiki": wiki, "images": page_obj.object_list, "page_obj": page_obj, "profile": profile, "context_type": "wiki"}
+        return {
+            "location": location,
+            "wiki": conceal_wiki(wiki, profile),
+            "images": page_obj.object_list,
+            "page_obj": page_obj,
+            "profile": profile,
+            "context_type": "wiki",
+        }
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
         ctx = self._get_context(request, location_slug)
@@ -284,47 +378,23 @@ class WikiGalleryView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         """Upload an image to a location wiki. Rejects a file the uploader already has on this wiki."""
-        location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        image_file = request.FILES.get("image")
-        if not image_file:
-            return JsonResponse({"error": "No image provided."}, status=400)
-
-        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
-        if upload_error:
-            message, status = upload_error
-            return JsonResponse({"error": message}, status=status)
-
-        checksum = compute_checksum(image_file)
-        if Image.objects.filter(wiki=wiki, profile=profile, checksum=checksum).exists():
-            return JsonResponse({"error": "You already uploaded this photo to this wiki."}, status=409)
-
-        with per_profile_upload_lock(profile):
-            quota_error = quota_error_for_upload(profile, image_file.size)
-            if quota_error:
-                return JsonResponse({"error": quota_error}, status=413)
-
-            img = Image.objects.create(
-                image=image_file,
-                wiki=wiki,
-                location=location,
-                profile=profile,
-                caption=request.POST.get("caption", "").strip() or None,
-                checksum=checksum,
-                file_size=image_file.size,
-            )
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import process_image_upload
-
-        safely_enqueue_task(process_image_upload, img.pk)
-        return JsonResponse(image_to_gallery_json(img, request, profile), status=201)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        return store_uploaded_photo(request, wiki, profile)
 
 
 class WikiGalleryJsonView(LoginRequiredMixin, View):
     """JSON endpoint for the wiki photo map layer."""
 
     def get(self, request: HttpRequest, location_slug: str) -> JsonResponse:
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
+
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).with_coords()
+        # This layer plots photos at their capture coordinates, so an unfiltered
+        # payload does not merely list other people's contributions - it maps
+        # where they stood.
+        if concealment_active(wiki, profile):
+            images = conceal_rows(images, profile)
         data = [image_to_gallery_json(img, request, profile) for img in images]
         return JsonResponse({"images": data})
 
@@ -340,23 +410,41 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
-        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         try:
             data = json.loads(request.body)
             image_id = data.get("image_id")
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
+        # The row that gets saved must be the real one, not a concealed
+        # projection of it - see concealment.writable_wiki.
+        target = writable_wiki(wiki)
+
         if image_id is None:
-            wiki.cover_photo = None
-            wiki.save(update_fields=["cover_photo", "updated"])
+            target.cover_photo = None
+            target.save(update_fields=["cover_photo", "updated"])
             return JsonResponse({"cover_photo": None})
 
-        image = get_object_or_404(Image.objects.visible_to(profile), pk=image_id)
-        if image.wiki_id != wiki.pk and image.location_id != location.pk:
+        # Scoped to the one row before `visible_to`, whose per-uploader pass
+        # would otherwise walk every uploader on the site to answer about one image.
+        image = get_object_or_404(Image.objects.filter(pk=image_id).visible_to(profile))
+        # On the wiki, not merely at the place. Accepting any photo whose location
+        # matched let one person publish another's: a pin photo carries the
+        # location but no wiki, and being able to *see* somebody's photo - which a
+        # neighbour with a pin at the same place generally can - is not permission
+        # to put it on the front of a page everyone reads. The wiki cover is
+        # rendered with no visibility gate of its own, so this is the gate.
+        #
+        # The pin twin (PinCoverPhotoView) keeps the wider rule deliberately: its
+        # consequence is confined to the setter's own page.
+        on_this_wiki = image.wiki_id == wiki.pk or ImageAttachment.objects.filter(image=image, wiki=wiki).exists()
+        if not on_this_wiki:
             raise Http404
-        wiki.cover_photo = image
-        wiki.save(update_fields=["cover_photo", "updated"])
+        target.cover_photo = image
+        target.save(update_fields=["cover_photo", "updated"])
         return JsonResponse({"cover_photo": image.image.url if image.image else image.source_url})
 
 
@@ -365,7 +453,7 @@ class WikiImageView(LoginRequiredMixin, View):
 
     def _get_image(self, request: HttpRequest, image_id: int, location_slug: str) -> tuple[Image, Profile]:
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        return get_object_or_404(Image, pk=image_id, wiki=wiki), profile
+        return get_object_or_404(visible_rows(Image.objects.filter(wiki=wiki), wiki, profile), pk=image_id), profile
 
     def post(self, request: HttpRequest, location_slug: str, image_id: int) -> JsonResponse:
         img, profile = self._get_image(request, image_id, location_slug)
@@ -383,6 +471,5 @@ class WikiImageView(LoginRequiredMixin, View):
         img, profile = self._get_image(request, image_id, location_slug)
         if img.profile != profile:
             raise Http404
-        img.image.delete(save=False)
-        img.delete()
+        detach_image_from_wiki(img)
         return HttpResponse(status=204)

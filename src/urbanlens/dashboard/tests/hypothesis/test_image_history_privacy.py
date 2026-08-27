@@ -72,7 +72,9 @@ class ProcessImageUploadLocationPrivacyTests(TestCase):
             stored.load()
             exif = stored.getexif()
             self.assertFalse(exif.get_ifd(0x8825))
-            self.assertEqual(exif[0x010F], "UrbanLens")  # non-GPS EXIF survives
+            # The rest of the block goes too - make and model identify the kit,
+            # and the file is what gets served. It lives on the row instead.
+            self.assertIsNone(exif.get(0x010F))
 
     def test_tracking_off_raises_no_visit_suggestion(self):
         row = self._make_image_row(track_pin_visits=False)
@@ -80,7 +82,7 @@ class ProcessImageUploadLocationPrivacyTests(TestCase):
             process_image_upload(row.pk)
         self.assertEqual(VisitSuggestion.objects.count(), 0)
 
-    def test_tracking_on_preserves_lat_lng_and_exif_gps(self):
+    def test_tracking_on_records_gps_on_the_row_but_not_in_the_file(self):
         row = self._make_image_row(track_pin_visits=True)
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             process_image_upload(row.pk)
@@ -91,7 +93,10 @@ class ProcessImageUploadLocationPrivacyTests(TestCase):
         self.assertAlmostEqual(float(row.direction), 90.0, places=2)
         self.assertIn("GPSInfo", row.exif_data)
 
+        # Recorded on the row, absent from the file: tracking visits decides
+        # whether we keep the coordinates, not whether we hand them to everyone
+        # who can see the photo.
         with row.image.open("rb") as fh:
             stored = PILImage.open(fh)
             stored.load()
-            self.assertTrue(stored.getexif().get_ifd(0x8825))
+            self.assertFalse(stored.getexif().get_ifd(0x8825))

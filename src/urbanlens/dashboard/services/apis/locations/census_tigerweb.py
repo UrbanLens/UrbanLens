@@ -13,8 +13,8 @@ from typing import Any, ClassVar
 
 import requests
 
-from urbanlens.dashboard.services.gateway import Gateway
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class CensusTigerwebGateway(Gateway):
         Unlike :meth:`get_geography`, this is an attribute query (matching on
         the state's USPS abbreviation), not a point-in-polygon lookup - it
         answers "what does this state's polygon look like", not "what state is
-        this point in". Used by ``services.geo_boundary.state_boundary`` to
+        this point in". Used by ``services.geo.geo_boundary.state_boundary`` to
         build a point-containment gate for state-scoped plugins.
 
         Args:

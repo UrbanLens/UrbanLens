@@ -1,12 +1,12 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load map_components %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
+{% vendor_asset "leaflet_draw_css" %}
+{% vendor_asset "leaflet_draw_js" %}
 {% endblock %}
 
 {% block page_title %}{{ pin_list.name }} - Lists - {{ site_title|default:"UrbanLens" }}{% endblock %}
@@ -157,7 +157,7 @@
 </div>
 
 {# -- Edit list dialog ------------------------------------------------------ #}
-<dialog id="edit-list-dialog" class="ul-dialog">
+<dialog id="edit-list-dialog" class="ul-dialog" aria-labelledby="dialog-title-edit-list">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit List" %}
     <div class="ul-dialog-body">
         <form onsubmit="return pinListSaveEdit(event)">
@@ -178,7 +178,7 @@
 </dialog>
 
 {# -- Add pins dialog --------------------------------------------------------#}
-<dialog id="add-pins-dialog" class="ul-dialog">
+<dialog id="add-pins-dialog" class="ul-dialog" aria-labelledby="dialog-title-add-pins">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Pins" %}
     <div class="ul-dialog-body">
         <p class="pin-list-smart-hint">Search your pins, or an address, place, or coordinates to add somewhere new.</p>
@@ -189,7 +189,7 @@
 </dialog>
 
 {# -- Confirm creating a new pin from an Add Pins search result ---------------#}
-<dialog id="add-pins-create-confirm-dialog" class="ul-dialog">
+<dialog id="add-pins-create-confirm-dialog" class="ul-dialog" aria-labelledby="dialog-title-create-a-new-pin">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a New Pin?" %}
     <div class="ul-dialog-body">
         <p id="add-pins-create-confirm-text"></p>
@@ -206,10 +206,10 @@
 
 {# -- Create/edit saved filter dialog - markup+JS shared with Organize's Filters tab (see _saved_filter_dialog_scripts.html). #}
 {# No data-success-redirect set - saving/deleting here just reloads this page so the "Match pins from a saved filter" select picks up the change. #}
-<dialog id="saved-filter-form-dialog" class="ul-dialog saved-filter-form-dialog"></dialog>
+<dialog id="saved-filter-form-dialog" class="ul-dialog saved-filter-form-dialog" aria-label="Saved filter"></dialog>
 
 {# -- Add to trip dialog ------------------------------------------------------#}
-<dialog id="add-to-trip-dialog" class="ul-dialog">
+<dialog id="add-to-trip-dialog" class="ul-dialog" aria-labelledby="dialog-title-add-to-trip">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add to Trip" %}
     <div class="ul-dialog-body">
         <input type="search" id="add-to-trip-search" class="pin-list-add-results-search" placeholder="Search your trips..." oninput="pinListFilterTrips(this.value)" autocomplete="off">
@@ -226,7 +226,7 @@
     </div>
 </dialog>
 
-<dialog id="export-list-dialog" class="ul-dialog">
+<dialog id="export-list-dialog" class="ul-dialog" aria-labelledby="dialog-title-export-list">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Export list" %}
     <div class="ul-dialog-body">
         <p class="form-hint">Choose a format to download every pin on this list.</p>
@@ -256,7 +256,7 @@
 </form>
 
 {# -- >100 pins confirmation dialog ------------------------------------------#}
-<dialog id="pin-list-confirm-bulk-add-dialog" class="ul-dialog">
+<dialog id="pin-list-confirm-bulk-add-dialog" class="ul-dialog" aria-labelledby="dialog-title-add-a-lot-of-pins">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add a lot of pins?" %}
     <div class="ul-dialog-body">
         <p id="pin-list-confirm-bulk-add-text"></p>
@@ -326,8 +326,11 @@
     }
     function savePinListOrder(list) {
         const items = Array.from(list.querySelectorAll('.pin-list-item[data-id]')).map((el) => ({ id: el.dataset.id }));
+        // The reorder is already applied in the DOM, so a failure that says
+        // nothing reads as a successful save until the next page load undoes it.
         fetch(list.dataset.saveUrl, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ items }) })
-            .then((r) => { if (!r.ok) _toastError('Could not save the new order.'); });
+            .then((r) => { if (!r.ok) _toastError('Could not save the new order.'); })
+            .catch(() => _toastError('Could not save the new order.'));
     }
     initSortable();
     document.body.addEventListener('htmx:afterSwap', (e) => {
@@ -349,7 +352,7 @@
     };
 
     window.pinListDelete = function () {
-        if (!confirm('Delete this list? This cannot be undone.')) return;
+        if (!confirm('Delete this list? The pins on it are untouched, and you can restore the list from Settings → Undo History.')) return;
         fetch(LIST_DELETE_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
             .then((r) => {
                 if (!r.ok) return Promise.reject('Could not delete this list.');

@@ -49,6 +49,8 @@ class MapLayerSpec:
         thumb_alt: Alt text for the thumbnail image.
         icon: Material Symbols icon name used in the compact strip variant
             and as the thumbnail fallback.
+        color: Optional accent hex color (e.g. a CustomLayer's chosen color)
+            tinted behind the icon in the icon-only thumbnail variant.
         button_id: Explicit DOM id (kept stable for tests/automation).
     """
 
@@ -60,6 +62,7 @@ class MapLayerSpec:
     icon: str
     thumb: str = ""
     thumb_alt: str = ""
+    color: str = ""
     button_id: str = field(default="")
 
     def __post_init__(self) -> None:
@@ -99,7 +102,7 @@ register_map_layer(
         aria_label="Street Map",
         tooltip="Street map",
         icon="map",
-        thumb="dashboard/images/map_layer_street.jpg",
+        thumb="dashboard/images/map_layer_street.webp",
         thumb_alt="Street Layer",
         button_id="street-button",
     )
@@ -112,7 +115,7 @@ register_map_layer(
         aria_label="Topography Map",
         tooltip="Terrain map (T)",
         icon="terrain",
-        thumb="dashboard/images/map_layer_topography.jpg",
+        thumb="dashboard/images/map_layer_topography.webp",
         thumb_alt="Terrain Layer",
         button_id="topography-button",
     )
@@ -125,7 +128,7 @@ register_map_layer(
         aria_label="Satellite Map",
         tooltip="Satellite map (S)",
         icon="globe",
-        thumb="dashboard/images/map_layer_satellite.jpg",
+        thumb="dashboard/images/map_layer_satellite.webp",
         thumb_alt="Satellite Imagery Layer",
         button_id="satellite-button",
     )
@@ -138,7 +141,7 @@ register_map_layer(
         aria_label="Weather overlay",
         tooltip="Weather overlay (W)",
         icon="rainy",
-        thumb="dashboard/images/map_layer_weather.jpg",
+        thumb="dashboard/images/map_layer_weather.webp",
         thumb_alt="Weather Layer",
         button_id="weather-button",
     )
@@ -151,7 +154,7 @@ register_map_layer(
         aria_label="Show or hide pins",
         tooltip="Show or hide pins (P)",
         icon="location_on",
-        thumb="dashboard/images/map_layer_pins.jpg",
+        thumb="dashboard/images/map_layer_pins.webp",
         thumb_alt="Pins Layer",
         button_id="toggle-pins-button",
     )
@@ -164,7 +167,7 @@ register_map_layer(
         aria_label="Show or hide child pins",
         tooltip="Show pins nested inside other pins",
         icon="subdirectory_arrow_right",
-        thumb="dashboard/images/map_layer_child_pins.jpg",
+        thumb="dashboard/images/map_layer_child_pins.webp",
         thumb_alt="Child Pins Layer",
         button_id="child-pins-button",
     )
@@ -177,7 +180,7 @@ register_map_layer(
         aria_label="Toggle Dark Mode",
         tooltip="Dark mode (D)",
         icon="dark_mode",
-        thumb="dashboard/images/map_layer_dark.jpg",
+        thumb="dashboard/images/map_layer_dark.webp",
         thumb_alt="Dark Mode",
         button_id="dark-mode-button",
     )
@@ -190,7 +193,7 @@ register_map_layer(
         aria_label="Toggle Geopolitical boundaries",
         tooltip="Borders layer (B)",
         icon="public",
-        thumb="dashboard/images/map_layer_borders.jpg",
+        thumb="dashboard/images/map_layer_borders.webp",
         thumb_alt="Borders Layer",
         button_id="boundaries-button",
     )
@@ -203,9 +206,22 @@ register_map_layer(
         aria_label="Toggle Places layer",
         tooltip="Places layer",
         icon="travel_explore",
-        thumb="dashboard/images/map_layer_places.jpg",
+        thumb="dashboard/images/map_layer_places.webp",
         thumb_alt="Places Layer",
         button_id="places-button",
+    )
+)
+register_map_layer(
+    MapLayerSpec(
+        key="infrastructure",
+        kind="custom",
+        label="Water & Rail",
+        aria_label="Toggle waterways and railways, including historic routes",
+        tooltip="Active and historic waterways, railways, canals, and rail trails",
+        icon="conversion_path",
+        thumb="dashboard/images/map_layer_water_rail.webp",
+        thumb_alt="Waterways and Railways Layer",
+        button_id="infrastructure-button",
     )
 )
 register_map_layer(
@@ -236,13 +252,35 @@ register_map_layer(
 )
 register_map_layer(
     MapLayerSpec(
+        key="underlay",
+        kind="custom",
+        label="Floor below",
+        aria_label="Show the floor below, faintly",
+        tooltip="Show the floor below",
+        icon="layers",
+        button_id="floorplan-underlay-button",
+    )
+)
+register_map_layer(
+    MapLayerSpec(
+        key="grid",
+        kind="custom",
+        label="Grid",
+        aria_label="Show a measurement grid, and snap to it",
+        tooltip="Show grid",
+        icon="grid_4x4",
+        button_id="floorplan-grid-button",
+    )
+)
+register_map_layer(
+    MapLayerSpec(
         key="nearby",
         kind="custom",
         label="Nearby Pins",
         aria_label="Show or hide the user's other nearby pins",
         tooltip="Show your other pins near this location",
         icon="share_location",
-        thumb="dashboard/images/map_layer_nearby_pins.jpg",
+        thumb="dashboard/images/map_layer_nearby_pins.webp",
         thumb_alt="Nearby Pins Layer",
         button_id="nearby-pins-button",
     )
@@ -255,11 +293,38 @@ register_map_layer(
         aria_label="Show or hide past activities",
         tooltip="Show completed/past activities on the map",
         icon="history",
-        thumb="dashboard/images/map_layer_previous_pins.jpg",
+        thumb="dashboard/images/map_layer_previous_pins.webp",
         thumb_alt="Previous Pins Layer",
         button_id="past-activities-button",
     )
 )
+
+
+def custom_layer_button(layer: Any) -> MapLayerSpec:
+    """Wrap a CustomLayer row as a MapLayerSpec so it renders in the layers panel.
+
+    The panel template only ever duck-types on a button's key/kind/label/icon/...
+    attributes, so a per-pin/wiki user-created layer can reuse the exact same
+    rendering path as the static, developer-registered layers - it just isn't
+    added to the process-wide :data:`MAP_LAYER_REGISTRY`, since that would leak
+    one pin's layers into every other map on the site.
+
+    Args:
+        layer: A ``CustomLayer`` instance.
+
+    Returns:
+        A MapLayerSpec representing this layer's button.
+    """
+    return MapLayerSpec(
+        key=f"layer-{layer.uuid}",
+        kind="custom",
+        label=layer.name,
+        aria_label=f"Show or hide {layer.name}",
+        tooltip=layer.name,
+        icon=layer.icon or "layers",
+        color=layer.color,
+        button_id=f"custom-layer-{layer.uuid}-button",
+    )
 
 
 @register.inclusion_tag("dashboard/partials/map/_layers_panel.html")
@@ -268,6 +333,9 @@ def map_layers_panel(
     variant: str = "panel",
     panel_id: str = "map-layers-panel",
     extra_class: str = "",
+    custom_layers: Any = None,
+    manage_layers_url: str = "",
+    manage_overlays_url: str = "",
 ) -> dict[str, Any]:
     """Render the shared map layers component.
 
@@ -282,17 +350,28 @@ def map_layers_panel(
         extra_class: Extra CSS classes for the root (e.g.
             ``map-layers-panel--inline`` to dock it in a
             ``.map-bottom-controls`` row).
+        custom_layers: Iterable of ``CustomLayer`` rows to append after the
+            static registry buttons (e.g. a pin or wiki's own layers).
+        manage_layers_url: HTMX GET URL for the "Manage Layers" dialog entry
+            point. Omit to hide that button (e.g. the ``strip`` variant).
+        manage_overlays_url: HTMX GET URL for the "Image Overlays" dialog,
+            where a user georeferences a historical map or site plan onto this
+            map. Omit to hide that button - only the pin-detail and wiki maps
+            have overlays.
 
     Returns:
         Context for ``partials/map/_layers_panel.html``.
     """
     keys = [k.strip() for k in layers.split(",") if k.strip()]
     buttons = [MAP_LAYER_REGISTRY[k] for k in keys if k in MAP_LAYER_REGISTRY]
+    buttons += [custom_layer_button(layer) for layer in (custom_layers or [])]
     return {
         "buttons": buttons,
         "variant": variant,
         "panel_id": panel_id,
         "extra_class": extra_class,
+        "manage_layers_url": manage_layers_url,
+        "manage_overlays_url": manage_overlays_url,
     }
 
 
@@ -426,6 +505,20 @@ register_map_tool(
 )
 register_map_tool(
     MapToolSpec(
+        key="pin_list",
+        icon="list",
+        aria_label="Pin list",
+        tooltip="Browse the pins matching the current filters",
+        tooltip_pos="below",
+        # _togglePinListPanel() already looks this id up to sync the button's
+        # active state; the edge handle (#pin-list-handle) is a desktop
+        # convenience rather than the only way in.
+        button_id="pin-list-button",
+        onclick="_togglePinListPanel()",
+    )
+)
+register_map_tool(
+    MapToolSpec(
         key="select",
         icon="check_box",
         aria_label="Select pins",
@@ -448,6 +541,17 @@ register_map_tool(
 )
 register_map_tool(
     MapToolSpec(
+        key="select_building_import",
+        icon="check_box",
+        aria_label="Select buildings",
+        tooltip="Click or drag on the map to include or exclude buildings",
+        tooltip_pos="below",
+        button_id="select-building-import-button",
+        onclick="toggleBuildingImportSelectMode()",
+    )
+)
+register_map_tool(
+    MapToolSpec(
         key="select_unlogged_visits",
         icon="check_box",
         aria_label="Select pins",
@@ -459,6 +563,21 @@ register_map_tool(
         # using an inline onclick, same as select/select_detail_pins' pattern
         # but through addEventListener instead of a global function call.
         button_id="unlogged-visits-select-toggle",
+    )
+)
+register_map_tool(
+    MapToolSpec(
+        key="select_pin_suggestions",
+        icon="check_box",
+        aria_label="Select pins",
+        tooltip="Select multiple pins",
+        tooltip_pos="below",
+        # Sibling of select_unlogged_visits above - same shared PinSelectMap
+        # component, memories/locations.html's own button id. Previously a
+        # bespoke `.pin-select-toggle` pill instead of this shared component;
+        # see test_memories_unlogged.py's fix for the identical defect on the
+        # visits.html sibling page.
+        button_id="pin-suggestions-select-toggle",
     )
 )
 register_map_tool(

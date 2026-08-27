@@ -39,23 +39,29 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_BLOCKED, REASON_MANUAL_ONLY, REASON_SOURCE_ERROR
-from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource, PanelApiKind
-from urbanlens.dashboard.services.geo_boundary import USA
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_BLOCKED, REASON_MANUAL_ONLY, TRANSIENT_REASONS
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.geo.geo_boundary import USA
+from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelApiKind
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.property_owner.model import WikiOwner
-    from urbanlens.dashboard.services.enrichment import EnrichmentSource
-    from urbanlens.dashboard.services.external_data import PanelSource
-    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
+    from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
+    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 logger = logging.getLogger(__name__)
 
 _CACHE_SOURCE = "property_records"
+
+
+#: Liens shown on the card. A parcel with a long enforcement history is
+#: interesting, but the card is a summary - the full list belongs to whoever
+#: goes looking in the county records.
+_MAX_LIEN_ROWS = 8
 
 
 def _fetch_payload(location: Location, latitude: float, longitude: float) -> dict[str, Any]:
@@ -64,7 +70,7 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
     Args:
         location: The Location to fetch a property record for. Its own
             geocoded ``address`` (when already resolved - see
-            ``services.enrichment.AddressEnrichmentSource``) is passed
+            ``services.locations.enrichment.AddressEnrichmentSource``) is passed
             through to REData as an additional search key; REData decides for
             itself whether/how to use it alongside anything it already knows.
         latitude: The latitude to look up - passed explicitly (rather than
@@ -81,7 +87,9 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
         on REData's error response so no second lookup round-trip is needed.
 
     Raises:
-        PropertyRecordsUnavailableError: Only for ``REASON_SOURCE_ERROR`` - a
+        PropertyRecordsUnavailableError: Only for a reason in
+            ``TRANSIENT_REASONS`` (``source_error``, ``source_rate_limited``,
+            ``rate_limited``) - a
             transient outage (REData itself, or a source it depends on) must
             not be written to the cache as a durable "no data" fact; the
             panel/enrichment frameworks' own failure handling retries it
@@ -92,7 +100,7 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
     try:
         payload = RedataGateway().lookup_parcel(latitude, longitude, situs_address=location.address or "")
     except PropertyRecordsUnavailableError as exc:
-        if exc.reason == REASON_SOURCE_ERROR:
+        if exc.reason in TRANSIENT_REASONS:
             raise
         result: dict[str, Any] = {"available": False, "reason": exc.reason, "message": str(exc)}
         if exc.links:
@@ -100,7 +108,213 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
         return result
 
     payload["available"] = True
+
+    if payload.get("uuid"):
+        # Supplementary assessor history (annual valuations; Cook County
+        # today). Best-effort: the record card stands on its own, so a
+        # failure or no-coverage answer here must not blank it - the history
+        # simply reappears on the next refresh cycle.
+        gateway = RedataGateway()
+        try:
+            rows = gateway.lookup_assessments(payload["uuid"])
+        except PropertyRecordsUnavailableError:
+            rows = []
+        history = _assessment_history(rows, payload.get("apn") or "")
+        if history:
+            payload["assessment_history"] = history
+
+        # Supplementary recorded sales (CT OPM, Cook County) - same
+        # best-effort stance. Matched rows are appended to sales_history so
+        # the existing OFFICIAL-sale pipeline ingests them unchanged.
+        try:
+            sale_rows = gateway.lookup_sale_records(payload["uuid"])
+        except PropertyRecordsUnavailableError:
+            sale_rows = []
+        supplementary = _supplementary_sales(sale_rows, payload.get("situs_address") or "", payload.get("apn") or "")
+        if supplementary:
+            payload["sales_history"] = list(payload.get("sales_history") or []) + supplementary
+
+        # Encumbrances and unpaid tax. For this application these are the most
+        # telling records on the card: an open code-enforcement lien and years
+        # of delinquent tax are what "abandoned" looks like in public records,
+        # long before anything says so in words. Same best-effort stance as
+        # above - the card stands without them.
+        try:
+            lien_rows = gateway.lookup_liens(payload["uuid"])
+        except PropertyRecordsUnavailableError:
+            lien_rows = []
+        if lien_rows:
+            payload["liens"] = _lien_rows(lien_rows)
+
+        try:
+            tax_rows = gateway.lookup_tax_payments(payload["uuid"])
+        except PropertyRecordsUnavailableError:
+            tax_rows = []
+        if tax_rows:
+            payload["tax_status"] = _tax_status(tax_rows)
+
     return payload
+
+
+def _lien_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Shape lien rows for display, newest filing first.
+
+    ``status`` is free text that publishers spell inconsistently, so it is
+    passed through as a label rather than interpreted.
+
+    Args:
+        rows: Raw rows from :meth:`RedataGateway.lookup_liens`.
+
+    Returns:
+        Display rows carrying type, amount, filing date and status.
+    """
+    shaped = [
+        {
+            "lien_type": (row.get("lien_type") or "Lien").strip(),
+            "amount": row.get("amount"),
+            "filed_date": row.get("filed_date"),
+            "status": (row.get("status") or "").strip(),
+        }
+        for row in rows
+        if isinstance(row, dict)
+    ]
+    return sorted(shaped, key=lambda row: row.get("filed_date") or "", reverse=True)[:_MAX_LIEN_ROWS]
+
+
+def _tax_status(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarise tax history into the two facts worth showing.
+
+    ``delinquent`` is the publisher's own determination and is not derived from
+    ``paid``: a bill is unpaid before its due date without being delinquent, so
+    counting unpaid rows as delinquency would overstate distress on a property
+    whose current bill simply is not due yet.
+
+    Args:
+        rows: Raw rows from :meth:`RedataGateway.lookup_tax_payments`.
+
+    Returns:
+        The latest year on record and how many years are marked delinquent.
+    """
+    # Bound and narrowed in one place: testing `row.get(...)` in the condition and
+    # reading it again in the value is two lookups that a reader - and mypy - has
+    # to take on trust are the same answer.
+    entries = [row for row in rows if isinstance(row, dict)]
+    years = [year for row in entries if isinstance(year := row.get("tax_year"), int)]
+    delinquent = sorted(year for row in entries if row.get("delinquent") and isinstance(year := row.get("tax_year"), int))
+    return {
+        "latest_year": max(years) if years else None,
+        "delinquent_years": delinquent,
+        "delinquent_count": len(delinquent),
+    }
+
+
+#: Every spelling a sale-record provider uses for "the parcel this sale was on",
+#: most specific first. REData normalizes what it can onto promoted columns, but
+#: a parcel number is the one identifier whose format is the publisher's own, so
+#: it stays in the provider's raw ``attributes``.
+_PARCEL_NUMBER_KEYS: tuple[str, ...] = ("pin", "parcel_identifier", "parcel_id")
+
+
+def _supplementary_sales(rows: list[dict[str, Any]], situs_address: str, apn: str) -> list[dict[str, Any]]:
+    """Sale rows attributable to *this* parcel, shaped for the sales_history pipeline.
+
+    The endpoint answers for parcels *near* the coordinate and links no row to
+    a parcel, so attribution is on us: a row counts only when its
+    ``situs_address`` equals the record's own (compared with punctuation and
+    case stripped), or its ``attributes`` carry a parcel number matching the
+    record's APN. An unmatched row is a neighbour's sale and is dropped -
+    misattributing one would be worse than missing it.
+
+    Each provider spells that parcel number differently, and a spelling this
+    function does not know is silently a whole state with no sale history:
+    Florida's statewide DOR layer publishes no ``situs_address`` at all and
+    keys its parcel under ``parcel_id``, so before that key was read here every
+    Florida sale was dropped and the card looked like REData had no coverage.
+    :data:`_PARCEL_NUMBER_KEYS` is therefore the place to add a new provider.
+
+    Rows the county itself marks as unrepresentative
+    (``attributes.arms_length`` explicitly false - bundle sales, nominal
+    transfers) are excluded: their ``sale_price`` is not this parcel's market
+    price, and the sales pipeline has no way to carry the caveat.
+
+    Args:
+        rows: Raw rows from :meth:`RedataGateway.lookup_sale_records`.
+        situs_address: The record payload's own street address, possibly blank.
+        apn: The record payload's own parcel number, possibly blank.
+
+    Returns:
+        ``{"date", "price", "grantor", "grantee"}`` dicts (the shape
+        ``_write_official_owners_and_sales`` reads; these providers publish no
+        party names, so grantor/grantee are blank), oldest first.
+    """
+
+    def normalize(value: str) -> str:
+        return "".join(ch for ch in value if ch.isalnum()).casefold()
+
+    our_address = normalize(situs_address)
+    our_apn = normalize(apn)
+
+    matched: list[dict[str, Any]] = []
+    for row in rows:
+        attributes = row.get("attributes") or {}
+        if attributes.get("arms_length") is False:
+            continue
+        row_address = normalize(str(row.get("situs_address") or ""))
+        row_pin = normalize(next((str(attributes[key]) for key in _PARCEL_NUMBER_KEYS if attributes.get(key)), ""))
+        address_match = bool(our_address) and row_address == our_address
+        pin_match = bool(our_apn) and row_pin == our_apn
+        if not (address_match or pin_match):
+            continue
+        if not (row.get("sale_date") or row.get("sale_price")):
+            continue
+        matched.append({"date": row.get("sale_date") or "", "price": row.get("sale_price") or "", "grantor": "", "grantee": ""})
+
+    matched.sort(key=lambda sale: sale["date"] or "")
+    return matched
+
+
+def _assessment_history(rows: list[dict[str, Any]], apn: str) -> list[dict[str, Any]]:
+    """One parcel's assessment rows, newest tax year first.
+
+    The endpoint answers for parcels *near* the coordinate, so this filters to
+    ours: rows matching the record's own APN when it is known (compared with
+    punctuation stripped - assessors and GIS vendors format the same PIN
+    differently), else the identifier with the most rows, which for a
+    parcel-centred query is the parcel itself.
+
+    Args:
+        rows: Raw rows from :meth:`RedataGateway.lookup_assessments`.
+        apn: The record payload's own parcel number, possibly blank.
+
+    Returns:
+        Compact ``{"tax_year", "total_value", "value_stage"}`` dicts, capped
+        at ten years.
+    """
+
+    def normalize(value: str) -> str:
+        return "".join(ch for ch in value if ch.isalnum()).casefold()
+
+    keyed: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        identifier = normalize(str(row.get("parcel_identifier") or ""))
+        if identifier:
+            keyed.setdefault(identifier, []).append(row)
+    if not keyed:
+        return []
+
+    if apn:
+        # A known APN that matches no row means *our* parcel has no coverage -
+        # falling back to another identifier would display a neighbour's
+        # valuations under this card.
+        ours = keyed.get(normalize(apn))
+        if ours is None:
+            return []
+    else:
+        ours = max(keyed.values(), key=len)
+
+    ours = [row for row in ours if row.get("total_value")]
+    ours.sort(key=lambda row: row.get("tax_year") or 0, reverse=True)
+    return [{"tax_year": row.get("tax_year"), "total_value": row["total_value"], "value_stage": row.get("value_stage") or ""} for row in ours[:10]]
 
 
 def _get_or_create_official_owner(location: Location, name: str, *, mailing_address: str = "") -> WikiOwner | None:
@@ -185,6 +399,9 @@ def _write_official_owners_and_sales(location: Location, payload: dict[str, Any]
             new_sale.new_owners.add(grantee)
 
 
+#: Recorded-document links shown before the list is truncated.
+_MAX_DEED_LINKS = 5
+
 #: Human-readable labels for BuildingCharacteristics fields, in display order.
 _BUILDING_CHARACTERISTIC_LABELS: tuple[tuple[str, str], ...] = (
     ("stories", "Stories"),
@@ -197,8 +414,62 @@ _BUILDING_CHARACTERISTIC_LABELS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _render_available(data: dict[str, Any]) -> dict[str, Any]:
-    """Build the info-panel context for a successful record."""
+#: The Census Bureau's four Special Land Use Area categories, in the order this
+#: app cares about them: whether the ground you would be standing on is
+#: access-controlled comes before what it is called.
+#:
+#: REData resolves these on every parcel fetch (a point-in-polygon test against
+#: TIGERweb's Special Land Use Areas layer) and UrbanLens has been caching the
+#: answer and showing none of it. For this application that is the single most
+#: consequential field on the record: a site inside a military installation or a
+#: correctional facility is not a legal question about trespass, it is a
+#: different statute, and "the parcel record was fetched and it did say so" is
+#: not a good place for that to have been left unread.
+_SPECIAL_LAND_USE_LABELS: tuple[tuple[str, str], ...] = (
+    ("military_installation", "Military installation"),
+    ("correctional_facility", "Correctional facility"),
+    ("national_park", "National park"),
+    ("college_university", "College or university"),
+)
+
+
+def special_land_use_rows(areas: Any) -> list[dict[str, str]]:
+    """Name the Special Land Use Areas a parcel falls inside.
+
+    Args:
+        areas: REData's ``special_land_use_areas`` mapping - keyed by category,
+            each value ``{"name": ..., "geoid": ...}`` or ``None``. ``{}`` (the
+            common case) means the parcel is inside none of them.
+
+    Returns:
+        ``{"category", "label", "name"}`` dicts in :data:`_SPECIAL_LAND_USE_LABELS`
+        order, skipping categories the parcel is not inside. A category present
+        but unnamed still yields a row - *that* the parcel is inside a
+        correctional facility matters whether or not the layer says which one.
+    """
+    if not isinstance(areas, dict):
+        return []
+
+    rows: list[dict[str, str]] = []
+    for category, label in _SPECIAL_LAND_USE_LABELS:
+        area = areas.get(category)
+        if not area:
+            continue
+        name = str(area.get("name") or "").strip() if isinstance(area, dict) else ""
+        rows.append({"category": category, "label": label, "name": name or label})
+    return rows
+
+
+def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, Any]:
+    """Build the info-panel context for a successful record.
+
+    Args:
+        data: The cached property-record payload.
+        show_owner: Whether this viewer may see the owner's name. County
+            assessor data is the paid half of this card - the parcel/tax
+            facts stay unconditional, the private individual's name does not
+            (see ``services.property.owner_access``).
+    """
     meta = [{"label": "Address", "value": data["situs_address"]}] if data.get("situs_address") else []
     if data.get("apn"):
         meta.append({"label": "APN / Parcel ID", "value": data["apn"]})
@@ -218,6 +489,10 @@ def _render_available(data: dict[str, Any]) -> dict[str, Any]:
         meta.append({"label": "Building size", "value": f"{data['building_sqft']:,.0f} sq ft"})
     if data.get("year_built"):
         meta.append({"label": "Year built", "value": data["year_built"]})
+    for area in special_land_use_rows(data.get("special_land_use_areas")):
+        meta.append({"label": area["label"], "value": area["name"]})
+    if data.get("flood_zone_code"):
+        meta.append({"label": "Flood zone", "value": data["flood_zone_code"]})
 
     building = data.get("building_characteristics") or {}
     for field_name, label in _BUILDING_CHARACTERISTIC_LABELS:
@@ -231,6 +506,27 @@ def _render_available(data: dict[str, Any]) -> dict[str, Any]:
     if assessed.get("total"):
         year_suffix = f" ({assessed['year']})" if assessed.get("year") else ""
         meta.append({"label": f"Assessed value{year_suffix}", "value": f"${assessed['total']:,.0f}"})
+    for row in (data.get("assessment_history") or [])[:5]:
+        # An assessed value is a statutory fraction of market value; the
+        # stage matters because a Board of Review figure is post-appeal.
+        stage_suffix = f" ({row['value_stage']})" if row.get("value_stage") else ""
+        meta.append({"label": f"Assessed {row.get('tax_year') or '?'}", "value": f"${row['total_value']:,.0f}{stage_suffix}"})
+
+    # Distress signals, last because they are the conclusion the rows above
+    # lead to rather than another attribute of the building.
+    tax_status = data.get("tax_status") or {}
+    if tax_status.get("delinquent_count"):
+        years = tax_status.get("delinquent_years") or []
+        span = f"{years[0]}-{years[-1]}" if len(years) > 1 else str(years[0])
+        meta.append({"label": "Tax delinquent", "value": f"{tax_status['delinquent_count']} year{'s' if tax_status['delinquent_count'] != 1 else ''} ({span})"})
+    elif tax_status.get("latest_year"):
+        meta.append({"label": "Tax status", "value": f"Current through {tax_status['latest_year']}"})
+
+    for lien in (data.get("liens") or [])[:5]:
+        amount = f"${float(lien['amount']):,.0f}" if lien.get("amount") not in (None, "") else ""
+        status = f" - {lien['status']}" if lien.get("status") else ""
+        filed = f" (filed {lien['filed_date']})" if lien.get("filed_date") else ""
+        meta.append({"label": lien["lien_type"].title(), "value": f"{amount}{status}{filed}".strip(" -")})
     if data.get("market_value"):
         meta.append({"label": "Market value", "value": f"${data['market_value']:,.0f}"})
     if building.get("outbuilding_value"):
@@ -243,7 +539,21 @@ def _render_available(data: dict[str, Any]) -> dict[str, Any]:
     if data.get("school_district"):
         meta.append({"label": "School district", "value": data["school_district"]})
 
-    chips = []
+    # Recorded-document references (deeds, plats). Linked rather than listed as
+    # bare URLs: they are the primary sources behind the ownership history above,
+    # and a recorder's URL is not text anyone reads. Capped because a
+    # long-subdivided parcel can carry dozens.
+    document_links = [link.strip() for link in (data.get("deed_document_links") or []) if isinstance(link, str) and link.strip()]
+    for index, link in enumerate(document_links[:_MAX_DEED_LINKS], start=1):
+        # Numbered by displayed position, not by position in the source list -
+        # a county that publishes blanks between real entries would otherwise
+        # produce "Recorded document 2, Recorded document 5".
+        meta.append({"label": "Recorded document" if index == 1 else f"Recorded document {index}", "value": "View document", "href": link})
+
+    chips: list[str] = []
+    # First, because it is the one fact here that changes what a visit *is*
+    # rather than describing the property.
+    chips.extend(area["label"] for area in special_land_use_rows(data.get("special_land_use_areas")))
     if data.get("field_mismatches"):
         chips.append("Sources disagree")
     if any(entry.get("delinquent") for entry in data.get("tax_history") or []):
@@ -253,8 +563,15 @@ def _render_available(data: dict[str, Any]) -> dict[str, Any]:
 
     # footer_link = {"url": data["source"]["url"], "label": f"View on {data['source']['provider']}"} if data["source"].get("url") else None
 
+    owner_names = data.get("owner_name") or []
+    if owner_names and not show_owner:
+        # Named rather than silently dropped: "this parcel has a recorded
+        # owner you can't see" is a different (and honest) statement from
+        # "no owner on record", and the second would read as missing data.
+        chips.append("Owner on record - subscribers only")
+
     return {
-        "heading_name": ", ".join(data.get("owner_name") or []) or None,
+        "heading_name": (", ".join(owner_names) or None) if show_owner else None,
         "chips": chips,
         "meta": meta,
     }
@@ -300,11 +617,18 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
             _write_official_owners_and_sales(pin.location, payload)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Render the found record, the manual-lookup pointer card, or nothing (204)."""
+        """Render the found record, the manual-lookup pointer card, or nothing (204).
+
+        The owner's name is shown only to a viewer entitled to it - see
+        ``services.property.owner_access.viewer_of`` for who that is, and why
+        an unresolvable viewer withholds the name rather than showing it.
+        """
+        from urbanlens.dashboard.services.property.owner_access import can_see_official_owners, viewer_of
+
         if not data:
             return None
         if data.get("available"):
-            return _render_available(data)
+            return _render_available(data, show_owner=can_see_official_owners(viewer_of(pin)))
         if data.get("reason") in (REASON_MANUAL_ONLY, REASON_BLOCKED):
             return _render_manual_only(data)
         return None
@@ -322,6 +646,18 @@ class PropertyRecordsEnrichmentSource(LocationCacheEnrichmentSource):
     cache_source: ClassVar[str] = _CACHE_SOURCE
     service_keys: ClassVar[tuple[str, ...]] = ("redata_api",)
     geo_boundary: ClassVar[GeoBoundary | None] = USA
+
+    def gate(self) -> bool:
+        """Requires REData to be configured - this source has no other backend.
+
+        Without it the cycle picks candidates, every fetch raises, and the run
+        logs one exception per location. Answering here skips the source for
+        the whole cycle instead, which is what "unavailable" means to
+        ``self_reported_skip``.
+        """
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+
+        return redata_configured()
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Call REData and, on success, upsert OFFICIAL owner/sale rows.

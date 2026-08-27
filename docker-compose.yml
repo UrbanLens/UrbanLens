@@ -9,6 +9,24 @@ x-app-build: &app-build
     UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
     UL_CONTAINER_NAME: ${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}
 
+# Every UL_* value in the host .env, injected at container start rather than
+# baked into the image. This block is load-bearing, not a convenience: the
+# `environment:` allowlist below covers only some settings, and the rest
+# (UL_EMAIL_PASSWORD, UL_STRIPE_SECRET_KEY, UL_REDATA_API_KEY, UL_TWILIO_*,
+# UL_CLOUDFLARE_*, UL_HUGGINGFACE_*, ...) used to reach containers only because
+# `COPY . /app` baked the .env into an image layer. .dockerignore now excludes
+# it - see the note there for why a baked secret survives its own rotation.
+# `environment:` still wins over these on key collisions, so the explicit
+# in-compose defaults (DB host, valkey URL) keep overriding any host value
+# meant for running outside Docker.
+#
+# The `required: false` long form needs Compose v2.24+ (Jan 2024). It is worth
+# the floor: the short `env_file: .env` aborts outright when the file is absent,
+# which would break any checkout that runs compose before writing one.
+x-app-env-file: &app-env-file
+  - path: .env
+    required: false
+
 # Full environment for the app server and celery workers (need all API keys).
 # UL_PG_DUMP_BIN bypasses the pg_wrapper dispatcher and calls the versioned
 # binary directly, which avoids the "install postgresql-client-<ver>" error
@@ -45,6 +63,13 @@ x-app-env: &app-env
   UL_SMITHSONIAN_API_KEY: ${UL_SMITHSONIAN_API_KEY}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+  # Independent of DJANGO_SECRET_KEY on purpose: without it, EncryptedTextField
+  # falls back to deriving its Fernet key from SECRET_KEY, which couples routine
+  # signing-key rotation to at-rest data decryptability. Listed explicitly (not
+  # only via env_file) so it is visible as a first-class deployment secret.
+  # Rotating it requires the procedure in docs/DATA_ENCRYPTION.md.
+  UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
+  UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
   UL_PG_DUMP_BIN: /usr/lib/postgresql/17/bin/pg_dump
 
 # Minimal environment for celery-beat - only needs DB + broker to schedule tasks.
@@ -57,6 +82,11 @@ x-beat-env: &beat-env
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+  # beat only schedules tasks, but it imports the same settings/models, so the
+  # encryption key must resolve the same way here or an import-time read of an
+  # encrypted field would decrypt under the wrong key.
+  UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
+  UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
 
 # Project name is derived from the environment so each of prod/dev/test/staging
 # gets its own Compose namespace - this prefixes default (unnamed) networks and
@@ -88,15 +118,25 @@ services:
         aliases:
           - urbanlens_app
 
+    env_file: *app-env-file
     environment:
       <<: *app-env
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 15s
+      start_period: 30s
+
+    # This is the service that actually logs client IPs (request logging) - the
+    # backend-only services below already had this; app didn't, so its stdout log
+    # grew unbounded on any deployment relying on Docker's default driver.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
 
   # Dedicated ASGI (Daphne) process for WebSocket traffic only (safety check-in
   # chat, etc). `app` above keeps serving 100% of normal HTTP via gunicorn+gevent
@@ -114,7 +154,16 @@ services:
     # in `docker logs`. Route it to the shared log volume instead so it's still on
     # disk for debugging WS issues (see channels_redis timeout tuning) without
     # flooding the console.
-    command: ["-b", "0.0.0.0", "-p", "8001", "--access-log", "/var/log/urbanlens/daphne-access.log", "urbanlens.UrbanLens.asgi:application"]
+    command:
+      [
+        "-b",
+        "0.0.0.0",
+        "-p",
+        "8001",
+        "--access-log",
+        "/var/log/urbanlens/daphne-access.log",
+        "urbanlens.UrbanLens.asgi:application",
+      ]
 
     # `app`'s own entrypoint runs bin/init.py (migrate + collectstatic) before
     # its healthcheck can pass - waiting on `app` being healthy, not just
@@ -138,15 +187,26 @@ services:
         aliases:
           - urbanlens_app_ws
 
+    env_file: *app-env-file
     environment:
       <<: *app-env
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health/"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 15s
+      start_period: 25s
+
+    # Bounds this service's own stdout/stderr (startup, errors) - the per-request
+    # access log is deliberately routed to the logs volume above instead, and
+    # still needs its own rotation (tracked separately, see docs/GOALS_CODE_AUDIT.md
+    # "Backups and logs" - this block does not cover that file).
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
 
   nginx:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_nginx
@@ -172,11 +232,21 @@ services:
       # to ::1 first and nginx's `listen 8080` binds IPv4 only, so the check
       # was connection-refused on every probe (container permanently
       # "unhealthy" despite serving traffic fine).
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/nginx-health"]
+      test:
+        ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/nginx-health"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 15s
+      start_period: 20s
+
+    # nginx's own access_log is deliberately routed to /tmp (see nginx.conf) rather
+    # than stdout, so this bounds its error log/startup output, not request logs -
+    # the /tmp file still needs its own rotation, tracked separately.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
 
   db:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_db
@@ -200,7 +270,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${UL_DB_USER:-postgres}"]
       interval: 10s
-      timeout: 10s
+      timeout: 15s
       retries: 9
 
     logging:
@@ -224,7 +294,14 @@ services:
     # including the safety-checkin scheduled tasks that fire every 5 minutes -
     # that drowns out real signal in production. Failures/retries are still
     # surfaced explicitly via the task_failure/task_retry handlers in celery.py.
-    command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=warning", "--concurrency=4"]
+    command:
+      [
+        "-A",
+        "urbanlens.UrbanLens",
+        "worker",
+        "--loglevel=warning",
+        "--concurrency=4",
+      ]
     restart: on-failure
     depends_on:
       db:
@@ -237,6 +314,7 @@ services:
       - backups:/app/src/backups
     networks:
       - app_network
+    env_file: *app-env-file
     environment:
       <<: *app-env
     logging:
@@ -273,17 +351,30 @@ services:
     # GeoParquet/Shapely geometry parsing) opt out via PanelSource.queue and
     # stay on celery-worker's prefork pool instead, so they can't cause GIL
     # contention here for the panels that are genuinely just waiting on I/O.
-    command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=warning", "--pool=threads", "--concurrency=20", "-Q", "panel_fetch"]
+    command:
+      [
+        "-A",
+        "urbanlens.UrbanLens",
+        "worker",
+        "--loglevel=warning",
+        "--pool=threads",
+        "--concurrency=20",
+        "-Q",
+        "panel_fetch",
+      ]
     restart: on-failure
     depends_on:
       db:
         condition: service_healthy
       valkey:
         condition: service_healthy
+      app:
+        condition: service_healthy
     volumes:
       - logs:/var/log/urbanlens
     networks:
       - app_network
+    env_file: *app-env-file
     environment:
       <<: *app-env
     logging:
@@ -300,12 +391,21 @@ services:
     # loglevel=warning: info logs "Scheduler: Sending due task ..." on every beat tick
     # (every 5 minutes for the safety-checkin tasks alone), which is pure noise once
     # the schedule is known-good.
-    command: ["-A", "urbanlens.UrbanLens", "beat", "--loglevel=warning", "--schedule=/var/log/urbanlens/celerybeat-schedule"]
+    command:
+      [
+        "-A",
+        "urbanlens.UrbanLens",
+        "beat",
+        "--loglevel=warning",
+        "--schedule=/var/log/urbanlens/celerybeat-schedule",
+      ]
     restart: on-failure
     depends_on:
       db:
         condition: service_healthy
       valkey:
+        condition: service_healthy
+      app:
         condition: service_healthy
     volumes:
       - logs:/var/log/urbanlens
@@ -376,7 +476,18 @@ services:
     # only evicts keys with a TTL (the cache's, and the channel layer's own
     # expiring keys), so queued Celery tasks are never silently dropped; if
     # memory is genuinely exhausted, writes fail loudly (OOM) instead.
-    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "512mb", "--maxmemory-policy", "volatile-lru"]
+    command:
+      [
+        "valkey-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--maxmemory",
+        "512mb",
+        "--maxmemory-policy",
+        "volatile-lru",
+      ]
     networks:
       app_network:
         aliases:
@@ -425,6 +536,7 @@ services:
     # a DB that pytest hasn't created yet. The runner just stays alive for
     # `docker compose exec ... pytest` calls.
     entrypoint: ["sleep", "infinity"]
+    env_file: *app-env-file
     environment:
       <<: *app-env
       UL_DB_HOST: localhost
@@ -466,7 +578,18 @@ services:
     network_mode: service:test-runner
     depends_on:
       - test-runner
-    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
+    command:
+      [
+        "valkey-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--maxmemory",
+        "256mb",
+        "--maxmemory-policy",
+        "volatile-lru",
+      ]
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 10s

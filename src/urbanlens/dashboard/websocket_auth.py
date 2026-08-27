@@ -44,7 +44,7 @@ from urllib.parse import parse_qs
 from channels.auth import AuthMiddlewareStack
 from channels.db import database_sync_to_async
 
-from urbanlens.dashboard.services.api_keys import KEY_LABEL, authenticate_api_key
+from urbanlens.dashboard.services.auth.api_keys import KEY_LABEL, authenticate_api_key
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import AbstractBaseUser

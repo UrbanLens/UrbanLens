@@ -19,7 +19,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, grant_subscription
-from urbanlens.dashboard.services.storage import (
+from urbanlens.dashboard.services.media.storage import (
     DOWNSCALE_DIMENSION_CHOICES,
     GIB,
     allowed_user_dimension_values,
@@ -40,7 +40,9 @@ def _make_profile():
 
 
 def _grant_role(profile, **role_fields):
-    role = baker.make(SubscriptionRole, slug=role_fields.pop("slug", "vip"), **role_fields)
+    # Bakery's default unique-value sequencing keeps repeated calls collision-free;
+    # avoid a fixed default slug since "vip" is now seeded as baseline data by migration 0019.
+    role = baker.make(SubscriptionRole, **role_fields)
     granter = baker.make(User)
     grant_subscription(profile.user, role, granter, months=None)
     return role

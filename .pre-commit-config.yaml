@@ -38,6 +38,46 @@ repos:
         always_run: true
         pass_filenames: false
 
+# REPOSITORY CONSISTENCY
+-   repo: local
+    hooks:
+      - id: imports-tracked
+        name: every urbanlens.* import resolves to a committed file
+        entry: python3 bin/check_imports_tracked.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
+      - id: outage-not-cached
+        name: no fetch caches a swallowed failure as a result
+        entry: python3 bin/check_outage_not_cached.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
+      - id: notification-choke-point
+        name: every notification write honours the mute preference
+        entry: python3 bin/check_notification_choke_point.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
+      - id: versioned-writes
+        name: a model that versions fields records every write path
+        entry: python3 bin/check_versioned_writes.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
+      - id: signal-reachable
+        name: no post_save subscription waits on a field only update() sets
+        entry: python3 bin/check_signal_reachable.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
+      - id: concealed-writes
+        name: a wiki resolved for reading is never saved
+        entry: python3 bin/check_concealed_writes.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
+
 # TYPESCRIPT
 -   repo: local
     hooks:

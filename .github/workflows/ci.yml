@@ -81,13 +81,87 @@ jobs:
         run: ruff format --check src
 
       - name: Static type check
-        run: mypy src
+        # --show-traceback: the django-stubs plugin runs django.setup() while it
+        # constructs, and mypy reports any failure there as a bare "Error
+        # constructing plugin instance" with nothing to act on.
+        run: mypy src --show-traceback
+
+      # Structural, and cheap: every urbanlens.* import in a committed file must
+      # resolve to a file git actually has. Runs in pre-commit too, but that only
+      # protects a developer who has it installed and does not pass --no-verify -
+      # and the incident it was written for (a commit that landed 139 files while
+      # leaving five imported modules untracked) broke model loading for the app,
+      # every management command, both workers and the whole suite.
+      - name: Imports resolve in the committed tree
+        run: python3 bin/check_imports_tracked.py
+
+      # A citation like `controllers/friendship.py:649` in a 583-line file sends
+      # a reader to nothing, and nothing else notices: the file still exists and
+      # the note still reads as authoritative. Only the unambiguous half is
+      # enforced - that the line exists - since "the line moved" needs a human.
+      - name: Documentation citations point at real lines
+        run: python3 bin/check_doc_line_refs.py
+
+      # makemigrations builds `dependencies` from whatever files are on disk,
+      # tracked or not - so an uncommitted migration can become the parent of a
+      # committed one. Invisible in the checkout that made it; NodeNotFoundError
+      # everywhere else, before the app or the workers can start.
+      - name: Migration graph resolves in the committed tree
+        run: python3 bin/check_migration_graph.py
+
+      # A pre-commit-only check is defeated by --no-verify, no hooks installed,
+      # or a hookless path like the GitHub web UI - exactly the "worked around,
+      # not fixed" friction docs/GOALS.md calls out. imports-tracked/doc-line-refs/
+      # migration-graph above already made this move; these two were the last
+      # structural pre-commit hooks still missing a CI backstop.
+      - name: No swallowed-failure result gets cached as a success
+        run: python3 bin/check_outage_not_cached.py
+
+      - name: Every notification write honours the mute preference
+        run: python3 bin/check_notification_choke_point.py
+
+      # Field provenance is recorded by interception, so a model that declares
+      # versioned_fields without a VersionedQuerySet records instance saves and
+      # silently drops every bulk write - which reads as working.
+      - name: Versioned models intercept every write path
+        run: python3 bin/check_versioned_writes.py
+
+      # A transition made by queryset update() emits no signal, so a post_save
+      # subscription waiting on it is dead and looks alive. Three rules in the
+      # reputation ledger shipped that way.
+      - name: Signal subscriptions are reachable
+        run: python3 bin/check_signal_reachable.py
+
+      # resolve_visible_wiki may return a concealed projection, and saving one
+      # writes a single viewer's redacted view over the community's content.
+      - name: A wiki resolved for reading is never saved
+        run: python3 bin/check_concealed_writes.py
+
+      # Nothing else checks this: a model change without its migration only
+      # surfaces if some test happens to touch the field, and otherwise waits
+      # until the column is needed in production.
+      - name: No missing migrations
+        run: python src/urbanlens/manage.py makemigrations --check --dry-run
 
       # ----------------------------------------------------------------------------
-      # Three issues to address here (TODO):
-      # 1 -- ?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting. If your entire site is served only over SSL, you may want to consider setting a value and enabling HTTP Strict Transport Security. Be sure to read the documentation first; enabling HSTS carelessly can cause serious, irreversible problems.
-      # 2 -- ?: (security.W009) Your SECRET_KEY has less than 50 characters, less than 5 unique characters, or it's prefixed with 'django-insecure-' indicating that it was generated automatically by Django. Please generate a long and random value, otherwise many of Django's security-critical features will be vulnerable to attack.
-      # 3 -- Copy .env-sample to .env so CI picks up the env vars.
+      # Deployment checks, still disabled - but not for the three reasons that used
+      # to be listed here. Re-checked 2026-08-17:
+      #
+      #   - SECURE_HSTS_SECONDS is now set (settings/base.py), so W004 no longer
+      #     reflects a missing setting.
+      #   - The ".env is needed" note is moot: this workflow sets the env vars
+      #     directly in its own `env:` block.
+      #
+      # The blocker is one the old list did not name. This job runs under
+      # DJANGO_SETTINGS_MODULE=...settings.test, where SECURE_SSL_REDIRECT is off
+      # and DEBUG is on *by design* - so `check --deploy` reports W004/W008/W018
+      # against settings that are behaving correctly. Measured: 18 issues, of which
+      # the security ones are all artefacts of running a production check against
+      # test settings (the rest are drf-spectacular enum-naming warnings, tracked
+      # separately in docs/PROBLEMS.md).
+      #
+      # Making this meaningful means evaluating production-like settings, not
+      # relaxing the check - which is a deployment decision, not a CI one.
       # ----------------------------------------------------------------------------
       #- name: Django deployment checks
       #  run: python src/urbanlens/manage.py check --deploy --fail-level WARNING
@@ -107,19 +181,34 @@ jobs:
           if-no-files-found: ignore
 
   frontend:
-    name: Frontend build
+    name: Frontend build and tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      # Pinned to the same exact patch as the Dockerfile (see its comment): bun
+      # 1.4.0 dropped `bun build --format iife` and also changed enough
+      # `preventDefault`/event-dispatch behavior under `bun test` to fail
+      # autosave-guard.test.ts, which passes clean on 1.3.14.
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.14
 
       - name: Install frontend dependencies
         run: npm install
+
+      # Both of these run in pre-commit, which only protects a developer who has
+      # it installed and does not pass --no-verify. Without them here the whole
+      # TypeScript suite - including the contract tests that guard agreements
+      # between a template and the code reading it - never runs in CI, so a pull
+      # request that breaks one merges green.
+      - name: TypeScript typecheck
+        run: bun run typecheck
+
+      - name: TypeScript tests
+        run: bun run test:ts
 
       - name: Build JavaScript bundle
         run: bun run build

@@ -18,7 +18,17 @@ These three models are often confused. Keep their responsibilities strictly sepa
 - User-specific fields: custom name override, personal notes (`description`), icon, priority, last-visited date, status, and marker coordinates
 - Address and place metadata are accessed via read-only proxy properties that delegate to `self.location`; never store address data directly on Pin. If the pin moves, assign it to a new location rather than mutating the location it was assigned to.
 
-**`Wiki`** - Community wiki for a location that many users can see and edit. The only users who can see a wiki are users who have a pin within the bounding box of the wiki's location. This is by design; users must discover the location before they can see the wiki.
+**`Wiki`** - Community wiki for a location that many users can see and edit. Visibility is by *place domain*, not a bounding box: a user sees a wiki when they have a pin on its exact `Location`, or a pin whose place resolves to the same domain root - the parcel, or any building on it - so two users who pinned the same property metres apart share its wiki. Aggregate places extend this (a domain covering every member of an aggregate earns the aggregate), and `PlaceAccessGrant` rows add explicit access. The rule has one implementation, `wiki_access._domains_given_pins`, which the pin-move preview also calls so the preview cannot drift from what is enforced. This is by design; users must discover the location before they can see the wiki.
+
+## Label uniqueness
+
+`Label` is unique on `(lower(name), profile, kind)` with `nulls_distinct=False` (migrations
+0042/0043). Any lookup that feeds a create must use `name__iexact` - an exact-match `get` misses a
+case variant, the insert violates the constraint, and `get_or_create` cannot self-heal because its
+retry repeats the same exact-match `get`. Write paths call
+`services.labels.uniqueness.find_conflicting_label` first and return a message; reaching the
+constraint is a 500. That check also refuses a personal label shadowing a global one, which the
+database permits (the `profile` values differ). See `docs/NOTES.md` for the full rule.
 
 ## Models & ORM
 

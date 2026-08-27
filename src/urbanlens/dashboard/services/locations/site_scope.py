@@ -22,7 +22,7 @@ Two rules, in order:
 
 Deliberately *not* a rule: "the parcel at these coordinates has several
 buildings according to REData". That signal is real, and it does drive the
-"organize this property?" suggestion (see ``services.pin_restructure``) - but
+"organize this property?" suggestion (see ``services.pins.pin_restructure``) - but
 on its own it would silently reclassify a house with a detached garage, so it
 never flips scope by itself. The user accepting the suggestion creates the
 child pins, and *those* flip it.
@@ -136,16 +136,9 @@ def is_site_scope(target: Pin | Wiki) -> bool:
         return cached
 
     from urbanlens.dashboard.models.pin.model import PinType
+    from urbanlens.dashboard.services.places.scope import effective_pin_type
 
-    if target.pin_type_is_user_provided:
-        if target.pin_type == PinType.PARCEL:
-            result = True
-        elif target.pin_type == PinType.BUILDING:
-            result = False
-        else:
-            result = building_child_count(target) >= MULTI_BUILDING_THRESHOLD
-    else:
-        result = building_child_count(target) >= MULTI_BUILDING_THRESHOLD
+    result = effective_pin_type(target) == PinType.PARCEL
 
     target._site_scope_cache = result  # noqa: SLF001 - memoizing on the instance we were handed
     return result
@@ -227,11 +220,11 @@ def looks_like_a_building(location: Location | None) -> bool:
 
     Two independent signals, cheapest first:
 
-    1. The location's generated ``BUILDING`` boundary. The boundary provider
-       chain (``services.locations.boundaries``) only ever fills that row when
-       some provider - county GIS via REData, OSM via Overpass, Overture,
-       Microsoft/Google footprints - has a footprint polygon *containing* this
-       exact point, so its mere presence is the answer.
+    1. The location resolved onto a ``BUILDING`` place. A building place only
+       exists because some provider - county GIS via REData, OSM via Overpass,
+       Overture, Microsoft/Google footprints - published a footprint, and the
+       location only resolved onto it because that footprint *contains* this
+       exact point, so the resolution is itself the answer.
     2. Failing that, proximity to a building record on the parcel (see
        :func:`parcel_buildings`), which covers sources that only publish a
        centroid rather than a footprint.
@@ -242,13 +235,12 @@ def looks_like_a_building(location: Location | None) -> bool:
     Returns:
         True when this coordinate is on a building.
     """
-    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+    from urbanlens.dashboard.models.place.model import PlaceKind
 
     if location is None or location.latitude is None or location.longitude is None:
         return False
 
-    row = Boundary.objects.row_for_location(location, BoundaryType.BUILDING)
-    if row is not None and row.generated_polygon is not None:
+    if location.place_id and location.place is not None and location.place.kind == PlaceKind.BUILDING:
         return True
 
     buildings = parcel_buildings(location) or []
@@ -256,12 +248,19 @@ def looks_like_a_building(location: Location | None) -> bool:
 
 
 def classify_building_pin_type(target: Pin | Wiki) -> bool:
-    """Type an unclassified child marker as a building when it sits on one.
+    """Type an unclassified marker as a building when it stands on one.
 
-    A no-op for anything the user classified themselves, and for a marker
-    that isn't on a building - the latter keeps whatever provisional type it
-    was created with (Point of Interest), which is exactly right for the
-    entrances, hazards, and landmarks users also drop on a pin's map.
+    This answers an *observation* - "is there a structure under this marker?" -
+    not the scope question :func:`is_site_scope` answers. The two are
+    deliberately separate: a pin on the only building of an ordinary house is
+    standing on a building (so a child marker there types as one) while the
+    property as a whole still commits to no scope, because parcel and building
+    are the same thing there.
+
+    A no-op for anything the user classified themselves, and for a marker that
+    isn't on a building - the latter keeps whatever provisional type it was
+    created with (Point of Interest), which is exactly right for the entrances,
+    hazards, and landmarks users also drop on a pin's map.
 
     Args:
         target: The pin or wiki to classify.
@@ -283,3 +282,40 @@ def classify_building_pin_type(target: Pin | Wiki) -> bool:
     target.save(update_fields=["pin_type", "updated"])
     logger.debug("Classified %s %s as a building", type(target).__name__, target.pk)
     return True
+
+
+def reclassify_markers_on_place(place) -> int:
+    """Re-derive the cached scope of every marker standing on a place.
+
+    Scope is a property of the *place*, not of whoever pinned it: the moment a
+    property is known to hold several buildings, every user's marker on it is
+    describing the grounds, not just the marker belonging to whoever pressed
+    the import button. Deriving from the place and fanning out is what keeps
+    those consistent - and what makes the answer survive buildings being added
+    or removed later.
+
+    Deliberately a no-op on an ordinary single-building property. There is no
+    scope to assert there, so rewriting markers would only overwrite the
+    observations :func:`classify_building_pin_type` recorded.
+
+    Args:
+        place: The place whose markers to re-derive.
+
+    Returns:
+        How many pins and wikis were retyped.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin, PinType
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.places.scope import pin_type_for_place
+
+    if place is None:
+        return 0
+    implied = pin_type_for_place(place)
+    if implied is None or implied == PinType.LOCATION_MARKER:
+        return 0
+
+    scoped = {PinType.LOCATION_MARKER, PinType.PARCEL, PinType.BUILDING}
+    retyped = 0
+    retyped += Pin.objects.filter(location__place=place, pin_type_is_user_provided=False, pin_type__in=scoped).exclude(pin_type=implied).update(pin_type=implied)
+    retyped += Wiki.objects.filter(place=place, pin_type_is_user_provided=False, pin_type__in=scoped).exclude(pin_type=implied).update(pin_type=implied)
+    return retyped

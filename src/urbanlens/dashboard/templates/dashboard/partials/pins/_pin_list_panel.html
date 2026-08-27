@@ -55,8 +55,8 @@ resend the filter-form fields on every page click, so filters stay applied.
                     <span class="pin-list-labels">
                         {% for label in pin.labels.all %}
                         <span class="popup-tag-chip pin-list-label"
-                              {% if label.color %}style="border-color:{{ label.color }}55;background:{{ label.color }}18;color:{{ label.color }}cc"{% endif %}
-                              >{{ label.name }}</span>
+                              {% if label.effective_color %}style="border-color:{{ label.effective_color }}55;background:{{ label.effective_color }}18;color:{{ label.effective_color }}cc"{% endif %}
+                              >{{ label.effective_name }}</span>
                         {% endfor %}
                     </span>
                     {% endif %}

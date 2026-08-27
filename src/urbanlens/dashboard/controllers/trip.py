@@ -23,13 +23,13 @@ from urbanlens.dashboard.models.trips.model import (
     TripComment,
     TripMembership,
 )
-from urbanlens.dashboard.services.trip_access import (
+from urbanlens.dashboard.services.trips.trip_access import (
     can_perform as _can_perform,
     get_trip_for_viewer,
     has_joined as _viewer_has_joined,
     is_organizer as _is_organizer,
 )
-from urbanlens.dashboard.services.trip_activities import (
+from urbanlens.dashboard.services.trips.trip_activities import (
     activity_queryset as _activity_qs,
     build_activity_rows,
     complete_activity,
@@ -47,12 +47,12 @@ from urbanlens.dashboard.services.trip_activities import (
     set_activity_vote,
     update_activity,
 )
-from urbanlens.dashboard.services.trip_comments import ALLOWED_COMMENT_EMOJIS, TripCommentData, add_comment, build_comment_tree, delete_comment, get_comment
-from urbanlens.dashboard.services.trip_crud import TRIP_DELETED_MESSAGE, create_trip, delete_trip, set_trip_permissions, update_trip
-from urbanlens.dashboard.services.trip_errors import TripError, TripMemberNotFoundError, TripNotFoundError, TripPermissionError
-from urbanlens.dashboard.services.trip_legs import activity_coords
-from urbanlens.dashboard.services.trip_map import build_trip_map_points
-from urbanlens.dashboard.services.trip_membership import (
+from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS, TripCommentData, add_comment, build_comment_tree, delete_comment, get_comment
+from urbanlens.dashboard.services.trips.trip_crud import TRIP_DELETED_MESSAGE, create_trip, delete_trip, set_trip_permissions, update_trip
+from urbanlens.dashboard.services.trips.trip_errors import TripError, TripMemberNotFoundError, TripNotFoundError, TripPermissionError
+from urbanlens.dashboard.services.trips.trip_legs import activity_coords
+from urbanlens.dashboard.services.trips.trip_map import build_trip_map_points
+from urbanlens.dashboard.services.trips.trip_membership import (
     add_member_by_username,
     addable_friends as _addable_friends,
     join_trip,
@@ -74,7 +74,7 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
     from urbanlens.dashboard.controllers.comments import _ReactionData
-    from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
+    from urbanlens.dashboard.services.apis.weather.forecast import ForecastSlot
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) ->
         viewer: The profile viewing the list.
         trips: Trips about to be rendered via ``trip_list_partial.html``.
     """
-    from urbanlens.dashboard.services.identity_visibility import mask_profile_references
+    from urbanlens.dashboard.services.profile.identity_visibility import mask_profile_references
 
     all_refs: list[Profile] = []
     for trip in trips:
@@ -234,7 +234,7 @@ def trip_or_not_found(request: HttpRequest, trip_slug: str, profile: Profile) ->
     """Return the trip when *profile* may see it, else the styled "not found" page.
 
     The thin HTMX-facing adapter over
-    :func:`~urbanlens.dashboard.services.trip_access.get_trip_for_viewer`,
+    :func:`~urbanlens.dashboard.services.trips.trip_access.get_trip_for_viewer`,
     which is where the rule itself lives.
 
     Replaces the former ``_trip_or_403``. That version rendered the same page
@@ -397,16 +397,24 @@ class TripOverviewView(LoginRequiredMixin, View):
 
     def get(self, request):
         from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
-        from urbanlens.dashboard.services.connections import get_connections
+        from urbanlens.dashboard.services.social.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        all_trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user"))
+        # with_effective_dates: the calendar payload and the stat tiles both read
+        # effective_start_date/effective_end_date/timeline_status, which query the
+        # trip's activities per row without the annotations.
+        all_trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user").with_effective_dates())
         recently_updated_trips = list(Trip.objects.recently_updated(profile, limit=self.RECENT_TRIPS_LIMIT))
         recently_viewed_trips = list(Trip.objects.recently_viewed(profile, limit=self.RECENT_TRIPS_LIMIT))
         # Matches TripListView/CalendarImportView - every list of other members'
         # trips must mask identities the viewer isn't allowed to see (see
         # _apply_trip_list_identity_masking's docstring for the gap this closes).
-        _apply_trip_list_identity_masking(profile, all_trips)
+        #
+        # Only the two rendered lists need it. `all_trips` never reaches the
+        # template: it is consumed here into `stats` and `trips_calendar_data`,
+        # which carry no identity fields (uuid/name/dates/status/url). Masking it
+        # walked every trip's memberships, so an unbounded trip list cost two
+        # queries per trip to mutate objects that were then discarded.
         _apply_trip_list_identity_masking(profile, recently_updated_trips)
         _apply_trip_list_identity_masking(profile, recently_viewed_trips)
         return render(
@@ -434,7 +442,7 @@ class TripListView(LoginRequiredMixin, View):
 
     def get(self, request):
         from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
-        from urbanlens.dashboard.services.connections import get_connections
+        from urbanlens.dashboard.services.social.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         sort, direction = _trip_list_sort_params(request)
@@ -466,7 +474,7 @@ class TripCalendarView(LoginRequiredMixin, View):
 
     def get(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user"))
+        trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user").with_effective_dates())
         return render(
             request,
             "dashboard/pages/trips/calendar.html",
@@ -695,7 +703,7 @@ class TripAiSuggestionsView(LoginRequiredMixin, View):
         return self._respond(request, trip_slug, force_refresh=True)
 
     def _respond(self, request, trip_slug, *, force_refresh: bool):
-        from urbanlens.dashboard.services.trip_ai_suggestions import get_trip_suggestions
+        from urbanlens.dashboard.services.trips.trip_ai_suggestions import get_trip_suggestions
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = trip_or_not_found(request, trip_slug, profile)
@@ -1070,7 +1078,7 @@ class TripMapDataView(LoginRequiredMixin, View):
         trip = result
         include_past = request.GET.get("include_past", "0") not in {"", "0", "false"}
         # The external API's map endpoint returns exactly this, unmodified -
-        # see services.trip_map for why the two must not diverge.
+        # see services.trips.trip_map for why the two must not diverge.
         return JsonResponse({"points": build_trip_map_points(trip, profile, include_past=include_past)})
 
 
@@ -1339,7 +1347,7 @@ class TripActivityPositionView(LoginRequiredMixin, View):
             now requires edit-activities permission (it previously admitted any
             *invited* member, joined or not), and coordinates are bounds-checked
             (they previously were not, so a marker could be saved at latitude
-            5000). See ``services.trip_activities.set_activity_position``.
+            5000). See ``services.trips.trip_activities.set_activity_position``.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = trip_or_not_found(request, trip_slug, profile)
@@ -1399,13 +1407,48 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         return JsonResponse({"results": results})
 
 
-def _build_activity_forecasts(activities: list[TripActivity], gateway: OpenWeatherMapGateway) -> list[dict]:
-    """For each activity, find the closest 3-hourly forecast slot at its location/time.
+def _forecast_gap_seconds(slot: ForecastSlot, target: datetime.datetime) -> float:
+    """Absolute gap in seconds between a forecast slot and a scheduled time.
+
+    A slot carrying an aware-UTC ``date_utc`` (see the ``ForecastSlot``
+    contract) is compared against an aware ``target`` directly, so the gap is
+    offset-correct even when the provider's ``date`` is a local wall clock
+    (Open-Meteo's is). Slots without one fall back to comparing wall clocks,
+    forced naive on both sides so an offset-carrying ``date`` can't raise
+    "can't subtract offset-naive and offset-aware datetimes" and 500 the
+    trip page.
+
+    Args:
+        slot: The forecast slot to measure.
+        target: The activity's scheduled time (aware UTC from the ORM, but a
+            naive value is tolerated and falls back to the wall-clock path).
+
+    Returns:
+        The absolute difference in seconds.
+    """
+    date_utc = slot.get("date_utc")
+    if date_utc is not None and target.tzinfo is not None:
+        return abs((date_utc - target).total_seconds())
+    slot_date = slot["date"]
+    if slot_date.tzinfo is not None:
+        slot_date = slot_date.replace(tzinfo=None)
+    target_naive = target.replace(tzinfo=None) if target.tzinfo is not None else target
+    return abs((slot_date - target_naive).total_seconds())
+
+
+def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
+    """For each activity, find the closest forecast slot at its location/time.
+
+    Tries REData first, then the direct OpenWeatherMap/Open-Meteo chain - see
+    ``services.apis.locations.weather_resolution.get_raw_forecast_slots``.
 
     Returns a list of dicts with keys:
       activity, location_name, scheduled_at, slot, no_coords, out_of_range
     """
-    cache: dict[tuple[float, float], list[dict] | None] = {}
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+    from urbanlens.dashboard.services.apis.locations.weather_resolution import get_raw_forecast_slots
+
+    cache: dict[tuple[float, float], list[ForecastSlot] | None] = {}
     results = []
 
     for act in activities:
@@ -1429,8 +1472,8 @@ def _build_activity_forecasts(activities: list[TripActivity], gateway: OpenWeath
         key = (round(coords[0], 2), round(coords[1], 2))
         if key not in cache:
             try:
-                cache[key] = gateway.get_raw_forecast(*coords)
-            except requests.RequestException:
+                cache[key] = get_raw_forecast_slots(*coords)
+            except (requests.RequestException, LocationContextUnavailableError):
                 logger.warning("Weather fetch failed for coords %s", key)
                 cache[key] = None
 
@@ -1440,11 +1483,8 @@ def _build_activity_forecasts(activities: list[TripActivity], gateway: OpenWeath
             continue
 
         target = act.scheduled_at
-        if target.tzinfo is not None:
-            target = target.replace(tzinfo=None)
-
-        closest = min(slots, key=lambda s: abs((s["date"] - target).total_seconds()))
-        gap_hours = abs((closest["date"] - target).total_seconds()) / 3600
+        closest, gap_seconds = min(((slot, _forecast_gap_seconds(slot, target)) for slot in slots), key=lambda pair: pair[1])
+        gap_hours = gap_seconds / 3600
 
         if gap_hours > 36:
             entry["out_of_range"] = True
@@ -1453,6 +1493,85 @@ def _build_activity_forecasts(activities: list[TripActivity], gateway: OpenWeath
 
         results.append(entry)
 
+    return results
+
+
+def _group_by_day(rows: list[dict]) -> list[tuple]:
+    """Bucket weather rows by their activity's calendar day, earliest first.
+
+    Args:
+        rows: Dicts carrying a ``scheduled_at``.
+
+    Returns:
+        ``[(day, rows)]`` with undated rows, if any, last.
+    """
+    from collections import defaultdict
+
+    day_map: dict = defaultdict(list)
+    for row in rows:
+        day_map[row["scheduled_at"].date() if row["scheduled_at"] else None].append(row)
+    dated = sorted(day for day in day_map if day is not None)
+    keys = dated + ([None] if None in day_map else [])
+    return [(day, day_map[day]) for day in keys]
+
+
+def _build_activity_history(activities: list[TripActivity]) -> list[dict]:
+    """For each past activity, what the weather actually was on its day.
+
+    The counterpart of :func:`_build_activity_forecasts`, for activities the
+    forecast can no longer say anything about. A forecast is only meaningful
+    relative to when it was made; a record of a day that has already happened
+    never changes, which is why this needs no freshness handling at all.
+
+    Grouped by coordinate before fetching, and fetched as a *range* per group,
+    so a week-long trip with five activities at one place costs one REData
+    request rather than five. Activities whose position comes from a lat/lng
+    override have no ``Location`` to cache against and take the uncached path -
+    REData still caches the days on its own side.
+
+    Args:
+        activities: Past trip activities, in any order.
+
+    Returns:
+        A list of dicts with keys ``activity``, ``location_name``,
+        ``scheduled_at`` and ``recorded`` (a
+        :class:`~urbanlens.dashboard.services.locations.visit_weather.RecordedDay`),
+        for the activities a reading could be found for. Activities with no
+        coordinates, no date, or a day outside ERA5's window are absent rather
+        than rendered as empty rows.
+    """
+    from urbanlens.dashboard.services.locations.visit_weather import recorded_range, recorded_range_at
+
+    # (rounded coordinate) -> the activities there. Rounding matches
+    # _build_activity_forecasts' own key, so the two group identically. The day
+    # is carried alongside rather than re-derived below: `scheduled_at` is
+    # nullable and the guard that rules that out is here, so re-reading it
+    # later would be reasoning the reader (and the type checker) cannot follow.
+    by_point: dict[tuple[float, float], list[tuple[TripActivity, tuple[float, float], datetime.date]]] = {}
+    for act in activities:
+        coords = activity_coords(act)
+        if coords is None or act.scheduled_at is None:
+            continue
+        by_point.setdefault((round(coords[0], 2), round(coords[1], 2)), []).append((act, coords, act.scheduled_at.date()))
+
+    results: list[dict] = []
+    for group in by_point.values():
+        days = sorted({day for _, _, day in group})
+        first_act, coords, _ = group[0]
+        location = first_act.location or (first_act.pin.location if first_act.pin else None)
+        if location is not None and first_act.lat_override is None:
+            recorded = recorded_range(location, days[0], days[-1])
+        else:
+            recorded = recorded_range_at(coords[0], coords[1], days[0], days[-1])
+
+        for act, _, day in group:
+            entry = recorded.get(day.isoformat())
+            if entry is None or not entry.has_readings:
+                continue
+            location_name = act.effective_title if act.effective_title != "Unnamed activity" else ""
+            results.append({"activity": act, "location_name": location_name, "scheduled_at": act.scheduled_at, "recorded": entry})
+
+    results.sort(key=lambda row: row["scheduled_at"])
     return results
 
 
@@ -1474,11 +1593,6 @@ class TripWeatherView(LoginRequiredMixin, View):
         """
         from collections import defaultdict
 
-        from urbanlens.dashboard.services.apis.weather.gateway import (
-            OpenWeatherMapGateway,
-        )
-        from urbanlens.UrbanLens.settings.app import settings as app_settings
-
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = trip_or_not_found(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
@@ -1487,20 +1601,34 @@ class TripWeatherView(LoginRequiredMixin, View):
 
         error: str = ""
         grouped: list[tuple] = []
+        recorded_days: list[tuple] = []
 
         if not profile.external_apis_enabled:
             error = "External weather lookups are turned off in your settings."
-        elif not app_settings.openweathermap_api_key:
-            error = "Weather API key not configured."
         else:
-            today = datetime.date.today()
-            activities = [act for act in _activity_qs(trip) if act.status != TripActivity.STATUS_COMPLETED and (act.scheduled_at is None or act.scheduled_at.date() >= today)]
+            today = timezone.localdate()
+            all_activities = list(_activity_qs(trip))
+            # A past activity is one the forecast can no longer speak to. It gets
+            # the recorded-conditions treatment below instead of being dropped,
+            # which is what left a finished trip's weather panel empty.
+            past_activities = [act for act in all_activities if act.scheduled_at is not None and act.scheduled_at.date() < today]
+            try:
+                recorded = _build_activity_history(past_activities)
+            except (requests.RequestException, KeyError, TypeError, ValueError):
+                # REData's own unavailability is already absorbed inside
+                # `visit_weather._fetch_days`, which answers with no days rather
+                # than raising - so what reaches here is a malformed activity
+                # (an unparseable coordinate, say), not an outage.
+                logger.warning("Historical weather fetch failed for trip %s", trip_slug, exc_info=True)
+                recorded = []
+            recorded_days = _group_by_day(recorded)
+
+            activities = [act for act in all_activities if act.status != TripActivity.STATUS_COMPLETED and (act.scheduled_at is None or act.scheduled_at.date() >= today)]
             if not activities:
                 pass  # no upcoming activities - leave error/grouped empty to hide the section
             else:
                 try:
-                    gateway = OpenWeatherMapGateway()
-                    activity_forecasts = _build_activity_forecasts(activities, gateway)
+                    activity_forecasts = _build_activity_forecasts(activities)
                     # Drop activities with nothing useful to show (no location data,
                     # or too far outside the 5-day forecast window) instead of
                     # rendering an empty "No location data"/"Outside 5-day forecast"
@@ -1527,6 +1655,7 @@ class TripWeatherView(LoginRequiredMixin, View):
             {
                 "trip": trip,
                 "grouped": grouped,
+                "recorded_days": recorded_days,
                 "error": error,
             },
         )

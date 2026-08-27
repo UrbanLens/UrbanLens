@@ -27,7 +27,9 @@ class VisitQuerySet(abstract.FrontendDashboardQuerySet):
         Returns:
             Filtered queryset.
         """
-        return self.filter(source="manual")
+        from urbanlens.dashboard.models.visits.model import VisitSource
+
+        return self.filter(source=VisitSource.MANUAL)
 
     def from_takeout(self) -> Self:
         """Filter to visits imported from the user's location history (e.g. Google Takeout).
@@ -35,7 +37,9 @@ class VisitQuerySet(abstract.FrontendDashboardQuerySet):
         Returns:
             Filtered queryset.
         """
-        return self.filter(source="history")
+        from urbanlens.dashboard.models.visits.model import VisitSource
+
+        return self.filter(source=VisitSource.HISTORY)
 
 
 class VisitManager(abstract.FrontendDashboardManager.from_queryset(VisitQuerySet)):

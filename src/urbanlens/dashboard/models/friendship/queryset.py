@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Self
 
-from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 
 from urbanlens.dashboard.models import abstract
@@ -34,8 +33,29 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
         )
 
     def between(self, from_profile: Profile | int, to_profile: Profile | int) -> Friendship | None:
-        """
-        Return a list of all friendships between two profiles.
+        """Return the relationship joining two profiles, in either direction.
+
+        "One row per pair" is a convention (``Friendship.request`` reuses an
+        existing row), not a constraint: ``unique_together`` is on
+        ``(from_profile, to_profile)``, which permits ``A->B`` **and** ``B->A``
+        to both exist. A profile import that restores both directions
+        (``services.import_export.import_data``) or two simultaneous requests in
+        opposite directions produce exactly that, and this used to ``.get()`` -
+        so a reciprocal pair raised ``MultipleObjectsReturned`` out of the
+        profile page, the friends API, and (once mute was wired into delivery)
+        every notification between them.
+
+        The oldest row wins, deterministically: it is the one the pair's history
+        actually hangs off, and picking arbitrarily would make the answer depend
+        on query planning. A second row is data to repair, not a reason to
+        refuse to answer - see "reciprocal Friendship rows" in docs/PROBLEMS.md.
+
+        Args:
+            from_profile: One of the two profiles, or its pk.
+            to_profile: The other, or its pk.
+
+        Returns:
+            The relationship, or None when the pair has none.
         """
         q1: dict[str, Any] = {}
         q2: dict[str, Any] = {}
@@ -54,10 +74,12 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
             q1["to_profile"] = to_profile
             q2["from_profile"] = to_profile
 
-        try:
-            return self.filter(Q(**q1) | Q(**q2)).get()
-        except ObjectDoesNotExist:
+        matches = list(self.filter(Q(**q1) | Q(**q2)).order_by("pk")[:2])
+        if not matches:
             return None
+        if len(matches) > 1:
+            logger.warning("Two Friendship rows join profiles %s and %s (%s, %s); using the older one", from_profile, to_profile, matches[0].pk, matches[1].pk)
+        return matches[0]
 
     def user(self, user: User) -> Self:
         """
@@ -96,30 +118,42 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
         """
         return self.filter(status__in=(FriendshipStatus.ACCEPTED, FriendshipStatus.REMOVED))
 
-    def muted(self) -> Self:
-        """Return the relationships that have been muted.
+    def muted_by(self, viewer: Profile | int) -> Self:
+        """Return the relationships ``viewer`` has muted.
 
-        Reads the ``muted`` flag, never ``status``. Mute used to *be* a status,
+        Reads the mute columns, never ``status``. Mute used to *be* a status,
         which is why this filter has to exist at all: any caller that reaches
         for ``status="Muted"`` is reproducing the bug where muting a friend
         overwrote ``Accepted`` and un-friended them everywhere.
 
-        Note that the flag lives on the single shared row joining the pair, so
-        it is *not* per-viewer - see ``Friendship.muted``. Do not present this
-        as "relationships I have muted" without that caveat.
+        Takes the viewer because there is one row per pair with a column per
+        side: "muted" is not a property of the relationship, and a filter that
+        did not ask whose preference it meant could only answer the wrong
+        question.
+
+        Args:
+            viewer: The profile whose own mutes to return, or its pk.
 
         Returns:
-            The muted relationships, whatever relationship state they are in.
+            The relationships that profile muted, whatever relationship state
+            they are in.
         """
-        return self.filter(muted=True)
+        viewer_id = viewer if isinstance(viewer, int) else viewer.pk
+        return self.filter(Q(from_profile_id=viewer_id, muted_by_from_profile=True) | Q(to_profile_id=viewer_id, muted_by_to_profile=True))
 
-    def unmuted(self) -> Self:
-        """Return the relationships that are not muted.
+    def not_muted_by(self, viewer: Profile | int) -> Self:
+        """Return ``viewer``'s relationships whose notifications are still on.
+
+        Args:
+            viewer: The profile whose own mutes to exclude, or its pk.
 
         Returns:
-            The relationships whose notifications are still on.
+            The relationships that profile has not muted. Relationships the
+            profile is not part of are excluded too - the question only has an
+            answer for their own rows.
         """
-        return self.filter(muted=False)
+        viewer_id = viewer if isinstance(viewer, int) else viewer.pk
+        return self.filter(Q(from_profile_id=viewer_id, muted_by_from_profile=False) | Q(to_profile_id=viewer_id, muted_by_to_profile=False))
 
     def relationship_type(self, relationship_type: str) -> Self:
         """

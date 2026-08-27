@@ -32,7 +32,7 @@ from urbanlens.dashboard.controllers.trip import (
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.trip_legs import activity_coords as _activity_coords
+from urbanlens.dashboard.services.trips.trip_legs import activity_coords as _activity_coords
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -405,8 +405,17 @@ class ComputeActivityIndexMapTests(SimpleTestCase):
 # _build_activity_forecasts
 # ---------------------------------------------------------------------------
 
+_GET_RAW_FORECAST_SLOTS = "urbanlens.dashboard.services.apis.locations.weather_resolution.get_raw_forecast_slots"
+
+
 class BuildActivityForecastsTests(SimpleTestCase):
-    """_build_activity_forecasts matches activities to weather slots."""
+    """_build_activity_forecasts matches activities to weather slots.
+
+    ``get_raw_forecast_slots`` (REData-first, OWM/Open-Meteo-fallback - see
+    ``services.apis.locations.weather_resolution``) is mocked directly rather
+    than a gateway instance, since ``_build_activity_forecasts`` no longer
+    picks a provider itself.
+    """
 
     def _make_activity(self, lat=51.5, lng=-0.12, scheduled_at=None, status="proposed"):
         act = MagicMock()
@@ -420,15 +429,10 @@ class BuildActivityForecastsTests(SimpleTestCase):
         act.status = status
         return act
 
-    def _make_gateway(self, slots=None):
-        gw = MagicMock()
-        gw.get_raw_forecast.return_value = slots or []
-        return gw
-
     def test_activity_without_scheduled_at_gets_no_slot(self):
         act = self._make_activity(scheduled_at=None)
-        gw = self._make_gateway()
-        results = _build_activity_forecasts([act], gw)
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[]):
+            results = _build_activity_forecasts([act])
         self.assertEqual(len(results), 1)
         self.assertIsNone(results[0]["slot"])
 
@@ -438,50 +442,49 @@ class BuildActivityForecastsTests(SimpleTestCase):
         act.lng_override = None
         act.pin = None
         act.location = None
-        gw = self._make_gateway()
-        results = _build_activity_forecasts([act], gw)
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[]):
+            results = _build_activity_forecasts([act])
         self.assertTrue(results[0]["no_coords"])
 
     def test_slot_matched_when_within_36_hours(self):
         target = datetime.datetime(2025, 7, 4, 12, 0)
         slot_time = datetime.datetime(2025, 7, 4, 12, 0)
-        slot = {"date": slot_time, "temp": 22, "description": "Sunny"}
+        slot = {"date": slot_time, "temp": 22, "condition": "Sunny"}
         act = self._make_activity(scheduled_at=target)
-        gw = self._make_gateway(slots=[slot])
-        results = _build_activity_forecasts([act], gw)
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[slot]):
+            results = _build_activity_forecasts([act])
         self.assertIsNotNone(results[0]["slot"])
         self.assertEqual(results[0]["slot"]["temp"], 22)
 
     def test_out_of_range_when_gap_exceeds_36h(self):
         target = datetime.datetime(2025, 7, 4, 12, 0)
         slot_time = datetime.datetime(2025, 7, 6, 18, 0)  # ~54h gap
-        slot = {"date": slot_time, "temp": 15, "description": "Cloudy"}
+        slot = {"date": slot_time, "temp": 15, "condition": "Cloudy"}
         act = self._make_activity(scheduled_at=target)
-        gw = self._make_gateway(slots=[slot])
-        results = _build_activity_forecasts([act], gw)
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[slot]):
+            results = _build_activity_forecasts([act])
         self.assertTrue(results[0]["out_of_range"])
 
     def test_gateway_exception_returns_no_slot(self):
         import requests as req_lib
         target = datetime.datetime(2025, 7, 4, 12, 0)
         act = self._make_activity(scheduled_at=target)
-        gw = MagicMock()
-        gw.get_raw_forecast.side_effect = req_lib.RequestException("timeout")
-        results = _build_activity_forecasts([act], gw)
+        with patch(_GET_RAW_FORECAST_SLOTS, side_effect=req_lib.RequestException("timeout")):
+            results = _build_activity_forecasts([act])
         self.assertIsNone(results[0]["slot"])
 
     def test_coords_cached_across_same_location(self):
         target = datetime.datetime(2025, 7, 4, 12, 0)
-        slot = {"date": target, "temp": 20, "description": "Clear"}
-        gw = self._make_gateway(slots=[slot])
+        slot = {"date": target, "temp": 20, "condition": "Clear"}
         # Two activities at the same rounded coords
         acts = [
             self._make_activity(lat=51.5, lng=-0.12, scheduled_at=target),
             self._make_activity(lat=51.5, lng=-0.12, scheduled_at=target),
         ]
-        _build_activity_forecasts(acts, gw)
-        # Gateway should only be called once for the same coord pair
-        self.assertEqual(gw.get_raw_forecast.call_count, 1)
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[slot]) as get_slots:
+            _build_activity_forecasts(acts)
+        # The resolver should only be called once for the same coord pair
+        self.assertEqual(get_slots.call_count, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -519,8 +522,7 @@ class TripWeatherViewFiltersEmptyForecastsTests(TestCase):
             location=None,
         )
 
-        with patch("urbanlens.UrbanLens.settings.app.settings.openweathermap_api_key", "fake-key"):
-            resp = self.client_.get(self._url())
+        resp = self.client_.get(self._url())
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["grouped"], [])
@@ -542,17 +544,16 @@ class TripWeatherViewFiltersEmptyForecastsTests(TestCase):
         )
         slot = {
             "date": target.replace(tzinfo=None),
-            "main": {"temp": 20, "feels_like": 18, "humidity": 50},
-            "weather": [{"icon": "01d", "description": "Clear"}],
-            "wind": {"speed": 5},
+            "temp": 20,
+            "condition": "Clear",
+            "icon": "wb_sunny",
+            "humidity": 50,
+            "wind_speed": 5,
+            "feels_like": 18,
+            "precipitation_probability": None,
         }
-        gw = MagicMock()
-        gw.get_raw_forecast.return_value = [slot]
 
-        with (
-            patch("urbanlens.UrbanLens.settings.app.settings.openweathermap_api_key", "fake-key"),
-            patch("urbanlens.dashboard.services.apis.weather.gateway.OpenWeatherMapGateway", return_value=gw),
-        ):
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[slot]):
             resp = self.client_.get(self._url())
 
         self.assertEqual(resp.status_code, 200)
@@ -583,17 +584,16 @@ class TripWeatherViewFiltersEmptyForecastsTests(TestCase):
         )
         slot = {
             "date": target.replace(tzinfo=None),
-            "main": {"temp": 20, "feels_like": 18, "humidity": 50},
-            "weather": [{"icon": "01d", "description": "Clear"}],
-            "wind": {"speed": 5},
+            "temp": 20,
+            "condition": "Clear",
+            "icon": "wb_sunny",
+            "humidity": 50,
+            "wind_speed": 5,
+            "feels_like": 18,
+            "precipitation_probability": None,
         }
-        gw = MagicMock()
-        gw.get_raw_forecast.return_value = [slot]
 
-        with (
-            patch("urbanlens.UrbanLens.settings.app.settings.openweathermap_api_key", "fake-key"),
-            patch("urbanlens.dashboard.services.apis.weather.gateway.OpenWeatherMapGateway", return_value=gw),
-        ):
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[slot]):
             resp = self.client_.get(self._url())
 
         grouped = resp.context["grouped"]
@@ -700,3 +700,124 @@ class TripMembershipQuerySetTests(TestCase):
         result = list(TripMembership.objects.rsvp_yes(self.trip))
 
         self.assertEqual(result, [yes_member])
+
+
+# ---------------------------------------------------------------------------
+# TripWeatherView - a finished trip gets what the weather *was*, not a forecast
+# ---------------------------------------------------------------------------
+
+_HISTORY_ROW = {
+    "date": "2026-05-01",
+    "temperature_max_c": 20.0,
+    "temperature_min_c": 10.0,
+    "temperature_mean_c": 15.0,
+    "precipitation_mm": 25.4,
+    "snowfall_cm": None,
+    "wind_speed_max_kmh": 32.1868,
+    "wind_gusts_max_kmh": None,
+}
+
+
+class TripRecordedWeatherTests(TestCase):
+    """A past trip's weather panel was empty: the view filtered to activities
+    scheduled today or later, so a finished trip had nothing to forecast and the
+    whole card hid. REData's `/weather/history/` answers the question that
+    actually applies to a finished trip.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user: User = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.profile.external_apis_enabled = True
+        self.profile.save(update_fields=["external_apis_enabled"])
+        self.client_ = Client()
+        self.client_.force_login(self.user)
+        self.trip = Trip.objects.create(name="Past Trip", creator=self.profile)
+        TripMembership.objects.get_or_create(trip=self.trip, profile=self.profile, defaults={"rsvp": "yes"})
+
+    def _url(self) -> str:
+        return reverse("trips.weather", args=[self.trip.slug])
+
+    def _past_activity(self, when: datetime.datetime) -> TripActivity:
+        return baker.make(
+            TripActivity,
+            trip=self.trip,
+            title="Powerhouse",
+            scheduled_at=when,
+            lat_override=41.73,
+            lng_override=-73.92,
+            pin=None,
+            location=None,
+        )
+
+    def test_a_past_activity_gets_its_recorded_conditions(self) -> None:
+        when = timezone.make_aware(datetime.datetime(2026, 5, 1, 14, 0))
+        self._past_activity(when)
+
+        with patch(
+            "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
+            return_value={"2026-05-01": _HISTORY_ROW},
+        ):
+            resp = self.client_.get(self._url())
+
+        self.assertEqual(resp.status_code, 200)
+        recorded = resp.context["recorded_days"]
+        self.assertEqual(len(recorded), 1)
+        day, rows = recorded[0]
+        self.assertEqual(day, when.date())
+        self.assertEqual(len(rows), 1)
+        # 20C high, 10C low, 25.4mm rain, 32.1868 km/h wind - in the units every
+        # other weather surface in the app uses.
+        self.assertEqual(rows[0]["recorded"].high_f, 68.0)
+        self.assertEqual(rows[0]["recorded"].low_f, 50.0)
+        self.assertEqual(rows[0]["recorded"].precipitation_in, 1.0)
+        self.assertEqual(rows[0]["recorded"].wind_max_mph, 20.0)
+
+    def test_the_panel_renders_instead_of_hiding(self) -> None:
+        """The whole card used to be `hidden` when there was no forecast to show."""
+        self._past_activity(timezone.make_aware(datetime.datetime(2026, 5, 1, 14, 0)))
+
+        with patch(
+            "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
+            return_value={"2026-05-01": _HISTORY_ROW},
+        ):
+            content = self.client_.get(self._url()).content.decode()
+
+        self.assertIn("What the weather was", content)
+        self.assertNotIn('id="trip-weather-panel" hidden', content)
+
+    def test_several_activities_at_one_place_cost_one_request(self) -> None:
+        """A range is one call however wide, which is what makes this affordable."""
+        for day in (1, 2, 3):
+            self._past_activity(timezone.make_aware(datetime.datetime(2026, 5, day, 9, 0)))
+
+        with patch(
+            "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
+            return_value={"2026-05-01": _HISTORY_ROW},
+        ) as fetch:
+            self.client_.get(self._url())
+
+        self.assertEqual(fetch.call_count, 1)
+        _lat, _lng, start, end = fetch.call_args.args
+        self.assertEqual((start, end), (datetime.date(2026, 5, 1), datetime.date(2026, 5, 3)))
+
+    def test_a_day_outside_era5s_window_is_never_requested(self) -> None:
+        """Inside the publication lag there is nothing to fetch, and caching the
+        blank would make it permanent."""
+        self._past_activity(timezone.now() - datetime.timedelta(days=1))
+
+        with patch("urbanlens.dashboard.services.locations.visit_weather._fetch_days") as fetch:
+            resp = self.client_.get(self._url())
+
+        fetch.assert_not_called()
+        self.assertEqual(resp.context["recorded_days"], [])
+
+    def test_an_unavailable_source_leaves_the_section_empty_rather_than_erroring(self) -> None:
+        self._past_activity(timezone.make_aware(datetime.datetime(2026, 5, 1, 14, 0)))
+
+        with patch("urbanlens.dashboard.services.locations.visit_weather._fetch_days", return_value={}):
+            resp = self.client_.get(self._url())
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["recorded_days"], [])

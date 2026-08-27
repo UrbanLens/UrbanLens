@@ -78,6 +78,26 @@ JavaScript is unavailable.
     var retryCount = 0;
     var permanentlyClosed = false;
     var warnedSlowReconnect = false;
+    var heartbeatTimer = null;
+    // Cloudflare closes a tunnelled WebSocket that has carried no traffic for
+    // roughly 100 seconds, and the threshold isn't configurable below an
+    // Enterprise plan. A check-in nobody is typing in is idle by definition, so
+    // without this ping the chat quietly dies right when it matters. Same
+    // interval, and the same reasoning, as ts/shared/live-socket.ts - which this
+    // inline script can't import. SafetyCheckinChatConsumer.receive() ignores
+    // the ping explicitly, so it needs no reply.
+    var HEARTBEAT_MS = 45000;
+
+    function startHeartbeat() {
+        stopHeartbeat();   // every reconnect passes through here - don't stack intervals
+        heartbeatTimer = setInterval(function () {
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send('{"type":"ping"}');
+        }, HEARTBEAT_MS);
+    }
+
+    function stopHeartbeat() {
+        if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    }
 
     function toast(level, message) {
         if (window.toastr) toastr[level](message);
@@ -94,9 +114,11 @@ JavaScript is unavailable.
             retryDelay = 1000;
             retryCount = 0;
             warnedSlowReconnect = false;
+            startHeartbeat();
             setConnected(true);
         };
         ws.onclose = function (ev) {
+            stopHeartbeat();
             setConnected(false);
             if (ev.code === 4404) {
                 // Permanent: this connection is not (or no longer) authorized - e.g. a
@@ -181,9 +203,11 @@ JavaScript is unavailable.
                     appendMessage({ sender_name: 'You', body: body, created: new Date().toISOString() });
                     return;
                 }
-                if (resp.status === 400) {
-                    // The only case that returns plain, safe-to-display text - see
-                    // SafetyCheckinMessageView.post (blank/too-long body, or archived).
+                if (resp.status === 400 || resp.status === 409) {
+                    // The only statuses returning plain, safe-to-display text - see
+                    // SafetyCheckinMessageView.post: 400 for a blank/too-long body,
+                    // 409 for a check-in already archived (the body was fine, the
+                    // conversation is closed), matching what the external API says.
                     return resp.text().then(function (text) { throw new Error(text || 'Message failed to send.'); });
                 }
                 // Anything else (404 - access was revoked or the checkin/token no longer

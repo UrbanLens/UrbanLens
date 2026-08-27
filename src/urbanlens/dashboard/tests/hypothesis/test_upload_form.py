@@ -17,7 +17,6 @@ from django.utils.datastructures import MultiValueDict
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile, _MultipleFileField, _MultipleFileInput
 
-
 # -- _MultipleFileInput --------------------------------------------------------
 
 class MultipleFileInputValueFromDatadictTests(SimpleTestCase):

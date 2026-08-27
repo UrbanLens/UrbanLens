@@ -16,13 +16,13 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource, TriviaQuestionStatus, TriviaQuestionVote, TriviaQuestionVoteKind
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.ai.article_safety import ArticleSafetyVerdict
-from urbanlens.dashboard.services.articles import get_article, save_article
 from urbanlens.dashboard.services.trivia.wiki_incorporation import (
     EDIT_SUMMARY_INCORPORATED_TRIVIA,
     WIKI_INCORPORATION_SCORE_THRESHOLD,
     incorporate_question_into_wiki,
     sweep_questions_for_wiki_incorporation,
 )
+from urbanlens.dashboard.services.wiki.articles import get_article, save_article
 
 _coordinate_counter = count()
 

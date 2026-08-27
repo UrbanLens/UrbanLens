@@ -53,7 +53,7 @@
                 onclick="_openCommentAttachImageDialog(this.closest('.comment-compose'))">
           <i class="material-symbols-outlined">image</i>
         </button>
-        <input type="file" name="image" accept="image/*" class="comment-image-input" hidden>
+        <input type="file" name="image" accept="image/*" class="comment-image-input" hidden aria-label="Attach an image">
         {# Hidden field carrying a previously-uploaded photo's id - populated by the "Choose Existing" tab #}
         <input type="hidden" name="existing_image_id" class="comment-existing-image-field" value="">
         <span class="comment-image-preview"></span>

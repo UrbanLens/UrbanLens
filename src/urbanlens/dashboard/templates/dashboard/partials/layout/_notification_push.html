@@ -13,12 +13,21 @@
     var RETRY_MAX_MS = 30000;
     var POLL_MS = 60000;
     var FAILURES_BEFORE_POLLING = 2;
+    // Cloudflare closes a tunnelled WebSocket that has carried no traffic for
+    // roughly 100 seconds, and the threshold isn't configurable below an
+    // Enterprise plan. A quiet account sends nothing for hours, so without this
+    // ping the socket dies while the page still believes it's connected. Same
+    // interval, and the same reasoning, as ts/shared/live-socket.ts - which this
+    // inline script can't import. UserNotificationConsumer ignores every client
+    // frame, so the ping needs no reply.
+    var HEARTBEAT_MS = 45000;
 
     var ws = null;
     var retryDelay = RETRY_MIN_MS;
     var failures = 0;
     var pollTimer = null;
     var reconnectTimer = null;
+    var heartbeatTimer = null;
     var stopped = false;   // set on close 4404 (unauthenticated) - retrying won't help
 
     function refreshBadge() {
@@ -53,22 +62,29 @@
         return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // NotificationLog.url is a plain CharField (not validated at the DB
-    // level) - every current call site fills it via Django's reverse() or
-    // leaves it blank, but that's an application-level convention, not a
-    // guarantee the client can rely on. Gate the window.location sinks below
-    // on this so a stray "javascript:" (or a future call site that forgets
-    // to use reverse()) can't be navigated to. Allows same-origin relative
-    // paths ("/foo", not "//foo" which is scheme-relative to another host)
-    // and same-origin absolute http(s) URLs.
-    function isSafeUrl(url) {
-        if (typeof url !== 'string' || !url) return false;
-        if (url.charAt(0) === '/' && url.charAt(1) !== '/') return true;
+    // NotificationLog.url is a plain CharField - NotificationLog.save() now
+    // normalizes it, but this stays as the client-side backstop for rows
+    // written before that, and for any future path that bypasses save().
+    //
+    // Everything goes through the browser's own URL parser. There is
+    // deliberately no hand-parsed fast path for "starts with a slash": the
+    // guard used to early-return true for that, which let "/\evil.com",
+    // "/<TAB>/evil.com" and nine other inputs through, because WHATWG treats
+    // "\" as "/" in an authority and strips TAB/LF/CR before parsing. Any
+    // check that parses differently than the sink will eventually disagree
+    // with it, so the sink's own parser is the only safe arbiter.
+    // Returns the URL to navigate to, or null. It hands back the *parsed*
+    // href rather than a yes/no, so a caller cannot check one string and then
+    // navigate to another - the value that was validated is the only value
+    // available to assign.
+    function safeNotifUrl(url) {
+        if (typeof url !== 'string' || !url) return null;
         try {
             var parsed = new URL(url, window.location.origin);
-            return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.origin === window.location.origin;
+            var ok = (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.origin === window.location.origin;
+            return ok ? parsed.href : null;
         } catch (err) {
-            return false;
+            return null;
         }
     }
 
@@ -77,9 +93,10 @@
         var toast = n.message
             ? toastr.info(escapeHtml(n.message), escapeHtml(n.title))
             : toastr.info(escapeHtml(n.title));
-        if (toast && n.url && isSafeUrl(n.url)) {
+        var toastTarget = safeNotifUrl(n.url);
+        if (toast && toastTarget) {
             toast.css('cursor', 'pointer');
-            toast.on('click', function () { window.location = n.url; });
+            toast.on('click', function () { window.location = toastTarget; });
         }
     }
 
@@ -94,7 +111,8 @@
             });
             note.onclick = function () {
                 window.focus();
-                if (n.url && isSafeUrl(n.url)) window.location = n.url;
+                var target = safeNotifUrl(n.url);
+                if (target) window.location = target;
                 note.close();
             };
         } catch (err) {
@@ -108,6 +126,17 @@
 
     function stopPolling() {
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    function startHeartbeat() {
+        stopHeartbeat();   // every reconnect passes through here - don't stack intervals
+        heartbeatTimer = setInterval(function () {
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send('{"type":"ping"}');
+        }, HEARTBEAT_MS);
+    }
+
+    function stopHeartbeat() {
+        if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
     }
 
     function scheduleReconnect() {
@@ -134,6 +163,7 @@
             retryDelay = RETRY_MIN_MS;
             failures = 0;
             stopPolling();
+            startHeartbeat();
             refreshBadge();  // catch anything that arrived while disconnected
         };
 
@@ -157,6 +187,7 @@
 
         ws.onclose = function (e) {
             ws = null;
+            stopHeartbeat();
             if (e && e.code === 4404) {  // session no longer authenticated - permanent
                 stopped = true;
                 stopPolling();

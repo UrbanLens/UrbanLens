@@ -43,12 +43,34 @@ def validate_started_exploring(value: date | None) -> str | None:
     return None
 
 
+#: Interaction-preference choice fields, each paired with a free-text
+#: "<field>_other" companion - see Profile.PREFERENCE_FIELDS for the same
+#: pairing used to display the answers on the public profile page.
+_PREFERENCE_SELECT_FIELDS = [field for field, _label in Profile.PREFERENCE_FIELDS]
+_PREFERENCE_OTHER_FIELDS = [f"{field}_other" for field in _PREFERENCE_SELECT_FIELDS]
+
+
 class ProfileForm(forms.ModelForm):
-    """Bio, location, and dates - social links are managed separately."""
+    """Bio, location, dates, and interaction preferences - social links are managed separately.
+
+    Every field here is public presentation: what other users see on this
+    profile's page, not a technical setting - see the module docstring on
+    ``external_api.serializers.ProfileUpdateSerializer`` for why that split
+    matters for the mobile API surface.
+    """
 
     class Meta:
         model = Profile
-        fields = ["avatar", "bio", "area", "birth_date", "started_exploring"]
+        fields = [
+            "avatar",
+            "bio",
+            "area",
+            "birth_date",
+            "started_exploring",
+            *_PREFERENCE_SELECT_FIELDS,
+            *_PREFERENCE_OTHER_FIELDS,
+            "additional_preferences",
+        ]
         widgets = {
             "bio": forms.Textarea(attrs={"rows": 4, "class": "edit-textarea", "data-autosave": "bio"}),
             "area": forms.TextInput(attrs={"class": "edit-input", "data-autosave": "area"}),
@@ -56,6 +78,9 @@ class ProfileForm(forms.ModelForm):
             "started_exploring": forms.DateInput(
                 attrs={"type": "date", "class": "edit-input", "data-autosave": "started_exploring"},
             ),
+            **{field: forms.Select(attrs={"class": "edit-select browser-default", "data-autosave": field, "data-preference-toggle": field}) for field in _PREFERENCE_SELECT_FIELDS},
+            **{field: forms.TextInput(attrs={"class": "edit-input", "data-autosave": field, "placeholder": "Describe your preference", "data-preference-other-for": field.removesuffix("_other")}) for field in _PREFERENCE_OTHER_FIELDS},
+            "additional_preferences": forms.Textarea(attrs={"rows": 3, "class": "edit-textarea", "data-autosave": "additional_preferences"}),
         }
 
     def clean_birth_date(self):

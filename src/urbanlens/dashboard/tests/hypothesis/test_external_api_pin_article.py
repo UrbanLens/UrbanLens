@@ -26,9 +26,9 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.articles import save_article
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.wiki.articles import save_article
 
 BASE = "/dashboard/api/external/v1/pins"
 

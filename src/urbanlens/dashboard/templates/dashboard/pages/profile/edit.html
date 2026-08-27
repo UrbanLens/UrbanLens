@@ -7,7 +7,7 @@
 {% block subnav %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
-        {% include "dashboard/partials/profile/_profile_tabs.html" with active="edit" %}
+        {% include "dashboard/partials/profile/_profile_tabs.html" with active="edit" profile_slug=profile.slug %}
     </div>
 </div>
 {% endblock %}
@@ -61,7 +61,7 @@
                 <span class="edit-username-at">@</span>
                 <input type="text" class="edit-input edit-username-input" id="username-input"
                        maxlength="30" value="{{ request.user.username }}"
-                       autocomplete="username" spellcheck="false">
+                       autocomplete="username" spellcheck="false" aria-label="Username">
                 <span class="edit-username-hint" id="username-hint"></span>
             </div>
             <p class="edit-field-hint" id="username-requirements-hint" style="display:none">3-30 characters: letters, numbers, and underscores only.</p>
@@ -128,7 +128,7 @@
                 </label>
                 <input type="text" class="edit-input" maxlength="150"
                        value="{{ request.user.first_name }}"
-                       data-autosave="first_name">
+                       data-autosave="first_name" aria-label="First name">
             </div>
             <div class="edit-field">
                 <label class="edit-label">
@@ -137,7 +137,7 @@
                 </label>
                 <input type="text" class="edit-input" maxlength="150"
                        value="{{ request.user.last_name }}"
-                       data-autosave="last_name">
+                       data-autosave="last_name" aria-label="Last name">
             </div>
         </div>
 
@@ -175,6 +175,38 @@
             </div>
         </div>
 
+    </section>
+
+    {# -- Interaction preferences ---------------------------------------------- #}
+    <section class="edit-card ul-section">
+        <h2 class="edit-card-title">Interaction Preferences</h2>
+        <p class="edit-card-desc">
+            These are shown on your public profile so other users know how you'd like to be treated -
+            on this site and off it (e.g. tagging you in a photo posted elsewhere). They're informational
+            only for now and aren't enforced by the site.
+        </p>
+
+        {% for field in preference_fields %}
+        <div class="edit-field">
+            <label class="edit-label" for="{{ field.select.id_for_label }}">
+                {{ field.label }}
+                <span class="field-status" data-field-status="{{ field.name }}"></span>
+            </label>
+            {{ field.select }}
+            <div class="edit-preference-other" data-preference-other-for="{{ field.name }}"{% if field.select.value != "other" %} style="display:none"{% endif %}>
+                {{ field.other_input }}
+                <span class="field-status" data-field-status="{{ field.name }}_other"></span>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="edit-field">
+            <label class="edit-label" for="{{ form.additional_preferences.id_for_label }}">
+                Other Preferences
+                <span class="field-status" data-field-status="additional_preferences"></span>
+            </label>
+            {{ form.additional_preferences }}
+        </div>
     </section>
 
     {# -- Social links -------------------------------------------------------- #}
@@ -378,6 +410,15 @@ function closeDateErrorDialog() {
         } else {
             el.addEventListener('change', function () { saveField(field, el.value, false); });
         }
+    });
+
+    // -- interaction preferences: show the "specify" field only when "Other" is picked --
+    document.querySelectorAll('[data-preference-toggle]').forEach(function (select) {
+        var wrap = document.querySelector('[data-preference-other-for="' + select.dataset.preferenceToggle + '"]');
+        if (!wrap) return;
+        select.addEventListener('change', function () {
+            wrap.style.display = select.value === 'other' ? '' : 'none';
+        });
     });
 
     // -- username field: debounced availability check + save on blur -----------

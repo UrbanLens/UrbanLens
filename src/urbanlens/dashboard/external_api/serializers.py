@@ -5,19 +5,21 @@ These never subclass or reuse the internal ``PinSerializer``/``ProfileSerializer
 the internal API is free to grow fields for the site's own frontend without
 silently expanding what a third-party application is permitted to submit or
 read. Field-level bounds here are the first line of defense against
-untrusted input; ``services.pin_creation.create_pin_for_profile`` is the
+untrusted input; ``services.pins.pin_creation.create_pin_for_profile`` is the
 second, since it's shared with the (trusted) map UI form and sanitizes
 regardless of caller.
 """
 
 from __future__ import annotations
 
+import datetime
 import math
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -40,9 +42,16 @@ from urbanlens.dashboard.models.pin_list.model import PinListItem
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS
 from urbanlens.dashboard.models.profile.meta import (
     DistanceUnit,
+    ExploringWithOthersPreference,
+    FriendRequestPreference,
     GuidanceLevel,
     MapCenterMode,
     MapViewChoice,
+    MeetupPreference,
+    PhotoSharingPreference,
+    PhotoTaggingPreference,
+    PhotoTakingPreference,
+    PhotoUsagePreference,
     SyncAliasesDirection,
     ThemeChoice,
     VisibilityChoice,
@@ -57,27 +66,27 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyCheckinStatus,
 )
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
-from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
-from urbanlens.dashboard.services.media_labels import MAX_MEDIA_LABEL_NAME_LENGTH, MAX_MEDIA_LABELS
-from urbanlens.dashboard.services.notification_center import preference_field_names
-from urbanlens.dashboard.services.pin_edit import EDITABLE_PIN_FIELDS
-from urbanlens.dashboard.services.text_limits import (
+from urbanlens.dashboard.services.core.text_limits import (
+    MAX_ADDITIONAL_PREFERENCES_LENGTH,
     MAX_COMMENT_TEXT_LENGTH,
     MAX_FRIEND_REQUEST_MESSAGE_LENGTH,
     MAX_PIN_DESCRIPTION_LENGTH,
     MAX_PIN_LIST_DESCRIPTION_LENGTH,
     MAX_PIN_NOTE_LENGTH,
+    MAX_PREFERENCE_OTHER_LENGTH,
     MAX_PROFILE_BIO_LENGTH,
     MAX_TRIP_ACTIVITY_NOTES_LENGTH,
     MAX_TRIP_DESCRIPTION_LENGTH,
     MAX_VISIT_NOTES_LENGTH,
 )
-from urbanlens.dashboard.services.trip_comments import ALLOWED_COMMENT_EMOJIS
+from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
+from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
+from urbanlens.dashboard.services.media.media_labels import MAX_MEDIA_LABEL_NAME_LENGTH, MAX_MEDIA_LABELS
+from urbanlens.dashboard.services.notifications.notification_center import preference_field_names
+from urbanlens.dashboard.services.pins.pin_edit import EDITABLE_PIN_FIELDS
+from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS
 
 if TYPE_CHECKING:
-    import datetime
-
     from urbanlens.dashboard.models.profile.model import Profile
 
 #: Same scheme restriction as controllers.links._clean_link_input - external
@@ -139,7 +148,7 @@ class PinCreateSerializer(serializers.Serializer):
     uuid = serializers.UUIDField(required=False, allow_null=True, default=None)
     #: uuid of one of the caller's own pins to create this one as a child
     #: (detail pin) of - e.g. a building entrance a few meters from its main
-    #: pin. See ``services.pin_creation.create_pin_for_profile``'s parent_id
+    #: pin. See ``services.pins.pin_creation.create_pin_for_profile``'s parent_id
     #: docstring for why this matters: without it, coordinates this close
     #: would be swallowed by the default fuzzy-location dedup instead of
     #: creating the distinct child.
@@ -185,7 +194,7 @@ class PinSuggestionCreateSerializer(serializers.Serializer):
     Unlike ``PinCreateSerializer``, nothing here is written to a real Pin
     immediately - it's staged as a ``PinSuggestion`` the profile owner must
     explicitly accept before anything appears on their map (see
-    ``services.pin_suggestions.ingest_location_hits``). This is why an
+    ``services.pins.pin_suggestions.ingest_location_hits``). This is why an
     external "discovery" app (finds candidate places autonomously, without
     the user having been there) should use this endpoint rather than
     ``PinCreateSerializer``/``PinsView.post``, which creates a real pin outright.
@@ -267,7 +276,7 @@ class SyncPinSerializer(serializers.Serializer):
     """Documents the pin payload shape served by the delta-sync endpoint.
 
     Schema-only: the actual payload is built by
-    ``services.pin_sync.serialize_sync_pin`` (the map payload plus sync-only
+    ``services.pins.pin_sync.serialize_sync_pin`` (the map payload plus sync-only
     fields), never by this class - but the OpenAPI contract (and the Dart
     client generated from it) needs the shape spelled out.
     ``test_external_api_schema`` asserts these fields exactly match what the
@@ -380,7 +389,7 @@ class PinLinkSerializer(serializers.Serializer):
         """The Wayback snapshot url, or null when none has been archived yet.
 
         The model stores "not archived" as ``""``; this reports it as null to
-        match the shape ``services.pin_detail.build_pin_detail`` already ships.
+        match the shape ``services.pins.pin_detail.build_pin_detail`` already ships.
 
         Args:
             link: The link being serialized.
@@ -431,7 +440,7 @@ class PinDetailSerializer(SyncPinSerializer):
     """Documents the full pin-detail response (schema-only).
 
     A superset of :class:`SyncPinSerializer` - see
-    ``services.pin_detail.build_pin_detail``, the function that actually
+    ``services.pins.pin_detail.build_pin_detail``, the function that actually
     builds this payload. ``test_external_api_schema.PinDetailContractTests``
     asserts these fields exactly match what that function really emits.
     """
@@ -545,7 +554,7 @@ class PinUpdateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
     icon = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
     #: The owner's personal notes on this pin. Bounded by the same limit the
-    #: website's own editor enforces (``services.text_limits``).
+    #: website's own editor enforces (``services.core.text_limits``).
     description = serializers.CharField(max_length=MAX_PIN_DESCRIPTION_LENGTH, required=False, allow_blank=True, allow_null=True)
     #: Hex color override for this pin's marker, e.g. ``"#F44336"``. Null/blank
     #: restores the inherited color (the winning label's, or the default).
@@ -623,7 +632,7 @@ class PinUpdateSerializer(serializers.Serializer):
         """Flatten the validated payload into ``Pin`` column name -> value to write.
 
         Only keys this request actually submitted appear, so the result can be
-        handed straight to ``services.pin_edit.apply_pin_edits`` without
+        handed straight to ``services.pins.pin_edit.apply_pin_edits`` without
         breaking its absent-means-untouched contract. Everything that is not a
         ``Pin`` column (``latitude``/``longitude``, ``parent_id``,
         ``label_uuids``, ``visited``, ``confirm_wiki_loss``) is dropped here -
@@ -645,7 +654,7 @@ class PinUpdateSerializer(serializers.Serializer):
 
         Returns:
             Mapping of ``Pin`` field name to the value to write. Always a
-            subset of ``services.pin_edit.EDITABLE_PIN_FIELDS``.
+            subset of ``services.pins.pin_edit.EDITABLE_PIN_FIELDS``.
         """
         data = self.validated_data
         edits: dict[str, Any] = {field: value for field, value in data.items() if field in EDITABLE_PIN_FIELDS and field != SECURITY_WIRE_KEY}
@@ -674,11 +683,43 @@ class PinVisitSerializer(serializers.Serializer):
     updated = serializers.DateTimeField(read_only=True)
 
 
+#: How far ahead of the server's clock a submitted visit time may sit.
+#:
+#: Not zero, because a client's clock is its own and a phone a minute fast is
+#: not lying about anything. Small, because the point is to reject a *date*
+#: in the future rather than to accommodate one.
+MAX_VISIT_CLOCK_SKEW = datetime.timedelta(minutes=5)
+
+
 class PinVisitCreateSerializer(serializers.Serializer):
     """A manually logged visit submitted for a pin."""
 
     visited_at = serializers.DateTimeField(required=True)
     notes = serializers.CharField(max_length=MAX_VISIT_NOTES_LENGTH, required=False, allow_blank=True, allow_null=True, default=None)
+
+    def validate_visited_at(self, value: datetime.datetime) -> datetime.datetime:
+        """Refuse a visit that has not happened yet.
+
+        A visit is a record of somewhere the user has *been*. A future one has
+        no meaning the product supports - a planned outing is a trip activity,
+        which is a different model with its own scheduling - and it is not
+        inert: ``sync_last_visited`` feeds ``Pin.last_visited``, which is
+        displayed and ordered by, so one mistyped year makes a pin permanently
+        the most recently visited thing its owner has.
+
+        Args:
+            value: The submitted visit time.
+
+        Returns:
+            The value, unchanged, when it is in the past.
+
+        Raises:
+            serializers.ValidationError: The time is beyond
+                :data:`MAX_VISIT_CLOCK_SKEW` ahead of now.
+        """
+        if value > timezone.now() + MAX_VISIT_CLOCK_SKEW:
+            raise serializers.ValidationError("A visit cannot be logged in the future.")
+        return value
 
 
 class LocationSearchQuerySerializer(serializers.Serializer):
@@ -782,12 +823,18 @@ class PushDeviceResponseSerializer(serializers.Serializer):
 
     Deliberately excludes ``address``: a UnifiedPush endpoint URL is a
     send-capability secret, and the caller already knows what it submitted.
+
+    ``dispatch_enabled`` reports whether the server will actually push to this
+    device. An FCM registration is accepted and stored but never dispatched to
+    yet, so it comes back False - a client that assumed a 201 meant working
+    delivery would otherwise show a silently dead notification setting.
     """
 
     uuid = serializers.UUIDField(read_only=True)
     transport = serializers.CharField(read_only=True)
     name = serializers.CharField(read_only=True)
     created = serializers.DateTimeField(read_only=True)
+    dispatch_enabled = serializers.BooleanField(read_only=True)
 
 
 class SettingsFeaturesSerializer(serializers.Serializer):
@@ -810,10 +857,10 @@ class SettingsSerializer(serializers.Serializer):
     an external client has no business reading, and a model-derived serializer
     would leak each new such field the moment someone added it. An explicit
     list fails closed - a new preference is invisible here until deliberately
-    added to ``services.profile_settings.SETTINGS_FIELDS`` and to this class.
+    added to ``services.profile.profile_settings.SETTINGS_FIELDS`` and to this class.
 
     Fields mirror that allowlist exactly; the trailing read-only keys are
-    computed context (see ``services.profile_settings.read_settings``).
+    computed context (see ``services.profile.profile_settings.read_settings``).
     """
 
     # Name (User passthrough).
@@ -852,6 +899,7 @@ class SettingsSerializer(serializers.Serializer):
     cluster_radius = serializers.IntegerField(read_only=True, allow_null=True)
     use_pin_cache = serializers.BooleanField(read_only=True)
     suggest_pin_restructure = serializers.BooleanField(read_only=True)
+    auto_create_building_pins = serializers.BooleanField(read_only=True)
     # Map center.
     map_center_mode = serializers.ChoiceField(choices=MapCenterMode.choices, read_only=True)
     map_custom_latitude = serializers.DecimalField(max_digits=9, decimal_places=6, read_only=True, allow_null=True)
@@ -869,6 +917,7 @@ class SettingsSerializer(serializers.Serializer):
     # AI (feature-gated).
     ai_enabled = serializers.BooleanField(read_only=True)
     ai_label_categories = serializers.BooleanField(read_only=True)
+    disable_auto_tagging = serializers.BooleanField(read_only=True)
     ai_label_tags = serializers.BooleanField(read_only=True)
     ai_label_statuses = serializers.BooleanField(read_only=True)
     # Keyword tagging.
@@ -886,6 +935,7 @@ class SettingsSerializer(serializers.Serializer):
     community_enabled = serializers.BooleanField(read_only=True)
     show_wiki_cover_photos = serializers.BooleanField(read_only=True)
     auto_create_pin_article_from_wikipedia = serializers.BooleanField(read_only=True)
+    show_supporter_badge = serializers.BooleanField(read_only=True)
     # Pin suggestions.
     pin_suggestions_enabled = serializers.BooleanField(read_only=True)
     suggest_public_pins = serializers.BooleanField(read_only=True)
@@ -929,7 +979,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     first_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
     last_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
     # Contact methods. discord_username's charset is checked in
-    # services.profile_settings (mirrors ContactMethodsForm.clean_discord_username).
+    # services.profile.profile_settings (mirrors ContactMethodsForm.clean_discord_username).
     phone_number = serializers.CharField(required=False, allow_blank=True, max_length=30)
     signal_username = serializers.CharField(required=False, allow_blank=True, max_length=100)
     discord_username = serializers.CharField(required=False, allow_blank=True, max_length=100)
@@ -963,6 +1013,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     cluster_radius = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=1000)
     use_pin_cache = serializers.BooleanField(required=False)
     suggest_pin_restructure = serializers.BooleanField(required=False)
+    auto_create_building_pins = serializers.BooleanField(required=False)
     # Map center.
     map_center_mode = serializers.ChoiceField(choices=MapCenterMode.choices, required=False)
     map_custom_latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True, min_value=-90, max_value=90)
@@ -980,6 +1031,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     # AI (feature-gated - rejected with 400 while the feature is off).
     ai_enabled = serializers.BooleanField(required=False)
     ai_label_categories = serializers.BooleanField(required=False)
+    disable_auto_tagging = serializers.BooleanField(required=False)
     ai_label_tags = serializers.BooleanField(required=False)
     ai_label_statuses = serializers.BooleanField(required=False)
     # Keyword tagging.
@@ -998,6 +1050,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     community_enabled = serializers.BooleanField(required=False)
     show_wiki_cover_photos = serializers.BooleanField(required=False)
     auto_create_pin_article_from_wikipedia = serializers.BooleanField(required=False)
+    show_supporter_badge = serializers.BooleanField(required=False)
     # Pin suggestions.
     pin_suggestions_enabled = serializers.BooleanField(required=False)
     suggest_public_pins = serializers.BooleanField(required=False)
@@ -1012,7 +1065,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     # External APIs.
     external_apis_enabled = serializers.BooleanField(required=False)
     #: Null means "no downscaling preference"; any value is checked against the
-    #: caller's plan entitlement in services.profile_settings.
+    #: caller's plan entitlement in services.profile.profile_settings.
     image_downscale_max_dimension = serializers.IntegerField(required=False, allow_null=True)
     video_downscale_max_height = serializers.IntegerField(required=False, allow_null=True)
 
@@ -1026,11 +1079,11 @@ MAX_BOUNDARY_VERTICES = 20_000
 
 #: Human-readable description of the ``criteria``/``smart_filter`` JSON shape,
 #: reused by every field carrying it. Deliberately describes the *existing*
-#: format produced by ``services.filter_criteria.serialize_form_criteria`` -
+#: format produced by ``services.search.filter_criteria.serialize_form_criteria`` -
 #: this is not a new contract, and the two must not drift.
 CRITERIA_HELP_TEXT = (
     "Saved main-map filter criteria, in the same JSON shape "
-    "`services.filter_criteria.serialize_form_criteria` produces and "
+    "`services.search.filter_criteria.serialize_form_criteria` produces and "
     "`deserialize_criteria` replays. Every key is optional; an absent key means "
     '"no filter on that dimension". Recognized keys: `name` (substring match); '
     "the numeric bounds `min_rating`/`max_rating`, `min_priority`/`max_priority`, "
@@ -1107,7 +1160,7 @@ class PinListDetailSerializer(PinListSerializer):
 
     def get_smart_boundary(self, obj) -> dict | None:
         """The boundary as a GeoJSON MultiPolygon, or null when unset."""
-        from urbanlens.dashboard.services.geo import geometry_to_geojson
+        from urbanlens.dashboard.services.geo.geo import geometry_to_geojson
 
         return geometry_to_geojson(obj.smart_boundary)
 
@@ -1125,7 +1178,7 @@ class PinListWriteSerializer(serializers.Serializer):
     is_smart = serializers.BooleanField(required=False)
     smart_filter = serializers.JSONField(required=False, allow_null=True, help_text=CRITERIA_HELP_TEXT)
     #: A GeoJSON Polygon or MultiPolygon. Converted to a MultiPolygon on the
-    #: way in (see services.geo.parse_multipolygon_geojson), so a client may
+    #: way in (see services.geo.geo.parse_multipolygon_geojson), so a client may
     #: submit either.
     smart_boundary = serializers.JSONField(required=False, allow_null=True)
     #: Point this list at one of the caller's saved filters: its criteria are
@@ -1149,7 +1202,7 @@ class PinListWriteSerializer(serializers.Serializer):
         """
         if value is None:
             return None
-        from urbanlens.dashboard.services.geo import parse_multipolygon_geojson
+        from urbanlens.dashboard.services.geo.geo import parse_multipolygon_geojson
 
         try:
             geom = parse_multipolygon_geojson(value)
@@ -1258,12 +1311,17 @@ class PinListMarkupMapResponseSerializer(serializers.Serializer):
     markup_map_uuid = serializers.UUIDField(read_only=True)
 
 
+_ALLOWED_SAVED_FILTER_COLORS = {hex_value for hex_value, _label in COLOR_CHOICES}
+
+
 class SavedFilterSerializer(serializers.Serializer):
     """One of the caller's saved main-map filters."""
 
     uuid = serializers.UUIDField(read_only=True)
     name = serializers.CharField(read_only=True)
     icon = serializers.CharField(read_only=True, allow_blank=True)
+    color = serializers.CharField(read_only=True, allow_blank=True)
+    opacity = serializers.IntegerField(read_only=True)
     criteria = serializers.JSONField(read_only=True, help_text=CRITERIA_HELP_TEXT)
     order = serializers.IntegerField(read_only=True)
     created = serializers.DateTimeField(read_only=True)
@@ -1275,8 +1333,26 @@ class SavedFilterWriteSerializer(serializers.Serializer):
 
     name = serializers.CharField(max_length=100)
     icon = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    color = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    opacity = serializers.IntegerField(required=False, min_value=0, max_value=100)
     criteria = serializers.JSONField(required=False, help_text=CRITERIA_HELP_TEXT)
     order = serializers.IntegerField(required=False)
+
+    def validate_color(self, value):
+        """Reject any hex not in the shared saved-filter/label/custom-layer color palette.
+
+        Args:
+            value: The submitted color.
+
+        Returns:
+            The validated color.
+
+        Raises:
+            serializers.ValidationError: If it isn't blank or an allowed hex.
+        """
+        if value and value not in _ALLOWED_SAVED_FILTER_COLORS:
+            raise serializers.ValidationError("Not a recognized color.")
+        return value
 
     def validate_criteria(self, value):
         """Require a JSON object, since every consumer indexes it by key.
@@ -1300,8 +1376,16 @@ class SavedFilterUpdateResponseSerializer(SavedFilterSerializer):
 
     #: Smart lists whose membership was recomputed because they were derived
     #: from this filter and its criteria changed. See
-    #: ``services.pin_list_membership.resync_lists_for_saved_filter``.
+    #: ``services.pins.pin_list_membership.resync_lists_for_saved_filter``.
     lists_resynced = serializers.IntegerField(read_only=True)
+
+
+#: Schema for a count that is only present when ``?with_counts=true`` was
+#: passed. See where it is used, on ``LabelSerializer``.
+_OPTIONAL_COUNT_SCHEMA = {
+    "type": "integer",
+    "description": "Only present when the request passed `with_counts=true`; each count costs a correlated subquery per label.",
+}
 
 
 class LabelSerializer(serializers.Serializer):
@@ -1338,8 +1422,24 @@ class LabelSerializer(serializers.Serializer):
     parent_uuids = serializers.SerializerMethodField()
     #: Present only when the caller asked for counts (``?with_counts=true``) -
     #: they cost a correlated subquery per label.
-    pin_count = serializers.IntegerField(read_only=True, required=False)
-    location_count = serializers.IntegerField(read_only=True, required=False)
+    #:
+    #: Deliberately **not** ``read_only``, which is what keeps them optional in
+    #: the published document. drf-spectacular adds any field carrying
+    #: ``readOnly`` to the component's ``required`` list no matter what
+    #: ``required`` says, and its only off-switch
+    #: (``COMPONENT_NO_READ_ONLY_REQUIRED``) is global - turning that on to fix
+    #: two fields would make every read-only field of every component optional,
+    #: so a client could no longer rely on ``uuid`` being present anywhere. The
+    #: schema previously demanded a key the response omits unless asked for, so
+    #: a generated client with a non-optional field could not parse an ordinary
+    #: label list.
+    #:
+    #: Dropping ``read_only`` costs nothing here: this serializer is
+    #: response-only (writes go through ``LabelWriteSerializer``), so nothing
+    #: ever parses input through it. Restore ``read_only=True`` if that changes,
+    #: and solve the required-ness another way.
+    pin_count = extend_schema_field(_OPTIONAL_COUNT_SCHEMA)(serializers.IntegerField(required=False))
+    location_count = extend_schema_field(_OPTIONAL_COUNT_SCHEMA)(serializers.IntegerField(required=False))
     created = serializers.DateTimeField(read_only=True)
     updated = serializers.DateTimeField(read_only=True)
 
@@ -1727,7 +1827,7 @@ class SafetyPhotoAttachSerializer(serializers.Serializer):
     Interim shape: the multipart upload pipeline (quota accounting, checksum
     dedup, downscaling, EXIF handling) lives in
     ``controllers.safety.SafetyGalleryView.post`` and has not yet been extracted
-    into the shared ``services.photo_upload`` the Photos domain is landing.
+    into the shared ``services.photos.photo_upload`` the Photos domain is landing.
     Rebuilding it here would fork that logic and give the external surface its
     own subtly different quota and dedup behavior, so this endpoint deliberately
     only *references* an image the caller already uploaded.
@@ -1785,7 +1885,7 @@ class FriendProfileSerializer(serializers.Serializer):
     """A person as they may be shown to the caller, masking included.
 
     Never populated straight off a ``Profile``. Callers must build the dict
-    through ``services.identity_visibility.resolve_visible_identity`` so a
+    through ``services.profile.identity_visibility.resolve_visible_identity`` so a
     profile whose privacy settings don't permit the caller is masked here
     exactly as it is in the web UI - the API surface must not become the way
     to read a name the site itself would hide.
@@ -1816,22 +1916,22 @@ class FriendshipSerializer(serializers.Serializer):
     #: Which way the original request ran, relative to the caller.
     direction = serializers.ChoiceField(choices=[("incoming", "Incoming"), ("outgoing", "Outgoing")], read_only=True)
     message = serializers.CharField(read_only=True, allow_null=True)
-    #: Whether this relationship is marked muted. Read the flag, never
+    #: Whether **the caller** has muted this relationship. Read the flag, never
     #: ``status``: mute used to be written *over* ``status``, which un-friended
     #: the pair for every gate reading ``Profile.are_friends``. It is now a
-    #: separate boolean and ``status`` is left alone.
+    #: separate per-side boolean and ``status`` is left alone.
     #:
-    #: **Two caveats a client must not paper over.** First, the flag lives on
-    #: the single shared row joining the pair, so it is not per-viewer - label
-    #: it "muted", never "muted by you". Second, and more important:
-    #: *friendship-level mute does not currently suppress anything*. No
-    #: notification delivery path consults it yet (see ``docs/PROBLEMS.md``,
-    #: 2026-07-28), so the muter still receives friend-request, pin-share,
-    #: trip-invite and safety notifications from that profile. The preference is
-    #: recorded faithfully and will start being honored when delivery is wired
-    #: up; until then a UI that promises silence would be lying. The two mute
-    #: mechanisms that *do* work are unrelated: ``DirectMessageMute``
-    #: (per-sender DM mute) and per-group chat mute.
+    #: Genuinely "muted by you": the row is shared by the pair but carries one
+    #: column per side, so the other profile's own answer is independent. What
+    #: it suppresses is the in-app notification and everything that follows
+    #: from it - live toast, WhatsApp/SMS alert, native push - for every
+    #: notification type except the safety check-in family, which is exempt
+    #: (``MUTE_EXEMPT_TYPES``) because a preference about someone's chatter is
+    #: not consent to stop watching for them going overdue. Emails a producer
+    #: sends alongside its notification are not covered.
+    #:
+    #: The two narrower mute mechanisms are unrelated and still apply on top:
+    #: ``DirectMessageMute`` (per-sender DM mute) and per-group chat mute.
     is_muted = serializers.BooleanField(read_only=True)
     created = serializers.DateTimeField(read_only=True)
     updated = serializers.DateTimeField(read_only=True)
@@ -1893,7 +1993,7 @@ class FriendInviteResponseSerializer(serializers.Serializer):
     ``result`` is always the literal ``"sent"``. It does not vary by whether
     the address was registered, whether the target's privacy settings
     accepted the request, or whether the mail actually went out - see
-    ``services.friendship.invite_by_email``. Anything that made this field (or
+    ``services.social.friendship.invite_by_email``. Anything that made this field (or
     the status code, or the headers) branch would hand a caller an
     account-enumeration oracle.
     """
@@ -1955,9 +2055,32 @@ class ProfileDetailSerializer(serializers.Serializer):
     bio = serializers.CharField(read_only=True, allow_null=True)
     area = serializers.CharField(read_only=True, allow_null=True)
     started_exploring = serializers.DateField(read_only=True, allow_null=True)
+    #: Consent-style interaction preferences - see ``ProfileUpdateSerializer``
+    #: for why these are writable through this same public-presentation surface.
+    #: Blank means the profile hasn't answered that one.
+    photo_taking_preference = serializers.ChoiceField(choices=PhotoTakingPreference.choices, read_only=True, allow_blank=True)
+    photo_taking_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    photo_sharing_preference = serializers.ChoiceField(choices=PhotoSharingPreference.choices, read_only=True, allow_blank=True)
+    photo_sharing_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    photo_tagging_preference = serializers.ChoiceField(choices=PhotoTaggingPreference.choices, read_only=True, allow_blank=True)
+    photo_tagging_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    photo_usage_preference = serializers.ChoiceField(choices=PhotoUsagePreference.choices, read_only=True, allow_blank=True)
+    photo_usage_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    friend_request_preference = serializers.ChoiceField(choices=FriendRequestPreference.choices, read_only=True, allow_blank=True)
+    friend_request_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    meetup_preference = serializers.ChoiceField(choices=MeetupPreference.choices, read_only=True, allow_blank=True)
+    meetup_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    exploring_with_others_preference = serializers.ChoiceField(choices=ExploringWithOthersPreference.choices, read_only=True, allow_blank=True)
+    exploring_with_others_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    additional_preferences = serializers.CharField(read_only=True, allow_blank=True)
     is_self = serializers.BooleanField(read_only=True)
     #: Null when no relationship row exists at all.
     friendship_status = serializers.ChoiceField(choices=FriendshipStatus.choices, read_only=True, allow_null=True)
+    #: The caller's own private nickname for this profile, or null when the
+    #: caller assigned none - including when viewing your own profile, since a
+    #: nickname cannot describe its own author. Never the nickname someone
+    #: else assigned to this profile; see ``services.profile.profile_annotations``.
+    nickname = serializers.CharField(read_only=True, allow_null=True)
     #: Omitted unless contact visibility permits this caller.
     contact = ProfileContactSerializer(read_only=True, allow_null=True)
     #: Present only on your own profile.
@@ -1967,10 +2090,10 @@ class ProfileDetailSerializer(serializers.Serializer):
 class ProfileUpdateSerializer(serializers.Serializer):
     """Validates a partial update to the caller's own profile.
 
-    Deliberately limited to the three fields that are *public presentation* -
-    what other people see on your profile page. Everything else a profile row
-    happens to carry is a setting, and settings are written through
-    ``PATCH /settings/`` behind the ``settings:write`` scope.
+    Deliberately limited to fields that are *public presentation* - what other
+    people see on your profile page. Everything else a profile row happens to
+    carry is a setting, and settings are written through ``PATCH /settings/``
+    behind the ``settings:write`` scope.
 
     That split is a privilege boundary, not tidiness. ``PATCH /profiles/{slug}/``
     is gated on ``social:write`` - the scope an app asks for to send friend
@@ -1983,6 +2106,14 @@ class ProfileUpdateSerializer(serializers.Serializer):
     ``settings:write`` exists to protect. ``ProfileSettingsOverlapTests`` asserts
     the two field sets stay disjoint so the overlap cannot creep back.
 
+    The interaction-preference fields (``photo_taking_preference`` and
+    friends, plus their ``_other`` free-text companions and the standalone
+    ``additional_preferences`` note) belong here for the same reason bio/area
+    do: they're consent statements shown on the public profile, not access
+    control, even though the website edits them from the Edit Profile page
+    rather than Settings. Nothing here is technically enforced - see
+    ``Profile.PREFERENCE_FIELDS``.
+
     Excludes ``avatar`` for a different reason: image upload is the Photos
     domain's problem (size limits, downscaling, quota) and wiring a second
     upload path through here would duplicate all of it. ``avatar_url`` stays
@@ -1992,6 +2123,21 @@ class ProfileUpdateSerializer(serializers.Serializer):
     bio = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=MAX_PROFILE_BIO_LENGTH)
     area = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=255)
     started_exploring = serializers.DateField(required=False, allow_null=True)
+    photo_taking_preference = serializers.ChoiceField(choices=PhotoTakingPreference.choices, required=False, allow_blank=True)
+    photo_taking_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    photo_sharing_preference = serializers.ChoiceField(choices=PhotoSharingPreference.choices, required=False, allow_blank=True)
+    photo_sharing_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    photo_tagging_preference = serializers.ChoiceField(choices=PhotoTaggingPreference.choices, required=False, allow_blank=True)
+    photo_tagging_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    photo_usage_preference = serializers.ChoiceField(choices=PhotoUsagePreference.choices, required=False, allow_blank=True)
+    photo_usage_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    friend_request_preference = serializers.ChoiceField(choices=FriendRequestPreference.choices, required=False, allow_blank=True)
+    friend_request_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    meetup_preference = serializers.ChoiceField(choices=MeetupPreference.choices, required=False, allow_blank=True)
+    meetup_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    exploring_with_others_preference = serializers.ChoiceField(choices=ExploringWithOthersPreference.choices, required=False, allow_blank=True)
+    exploring_with_others_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    additional_preferences = serializers.CharField(required=False, allow_blank=True, max_length=MAX_ADDITIONAL_PREFERENCES_LENGTH)
 
 
 class ProfileNoteSerializer(serializers.Serializer):
@@ -2067,7 +2213,7 @@ class NotificationPreferenceEntrySerializer(serializers.Serializer):
 def _preference_entry_fields() -> dict[str, serializers.Field]:
     """Build one nested entry field per real notification-preference stem.
 
-    Driven by ``services.notification_center.preference_field_names``, which
+    Driven by ``services.notifications.notification_center.preference_field_names``, which
     introspects the model - so a thirteenth preference becomes readable and
     writable here with no change to this module.
 
@@ -2134,10 +2280,10 @@ class PhotoSerializer(serializers.Serializer):
     dm_peer_name = serializers.CharField(read_only=True, allow_null=True)
 
 
-def build_photo_payload(image: Image, viewer_profile: Profile) -> dict:
+def build_photo_payload(image: Image, viewer_profile: Profile, pending_image_ids: set[int] | None = None) -> dict:
     """Build one photo's external-API payload for a given viewer.
 
-    Deliberately not ``services.images.image_to_gallery_json``: that one takes
+    Deliberately not ``services.media.images.image_to_gallery_json``: that one takes
     an ``HttpRequest``, builds absolute URLs and template-facing flags for the
     site's own gallery, and is free to change shape whenever the frontend
     needs it. This payload is a published contract.
@@ -2147,9 +2293,9 @@ def build_photo_payload(image: Image, viewer_profile: Profile) -> dict:
     viewer can legitimately see never becomes a side channel for context they
     cannot:
 
-    - ``owner_slug`` goes through ``services.identity_visibility`` and is null
+    - ``owner_slug`` goes through ``services.profile.identity_visibility`` and is null
       when the uploader's privacy settings hide them from this viewer.
-    - ``wiki_slug``/``wiki_name`` go through ``services.wiki_access`` and are
+    - ``wiki_slug``/``wiki_name`` go through ``services.wiki.wiki_access`` and are
       null when the viewer has no standing to see that community page.
     - ``dm_peer_*`` is the other participant in the photo's originating direct
       message, and is null unless the viewer is one of the two participants -
@@ -2163,13 +2309,17 @@ def build_photo_payload(image: Image, viewer_profile: Profile) -> dict:
             ``pin``/``wiki``/``visit``/``location``/``profile`` selected, or
             this issues a query per field.
         viewer_profile: The profile the payload is being built for.
+        pending_image_ids: Precomputed pending-suggestion ids for the whole
+            batch (see ``services.memories.photos.pending_suggestion_image_ids``).
+            Callers serializing a list should pass it; without it ``classify_photo``
+            issues a query per photo.
 
     Returns:
         A dict matching :class:`PhotoSerializer`.
     """
-    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
     from urbanlens.dashboard.services.memories.photos import classify_photo
-    from urbanlens.dashboard.services.wiki_access import location_visible_to
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+    from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
 
     is_owner = image.profile_id == viewer_profile.pk
 
@@ -2212,7 +2362,7 @@ def build_photo_payload(image: Image, viewer_profile: Profile) -> dict:
         "file_size": image.file_size,
         "labels": [label.name for label in image.labels.all()],
         "organize_dismissed": image.organize_dismissed if is_owner else False,
-        "state": classify_photo(image),
+        "state": classify_photo(image, pending_image_ids),
         "owner_slug": owner_slug,
         "pin_slug": image.pin.slug if (is_owner and image.pin is not None) else None,
         "pin_name": image.pin.effective_name if (is_owner and image.pin is not None) else None,
@@ -2459,7 +2609,7 @@ class JournalResponseSerializer(serializers.Serializer):
 class TripMemberProfileSerializer(serializers.Serializer):
     """One person as they may be shown to the requesting viewer.
 
-    Always sourced from ``services.identity_visibility.resolve_visible_identities``'
+    Always sourced from ``services.profile.identity_visibility.resolve_visible_identities``'
     masked output, never from the raw model fields. That matters for ``slug``
     in particular: a profile slug is derived from the username, so emitting it
     for someone whose privacy settings hide them from this viewer would undo
@@ -2519,14 +2669,29 @@ class TripSummarySerializer(serializers.Serializer):
         return self.context.get("viewer")
 
     def _membership(self, trip):
-        """This viewer's membership row for *trip*, resolved at most once per trip."""
+        """This viewer's membership row for *trip*, resolved at most once per trip.
+
+        Prefers the prefetched roster when the caller supplied one: ``for_list_page``
+        already prefetches ``memberships``, so querying for the viewer's own row here
+        cost one extra query per trip in the list - the roster was in memory the whole
+        time. Callers that did not prefetch keep the targeted query, which fetches one
+        row rather than pulling a whole roster they have no other use for.
+        """
         cache = self.context.setdefault("_membership_cache", {})
         if trip.pk not in cache:
-            from urbanlens.dashboard.models.trips.model import TripMembership
-
             viewer = self._viewer()
-            cache[trip.pk] = TripMembership.objects.for_trip_and_profile(trip, viewer).first() if viewer else None
+            cache[trip.pk] = self._resolve_membership(trip, viewer) if viewer else None
         return cache[trip.pk]
+
+    @staticmethod
+    def _resolve_membership(trip, viewer):
+        """Find *viewer*'s membership row, from the prefetch when one exists."""
+        if "memberships" in getattr(trip, "_prefetched_objects_cache", {}):
+            return next((m for m in trip.memberships.all() if m.profile_id == viewer.id), None)
+
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        return TripMembership.objects.for_trip_and_profile(trip, viewer).first()
 
     def get_activity_count(self, trip) -> int:
         """Annotated activity count, or 0 on an un-annotated instance."""
@@ -2601,7 +2766,7 @@ class TripViewerSerializer(serializers.Serializer):
     """What the requesting caller specifically may see and do on this trip.
 
     The four ``can_*`` booleans are derived server-side from
-    ``services.trip_access.can_perform``, not re-derived by the client from
+    ``services.trips.trip_access.can_perform``, not re-derived by the client from
     the permission levels - so a future change to how a level is evaluated
     reaches the app without an app release, and a client can gray out an
     action it would be refused rather than discovering that by 403.
@@ -2671,7 +2836,11 @@ class TripActivitySerializer(serializers.Serializer):
     id = serializers.IntegerField(source="activity.id", read_only=True)
     title = serializers.CharField(source="activity.title", read_only=True, allow_null=True)
     #: The label the UI shows: the title, else the linked pin/location's name.
-    effective_title = serializers.CharField(source="activity.effective_title", read_only=True)
+    # source is the row's already-masked display_title, not activity.effective_title directly -
+    # the raw model property has no location_hidden/viewer-privacy awareness, and reading it
+    # here bypassed the masking the internal HTMX panel already applies (see
+    # trip_activities._masked_activity_title's docstring for the leak this exists to prevent).
+    effective_title = serializers.CharField(source="display_title", read_only=True)
     notes = serializers.CharField(source="activity.notes", read_only=True, allow_null=True)
     status = serializers.ChoiceField(choices=TripActivity.STATUS_CHOICES, source="activity.status", read_only=True)
     scheduled_at = serializers.DateTimeField(source="activity.scheduled_at", read_only=True, allow_null=True)
@@ -2701,7 +2870,7 @@ class TripActivitySerializer(serializers.Serializer):
 
     def _visible_coords(self, row) -> tuple[float, float] | None:
         """Coordinates this viewer may see, or None when hidden or absent."""
-        from urbanlens.dashboard.services.trip_legs import activity_coords
+        from urbanlens.dashboard.services.trips.trip_legs import activity_coords
 
         if row["effective_location_hidden"]:
             return None
@@ -2726,7 +2895,7 @@ class TripActivitySerializer(serializers.Serializer):
 class TripMapPointSerializer(serializers.Serializer):
     """Documents one trip-map marker (schema-only).
 
-    The map endpoint returns ``services.trip_map.build_trip_map_points`` output
+    The map endpoint returns ``services.trips.trip_map.build_trip_map_points`` output
     verbatim so it stays byte-identical to the web map's own ``map-data/``
     payload; this class exists purely to describe that shape in the OpenAPI
     contract and is never used to serialize.
@@ -2906,7 +3075,7 @@ class TripUpdateSerializer(_StoredRangeValidationMixin):
 
     No field carries a default, so ``"x" in validated_data`` distinguishes
     "omitted" from "explicitly set to null" - the same presence-keyed pattern
-    :class:`PinUpdateSerializer` uses, and what ``services.trip_crud.update_trip``
+    :class:`PinUpdateSerializer` uses, and what ``services.trips.trip_crud.update_trip``
     expects.
 
     Unlike :class:`TripCreateSerializer` this had no range validation at all,
@@ -3043,7 +3212,7 @@ class TripActivityStatusSerializer(serializers.Serializer):
     """Validates an activity status change.
 
     ``completed`` is accepted here and routed to
-    ``services.trip_activities.complete_activity``, which also logs the
+    ``services.trips.trip_activities.complete_activity``, which also logs the
     completer's visit and snaps a future date back to today - so a client never
     has to know that completing is a different operation from confirming.
     """

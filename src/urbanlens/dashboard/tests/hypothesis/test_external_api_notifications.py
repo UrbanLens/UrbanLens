@@ -3,7 +3,7 @@
 The acknowledgement endpoint is the security-sensitive one. It answers 204
 whether or not a row matched, so a caller cannot use it to discover whether a
 given uuid belongs to *somebody* - the same reasoning behind
-``services.push.unregister_device`` returning a bare bool.
+``services.notifications.push.unregister_device`` returning a bare bool.
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.notification_center import preference_field_names
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.notifications.notification_center import preference_field_names
 
 
 def _bearer(raw_key: str) -> dict:
@@ -75,7 +75,7 @@ class NotificationPreferenceCoverageTests(TestCase):
         """
         stems = set(preference_field_names())
         all_types = {value for value, _label in NotificationType.choices}
-        self.assertEqual(len(stems), 12)
+        self.assertEqual(len(stems), 13)
         self.assertLess(len(stems), len(all_types))
 
     def test_one_preference_stem_does_not_match_its_notification_type(self) -> None:
@@ -85,7 +85,7 @@ class NotificationPreferenceCoverageTests(TestCase):
         ``safety_ci_partner_invite``, but its preference columns are named
         ``safety_checkin_partner_invite*``. Anything deriving a field name from
         a notification's type therefore misses it -
-        ``services.notification_text_alerts._wants_text_alerts`` does exactly
+        ``services.notifications.notification_text_alerts._wants_text_alerts`` does exactly
         that and falls back to ``False``, so WhatsApp/SMS alerts for that type
         never fire even when the user enabled them. Recorded in
         ``docs/PROBLEMS.md``.
@@ -193,6 +193,38 @@ class NotificationInboxTests(TestCase):
         # And critically, the other profile's notification was NOT touched.
         foreign.refresh_from_db()
         self.assertEqual(foreign.status, Status.UNREAD)
+
+    def test_a_matched_row_answers_exactly_like_an_unmatched_one(self) -> None:
+        """The third leg, and the one that makes this an anti-oracle test.
+
+        The companion above compares two *non*-matches with each other, which
+        shows only that a foreign uuid looks like a nonexistent one. The
+        property the endpoint actually claims is stronger - 204 whether or not a
+        row matched - and it is not held unless the *matched* response is
+        indistinguishable too. Without this, a serializer added to the success
+        path, or a `Location` header, or a body of `{"status": "read"}`, would
+        turn every uuid into a membership test and the pair of tests above would
+        both still pass.
+        """
+        mine = self._notify(self.profile)
+
+        matched = self.client.post(
+            reverse("external_api:notifications.detail", kwargs={"notification_uuid": mine.uuid}),
+            **_bearer(self.raw_key),
+        )
+        unmatched = self.client.post(
+            reverse("external_api:notifications.detail", kwargs={"notification_uuid": uuid4()}),
+            **_bearer(self.raw_key),
+        )
+
+        self.assertEqual(matched.status_code, unmatched.status_code)
+        self.assertEqual(matched.content, unmatched.content)
+        self.assertEqual(sorted(matched.headers), sorted(unmatched.headers))
+
+        # The acknowledgement still has to have happened - an endpoint that did
+        # nothing at all would satisfy everything above.
+        mine.refresh_from_db()
+        self.assertEqual(mine.status, Status.READ)
 
     def test_read_all_clears_only_the_callers_notifications(self) -> None:
         self._notify(self.profile)

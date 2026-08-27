@@ -1,5 +1,7 @@
+{% load vendor_assets %}
 <!DOCTYPE html>
-<html id="html-root"{% if request.user.is_authenticated %}{% with tm=request.user.profile.theme_mode %}{% if tm == "dark" %} data-theme="dark"{% elif tm == "light" %} data-theme="light"{% endif %}{% endwith %}{% if not request.user.profile.show_hover_tooltips %} class="tooltips-disabled"{% endif %}{% endif %}>
+{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
+<html id="html-root" lang="{{ LANGUAGE_CODE|default:"en" }}"{% if request.user.is_authenticated %}{% with tm=request.user.profile.theme_mode %}{% if tm == "dark" %} data-theme="dark"{% elif tm == "light" %} data-theme="light"{% endif %}{% endwith %}{% if not request.user.profile.show_hover_tooltips %} class="tooltips-disabled"{% endif %}{% endif %}>
 
 <head>
     <meta charset="utf-8">
@@ -11,11 +13,11 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0" />
     <!-- Compiled and minified CSS -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    {% vendor_asset "fontawesome_css" %}
 
-    <script src="https://code.jquery.com/jquery-4.0.0-beta.min.js" integrity="sha384-Cm3jMWwIyV0dazzpp3V+n5HmonAQ2uoNpQCYQzGrAK1ZBIKjGgaiHq2N8ItUlBcJ" crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.js" integrity="sha384-VDls8ImYGI8SwVxpmjX2Bn27U2TcNodzTNROTusVEWO55+lmL+H9NczoQJk6mwZR" crossorigin="anonymous"></script>
+    {% vendor_asset "jquery_js" %}
+    {% vendor_asset "toastr_css" %}
+    {% vendor_asset "toastr_js" %}
 
     {% load static map_components %}
     <script src="{% static 'dashboard/js/core.js' %}"></script>
@@ -24,7 +26,7 @@
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}" />
 
     <!-- Compiled and minified JavaScript -->
-    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    {% vendor_asset "htmx_js" %}
 
     <!--Let browser know website is optimized for mobile-->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -32,6 +34,7 @@
 
 <body class="{% if page_name %}page-{{ page_name }}{% endif %}">
     {% include 'dashboard/partials/layout/_env_indicator.html' %}
+    {% include 'dashboard/partials/layout/_demo_banner.html' %}
     {% include 'dashboard/partials/layout/_account_deletion_banner.html' %}
     {% include 'dashboard/partials/layout/header.html' %}
 
@@ -74,7 +77,11 @@
         document.body.addEventListener('htmx:configRequest', function (evt) {
             evt.detail.headers['X-CSRFToken'] = csrftoken;
         });
-        toastr.options = {
+        // Guarded because toastr is a CDN script: unguarded, a failed load threw here
+        // and took out the rest of this block - including the showToast and
+        // htmx:responseError listeners below, whose own window.toastr guards then
+        // never ran at all.
+        if (window.toastr) toastr.options = {
             positionClass: 'toast-bottom-right',
             progressBar: true,
             timeOut: 4500,
@@ -85,6 +92,14 @@
             newestOnTop: true,
             showDuration: 280,
             hideDuration: 220,
+            // toastr renders a message with .html() and defaults this to false,
+            // so every toast was an HTML sink. Server error strings reach it
+            // verbatim (see floorplan-editor.ts's save handler), and some of
+            // those embed the caller's own input via CPython messages like
+            // "invalid literal for int() with base 10: '<x>'". Escaping here
+            // makes that structurally impossible for every toast on the site,
+            // rather than depending on each producer sanitising its message.
+            escapeHtml: true,
         };
 
         {% if messages %}
@@ -94,7 +109,7 @@
             (function () {
                 var tag = '{{ message.tags|escapejs }}';
                 var fn = _valid[tag] ? tag : 'info';
-                toastr[fn]('{{ message.message|escapejs }}');
+                if (window.toastr) toastr[fn]('{{ message.message|escapejs }}');
             }());
             {% endfor %}
         }());
@@ -106,7 +121,7 @@
             if (!d) return;
             var level = d.level;
             var fn = (level === 'success' || level === 'info' || level === 'warning' || level === 'error') ? level : 'info';
-            toastr[fn](d.message || '');
+            if (window.toastr) toastr[fn](d.message || '');
         });
 
         // Global request error notifications for HTMX and fetch/AJAX calls.
@@ -227,370 +242,21 @@
             if (rect.height > 0) inputEl.style.minHeight = rect.height + 'px';
         };
     </script>
-    <script>
-    // -- Comment utilities -----------------------------------------------------
+    {# Comment utilities - the reply-form toggle and image preview live in #}
+    {# frontend/ts/shared/comment-compose.ts, the emoji reactions in #}
+    {# shared/reaction-picker.ts, @mention autocomplete in #}
+    {# shared/mention-autocomplete.ts, and the RSVP/album popup dismissal in #}
+    {# shared/popup-dismiss.ts. All are installed by core.js above. #}
 
-    function toggleReplyForm(id) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        el.hidden = !el.hidden;
-        if (!el.hidden) {
-            var ta = el.querySelector('textarea');
-            if (ta) setTimeout(function () { ta.focus(); }, 30);
-        }
-    }
-
-    var RECENT_REACTION_EMOJIS_KEY = 'urbanlens.recentReactionEmojis';
-    var RECENT_REACTION_EMOJIS_LIMIT = 5;
-
-    function getRecentReactionEmojis() {
-        try {
-            var parsed = JSON.parse(window.localStorage.getItem(RECENT_REACTION_EMOJIS_KEY) || '[]');
-            return Array.isArray(parsed) ? parsed.filter(function (emoji) {
-                return typeof emoji === 'string' && emoji.length > 0;
-            }).slice(0, RECENT_REACTION_EMOJIS_LIMIT) : [];
-        } catch (err) {
-            return [];
-        }
-    }
-
-    function saveRecentReactionEmoji(emoji) {
-        if (!emoji) return;
-        var recent = getRecentReactionEmojis().filter(function (item) { return item !== emoji; });
-        recent.unshift(emoji);
-        try {
-            window.localStorage.setItem(RECENT_REACTION_EMOJIS_KEY, JSON.stringify(recent.slice(0, RECENT_REACTION_EMOJIS_LIMIT)));
-        } catch (err) {
-            // Browsers can disable localStorage; reactions should still work normally.
-        }
-    }
-
-    function refreshRecentReactionEmojis(popup) {
-        var recent = getRecentReactionEmojis();
-        var section = popup.querySelector('.reaction-picker-recent');
-        if (!section) {
-            section = document.createElement('div');
-            section.className = 'reaction-picker-recent';
-            section.innerHTML = '<div class="reaction-picker-label">Recent</div><div class="reaction-picker-recent-list"></div>' +
-                '<div class="reaction-picker-divider" aria-hidden="true"></div>';
-            popup.insertBefore(section, popup.firstChild);
-        }
-
-        var list = section.querySelector('.reaction-picker-recent-list');
-        list.innerHTML = '';
-        recent.forEach(function (emoji) {
-            var source = Array.prototype.find.call(popup.querySelectorAll('.reaction-picker-emoji:not(.reaction-picker-emoji--recent)'), function (btn) {
-                return (btn.dataset.emoji || btn.textContent.trim()) === emoji;
-            });
-            if (!source) return;
-            var clone = source.cloneNode(true);
-            clone.classList.add('reaction-picker-emoji--recent');
-            clone.setAttribute('title', 'Use recent reaction ' + emoji);
-            list.appendChild(clone);
-            if (window.htmx) window.htmx.process(clone);
-        });
-        section.hidden = !list.children.length;
-    }
-
-    function toggleReactionPicker(btn) {
-        var popup = btn.parentElement && btn.parentElement.querySelector('.reaction-picker-popup');
-        if (!popup) return;
-        document.querySelectorAll('.reaction-picker-popup:not([hidden])').forEach(function (p) {
-            if (p !== popup) p.hidden = true;
-        });
-        if (popup.hidden) refreshRecentReactionEmojis(popup);
-        popup.hidden = !popup.hidden;
-    }
-
-    document.addEventListener('click', function (e) {
-        var reactionEmojiButton = e.target.closest('.reaction-picker-emoji');
-        if (reactionEmojiButton) {
-            saveRecentReactionEmoji(reactionEmojiButton.dataset.emoji || reactionEmojiButton.textContent.trim());
-        }
-        if (!e.target.closest('.reaction-picker')) {
-            document.querySelectorAll('.reaction-picker-popup:not([hidden])').forEach(function (p) {
-                p.hidden = true;
-            });
-        }
-        if (!e.target.closest('.trip-member-rsvp-wrap')) {
-            document.querySelectorAll('.rsvp-popup:not([hidden])').forEach(function (p) {
-                p.hidden = true;
-            });
-        }
-        if (!e.target.closest('.pab-add-picker')) {
-            document.querySelectorAll('.pab-add-picker[open]').forEach(function (d) {
-                d.open = false;
-            });
-        }
-    });
-
-    // -- @mention autocomplete -------------------------------------------------
-    (function () {
-        var _timer = null;
-
-        function _query(ta) {
-            var pos = ta.selectionStart;
-            var before = ta.value.substring(0, pos);
-            var atIdx = before.lastIndexOf('@');
-            if (atIdx === -1) return null;
-            var frag = before.substring(atIdx + 1);
-            if (/\s/.test(frag)) return null;
-            return { start: atIdx, query: frag };
-        }
-
-        function _showDropdown(ta, items, onSelect) {
-            var wrap = ta.closest('.comment-input-wrap');
-            var dd = wrap && wrap.querySelector('.mention-dropdown');
-            if (!dd) return;
-            dd.innerHTML = '';
-            if (!items.length) { dd.hidden = true; return; }
-            items.forEach(function (item) {
-                var div = document.createElement('div');
-                div.className = 'mention-option';
-                div.innerHTML = '<span class="mention-option__name">' +
-                    item.name.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>';
-                div.addEventListener('mousedown', function (e) {
-                    e.preventDefault();
-                    onSelect(item);
-                    dd.hidden = true;
-                    dd.innerHTML = '';
-                });
-                dd.appendChild(div);
-            });
-            dd.hidden = false;
-        }
-
-        function _hide(ta) {
-            var wrap = ta.closest('.comment-input-wrap');
-            var dd = wrap && wrap.querySelector('.mention-dropdown');
-            if (dd) { dd.hidden = true; dd.innerHTML = ''; }
-        }
-
-        function _insert(ta, start, text) {
-            var pos = ta.selectionStart;
-            ta.value = ta.value.substring(0, start) + text + ' ' + ta.value.substring(pos);
-            var cur = start + text.length + 1;
-            ta.setSelectionRange(cur, cur);
-            ta.focus();
-        }
-
-        function _fetch(ta) {
-            var q = _query(ta);
-            if (!q || q.query.length < 1) { _hide(ta); return; }
-            var ctx = ta.dataset.contextType || '';
-            var tripSlug = ta.dataset.tripSlug || '';
-            var isNum = /^\d+$/.test(q.query);
-
-            if (isNum && ctx === 'trip' && tripSlug) {
-                fetch('/dashboard/trips/' + encodeURIComponent(tripSlug) + '/map-data/', {
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    var pts = (data.points || []).filter(function (p) {
-                        return String(p.index).startsWith(q.query);
-                    });
-                    _showDropdown(ta, pts.map(function (p) {
-                        return { name: '#' + p.index + ' - ' + p.label, actIndex: p.index };
-                    }), function (item) {
-                        _insert(ta, q.start, '@act:' + item.actIndex);
-                    });
-                })
-                .catch(function () {});
-            } else {
-                fetch('/dashboard/comments/locations/?q=' + encodeURIComponent(q.query), {
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (results) {
-                    _showDropdown(ta, results, function (item) {
-                        _insert(ta, q.start, '@[' + item.name + '](loc:' + item.uuid + ')');
-                    });
-                })
-                .catch(function () {});
-            }
-        }
-
-        document.addEventListener('input', function (e) {
-            if (!e.target.classList.contains('mention-input')) return;
-            clearTimeout(_timer);
-            var ta = e.target;
-            _timer = setTimeout(function () { _fetch(ta); }, 200);
-        });
-
-        document.addEventListener('keydown', function (e) {
-            if (!e.target.classList.contains('mention-input')) return;
-            var ta = e.target;
-            var wrap = ta.closest('.comment-input-wrap');
-            var dd = wrap && wrap.querySelector('.mention-dropdown');
-            if (!dd || dd.hidden) return;
-            var opts = Array.from(dd.querySelectorAll('.mention-option'));
-            var cur = dd.querySelector('.mention-option.is-selected');
-            var idx = cur ? opts.indexOf(cur) : -1;
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (cur) cur.classList.remove('is-selected');
-                var nxt = opts[Math.min(idx + 1, opts.length - 1)];
-                if (nxt) nxt.classList.add('is-selected');
-            } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                if (cur) cur.classList.remove('is-selected');
-                var prv = opts[Math.max(idx - 1, 0)];
-                if (prv) prv.classList.add('is-selected');
-            } else if ((e.key === 'Enter' || e.key === 'Tab') && cur) {
-                e.preventDefault();
-                cur.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-            } else if (e.key === 'Escape') {
-                dd.hidden = true;
-                dd.innerHTML = '';
-            }
-        });
-
-        document.addEventListener('click', function (e) {
-            if (!e.target.classList.contains('mention-input')) {
-                document.querySelectorAll('.mention-dropdown:not([hidden])').forEach(function (dd) {
-                    dd.hidden = true;
-                    dd.innerHTML = '';
-                });
-            }
-        });
-    }());
-
-    // -- Comment image upload preview -----------------------------------------
-    document.addEventListener('change', function (e) {
-        if (!e.target.classList.contains('comment-image-input')) return;
-        var file = e.target.files && e.target.files[0];
-        var actions = e.target.closest('.comment-compose-actions');
-        var preview = actions && actions.querySelector('.comment-image-preview');
-        if (preview) preview.textContent = file ? '📎 ' + file.name : '';
-    });
-
-    // -- Activity mention hover → highlight trip map marker --------------------
-    document.addEventListener('mouseover', function (e) {
-        var link = e.target.closest && e.target.closest('.mention--activity');
-        if (!link || !window.tripHighlightMarker) return;
-        var id = link.dataset.activityId;
-        if (id) window.tripHighlightMarker(id, true);
-    });
-    document.addEventListener('mouseout', function (e) {
-        var link = e.target.closest && e.target.closest('.mention--activity');
-        if (!link || !window.tripHighlightMarker) return;
-        var id = link.dataset.activityId;
-        if (id) window.tripHighlightMarker(id, false);
-    });
-    </script>
-
-    <script>
-    // -- Scroll to hash anchor after HTMX swap (for dynamically loaded comments) -
-    (function () {
-        function _scrollToHash() {
-            var hash = window.location.hash;
-            if (!hash) return;
-            var el = document.querySelector(hash);
-            if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-        }
-        document.addEventListener('htmx:afterSettle', _scrollToHash);
-        document.addEventListener('DOMContentLoaded', function () { setTimeout(_scrollToHash, 400); });
-    }());
-    </script>
-
-    <script>
-    // -- Unsaved / in-flight auto-save guard -----------------------------------
-    (function () {
-        var _dirty = false;
-        var _inFlight = 0;
-        var _message = 'Changes are still saving. Leave this page anyway?';
-
-        window.autosaveGuard = {
-            markDirty: function () { _dirty = true; },
-            markClean: function () { _dirty = false; },
-            saveStarted: function () { _inFlight++; },
-            saveFinished: function () { _inFlight = Math.max(0, _inFlight - 1); },
-            allowNavigation: function () { _dirty = false; _inFlight = 0; },
-            isBlocked: function () { return _dirty || _inFlight > 0; },
-            setMessage: function (msg) { _message = msg; },
-        };
-
-        window.addEventListener('beforeunload', function (e) {
-            if (!window.autosaveGuard.isBlocked()) return;
-            e.preventDefault();
-            e.returnValue = '';
-        });
-
-        document.body.addEventListener('htmx:confirm', function (e) {
-            if (!window.autosaveGuard.isBlocked()) return;
-            e.preventDefault();
-            var proceed = window.confirmDialog ? window.confirmDialog({
-                title: 'Leave page?',
-                message: _message,
-                confirmLabel: 'Leave anyway',
-                danger: true,
-            }) : Promise.resolve(window.confirm(_message));
-            proceed.then(function (ok) {
-                if (ok) {
-                    window.autosaveGuard.allowNavigation();
-                    e.detail.issueRequest(true);
-                }
-            });
-        });
-
-        document.addEventListener('click', function (e) {
-            if (!window.autosaveGuard.isBlocked()) return;
-            var a = e.target.closest ? e.target.closest('a[href]') : null;
-            if (!a) return;
-            var href = a.getAttribute('href');
-            var scheme = href ? href.trim().toLowerCase() : '';
-            if (!href || href.charAt(0) === '#' || scheme.indexOf('javascript:') === 0 || scheme.indexOf('data:') === 0 || scheme.indexOf('vbscript:') === 0 || a.target === '_blank') return;
-            e.preventDefault();
-            var proceed = window.confirmDialog ? window.confirmDialog({
-                title: 'Leave page?',
-                message: _message,
-                confirmLabel: 'Leave anyway',
-                danger: true,
-            }) : Promise.resolve(window.confirm(_message));
-            proceed.then(function (ok) {
-                if (ok) {
-                    window.autosaveGuard.allowNavigation();
-                    window.location.href = a.href;
-                }
-            });
-        }, true);
-    }());
-    </script>
-
-    <script>
-    // -- Close any <dialog> on backdrop click (not drag-outside) ---------------
-    (function () {
-        var _dialogPress = null;
-
-        function _isBackdrop(dialog, x, y) {
-            var rect = dialog.getBoundingClientRect();
-            return x < rect.left || x > rect.right || y < rect.top || y > rect.bottom;
-        }
-
-        document.addEventListener('mousedown', function (e) {
-            var dlg = e.target.closest ? e.target.closest('dialog') : null;
-            if (!dlg || !dlg.open) { _dialogPress = null; return; }
-            _dialogPress = _isBackdrop(dlg, e.clientX, e.clientY) ? 'backdrop' : 'inside';
-        });
-
-        document.addEventListener('click', function (e) {
-            if (e.target.tagName !== 'DIALOG' || !e.target.open) return;
-            if (_dialogPress !== 'backdrop') return;
-            if (!_isBackdrop(e.target, e.clientX, e.clientY)) return;
-            var closeFn = e.target.dataset.closefn;
-            if (closeFn && window[closeFn]) { window[closeFn](); }
-            else { e.target.close(); }
-            _dialogPress = null;
-        });
-    }());
-    </script>
+    {# Scroll-to-hash after an HTMX swap lives in frontend/ts/shared/scroll-to-hash.ts, #}
+    {# the unsaved-changes guard in shared/autosave-guard.ts, and dialog backdrop #}
+    {# closing in shared/dialog-backdrop.ts. All are installed by core.js above. #}
 
     {# -- Comment map composer dialog -------------------------------------------- #}
-    <dialog id="comment-map-composer" class="comment-map-composer-dialog ul-dialog">
+    <dialog id="comment-map-composer" class="comment-map-composer-dialog ul-dialog" aria-labelledby="comment-map-composer-title">
       <div class="dialog-header">
-        <span>Attach a Map</span>
-        <button type="button" class="dialog-close" id="comment-map-composer-close">
+        <span id="comment-map-composer-title">Attach a Map</span>
+        <button type="button" class="dialog-close" id="comment-map-composer-close" aria-label="Close">
           <i class="material-symbols-outlined">close</i>
         </button>
       </div>
@@ -691,10 +357,10 @@
     {# picker) or "Choose Existing" (one of the poster's own already-uploaded #}
     {# photos, via CommentImagePickerView). Reuses the .cmc-tabs/.cmc-tab #}
     {# strip styling from the map composer above for a consistent look. #}
-    <dialog id="comment-image-composer" class="comment-image-composer-dialog ul-dialog">
+    <dialog id="comment-image-composer" class="comment-image-composer-dialog ul-dialog" aria-labelledby="comment-image-composer-title">
       <div class="dialog-header">
-        <span>Attach a Photo</span>
-        <button type="button" class="dialog-close" id="comment-image-composer-close">
+        <span id="comment-image-composer-title">Attach a Photo</span>
+        <button type="button" class="dialog-close" id="comment-image-composer-close" aria-label="Close">
           <i class="material-symbols-outlined">close</i>
         </button>
       </div>
@@ -727,7 +393,7 @@
     </dialog>
 
     {# -- Global confirm dialog (replaces browser confirm()) -------------------- #}
-    <dialog id="confirm-dialog" class="confirm-dialog ul-dialog">
+    <dialog id="confirm-dialog" class="confirm-dialog ul-dialog" aria-labelledby="confirm-dialog-title">
         <div class="dialog-header">
             <span id="confirm-dialog-title">Are you sure?</span>
             <button type="button" id="confirm-dialog-x" class="dialog-close" aria-label="Close">
@@ -743,103 +409,10 @@
             <button type="button" id="confirm-dialog-ok" class="btn btn--danger-filled">Confirm</button>
         </div>
     </dialog>
-    <script>
-    (function () {
-        var _resolve = null;
-        var dlg = document.getElementById('confirm-dialog');
-        var okBtn = document.getElementById('confirm-dialog-ok');
-        var altBtn = document.getElementById('confirm-dialog-alt');
-
-        function _done(result) {
-            if (_resolve) { var r = _resolve; _resolve = null; r(result); }
-            if (dlg.open) dlg.close();
-        }
-
-        document.getElementById('confirm-dialog-cancel').addEventListener('click', function () { _done(false); });
-        document.getElementById('confirm-dialog-x').addEventListener('click', function () { _done(false); });
-        okBtn.addEventListener('click', function () { _done(true); });
-        altBtn.addEventListener('click', function () { _done('alt'); });
-        // Catches all close paths: backdrop click, Escape key, and direct .close() calls
-        dlg.addEventListener('close', function () { _done(false); });
-
-        // Resolves with true (confirm), false (cancel/dismiss), or 'alt' when
-        // opts.altLabel was given and the user picked the alternative action.
-        window.confirmDialog = function (opts) {
-            if (typeof opts === 'string') opts = { message: opts };
-            opts = opts || {};
-            document.getElementById('confirm-dialog-title').textContent = opts.title || 'Are you sure?';
-            document.getElementById('confirm-dialog-message').innerHTML =
-                (opts.message || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>');
-            okBtn.textContent = opts.confirmLabel || 'Confirm';
-            okBtn.className = (opts.danger === false) ? 'btn btn--primary' : 'btn--danger-filled';
-            altBtn.hidden = !opts.altLabel;
-            if (opts.altLabel) altBtn.textContent = opts.altLabel;
-            return new Promise(function (resolve) {
-                _resolve = resolve;
-                dlg.showModal();
-            });
-        };
-
-        // -- Confirm-before-leaving for untrusted community-added links (wiki links) --
-        // Returning false from the onclick= that calls this cancels the native
-        // navigation; a confirmed click re-opens the url itself via window.open,
-        // since the original click's user-activation is already spent by the
-        // time the async confirmDialog promise resolves.
-        window.urbanlensConfirmExternalLink = function (event, url) {
-            event.preventDefault();
-            window.confirmDialog({
-                title: 'Leaving this site',
-                message: 'This link was added by the community and leads to an external, untrusted site:\n' + url,
-                confirmLabel: 'Continue',
-                danger: false,
-            }).then(function (ok) { if (ok) window.open(url, '_blank', 'noopener'); });
-            return false;
-        };
-
-        // -- Shared pin delete flow (map popup, pin edit dialog, pin detail page) --
-        // Confirms the delete, then lets the server veto with a 409 when the pin
-        // has child pins so the user decides whether those are deleted too or kept.
-        // Resolves with true (deleted), false (user cancelled), or null (request failed).
-        window.deletePinCascade = async function (pinUuid, pinName, csrfToken) {
-            var confirmed = await window.confirmDialog({
-                title: 'Delete Pin',
-                message: 'Delete "' + (pinName || 'this pin') + '"?\n\nYou can restore it from Settings → Undo History.',
-                confirmLabel: 'Delete',
-            });
-            if (!confirmed) return false;
-
-            var url = '/dashboard/rest/pins/' + encodeURIComponent(pinUuid) + '/';
-            async function _send(query) {
-                return fetch(url + (query || ''), {
-                    method: 'DELETE',
-                    headers: { 'X-CSRFToken': csrfToken },
-                });
-            }
-
-            var response;
-            try { response = await _send(''); } catch (e) { return null; }
-
-            if (response.status === 409) {
-                var data = null;
-                try { data = await response.json(); } catch (e) { /* non-JSON 409 */ }
-                if (!data || !data.requires_children_decision) return null;
-                var n = data.children || 0;
-                var plural = n === 1 ? '' : 's';
-                var them = n === 1 ? 'it' : 'them';
-                var choice = await window.confirmDialog({
-                    title: 'Delete child pins too?',
-                    message: 'This pin has ' + n + ' child pin' + plural + '.\n\nDelete ' + them + ' as well, or keep ' + them + ' on your map?',
-                    confirmLabel: 'Delete all',
-                    altLabel: 'Keep child pin' + plural,
-                });
-                if (!choice) return false;
-                try { response = await _send(choice === 'alt' ? '?children=keep' : '?children=delete'); } catch (e) { return null; }
-            }
-
-            return response.ok ? true : null;
-        };
-    }());
-    </script>
+    {# The confirm dialog's behaviour - plus urbanlensConfirmExternalLink and #}
+    {# deletePinCascade, which build on it - lives in frontend/ts/shared/confirm-dialog.ts #}
+    {# and is installed by core.js above. It binds these elements on first use, not at #}
+    {# load, because that bundle runs in the head and this markup is further down. #}
 
     {# -- Comment map composer + viewer JS -------------------------------------- #}
     {# Leaflet is NOT re-loaded here - pages with maps (pin detail, wiki, trips) already load  #}
@@ -1021,7 +594,9 @@
         // has for them.
         window._openCommentMapComposer = function (formOrOptions) {
             if (typeof L === 'undefined') {
-                toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
+                // Leaflet is a CDN script too, so the load failure this reports is
+                // exactly when toastr is likely missing as well.
+                if (window.toastr) toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
                 return;
             }
             var opts = (formOrOptions instanceof HTMLElement) ? { form: formOrOptions } : (formOrOptions || {});
@@ -1254,16 +829,23 @@
                         });
                     })
                     .then(function (shouldDownload) {
-                        if (shouldDownload) {
-                            window.MapExport.download(_composerMap, {
-                                layers: _composerLayers,
-                                getShapes: function () { return _composerShapes; },
-                                filename: 'map-screenshot.jpg',
-                            });
-                        }
-                        _closeComposer();
+                        // Awaited, not fired-and-forgotten: this was closing the
+                        // composer (tearing down _composerSession, which owns
+                        // _composerMap) immediately after *starting* the download,
+                        // not after it finished - the tile-fetch-and-draw below
+                        // could still be reading from a map that had just been
+                        // destroyed. Caught locally so a download failure (the
+                        // save already succeeded) doesn't report as "Failed to
+                        // save map" via the outer catch.
+                        if (!shouldDownload) return;
+                        return window.MapExport.download(_composerMap, {
+                            layers: _composerLayers,
+                            getShapes: function () { return _composerShapes; },
+                            filename: 'map-screenshot.jpg',
+                        }).catch(function () { if (window.toastr) toastr.error('Map saved, but the JPEG download failed.'); });
                     })
-                    .catch(function () { toastr.error('Failed to save map.'); })
+                    .then(function () { _closeComposer(); })
+                    .catch(function () { if (window.toastr) toastr.error('Failed to save map.'); })
                     .finally(function () { _saveBtn.disabled = false; });
                 return;
             }
@@ -1282,11 +864,15 @@
         // -- Download current view as JPEG -------------------------------------
         document.getElementById('cmc-download').addEventListener('click', function () {
             if (!_composerMap) return;
+            var btn = this;
+            btn.disabled = true;
             window.MapExport.download(_composerMap, {
                 layers: _composerLayers,
                 getShapes: function () { return _composerShapes; },
                 filename: 'map-screenshot.jpg',
-            });
+            })
+                .catch(function () { if (window.toastr) toastr.error('Failed to download the map image.'); })
+                .finally(function () { btn.disabled = false; });
         });
 
         // -- Clear attached map from a form ------------------------------------
@@ -1304,11 +890,18 @@
             if (!downloadBtn) return;
             var cached = _viewerMaps[downloadBtn.dataset.mapId];
             if (!cached) return;
+            downloadBtn.classList.add('is-loading');
+            downloadBtn.disabled = true;
             window.MapExport.download(cached.map, {
                 layers: cached.layers,
                 getShapes: function () { return cached.shapes; },
                 filename: 'map-' + downloadBtn.dataset.mapId + '.jpg',
-            });
+            })
+                .catch(function () { if (window.toastr) toastr.error('Failed to download the map image.'); })
+                .finally(function () {
+                    downloadBtn.classList.remove('is-loading');
+                    downloadBtn.disabled = false;
+                });
         });
 
         // Wire the read-only viewer's Edit button: seeds the shared composer
@@ -1323,7 +916,7 @@
             var script = document.getElementById('comment-map-data-' + mapId);
             var data = null;
             if (script) { try { data = JSON.parse(script.textContent); } catch (_) {} }
-            if (!data) { toastr.error("Couldn't load this map to edit."); return; }
+            if (!data) { if (window.toastr) toastr.error("Couldn't load this map to edit."); return; }
             var dlg = document.getElementById('comment-map-dialog-' + mapId);
             if (dlg && dlg.open) dlg.close();
             window._openCommentMapComposer({ existingData: data });
@@ -1354,7 +947,7 @@
         // -- Pin my location: drop a marker instantly, no multi-click draw session needed --
         document.getElementById('cmc-pin-location').addEventListener('click', function () {
             if (!navigator.geolocation) {
-                toastr.warning('Geolocation is not available in this browser.');
+                if (window.toastr) toastr.warning('Geolocation is not available in this browser.');
                 return;
             }
             navigator.geolocation.getCurrentPosition(
@@ -1368,7 +961,7 @@
                     if (_composerMap) _composerMap.panTo([pos.coords.latitude, pos.coords.longitude]);
                 },
                 function () {
-                    toastr.warning("Couldn't get your location. Check your browser's location permission.");
+                    if (window.toastr) toastr.warning("Couldn't get your location. Check your browser's location permission.");
                 },
                 { enableHighAccuracy: true, timeout: 10000 },
             );
@@ -1784,243 +1377,11 @@
     }());
     </script>
 
-    <script>
-    // -- Collapsible sections ---------------------------------------------------
-    // Any element with [data-collapse-scope][data-collapse-section] gets a
-    // chevron button injected into its header that toggles an .is-collapsed
-    // class, which hides the whole section (header included). State is
-    // persisted in localStorage keyed by scope ("pin", "wiki", "trip") +
-    // section name only - deliberately NOT by entity id, so collapsing
-    // "Comments" on one pin collapses it on every pin, independent of the
-    // wiki and trip pages.
-    //
-    // Because collapsing hides the section entirely, there's no header left to
-    // click to bring it back. The fixed bottom-left #tools-fab (see below in
-    // this template) lists the current page's collapsed sections so the user
-    // can restore them individually (see _updateRestoreControls).
-    (function () {
-        function _key(scope, section) { return 'ul-collapsed:' + scope + ':' + section; }
-
-        function _isCollapsed(scope, section) {
-            try { return localStorage.getItem(_key(scope, section)) === '1'; }
-            catch (_) { return false; }
-        }
-
-        // Exposed so hx-trigger conditions on lazy-loaded sections can skip
-        // firing their request entirely when the section is already hidden
-        // (see the hx-trigger="load[...]" attributes on pin/wiki pages).
-        window.ulSectionCollapsed = _isCollapsed;
-
-        function _setCollapsed(scope, section, collapsed) {
-            try {
-                if (collapsed) localStorage.setItem(_key(scope, section), '1');
-                else localStorage.removeItem(_key(scope, section));
-            } catch (_) {}
-        }
-
-        function _applyState(container) {
-            var scope = container.dataset.collapseScope;
-            var section = container.dataset.collapseSection;
-            if (!scope || !section) return;
-            // data-collapse-if-empty (set server-side per section - e.g. Links,
-            // Custom Fields, Ownership - whenever that section currently has no
-            // content) collapses by default alongside the normal stored
-            // preference, but is deliberately never written to localStorage via
-            // _setCollapsed - it's re-derived from the section's actual content
-            // on every load, not a sticky choice. The toggle button still works
-            // normally on top of it: expanding un-collapses for this view (see
-            // the click handler below), and if the section is still empty next
-            // visit, it re-collapses on its own rather than staying stuck open.
-            var collapsed = _isCollapsed(scope, section) || container.dataset.collapseIfEmpty === 'true';
-            container.classList.toggle('is-collapsed', collapsed);
-            var btn = container.querySelector('.section-collapse-btn');
-            if (btn) btn.setAttribute('aria-expanded', String(!collapsed));
-        }
-
-        function _header(container) {
-            return container.querySelector(':scope > .card-header, :scope > .wiki-card-header, :scope > .tag-panel-header, :scope > .wiki-tabs');
-        }
-
-        // Reads the section's display name from its header title so the
-        // restore menu can show something more useful than the section slug.
-        function _label(container, header) {
-            if (container.dataset.collapseLabel) return container.dataset.collapseLabel;
-            var titleEl = header && header.querySelector(':scope > span:not(.badge):not(.visit-count), :scope > h2, :scope > h3, :scope > h4');
-            var label = (titleEl && titleEl.textContent.trim()) || container.dataset.collapseSection;
-            container.dataset.collapseLabel = label;
-            return label;
-        }
-
-        function _actionsGroup(header) {
-            var group = header.querySelector(':scope > .card-header-actions');
-            if (group) return group;
-            group = document.createElement('div');
-            group.className = 'card-header-actions';
-            var toMove = [];
-            Array.prototype.forEach.call(header.children, function (el) {
-                if (el.matches('.btn--icon-sm, .gallery-upload-compact-btn, .card-header-link, .btn, .section-collapse-btn')
-                    && !el.classList.contains('view-toggle-btn')) {
-                    toMove.push(el);
-                }
-            });
-            toMove.forEach(function (el) { group.appendChild(el); });
-            header.appendChild(group);
-            return group;
-        }
-
-        // Headers can arrive after this container is first seen (HTMX content
-        // still loading), so this is safe to call repeatedly and idempotent.
-        function _ensureToggle(container) {
-            var header = _header(container);
-            if (header) _label(container, header);
-            if (container.dataset.collapseInit === '1') { _applyState(container); return; }
-            if (!header) return;
-            var actions = _actionsGroup(header);
-            if (!actions.querySelector('.section-collapse-btn')) {
-                var btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'btn btn--icon-sm section-collapse-btn';
-                btn.setAttribute('aria-label', 'Collapse section');
-                btn.innerHTML = '<i class="material-symbols-outlined">expand_less</i>';
-                actions.appendChild(btn);
-            }
-            container.dataset.collapseInit = '1';
-            _applyState(container);
-        }
-
-        // A page only ever uses one collapse scope at a time (pin, wiki, trip, ...),
-        // so the single global tools menu (#tools-fab) can auto-detect which scope
-        // is active instead of every page having to declare its own restore control.
-        function _currentScope() {
-            var el = document.querySelector('[data-collapse-scope]');
-            return el ? el.dataset.collapseScope : null;
-        }
-
-        function _closeToolsFab() {
-            var menu = document.getElementById('tools-fab-menu');
-            var btn = document.getElementById('tools-fab-btn');
-            if (menu) menu.hidden = true;
-            if (btn) btn.setAttribute('aria-expanded', 'false');
-        }
-
-        // Fills the "Hidden sections" group of the global tools menu with the
-        // current scope's collapsed sections, hiding that group - and the whole
-        // FAB, since it has nothing else in it yet - when nothing is collapsed.
-        function _updateRestoreControls() {
-            var fab = document.getElementById('tools-fab');
-            var group = fab && fab.querySelector('[data-tools-fab-group="collapse-restore"]');
-            if (!fab || !group) return;
-
-            var scope = _currentScope();
-            // A pin/wiki detail page renders every subpage tab's markup at once
-            // (data-tab-panel, plus nested data-article-subtab wrappers), only
-            // toggling `hidden` to switch which one is visible - so a section
-            // collapsed on one tab (e.g. Overview) would otherwise still show up
-            // here while viewing an unrelated tab (e.g. Article) that has nothing
-            // to do with it. `.closest('[hidden]')` excludes anything nested
-            // inside a currently-hidden tab/subtab wrapper, regardless of how
-            // many levels deep - only sections on the tab actually being viewed
-            // are offered for restore.
-            var hiddenSections = scope
-                ? Array.prototype.filter.call(
-                    document.querySelectorAll('[data-collapse-scope="' + scope + '"][data-collapse-section].is-collapsed'),
-                    function (section) { return !section.closest('[hidden]'); },
-                  )
-                : [];
-            var restoreMenu = group.querySelector('.collapse-restore-menu');
-            var countEl = fab.querySelector('.collapse-restore-count');
-
-            group.hidden = !hiddenSections.length;
-            fab.hidden = !hiddenSections.length;
-            if (countEl) {
-                countEl.hidden = !hiddenSections.length;
-                countEl.textContent = String(hiddenSections.length);
-            }
-            if (!hiddenSections.length) {
-                _closeToolsFab();
-                if (restoreMenu) restoreMenu.innerHTML = '';
-                return;
-            }
-
-            restoreMenu.innerHTML = '';
-            hiddenSections.forEach(function (section) {
-                var item = document.createElement('button');
-                item.type = 'button';
-                item.className = 'collapse-restore-item';
-                item.innerHTML = '<i class="material-symbols-outlined">visibility</i>';
-                item.append(section.dataset.collapseLabel || section.dataset.collapseSection);
-                item.addEventListener('click', function () {
-                    section.classList.remove('is-collapsed');
-                    var toggleBtn = section.querySelector('.section-collapse-btn');
-                    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
-                    _setCollapsed(scope, section.dataset.collapseSection, false);
-                    // Section was hidden before its hx-get ever fired (see the
-                    // hx-trigger="load[...]" skip condition) - its content was
-                    // never loaded, so kick off that request now.
-                    if (section.getAttribute('hx-get') && window.htmx) {
-                        htmx.trigger(section, 'ul:unhide');
-                    }
-                    var innerLoader = section.querySelector('[hx-get][hx-trigger*="ul:unhide"]');
-                    if (innerLoader && window.htmx) {
-                        htmx.trigger(innerLoader, 'ul:unhide');
-                    }
-                    _updateRestoreControls();
-                });
-                restoreMenu.appendChild(item);
-            });
-        }
-
-        // Exposed so page-specific tab switches that don't go through
-        // page-tabs.js's `ul:tabShown` event (e.g. the Article tab's own
-        // internal Article/Wikipedia sub-tab toggle) can still refresh which
-        // collapsed sections are currently visible/restorable.
-        window.ulRefreshCollapseRestore = _updateRestoreControls;
-
-        function _scanAll() {
-            document.querySelectorAll('[data-collapse-scope][data-collapse-section]').forEach(_ensureToggle);
-            _updateRestoreControls();
-        }
-
-        document.addEventListener('click', function (e) {
-            var fabToggle = e.target.closest('#tools-fab-btn');
-            if (fabToggle) {
-                var menu = document.getElementById('tools-fab-menu');
-                var opening = !!(menu && menu.hidden);
-                if (menu) menu.hidden = !opening;
-                fabToggle.setAttribute('aria-expanded', String(opening));
-                return;
-            }
-
-            var btn = e.target.closest('.section-collapse-btn');
-            if (btn) {
-                var container = btn.closest('[data-collapse-scope][data-collapse-section]');
-                if (!container) return;
-                var collapsed = !container.classList.contains('is-collapsed');
-                container.classList.toggle('is-collapsed', collapsed);
-                btn.setAttribute('aria-expanded', String(!collapsed));
-                _setCollapsed(container.dataset.collapseScope, container.dataset.collapseSection, collapsed);
-                _updateRestoreControls();
-                return;
-            }
-
-            // Click outside the open tools menu closes it.
-            var fab = document.getElementById('tools-fab');
-            var openMenu = document.getElementById('tools-fab-menu');
-            if (fab && openMenu && !openMenu.hidden && !fab.contains(e.target)) {
-                _closeToolsFab();
-            }
-        });
-
-        document.addEventListener('DOMContentLoaded', _scanAll);
-        document.addEventListener('htmx:afterSettle', _scanAll);
-        // page-tabs.js dispatches this on every tab switch (pin/wiki detail
-        // pages render every tab's markup at once, just toggling `hidden`) -
-        // refresh the restore list immediately rather than waiting for the
-        // next htmx settle, so switching away from a tab with collapsed
-        // sections hides them from the FAB right away.
-        document.body.addEventListener('ul:tabShown', _updateRestoreControls);
-    }());
-    </script>
+    {# Collapsible sections + the tools-FAB restore list live in #}
+    {# frontend/ts/shared/collapsible-sections.ts, and the empty-card dismissal in #}
+    {# shared/fly-to-dismiss.ts; both are installed by core.js above. They bind once #}
+    {# the document is ready rather than at load, because that bundle runs in the #}
+    {# head where document.body does not exist yet. #}
 
     {% include 'dashboard/partials/ui/_tooltips_script.html' %}
     {% include 'dashboard/partials/ui/_page_explainer_script.html' %}

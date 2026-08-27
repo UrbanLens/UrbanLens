@@ -1,6 +1,6 @@
 """Tests for services.labels - auto-applying the protected "Demolished" status.
 
-Mirrors services.visits.add_visited_status's contract for pins, plus the
+Mirrors services.visits.visits.add_visited_status's contract for pins, plus the
 wiki-side counterpart that uses one canonical global label instead of a
 per-profile one (a Wiki has no owning profile - see services.labels'
 module docstring).
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
@@ -64,7 +65,7 @@ class AddDemolishedStatusToWikiTests(TestCase):
         # Deterministic regardless of whether migration 0087 already seeded
         # the global row in this test database.
         Label.objects.filter(profile=None, kind="status", name="Demolished").delete()
-        self.global_demolished = baker.make(Label, profile=None, kind="status", name="Demolished", is_protected=True)
+        self.global_demolished = ensure_label( profile=None, kind="status", name="Demolished", is_protected=True)
 
     def test_adds_the_global_demolished_label(self) -> None:
         wiki = baker.make(Wiki, location=baker.make("dashboard.Location"))

@@ -1,0 +1,8 @@
+{% load dashboard_tags %}
+{% if scope_type and scope_type != "location" %}
+<span class="ul-scope-badge ul-scope-badge--{{ scope_type }}"
+      data-tooltip="{{ scope_help }}" data-tooltip-pos="bottom">
+    <i class="material-symbols-outlined">{{ scope_type|pin_type_icon }}</i>
+    <span>{{ scope_label }}</span>
+</span>
+{% endif %}

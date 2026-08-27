@@ -22,6 +22,8 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.labels.meta import KIND_STATUS
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.trips.model import Trip, TripComment, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
@@ -45,7 +47,7 @@ class PriorityUnvisitedPinsTests(TestCase):
     """The "High-priority places to visit" widget on the Home overview page.
 
     The dashboard (and its context) moved from the profile page to the Home
-    overview page - see services.home_widgets.home_dashboard_context.
+    overview page - see services.home.home_widgets.home_dashboard_context.
     """
 
     def setUp(self) -> None:
@@ -70,6 +72,13 @@ class PriorityUnvisitedPinsTests(TestCase):
         """A PinVisit exists but last_visited was never synced (e.g. a bulk import gap)."""
         pin = _make_pin(self.profile, last_visited=None)
         PinVisit.objects.create(pin=pin, visited_at=_aware(2024, 6, 1), source=VisitSource.HISTORY)
+        self.assertNotIn(pin, self._priority_pins())
+
+    def test_pin_with_visited_status_label_is_excluded(self) -> None:
+        """The "Visited" status label can be set by hand without ``last_visited`` or a ``PinVisit`` row."""
+        pin = _make_pin(self.profile, last_visited=None)
+        visited_label = Label.objects.get(profile=self.profile, kind=KIND_STATUS, name="Visited")
+        pin.labels.add(visited_label)
         self.assertNotIn(pin, self._priority_pins())
 
 

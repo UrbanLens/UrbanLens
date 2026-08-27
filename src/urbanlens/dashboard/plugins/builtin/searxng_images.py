@@ -1,11 +1,12 @@
-"""SearXNG Images plugin: a Media-gallery tab of web-image search results.
+"""Web Images plugin: a Media-gallery tab of web-image search results, via REData.
 
 Unlike the archive providers (Wikimedia, Smithsonian, Library of Congress),
 which search one curated collection, this provider casts the widest net: it
-runs an aggressive, relevance-shaped query across many image engines behind a
-self-hosted SearXNG instance to surface photos of a place that never made it
-into a formal archive - the abandoned-hospital shots, urbex galleries, and
-vintage postcards that live on Flickr, imgur, Pinterest, DeviantArt, etc.
+runs an aggressive, relevance-shaped query through REData's ``/search/web/``
+image mode to surface photos of a place that never made it into a formal
+archive - the abandoned-hospital shots, urbex galleries, and vintage
+postcards that live on Flickr, imgur, Pinterest, DeviantArt, etc. (REData's
+own image-capable provider today, Google Programmable Search).
 
 The whole value here is *precision*: a bare "Hudson River State Hospital"
 image search returns unrelated stock photos and same-named places elsewhere.
@@ -22,8 +23,11 @@ treats as required, disambiguating clauses (see :func:`build_image_query`):
   decay, ...), so a generic name doesn't pull in the operating business of
   the same name.
 
-Shares the ``searxng`` service_key (rate limiting / call logging) with the
-web-search :class:`~urbanlens.dashboard.services.apis.search.searxng.SearxngGateway`.
+This panel keeps its historical name/slug (``searxng_images``) for
+``UL_DISABLED_PLUGINS`` continuity even though it no longer talks to a
+self-hosted SearXNG instance directly - REData's web-search endpoint (shared
+with :class:`~urbanlens.dashboard.plugins.builtin.google_images.GoogleImagesPanelSource`)
+covers it instead.
 """
 
 from __future__ import annotations
@@ -31,12 +35,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import GalleryMediaSource
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaItem
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 #: Fixed subject-matter clause: at least one of these words must appear, so a
 #: place name that coincides with an operating business/brand doesn't flood the
@@ -162,7 +167,7 @@ def _area_terms(pin: Pin) -> list[str]:
 
 
 class SearxngImageMediaSource(GalleryMediaSource):
-    """Web-image search results for a pin's place, via SearXNG's image engines."""
+    """Web-image search results for a pin's place, via REData's web-search endpoint."""
 
     key = "searxng_images"
     cache_source = "searxng_images"
@@ -170,53 +175,64 @@ class SearxngImageMediaSource(GalleryMediaSource):
     title = "Web Images"
 
     def gate(self, pin: Pin) -> bool:
-        """Needs a configured SearXNG instance and a buildable relevance query."""
-        from urbanlens.UrbanLens.settings.app import settings
-
-        return bool(settings.searxng_base_url) and build_image_query(pin) is not None
+        """Needs REData configured and a buildable relevance query."""
+        return redata_configured() and build_image_query(pin) is not None
 
     def fetch(self, pin: Pin) -> None:
-        """Run the SearXNG image search for the pin's relevance query and cache it."""
+        """Run the REData image search for the pin's relevance query and cache it."""
         import logging
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.search.searxng import SearxngError, SearxngGateway
+        from urbanlens.dashboard.services.apis.locations.redata_search_gateway import RedataSearchGateway
 
         query = build_image_query(pin)
         results: list[dict] = []
         if query:
             try:
-                results = SearxngGateway().search_images(query, max_results=_MAX_IMAGES)
-            except SearxngError as exc:
-                # A misconfigured or unreachable instance degrades to "no
-                # results" rather than failing the whole Media gallery loader.
-                logging.getLogger(__name__).warning("SearXNG image search failed for %r: %s", query, exc)
+                results = RedataSearchGateway().search_web(query, images=True, max_results=_MAX_IMAGES)
+            except LocationContextUnavailableError as exc:
+                # An outage must not be written to the cache. The *existence* of
+                # a LocationCache row is what marks this source as having run
+                # (see LocationCacheEnrichmentSource), so caching an empty list
+                # here turns a transient failure into a durable "no photographs
+                # here" that nothing retries - which is exactly what happened
+                # while the SearXNG instance was returning 403s: the emptiness
+                # outlived the outage. Returning without writing leaves the
+                # source unfetched, so the next pass tries again.
+                logging.getLogger(__name__).warning("REData image search failed for %r, leaving it unfetched to retry: %s", query, exc)
+                return
         LocationCache.set(pin.location, self.cache_source, {"items": results, "query": query or ""}, query_key=query or "")
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Rebuild ``MediaItem``s from the cached SearXNG image results."""
+        """Rebuild ``MediaItem``s from the cached REData image results.
+
+        REData's image-mode results carry the image itself under
+        ``thumbnail`` and the page it was found on under ``link`` (see
+        ``RedataSearchGateway.search_web``) - there is no separate smaller
+        preview, so the same URL serves as both the item and its thumbnail.
+        """
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
         items = (data or {}).get("items") or []
         return [
             MediaItem(
-                url=item["url"],
-                thumb_url=item.get("thumbnail") or item["url"],
+                url=item["thumbnail"],
+                thumb_url=item["thumbnail"],
                 caption=item.get("title") or "",
-                source=item.get("source") or "Web Search",
-                page_url=item.get("page_url") or item["url"],
+                source="Web Search",
+                page_url=item.get("link") or item["thumbnail"],
             )
             for item in items[:_MAX_IMAGES]
-            if item.get("url")
+            if item.get("thumbnail")
         ]
 
 
 class SearxngImagesPlugin(UrbanLensPlugin):
-    """Adds a broad web-image search tab (via SearXNG) to the Media gallery."""
+    """Adds a broad web-image search tab (via REData) to the Media gallery."""
 
     name: ClassVar[str] = "searxng_images"
-    verbose_name: ClassVar[str] = "SearXNG Images"
-    description: ClassVar[str] = "Adds a Web Images tab to the pin detail and wiki Media galleries, sourced from an aggressive, relevance-shaped image search across many engines via SearXNG. Requires UL_SEARXNG_BASE_URL."
+    verbose_name: ClassVar[str] = "Web Images"
+    description: ClassVar[str] = "Adds a Web Images tab to the pin detail and wiki Media galleries, sourced from an aggressive, relevance-shaped image search via REData's web-search endpoint."
     author: ClassVar[str] = "UrbanLens"
 
     def get_panel_sources(self) -> list[PanelSource]:

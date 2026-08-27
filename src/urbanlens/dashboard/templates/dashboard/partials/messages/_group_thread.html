@@ -56,7 +56,7 @@ to route live messages and fall back to the plain POST endpoint.
         hx-target="#dm-thread-pane" hx-swap="innerHTML">
     {% csrf_token %}
     <input type="text" name="name" id="dm-group-rename-input" class="dm-group-rename__input"
-           value="{{ group.name }}" maxlength="{{ max_group_name_length }}" required>
+           value="{{ group.name }}" maxlength="{{ max_group_name_length }}" required aria-label="Group name">
     <button type="submit" class="btn btn--primary btn--sm">Save</button>
     <button type="button" class="btn btn--ghost btn--sm" id="dm-group-rename-cancel">Cancel</button>
   </form>

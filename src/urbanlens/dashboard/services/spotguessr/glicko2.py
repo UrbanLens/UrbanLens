@@ -4,7 +4,7 @@ Pure math, deliberately with no Django/ORM dependency - ``services.spotguessr.ra
 is the layer that reads/writes ``PlayerModeRating``/``LocationModeRating`` rows around this.
 
 SpotGuessr repurposes plain, unmodified Glicko-2 as a symmetric player-skill /
-location-difficulty pairing (see ``docs/designs/spotguessr.md``): a round is one
+location-difficulty pairing (see ``docs/designs/drafts/spotguessr.md``): a round is one
 rating period for both the player (opponent = the location, score = normalized
 points) and the location (opponents = every participant, score = ``1 - their
 normalized points``). Only the *meaning* of "opponent" and "score" is chosen to
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 #: Recommended system constant (0.3-1.2 per the paper); controls how much a
 #: single surprising result can move volatility. Must match
-#: ``docs/designs/spotguessr.md``'s config table.
+#: ``docs/designs/drafts/spotguessr.md``'s config table.
 DEFAULT_TAU = 0.5
 
 #: The paper's Illinois-algorithm root find stops once the bracket is this narrow.

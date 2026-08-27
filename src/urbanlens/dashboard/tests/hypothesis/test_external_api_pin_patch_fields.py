@@ -38,6 +38,7 @@ from django.contrib.auth.models import User
 from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.external_api.serializers import PinUpdateSerializer
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -48,9 +49,9 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatVote
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
-from urbanlens.dashboard.services.pin_edit import EDITABLE_PIN_FIELDS, SECURITY_EDIT_FIELDS
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_edit import EDITABLE_PIN_FIELDS, SECURITY_EDIT_FIELDS
 
 BASE = "/dashboard/api/external/v1/pins"
 
@@ -161,7 +162,7 @@ class _PinPatchTestCase(TestCase):
         Returns:
             The created label.
         """
-        return Label.objects.create(name=name, kind=kind, profile=profile if profile is not None else self.profile)
+        return ensure_label(name=name, kind=kind, profile=profile if profile is not None else self.profile)
 
 
 class PinPatchRoundTripTests(_PinPatchTestCase):
@@ -271,7 +272,7 @@ class PinPatchRoundTripTests(_PinPatchTestCase):
 
         ``PATCH`` accepts both, and both are persisted - but neither appears in
         the pin-detail payload, because ``services.map_pins.payload`` (which
-        ``services.pin_detail.build_pin_detail`` builds on) never emitted them
+        ``services.pins.pin_detail.build_pin_detail`` builds on) never emitted them
         and the schema serializers honestly reflect that. The result is two
         write-only fields: a client cannot read back what it just wrote, so it
         has no way to detect a lost write or reconcile after an offline edit.
@@ -493,7 +494,7 @@ class PinPatchLabelReplacementTests(_PinPatchTestCase):
 
     def test_a_global_label_is_accepted(self) -> None:
         """Labels with no owner are usable by everyone - they are not "someone else's"."""
-        shared = Label.objects.create(name="urbex", kind=KIND_TAG, profile=None)
+        shared = ensure_label(name="urbex", kind=KIND_TAG, profile=None)
 
         response = self._patch({"label_uuids": [str(shared.uuid)]})
 

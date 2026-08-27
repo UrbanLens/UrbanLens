@@ -7,7 +7,7 @@ to one ``Pin``, definitionally invisible to anyone else and to the wiki - no
 "private" flag exists because there is nothing else it could mean.
 ``WikiOwner``/``WikiPropertySale`` are shared, community-editable data about
 the place (``Location``), visible to anyone with a pin there - the same
-access rule as the rest of the wiki (``services.wiki_access.location_visible_to``).
+access rule as the rest of the wiki (``services.wiki.wiki_access.location_visible_to``).
 A pin's own Ownership card must only ever query ``PinOwner``/``PinPropertySale``;
 the wiki's Ownership card must only ever query ``WikiOwner``/``WikiPropertySale``
 - never both in the same view, exactly like ``PinAlias``/``WikiAlias`` are
@@ -65,7 +65,6 @@ class PinOwner(_OwnerBase):
 
     class Meta(_OwnerBase.Meta):
         db_table = "dashboard_pin_owner"
-        indexes = [Index(fields=["pin"], name="idxdb_pinowner_pin")]
         constraints = [
             # Backs the case-insensitive dedup both PinOwnershipPanelView and
             # PinPropertySaleTabView already perform in Python

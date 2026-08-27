@@ -10,6 +10,8 @@
  */
 import { getCsrfToken } from "../shared/csrf";
 import { confirmAction, toast } from "../shared/dialogs";
+import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
+import { openLiveSocket, type LiveSocketHandle } from "../shared/live-socket";
 import { createMapLayers } from "../shared/map-layers";
 import {
     avatarInitial,
@@ -18,7 +20,6 @@ import {
     formatCountdown,
     formatRatingDelta,
     interpolateLatLng,
-    panelVisibility,
     summaryBestRoundSubtitle,
     summaryHeadline,
     type PanelName,
@@ -65,6 +66,7 @@ interface LastConfig {
     use_aliases: boolean;
     geo_bounds_geojson: GeoJSON.Geometry | null;
     round_time_limit_seconds: number | null;
+    label_id: number | null;
 }
 
 // [[south, west], [north, east]] - matches Leaflet's LatLngBoundsExpression shape directly.
@@ -86,6 +88,13 @@ interface RoundPayload {
     image_url?: string;
     display_text?: string | null;
     street_view_image?: string | null;
+    // The panorama's own resolved coordinates - see street_view_lat's docstring
+    // on services.spotguessr.street_view.StreetViewPanorama for why this mode
+    // gets an explicit exception to "never reveal the answer before a guess":
+    // a real pan/zoom/walk-around panorama has to talk to Google directly, so
+    // the browser needs to know where to look.
+    street_view_lat?: number | null;
+    street_view_lng?: number | null;
 }
 
 interface RevealPayload {
@@ -189,6 +198,7 @@ const DEFAULT_ZOOM = 2;
 const pageEl = document.querySelector<HTMLElement>(".spotguessr-page");
 const myProfileId = Number(pageEl?.dataset.myProfileId ?? "0");
 const regionSearchUrl = pageEl?.dataset.regionSearchUrl ?? "";
+const googleMapsApiKey = pageEl?.dataset.googleMapsApiKey ?? "";
 
 // ---------------------------------------------------------------------------
 // Session/UI state - every mutable cross-function value lives on this one
@@ -214,8 +224,12 @@ interface SpotGuessrState {
     isMultiplayer: boolean;
     hostProfileId: number | null;
     lastRevealedRoundId: number | null;
-    ws: WebSocket | null;
+    ws: LiveSocketHandle | null;
     guessMap: L.Map | null;
+    // Reused across rounds/sessions via setPano() rather than torn down and
+    // recreated - same singleton-container convention as guessMap/areaMap
+    // below.
+    streetViewPanorama: google.maps.StreetViewPanorama | null;
     guessMarker: L.Marker | null;
     actualMarker: L.Marker | null;
     resultLine: L.Polyline | null;
@@ -249,6 +263,7 @@ const state: SpotGuessrState = {
     lastRevealedRoundId: null,
     ws: null,
     guessMap: null,
+    streetViewPanorama: null,
     guessMarker: null,
     actualMarker: null,
     resultLine: null,
@@ -278,11 +293,24 @@ const PANEL_IDS: Record<PanelName, string> = {
     empty: "sg-empty-state-panel",
 };
 
+// Assigned once at the bottom of this module, before any user interaction can
+// trigger a panel change. Nullable only so the declaration can sit above the
+// functions that use it.
+let shell: GameShell | null = null;
+
 function showPanel(name: PanelName): void {
-    const visibility = panelVisibility(name);
-    for (const [key, id] of Object.entries(PANEL_IDS) as [PanelName, string][]) {
-        el(id).hidden = !visibility[key];
-    }
+    shell?.showPanel(name);
+}
+
+// One-shot scale/glow on an element whose number is about to be counted up, so
+// the reward moment registers even when the value barely changes.
+function flareCount(target: HTMLElement): void {
+    if (shell?.reducedMotion()) return;
+    target.classList.remove("is-counting");
+    // Force a reflow so a repeat on the same element restarts the animation.
+    void target.offsetWidth;
+    target.classList.add("is-counting");
+    target.addEventListener("animationend", () => target.classList.remove("is-counting"), { once: true });
 }
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -646,29 +674,38 @@ function pickFriendsToInvite(available: FriendOption[]): Promise<Set<number>> {
     return new Promise((resolve) => {
         const chosen = new Set<number>();
         const dialog = document.createElement("dialog");
-        dialog.className = "spotguessr-invite-more-dialog";
-        dialog.style.cssText = "max-width:22rem;width:90vw;padding:1.25rem;border-radius:0.5rem;border:1px solid rgba(0,0,0,0.15);";
+        dialog.className = "ul-dialog ul-game-dialog spotguessr-invite-more-dialog";
 
-        const heading = document.createElement("h3");
+        const header = document.createElement("div");
+        header.className = "dialog-header";
+        const heading = document.createElement("span");
         heading.textContent = "Invite more players";
-        heading.style.marginTop = "0";
+        header.appendChild(heading);
 
+        const body = document.createElement("div");
+        body.className = "ul-dialog-body";
         const list = document.createElement("div");
-        list.style.cssText = "display:flex;flex-direction:column;gap:0.5rem;max-height:16rem;overflow-y:auto;margin:0.75rem 0;";
+        list.className = "spotguessr-invite-more-list";
         renderFriendCheckboxes(list, available, new Set(), chosen);
+        body.appendChild(list);
 
         const actions = document.createElement("div");
-        actions.style.cssText = "display:flex;justify-content:flex-end;gap:0.5rem;";
+        actions.className = "dialog-footer";
         const cancelBtn = document.createElement("button");
         cancelBtn.type = "button";
+        cancelBtn.className = "btn btn--ghost";
         cancelBtn.textContent = "Cancel";
         const inviteBtn = document.createElement("button");
         inviteBtn.type = "button";
+        inviteBtn.className = "btn btn--primary";
         inviteBtn.textContent = "Invite";
         actions.append(cancelBtn, inviteBtn);
 
-        dialog.append(heading, list, actions);
-        document.body.appendChild(dialog);
+        dialog.append(header, body, actions);
+        // Into the shell, not document.body: outside it the dialog is neither
+        // painted in true fullscreen nor reached by the page's [hidden] guard.
+        if (shell) shell.mountOverlay(dialog);
+        else document.body.appendChild(dialog);
 
         const cleanup = (result: Set<number>) => {
             dialog.close();
@@ -857,6 +894,89 @@ async function refreshLobby(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Street View panorama - interactive pan/zoom/walk-around for street_view
+// mode rounds (google.maps.StreetViewPanorama), loaded lazily so players who
+// never touch this mode never pay for the script. See street_view_lat's
+// docstring on RoundPayload for why the pano's coordinates are safe to hand
+// the client here despite the round payload never revealing the answer
+// otherwise.
+// ---------------------------------------------------------------------------
+
+// Memoized so a second street_view round doesn't inject the <script> tag
+// again - module load, not per-call, is the right lifetime for this promise.
+let googleMapsLoadPromise: Promise<void> | null = null;
+
+function loadGoogleMapsScript(): Promise<void> {
+    if (googleMapsLoadPromise) return googleMapsLoadPromise;
+    googleMapsLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(googleMapsApiKey)}&v=weekly`;
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("Failed to load the Google Maps JS API."));
+        document.head.appendChild(script);
+    });
+    return googleMapsLoadPromise;
+}
+
+// One-way switch for the round: once a player falls back to the static
+// image there is nothing further to fall back to, so the button that got
+// them here goes away too.
+function showStreetViewFallback(): void {
+    el("sg-street-view-pano").hidden = true;
+    el<HTMLButtonElement>("sg-street-view-fallback-btn").hidden = true;
+    el<HTMLImageElement>("sg-round-photo").hidden = false;
+}
+
+async function initStreetViewPanorama(lat: number, lng: number): Promise<void> {
+    const container = el("sg-street-view-pano");
+    const fallbackBtn = el<HTMLButtonElement>("sg-street-view-fallback-btn");
+    container.hidden = false;
+    fallbackBtn.hidden = false;
+    el<HTMLImageElement>("sg-round-photo").hidden = true;
+
+    if (!googleMapsApiKey) {
+        showStreetViewFallback();
+        return;
+    }
+
+    try {
+        await loadGoogleMapsScript();
+        // Resolved server-side too (services.spotguessr.street_view), but that
+        // only confirms coverage existed when the round was built - re-resolving
+        // here also gets us the pano id StreetViewPanorama needs, and gives a
+        // definitive client-side OK/not-OK signal a bare `position:` option
+        // wouldn't (silent failures here fall back to the static image).
+        const service = new google.maps.StreetViewService();
+        const response = await service.getPanorama({ location: { lat, lng }, radius: 75 });
+        const pano = response.data.location?.pano;
+        if (!pano) {
+            showStreetViewFallback();
+            return;
+        }
+        if (state.streetViewPanorama) {
+            state.streetViewPanorama.setPano(pano);
+        } else {
+            state.streetViewPanorama = new google.maps.StreetViewPanorama(container, {
+                pano,
+                addressControl: false,
+                fullscreenControl: false,
+                motionTracking: false,
+                showRoadLabels: false,
+            });
+        }
+        // The container was `hidden` (display:none) until just above, so the
+        // panorama needs a nudge to size itself correctly - same reason
+        // guessMap.invalidateSize() gets one at the end of renderRound().
+        setTimeout(() => {
+            if (state.streetViewPanorama) google.maps.event.trigger(state.streetViewPanorama, "resize");
+        }, 0);
+    } catch {
+        showStreetViewFallback();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Gameplay
 // ---------------------------------------------------------------------------
 
@@ -865,8 +985,11 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
     state.currentMode = round.mode;
     state.currentRoundShowsImagery = round.shows_imagery;
     showPanel("game");
-    el("sg-reveal-panel").hidden = true;
+    const revealPanel = el("sg-reveal-panel");
+    revealPanel.hidden = true;
+    revealPanel.classList.remove("ul-game-reveal--good", "ul-game-reveal--bad");
     el("sg-round-status").textContent = `Round ${roundNumber} of ${state.totalRounds}`;
+    shell?.setProgress(roundNumber, state.totalRounds);
     // Baseline for the new round - not a "reward" moment, so no count-up here.
     state.displayedSessionScore = state.sessionScore;
     el("sg-score-status").textContent = state.isMultiplayer ? "" : `Score: ${state.sessionScore}`;
@@ -882,20 +1005,41 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
     const photo = el<HTMLImageElement>("sg-round-photo");
     const nameHeading = el("sg-round-name");
     const pinSearchWrap = el("sg-pin-search-wrap");
+    // The play panel stays mounted between rounds, so the clue and the photo
+    // only animate if the entrance is re-applied - otherwise round 2..N is a
+    // hard cut on the single most repeated moment in the game.
+    const skipMotion = shell?.reducedMotion() ?? false;
 
     if (round.mode === "named_place") {
         photo.hidden = true;
+        el("sg-street-view-pano").hidden = true;
+        el<HTMLButtonElement>("sg-street-view-fallback-btn").hidden = true;
         nameHeading.hidden = false;
         nameHeading.textContent = round.display_text ?? "";
+        playEntrance(nameHeading, skipMotion);
         pinSearchWrap.hidden = true; // Named Place mode is map-click only, per spec - no pin search.
     } else {
         nameHeading.hidden = true;
         pinSearchWrap.hidden = false;
-        photo.hidden = false;
         // street_view_image is a server-built data: URI (services.spotguessr.street_view);
         // image_url is a Django ImageField storage path. Neither is user-typed.
         photo.src = (round.mode === "street_view" ? round.street_view_image : round.image_url) ?? ""; // lgtm[js/xss,js/client-side-unvalidated-url-redirection]
+        if (round.mode === "street_view" && round.street_view_lat != null && round.street_view_lng != null) {
+            // initStreetViewPanorama sets container.hidden = false synchronously
+            // (before its first await), so the entrance animation below sees
+            // the un-hidden element even though the fetch it kicks off is async.
+            void initStreetViewPanorama(round.street_view_lat, round.street_view_lng);
+            playEntrance(el("sg-street-view-pano"), skipMotion);
+        } else {
+            photo.hidden = false;
+            el("sg-street-view-pano").hidden = true;
+            el<HTMLButtonElement>("sg-street-view-fallback-btn").hidden = true;
+            playEntrance(photo, skipMotion);
+        }
     }
+
+    // The rail holds nothing but multiplayer scores and chat.
+    shell?.setRailAvailable(state.isMultiplayer);
 
     el("sg-date-field").hidden = !state.dateGuessingEnabled;
     el("sg-photo-feedback").hidden = true;
@@ -926,7 +1070,9 @@ function animateCountUp(el: HTMLElement, from: number, to: number, durationMs = 
     const pending = activeCountUps.get(el);
     if (pending !== undefined) cancelAnimationFrame(pending);
 
-    if (from === to || durationMs <= 0) {
+    // requestAnimationFrame is exactly what the CSS reduced-motion blanket
+    // cannot neutralise, so the guard has to live here.
+    if (from === to || durationMs <= 0 || shell?.reducedMotion()) {
         el.textContent = formatter(to);
         activeCountUps.delete(el);
         return;
@@ -951,7 +1097,11 @@ function animateCountUp(el: HTMLElement, from: number, to: number, durationMs = 
 // setLatLngs() API (not internal SVG path plumbing), so it doesn't depend on
 // Leaflet's rendering internals.
 function animateLineDrawIn(map: L.Map, from: L.LatLng, to: L.LatLng, durationMs = 600): L.Polyline {
-    const line = L.polyline([from, from], { color: "#e74c3c" }).addTo(map);
+    const line = L.polyline([from, from], { color: shell?.cssVar("bad") || "#e74c3c" }).addTo(map);
+    if (shell?.reducedMotion()) {
+        line.setLatLngs([from, to]);
+        return line;
+    }
     const start = performance.now();
     const tick = (now: number): void => {
         const progress = Math.min(1, (now - start) / durationMs);
@@ -1146,13 +1296,16 @@ function drawRevealMarkers(actualLatLng: L.LatLng): void {
     const map = ensureGuessMap();
     state.actualMarker = L.marker(actualLatLng).addTo(map);
     dropInMarker(state.actualMarker);
+    // A flown camera reads as "here is where it actually was"; an instant jump
+    // reads as a glitch. Reduced motion falls back to the old snap.
+    const animate = !(shell?.reducedMotion() ?? false);
 
     if (state.guessMarker) {
         const guessLatLng = state.guessMarker.getLatLng();
-        map.fitBounds(L.latLngBounds([guessLatLng, actualLatLng]), { padding: [40, 40] });
+        map.fitBounds(L.latLngBounds([guessLatLng, actualLatLng]), { padding: [40, 40], animate, duration: 0.9 });
         state.resultLine = animateLineDrawIn(map, guessLatLng, actualLatLng);
     } else {
-        map.setView(actualLatLng, 14);
+        map.flyTo(actualLatLng, 14, { animate, duration: 0.9 });
     }
 }
 
@@ -1170,6 +1323,16 @@ function updateRatingDeltaDisplay(delta: number | null | undefined): void {
     badge.className = `spotguessr-rating-delta spotguessr-rating-delta--${formatted.direction}`;
 }
 
+// Colours the reveal sheet's border and flashes the stage. Scoring anything at
+// all counts as "good" - a zero means the guess landed outside every scoring
+// band, or the round timed out with no guess placed.
+function setRevealVerdict(scored: boolean): void {
+    const panel = el("sg-reveal-panel");
+    panel.classList.toggle("ul-game-reveal--good", scored);
+    panel.classList.toggle("ul-game-reveal--bad", !scored);
+    shell?.flashStage(scored ? "good" : "bad");
+}
+
 function showReveal(reveal: RevealPayload): void {
     clearRoundTimer();
     el<HTMLButtonElement>("sg-submit-guess-btn").disabled = true;
@@ -1179,11 +1342,14 @@ function showReveal(reveal: RevealPayload): void {
         el("sg-score-status").textContent = "";
     } else {
         animateCountUp(el("sg-score-status"), state.displayedSessionScore, state.sessionScore, 700, (value) => `Score: ${Math.round(value)}`);
+        flareCount(el("sg-score-status"));
     }
     state.displayedSessionScore = state.sessionScore;
     showPhotoFeedbackIfApplicable();
     updateRatingDeltaDisplay(reveal.rating_delta);
     animateCountUp(el("sg-reveal-points-value"), 0, roundTotal);
+    flareCount(el("sg-reveal-points"));
+    setRevealVerdict(roundTotal > 0);
 
     const distanceKm = (reveal.distance_meters / 1000).toFixed(2);
     if (!reveal.revealed) {
@@ -1230,6 +1396,9 @@ function showBroadcastReveal(data: RoundRevealBroadcast): void {
         el<HTMLButtonElement>("sg-next-round-btn").hidden = true;
         const myResult = data.results.find((result) => result.profile_id === myProfileId);
         updateRatingDeltaDisplay(myResult?.rating_delta);
+        // Reached without showReveal() when this player never guessed (round
+        // timed out), so the verdict still has to be set here.
+        setRevealVerdict(myResult ? myResult.points + myResult.date_points + myResult.bonus_points > 0 : false);
     }
     updateScoreboardFromResults(data.results);
     renderResultsList(data.results);
@@ -1288,6 +1457,8 @@ async function startGame(mode: string): Promise<void> {
     });
     if (geoBounds) body.append("geo_bounds", geoBounds);
     if (roundTimeLimit) body.append("round_time_limit_seconds", roundTimeLimit);
+    const labelId = el<HTMLSelectElement>("sg-label-filter").value;
+    if (labelId) body.append("label_id", labelId);
     for (const profileId of state.selectedInviteIds) body.append("invite_profile_ids", String(profileId));
 
     const response = await postForm(urls.start, body);
@@ -1320,6 +1491,13 @@ async function startGame(mode: string): Promise<void> {
 
 async function submitGuess(): Promise<void> {
     if (!state.guessMarker || state.sessionId === null || state.currentRoundId === null) return;
+    const submitBtn = el<HTMLButtonElement>("sg-submit-guess-btn");
+    // Closes the double-click window: nothing else disables this button
+    // between placing a marker and the reveal actually landing, so a second
+    // click before the first request resolves posted a second guess for the
+    // same round and double-counted the score.
+    if (submitBtn.disabled) return;
+    submitBtn.disabled = true;
     const latlng = state.guessMarker.getLatLng();
     const payload: Record<string, string> = { latitude: String(latlng.lat), longitude: String(latlng.lng) };
     if (state.dateGuessingEnabled) {
@@ -1330,6 +1508,7 @@ async function submitGuess(): Promise<void> {
     const reveal: RevealPayload = await postForm(urlFor(urls.guess, state.sessionId, state.currentRoundId), payload);
     if (reveal.error) {
         toast.error(reveal.error);
+        submitBtn.disabled = false; // the marker is still placed - let them retry
         return;
     }
     showReveal(reveal);
@@ -1440,12 +1619,15 @@ function resetToSettings(): void {
 function activeFilterLabels(): string[] {
     const labels: string[] = [];
     if (el<HTMLInputElement>("sg-require-visited-all").checked) labels.push("Only places I've visited");
+    const labelFilter = el<HTMLSelectElement>("sg-label-filter");
+    if (labelFilter.value) labels.push(`Restricted to the "${labelFilter.selectedOptions[0]?.textContent}" label`);
     if (el<HTMLInputElement>("sg-restrict-area").checked && currentGeoBoundsGeoJson()) labels.push("Restricted to a chosen area");
     return labels;
 }
 
 function clearActiveFilters(): void {
     el<HTMLInputElement>("sg-require-visited-all").checked = false;
+    el<HTMLSelectElement>("sg-label-filter").value = "";
     clearAreaGeometry();
 }
 
@@ -1511,6 +1693,10 @@ function applyLastConfig(): void {
     el<HTMLInputElement>("sg-use-aliases").checked = config.use_aliases;
     el<HTMLInputElement>("sg-require-visited-all").checked = config.require_visited_all;
     el<HTMLSelectElement>("sg-round-time-limit").value = config.round_time_limit_seconds ? String(config.round_time_limit_seconds) : "";
+    // A label the profile deleted (or that never existed - a stale/tampered snapshot)
+    // simply leaves no matching <option>, so the select silently falls back to "All spots"
+    // rather than erroring.
+    el<HTMLSelectElement>("sg-label-filter").value = config.label_id ? String(config.label_id) : "";
 
     if (config.geo_bounds_geojson) {
         el<HTMLInputElement>("sg-restrict-area").checked = true;
@@ -1532,17 +1718,17 @@ function applyLastConfig(): void {
 
 function connectSessionSocket(): void {
     if (state.ws || state.sessionId === null) return;
-    const proto = location.protocol === "https:" ? "wss://" : "ws://";
-    state.ws = new WebSocket(`${proto}${location.host}/ws/spotguessr/session/${state.sessionId}/`);
-    state.ws.addEventListener("message", (event) => {
-        try {
-            handleSocketMessage(JSON.parse(event.data));
-        } catch {
-            // Ignore unparseable frames - nothing actionable to do with one.
-        }
-    });
-    state.ws.addEventListener("close", () => {
-        state.ws = null;
+    // shared/live-socket.ts adds the heartbeat this socket needs to survive the
+    // Cloudflare tunnel's idle cutoff, and the reconnect it never had.
+    state.ws = openLiveSocket({
+        path: `/ws/spotguessr/session/${state.sessionId}/`,
+        onMessage: handleSocketMessage,
+        // 4404 here means the host removed this player, or the entitlement went
+        // away - nothing more is coming, so drop the handle rather than leave a
+        // dead one blocking a later join.
+        onPermanentClose: () => {
+            state.ws = null;
+        },
     });
     el("sg-chat-panel").hidden = false;
     void loadChatHistory();
@@ -1601,8 +1787,9 @@ function initChat(): void {
         event.preventDefault();
         const input = el<HTMLInputElement>("sg-chat-input");
         const body = input.value.trim();
-        if (!body || !state.ws) return;
-        state.ws.send(JSON.stringify({ body }));
+        // send() is false while the socket is reconnecting - leave what they
+        // typed in the box rather than clearing it for a message that never left.
+        if (!body || !state.ws?.send({ body })) return;
         input.value = "";
     });
 }
@@ -1643,6 +1830,23 @@ async function loadInitialSession(): Promise<void> {
     }
 }
 
+const shellEl = document.getElementById("sg-shell");
+if (pageEl && shellEl) {
+    shell = createGameShell({
+        root: pageEl,
+        shell: shellEl,
+        panels: PANEL_IDS,
+        // The summary counts as "in play" so the celebration keeps the game's
+        // own chrome rather than dropping back into the site page.
+        playingPanels: ["game", "summary"],
+        onResize: () => {
+            state.guessMap?.invalidateSize();
+            state.areaMap?.invalidateSize();
+            if (state.streetViewPanorama) google.maps.event.trigger(state.streetViewPanorama, "resize");
+        },
+    });
+}
+
 applyLastConfig();
 initRoundsSlider();
 initModeCards();
@@ -1671,4 +1875,5 @@ el("sg-join-lobby-btn").addEventListener("click", () => void joinLobby());
 el("sg-begin-btn").addEventListener("click", () => void beginGame());
 el("sg-invite-more-btn").addEventListener("click", () => void handleInviteMore());
 el("sg-end-game-btn").addEventListener("click", () => void endGameNow());
+el("sg-street-view-fallback-btn").addEventListener("click", showStreetViewFallback);
 void loadInitialSession();

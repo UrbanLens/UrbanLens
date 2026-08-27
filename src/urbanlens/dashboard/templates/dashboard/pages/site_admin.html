@@ -138,6 +138,16 @@
                        value="{{ settings.login_max_attempts }}" min="0" max="100" step="1">
             </div>
             <div class="form-row">
+                <label for="login-ip-max-attempts">Max failed login attempts per IP</label>
+                <p class="form-help">
+                    How many failed login attempts a single IP address may make (across any
+                    accounts) before further attempts from that address are temporarily blocked.
+                    Set to <strong>0</strong> to disable the per-IP throttle.
+                </p>
+                <input type="number" name="login_ip_max_attempts" id="login-ip-max-attempts"
+                       value="{{ settings.login_ip_max_attempts }}" min="0" max="1000" step="1">
+            </div>
+            <div class="form-row">
                 <label for="login-lockout-minutes">Lockout duration (minutes)</label>
                 <p class="form-help">
                     How many minutes a locked account must wait before login attempts are accepted
@@ -159,19 +169,6 @@
         </div>
         <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-name-priority">
             {% csrf_token %}
-            <div class="form-row">
-                <label for="search-provider">Search provider</label>
-                <p class="form-help">
-                    Preferred provider for the "Web Search" panel on pin detail pages, tried first. If it's
-                    unconfigured, rate-limited, or fails, the remaining providers are tried automatically
-                    (SearXNG, Google, Brave, DuckDuckGo, Mojeek, Marginalia, in that order).
-                </p>
-                <select name="search_provider" id="search-provider">
-                    {% for value, label in search_provider_choices %}
-                    <option value="{{ value }}"{% if settings.search_provider == value %} selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
             <div class="form-row">
                 <label for="external-data-cache-days">External data cache duration (days)</label>
                 <p class="form-help">
@@ -307,7 +304,7 @@
                     <li>
                         <strong>{{ source.verbose_name }}</strong>
                         <span class="text-muted">({{ source.services }})</span>
-                        {% if not source.available %}<span class="badge badge--muted">unavailable</span>{% endif %}
+                        {% if not source.available %}<span class="ul-badge ul-badge--neutral">unavailable</span>{% endif %}
                     </li>
                     {% endfor %}
                 </ul>

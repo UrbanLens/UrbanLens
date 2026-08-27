@@ -21,8 +21,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account import TOTPDevice, WebAuthnCredential
+from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT, SESSION_WEBAUTHN_PENDING_USER
 from urbanlens.dashboard.services.social_auth.pipeline import enforce_two_factor_for_sso
-from urbanlens.dashboard.services.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT, SESSION_WEBAUTHN_PENDING_USER
 
 
 class _FakeStrategy:

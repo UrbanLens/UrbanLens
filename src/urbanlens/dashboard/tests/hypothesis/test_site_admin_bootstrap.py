@@ -10,7 +10,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings import SiteSettings
-from urbanlens.dashboard.services.site_admin import (
+from urbanlens.dashboard.services.admin.site_admin import (
     SITE_ADMIN_GROUP_NAME,
     add_user_to_site_admin_group,
     complete_site_admin_onboarding,

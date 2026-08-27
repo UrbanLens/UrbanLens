@@ -1,0 +1,54 @@
+// Memories > Locations - the pin-import-failure review queue: pins from an
+// import whose Google Maps CID never resolved to a location. Cards reuse
+// _pin_suggestions.scss's .pin-suggestion-card/.pin-suggestions-grid classes
+// wholesale so they blend into the same grid instead of reading as a
+// separate section - only the place-pin dialog is genuinely new here.
+
+@use 'variables' as *;
+
+.pin-import-failure-place-dialog {
+    @include dialog-base(420px);
+}
+
+.pin-import-failure-dialog-caption {
+    margin: 0 0 $space-sm;
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+}
+
+// A name-derived location suggestion on a failure card. Deliberately quiet:
+// it is a guess, so it should read as an offer rather than as the card's
+// primary content, which is still "place this pin yourself".
+.pin-import-failure-guess {
+    margin: $space-sm 0 0;
+    padding: $space-sm;
+    border: 1px dashed var(--ul-grey-4);
+    border-radius: 8px;
+    background: var(--ul-grey-1);
+}
+
+.pin-import-failure-guess-label {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin: 0 0 .2rem;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+.pin-import-failure-guess-name {
+    margin: 0 0 $space-sm;
+    font-size: .85rem;
+    line-height: 1.3;
+}
+
+// An area-only guess shows bare coordinates; monospace keeps them scannable and
+// signals that this is rougher than a named match.
+.pin-import-failure-guess-name--coords {
+    font-family: monospace;
+    color: var(--ul-grey-6);
+}

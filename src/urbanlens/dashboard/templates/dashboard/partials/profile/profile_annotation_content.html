@@ -153,7 +153,7 @@
                           hx-trigger="keyup changed delay:700ms"
                           hx-target="#profile-annotation-inner"
                           hx-swap="outerHTML"
-                          name="content">{{ note.content }}</textarea>
+                          name="content" aria-label="Note about this person">{{ note.content }}</textarea>
                 <div class="pan-note-edit-actions">
                     <button type="button" class="btn btn--ghost btn--sm" onclick="panToggleEdit({{ note.pk }})">Done</button>
                 </div>

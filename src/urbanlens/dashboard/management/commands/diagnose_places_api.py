@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand
 import requests
 
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
-from urbanlens.dashboard.services.redact import redact_coordinate, redact_secret
+from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_secret
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 # A well-known place with a stable place_id and URL (Empire State Building)

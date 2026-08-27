@@ -29,13 +29,13 @@ from rest_framework import serializers
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.boundary.model import BoundaryType
-from urbanlens.dashboard.services.text_limits import (
+from urbanlens.dashboard.services.core.text_limits import (
     MAX_ARTICLE_EDIT_SUMMARY_LENGTH,
     MAX_ARTICLE_LENGTH,
     MAX_COMMENT_TEXT_LENGTH,
     MAX_WIKI_DESCRIPTION_LENGTH,
 )
-from urbanlens.dashboard.services.wiki_aliases import alias_is_current_name
+from urbanlens.dashboard.services.wiki.wiki_aliases import alias_is_current_name
 
 #: Field names only, in the canonical order shared with the model layer.
 _SECURITY_FIELD_NAMES = tuple(name for name, _label in SECURITY_FIELDS)
@@ -60,7 +60,8 @@ class WikiSecurityUpdateSerializer(serializers.Serializer):
     Every field is optional, so a caller may submit only the indicators they
     actually observed. Each is a strict ``ChoiceField`` - an unrecognized value
     is a 400, never a silently-skipped field (the internal view's behavior; see
-    ``docs/PROBLEMS.md``).
+    "Messaging / external API (noted 2026-07-26)" in ``docs/PROBLEMS.md``, the
+    strict-vs-lenient wiki edit item).
     """
 
     fences = serializers.ChoiceField(choices=SecurityLevel.choices, required=False)
@@ -161,7 +162,7 @@ class WikiArticleSummarySerializer(serializers.Serializer):
 class WikiDetailSerializer(serializers.Serializer):
     """Documents the full wiki-detail response (schema-only).
 
-    See ``services.wiki_detail.build_wiki_detail``, the function that actually
+    See ``services.wiki.wiki_detail.build_wiki_detail``, the function that actually
     builds this payload.
     """
 
@@ -305,7 +306,7 @@ class CommentMentionSerializer(serializers.Serializer):
 
     display = serializers.CharField(read_only=True)
     #: Safe to expose: a comment only reaches a viewer who has provably pinned
-    #: every location it mentions (see ``services.comments``).
+    #: every location it mentions (see ``services.comments.comments``).
     location_slug = serializers.CharField(read_only=True)
 
 

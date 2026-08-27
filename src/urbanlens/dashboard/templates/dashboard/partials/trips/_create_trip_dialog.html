@@ -1,7 +1,8 @@
+{% load dashboard_tags %}
 {# Create-trip dialog, shared by the trip list and trip overview pages. #}
 {# `source` distinguishes where the dialog was opened from so the backend knows #}
 {# whether to swap #trip-list (list page) or redirect to the new trip (overview page). #}
-<dialog id="create-trip-dialog" class="trip-create-dialog ul-dialog">
+<dialog id="create-trip-dialog" class="trip-create-dialog ul-dialog" aria-labelledby="dialog-title-new-trip">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="New Trip" %}
     {# hx-target must match whichever page this dialog is opened from - the    #}
     {# overview page has no #trip-list element (it redirects to the new trip  #}
@@ -79,6 +80,8 @@
         </div>
     </form>
 </dialog>
+{% trip_name_ideas as trip_name_idea_list %}
+{{ trip_name_idea_list|json_script:"trip-name-ideas" }}
 <script>
     (function () {
         window._tripRevealDates = window._tripRevealDates || function (prefix) {
@@ -98,16 +101,13 @@
 
         // Rotate the name placeholder so the suggestion doesn't go stale
         // (UL-360). Display-only flavor: blank submissions get their real
-        // generated name server-side (services.trip_names).
-        var _tripNameIdeas = [
-            'Rust Belt Ramble', 'Backroads Recon', 'Off-Season Loop', 'First Light Run',
-            'Smokestack Circuit', 'Freight Line Detour', 'Powerhouse Crawl', 'Overgrown Wander',
-            'Turbine Hall Survey', 'Night Shift Expedition', 'Millpond Weekender', 'Watchtower Field Trip',
-        ];
+        // generated name server-side, from this same generator.
+        var _tripNameIdeasEl = document.getElementById('trip-name-ideas');
+        var _tripNameIdeas = _tripNameIdeasEl ? JSON.parse(_tripNameIdeasEl.textContent) : [];
         var _tripNameInput = document.getElementById('trip-name');
         var _tripCreateDialog = document.getElementById('create-trip-dialog');
         function _tripRotateNamePlaceholder() {
-            if (_tripNameInput) {
+            if (_tripNameInput && _tripNameIdeas.length) {
                 _tripNameInput.placeholder = 'e.g. ' + _tripNameIdeas[Math.floor(Math.random() * _tripNameIdeas.length)];
             }
         }

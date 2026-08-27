@@ -1,3 +1,4 @@
+import { safeColor } from "./color-safety";
 import { confirmAction, toast } from "./dialogs";
 import { getCsrfToken } from "./csrf";
 import { renderIconGlyphHtml, resetIconPicker } from "./icon-picker";
@@ -127,6 +128,21 @@ export class OrgTabManager {
             this.selected = new Set(ids.map(String));
             this.syncSelectionUi();
             this.openBulkEditDialog();
+        };
+        // Merge and delete are exposed the same way so the Display Order tab can
+        // drive them without owning its own dialogs: that tab lists all three
+        // kinds together, and each kind's merge dialog lives here.
+        window._orgBulkMergeByIds[this.cfg.ns] = (ids: string[]) => {
+            this.selected = new Set(ids.map(String));
+            this.syncSelectionUi();
+            this.mergeTargetId = Array.from(this.selected)[0]!;
+            this.renderMergeDialog();
+            (document.getElementById(this.cfg.mergeDialog.dialogId) as HTMLDialogElement).showModal();
+        };
+        window._orgBulkDeleteByIds[this.cfg.ns] = (ids: string[]) => {
+            this.selected = new Set(ids.map(String));
+            this.syncSelectionUi();
+            void this.bulkDelete();
         };
         window._orgRegisterSelectionClearer(() => {
             this.selected.clear();
@@ -435,7 +451,11 @@ export class OrgTabManager {
         if (sharedCustomIcon) {
             iconNochange.checked = true;
             if (iconValue) iconValue.value = "";
-            if (iconCurrent) iconCurrent.innerHTML = `<img src="${sharedCustomIcon}" alt="" class="tag-icon-img"> <span class="icon-picker-none-label">Custom icon (kept unless you pick a new one)</span>`;
+            // escHtml, not raw: this value is read back out of a data attribute,
+            // where the DOM has already decoded any entity Django wrote, so a
+            // quote in it would close the src attribute rather than sit inside
+            // it. Every other interpolation in this file already escapes.
+            if (iconCurrent) iconCurrent.innerHTML = `<img src="${escHtml(sharedCustomIcon)}" alt="" class="tag-icon-img"> <span class="icon-picker-none-label">Custom icon (kept unless you pick a new one)</span>`;
         } else if (sharedIcon !== null) {
             iconNochange.checked = false;
             if (iconValue) iconValue.value = sharedIcon;
@@ -604,8 +624,9 @@ export class OrgTabManager {
     }
 
     private miniCardHtml(data: CardData, isTarget: boolean, hideSwap: boolean): string {
-        const colorStyle = data.color ? `background:${data.color}22;border-color:${data.color}44;` : "";
-        const iconColorStyle = data.color ? `color:${data.color}` : "";
+        const color = safeColor(data.color);
+        const colorStyle = color ? `background:${color}22;border-color:${color}44;` : "";
+        const iconColorStyle = color ? `color:${color}` : "";
         let iconHtml: string;
         if (data.customIcon) {
             iconHtml = `<img src="${escHtml(data.customIcon)}" style="width:24px;height:24px;object-fit:cover;border-radius:4px;" alt="">`;

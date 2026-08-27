@@ -22,7 +22,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.auto_tag import AutoTagService
+from urbanlens.dashboard.services.labels.auto_tag import AutoTagService
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -96,7 +96,14 @@ class KeywordKindEnabledForProfileTests(TestCase):
 
 
 class SuggestForPinStageGatingTests(TestCase):
-    """suggest_for_pin must only invoke the keyword/AI matching stages the profile allows."""
+    """suggest_for_pin must only invoke the stages the profile allows.
+
+    The pin path's first stage is REData suggestions rather than keyword
+    matching (a wiki, which has no owner and so no per-user taxonomy, still
+    keyword-matches). The two stages are independently gated: REData on
+    SiteFeature.AUTO_TAGGING plus the user's own switch, AI on SiteFeature.AI
+    plus the per-kind AI preferences.
+    """
 
     def setUp(self) -> None:
         super().setUp()
@@ -104,47 +111,50 @@ class SuggestForPinStageGatingTests(TestCase):
         self.profile: Profile = self.user.profile
         self.pin = _make_pin(self.profile)
 
-    def _run(self):
+    def _run(self, *, auto_tagging: bool):
         with (
-            mock.patch.object(AutoTagService, "_keyword_match", return_value=[]) as keyword_match,
+            mock.patch.object(AutoTagService, "_redata_match", return_value=[]) as redata_match,
             mock.patch.object(AutoTagService, "_ai_match", return_value=[]) as ai_match,
             mock.patch.object(AutoTagService, "_eligible_labels", return_value=[baker.prepare(Label, kind=KIND_CATEGORY)]),
+            mock.patch("urbanlens.dashboard.models.subscriptions.model.user_has_feature", return_value=auto_tagging),
         ):
             AutoTagService(kinds=[KIND_CATEGORY]).suggest_for_pin(self.pin)
-        return keyword_match, ai_match
+        return redata_match, ai_match
 
-    def test_keyword_only_runs_keyword_stage_not_ai(self) -> None:
-        self.profile.keyword_tagging_enabled = True
-        self.profile.keyword_label_categories = True
+    def test_the_capability_alone_runs_the_redata_stage(self) -> None:
         self.profile.ai_enabled = False
-        self.profile.save(update_fields=["keyword_tagging_enabled", "keyword_label_categories", "ai_enabled"])
-        keyword_match, ai_match = self._run()
-        keyword_match.assert_called_once()
+        self.profile.save(update_fields=["ai_enabled"])
+
+        redata_match, ai_match = self._run(auto_tagging=True)
+
+        redata_match.assert_called_once()
         ai_match.assert_not_called()
 
-    def test_ai_only_runs_ai_stage_not_keyword(self) -> None:
-        self.profile.keyword_tagging_enabled = False
-        self.profile.ai_enabled = True
-        self.profile.ai_label_categories = True
-        self.profile.save(update_fields=["keyword_tagging_enabled", "ai_enabled", "ai_label_categories"])
-        keyword_match, ai_match = self._run()
-        keyword_match.assert_not_called()
-        ai_match.assert_called_once()
-
-    def test_both_disabled_runs_neither_stage(self) -> None:
-        self.profile.keyword_tagging_enabled = False
+    def test_the_user_switch_turns_the_redata_stage_off(self) -> None:
+        self.profile.disable_auto_tagging = True
         self.profile.ai_enabled = False
-        self.profile.save(update_fields=["keyword_tagging_enabled", "ai_enabled"])
-        keyword_match, ai_match = self._run()
-        keyword_match.assert_not_called()
+        self.profile.save(update_fields=["disable_auto_tagging", "ai_enabled"])
+
+        redata_match, ai_match = self._run(auto_tagging=True)
+
+        redata_match.assert_not_called()
         ai_match.assert_not_called()
 
-    def test_both_enabled_runs_both_stages(self) -> None:
-        self.profile.keyword_tagging_enabled = True
-        self.profile.keyword_label_categories = True
+    def test_neither_stage_runs_without_either_grant(self) -> None:
+        self.profile.ai_enabled = False
+        self.profile.save(update_fields=["ai_enabled"])
+
+        redata_match, ai_match = self._run(auto_tagging=False)
+
+        redata_match.assert_not_called()
+        ai_match.assert_not_called()
+
+    def test_both_grants_run_both_stages(self) -> None:
         self.profile.ai_enabled = True
         self.profile.ai_label_categories = True
-        self.profile.save(update_fields=["keyword_tagging_enabled", "keyword_label_categories", "ai_enabled", "ai_label_categories"])
-        keyword_match, ai_match = self._run()
-        keyword_match.assert_called_once()
+        self.profile.save(update_fields=["ai_enabled", "ai_label_categories"])
+
+        redata_match, ai_match = self._run(auto_tagging=True)
+
+        redata_match.assert_called_once()
         ai_match.assert_called_once()

@@ -6,7 +6,7 @@ fields mirroring internal ``PinViewSet`` semantics (name/icon/last_visited/
 coordinate move) plus the new ``parent_id`` detach/reparent capability, and
 DELETE's child-pin decision handshake - the same behavior
 ``test_pin_delete_view.py`` already covers for the internal endpoint, since
-both now share ``services.pin_edit``.
+both now share ``services.pins.pin_edit``.
 """
 
 from __future__ import annotations
@@ -26,8 +26,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.pin_tombstone import PinTombstone
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 
 def _bearer(raw_key: str) -> dict:

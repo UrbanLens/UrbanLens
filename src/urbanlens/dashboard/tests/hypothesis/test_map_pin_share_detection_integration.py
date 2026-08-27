@@ -34,9 +34,9 @@ from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
-from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
-from urbanlens.dashboard.services.map_pin_share_detection import arrow_points_toward, detect_shared_pins, sync_pin_inferences
-from urbanlens.dashboard.services.map_sharing import clone_markup_map, share_markup_map_with_profile
+from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+from urbanlens.dashboard.services.sharing.map_pin_share_detection import arrow_points_toward, detect_shared_pins, sync_pin_inferences
+from urbanlens.dashboard.services.sharing.map_sharing import clone_markup_map, share_markup_map_with_profile
 
 # Fixed test coordinates - Manhattan-ish, nowhere near a pole/antimeridian.
 _LAT, _LNG = 40.0, -74.0

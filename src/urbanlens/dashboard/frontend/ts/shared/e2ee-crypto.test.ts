@@ -9,6 +9,7 @@ import {
     cryptoReady,
     decryptMessage,
     deriveKey,
+    deriveKeyFromPrf,
     deriveLoginKeys,
     encryptMessage,
     generateConversationKey,
@@ -17,6 +18,7 @@ import {
     KDF_MEMLIMIT,
     KDF_OPSLIMIT,
     parseRecoveryKey,
+    randomPrfInput,
     randomSalt,
     sealToPublicKey,
     unseal,
@@ -26,6 +28,44 @@ import {
 
 beforeAll(async () => {
     await cryptoReady();
+});
+
+describe("deriveKeyFromPrf", () => {
+    // The derivation is part of the E2EEPasskeyWrap wire protocol: a changed
+    // output orphans every stored wrap, so it is pinned to a fixed vector
+    // (HKDF-SHA256, empty salt, info "urbanlens-e2ee-passkey-wrap-v1",
+    // computed independently with Python's cryptography.hazmat HKDF).
+    test("matches the pinned HKDF-SHA256 vector", async () => {
+        const prfOutput = new Uint8Array(32).fill(7);
+        const key = await deriveKeyFromPrf(prfOutput);
+        const expected = "d8dc9887f68834906ccb192b16422d959a83528d06f34888aa5ac17b66f827de";
+        expect(Buffer.from(key).toString("hex")).toBe(expected);
+    });
+
+    test("is deterministic and input-sensitive", async () => {
+        const a = await deriveKeyFromPrf(new Uint8Array(32).fill(1));
+        const b = await deriveKeyFromPrf(new Uint8Array(32).fill(1));
+        const c = await deriveKeyFromPrf(new Uint8Array(32).fill(2));
+        expect(Array.from(a)).toEqual(Array.from(b));
+        expect(Array.from(a)).not.toEqual(Array.from(c));
+    });
+
+    test("output wraps and unwraps a private key", async () => {
+        const identity = generateIdentity();
+        const wrapKey = await deriveKeyFromPrf(new Uint8Array(32).fill(9));
+        const blob = wrapSecretKey(identity.privateKey, wrapKey);
+        const roundTripped = unwrapSecretKey(blob, await deriveKeyFromPrf(new Uint8Array(32).fill(9)));
+        expect(roundTripped).not.toBeNull();
+        expect(Array.from(roundTripped!)).toEqual(Array.from(identity.privateKey));
+        // The wrong PRF output must fail closed, not decrypt garbage.
+        expect(unwrapSecretKey(blob, await deriveKeyFromPrf(new Uint8Array(32).fill(8)))).toBeNull();
+    });
+
+    test("randomPrfInput is 32 bytes of standard base64", () => {
+        const input = randomPrfInput();
+        expect(Buffer.from(input, "base64").length).toBe(32);
+        expect(randomPrfInput()).not.toBe(input);
+    });
 });
 
 describe("deriveKey / deriveLoginKeys", () => {

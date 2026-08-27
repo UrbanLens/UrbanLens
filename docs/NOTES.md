@@ -14,8 +14,13 @@ Three models are easy to confuse and have strictly separated responsibilities:
   at the same `Location`.
 - **`Pin`** — one user's *personal* record for a location: custom name override (nullable —
   `None` means "use the location's name", see `pin.effective_name`), private notes, icon,
-  priority, status, last-visited date, marker coordinates. Address/place metadata is read via
-  proxy properties that delegate to `self.location`; it is never stored directly on `Pin`.
+  priority, status, last-visited date. Address/place metadata is read via proxy properties that
+  delegate to `self.location`; it is never stored directly on `Pin`.
+
+  **A pin has no coordinates of its own.** `Pin._meta` carries no latitude/longitude field at all,
+  and `pin.effective_latitude` returns `float(self.location.latitude)` — so a pin's position *is*
+  its location's position, exactly, always. (This line used to claim "marker coordinates" among a
+  pin's own fields, which cost a session's worth of wrong reasoning; see the detach entry below.)
 - **`Wiki`** — an *opt-in*, community-editable page about a `Location`. Not every Location has
   one; users seed them explicitly. Keeping Wiki opt-in was a deliberate privacy decision — see
   "coordinate immutability" below for the related concern about leaking exact locations, and
@@ -26,6 +31,14 @@ DB trigger). Address components stay mutable to allow geocode backfill. Use
 `Location.objects.get_nearby_or_create(...)` rather than constructing new Locations directly when
 coordinates might already exist nearby.
 
+**To move a pin or a wiki, relink it to a different `Location` — never change the coordinates of
+the one it currently points at.** The two rules compose into a thing worth stating outright,
+because it is not obvious from either alone: since a pin has no coordinates of its own, and a
+location's cannot change, "give this pin its own place at the same point" is not expressible at
+all. That is why detaching a pin from its `Location` refuses with an explanation rather than
+inventing a row (see `controllers/pin_edit.PinRelinkView`, and the 2026-08-13 entry in
+`docs/PROBLEMS.md`).
+
 ## Wiki visibility — pinned, not public
 
 A `Wiki` existing is not the same as a `Wiki` being visible. **A profile may only see (or act on)
@@ -35,7 +48,7 @@ pin); a wiki readable by any logged-in user would let people browse other users'
 by guessing/crawling `location_slug` values, defeating that.
 
 Every wiki-scoped controller must resolve its `Location`/`Wiki` through
-`services.wiki_access.resolve_visible_wiki(request, location_slug)` (or check
+`services.wiki.wiki_access.resolve_visible_wiki(request, location_slug)` (or check
 `location_visible_to(location, profile)` directly for views that need a different response shape
 than a redirect/404 — e.g. a JSON polling endpoint that should return an empty list rather than
 error). The check is simply "does the requester have a `Pin` at this `Location`" —
@@ -78,6 +91,38 @@ controllers and viewsets were deleted in favor of the unified label controller/v
 Per-user visual overrides (color/icon) on a shared global label live in a separate
 `LabelCustomization` model — editing "your" label color never mutates the label other users see.
 
+## Label names are unique per owner and kind, case-insensitively
+
+Since migrations 0042/0043, `Label` carries
+`UniqueConstraint(Lower("name"), "profile", "kind", nulls_distinct=False)`. Three consequences that
+are not obvious from the model:
+
+**It is case-insensitive.** "Abandoned" and "abandoned" are the same label. This matches what
+callers already assumed - `services/media/media_labels.py` pre-filtered with `name__iexact` because
+`get_or_create(name=...)` alone is case-sensitive and the intended identity was not. Any lookup that
+feeds a create must use `name__iexact`, or the `get` misses an existing row, the insert violates the
+constraint, and `get_or_create`'s own retry (which repeats the same exact-match `get`) cannot
+recover.
+
+**Global labels are constrained against each other.** A global label has `profile IS NULL`, and
+Postgres treats NULLs as distinct by default - so without `nulls_distinct=False` two identical
+global labels would still be possible. That flag needs Postgres 15+; this project runs 17.
+
+**Shadowing a global label is refused by the application, not the database.** A personal label and a
+global label with the same name differ in `profile`, so the constraint permits both. The check in
+`services/labels/uniqueness.py` is deliberately wider and refuses it, because two identically-named
+labels in one list are indistinguishable to the user. Migration 0042 merged the pre-existing ones
+into the global label, which survives.
+
+Every write path checks `find_conflicting_label` *before* writing and returns a message (HTML views
+400, external API 409, undo-restore refuses) - reaching the constraint means a 500, so the check is
+the interface and the constraint is the backstop.
+
+For tests: a new `Profile` is seeded with ~46 default labels, so `Label.objects.create(name="Hospital",
+kind=KIND_CATEGORY)` now raises. Use `core/tests/labels.ensure_label()` when the fixture wants "a
+label with this identity", and a fresh name when it genuinely needs a *new* row - `ensure_label`
+returns the seeded one, which fires no create signal and already has parents.
+
 ## Pin slugs are scoped per-profile, not global
 
 `Pin` has `UniqueConstraint(fields=["profile", "slug"], condition=Q(slug__isnull=False))` — slugs
@@ -90,31 +135,101 @@ There's also `UniqueConstraint(fields=["location", "profile"], condition=Q(paren
 — a user can only have one top-level pin per Location (sub-pins via `parent_pin` are exempt).
 TODO NOTE From Jess: I could be mistaken, but I think there shouldn't be an exception for sub-pins. Sub-pins will be nearby, of course, but the coordinates won't be exactly, precisely the same. This exception allows for two pins to precisely overlap on a map, which surely not very helpful.
 
-## Boundary matching only trusts the auto-generated polygon
+## Matching reads `Place.geometry`, and nothing else
 
-`Boundary.generated_polygon` (from external building-footprint APIs) is the only polygon used by
-`get_for_point`/`get_all_for_point`/`within_bounding_box`. The user-editable `polygon` field is
-for *display* only and is deliberately excluded from matching logic — otherwise a user could
-inflate their boundary to claim overlap with other pins/areas.
+Official geometry lives on `Place`, written only by the provider chain and boundary voting. The
+`Boundary` table is now *only* user- and community-drawn shapes (plus per-provider voting
+candidates), and no access or matching path reads it at all — so "a drawn polygon can never widen
+what you can see" is a property of the schema rather than a filter every query has to remember to
+apply. `Boundary.objects.resolve_for_*` still consults those drawn rows, because they are for
+display.
 
-## Parcel vs. building scope — counted from children, never from the parcel data
+## Place is the answer to "is this the same place?"
 
-A Pin (and its Wiki) has always doubled as both *the parcel* and *the building*, because for an
-ordinary place those are the same thing. On a campus they are not: the pin at
-`41.73315, -73.93037` was rendering "TOOL SHED (1937) — NON-CONTRIBUTING, Building Number 154"
-from NY SHPO's CRIS inventory, because `CrisBuildingPanelSource` took the *first*
-`resource_type == "building"` match inside a 200 m radius. `services/locations/site_scope.py`
-is the one place that decides which a marker is.
+`Location` is an exact coordinate; `Place` is the real-world parcel or building that coordinate
+stands on, and it is what wikis, official geometry, boundary votes, and access all hang off.
+`Location.place` is a *resolved cache*, recomputed whenever geometry changes — never an identity,
+so a provider correcting a boundary can move a location between places without disturbing pin,
+share, or wiki provenance.
 
-Two rules, in order. **An explicit choice wins**: `pin_type_is_user_provided` marks a type the
-user actually picked, mirroring how `name_is_user_provided` guards `Pin.name`. **Otherwise, count
-the children typed as buildings** — two or more (`MULTI_BUILDING_THRESHOLD`) makes the parent a
-parcel.
+Before Place, geometry hung off each Location and was fetched by point lookup. Importing 124
+buildings onto one campus therefore created 124 Locations each holding its own copy of the *same
+parcel polygon* — so every point on the campus sat inside 125 boundaries at once. That one cause
+produced three separate-looking bugs: visitors told that 124 other locations covered their pin, a
+building's page drawing the whole parcel, and one property accumulating 125 wikis.
 
-What is deliberately *not* a rule: "REData says this parcel has several buildings." That signal is
-real, and it drives the "would you like to add pins for the buildings here?" offer — but on its own
-it would silently reclassify a house with a detached garage, so it never flips scope by itself. The
-user accepting the offer creates the child pins, and *those* flip it.
+Load-bearing details:
+
+- **Most specific wins**, ordered by cached `area_sqm`. A footprint is always smaller than the
+  parcel around it, so area ordering subsumes "deepest in the tree" without walking it, and stays
+  deterministic for two overlapping unrelated parcels.
+- **`Place.geometry` is nullable.** A building nobody has a footprint for still gets a place: it
+  keeps identity, lineage, and its own wiki, and can never be resolved onto.
+- **Aggregates are excluded from resolution entirely** (`PlaceQuerySet.resolvable`), which is what
+  makes strict earning unbypassable rather than merely unlikely — a pin in a gap between a site's
+  parcels cannot land on the site itself.
+- **A placeless coordinate behaves exactly as it always did**: circle fallback for display,
+  exact-Location pin for wiki access.
+
+## Access is per *domain*, and only `MEMBER_OF` edges gate anything
+
+A **domain** is a parcel plus everything `PART_OF` it, denormalised onto `Place.domain_root` so the
+predicate is one indexed equality test. It is indivisible: a pin anywhere in it grants every wiki
+in it, in *either* direction. Organising a property into its 124 buildings is an organisational
+act and must not change who can see what — the alternative hides content from people who already
+had the property, purely because someone pressed a button.
+
+`MEMBER_OF` (a split's superseded campus, or a site spanning several tax parcels) is the only
+access boundary. Such a parent is earned only by holding access to *every* member, because its
+knowledge genuinely exceeds any one child's. Earning is recursive over *access*, not over literal
+pins, so completing one tier can complete the tier above it.
+
+`PlaceAccessGrant` covers what containment can no longer prove. It is written by exactly two
+callers — the Place backfill migration and split processing — and by no API surface. That
+snapshot is what makes automatic split and site detection safe: a false positive costs a redundant
+row, never someone's access.
+
+Consequence worth knowing: a newcomer who pins one building of a *multi-parcel* campus gets that
+parcel's domain but not the campus, and sees no hint the campus wiki exists. That is the strict
+rule working as intended; existing holders keep it via backfill grants.
+
+## Parcel vs. building scope — derived from the place, not asserted per pin
+
+A Pin (and its Wiki) doubles as both *the parcel* and *the building* for an ordinary house, because
+those are the same thing there. On a campus they are not: the pin at `41.73315, -73.93037` was
+rendering "TOOL SHED (1937) — NON-CONTRIBUTING, Building Number 154" from NY SHPO's CRIS inventory,
+because `CrisBuildingPanelSource` took the *first* `resource_type == "building"` match inside a
+200 m radius. `services/places/scope.py` is the one place that decides which a marker is, and
+`site_scope.is_site_scope` reads it.
+
+Rules, in order. **An explicit choice wins**: `pin_type_is_user_provided` marks a type the user
+actually picked, mirroring how `name_is_user_provided` guards `Pin.name`. **Otherwise it is derived
+from the resolved place**: a marker on a property holding `MULTI_BUILDING_THRESHOLD` or more
+buildings commits to describing the grounds or one structure; a marker on a single-building
+property stays `LOCATION_MARKER`, which is not "unknown" but the honest answer.
+
+`Pin.pin_type` / `Wiki.pin_type` are caches of that derivation, refreshed by
+`site_scope.reclassify_markers_on_place`. Deriving from the place and fanning out matters: scope is
+a fact about the *property*, so importing buildings retypes **every user's** marker on it, not just
+the marker belonging to whoever pressed the button — and it can't drift when buildings are added or
+removed later.
+
+What is deliberately *not* a rule: "REData says this parcel has several buildings." That signal
+drives the "would you like to add pins for the buildings here?" offer, but on its own it would
+silently reclassify a house with a detached garage. Accepting the offer creates the building
+*places*, and those flip it.
+
+**What each scope draws** (`services/places/scope.py::place_polygon`) — the answer to "a building's
+page shouldn't show the parcel":
+
+| Marker | PROPERTY | BUILDING |
+|---|---|---|
+| Building on a multi-building property | *nothing* | its footprint |
+| Building on an ordinary property | its parcel | its footprint |
+| Parcel / site | its outline | *nothing* |
+
+The two "nothing" cells are the point. A building on a campus is not about the 200 acres it sits
+on, and a campus marker must not pick one of its 124 structures to represent it.
 
 Consequences worth knowing:
 
@@ -136,7 +251,7 @@ Consequences worth knowing:
 
 ## The restructure suggestion is one dialog, and it is offered exactly once
 
-`services/pin_restructure.py` answers two questions that are really one — "this pin's hierarchy
+`services/pins/pin_restructure.py` answers two questions that are really one — "this pin's hierarchy
 doesn't match the ground" — so they share a single prompt on the pin detail page rather than
 interrupting twice:
 
@@ -160,6 +275,11 @@ Load-bearing details:
   doesn't resurrect the prompt on the one pin they explicitly declined.
 - **The plan is recomputed on apply**, never trusted from the rendered page, so anything pinned or
   nested between render and click is simply skipped.
+- **The import persists each building as a `Place` first**, from the footprint it already holds,
+  and attaches each new child pin's Location to its place directly rather than resolving by
+  containment. Two reasons: a point lookup for a building returns the *parcel* when no footprint
+  provider covers it (which is how 124 markers each ended up claiming to be the whole hospital),
+  and a building centroid can legitimately fall outside its own concave footprint.
 - **A spent poll budget still offers what's known.** The nesting half doesn't depend on the REData
   lookup, so a slow/unavailable parcel fetch degrades to "offer the nesting" rather than hiding the
   whole suggestion.
@@ -168,14 +288,20 @@ Load-bearing details:
 
 ## Wiki-to-wiki auto-merge is the one hierarchy change with no confirmation dialog
 
-`services/wiki_merge.py` is the exception to this codebase's usual "ask first" pattern for
+`services/wiki/wiki_merge.py` is the exception to this codebase's usual "ask first" pattern for
 structural changes. Two community wikis are independent, user-initiated pages - nothing stops
-someone wiki-ing a building before anyone's wiki-ed the campus it sits on. Once both have a real
-property boundary, `reconcile_wiki_nesting` re-parents the smaller under the bigger automatically,
+someone wiki-ing a building before anyone's wiki-ed the campus it sits on. Once both resolve onto
+places, `reconcile_wiki_nesting` re-parents the child's wiki under the ancestor's automatically,
 per the ROADMAP's explicit "without needing user confirmation." It runs from the single choke
-point every boundary-generation call site shares (`services.locations.boundaries.
-generate_location_boundaries`), checking both directions - does a bigger wiki now contain me, and
-do any smaller ones now sit inside me - so it converges regardless of creation order.
+point every place-resolution call site shares (`services.locations.boundaries.
+generate_location_boundaries`), checking both directions - does an ancestor place have a wiki, and
+do any of my direct children have root wikis - so it converges regardless of creation order.
+
+Nesting follows **place lineage**, not geometry: the hierarchy was already decided when the places
+were provisioned, so this walks one FK chain instead of sorting every containing polygon by area,
+and it cannot disagree with the access model, which reads the same edges. A wiki on a coordinate no
+provider knows has no lineage to walk, so it falls back to containment against official place
+outlines (`_containing_root_wiki_by_geometry`).
 
 Load-bearing details:
 
@@ -209,7 +335,7 @@ swaps its own queryset from `pin.<related>` to `<Model>.objects.filter(pin__in=P
 filter(pk=pin.pk).with_descendants())` when the flag is set, and independently threads
 `extra_query="children=1"` through its own pagination. There is no shared helper - see
 `controllers.comments._pin_comments_context` for the newest one, modelled directly on
-`controllers.visits._render_visit_history`. `services.pin_restructure`/`services.pin_wiki_sync`
+`controllers.visits._render_visit_history`. `services.pins.pin_restructure`/`services.pins.pin_wiki_sync`
 cover pin ↔ external-data and pin ↔ wiki *hierarchy* fixes; this is purely about *display* -
 aliases and labels are not yet aggregated this way (tracked in `docs/PROBLEMS.md`).
 
@@ -234,9 +360,42 @@ subtree, not just the exact pin in the URL - otherwise deleting an aggregated ch
 
 ## Community counts are fuzzed, not exact
 
-Wiki "how many people have this pinned" style counts (`services/community_counts.py`) are
+Wiki "how many people have this pinned" style counts (`services/wiki/community_counts.py`) are
 deliberately fuzzed (small random jitter, cached for a day) rather than exact — an exact count
 combined with a timeline could otherwise let someone infer individual pinning activity.
+
+## Achievements — awards are permanent, and streaks are judged on read
+
+Three non-obvious rules hold the achievement system together:
+
+**Awards are never revoked.** `evaluate_profile` only ever grants. Deleting pins drops
+`pins_created` below the threshold, and the award stays. That is why there are no `post_delete`
+handlers in `models/achievements/signals.py` — their absence is deliberate, not an oversight.
+
+**Streak achievements compare against `longest_length`, never `current_length`.** Breaking a
+streak must not take back the award it earned. Separately, `current_length` is only ever
+*advanced* — nothing fires on the day a user stops — so it is stale by construction. Always read
+it through `ProfileStreak.current_length_as_of()`, which returns 0 once `last_day` is more than a
+day old. The stored column is not the live value.
+
+**One activity row per day is what makes streaks idempotent.** `record_activity` is safe to call
+on every write because `ProfileActivityDay` is unique on (profile, kind, day); only the first call
+of a day advances the streak. Do not "optimise" that `get_or_create` away — uploading fifty photos
+in an afternoon would then count as fifty streak days.
+
+Two things about the write path. Streak days are recorded **synchronously**, inside the
+contributing transaction, not in the Celery task — streaks are the only metric with no source of
+truth outside our own tables, so the day has to be written even when no streak award exists yet,
+or an award added later would have nothing to reward. The *evaluation* enqueue, by contrast, is
+gated on `active_metric_keys()`: if no active award measures the affected metric, nothing is
+queued at all. That gate is deliberately **uncached** — caching it made write-path behaviour
+depend on whatever ran before it, because a rolled-back transaction leaves no signal to
+invalidate on.
+
+Two more things that bite: metric keys are stored on `Achievement.metric`, so renaming one in the
+registry orphans every award pointing at it (needs a data migration). And `Achievement.metric`
+takes its `choices` as a *callable* precisely so registering a new metric does not generate a
+migration — don't "simplify" it to a literal list.
 
 ## Undo framework — do not "delete" through save()/post_save
 
@@ -272,7 +431,7 @@ Inbound-facing, unlike everything else in "Rate limiting and cost tracking" abov
   assumption) so a future picker only has to change what gets written at creation time, not the
   verification path in `external_api/permissions.py`.
 - Pin creation from the external API goes through the exact same
-  `services.pin_creation.create_pin_for_profile` call as the map UI's "Add pin" form (see
+  `services.pins.pin_creation.create_pin_for_profile` call as the map UI's "Add pin" form (see
   `controllers/maps.py`) - this is intentional, not incidental reuse. Any validation/sanitization
   added to one caller must go in that shared function so it automatically covers the other.
 - `external_api/` never imports from - or gets imported by - the internal viewsets under
@@ -292,19 +451,6 @@ Inbound-facing, unlike everything else in "Rate limiting and cost tracking" abov
   via OAuth2 where the consent screen enumerates them. `permissions.OAUTH2_ONLY_SCOPES` goes
   further and refuses the `messages:*` scopes to PAT-style keys outright.
 
-## Windows development environment quirks
-
-- The venv is `.venv_windows\` (not `.venv`) because it was created on Windows — always invoke
-  tools via `.venv_windows\Scripts\<tool>.exe`.
-- GeoDjango's GDAL/GEOS dependency on Windows is satisfied via DLLs vendored by `geopandas`'s
-  `pyogrio` dependency, resolved in `settings/_gdal_windows.py`. This only applies when
-  `UL_ENVIRONMENT=local` (the default for local dev) — it is never invoked in Docker/CI/production,
-  so don't "fix" GDAL issues there using the Windows path.
-- Docker is not run from within Claude's environment — if Docker needs to be exercised, ask the
-  user to run it manually rather than attempting `docker-compose` commands directly.
-- Sass compiles fine natively on Windows via `bun run sass` — no Docker needed for frontend asset
-  builds.
-
 ## Migrations churn on squashes
 
 Django's `CreateModel` operation defers index creation to the end of a migration, but
@@ -318,8 +464,151 @@ time migrations get re-squashed.
 
 - Custom test runner (`urbanlens.core.tests.runner.TestRunner`) suppresses log output on passing
   tests and surfaces it only on failure.
+- **Why `manage.py test` fails locally but works in CI.** The advice elsewhere is "use pytest, never
+  `manage.py test`", and the symptom is real - `ValueError: Missing staticfiles manifest entry` on
+  any test that renders a page (measured: 28 of 33 errors in one module). The reason is worth
+  knowing, because it is not "the runner never sets `TESTING`". It does, in
+  `setup_test_environment()`. But `STORAGES` is computed **at settings-import time** from `TESTING`
+  (`settings/base.py`), and the runner's hook runs after that, so the manifest storage has already
+  been chosen. `pytest` avoids it because `TESTING` also checks for `pytest` in `sys.argv`, which is
+  true before settings are read.
+
+  CI is unaffected and is *not* misconfigured: `.github/workflows/ci.yml` sets
+  `DJANGO_SETTINGS_MODULE=urbanlens.UrbanLens.settings.test`, and that module sets `TESTING = True`
+  at import - before `STORAGES` is decided. So `manage.py test` under `settings.test` is fine, and
+  only the default settings module hits this. (Established 2026-08-17 while checking whether CI's
+  Django step was silently broken; it is not.)
 - `@given` (Hypothesis) and Django's `self.client` don't mix cleanly in this repo's `TestCase` —
   prefer calling the view/service function directly under `@given`, or drop Hypothesis for that
   particular test. TODO NOTE From Jess: We should probably fix TestCase so it does work cleanly.
 - Don't write unit tests asserting an exact log message string — trivial wording changes then
   break tests for no functional reason.
+
+## Georeferenced map image overlays
+
+`MapImageOverlay` stores **four WGS-84 corners**, not a transform matrix. The matrix is recomputed
+client-side on every map move from those corners
+(`frontend/ts/shared/map-image-overlays.ts:matrix3dForCorners`), which is why an overlay stays
+correct across zoom levels, base-layer switches, and would survive the rendering ever moving off
+Leaflet. Storing a matrix would bake in one particular projection and pixel origin.
+
+Rendering is a plain `<img>` under a CSS `matrix3d` rather than `L.ImageOverlay`: Leaflet's own
+overlay only accepts axis-aligned bounds, which cannot express rotation, shear, or the trapezoidal
+distortion a flatbed scan of an old sheet actually has. The homography solve is deliberately
+in-repo (~70 lines) rather than a `leaflet-distortableimage` dependency, so the corner semantics
+stay ours.
+
+Two things that look like they could be simplified but can't:
+
+* `.ul-map-overlay-image` must keep `transform-origin: 0 0`. The homography is solved against the
+  image's natural pixel rectangle starting at (0,0); any other origin silently shifts every corner.
+* A degenerate quadrilateral (three corners dragged onto one point) makes the 8x8 system singular.
+  `matrix3dForCorners` returns null there and the caller keeps the previous transform - applying a
+  NaN matrix would make the overlay vanish with no handle left to drag it back.
+
+`?preview=1` is not involved here: an overlay's image must be something a browser renders directly,
+which is why the external-URL path rejects PDFs/TIFFs and tells the user to upload instead (the
+upload path runs through the normal media pipeline).
+
+## OpenHistoricalMap: cache aggressively, don't treat it as a live dependency
+
+OHM's public Overpass fork (`services/apis/locations/open_historical_map.py`) is volunteer-run
+infrastructure with no formal SLA or published rate-limit policy, and a real history of being
+overwhelmed - the only hard number it publishes is a 2-concurrent-request limit. This integration
+deliberately leans on `LocationCache` rather than calling Overpass live: coverage/year discovery is
+proactively backfilled the same way boundary data is, and each year's GeoJSON is cached
+essentially forever (past OHM data for a given year doesn't change). Don't "fix" this into
+something snappier without keeping that constraint in mind - a naive per-request Overpass call is
+exactly the pattern that gets this fork's users rate-limited or blocked.
+
+One consequence worth knowing before touching the source-string scheme: `LocationCache`'s unique
+key is the `(location, source)` pair alone - `query_key` is descriptive metadata, not part of
+lookup. Per-year feature caching therefore gives each requested year its own `source` string
+(`f"ohm_features_{year}"`) rather than one `source` with a `query_key` per year. It looks like it
+could be collapsed into a single source + query_key; it can't, without breaking per-year lookup.
+
+## Decisions from the 2026-07-23 session (reconstructed 2026-08-15)
+
+Six code comments cite "decision 2026-07-23, docs/PROBLEMS.md" for decisions that were never in
+that file - the originals lived in `docs/notes/ai/`, which is gitignored, so no fresh checkout can
+read them (see PROBLEMS.md, "`completed.md` is referenced from three places"). What follows is
+**reconstructed from the citing comments' own one-line summaries** - the reasoning as recorded at
+the call sites, promoted to a tracked file so the citations point at something reachable. If the
+original notes surface, replace this section with them.
+
+- **Per-recipient payloads** (`services/messaging/direct_messages.py`,
+  `services/messaging/group_chats.py`): a live incoming message is serialized once *per viewer*,
+  resolving sender identity through the viewer's own masking (and, for DMs, image-consent) rules -
+  never one shared payload for all recipients, which had leaked names the server-rendered thread
+  would mask. The per-viewer *payload* is the guarantee; the per-viewer *query* was not, and cost a
+  `Friendship` lookup per member (twice per group send). `Profile.viewers_who_can_see` resolves the
+  same question for a whole room in a fixed number of queries - the mirror of
+  `visible_profile_pks`, and held to `can_view_profile` by the same agreement test.
+- **Opaque identifiers** (`services/security/e2ee.py`): the E2EE group key-rotation API keys its
+  payload by a deterministic per-(group, member) HMAC token rather than profile slugs, which had
+  handed every member the real slug of masked members (the PR #111 finding). Group-scoped so tokens
+  cannot correlate a member across groups.
+- **Wire them all** (`services/notifications/notification_text_alerts.py`,
+  `models/notifications/signals.py`): every `<type>_whatsapp`/`<type>_sms` preference toggle
+  delivers, via central `post_save` wiring - previously only safety check-ins and DMs read their
+  toggles and every other stored preference silently did nothing.
+- **Option (a): a validation endpoint** (`controllers/account.py`): E2EE signup/password flows
+  validate the raw password server-side through a dedicated rate-limited endpoint (option a),
+  rather than duplicating every configured validator's rules in TypeScript and keeping them in
+  sync by hand (option b). The raw password crosses HTTPS exactly once, is validated in memory,
+  and is never stored or logged.
+
+## Package `__init__` import ordering in `services/trivia` and `services/spotguessr`
+
+Both packages' `__init__.py` files import their submodules in **dependency order, not
+alphabetical order**, and each carries an `# isort: skip_file` guard. The `session` submodule must
+be imported last: it imports back into the package, so importing it before the package's other
+attributes are set intermittently raises `ImportError: partially initialized module` depending on
+which process triggers the package import first - celery workers hit it, a plain `manage.py
+check` didn't. Letting `ruff --fix` or an editor's organize-imports re-sort either file
+reintroduces the race. (Promoted here 2026-08-15 from the two files' comments, which previously
+pointed at a PROBLEMS.md entry that never existed.)
+
+
+## A floorplan save forks rather than overwrites
+
+Floorplans are hours of hand tracing, so `services/floorplans/resolution.floorplan_for_editing` is
+deliberately narrow about what a save may write into. Only a version the saving profile *owns*, named
+by uuid in the posted document, is updated in place. Everything else - no uuid, an unknown uuid, a
+REData-origin document, or another user's version - creates a new version owned by the saver.
+
+Two ways work would otherwise have been lost, both real:
+
+- Re-dating a loaded plan resolved "the version in force at the new date" and rewrote *that*, so
+  setting `valid_from` on a baseline destroyed the baseline instead of recording a renovation.
+- Resolution is place-scoped, so any user could load - and then overwrite - another user's plan for
+  the same building.
+
+The document's item uuids belong to the version they came from, which is what makes forking safe:
+they don't match the new version's (empty) contents, so `_sync` recreates the items rather than
+moving them off the original.
+
+Reads are profile-scoped for the same reason the writes are careful: a plan names doors, locks and
+key attributes, which is not something to hand to everyone who happens to pin the same building.
+
+
+## The floorplan document is REData's contract, not ours
+
+`services/floorplans/serialization.py` emits and accepts exactly the shape
+`../REData/src/redata/parcels/services/floorplans.py` does, and that is a constraint rather than a
+coincidence: REData's write side **rejects unknown keys outright**, so any field we invent breaks a
+future push upstream, and any field it emits that we ignore is data silently dropped on the way in.
+`FloorplanDocumentContractTests` pins the key sets in both directions.
+
+Two consequences worth knowing before editing that module:
+
+- **Array order is the order.** Items carry a `sort_order` column, assigned from their position in
+  the document, but it is never *emitted* - REData doesn't emit it either, and a second
+  representation of the same fact is a second thing to keep in step. Re-arranging items in an editor
+  survives because the array does.
+- **A reference may name a `key` instead of a uuid.** A client drawing a door on a wall it just drew
+  has no uuid for either, so an item may name itself with a write-only `key` that any reference
+  (`room`, `mounted_on`, `parent`, `connects_rooms`, `spans_floors`, `source`, `references`) can
+  point at. Keys live for one document and are never emitted on read.
+
+`labels` is the one field we add, per item, and it is invisible to the upstream shape.

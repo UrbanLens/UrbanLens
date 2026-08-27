@@ -1,0 +1,26 @@
+{% comment %}
+Collapsible explanation of what each album type does, shown under the create
+form's type picker. Only kinds that carry behaviour beyond plain grouping
+(AlbumKindSpec.badge) need explaining - "Album" is self-describing, and a line
+saying so would be noise.
+
+Expects:
+  album_kind_specs - AlbumKindSpec list
+{% endcomment %}
+<details class="album-kind-explainer">
+  <summary class="album-kind-explainer-summary">
+    <i class="material-symbols-outlined album-kind-explainer-chevron">expand_more</i>
+    <span>What are these types?</span>
+  </summary>
+  <dl class="album-kind-explainer-body">
+    {% for spec in album_kind_specs %}
+    {% if spec.badge %}
+    <dt class="album-kind-explainer-term">
+      <i class="material-symbols-outlined">{{ spec.icon }}</i>
+      {{ spec.label }}
+    </dt>
+    <dd class="album-kind-explainer-def">{{ spec.help_text }}</dd>
+    {% endif %}
+    {% endfor %}
+  </dl>
+</details>

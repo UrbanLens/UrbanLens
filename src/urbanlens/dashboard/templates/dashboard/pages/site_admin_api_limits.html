@@ -122,6 +122,11 @@
                         <input type="number" id="cp30-{{ cfg.service }}" name="calls_per_30_days"
                                value="{{ cfg.calls_per_30_days|default:'' }}" min="1" max="100000000" placeholder="∞">
                     </div>
+                    <div class="form-row">
+                        <label for="mis-{{ cfg.service }}" title="Minimum seconds required between consecutive calls, enforced independently of the budgets above">Min interval (s)</label>
+                        <input type="number" id="mis-{{ cfg.service }}" name="min_interval_seconds"
+                               value="{{ cfg.min_interval_seconds|default:'' }}" min="0" step="0.1" placeholder="none">
+                    </div>
                     <div class="form-row form-row--notes">
                         <label for="notes-{{ cfg.service }}">Notes</label>
                         <textarea id="notes-{{ cfg.service }}" name="notes" rows="2"
@@ -139,6 +144,55 @@
     </div>
     {% endfor %}
     </div>
+
+    {% if redata_capabilities %}
+    <section class="api-limits-capabilities card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">hub</i>
+            <h3>REData capabilities</h3>
+        </div>
+        <div class="card__body">
+            <p class="api-limits-capabilities-note">
+                What the connected REData instance can answer, generated from its own provider
+                registries. A pinned radius means the provider answers at its own radius whatever
+                is requested; billable providers are excluded from REData's speculative fetches.
+            </p>
+            <div class="table-scroll">
+                <table class="api-limits-capabilities-table">
+                    <thead>
+                        <tr><th>Domain</th><th>Endpoint</th><th>Prewarmed</th><th>Providers</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for domain in redata_capabilities.domains %}
+                        <tr>
+                            <td>{{ domain.label|default:domain.tag }}</td>
+                            <td><code>{{ domain.endpoint }}</code></td>
+                            <td>{{ domain.prewarmed|yesno:"yes,no" }}</td>
+                            <td>
+                                {% for provider in domain.providers %}
+                                <span class="api-limits-capability-provider">{{ provider.tag }}{% if provider.billable %} ($){% endif %}{% if provider.radius_pinned %} [pinned]{% endif %}</span>{% if not forloop.last %}, {% endif %}
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% for domain in redata_capabilities.text_domains %}
+                        <tr>
+                            <td>{{ domain.label|default:domain.tag }} (text search)</td>
+                            <td><code>{{ domain.endpoint }}</code></td>
+                            <td>-</td>
+                            <td>
+                                {% for provider in domain.providers %}
+                                <span class="api-limits-capability-provider">{{ provider.tag }}{% if provider.billable %} ($){% endif %}</span>{% if not forloop.last %}, {% endif %}
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    {% endif %}
 </div>
 {% endblock %}
 

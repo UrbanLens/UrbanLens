@@ -14,17 +14,6 @@ class AiProviderChoice(TextChoices):
     ANTHROPIC = "anthropic", "Anthropic (Claude)"
 
 
-class SearchProviderChoice(TextChoices):
-    """Web search provider options for pin search panels."""
-
-    BRAVE = "brave", "Brave Search"
-    GOOGLE = "google", "Google Custom Search"
-    SEARXNG = "searxng", "SearXNG (self-hosted, free)"
-    DUCKDUCKGO = "duckduckgo", "DuckDuckGo Instant Answer (free)"
-    MOJEEK = "mojeek", "Mojeek Search"
-    MARGINALIA = "marginalia", "Marginalia Search"
-
-
 class EnvironmentOverrideChoice(TextChoices):
     """Site environment override - falls back to ``UL_ENVIRONMENT`` when DEFAULT."""
 

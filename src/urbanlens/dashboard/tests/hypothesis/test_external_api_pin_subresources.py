@@ -29,9 +29,9 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visits.model import PinVisit
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 #: Every scope these endpoints need. The default grant a new key gets omits
 #: the visit scopes, so tests that touch visits must set this explicitly.
@@ -208,7 +208,7 @@ class PinVisitEndpointTests(SubResourceTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.visited_at = timezone.now() - timedelta(days=1)
+        self.visited_at = timezone.now() - timedelta(days=10)
 
     def test_create_returns_201_and_updates_last_visited(self) -> None:
         response = self._post(f"{_base(self.pin)}visits/", {"visited_at": self.visited_at.isoformat()})

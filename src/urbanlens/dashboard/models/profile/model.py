@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.contrib.auth.models import User
 from django.core.validators import MaxLengthValidator
@@ -19,6 +19,7 @@ from django.db.models import (
     IntegerField,
     JSONField,
     OneToOneField,
+    Q,
     SlugField,
     TextChoices,
     TextField,
@@ -27,11 +28,29 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
-from urbanlens.dashboard.models.profile.meta import DistanceUnit, GuidanceLevel, MapCenterMode, MapViewChoice, SyncAliasesDirection, ThemeChoice, VisibilityChoice
+from urbanlens.dashboard.models.fields import EncryptedTextField
+from urbanlens.dashboard.models.profile.meta import (
+    DistanceUnit,
+    ExploringWithOthersPreference,
+    FriendRequestPreference,
+    GuidanceLevel,
+    MapCenterMode,
+    MapViewChoice,
+    MeetupPreference,
+    PhotoSharingPreference,
+    PhotoTaggingPreference,
+    PhotoTakingPreference,
+    PhotoUsagePreference,
+    SyncAliasesDirection,
+    ThemeChoice,
+    VisibilityChoice,
+)
 from urbanlens.dashboard.models.profile.queryset import ProfileManager
-from urbanlens.dashboard.services.text_limits import MAX_PROFILE_BIO_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_ADDITIONAL_PREFERENCES_LENGTH, MAX_PREFERENCE_OTHER_LENGTH, MAX_PROFILE_BIO_LENGTH
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from django.db.models import Manager as DjangoManager
 
     from urbanlens.dashboard.models.labels.queryset import LabelManager
@@ -80,12 +99,18 @@ _COMMUNITY_GATED_SYNC_FIELDS = (
 
 
 def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
-    """Great-circle distance in kilometres between two (lat, lng) points."""
-    lat1, lng1 = math.radians(p1[0]), math.radians(p1[1])
-    lat2, lng2 = math.radians(p2[0]), math.radians(p2[1])
-    dlat, dlng = lat2 - lat1, lng2 - lng1
-    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng / 2) ** 2
-    return 6_371.0 * 2 * math.asin(math.sqrt(a))
+    """Great-circle distance between two (latitude, longitude) pairs, in km.
+
+    Args:
+        p1: First (latitude, longitude).
+        p2: Second (latitude, longitude).
+
+    Returns:
+        Distance in kilometres.
+    """
+    from urbanlens.dashboard.services.geo.distance import haversine_km
+
+    return haversine_km(p1[0], p1[1], p2[0], p2[1])
 
 
 # Rough lat/lng bounding boxes for the regions that use miles for everyday road
@@ -128,10 +153,146 @@ class Profile(abstract.PublicDashboardModel):
     # never agreed - existing accounts are backfilled to their profile creation
     # date (accepting terms is implied by having used the site already).
     tos_accepted_at = DateTimeField(null=True, blank=True)
-    bio = TextField(null=True, blank=True, max_length=MAX_PROFILE_BIO_LENGTH, validators=[MaxLengthValidator(MAX_PROFILE_BIO_LENGTH)])
-    area = CharField(max_length=255, null=True, blank=True)
+    # "Not now" on the post-login add-a-passkey-or-password prompt snoozes it
+    # until this moment (see PostLoginRedirectView). Profile-persisted rather
+    # than session-persisted deliberately: the old per-session flag re-nagged
+    # SSO users on every signin, which trained them to dismiss security
+    # prompts. Null = never snoozed.
+    credential_prompt_snoozed_until = DateTimeField(null=True, blank=True)
+    bio = EncryptedTextField(null=True, blank=True, fail_soft=True, max_length=MAX_PROFILE_BIO_LENGTH, validators=[MaxLengthValidator(MAX_PROFILE_BIO_LENGTH)])
+    area = EncryptedTextField(null=True, blank=True, fail_soft=True)
     birth_date = DateField(null=True, blank=True)
     started_exploring = DateField(null=True, blank=True)
+
+    # Interaction preferences. Public presentation, like bio/area above - shown
+    # on the profile page so other users know how this person prefers to be
+    # treated, on or off this site. Purely informational for now: nothing here
+    # is technically enforced (see PREFERENCE_FIELDS/preference_display below
+    # for the display-only surface this backs). Left blank rather than
+    # defaulted, so an unanswered preference is distinguishable from an
+    # explicit "yes" and the profile page can omit it entirely.
+    #
+    # The free-text halves are encrypted despite being displayed publicly, for
+    # the same reason bio/area are: encryption at rest defends the DB dump, not
+    # the rendered page. The fixed-choice halves stay plaintext - one of a
+    # handful of enum values reveals almost nothing to a dump, and they still
+    # need to work with get_<field>_display() and any future filtering.
+    photo_taking_preference = CharField(
+        max_length=20,
+        choices=PhotoTakingPreference.choices,
+        blank=True,
+        default="",
+        help_text="Whether you're OK with people taking your photo, on or off this site.",
+    )
+    photo_taking_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
+
+    photo_sharing_preference = CharField(
+        max_length=20,
+        choices=PhotoSharingPreference.choices,
+        blank=True,
+        default="",
+        help_text="Whether you're OK with people sharing or posting your photo, on or off this site.",
+    )
+    photo_sharing_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
+
+    photo_tagging_preference = CharField(
+        max_length=20,
+        choices=PhotoTaggingPreference.choices,
+        blank=True,
+        default="",
+        help_text="Whether you're OK with being tagged or identified in photos, on or off this site.",
+    )
+    photo_tagging_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
+
+    photo_usage_preference = CharField(
+        max_length=20,
+        choices=PhotoUsagePreference.choices,
+        blank=True,
+        default="",
+        help_text="Whether you're OK with people using your photos, on or off this site.",
+    )
+    photo_usage_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
+
+    # Distinct from friend_request_visibility (below): that setting is a
+    # technical gate on who *can* send a request, this is a social statement
+    # of when this profile *welcomes* one.
+    friend_request_preference = CharField(
+        max_length=20,
+        choices=FriendRequestPreference.choices,
+        blank=True,
+        default="",
+        help_text="When you're open to receiving friend requests.",
+    )
+    friend_request_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
+
+    meetup_preference = CharField(
+        max_length=20,
+        choices=MeetupPreference.choices,
+        blank=True,
+        default="",
+        help_text="Whether you're interested in meetups with other users.",
+    )
+    meetup_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
+
+    exploring_with_others_preference = CharField(
+        max_length=20,
+        choices=ExploringWithOthersPreference.choices,
+        blank=True,
+        default="",
+        help_text="Whether you prefer to explore locations solo or with others.",
+    )
+    exploring_with_others_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
+
+    additional_preferences = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_ADDITIONAL_PREFERENCES_LENGTH,
+        validators=[MaxLengthValidator(MAX_ADDITIONAL_PREFERENCES_LENGTH)],
+        fail_soft=True,
+        help_text="Anything else you'd like other users to know about interacting with you.",
+    )
 
     # Privacy settings
     profile_visibility = CharField(
@@ -179,13 +340,17 @@ class Profile(abstract.PublicDashboardModel):
     # single indexed query instead of a full-table Python scan.
     primary_email_normalized = CharField(max_length=254, blank=True, default="", db_index=True)
 
-    # Contact information and its visibility
-    phone_number = CharField(max_length=30, blank=True, default="")
-    signal_username = CharField(max_length=100, blank=True, default="")
-    discord_username = CharField(max_length=100, blank=True, default="")
-    whatsapp_number = CharField(max_length=30, blank=True, default="")
-    telegram_username = CharField(max_length=100, blank=True, default="")
-    matrix_handle = CharField(max_length=200, blank=True, default="")
+    # Contact information and its visibility. Encrypted at rest - none of these are
+    # ever looked up by value (access is gated by contact_visibility at the app layer,
+    # not by a DB query), so there's no lookup/index/uniqueness to preserve. fail_soft
+    # because Profile loads on nearly every request: an undecryptable row must degrade
+    # to a blank field, not 500 the whole site (see EncryptedTextField).
+    phone_number = EncryptedTextField(blank=True, default="", fail_soft=True)
+    signal_username = EncryptedTextField(blank=True, default="", fail_soft=True)
+    discord_username = EncryptedTextField(blank=True, default="", fail_soft=True)
+    whatsapp_number = EncryptedTextField(blank=True, default="", fail_soft=True)
+    telegram_username = EncryptedTextField(blank=True, default="", fail_soft=True)
+    matrix_handle = EncryptedTextField(blank=True, default="", fail_soft=True)
     contact_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
@@ -302,6 +467,10 @@ class Profile(abstract.PublicDashboardModel):
 
     # AI feature preferences (only relevant when the user has an AI subscription).
     ai_enabled = BooleanField(default=True, help_text="Allow AI features on your account.")
+    # Auto-tagging is on for everyone who has the capability - the interesting
+    # setting is turning it *off*, so this is phrased as the exception rather
+    # than making every user opt in to something they were granted.
+    disable_auto_tagging = BooleanField(default=False, help_text="Turn off automatic tagging of your pins. Individual labels can also be excluded on the Organize page.")
     ai_label_tags = BooleanField(default=False, help_text="AI can automatically suggest and add tags when a pin is created.")
     ai_label_categories = BooleanField(default=False, help_text="AI can automatically suggest and add categories when a pin is created.")
     ai_label_statuses = BooleanField(default=False, help_text="AI can automatically suggest and add statuses when a pin is created.")
@@ -344,8 +513,13 @@ class Profile(abstract.PublicDashboardModel):
     # affect the viewer's own pin pages, which always show their chosen cover.
     show_wiki_cover_photos = BooleanField(default=True, help_text="Show the community-selected cover photo banner on wiki pages.")
 
+    # Purely cosmetic opt-in - has no bearing on whether the user actually holds
+    # an active subscription (see is_supporter below), only on whether a badge
+    # is shown when they do.
+    show_supporter_badge = BooleanField(default=True, help_text="Show a small supporter badge next to your name when you have an active subscription.")
+
     # Mirrors what already happens automatically for community wikis (see
-    # services.wiki_seed) - when a Wikipedia article is confidently matched to
+    # services.wiki.wiki_seed) - when a Wikipedia article is confidently matched to
     # one of your pins and it doesn't have an article yet, start one from that
     # extract instead of leaving it blank. Never overwrites an existing
     # article (seeded or human-written) - see seed_pin_article_from_wikipedia's
@@ -359,24 +533,30 @@ class Profile(abstract.PublicDashboardModel):
     # nesting existing top-level pins that fall inside the property boundary.
     # Off silences the suggestion everywhere at once; declining it on a single
     # pin instead is per-pin and permanent (Pin.restructure_offer_dismissed).
-    # See services.pin_restructure.
+    # See services.pins.pin_restructure.
     suggest_pin_restructure = BooleanField(default=True, help_text="Offer to organize pins into buildings and child pins when you open a property that has several.")
+
+    # Whether confidently-identified buildings on a multi-building property
+    # become child pins automatically, without the dialog. Only buildings the
+    # data is sure about are created this way; ambiguous ones always stay in
+    # the "add buildings" list. See services.pins.auto_nest.
+    auto_create_building_pins = BooleanField(default=True, help_text="Automatically add child pins for the buildings on a property when they are confidently identified. Ambiguous buildings still wait for your approval.")
 
     # Master switch for the whole pin-suggestion surface (Memories -> Locations).
     # Off overrides every per-source toggle below: no new suggestions are
     # created and any already-pending ones are hidden (not deleted) - see
-    # services.pin_suggestions.pending_suggestions_for_profile.
+    # services.pins.pin_suggestions.pending_suggestions_for_profile.
     pin_suggestions_enabled = BooleanField(default=True, help_text="Suggest pins based on your photos, public locations, and connected apps.")
 
     # Whether community-approved public locations appear in this profile's
     # suggestion queue. Public locations are the (rare) outcome of the
-    # public-pin vote - see services.public_pins. Off both stops new
+    # public-pin vote - see services.pins.public_pins. Off both stops new
     # suggestions from being created and hides any pending ones.
     suggest_public_pins = BooleanField(default=True, help_text="Suggest community-approved public locations that you haven't pinned yet.")
 
     # Whether Immich/local-folder photo scans may raise pin suggestions. Off
     # both stops new suggestions from being created (see
-    # services.pin_suggestions.ingest_location_hits) and hides any pending ones.
+    # services.pins.pin_suggestions.ingest_location_hits) and hides any pending ones.
     suggest_pins_from_photos = BooleanField(default=True, help_text="Suggest pins found by scanning your Immich library or local photo folders.")
 
     # Whether external apps (via the Pin Suggestions API endpoint) may raise
@@ -442,7 +622,7 @@ class Profile(abstract.PublicDashboardModel):
     # toggles below/elsewhere that remain independently adjustable.
     external_apis_enabled = BooleanField(default=True, help_text="Allow external services (weather, geocoding, place data, AI) to retrieve anonymized research data for you.")
 
-    # Ordered list of enabled homepage widget keys (see services.home_widgets),
+    # Ordered list of enabled homepage widget keys (see services.home.home_widgets),
     # e.g. ["stats", "recent_photos", ...]. Empty = never customized - the
     # homepage falls back to every widget, in the registry's default order.
     # Widgets omitted here are simply disabled, not deleted - re-enabling one
@@ -533,6 +713,23 @@ class Profile(abstract.PublicDashboardModel):
         """Whether button hover/focus hints should be shown."""
         return self.guidance_level != GuidanceLevel.NONE
 
+    @property
+    def is_supporter(self) -> bool:
+        """Whether this user currently holds an active subscription, paid or admin-granted."""
+        from urbanlens.dashboard.models.subscriptions.model import active_subscription_roles
+
+        return bool(active_subscription_roles(self.user))
+
+    @property
+    def display_supporter_badge(self) -> bool:
+        """Whether the supporter badge should actually be rendered next to this profile's name.
+
+        Requires both an active subscription and the user's own opt-in - the
+        two are independent so a badge never appears for a lapsed subscriber
+        just because they left the toggle on.
+        """
+        return self.show_supporter_badge and self.is_supporter
+
     def best_known_point(self) -> tuple[float, float] | None:
         """Return a representative (lat, lng) for this profile without extra computation.
 
@@ -592,6 +789,52 @@ class Profile(abstract.PublicDashboardModel):
     def full_name(self):
         return self.user.get_full_name()
 
+    # Registry pairing each interaction-preference field with its public label,
+    # so both the profile template and preference_display/interaction_preferences
+    # below can iterate them without a hard-coded per-field template block.
+    # Extend this tuple alongside a new pair of model fields to add another
+    # preference category - nothing else needs to change to surface it.
+    PREFERENCE_FIELDS: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("photo_taking_preference", "Taking Photos of Me"),
+        ("photo_sharing_preference", "Sharing Photos of Me"),
+        ("photo_tagging_preference", "Tagging Me in Photos"),
+        ("photo_usage_preference", "Using My Photos"),
+        ("friend_request_preference", "Friend Requests"),
+        ("meetup_preference", "Meetups"),
+        ("exploring_with_others_preference", "Exploring with Others"),
+    )
+
+    def preference_display(self, field: str) -> str:
+        """Return the human-readable value of one interaction-preference field.
+
+        Falls back to the paired ``<field>_other`` free-text note when the
+        stored choice is "other" and that note is non-blank; otherwise returns
+        the choice's display label, or "" when the preference is unset.
+
+        Args:
+            field: One of the field names in ``PREFERENCE_FIELDS``.
+
+        Returns:
+            The text to show for this preference, or "" if unanswered.
+        """
+        value = getattr(self, field)
+        if not value:
+            return ""
+        if value == "other":
+            other_text = getattr(self, f"{field}_other", "")
+            if other_text:
+                return other_text
+        return getattr(self, f"get_{field}_display")()
+
+    @property
+    def interaction_preferences(self) -> list[dict[str, str]]:
+        """This profile's answered interaction preferences, for display.
+
+        Omits any preference left unset entirely, rather than showing a
+        blank - see ``PREFERENCE_FIELDS`` for the field/label pairs.
+        """
+        return [{"field": field, "label": label, "value": self.preference_display(field)} for field, label in self.PREFERENCE_FIELDS if self.preference_display(field)]
+
     def _slugify_base(self) -> str:
         return self.user.username or "user"
 
@@ -610,6 +853,7 @@ class Profile(abstract.PublicDashboardModel):
             with resolvable coordinates.
         """
         from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.services.geo.longitude import circular_mean_longitude
 
         # A Pin's coordinates live on its linked Location (see AddressableModel).
         rows = list(Pin.objects.filter(profile=self).values_list("location__latitude", "location__longitude"))
@@ -627,7 +871,10 @@ class Profile(abstract.PublicDashboardModel):
         seed = pts[best_idx]
         cluster = [p for p in pts if _haversine_km(seed, p) <= _CLUSTER_RADIUS_KM]
         avg_lat = sum(p[0] for p in cluster) / len(cluster)
-        avg_lng = sum(p[1] for p in cluster) / len(cluster)
+        # Circular mean: the cluster is found with haversine (which handles the
+        # wrap), but averaging its longitudes arithmetically put a user whose
+        # pins straddle the date line at longitude 0 - in the Atlantic.
+        avg_lng = circular_mean_longitude([p[1] for p in cluster])
 
         Profile.objects.filter(pk=self.pk).update(
             map_center_latitude=avg_lat,
@@ -762,24 +1009,22 @@ class Profile(abstract.PublicDashboardModel):
 
     @staticmethod
     def _have_common_pin(subject: Profile, other: Profile) -> bool:
-        """Return True when both profiles have pinned at least one shared Location.
+        """Return True when both profiles have pinned at least one shared place.
 
         Args:
             subject: One profile of the pair.
             other: The other profile.
 
         Returns:
-            True when the profiles' pinned location sets intersect.
+            True when the profiles' pinned places intersect - keyed by Place
+            where a pin's location has one, falling back to the exact
+            Location otherwise (see
+            ``services.pins.common_pins.pinned_place_keys``), so two pins
+            fifty metres apart on the same parcel still count as shared.
         """
-        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.services.pins.common_pins import pinned_place_keys
 
-        my_locs = set(
-            Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", flat=True),
-        )
-        their_locs = set(
-            Pin.objects.filter(profile=other, location__isnull=False).values_list("location_id", flat=True),
-        )
-        return bool(my_locs & their_locs)
+        return bool(pinned_place_keys(subject) & pinned_place_keys(other))
 
     @staticmethod
     def _have_common_friend(subject: Profile, other: Profile) -> bool:
@@ -964,6 +1209,236 @@ class Profile(abstract.PublicDashboardModel):
         from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 
         return DirectMessage.objects.filter(sender=self, recipient=sender).exists()
+
+    @staticmethod
+    def visible_profile_pks(viewer: Profile | None, subjects: Sequence[Profile]) -> set[int]:
+        """Batch equivalent of :meth:`can_view_profile` over many subjects at once.
+
+        ``can_view_profile`` costs a fixed number of queries *per subject*, and every
+        relationship helper it reaches rebuilds the **viewer's** own set (pinned
+        locations, accepted friends, trip ids) on each call. Rendering a list of people
+        - a conversation list, a member list - therefore scaled linearly: the sidebar
+        conversation list measured about eleven queries per row.
+
+        This resolves the viewer's sets once and answers every subject from them, so the
+        cost is fixed regardless of how many subjects there are.
+
+        Semantics must match ``can_view_profile`` exactly, since a divergence here shows
+        a real name where the single-subject path would have masked it.
+        ``test_identity_visibility_batch`` asserts the two agree across every
+        ``VisibilityChoice`` and relationship combination rather than trusting this
+        reimplementation.
+
+        Args:
+            viewer: The profile viewing, or None for an anonymous viewer.
+            subjects: The profiles whose visibility is being resolved.
+
+        Returns:
+            The pks of the subjects whose identity ``viewer`` may see.
+        """
+        from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        subjects = list(subjects)
+        visible = {subject.pk for subject in subjects if subject.profile_visibility == VisibilityChoice.ANYONE}
+        if viewer is None:
+            return visible
+        visible |= {subject.pk for subject in subjects if subject.pk == viewer.pk}
+
+        # NO_ONE subjects skip the visibility gates but must still reach the
+        # temporary-access fallback below, exactly as can_view_profile does - an
+        # early return here masked a profile holding a valid grant.
+        undecided = [subject for subject in subjects if subject.pk not in visible and subject.profile_visibility != VisibilityChoice.NO_ONE]
+        pending_pks = {subject.pk for subject in undecided}
+
+        accepted = FriendshipStatus.ACCEPTED
+        friends: set[int] = set()
+        requesters: set[int] = set()
+        if pending_pks:
+            friends = set(
+                Friendship.objects.filter(from_profile=viewer, to_profile__in=pending_pks, status=accepted).values_list("to_profile_id", flat=True),
+            ) | set(
+                Friendship.objects.filter(to_profile=viewer, from_profile__in=pending_pks, status=accepted).values_list("from_profile_id", flat=True),
+            )
+            # Directional, matching has_pending_request_to(subject, viewer): a request
+            # the subject sent opens the subject's own gates to its recipient, one way.
+            requesters = set(
+                Friendship.objects.filter(
+                    from_profile__in=pending_pks,
+                    to_profile=viewer,
+                    status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING),
+                ).values_list("from_profile_id", flat=True),
+            )
+        connected = friends | requesters
+
+        needs = {subject.profile_visibility for subject in undecided if subject.pk not in connected}
+        common_pin: set[int] = set()
+        common_friend: set[int] = set()
+        common_trip: set[int] = set()
+        wants_pin = needs & {VisibilityChoice.COMMON_PIN, VisibilityChoice.ANYTHING_IN_COMMON}
+        wants_friend = needs & {VisibilityChoice.COMMON_FRIEND, VisibilityChoice.ANYTHING_IN_COMMON}
+        wants_trip = needs & {VisibilityChoice.COMMON_TRIP, VisibilityChoice.ANYTHING_IN_COMMON}
+
+        if wants_pin:
+            # Place-aware, not a raw Location match - two pins on the same
+            # parcel fifty metres apart must count as shared (see
+            # services.pins.common_pins.pinned_place_keys, which this mirrors
+            # in batch form rather than per-pair).
+            viewer_place_ids: set[int] = set()
+            viewer_location_ids: set[int] = set()
+            for location_id, place_id in Pin.objects.filter(profile=viewer, location__isnull=False).values_list("location_id", "location__place_id"):
+                (viewer_place_ids if place_id is not None else viewer_location_ids).add(place_id if place_id is not None else location_id)
+            if viewer_place_ids or viewer_location_ids:
+                common_pin = set(
+                    Pin.objects.filter(profile__in=pending_pks).filter(Q(location__place_id__in=viewer_place_ids) | Q(location_id__in=viewer_location_ids)).values_list("profile_id", flat=True),
+                )
+        if wants_friend:
+            viewer_friends = set(
+                Friendship.objects.filter(from_profile=viewer, status=accepted).values_list("to_profile_id", flat=True),
+            ) | set(
+                Friendship.objects.filter(to_profile=viewer, status=accepted).values_list("from_profile_id", flat=True),
+            )
+            if viewer_friends:
+                common_friend = set(
+                    Friendship.objects.filter(from_profile__in=pending_pks, to_profile__in=viewer_friends, status=accepted).values_list("from_profile_id", flat=True),
+                ) | set(
+                    Friendship.objects.filter(to_profile__in=pending_pks, from_profile__in=viewer_friends, status=accepted).values_list("to_profile_id", flat=True),
+                )
+        if wants_trip:
+            viewer_trips = set(TripMembership.objects.trip_ids_for(viewer))
+            if viewer_trips:
+                common_trip = set(
+                    TripMembership.objects.filter(profile__in=pending_pks, trip_id__in=viewer_trips).values_list("profile_id", flat=True),
+                )
+
+        for subject in undecided:
+            visibility = subject.profile_visibility
+            if subject.pk in connected:
+                visible.add(subject.pk)
+                continue
+            if (
+                (visibility == VisibilityChoice.COMMON_PIN and subject.pk in common_pin)
+                or (visibility == VisibilityChoice.COMMON_FRIEND and subject.pk in common_friend)
+                or (visibility == VisibilityChoice.COMMON_TRIP and subject.pk in common_trip)
+                or (visibility == VisibilityChoice.ANYTHING_IN_COMMON and (subject.pk in common_pin or subject.pk in common_friend or subject.pk in common_trip))
+            ):
+                visible.add(subject.pk)
+
+        # The temporary-access fallback, last, exactly as can_view_profile reaches it.
+        remaining = [subject for subject in subjects if subject.pk not in visible]
+        if remaining:
+            visible |= DirectMessageTemporaryAccess.granted_profile_pks({subject.pk for subject in remaining}, viewer.pk)
+        return visible
+
+    @staticmethod
+    def viewers_who_can_see(subject: Profile, viewers: Sequence[Profile]) -> set[int]:
+        """Batch equivalent of :meth:`can_view_profile` over many *viewers* of one subject.
+
+        The mirror of :meth:`visible_profile_pks`, and a genuinely different
+        question: that one renders a list of people to one viewer, this one
+        shows one person's name to a roomful. A group message carries its
+        sender's name, so the name has to be resolved through every recipient's
+        own visibility - once per recipient, which is a query each, twice per
+        send (the notification and the live payload are built separately).
+
+        Simpler than the other direction despite the symmetry, because there is
+        exactly one subject: ``profile_visibility`` is a single value, so the
+        per-subject branch tree collapses to one case rather than being
+        evaluated per row.
+
+        Semantics must match ``can_view_profile`` exactly - a divergence here
+        shows a real name to someone the single-viewer path would have masked
+        it from. ``test_identity_visibility_batch`` asserts the two agree across
+        every ``VisibilityChoice`` and relationship combination rather than
+        trusting this reimplementation.
+
+        Args:
+            subject: The profile whose identity is being displayed.
+            viewers: The profiles it would be displayed to. Anonymous viewers
+                are not expressible here; the call sites that need this all
+                hold real profiles, and ``can_view_profile(None)`` is a single
+                cheap check on the subject alone.
+
+        Returns:
+            The pks of the viewers who may see ``subject``'s identity.
+        """
+        from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        viewer_pks = {viewer.pk for viewer in viewers}
+        if not viewer_pks:
+            return set()
+        if subject.profile_visibility == VisibilityChoice.ANYONE:
+            return set(viewer_pks)
+
+        # Checked before the visibility setting, exactly as can_view_profile
+        # does - a NO_ONE subject can still see themselves.
+        visible = {subject.pk} & viewer_pks
+        pending = viewer_pks - visible
+
+        # NO_ONE skips the gates but must still reach the temporary-access
+        # fallback below, which is where an early return would go wrong.
+        if pending and subject.profile_visibility != VisibilityChoice.NO_ONE:
+            accepted = FriendshipStatus.ACCEPTED
+            connected = set(
+                Friendship.objects.filter(from_profile=subject, to_profile__in=pending, status=accepted).values_list("to_profile_id", flat=True),
+            ) | set(
+                Friendship.objects.filter(to_profile=subject, from_profile__in=pending, status=accepted).values_list("from_profile_id", flat=True),
+            )
+            # Directional, matching has_pending_request_to(subject, viewer): a
+            # request the subject sent opens their own gates to its recipient,
+            # one way. The other direction is not the same courtesy.
+            connected |= set(
+                Friendship.objects.filter(
+                    from_profile=subject,
+                    to_profile__in=pending,
+                    status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING),
+                ).values_list("to_profile_id", flat=True),
+            )
+            visible |= connected
+
+            undecided = pending - connected
+            visibility = subject.profile_visibility
+            wants_pin = undecided and visibility in (VisibilityChoice.COMMON_PIN, VisibilityChoice.ANYTHING_IN_COMMON)
+            wants_friend = undecided and visibility in (VisibilityChoice.COMMON_FRIEND, VisibilityChoice.ANYTHING_IN_COMMON)
+            wants_trip = undecided and visibility in (VisibilityChoice.COMMON_TRIP, VisibilityChoice.ANYTHING_IN_COMMON)
+
+            if wants_pin:
+                # Place-aware, not a raw Location match - see the matching
+                # comment in visible_profile_pks above.
+                subject_place_ids: set[int] = set()
+                subject_location_ids: set[int] = set()
+                for location_id, place_id in Pin.objects.filter(profile=subject, location__isnull=False).values_list("location_id", "location__place_id"):
+                    (subject_place_ids if place_id is not None else subject_location_ids).add(place_id if place_id is not None else location_id)
+                if subject_place_ids or subject_location_ids:
+                    visible |= set(
+                        Pin.objects.filter(profile_id__in=undecided).filter(Q(location__place_id__in=subject_place_ids) | Q(location_id__in=subject_location_ids)).values_list("profile_id", flat=True),
+                    )
+            if wants_friend:
+                subject_friends = set(
+                    Friendship.objects.filter(from_profile=subject, status=accepted).values_list("to_profile_id", flat=True),
+                ) | set(
+                    Friendship.objects.filter(to_profile=subject, status=accepted).values_list("from_profile_id", flat=True),
+                )
+                if subject_friends:
+                    visible |= set(
+                        Friendship.objects.filter(from_profile_id__in=undecided, to_profile_id__in=subject_friends, status=accepted).values_list("from_profile_id", flat=True),
+                    ) | set(
+                        Friendship.objects.filter(to_profile_id__in=undecided, from_profile_id__in=subject_friends, status=accepted).values_list("to_profile_id", flat=True),
+                    )
+            if wants_trip:
+                subject_trips = set(TripMembership.objects.trip_ids_for(subject))
+                if subject_trips:
+                    visible |= set(TripMembership.objects.filter(profile_id__in=undecided, trip_id__in=subject_trips).values_list("profile_id", flat=True))
+
+        remaining = viewer_pks - visible
+        if remaining:
+            visible |= DirectMessageTemporaryAccess.granting_viewer_pks(subject.pk, remaining)
+        return visible
 
     def can_view_profile(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's identity (name, etc).

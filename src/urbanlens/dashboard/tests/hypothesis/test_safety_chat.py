@@ -14,6 +14,7 @@ import json
 import uuid
 
 from asgiref.sync import async_to_sync
+from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
 from django.test import TransactionTestCase, override_settings
@@ -119,6 +120,46 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
 
         await comm.send_to(text_data=json.dumps({"body": "   "}))
         self.assertTrue(await comm.receive_nothing(timeout=0.2))
+
+        await comm.disconnect()
+
+    def test_heartbeat_ping_is_ignored(self):
+        _run(self._heartbeat_ping_is_ignored())
+
+    async def _heartbeat_ping_is_ignored(self):
+        # The client pings every 45s so Cloudflare's ~100s idle cutoff can't kill
+        # the socket (ts/shared/live-socket.ts). It must not be answered, and it
+        # must not be mistaken for a message: this consumer saves whatever it's
+        # sent, and a chat log full of empty 45-second entries would be the result.
+        comm = self._owner_communicator()
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+
+        await comm.send_to(text_data=json.dumps({"type": "ping"}))
+        self.assertTrue(await comm.receive_nothing(timeout=0.2))
+        self.assertEqual(await database_sync_to_async(self.checkin.messages.count)(), 0)
+
+        # The connection survives it - a real message still goes through after.
+        await comm.send_to(text_data=json.dumps({"body": "Still here"}))
+        self.assertEqual(json.loads(await comm.receive_from())["body"], "Still here")
+
+        await comm.disconnect()
+
+    def test_non_object_frame_is_ignored(self):
+        _run(self._non_object_frame_is_ignored())
+
+    async def _non_object_frame_is_ignored(self):
+        # Valid JSON that isn't a frame. Before the isinstance guard this raised
+        # AttributeError inside receive() and took the connection down with it.
+        comm = self._owner_communicator()
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+
+        await comm.send_to(text_data=json.dumps([1, 2, 3]))
+        self.assertTrue(await comm.receive_nothing(timeout=0.2))
+
+        await comm.send_to(text_data=json.dumps({"body": "Still here"}))
+        self.assertEqual(json.loads(await comm.receive_from())["body"], "Still here")
 
         await comm.disconnect()
 

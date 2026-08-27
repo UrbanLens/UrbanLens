@@ -35,20 +35,21 @@ class LocationDataOverviewFieldsAdapterTests(SimpleTestCase):
     def test_unknown_source_key_yields_none(self) -> None:
         self.assertIsNone(self.controller._location_data_overview_fields("not_a_real_source", {"name": "Test"}))
 
-    def test_photon_with_no_name_yields_none(self) -> None:
+    def test_photon_with_no_locality_yields_none(self) -> None:
         self.assertIsNone(self.controller._location_data_overview_fields("photon", {}))
 
     def test_photon_adapts_address_into_fields(self) -> None:
         piece = self.controller._location_data_overview_fields(
             "photon",
-            {"name": "Test Place", "osm_value": "cafe", "housenumber": "10", "street": "Main St", "city": "Poughkeepsie", "osm_url": "https://openstreetmap.org/way/1"},
+            {"locality": "Poughkeepsie", "region": "New York", "country": "United States", "house_number": "10", "street": "Main St"},
         )
         assert piece is not None
-        self.assertEqual(piece["heading_name"], "Test Place")
-        self.assertEqual(piece["chips"], ["Cafe"])
+        self.assertEqual(piece["heading_name"], "Poughkeepsie")
+        self.assertEqual(piece["chips"], [])
         self.assertIn({"label": "Street", "value": "10 Main St"}, piece["fields"])
-        self.assertIn({"label": "City", "value": "Poughkeepsie"}, piece["fields"])
-        self.assertEqual(piece["footer_link"], {"url": "https://openstreetmap.org/way/1", "label": "View raw OSM entry"})
+        self.assertIn({"label": "Region", "value": "New York"}, piece["fields"])
+        self.assertNotIn({"label": "Locality", "value": "Poughkeepsie"}, piece["fields"])
+        self.assertIsNone(piece["footer_link"])
 
     def test_nominatim_with_no_name_yields_none(self) -> None:
         self.assertIsNone(self.controller._location_data_overview_fields("nominatim", {}))
@@ -138,7 +139,7 @@ class LocationDataOverviewEndpointTests(TestCase):
         self.assertIn("open_elevation", scheduled_keys)
 
     def test_renders_ready_sources_merged(self) -> None:
-        LocationCache.set(self.pin.location, "photon", {"name": "Ready Place", "osm_value": "cafe"}, query_key="")
+        LocationCache.set(self.pin.location, "photon", {"locality": "Ready Place"}, query_key="")
         LocationCache.set(self.pin.location, "open_elevation", {"elevation_m": 100.0}, query_key="")
         with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source"):
             response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
@@ -148,7 +149,7 @@ class LocationDataOverviewEndpointTests(TestCase):
 
     def test_no_per_source_headers_or_titles_leak_into_the_merged_view(self) -> None:
         """The whole point of the merge: no "Photon"/"Building Characteristics" headers."""
-        LocationCache.set(self.pin.location, "photon", {"name": "Ready Place", "osm_value": "cafe", "city": "Testville"}, query_key="")
+        LocationCache.set(self.pin.location, "photon", {"locality": "Ready Place", "region": "Testville"}, query_key="")
         LocationCache.set(
             self.pin.location,
             "overture_building_attributes",
@@ -165,7 +166,7 @@ class LocationDataOverviewEndpointTests(TestCase):
 
     def test_partial_results_keep_self_polling(self) -> None:
         """Some sources ready, others still pending - render now, but keep polling."""
-        LocationCache.set(self.pin.location, "photon", {"name": "Ready Place", "osm_value": "cafe"}, query_key="")
+        LocationCache.set(self.pin.location, "photon", {"locality": "Ready Place"}, query_key="")
         with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source"):
             response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)
@@ -188,7 +189,7 @@ class LocationDataOverviewEndpointTests(TestCase):
 
     def test_a_settled_but_empty_source_is_flagged_even_when_others_are_ready(self) -> None:
         """Photon has real data; nominatim settled with nothing - only nominatim should be flagged."""
-        LocationCache.set(self.pin.location, "photon", {"name": "Ready Place", "osm_value": "cafe"}, query_key="")
+        LocationCache.set(self.pin.location, "photon", {"locality": "Ready Place"}, query_key="")
         LocationCache.set(self.pin.location, "nominatim", {}, query_key="")
         with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source"):
             response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))

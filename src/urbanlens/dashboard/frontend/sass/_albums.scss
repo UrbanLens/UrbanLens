@@ -1,0 +1,770 @@
+@use 'variables' as *;
+
+// -- Albums (Photos tab on pin detail + wiki) -------------------------------
+// The photo grids themselves reuse .gallery-grid/.gallery-item from _gallery.scss;
+// everything here is the album shell around them.
+//
+// Layout rule for this surface: the main column holds album covers and photos
+// and nothing else. Configuration (custom order, delete, the map, the "add
+// existing" picker) lives in the header's overflow menu or in a panel the user
+// opens, so the page reads as content rather than as a control panel.
+
+$album-gutter: 1rem;
+
+.albums-panel {
+    padding-bottom: 1rem;
+}
+
+// -- Section header ---------------------------------------------------------
+
+.albums-toolbar {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .85rem $album-gutter .35rem;
+}
+
+.albums-toolbar-title {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    flex: 1;
+    min-width: 0;
+}
+
+.albums-count {
+    padding: .05rem .45rem;
+    border-radius: 999px;
+    border: 1px solid var(--ul-surface-border);
+    font-size: .8rem;
+    font-weight: 500;
+    opacity: .8;
+}
+
+// -- Create form ------------------------------------------------------------
+// Hidden until "New album" is pressed. The [hidden] rule is load-bearing: a
+// bare `hidden` attribute loses to any class that sets `display`, which is
+// exactly how this form ended up permanently visible.
+
+.album-create-form {
+    display: block;
+    margin: .25rem $album-gutter .75rem;
+    padding: .85rem;
+    border: 1px solid var(--ul-surface-border);
+    border-radius: 10px;
+    background: var(--ul-control-bg);
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.album-create-fields {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: .75rem;
+}
+
+.album-create-field {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    flex: 0 1 12rem;
+
+    &--name {
+        flex: 1 1 16rem;
+    }
+}
+
+.album-create-label {
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--ul-grey-6);
+}
+
+.album-create-name,
+.album-create-kind {
+    width: 100%;
+    height: 2.4rem;
+    margin: 0;
+    padding: 0 .55rem;
+    border: 1px solid var(--ul-border-strong);
+    border-radius: 6px;
+    background: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+    font-size: .9rem;
+}
+
+// The <select> popup is drawn by the browser/OS, not by this box. Without an
+// explicit background+color on the options, a dark theme's light-on-dark text
+// is inherited into a light OS popup and the choices become unreadable;
+// color-scheme tells the browser to draw the popup dark to match.
+.album-create-kind {
+    color-scheme: light dark;
+
+    option {
+        background-color: var(--ul-grey-0);
+        color: var(--ul-grey-8);
+    }
+}
+
+.album-create-actions {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-left: auto;
+}
+
+// -- Album type explainer ---------------------------------------------------
+
+.album-kind-explainer {
+    margin-top: .75rem;
+    border-top: 1px solid var(--ul-surface-border);
+    padding-top: .5rem;
+    font-size: .82rem;
+}
+
+.album-kind-explainer-summary {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    cursor: pointer;
+    list-style: none;
+    color: var(--ul-grey-6);
+    font-weight: 500;
+
+    &::-webkit-details-marker {
+        display: none;
+    }
+
+    &:hover {
+        color: var(--ul-grey-8);
+    }
+}
+
+.album-kind-explainer-chevron {
+    font-size: 1.1rem;
+    transition: transform .15s;
+}
+
+.album-kind-explainer[open] .album-kind-explainer-chevron {
+    transform: rotate(180deg);
+}
+
+.album-kind-explainer-body {
+    margin: .5rem 0 0;
+}
+
+.album-kind-explainer-term {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-weight: 600;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+.album-kind-explainer-def {
+    margin: .1rem 0 .5rem;
+    padding-left: 1.3rem;
+    color: var(--ul-grey-6);
+    line-height: 1.45;
+}
+
+// -- Album grid -------------------------------------------------------------
+
+.albums-grid {
+    list-style: none;
+    margin: 0;
+    padding: .25rem $album-gutter 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: .85rem;
+}
+
+.album-card {
+    position: relative;
+    display: flex;
+    border: 1px solid var(--ul-surface-border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--ul-control-bg);
+    box-shadow: var(--ul-shadow-sm);
+    transition: border-color .12s, transform .12s, box-shadow .12s;
+
+    &:hover {
+        border-color: var(--primary-color);
+        transform: translateY(-2px);
+        box-shadow: var(--ul-shadow-md);
+    }
+}
+
+.album-card-link {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    text-decoration: none;
+    color: inherit;
+}
+
+.album-card-cover {
+    position: relative;
+    display: block;
+    aspect-ratio: 4 / 3;
+    background: var(--ul-color-accent-bg, rgba(30, 136, 229, .08));
+}
+
+.album-card-cover-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.album-card-cover-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    opacity: .45;
+
+    .material-symbols-outlined {
+        font-size: 2.5rem;
+    }
+}
+
+// Marks an album that carries extra behaviour (currently only Timelapse).
+.album-card-kind {
+    position: absolute;
+    top: .4rem;
+    left: .4rem;
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .15rem .45rem .15rem .3rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, .62);
+    color: #fff;
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .01em;
+
+    .material-symbols-outlined {
+        font-size: .95rem;
+    }
+}
+
+.album-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+    padding: .55rem .65rem .6rem;
+    min-width: 0;
+}
+
+.album-card-name {
+    display: block;
+    font-weight: 600;
+    font-size: .92rem;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.album-card-meta {
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+}
+
+.album-date-range {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+    white-space: nowrap;
+
+    .material-symbols-outlined {
+        font-size: .9rem;
+        opacity: .8;
+    }
+}
+
+.album-date-range-sep {
+    opacity: .7;
+}
+
+// -- Overflow menus ---------------------------------------------------------
+// <details>/<summary> rather than a JS popup: it opens without script, and
+// shared/popup-dismiss.ts only has to close it on an outside click.
+
+.album-menu {
+    position: relative;
+}
+
+.album-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    cursor: pointer;
+    list-style: none;
+    color: var(--ul-grey-7);
+    transition: background .12s, color .12s;
+
+    &::-webkit-details-marker {
+        display: none;
+    }
+
+    &:hover {
+        background: var(--ul-hover-bg);
+        color: var(--ul-grey-8);
+    }
+
+    .material-symbols-outlined {
+        font-size: 1.15rem;
+    }
+}
+
+.album-menu-list {
+    position: absolute;
+    top: calc(100% + .25rem);
+    right: 0;
+    z-index: 20;
+    min-width: 15rem;
+    padding: .3rem;
+    border: 1px solid var(--ul-surface-border);
+    border-radius: 10px;
+    background: var(--ul-grey-0);
+    box-shadow: var(--ul-shadow-lg);
+}
+
+.album-menu-item {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .45rem .55rem;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: inherit;
+    font-size: .85rem;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+        background: var(--ul-hover-bg);
+    }
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+        opacity: .85;
+    }
+
+    &--danger {
+        color: var(--ul-color-danger-text);
+    }
+
+    &--toggle {
+        align-items: flex-start;
+
+        span {
+            display: flex;
+            flex-direction: column;
+            gap: .1rem;
+        }
+
+        small {
+            font-size: .75rem;
+            color: var(--ul-grey-6);
+            line-height: 1.35;
+        }
+
+        input {
+            margin-top: .15rem;
+        }
+    }
+}
+
+.album-menu-form {
+    margin: .15rem 0;
+    padding: .15rem 0;
+    border-top: 1px solid var(--ul-surface-border);
+    border-bottom: 1px solid var(--ul-surface-border);
+}
+
+// The card's menu floats over the cover, so it needs its own placement.
+.album-card-menu {
+    position: absolute;
+    top: .35rem;
+    right: .35rem;
+
+    .album-menu-btn {
+        width: 1.75rem;
+        height: 1.75rem;
+        background: rgba(0, 0, 0, .55);
+        color: #fff;
+        opacity: 0;
+        transition: opacity .12s, background .12s;
+    }
+}
+
+.album-card:hover .album-card-menu .album-menu-btn,
+.album-card-menu[open] .album-menu-btn,
+.album-card-menu .album-menu-btn:focus-visible {
+    opacity: 1;
+}
+
+// -- Empty states -----------------------------------------------------------
+
+.albums-empty {
+    padding: .25rem $album-gutter 1rem;
+}
+
+.album-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .35rem;
+    margin: .5rem $album-gutter 1rem;
+    padding: 2rem 1rem;
+    border: 1px dashed var(--ul-border-strong);
+    border-radius: 12px;
+    text-align: center;
+
+    > .material-symbols-outlined {
+        font-size: 2.4rem;
+        opacity: .45;
+    }
+
+    p {
+        margin: 0;
+        max-width: 32rem;
+    }
+}
+
+.album-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: .5rem;
+    margin-top: .6rem;
+}
+
+.albums-loose {
+    border-top: 1px solid var(--ul-surface-border);
+    margin-top: .5rem;
+}
+
+// -- Album detail -----------------------------------------------------------
+
+.album-detail-toolbar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+}
+
+.album-back-btn {
+    flex: 0 0 auto;
+}
+
+.album-detail-heading {
+    flex: 1;
+    min-width: 0;
+}
+
+.album-detail-title {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+
+    > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+.album-detail-kind {
+    flex: 0 0 auto;
+    padding: .1rem .45rem;
+    border-radius: 999px;
+    background: var(--ul-color-accent-bg);
+    color: var(--ul-color-accent-fg);
+    font-size: .7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.album-detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .25rem .75rem;
+    margin: .15rem 0 0;
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+}
+
+.album-detail-actions {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    flex: 0 0 auto;
+}
+
+.album-detail-description {
+    padding: 0 $album-gutter .5rem;
+    margin: 0;
+    opacity: .85;
+}
+
+// -- Photo map --------------------------------------------------------------
+
+.album-map-section {
+    margin: 0 $album-gutter .85rem;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.album-map-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-bottom: .4rem;
+
+    .album-map-hint {
+        flex: 1;
+        margin: 0;
+    }
+}
+
+.album-map-wrap {
+    position: relative;
+    border: 1px solid var(--ul-surface-border);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.album-map {
+    height: 22rem;
+    width: 100%;
+}
+
+.album-map-layers {
+    position: absolute;
+    top: .5rem;
+    right: .5rem;
+    z-index: 500;
+}
+
+// -- Photo grid inside an album ---------------------------------------------
+
+.album-item,
+.album-add-item {
+    position: relative;
+}
+
+.album-item.is-highlighted {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+}
+
+.album-item-remove,
+.album-item-add {
+    position: absolute;
+    top: .3rem;
+    right: .3rem;
+    display: inline-flex;
+    padding: .1rem;
+    border: none;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, .6);
+    color: #fff;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .12s;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+.album-item:hover .album-item-remove,
+.album-item-remove:focus-visible {
+    opacity: 1;
+}
+
+.album-item-caption {
+    margin: .2rem 0 0;
+    font-size: .72rem;
+    color: var(--ul-grey-6);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+// Drag placeholder while reordering a custom-ordered album.
+.album-item--ghost {
+    opacity: .4;
+}
+
+.album-items-grid[data-album-sortable="1"] .album-item {
+    cursor: grab;
+}
+
+// -- "Add existing photos" picker dialog ------------------------------------
+
+.album-picker-dialog {
+    width: min(46rem, 92vw);
+    max-height: 80vh;
+    padding: 1rem;
+}
+
+.album-picker-head {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+
+    h4 {
+        flex: 1;
+        margin: 0;
+        font-size: 1rem;
+    }
+}
+
+.album-picker-close {
+    display: inline-flex;
+    padding: .2rem;
+    border: none;
+    border-radius: 999px;
+    background: none;
+    color: inherit;
+    cursor: pointer;
+
+    &:hover {
+        background: var(--ul-hover-bg);
+    }
+}
+
+.album-picker-hint {
+    margin: .35rem 0 .6rem;
+}
+
+.album-picker-dialog .album-add-grid {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+// The whole tile is the add button in the picker, so the icon is a hover hint
+// rather than the only target.
+.album-add-item .album-item-add {
+    position: static;
+    display: block;
+    width: 100%;
+    padding: 0;
+    border-radius: 8px;
+    background: none;
+    overflow: hidden;
+}
+
+.album-add-tick {
+    position: absolute;
+    top: .3rem;
+    right: .3rem;
+    display: inline-flex;
+    padding: .1rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, .6);
+    color: #fff;
+    opacity: 0;
+    transition: opacity .12s;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+.album-add-item:hover .album-add-tick,
+.album-add-item .album-item-add:focus-visible .album-add-tick {
+    opacity: 1;
+}
+
+// -- Drag-to-upload ---------------------------------------------------------
+
+.album-drop-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, .72);
+    color: #fff;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.album-drop-overlay-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .5rem;
+    padding: 2.5rem 3rem;
+    border: 2px dashed rgba(255, 255, 255, .7);
+    border-radius: 16px;
+    font-size: 1.05rem;
+
+    .material-symbols-outlined {
+        font-size: 3rem;
+    }
+
+    p {
+        margin: 0;
+    }
+}
+
+.album-upload-progress {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9001;
+    height: 4px;
+    background: var(--ul-surface-border);
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.album-upload-bar {
+    height: 100%;
+    width: 0;
+    background: var(--primary-color);
+    transition: width .2s;
+}

@@ -1,4 +1,4 @@
-"""Tests for services.api_keys: generation, hash-based verification, and revocation.
+"""Tests for services.auth.api_keys: generation, hash-based verification, and revocation.
 
 Mirrors the coverage shape of backup codes (test_backup_services.py doesn't
 cover BackupCode itself, so this is closer to two_factor's own
@@ -15,7 +15,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope, ApiKeyUsageLog
-from urbanlens.dashboard.services.api_keys import (
+from urbanlens.dashboard.services.auth.api_keys import (
     KEY_LABEL,
     USAGE_LOG_LIMIT,
     authenticate_api_key,

@@ -1,51 +1,252 @@
-.games-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 1rem;
-    margin-top: 1rem;
+// Games hub - the front door to the game suite.
+//
+// The hub, the shared subnav strip and the game pages themselves all read the
+// same --ul-game-* accent contract, so a card previews the colour the game it
+// links to will actually be wearing.
+
+@use 'sass:map';
+@use 'variables' as *;
+@use 'game_shell' as shell;
+
+// -- Per-game accent previews -----------------------------------------------------
+// `body.page-<name>` (declared in _game_shell.scss) only exists on that game's
+// own page, so the hub re-states each accent scoped to [data-game].
+//
+// The derived properties are re-declared alongside the accent they derive from:
+// a derivative inherited from `body` was already computed against `body`'s
+// accent and would silently ignore this override.
+//
+// A game absent from this map keeps the hub's own deep-purple accent, so a
+// fourth GAMES entry still renders sensibly with no change here.
+$game-accents: (
+    'spotguessr': (
+        light: (accent: $color-teal-700, strong: $color-teal-900, contrast: $color-grey-0a, ink: $color-teal-700),
+        dark: (accent: $color-teal-300, strong: $color-teal-100, contrast: var(--ul-black), ink: $color-teal-300),
+    ),
+    // Amber is a fill-only accent: as small text it fails AA on both canvases,
+    // which is why `ink` is neutral rather than the accent.
+    'trivia': (
+        light: (accent: $color-amber-700, strong: $color-amber-900, contrast: var(--ul-black), ink: var(--ul-grey-9)),
+        dark: (accent: $color-amber-500, strong: $color-amber-700, contrast: var(--ul-black), ink: $color-amber-300),
+    ),
+    'consensus': (
+        light: (accent: $color-indigo-500, strong: $color-indigo-800, contrast: $color-grey-0a, ink: $color-indigo-500),
+        dark: (accent: $color-indigo-300, strong: $color-indigo-200, contrast: var(--ul-black), ink: $color-indigo-200),
+    ),
+);
+
+@mixin game-accent($set, $dark: false) {
+    --ul-game-accent: #{map.get($set, accent)};
+    --ul-game-accent-strong: #{map.get($set, strong)};
+    --ul-game-accent-contrast: #{map.get($set, contrast)};
+    --ul-game-accent-ink: #{map.get($set, ink)};
+
+    --ul-game-accent-soft: rgba(0, 0, 0, .06);
+    --ul-game-accent-soft: color-mix(in srgb, var(--ul-game-accent) 14%, transparent);
+    --ul-game-accent-line: var(--ul-grey-2a);
+    --ul-game-accent-line: color-mix(in srgb, var(--ul-game-accent) 38%, transparent);
+    --ul-game-accent-ring: rgba(0, 0, 0, .2);
+    --ul-game-accent-ring: color-mix(in srgb, var(--ul-game-accent) 32%, transparent);
+    --ul-game-glow: var(--ul-shadow-md);
+
+    @if $dark {
+        --ul-game-glow: 0 1px 2px rgba(0, 0, 0, .4), 0 14px 36px color-mix(in srgb, var(--ul-game-accent) 28%, transparent);
+    } @else {
+        --ul-game-glow: 0 1px 2px rgba(0, 0, 0, .06), 0 14px 36px color-mix(in srgb, var(--ul-game-accent) 18%, transparent);
+    }
 }
 
+@each $game, $themes in $game-accents {
+    .games-card[data-game="#{$game}"],
+    .ul-game-subnav__tab[data-game="#{$game}"] {
+        @include game-accent(map.get($themes, light));
+    }
+
+    html[data-theme="dark"] {
+        .games-card[data-game="#{$game}"],
+        .ul-game-subnav__tab[data-game="#{$game}"] {
+            @include game-accent(map.get($themes, dark), $dark: true);
+        }
+    }
+}
+
+// -- Shared subnav strip ------------------------------------------------------------
+// The tab strip is rendered on all four pages, so its accent treatment lives
+// with the hub rather than being repeated per game. The "All Games" tab has no
+// [data-game] and so wears whichever page it is sitting on.
+.ul-game-subnav {
+    .ul-subnav-tab {
+        &:hover,
+        &:focus {
+            border-bottom-color: var(--ul-game-accent-line);
+        }
+
+        &.is-active,
+        &.active {
+            border-bottom-color: var(--ul-game-accent);
+            background-color: var(--ul-game-accent-soft);
+
+            .material-symbols-outlined {
+                color: var(--ul-game-accent-ink);
+            }
+        }
+    }
+
+    .ul-game-subnav__tab .material-symbols-outlined {
+        color: var(--ul-game-accent-ink);
+    }
+}
+
+// -- Hub layout ----------------------------------------------------------------------
+// `body.page-games > div.container` is unpadded full bleed (see
+// _game_shell.scss), so the hub supplies its own gutter - matched to
+// .ul-game-shell's, so hub -> game keeps the same edges.
+.ul-game-hub {
+    gap: $space-lg;
+    padding: $space-lg $space-md $space-xl;
+
+    @include up($breakpoint-sm) {
+        padding: $space-lg $space-lg $space-xl;
+    }
+
+    > * {
+        width: 100%;
+        max-width: 76rem;
+        margin-inline: auto;
+    }
+}
+
+#games-explainer {
+    // The hub is a flex column with its own gap.
+    margin-bottom: 0;
+}
+
+// A flex row rather than a grid: it centers a partial last row (e.g. a fourth
+// game dangling alone), which `justify-content: center` on a grid container
+// cannot do since it only centers the track set, not per-row content.
+.games-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: $space-lg;
+}
+
+// Same poster-tile look as SpotGuessr's mode cards (`shell.mode-card`): a
+// full-bleed accent gradient rather than a neutral surface with an accent
+// hairline, so each entry reads as a distinct "box art" rather than a plain
+// list row.
 .games-card {
+    @include shell.mode-card;
+    --ul-game-mode: var(--ul-game-accent);
+    flex: 1 1 18rem;
+    max-width: 22rem;
+    min-height: 15rem;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: .75rem;
-    padding: 1.25rem;
+    gap: $space-sm;
+    padding: $space-lg;
     text-decoration: none;
-    color: inherit;
-    transition: transform .15s ease, box-shadow .15s ease;
+    color: var(--ul-game-accent-contrast);
 
-    &:hover {
-        transform: translateY(-2px);
+    &:hover,
+    &:focus-visible {
+        color: var(--ul-game-accent-contrast);
+    }
+
+    &:active {
+        transform: translateY(-1px);
+    }
+
+    &:focus-visible {
+        outline: none;
+        box-shadow: var(--ul-game-glow), 0 0 0 3px color-mix(in srgb, var(--ul-game-accent-contrast) 55%, transparent);
+    }
+}
+
+// Oversized watermark of the game's own icon, bled off the bottom-right
+// corner - stand-in "box art" until/unless real artwork exists per game.
+.games-card-glyph {
+    position: absolute;
+    right: -1rem;
+    bottom: -1.75rem;
+    font-size: 8rem;
+    line-height: 1;
+    color: var(--ul-game-accent-contrast);
+    opacity: .14;
+    transform: rotate(-10deg);
+    pointer-events: none;
+    transition: transform var(--ul-game-dur-state) ease, opacity var(--ul-game-dur-state) ease;
+
+    .games-card:hover & {
+        transform: rotate(-4deg) scale(1.08);
+        opacity: .2;
     }
 }
 
 .games-card-icon {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 3rem;
     height: 3rem;
     border-radius: 50%;
-    background: var(--ul-surface-2, rgba(127, 127, 127, .08));
+    background: color-mix(in srgb, var(--ul-game-accent-contrast) 22%, transparent);
+    transition: transform var(--ul-game-dur-state) ease;
 
     .material-symbols-outlined {
         font-size: 1.75rem;
     }
+
+    .games-card:hover & {
+        transform: scale(1.06);
+    }
 }
 
 .games-card-title {
+    position: relative;
     margin: 0;
     font-size: 1.15rem;
+    font-weight: 700;
 }
 
 .games-card-description {
+    position: relative;
     margin: 0;
-    opacity: .8;
+    opacity: .9;
     font-size: .92rem;
+    line-height: 1.5;
 }
 
+// An inert <span> inside the card's own <a>, so its motion is driven entirely
+// by the parent's hover/focus rather than its own. The pill itself rides the
+// contrast colour rather than the accent - the card is already an accent
+// fill, so an accent-on-accent pill would disappear.
 .games-card-play {
+    position: relative;
     margin-top: auto;
     align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: $space-xs;
+    padding: $space-xs $space-md;
+    border: 1px solid color-mix(in srgb, var(--ul-game-accent-contrast) 32%, transparent);
+    border-radius: $radius-full;
+    background: color-mix(in srgb, var(--ul-game-accent-contrast) 14%, transparent);
+    font-size: .9rem;
+    font-weight: 700;
+    transition:
+        gap var(--ul-game-dur-state) ease,
+        background var(--ul-game-dur-state) ease;
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+    }
+
+    .games-card:hover &,
+    .games-card:focus-visible & {
+        gap: $space-sm;
+        background: color-mix(in srgb, var(--ul-game-accent-contrast) 24%, transparent);
+    }
 }

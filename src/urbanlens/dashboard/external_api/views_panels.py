@@ -1,7 +1,7 @@
 """External-facing pin-detail panel endpoints: enrichment data as JSON.
 
 Exposes exactly the panels that have opted in via a non-empty
-``PanelSource.api_kinds`` - see ``services.external_data`` for why that,
+``PanelSource.api_kinds`` - see ``services.pins.external_data`` for why that,
 rather than whether ``api_payload`` happens to return data right now, is the
 authoritative "exposed to the API" signal. The satellite and street-view
 carousels are deliberately not among them: their web payload is base64
@@ -22,7 +22,7 @@ from urbanlens.dashboard.external_api.serializers import ErrorSerializer
 from urbanlens.dashboard.external_api.serializers_panels import PanelListEntrySerializer, PanelPendingSerializer
 from urbanlens.dashboard.external_api.views import ExternalApiView, OwnedPinMixin
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.services.external_data import POLL_INTERVAL_SECONDS, get_panel_source, panel_readiness, panel_sources, panel_visible_to, schedule_panel_fetch
+from urbanlens.dashboard.services.pins.external_data import POLL_INTERVAL_SECONDS, gate_allows, get_panel_source, panel_readiness, panel_sources, panel_visible_to, schedule_panel_fetch
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -57,7 +57,7 @@ class PinPanelsListView(OwnedPinMixin, ExternalApiView):
             return Response({"error": "No such pin."}, status=404)
 
         exposed = sorted(
-            (source for source in panel_sources().values() if source.api_kinds and source.gate(pin) and panel_visible_to(request.user, source)),
+            (source for source in panel_sources().values() if source.api_kinds and gate_allows(source, pin) and panel_visible_to(request.user, source)),
             key=lambda source: source.key,
         )
         readiness = panel_readiness(pin, exposed)
@@ -80,7 +80,7 @@ class PinPanelDetailView(OwnedPinMixin, ExternalApiView):
             return Response({"error": "No such pin."}, status=404)
 
         source = get_panel_source(panel_key)
-        if source is None or not source.api_kinds or not source.gate(pin) or not panel_visible_to(request.user, source):
+        if source is None or not source.api_kinds or not gate_allows(source, pin) or not panel_visible_to(request.user, source):
             # Same anti-enumeration policy as the rest of this API: a
             # feature-gated panel the caller can't see must read identically
             # to one that doesn't exist, never a 403.

@@ -3,12 +3,26 @@
 @use "mixins" as *;
 
 [data-theme="dark"] {
+    // Native <select> popups (and other browser/OS chrome - scrollbars,
+    // autofill, etc.) render outside our CSS box, and some engines decide
+    // their palette from the document root's own color-scheme rather than
+    // the individual control's - the per-element `select` rule below alone
+    // left the actual option list's browser-native background unchanged in
+    // some engines, still light behind our (light-on-dark) text color.
+    color-scheme: dark;
 
-    @include input-selectors { 
-        color: var(--ul-grey-6); 
+    @include input-selectors {
+        color: var(--ul-grey-6);
     }
     @include input-selectors(":disabled", "[readonly=readonly]") {
         color: var(--ul-grey-5);
+    }
+
+    // Belt-and-suspenders: also set directly on every select, in case an
+    // engine prefers the originating element's own color-scheme over the
+    // root's for its popup.
+    select {
+        color-scheme: dark;
     }
 
     .tag-stat {
@@ -1009,25 +1023,9 @@
     }
 
     .org-bulk-count {
-        background: color-mix(in srgb, $primary-color 18%, transparent);
-        border-color: color-mix(in srgb, $primary-color 34%, transparent);
-        color: color-mix(in srgb, $primary-color 80%, white);
-    }
-
-    .org-bulk-btn {
-        &--edit:hover:not(:disabled) {
-            background: color-mix(in srgb, $primary-color 14%, var(--ul-grey-1));
-        }
-
-        &--merge {
-            &:disabled {
-                color: color-mix(in srgb, var(--ul-grey-0) 65%, transparent);
-            }
-        }
-
-        &--delete:hover:not(:disabled) {
-            background: color-mix(in srgb, $color-red-500 14%, var(--ul-grey-1));
-        }
+        background: color-mix(in srgb, $primary-color 50%, transparent);
+        border-color: color-mix(in srgb, $primary-color 60%, transparent);
+        color: color-mix(in srgb, $primary-color 20%, white);
     }
 }
 // Theme-level refinements for shared surfaces and controls. These catch legacy

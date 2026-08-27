@@ -21,14 +21,21 @@ from django.db import connection
 from django.urls import reverse
 from django.utils import timezone
 from hypothesis import given, strategies as st
+from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
+from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.notifications.meta import NotificationType
+from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.apis.calendar.google import ACTIVITY_ID_EVENT_PROPERTY, TRIP_UUID_EVENT_PROPERTY, CalendarEventNotFoundError
-from urbanlens.dashboard.services.calendar_sync import (
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.trips.calendar_sync import (
     DEFAULT_ACTIVITY_EVENT_DURATION,
     activity_to_event_body,
     disconnect_member_calendar_sync,
@@ -40,7 +47,6 @@ from urbanlens.dashboard.services.calendar_sync import (
     remove_trip_from_calendar,
     trip_to_event_body,
 )
-from urbanlens.dashboard.services.gateway import GatewayRequestError
 
 _DATES = st.dates(min_value=datetime.date(1990, 1, 1), max_value=datetime.date(2100, 1, 1))
 
@@ -193,7 +199,7 @@ class _CalendarSyncDBTestCase(TestCase):
 
     def _patch_gateway(self):
         """Patch the gateway class used by the sync service; returns the instance mock."""
-        patcher = mock.patch("urbanlens.dashboard.services.calendar_sync.GoogleCalendarGateway")
+        patcher = mock.patch("urbanlens.dashboard.services.trips.calendar_sync.GoogleCalendarGateway")
         gateway_cls = patcher.start()
         self.addCleanup(patcher.stop)
         return gateway_cls.return_value
@@ -241,6 +247,54 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
         self.assertEqual(created, [])
         self.assertEqual(len(skipped), 1)
         gateway.get_event.assert_not_called()
+
+    def test_racing_import_of_one_event_still_creates_a_single_trip(self):
+        """The already_linked() read can be lost; the DB constraint decides.
+
+        Simulates the double-submit by neutering the pre-check, so the second
+        import reaches the create path exactly as a concurrent request would.
+        The partial unique on (profile, google_event_id) must then reject it,
+        and the whole half-built trip must roll back rather than survive as a
+        duplicate.
+        """
+        gateway = self._patch_gateway()
+        gateway.get_event.return_value = {
+            "id": "evt1",
+            "summary": "Abandoned asylum weekend",
+            "start": {"date": "2026-09-04"},
+            "end": {"date": "2026-09-07"},
+        }
+        created_first, _skipped, _invited = import_events_as_trips(self.account, ["evt1"])
+        self.assertEqual(len(created_first), 1)
+        trips_after_first = Trip.objects.count()
+
+        with mock.patch.object(TripCalendarLink.objects, "already_linked", return_value=False):
+            created_second, skipped, _invited = import_events_as_trips(self.account, ["evt1"])
+
+        self.assertEqual(created_second, [])
+        self.assertEqual(len(skipped), 1)
+        self.assertEqual(Trip.objects.count(), trips_after_first)
+        self.assertEqual(TripCalendarLink.objects.filter(profile=self.profile, google_event_id="evt1").count(), 1)
+
+    def test_two_timed_imports_keep_their_blank_trip_level_links(self):
+        """The constraint is partial, so blank-id trip-level rows still coexist.
+
+        A timed import deliberately leaves the trip-level link's event id empty
+        (the activity-level row owns the id). A plain unique constraint would
+        have made the second such import fail.
+        """
+        gateway = self._patch_gateway()
+        gateway.get_event.side_effect = [
+            {"id": "timed1", "summary": "One", "location": "Somewhere", "start": {"dateTime": "2026-06-01T10:00:00Z"}, "end": {"dateTime": "2026-06-01T12:00:00Z"}},
+            {"id": "timed2", "summary": "Two", "location": "Elsewhere", "start": {"dateTime": "2026-06-02T10:00:00Z"}, "end": {"dateTime": "2026-06-02T12:00:00Z"}},
+        ]
+
+        created_one, _skipped, _invited = import_events_as_trips(self.account, ["timed1"])
+        created_two, _skipped, _invited = import_events_as_trips(self.account, ["timed2"])
+
+        self.assertEqual(len(created_one), 1)
+        self.assertEqual(len(created_two), 1)
+        self.assertEqual(TripCalendarLink.objects.filter(profile=self.profile, google_event_id="").count(), 2)
 
     def test_import_skips_events_exported_from_urbanlens(self):
         gateway = self._patch_gateway()
@@ -377,7 +431,7 @@ class MatchEventAttendeesTests(_CalendarSyncDBTestCase):
 
     def test_friend_attendee_is_invitable(self):
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-        from urbanlens.dashboard.services.calendar_sync import match_event_attendees
+        from urbanlens.dashboard.services.trips.calendar_sync import match_event_attendees
 
         friend = User.objects.create_user(username="att-friend", email="att-friend@example.com").profile
         Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
@@ -395,7 +449,7 @@ class MatchEventAttendeesTests(_CalendarSyncDBTestCase):
         self.assertEqual(others, ["No Account"])
 
     def test_non_friend_account_is_not_invitable(self):
-        from urbanlens.dashboard.services.calendar_sync import match_event_attendees
+        from urbanlens.dashboard.services.trips.calendar_sync import match_event_attendees
 
         User.objects.create_user(username="att-stranger", email="att-stranger@example.com")
 
@@ -947,7 +1001,7 @@ class PushAutoSyncedTripChangesTests(_CalendarSyncDBTestCase):
             trip=trip, profile=other_profile, google_event_id="evt-ok", direction=CalendarSyncDirection.IMPORTED, auto_sync=True,
         )
 
-        gateway_cls = mock.patch("urbanlens.dashboard.services.calendar_sync.GoogleCalendarGateway").start()
+        gateway_cls = mock.patch("urbanlens.dashboard.services.trips.calendar_sync.GoogleCalendarGateway").start()
         self.addCleanup(mock.patch.stopall)
 
         def _gateway_for(*, account):
@@ -1023,3 +1077,62 @@ class CalendarCallbackViewTests(TestCase):
         response = self.client.get(reverse("trips.calendar.callback"), {"error": "access_denied"})
         self.assertEqual(response.status_code, 302)
         self.assertFalse(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
+
+
+class CalendarInviteIdentityMaskingTests(TestCase):
+    """The calendar importer's trip invite must mask like the ordinary one does.
+
+    `trip_membership.invite_to_trip` resolves the inviter through
+    `resolve_visible_identity` before formatting, with a comment explaining that
+    a notification's message is stored as plain text and so must be masked at
+    write time. The Google Calendar importer creates the *same*
+    `ADDED_TO_TRIP` notification and named `importer.username` raw.
+
+    Being friends is not sufficient permission. `VisibilityChoice`'s own
+    docstring says accepted friends qualify for every level **except**
+    `NO_ONE` - so an importer who has hidden their identity was still named,
+    and a NotificationLog insert is picked up by push delivery and by
+    `notification_text_alerts`, which builds an SMS body from the stored text.
+    The name left the app.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.importer = baker.make(User, username="hidden_importer").profile
+        self.invitee = baker.make(User, username="invitee").profile
+        Friendship.objects.create(from_profile=self.importer, to_profile=self.invitee, status=FriendshipStatus.ACCEPTED)
+        Friendship.objects.create(from_profile=self.invitee, to_profile=self.importer, status=FriendshipStatus.ACCEPTED)
+        self.trip = baker.make(Trip, creator=self.importer, name="Quarry run")
+        self.trip.profiles.add(self.importer)
+
+    def _invite(self) -> None:
+        from urbanlens.dashboard.services.trips.calendar_sync import _invite_participants
+
+        _invite_participants(self.trip, self.importer, [self.invitee.pk], [])
+
+    def test_a_friend_who_hides_their_identity_is_not_named(self) -> None:
+        self.importer.profile_visibility = VisibilityChoice.NO_ONE
+        self.importer.save(update_fields=["profile_visibility"])
+
+        self._invite()
+
+        message = NotificationLog.objects.get(profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP).message
+        self.assertNotIn("hidden_importer", message, "the calendar importer leaked a username the app masks everywhere else")
+
+    def test_an_ordinary_friend_is_still_named(self) -> None:
+        """Anti-vacuity: masking must not swallow the normal case."""
+        self.importer.profile_visibility = VisibilityChoice.FRIENDS
+        self.importer.save(update_fields=["profile_visibility"])
+
+        self._invite()
+
+        message = NotificationLog.objects.get(profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP).message
+        self.assertIn("hidden_importer", message)
+
+    def test_the_notification_records_its_source_profile(self) -> None:
+        """The sibling path sets it; without it the notification cannot be re-resolved later."""
+        self._invite()
+
+        entry = NotificationLog.objects.get(profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP)
+        self.assertEqual(entry.source_profile_id, self.importer.pk)

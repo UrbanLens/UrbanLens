@@ -1,8 +1,21 @@
+import os
+
 from urbanlens.UrbanLens.settings._gdal_windows import local_windows_gdal_overrides
 from urbanlens.UrbanLens.settings.app import settings as _app_settings
 from urbanlens.UrbanLens.settings.base import *  # noqa: F403
 
 TESTING = True
+
+# django-perf-rec writes each covered view's query *fingerprint* to a .perf.yml
+# beside its test, so an N+1 arrives as a reviewable diff rather than as a
+# number nobody can interpret.
+#
+# MODE decides what a missing record means. "once" writes it and passes, which
+# is what you want the first time you cover a view. In CI a missing record means
+# the file was never committed, and silently recording it there would assert
+# whatever the code does today - including the regression under review - so it
+# fails instead.
+PERF_REC = {"MODE": "none" if os.getenv("CI") else "once"}
 
 # Django's default PBKDF2 hasher runs ~1.2M iterations per call, which is the
 # point in production and pure overhead in tests - every baked User, every
@@ -15,8 +28,38 @@ TESTING = True
 # Test-only: base.py keeps the real hashers for every other environment.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
+# The real cache is Redis/valkey-backed, which makes every test whose request path
+# touches the cache depend on a live external service. Two problems with that: the
+# suite's own network guard (core.testing_network) only permits localhost, so running
+# against a compose stack - where the cache resolves to a container bridge IP - fails
+# any such test with an opaque "External network access is disabled during tests"
+# rather than anything about the code; and tests would otherwise share one cache
+# instance, so entries bleed between them. locmem is per-process and needs nothing
+# running.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "urbanlens-tests",
+    },
+}
+
+# Same reasoning as CACHES above, for the Celery broker. base.py points it at
+# valkey, so every `apply_async` in a test opened a real broker connection - which
+# the network guard blocks, raising RuntimeError, which `safely_enqueue_task`
+# catches and reports as "broker unreachable" by returning None. Callers that treat
+# that as "give up quietly" then took their failure path: the pin-detail panel views
+# returned 204 instead of a panel, and twelve tests failed asserting a behaviour the
+# code only exhibits when the broker is down.
+#
+# `memory://` is Celery's in-process transport - enqueueing succeeds and needs
+# nothing running. Tasks still do not execute, since no worker consumes the queue
+# and CELERY_TASK_ALWAYS_EAGER stays opt-in via UL_CELERY_TASK_ALWAYS_EAGER, so a
+# test asserting a request only *scheduled* work still sees exactly that.
+CELERY_BROKER_URL = "memory://"
+CELERY_RESULT_BACKEND = "cache+memory://"
+
 # No clamd daemon runs in the test environment - tests that exercise the
-# malware-rejection path (services.malware_scan) mock it explicitly; every
+# malware-rejection path (services.security.malware_scan) mock it explicitly; every
 # other upload test should hit the "clean" no-op path instead of a 503 from
 # an unreachable scanner (see AppSettings.clamav_enabled's fail-closed
 # behavior).

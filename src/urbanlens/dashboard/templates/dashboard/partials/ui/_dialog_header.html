@@ -3,9 +3,13 @@ Shared dialog header. Usage:
   {% include "dashboard/partials/ui/_dialog_header.html" with title="My Title" %}
   Optional: closefn="myCloseFunc"  - JS function to call instead of dialog.close()
   Optional: title_id="my-title-id" - adds an id to the title span for dynamic JS updates
+
+The title span always carries an id (falling back to a slug of the title) so a
+host <dialog aria-labelledby="{% if title_id %}{{ title_id }}{% else %}dialog-title-{{ title|slugify }}{% endif %}"> can point aria-labelledby at it: without a name, a screen reader
+announces every dialog on the site as just "dialog".
 {% endcomment %}
 <div class="dialog-header">
-    <span{% if title_id %} id="{{ title_id }}"{% endif %}>{{ title }}</span>
+    <span id="{% if title_id %}{{ title_id }}{% else %}dialog-title-{{ title|slugify }}{% endif %}">{{ title }}</span>
     <button type="button" class="dialog-close"
             onclick="{% if closefn %}{{ closefn }}(){% else %}this.closest('dialog').close(){% endif %}"
             aria-label="Close dialog">

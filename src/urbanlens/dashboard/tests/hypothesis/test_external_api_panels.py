@@ -3,7 +3,7 @@
 Two kinds of coverage are mixed deliberately:
 
 1. Tests against the **real** panel registry, guarding the product decision
-   documented in ``services.external_data`` and ``docs/notes/mobile_app_notes.md``
+   documented in ``services.pins.external_data`` and ``docs/notes/mobile_app_notes.md``
    (D8): the satellite/street-view carousels stay off this API forever until a
    signed slide-image proxy exists, because their payload is base64 imagery and
    this API's throttle counts requests, not bytes.
@@ -27,8 +27,8 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.external_data import POLL_INTERVAL_SECONDS, PanelApiKind, PanelSource
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.external_data import POLL_INTERVAL_SECONDS, PanelApiKind, PanelSource
 
 
 class _StubPanelSource(PanelSource):

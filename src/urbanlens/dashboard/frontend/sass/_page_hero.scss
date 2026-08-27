@@ -278,6 +278,10 @@
 // hero's bottom margin so the two sit flush with no gap between them.
 .ul-page-subnav {
     width: 100%;
+    // Matches a .ul-subnav-tab's own rendered height (icon/line-height plus
+    // its .6rem vertical padding) so the bar stays visible even when
+    // __inner has no tabs to give it height (e.g. the homepage).
+    min-height: 2.4rem;
     background-color: var(--ul-grey-0b);
     border-bottom: 1px solid var(--ul-grey-1a);
 
@@ -530,7 +534,7 @@
 // "Create a wiki" state - the whole box IS the button (not an icon+label
 // card with a separate nested button), same footprint as the populated
 // card above so nothing shifts position once a wiki exists.
-.pin-hero-wiki-box--create {
+.pin-hero-wiki-box--share {
     justify-content: center;
     cursor: pointer;
     border-style: dashed;
@@ -572,8 +576,8 @@
         box-shadow: 0 14px 32px rgba(0, 0, 0, .5);
     }
 
-    .ul-page-hero:not(.ul-page-hero--cover) .pin-hero-wiki-box--create:hover,
-    .ul-page-hero:not(.ul-page-hero--cover) .pin-hero-wiki-box--create:focus-visible {
+    .ul-page-hero:not(.ul-page-hero--cover) .pin-hero-wiki-box--share:hover,
+    .ul-page-hero:not(.ul-page-hero--cover) .pin-hero-wiki-box--share:focus-visible {
         background: rgba(0, 0, 0, .55);
         border-color: rgba(255, 255, 255, .3);
     }
@@ -606,5 +610,61 @@
 
     @include up($breakpoint-sm) {
         min-height: 14.5rem;
+    }
+}
+
+// Parcel-or-building scope, shown in the eyebrow of both detail pages
+// whenever a marker commits to describing one or the other. Deliberately
+// absent for the neutral default, where the parcel and the building are the
+// same thing and a badge would only add noise.
+// See services.places.scope.SCOPE_BADGES.
+.ul-scope-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    margin-left: .5rem;
+    padding: .1rem .45rem;
+    border-radius: 999px;
+    border: 1px solid currentcolor;
+    letter-spacing: .08em;
+    vertical-align: middle;
+    cursor: help;
+
+    .material-symbols-outlined {
+        font-size: 1em;
+    }
+
+    &--parcel {
+        color: $color-purple-300;
+    }
+
+    &--building {
+        color: $color-blue-500;
+    }
+
+    &--danger {
+        color: $color-red-500;
+    }
+}
+
+// Small "this person has an active subscription" badge, opt-in per profile
+// (Profile.show_supporter_badge). Reused anywhere a name renders, not just
+// page heroes - see partials/ui/_supporter_badge.html.
+.ul-supporter-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: .35rem;
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: 999px;
+    color: #fff;
+    background: linear-gradient(135deg, $color-red-500, $color-purple-300);
+    vertical-align: middle;
+    cursor: help;
+
+    .material-symbols-outlined {
+        font-size: .85rem;
+        font-variation-settings: "FILL" 1;
     }
 }

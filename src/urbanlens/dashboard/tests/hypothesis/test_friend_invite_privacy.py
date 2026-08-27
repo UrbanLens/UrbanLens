@@ -24,7 +24,7 @@ def make_invitable_user(**kwargs) -> User:
     these tests correct if the default (or model_bakery's field-generation
     behavior) ever changes again.
 
-    ``services.friendship.invite_by_email`` runs the same
+    ``services.social.friendship.invite_by_email`` runs the same
     ``Profile.visibility_permits`` evaluator ``request_friend`` does - a
     deliberate fix, since the bare ``!= NO_ONE`` check it replaced let anyone
     who knew an address bypass a restricted visibility setting entirely. A

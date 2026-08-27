@@ -8,6 +8,7 @@ from django.db.models import Count, IntegerField, OuterRef, Prefetch, Q, Subquer
 from django.db.models.functions import Coalesce
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -38,33 +39,36 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
 
     def tags(self) -> Self:
         """Return only items with kind='tag'."""
-        # Don't hardcode strings
-        return self.filter(kind="tag")
+        return self.filter(kind=KIND_TAG)
 
     def categories(self) -> Self:
         """Return only items with kind='category'."""
-        # Don't hardcode strings
-        return self.filter(kind="category")
+        return self.filter(kind=KIND_CATEGORY)
 
     def statuses(self) -> Self:
         """Return only items with kind='status'."""
-        # Don't hardcode strings
-        return self.filter(kind="status")
+        return self.filter(kind=KIND_STATUS)
 
     def user_labels(self) -> Self:
         """Return only items with kind='user' (for annotating profiles privately)."""
-        # TODO: Don't hardcode 'user' string
-        return self.filter(kind="user")
+        return self.filter(kind=KIND_USER)
 
     def media(self) -> Self:
         """Return only items with kind='media' (attached to photos/videos/documents, not pins)."""
         # Don't hardcode strings
-        return self.filter(kind="media")
+        return self.filter(kind=KIND_MEDIA)
+
+    def suggestable(self) -> Self:
+        """Return only tag/category labels - the sole kinds ever synced to REData's label-suggestion service.
+
+        Status, people, and media labels are never sent (per the explicit
+        product decision - see ``services.labels.redata_suggestions``).
+        """
+        return self.filter(kind__in=(KIND_TAG, KIND_CATEGORY))
 
     def location_labels(self) -> Self:
         """Return only items assignable to pins/wikis (excludes 'user' and 'media', which attach elsewhere)."""
-        # TODO: Don't hardcode 'user' string
-        return self.exclude(kind__in=["user", "media"])
+        return self.exclude(kind__in=(KIND_USER, KIND_MEDIA))
 
     def with_customizations_for(self, profile: Profile | int) -> Self:
         """Prefetch this user's LabelCustomizations into _user_customizations attr."""
@@ -77,6 +81,23 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
                 queryset=LabelCustomization.objects.filter(profile_id=profile_id),
                 to_attr="_user_customizations",
             ),
+        )
+
+    def with_hierarchy(self) -> Self:
+        """Prefetch parents/children without computing pin or location counts.
+
+        Cheap counterpart to `with_pin_counts()` for a page's first paint: the
+        Organize page renders label cards from this immediately, then a
+        follow-up HTMX request re-fetches the same rows via `with_pin_counts()`
+        to back-fill the stat badges once they're ready, so the DOM shows up
+        before the count queries (including the per-label descendant BFS in
+        `tag_total_pins`) have run at all.
+        """
+        from urbanlens.dashboard.models.labels.model import Label
+
+        return self.prefetch_related(
+            Prefetch("children", queryset=Label.objects.only("id", "name", "kind")),
+            Prefetch("parents", queryset=Label.objects.only("id", "name", "kind")),
         )
 
     def with_pin_counts(self) -> Self:

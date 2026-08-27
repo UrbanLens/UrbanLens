@@ -1,6 +1,6 @@
 """Manual pin <-> wiki child-marker sync over the external API.
 
-The matching logic itself belongs to ``services.pin_wiki_sync`` and is tested
+The matching logic itself belongs to ``services.pins.pin_wiki_sync`` and is tested
 there; what these cover is everything the *endpoint* is responsible for, which
 is exactly the set of things a naive port gets wrong:
 
@@ -32,8 +32,8 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -156,7 +156,7 @@ class PinWikiSyncApiTests(TestCase):
         self.assertEqual(self.pin.detail_pins.count(), 0)
 
     def test_push_creates_a_child_wiki_per_selected_child_pin(self) -> None:
-        """The happy path, straight through ``services.pin_wiki_sync``."""
+        """The happy path, straight through ``services.pins.pin_wiki_sync``."""
         wiki = self._wiki()
         child = self._child_pin(42.5100, -73.5100, "Garage")
 

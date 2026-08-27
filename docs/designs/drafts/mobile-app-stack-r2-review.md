@@ -12,7 +12,7 @@ this review closed, then the verified-accurate remainder.
 r2 states (twice: §Push and Backend-prerequisites item 5) that "the dispatcher
 wiring remains". Wrong: v0.6.0 ships the full server half.
 
-- `services/push.py` — `send_push_to_profile` POSTs the notification JSON to
+- `services/notifications/push.py` — `send_push_to_profile` POSTs the notification JSON to
   every active UnifiedPush device (5s timeout, consecutive-failure counting,
   auto-revoke after 10 strikes); FCM rows accepted at registration, skipped at
   dispatch (as designed, pending the `play` flavor).
@@ -36,7 +36,7 @@ JSON document, transport-agnostically.
 credentials, or resolve to private/loopback/link-local/reserved ranges. A
 self-hosted ntfy on a LAN address will therefore be **rejected at
 registration**. That is a deliberate v1 SSRF stance (documented in
-`services/push.py`), but the app's settings UI should surface the error
+`services/notifications/push.py`), but the app's settings UI should surface the error
 message rather than treat registration as infallible.
 
 ### 3. Desktop OAuth redirect needs no fixed port — unaddressed in r2

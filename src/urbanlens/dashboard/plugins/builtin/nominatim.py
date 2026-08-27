@@ -1,21 +1,35 @@
-"""Nominatim plugin: OpenStreetMap place metadata panel on the pin detail page."""
+"""Nominatim plugin: OpenStreetMap place metadata panel on the pin detail page.
+
+Deliberately kept direct-only (no REData resolution-module wrapper), unlike
+most other single-provider integrations migrated to REData: this panel's
+value is Nominatim's own rich OSM extratags (wikidata/wikipedia tags,
+old-name aliases, opening hours, kind classification, ...), which REData's
+cross-provider ``/geocode/reverse/`` contract deliberately does not promote
+to normalized top-level fields (see ``../REData/docs/api-reference.md``:
+"Vendor-shaped extras ... stay in attributes"). Reconstructing this panel's
+shape from an unspecified per-provider ``attributes`` blob would be guesswork
+rather than a documented contract, so this stays a direct OpenStreetMap
+Nominatim integration. Forward geocoding (address -> coordinates, used by pin
+creation) is a much thinner contract and *is* REData-first - see
+``services.apis.locations.geocode_resolution``.
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource, PanelApiKind, info_card
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind, info_card
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.enrichment import EnrichmentSource
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 #: Cached keys that make the panel worth showing at all. A reverse-geocode that
 #: matched only an address (no name, no tags) tells a viewer nothing they can't

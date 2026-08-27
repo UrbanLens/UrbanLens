@@ -20,7 +20,8 @@ from django.views import View
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.direct_messages import (
+from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+from urbanlens.dashboard.services.messaging.direct_messages import (
     REACTION_PICKER_EMOJIS,
     DirectMessagePermissionError,
     DirectMessageValidationError,
@@ -32,6 +33,7 @@ from urbanlens.dashboard.services.direct_messages import (
     delete_message_for_everyone,
     delete_message_for_self,
     display_identity_for,
+    has_any_conversation,
     is_conversation_muted,
     is_profile_online,
     is_safe_reaction_emoji,
@@ -42,8 +44,8 @@ from urbanlens.dashboard.services.direct_messages import (
     set_conversation_muted,
     thread_page,
     toggle_reaction,
+    unread_conversations_for,
 )
-from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -425,8 +427,8 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
             JSON with the new image's ``id`` and ``url``, or a 400/413 error.
         """
         from urbanlens.dashboard.models.images.model import Image, MediaKind
-        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
-        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
         profile = _get_profile(request)
         image_file = request.FILES.get("image")
@@ -448,7 +450,7 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
 
             image = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size)
 
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, image.pk)
@@ -493,7 +495,7 @@ class MessageReactionToggleView(LoginRequiredMixin, View):
 
     Args come from the POST body (``emoji``). Broadcasts the message's updated
     reaction summary to both participants over the WebSocket (see
-    ``services.direct_messages.toggle_reaction``); the response itself is the
+    ``services.messaging.direct_messages.toggle_reaction``); the response itself is the
     re-rendered reaction-bar partial, used to update the acting client's own
     UI immediately without waiting on the WS round-trip.
     """
@@ -651,7 +653,7 @@ class ConversationSearchView(LoginRequiredMixin, View):
 
     Understands the same natural-language phrasing as global search (dates,
     "photos"/"maps"/"pins" keywords, "from <person>") via
-    ``services.direct_messages.search_direct_messages`` - the same query
+    ``services.messaging.direct_messages.search_direct_messages`` - the same query
     parser and queryset builder the Ctrl+K dialog's message search uses, so
     behavior never drifts between the two surfaces.
     """
@@ -751,12 +753,21 @@ class MessagesDropdownView(LoginRequiredMixin, View):
             from "no messages yet" (no DM history at all).
         """
         profile = _get_profile(request)
-        conversations = all_conversations_for(profile)
-        unread = [conv for conv in conversations if conv["unread_count"]][:DROPDOWN_CONVERSATION_LIMIT]
+        # Narrowed in the query, not after it: this used to build every
+        # conversation in the inbox - partner identity, last message, mute state
+        # - and then keep at most eight of them.
+        unread = unread_conversations_for(profile)[:DROPDOWN_CONVERSATION_LIMIT]
         return render(
             request,
             "dashboard/partials/messages/_dropdown.html",
-            {"conversations": unread, "has_conversations": bool(conversations)},
+            # viewer_id: the preview goes through `message_preview`, which needs
+            # it to apply this viewer's own tombstone/expiry rules. The dropdown
+            # hand-rolled the preview instead until 2026-08-19, which both
+            # showed a deleted message's body and defeated the `images` prefetch
+            # `all_conversations_for` pays for (`.exists()` ignores the cache).
+            # `has_conversations` distinguishes "all caught up" from "no messages
+            # yet", and needs only existence - not the whole inbox built.
+            {"conversations": unread, "has_conversations": has_any_conversation(profile), "viewer_id": profile.pk},
         )
 
 
@@ -774,7 +785,7 @@ class MessagesUnreadCountView(LoginRequiredMixin, View):
             least one unread message (not the total unread message count -
             one label per conversation needing attention).
         """
-        from urbanlens.dashboard.services.group_chats import unread_group_conversation_count
+        from urbanlens.dashboard.services.messaging.group_chats import unread_group_conversation_count
 
         profile = _get_profile(request)
         count = DirectMessage.objects.unread_conversation_count(profile) + unread_group_conversation_count(profile)

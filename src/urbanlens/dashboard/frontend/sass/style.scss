@@ -23,10 +23,12 @@
 @use 'article';
 @use 'ai_extractions';
 @use 'assistant';
+@use 'game_shell';
 @use 'spotguessr';
 @use 'trivia';
 @use 'consensus';
 @use 'games';
+@use 'achievements';
 @use 'pin-detail';
 @use 'tags';
 @use 'icon-picker';
@@ -46,6 +48,7 @@
 @use 'faq';
 @use 'legal';
 @use 'thanks';
+@use 'costs';
 @use 'help';
 @use 'comments';
 @use 'gallery';
@@ -59,6 +62,7 @@
 @use 'pin_select_map';
 @use 'pin_suggestions';
 @use 'pin_merge_suggestions';
+@use 'pin_import_failures';
 @use 'messages';
 @use 'search';
 @use 'e2ee';
@@ -69,3 +73,6 @@
 @use 'custom_fields';
 @use 'property_owner';
 @use 'pin_lists';
+@use 'albums';
+@use 'map_overlays';
+@use 'floorplans';

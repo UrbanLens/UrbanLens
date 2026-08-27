@@ -20,7 +20,7 @@ import json
 import os
 import tempfile
 
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
@@ -30,8 +30,8 @@ from urbanlens.dashboard.models.account import AccountKdf
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.direct_messages import create_direct_message, serialize_direct_message
-from urbanlens.dashboard.services.e2ee import fake_auth_salt, is_base64, login_params_for_identifier, valid_blob
+from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message, serialize_direct_message
+from urbanlens.dashboard.services.security.e2ee import fake_auth_salt, is_base64, login_params_for_identifier, valid_blob
 
 _db_settings = settings(
     max_examples=25,
@@ -452,6 +452,48 @@ class RewrapAllAndResetPreservationTests(TestCase):
     def _reset_body(self, **extra) -> str:
         return json.dumps({"confirm": "RESET", "public_key": _b64(os.urandom(32)), "recovery_wrapped_secret": _b64(os.urandom(72)), **extra})
 
+    @override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
+    def test_reset_refuses_when_the_bundle_moved_mid_flight(self) -> None:
+        """A second reset landing between our read and our write must not be applied.
+
+        The client rewraps every conversation against the key it read at the start. If
+        another reset bumps the bundle in between, applying these rewraps would seal
+        some threads to the superseded key while the bundle advertises the newer one -
+        undecryptable, and unrecoverable. The request has to lose, not half-succeed.
+        """
+        me, partner = _profile(), _profile()
+        _enroll(me)
+        row = self._pair_key(me, partner)
+        untouched_before = row.wrapped_for(me.pk)
+
+        bundle = MessagingKeyBundle.objects.for_profile(me).first()
+        original_version = bundle.version
+
+        # Simulate the competing reset committing after this request read the bundle
+        # but before it takes the row lock.
+        real_filter = ConversationKey.objects.filter
+
+        def bump_then_filter(*args, **kwargs):
+            MessagingKeyBundle.objects.filter(pk=bundle.pk).update(version=original_version + 5)
+            ConversationKey.objects.filter = real_filter
+            return real_filter(*args, **kwargs)
+
+        ConversationKey.objects.filter = bump_then_filter
+        try:
+            response = _client_for(me).post(
+                reverse("e2ee.reset"),
+                data=self._reset_body(rewrapped_conversation_keys=[{"id": row.pk, "wrapped_key": _b64(os.urandom(48))}]),
+                content_type="application/json",
+            )
+        finally:
+            ConversationKey.objects.filter = real_filter
+
+        self.assertEqual(response.status_code, 409)
+        row.refresh_from_db()
+        self.assertEqual(row.wrapped_for(me.pk), untouched_before, "no rewrap may be applied when the reset is refused")
+        bundle.refresh_from_db()
+        self.assertEqual(bundle.version, original_version + 5, "the competing reset's version must stand")
+
     def test_reset_applies_rewrapped_copies_and_reports_the_count(self) -> None:
         me, partner = _profile(), _profile()
         _enroll(me)
@@ -521,6 +563,71 @@ class RewrapAllAndResetPreservationTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    # -- What the reset left behind -------------------------------------------
+    #
+    # A payload only has to name rows the caller *owns*; it does not have to
+    # name all of them, and that is correct - someone who lost their key cannot
+    # re-seal anything and resets to get a working account back. But the rows
+    # left out are now sealed to a key that no longer exists. The server is the
+    # only party that knows how many, so it has to say.
+
+    def test_reset_reports_the_copies_it_could_not_re_seal(self) -> None:
+        me, partner = _profile(), _profile()
+        _enroll(me)
+        self._pair_key(me, partner)
+        self._group_envelope(me)
+
+        response = _client_for(me).post(reverse("e2ee.reset"), data=self._reset_body(), content_type="application/json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["rewrapped"], 0)
+        self.assertEqual(response.json()["not_rewrapped"], 2, "a reset that preserved nothing reported no loss")
+
+    def test_a_partial_rewrap_reports_only_the_remainder(self) -> None:
+        me, partner, third = _profile(), _profile(), _profile()
+        _enroll(me)
+        kept = self._pair_key(me, partner)
+        self._pair_key(me, third)  # deliberately left out of the payload
+        self._group_envelope(me)  # and this one
+
+        response = _client_for(me).post(
+            reverse("e2ee.reset"),
+            data=self._reset_body(rewrapped_conversation_keys=[{"id": kept.pk, "wrapped_key": _b64(os.urandom(48))}]),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.json()["rewrapped"], 1)
+        self.assertEqual(response.json()["not_rewrapped"], 2)
+
+    def test_a_complete_rewrap_reports_no_loss(self) -> None:
+        """Anti-vacuity: the counter must reach zero when nothing was left behind."""
+        me, partner = _profile(), _profile()
+        _enroll(me)
+        row = self._pair_key(me, partner)
+        envelope = self._group_envelope(me)
+
+        response = _client_for(me).post(
+            reverse("e2ee.reset"),
+            data=self._reset_body(
+                rewrapped_conversation_keys=[{"id": row.pk, "wrapped_key": _b64(os.urandom(48))}],
+                rewrapped_group_envelopes=[{"id": envelope.pk, "wrapped_key": _b64(os.urandom(48))}],
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.json()["rewrapped"], 2)
+        self.assertEqual(response.json()["not_rewrapped"], 0)
+
+    def test_another_profiles_rows_are_not_counted_as_the_callers_loss(self) -> None:
+        me, partner, other = _profile(), _profile(), _profile()
+        _enroll(me)
+        self._pair_key(partner, other)
+        self._group_envelope(other)
+
+        response = _client_for(me).post(reverse("e2ee.reset"), data=self._reset_body(), content_type="application/json")
+
+        self.assertEqual(response.json()["not_rewrapped"], 0)
+
 
 # -- create_direct_message with ciphertext ---------------------------------------
 
@@ -579,7 +686,7 @@ class ExportTests(TestCase):
     """Encrypted messages export ciphertext + a note, not a readable body."""
 
     def test_encrypted_message_exports_ciphertext(self) -> None:
-        from urbanlens.dashboard.services.export import _export_direct_messages
+        from urbanlens.dashboard.services.import_export.export import _export_direct_messages
 
         a, b = _profile(), _profile()
         _open_dms(a, b)

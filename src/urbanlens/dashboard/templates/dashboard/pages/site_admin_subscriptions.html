@@ -26,6 +26,12 @@
     {{ error }}
   </div>
   {% endif %}
+  {% if not stripe_configured %}
+  <div class="site-admin-notice">
+    <i class="material-symbols-outlined">error</i>
+    Stripe isn't configured on this server (UL_STRIPE_SECRET_KEY) - pricing below can be set, but users won't be able to check out until it is.
+  </div>
+  {% endif %}
   <section class="site-admin-card ul-section card subscription-types-card">
     <div class="card-header"><i class="material-symbols-outlined">workspace_premium</i><span>Subscription types &amp; features</span></div>
     <p class="form-help">Toggle which features each subscription type grants. Changes save automatically.</p>
@@ -56,8 +62,27 @@
       {% for role in roles %}
       <li class="subscription-types-list__item">
         <div class="subscription-types-list__heading">
-          <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i> {{ role.name }}</span>
-          {% if role.description %}<span class="subscription-types-list__description">{{ role.description }}</span>{% endif %}
+          <form method="post" class="role-meta-form" action="{% url 'site_admin_subscriptions' %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="role_rename">
+            <input type="hidden" name="role_slug" value="{{ role.slug }}">
+            <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i>
+              <input type="text" name="name" value="{{ role.name }}" maxlength="100" required
+                     class="role-meta-form__name" aria-label="Role name">
+            </span>
+            <input type="text" name="description" value="{{ role.description }}" maxlength="255"
+                   placeholder="Description (optional)" class="role-meta-form__description" aria-label="Role description">
+            <button type="submit" class="btn btn--ghost btn--sm">Save</button>
+          </form>
+          <form method="post" class="role-delete-form" action="{% url 'site_admin_subscriptions' %}"
+                onsubmit="return confirm('Delete the {{ role.name|escapejs }} role?{% if role.active_grant_count %} This immediately revokes it for {{ role.active_grant_count }} user{{ role.active_grant_count|pluralize }}.{% endif %} This cannot be undone.')">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="role_delete">
+            <input type="hidden" name="role_slug" value="{{ role.slug }}">
+            <button type="submit" class="btn btn--danger btn--sm" aria-label="Delete {{ role.name }} role">
+              <i class="material-symbols-outlined">delete</i>
+            </button>
+          </form>
         </div>
         <form class="inline-sub-form inline-sub-form--features"
               data-field-group="role_features" data-role="{{ role.slug }}"
@@ -79,6 +104,21 @@
         </form>
       </li>
       {% endfor %}
+      <li class="subscription-types-list__item subscription-types-list__item--add">
+        <form method="post" class="role-create-form" action="{% url 'site_admin_subscriptions' %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="role_create">
+          <label for="new-role-name">
+            <i class="material-symbols-outlined">add_circle</i>
+            New role
+          </label>
+          <input type="text" id="new-role-name" name="name" maxlength="100" placeholder="Role name" required
+                 class="role-meta-form__name">
+          <input type="text" name="description" maxlength="255" placeholder="Description (optional)"
+                 class="role-meta-form__description">
+          <button type="submit" class="btn btn--primary btn--sm">Add role</button>
+        </form>
+      </li>
     </ul>
   </section>
   <div class="subscription-grid">
@@ -103,6 +143,51 @@
         <span>Your active grants</span>
       </div>
       {% include "dashboard/partials/site_admin/_subscription_grants_list.html" %}
+    </section>
+    <section class="site-admin-card ul-section card subscription-pricing-card">
+      <div class="card-header"><i class="material-symbols-outlined">payments</i><span>Role pricing</span></div>
+      <p class="form-help">
+        Let users subscribe to a role directly. A fixed price charges that amount every month.
+        Pay-what-you-want lets the user choose their own monthly pledge instead - optionally gated
+        by a minimum (a static dollar amount, or the site's current cost-per-user, recalculated at
+        each successful charge, so the role's features are only granted in months the pledge still
+        clears it).
+        {% if current_cost_per_user %}Current cost-per-user: <strong>${{ current_cost_per_user|floatformat:2 }}/mo</strong>.{% endif %}
+      </p>
+      <div class="subscription-list">
+        <ul class="subscription-list__items">
+          {% for role in roles %}
+          <li class="subscription-list__item">
+            <form class="inline-sub-form inline-sub-form--pricing"
+                  data-field-group="role_pricing" data-role="{{ role.slug }}"
+                  hx-post="{% url 'site_admin_subscriptions' %}"
+                  hx-trigger="change delay:700ms"
+                  hx-swap="none">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="role_pricing">
+              <input type="hidden" name="role_slug" value="{{ role.slug }}">
+              <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i> {{ role.name }}</span>
+              {% if role.paid_subscriber_count %}<span class="form-help">{{ role.paid_subscriber_count }} paid subscriber{{ role.paid_subscriber_count|pluralize }}</span>{% endif %}
+              <label for="role-price-{{ role.slug }}">Fixed price ($/mo)</label>
+              <input type="number" id="role-price-{{ role.slug }}" name="monthly_price_dollars"
+                     value="{{ role.monthly_price_dollars|default_if_none:'' }}" min="0" step="0.01" placeholder="Not offered">
+              <label class="feature-toggle">
+                <input type="checkbox" name="pay_what_you_want" {% if role.pay_what_you_want %}checked{% endif %}>
+                Pay what you want
+              </label>
+              <label class="feature-toggle">
+                <input type="checkbox" name="pwyw_dynamic_threshold" {% if role.pwyw_dynamic_threshold %}checked{% endif %}>
+                Dynamic threshold (current cost-per-user)
+              </label>
+              <label for="role-pwyw-min-{{ role.slug }}">Static minimum ($/mo)</label>
+              <input type="number" id="role-pwyw-min-{{ role.slug }}" name="pwyw_minimum_dollars"
+                     value="{{ role.pwyw_minimum_dollars|default_if_none:'' }}" min="0" step="0.01" placeholder="Any amount">
+              <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
     </section>
     <section class="site-admin-card ul-section card subscription-quota-card">
       <div class="card-header"><i class="material-symbols-outlined">database</i><span>Role storage quotas</span></div>

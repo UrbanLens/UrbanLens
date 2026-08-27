@@ -28,7 +28,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.external_api.throttling import ExternalApiRateThrottle
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 BASE = "/dashboard/api/external/v1/wikis"
 
@@ -232,7 +232,7 @@ class WikiCrossScopeIdTests(TestCase):
         self.assertIsNotNone(self.b_comment.pk)
 
     def test_revision_id_from_another_wiki_is_not_found(self) -> None:
-        from urbanlens.dashboard.services.articles import save_article
+        from urbanlens.dashboard.services.wiki.articles import save_article
 
         _article_b, revision_b = save_article(editor=self.profile, content="B body", wiki=self.wiki_b)
         # Wiki A needs its own article, or the 404 would come from "no article

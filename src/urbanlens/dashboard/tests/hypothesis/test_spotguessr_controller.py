@@ -9,9 +9,14 @@ from django.core.files.base import ContentFile
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
+from urbanlens.core.tests.features import grant_alpha_features
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image, MediaKind
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -28,7 +33,9 @@ def _make_location() -> Location:
 
 
 def _make_profile() -> Profile:
-    return Profile.objects.get(user=baker.make("auth.User"))
+    user = baker.make("auth.User")
+    grant_alpha_features(user)  # every game route is behind SiteFeature.ALPHA_FEATURES
+    return Profile.objects.get(user=user)
 
 
 class SpotGuessrStartViewTests(TestCase):
@@ -150,6 +157,63 @@ class SpotGuessrStartViewTests(TestCase):
     def test_a_non_numeric_round_time_limit_is_rejected(self) -> None:
         response = self.client.post(self.start_url, {"round_time_limit_seconds": "soon"})
         self.assertEqual(response.status_code, 400)
+
+    def test_a_valid_label_id_is_persisted_on_the_session_config(self) -> None:
+        label = baker.make(Label, name="Factories", profile=self.profile)
+        Pin.objects.get(profile=self.profile, location=self.location).labels.add(label)
+        response = self.client.post(self.start_url, {"label_id": str(label.pk)})
+        self.assertEqual(response.status_code, 200, response.json())
+        session = GameSession.objects.get(pk=response.json()["session_id"])
+        self.assertEqual(session.config["label_id"], label.pk)
+
+    def test_no_label_id_defaults_to_no_label_filter(self) -> None:
+        response = self.client.post(self.start_url, {})
+        self.assertEqual(response.status_code, 200)
+        session = GameSession.objects.get(pk=response.json()["session_id"])
+        self.assertIsNone(session.config["label_id"])
+
+    def test_a_non_numeric_label_id_is_rejected(self) -> None:
+        response = self.client.post(self.start_url, {"label_id": "not-an-id"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_nonexistent_label_id_is_rejected(self) -> None:
+        response = self.client.post(self.start_url, {"label_id": "999999"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_another_profiles_private_label_id_is_rejected(self) -> None:
+        """Guards against using this endpoint to probe for another profile's private labels."""
+        other_profile = _make_profile()
+        someone_elses_label = baker.make(Label, name="Someone else's spots", profile=other_profile)
+        response = self.client.post(self.start_url, {"label_id": str(someone_elses_label.pk)})
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_global_label_id_is_accepted(self) -> None:
+        global_label = ensure_label(name="Abandoned", kind=KIND_TAG, profile=None)
+        response = self.client.post(self.start_url, {"label_id": str(global_label.pk)})
+        self.assertEqual(response.status_code, 200, response.json())
+
+    def test_label_filter_narrows_which_location_the_round_uses(self) -> None:
+        label = baker.make(Label, name="Factories", profile=self.profile)
+        other_location = _make_location()
+        other_pin = baker.make(Pin, profile=self.profile, location=other_location)
+        other_pin.labels.add(label)
+        baker.make(
+            Image,
+            location=other_location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            image=ContentFile(b"fake image bytes", name="other.jpg"),
+            wiki=baker.make(Wiki, location=other_location),
+        )
+        # self.location (from setUp) is pinned but never labeled, so only
+        # other_location should ever be picked once label_id narrows the pool.
+
+        for _ in range(5):
+            response = self.client.post(self.start_url, {"label_id": str(label.pk), "total_rounds": "1"})
+            self.assertEqual(response.status_code, 200)
+            round_ = GameRound.objects.get(pk=response.json()["round"]["round_id"])
+            self.assertEqual(round_.location_id, other_location.pk)
 
     def test_round_payload_reports_whether_it_shows_imagery(self) -> None:
         response = self.client.post(self.start_url, {"total_rounds": "1"})
@@ -302,7 +366,7 @@ class SpotGuessrSettingsViewTests(TestCase):
 class SpotGuessrMultiplayerGuessRevealTests(TestCase):
     """The answer must stay hidden from an early guesser until every joined participant has guessed.
 
-    Per "Real-time sync" in docs/designs/spotguessr.md: guess.submitted carries
+    Per "Real-time sync" in docs/designs/drafts/spotguessr.md: guess.submitted carries
     no coordinates or score, and the answer only goes out with round.revealed.
     Without this, the first guesser could read it off their own HTTP response
     and relay it to teammates over session chat before they'd guessed too.
@@ -485,3 +549,40 @@ class SpotGuessrRoundTimeoutViewTests(TestCase):
         self.client.force_login(outsider.user)
         response = self.client.post(timeout_url)
         self.assertEqual(response.status_code, 404)
+
+
+class SpotGuessrHomeViewPrewarmTests(TestCase):
+    """Visiting the overview page should speculatively prewarm a solo player's likely round 1 - see services.spotguessr.prewarm."""
+
+    def setUp(self) -> None:
+        self.profile = _make_profile()
+        self.location = _make_location()
+        baker.make(Pin, profile=self.profile, location=self.location)
+        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        self.client.force_login(self.profile.user)
+
+    def test_visiting_the_page_prewarms_round_one_for_the_default_mode(self) -> None:
+        from urbanlens.dashboard.services.spotguessr import prewarm
+        from urbanlens.dashboard.tasks import prewarm_spotguessr_solo_start
+
+        # The view enqueues the speculative prewarm rather than doing it; with
+        # no worker draining the broker it would simply never happen (see
+        # core.tests.celery_inline).
+        with tasks_run_inline(prewarm_spotguessr_solo_start):
+            response = self.client.get(reverse("spotguessr"))
+
+        self.assertEqual(response.status_code, 200)
+        cached = prewarm.consume_for_solo_start(self.profile.pk, SpotGuessrMode.PHOTOS, GameConfig())
+        assert cached is not None
+        self.assertEqual(cached[0], self.location.pk)
+
+    def test_resuming_a_specific_session_does_not_trigger_the_speculative_prewarm(self) -> None:
+        from urbanlens.dashboard.services.spotguessr import prewarm
+        from urbanlens.dashboard.services.spotguessr.session import start_solo_session
+
+        session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig(), total_rounds=3)
+
+        response = self.client.get(reverse("spotguessr"), {"session": session.pk})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(prewarm.consume_for_solo_start(self.profile.pk, SpotGuessrMode.PHOTOS, GameConfig()))

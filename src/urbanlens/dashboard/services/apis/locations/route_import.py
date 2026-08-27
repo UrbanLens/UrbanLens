@@ -43,7 +43,7 @@ def import_routes_streaming(parsed_routes: list[ParsedRoute], profile: Profile) 
         SSE-formatted strings (``data: {...}\\n\\n``).
     """
     from urbanlens.dashboard.services.import_formats.gpx_tracks import detect_dwells_and_create_visits
-    from urbanlens.dashboard.services.visits import route_import_allowed
+    from urbanlens.dashboard.services.visits.visits import route_import_allowed
 
     def sse(data: dict) -> str:
         return f"data: {json.dumps(data)}\n\n"

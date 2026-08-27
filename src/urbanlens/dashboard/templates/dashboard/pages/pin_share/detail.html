@@ -1,11 +1,12 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load map_components %}
 
 {% block title %}Shared Pin{% endblock %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
 {% endblock %}
 
 {% block content %}
@@ -35,7 +36,10 @@
 
     <div class="details-grid">
       <div class="detail-row full-width"><span class="field-label">Name</span><span class="field-value">{{ shared_name }}</span></div>
-      {% if pin.description %}<div class="detail-row full-width"><span class="field-label">Description</span><span class="field-value">{{ pin.description }}</span></div>{% endif %}
+      {% comment %}
+      pin.description is the sender's private personal notes, never something they opted to
+      share (see share.message for that) - address_basic is fine, it only proxies Location.
+      {% endcomment %}
       {% if pin.address_basic %}<div class="detail-row full-width"><span class="field-label">Address</span><span class="field-value">{{ pin.address_basic }}</span></div>{% endif %}
     </div>
 

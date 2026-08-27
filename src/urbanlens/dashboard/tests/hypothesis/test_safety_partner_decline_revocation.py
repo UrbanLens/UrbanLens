@@ -2,7 +2,7 @@
 
 ``SafetyCheckinChatConsumer`` checks "may this profile watch this check-in?" once,
 at ``connect()`` time, and then keeps the socket open. That is why
-``services.safety.remove_checkin_partner`` (the owner-initiated removal) ends with
+``services.visits.safety.remove_checkin_partner`` (the owner-initiated removal) ends with
 ``_broadcast_partner_access_revoked`` - without it, a removed partner keeps
 receiving chat, status and live-location frames for as long as their tab stays
 open.
@@ -31,7 +31,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckinPartner, SafetyCheckinPartnerStatus
-from urbanlens.dashboard.services.safety import create_checkin, decline_checkin_partner_invite
+from urbanlens.dashboard.services.visits.safety import create_checkin, decline_checkin_partner_invite
 
 
 class DeclineRevokesLiveAccessTests(TestCase):
@@ -67,7 +67,7 @@ class DeclineRevokesLiveAccessTests(TestCase):
         """Resigning is a removal, and a removal has to reach the live socket."""
         partner = self._partner(SafetyCheckinPartnerStatus.ACCEPTED)
 
-        with mock.patch("urbanlens.dashboard.services.safety._broadcast_partner_access_revoked") as revoke:
+        with mock.patch("urbanlens.dashboard.services.visits.safety._broadcast_partner_access_revoked") as revoke:
             decline_checkin_partner_invite(partner)
 
         revoke.assert_called_once_with(self.checkin, self.partner_profile.pk)
@@ -84,7 +84,7 @@ class DeclineRevokesLiveAccessTests(TestCase):
         """
         partner = self._partner(SafetyCheckinPartnerStatus.INVITED)
 
-        with mock.patch("urbanlens.dashboard.services.safety._broadcast_partner_access_revoked") as revoke:
+        with mock.patch("urbanlens.dashboard.services.visits.safety._broadcast_partner_access_revoked") as revoke:
             decline_checkin_partner_invite(partner)
 
         revoke.assert_not_called()

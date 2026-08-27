@@ -161,3 +161,29 @@ class ModelSaveSanitizesNameTests(TestCase):
         alias.refresh_from_db()
         self.assertNotIn("<", alias.name)
         self.assertNotIn(">", alias.name)
+
+
+class UnderscoreIsKeptTests(SimpleTestCase):
+    """Underscore survives sanitization, unlike other punctuation that is dropped.
+
+    It was dropped until 2026-08-12, which silently renamed anything imported or
+    typed with one - "Site_7" became "Site7" on save, with no indication. That is
+    a harsher outcome than the allowlist applies to genuinely risky characters:
+    `"`, `#`, `/` and `&` were all already kept. Underscore is a word character -
+    not markup-significant, not a URL or query-string delimiter, not a homograph -
+    so keeping it widens nothing the property tests above protect.
+    """
+
+    def test_an_underscore_survives(self) -> None:
+        self.assertEqual(sanitize_name("Site_7"), "Site_7")
+
+    def test_a_name_that_is_mostly_underscores_survives(self) -> None:
+        self.assertEqual(sanitize_name("__hidden__"), "__hidden__")
+
+    def test_underscores_do_not_reintroduce_markup_characters(self) -> None:
+        """The reason it is safe: it stays inert next to the things we do strip."""
+        self.assertEqual(sanitize_name("a_<script>_b"), "a_script_b")
+
+    def test_it_is_still_idempotent_with_underscores(self) -> None:
+        once = sanitize_name("Old_Mill & Co.")
+        self.assertEqual(sanitize_name(once), once)

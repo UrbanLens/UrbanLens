@@ -106,6 +106,5 @@ class Route(abstract.FrontendDashboardModel):
         get_latest_by = "started_at"
         indexes = [
             Index(fields=["uuid"], name="idxdb_route_uuid"),
-            Index(fields=["profile"], name="idxdb_route_profile"),
             Index(fields=["profile", "started_at"], name="idxdb_rte_pfile_start"),
         ]

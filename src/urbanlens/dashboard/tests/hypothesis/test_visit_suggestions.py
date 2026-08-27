@@ -23,15 +23,17 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
 from urbanlens.dashboard.models.notifications.model import NotificationPreference
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.safety.model import SafetyCheckin
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityRSVP, TripMembership
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.locations.naming import _MEANINGLESS_NAME_PHRASES
-from urbanlens.dashboard.services.visits import (
+from urbanlens.dashboard.services.visits.visits import (
     accept_visit_suggestion,
     build_visit_suggestion_message,
     create_visit_suggestion,
@@ -205,6 +207,117 @@ class GetOrCreatePinAtTests(TestCase):
 # ---------------------------------------------------------------------------
 # create_visit_suggestion
 # ---------------------------------------------------------------------------
+
+class SuggesterIdentityMaskingTests(TestCase):
+    """A visit suggestion must mask its sender like every other notification does.
+
+    The sibling of `test_calendar_sync.CalendarInviteIdentityMaskingTests`, found
+    by `bin/report_defect_history.py`'s incomplete-fix query: the commit that
+    fixed the calendar importer said it masked "like its sibling does", which is
+    exactly the phrase that means more instances exist. This was one.
+
+    The message is stored as plain text and is picked up by push delivery and by
+    `notification_text_alerts`, which builds an SMS body from the stored text -
+    so a name masked only at render time has already left the app. Being
+    connected is not sufficient permission: `VisibilityChoice`'s own docstring
+    notes accepted friends qualify for every level *except* `NO_ONE`.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.suggester = baker.make("auth.User", username="hidden_suggester").profile
+        self.recipient = baker.make("auth.User", username="recipient").profile
+        self.location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="Old Mill")
+        self.visited_at = timezone.make_aware(datetime.datetime(2026, 6, 1, 14, 0))
+
+    def _suggest(self) -> VisitSuggestion | None:
+        origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
+        origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
+        return create_visit_suggestion(
+            suggested_to=self.recipient,
+            suggested_by=self.suggester,
+            visited_at=self.visited_at,
+            location=self.location,
+            latitude=40.0,
+            longitude=-74.0,
+            candidate_profiles=[],
+            origin_visit=origin_visit,
+        )
+
+    def _hide(self, visibility: str) -> None:
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        Profile.objects.filter(pk=self.suggester.pk).update(profile_visibility=visibility)
+        self.suggester.refresh_from_db()
+
+    def test_a_suggester_who_hides_their_identity_is_not_named(self) -> None:
+        from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+
+        self._hide(VisibilityChoice.NO_ONE)
+
+        suggestion = self._suggest()
+
+        assert suggestion is not None
+        self.assertNotIn("hidden_suggester", suggestion.notification.message)
+
+    def test_an_ordinary_suggester_is_still_named(self) -> None:
+        """Anti-vacuity: masking must not swallow the normal case."""
+        from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+
+        self._hide(VisibilityChoice.ANYONE)
+
+        suggestion = self._suggest()
+
+        assert suggestion is not None
+        self.assertIn("hidden_suggester", suggestion.notification.message)
+
+    def test_the_merge_variant_masks_too(self) -> None:
+        """The two message branches are written separately and drifted before."""
+        from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+
+        self._hide(VisibilityChoice.NO_ONE)
+        # An existing visit at the same place and date turns this into the
+        # merge-or-separate wording, which is the other branch.
+        recipient_pin = baker.make(Pin, profile=self.recipient, location=self.location)
+        baker.make(PinVisit, pin=recipient_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
+        other = baker.make("auth.User").profile
+        Friendship.objects.create(from_profile=self.recipient, to_profile=other, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(from_profile=self.suggester, to_profile=other, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+
+        origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
+        origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
+        suggestion = create_visit_suggestion(
+            suggested_to=self.recipient,
+            suggested_by=self.suggester,
+            visited_at=self.visited_at,
+            location=self.location,
+            latitude=40.0,
+            longitude=-74.0,
+            candidate_profiles=[other],
+            origin_visit=origin_visit,
+        )
+
+        assert suggestion is not None
+        self.assertTrue(suggestion.offers_merge, "this test is about the merge wording; it did not take that branch")
+        self.assertNotIn("hidden_suggester", suggestion.notification.message)
+
+    def test_a_system_inferred_suggestion_still_says_who_it_is_from(self) -> None:
+        """No sender at all is a different case from a hidden one."""
+        origin_image = baker.make(Image, profile=self.recipient, location=self.location)
+        suggestion = create_visit_suggestion(
+            suggested_to=self.recipient,
+            suggested_by=None,
+            visited_at=self.visited_at,
+            location=self.location,
+            latitude=40.0,
+            longitude=-74.0,
+            candidate_profiles=[],
+            origin_image=origin_image,
+        )
+
+        assert suggestion is not None
+        self.assertIn("A photo you added", suggestion.notification.message)
+
 
 class CreateVisitSuggestionTests(TestCase):
     def setUp(self) -> None:
@@ -505,6 +618,83 @@ class MergeVisitSuggestionTests(TestCase):
         merge_visit_suggestion(self.suggestion, self.recipient)
         self.suggestion.refresh_from_db()
         self.assertEqual(self.suggestion.status, VisitSuggestionStatus.ACCEPTED)
+
+
+# ---------------------------------------------------------------------------
+# Origin deletion: the exactly-one-origin constraint means a suggestion's
+# origin FKs can't be SET_NULL - deleting the origin must cascade to the
+# suggestion instead. Regression coverage for the bulk pin-delete crash where
+# deleting a Pin cascaded to its PinVisit, which then tried (and failed) to
+# null out origin_visit on an accepted VisitSuggestion.
+# ---------------------------------------------------------------------------
+
+class VisitSuggestionOriginCascadeTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.suggester = baker.make("auth.User").profile
+        self.recipient = baker.make("auth.User").profile
+        self.location = baker.make(Location, latitude="40.0", longitude="-74.0")
+        self.visited_at = timezone.make_aware(datetime.datetime(2026, 6, 1, 14, 0))
+
+    def _make_suggestion(self, **overrides) -> VisitSuggestion:
+        defaults = dict(
+            location=self.location,
+            latitude=40.0,
+            longitude=-74.0,
+            visited_at=self.visited_at,
+            suggested_by=self.suggester,
+            suggested_to=self.recipient,
+        )
+        defaults.update(overrides)
+        return baker.make(VisitSuggestion, **defaults)
+
+    def test_bulk_deleting_pin_with_accepted_suggestion_does_not_raise(self) -> None:
+        """Reproduces the production bug: bulk-deleting a pin whose visit had an
+        accepted VisitSuggestion raised IntegrityError against
+        db_visit_suggestion_exactly_one_origin, because origin_visit was
+        SET_NULL and the collector nulled it without clearing from_my_activity."""
+        origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
+        origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
+        suggestion = self._make_suggestion(origin_visit=origin_visit, status=VisitSuggestionStatus.ACCEPTED)
+
+        Pin.objects.filter(pk=origin_pin.pk).delete()
+
+        self.assertFalse(Pin.objects.filter(pk=origin_pin.pk).exists())
+        self.assertFalse(VisitSuggestion.objects.filter(pk=suggestion.pk).exists())
+
+    def test_deleting_origin_visit_deletes_the_suggestion(self) -> None:
+        origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
+        origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
+        suggestion = self._make_suggestion(origin_visit=origin_visit)
+
+        origin_visit.delete()
+
+        self.assertFalse(VisitSuggestion.objects.filter(pk=suggestion.pk).exists())
+
+    def test_deleting_trip_activity_deletes_the_suggestion(self) -> None:
+        trip = Trip.objects.create(name="Test Trip", creator=self.suggester)
+        activity = TripActivity.objects.create(trip=trip, added_by=self.suggester, location=self.location, title="Explore")
+        suggestion = self._make_suggestion(origin_visit=None, trip_activity=activity)
+
+        activity.delete()
+
+        self.assertFalse(VisitSuggestion.objects.filter(pk=suggestion.pk).exists())
+
+    def test_deleting_safety_checkin_deletes_the_suggestion(self) -> None:
+        checkin = baker.make(SafetyCheckin, profile=self.suggester)
+        suggestion = self._make_suggestion(origin_visit=None, safety_checkin=checkin)
+
+        checkin.delete()
+
+        self.assertFalse(VisitSuggestion.objects.filter(pk=suggestion.pk).exists())
+
+    def test_deleting_origin_image_deletes_the_suggestion(self) -> None:
+        image = baker.make(Image, profile=self.suggester)
+        suggestion = self._make_suggestion(origin_visit=None, origin_image=image)
+
+        image.delete()
+
+        self.assertFalse(VisitSuggestion.objects.filter(pk=suggestion.pk).exists())
 
 
 # ---------------------------------------------------------------------------

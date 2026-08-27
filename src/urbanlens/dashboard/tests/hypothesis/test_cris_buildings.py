@@ -23,9 +23,13 @@ from urbanlens.dashboard.plugins.builtin.cris_buildings import (
     CrisBuildingEnrichmentSource,
     CrisBuildingPanelSource,
     CrisBuildingsPlugin,
+    cris_only,
+    nearest_resource,
+    site_resource,
+    site_resource_attributes,
 )
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
-from urbanlens.dashboard.services.geo_boundary import GeoBoundary
+from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 
 # A stand-in boundary covering roughly upstate NY, so tests don't hit TIGERweb.
 _NY_ISH = GeoBoundary.from_bboxes([(40.0, 45.0, -80.0, -73.0)])
@@ -65,14 +69,24 @@ class PanelGateTests(TestCase):
             self.assertFalse(self.source.gate(stub_pin))
 
 
+# Field values here mirror REData's own serializers exactly - `resource_type`
+# from CulturalResourceType and `kind` from CulturalResourceAttachmentKind,
+# both lowercase TextChoices values. Earlier fixtures used invented uppercase
+# kinds and a "district" resource type that REData never emits, which is what
+# let the plugin's mismatched comparisons pass tests while matching nothing live.
 _BUILDING_RESOURCE = {
     "uuid": "res-1",
     "resource_type": "building",
+    "source_latitude": 42.650000,
+    "source_longitude": -73.750000,
     "attributes": {"USNNum": "12345", "USNName": "Old Mill", "HouseNum": "10", "StreetName": "Main St", "City": "Albany", "Zip": "12207", "EligibilityDesc": "Listed"},
 }
 _BUILDING_DETAIL = {
     **_BUILDING_RESOURCE,
-    "attachments": [{"id": 1, "kind": "PHOTO", "name": "Front elevation"}, {"id": 2, "kind": "DOCUMENT", "attachment_type": "Building-Structure Inventory Form"}],
+    "attachments": [
+        {"id": 1, "kind": "photo", "name": "Front elevation", "content_type": "image/jpeg"},
+        {"id": 2, "kind": "document", "attachment_type": "Building-Structure Inventory Form", "content_type": "application/pdf"},
+    ],
 }
 
 
@@ -97,6 +111,7 @@ class PanelFetchTests(TestCase):
         self.assertEqual(data["USNName"], "Old Mill")
         self.assertEqual(data["resource_uuid"], "res-1")
         self.assertEqual(len(data["attachments"]), 2)
+        self.assertTrue(data["attachments_fetched"])
 
     def test_fetch_extracts_images_from_document_attachments_only(self) -> None:
         with (
@@ -108,7 +123,7 @@ class PanelFetchTests(TestCase):
         ):
             CrisBuildingPanelSource().fetch(self.pin)
 
-        mock_extract.assert_called_once_with("res-1", 2)  # only the DOCUMENT-kind attachment (id=2)
+        mock_extract.assert_called_once_with("res-1", 2)  # only the document-kind attachment (id=2)
         data = mock_set.call_args[0][2]
         attachments_by_id = {a["id"]: a for a in data["attachments"]}
         self.assertEqual(attachments_by_id[2]["extracted_images"], [{"id": 9}])
@@ -127,7 +142,7 @@ class PanelFetchTests(TestCase):
         data = mock_set.call_args[0][2]
         attachments_by_id = {a["id"]: a for a in data["attachments"]}
         self.assertEqual(attachments_by_id[2]["extracted_images"], [])
-        self.assertEqual(len(data["attachments"]), 2)  # the PHOTO attachment survives too
+        self.assertEqual(len(data["attachments"]), 2)  # the photo attachment survives too
 
     def test_no_building_resource_found_persists_empty(self) -> None:
         with (
@@ -179,22 +194,102 @@ class PanelFetchTests(TestCase):
         mock_set.assert_called_once_with(stub_location, "cris_building_usn", {}, query_key="")
 
 
+class NearestResourceTests(SimpleTestCase):
+    """A CRIS lookup over a campus returns dozens of buildings in no useful order.
+
+    Taking the first match handed every pin on a site the same arbitrary
+    outbuilding; each resource's own published position is what ranks them.
+    """
+
+    def _building(self, uuid: str, lat: float | None, lng: float | None) -> dict:
+        return {"uuid": uuid, "resource_type": "building", "source_latitude": lat, "source_longitude": lng}
+
+    def test_picks_the_closest_building_not_the_first(self) -> None:
+        resources = [
+            self._building("far", 41.740000, -73.930000),
+            self._building("near", 41.733200, -73.930400),
+            self._building("middling", 41.736000, -73.930000),
+        ]
+        chosen = nearest_resource(resources, "building", 41.733150, -73.930370)
+        assert chosen is not None
+        self.assertEqual(chosen["uuid"], "near")
+
+    def test_ignores_resources_of_another_type(self) -> None:
+        resources = [
+            {"uuid": "district", "resource_type": "building_district", "source_latitude": 41.733150, "source_longitude": -73.930370},
+            self._building("far", 41.740000, -73.930000),
+        ]
+        chosen = nearest_resource(resources, "building", 41.733150, -73.930370)
+        assert chosen is not None
+        self.assertEqual(chosen["uuid"], "far")
+
+    def test_falls_back_to_the_first_match_when_none_publishes_a_position(self) -> None:
+        """REData leaves source_* null for USN stubs - still better than nothing."""
+        resources = [self._building("a", None, None), self._building("b", None, None)]
+        chosen = nearest_resource(resources, "building", 41.7, -73.9)
+        assert chosen is not None
+        self.assertEqual(chosen["uuid"], "a")
+
+    def test_no_match_yields_none(self) -> None:
+        self.assertIsNone(nearest_resource([{"uuid": "x", "resource_type": "project"}], "building", 41.7, -73.9))
+
+
 class MediaItemsTests(SimpleTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.source = CrisBuildingPanelSource()
 
     def test_builds_one_item_per_attachment(self) -> None:
-        data = {"resource_uuid": "res-1", "attachments": [{"id": 1, "kind": "PHOTO", "name": "Front elevation"}, {"id": 2, "kind": "DOCUMENT", "attachment_type": "Inventory Form"}]}
+        data = {
+            "resource_uuid": "res-1",
+            "attachments": [
+                {"id": 1, "kind": "photo", "name": "Front elevation", "content_type": "image/jpeg"},
+                {"id": 2, "kind": "document", "attachment_type": "Inventory Form", "content_type": "application/pdf"},
+            ],
+        }
         items = self.source.media_items(data)
         self.assertEqual(len(items), 2)
         self.assertEqual(items[0].caption, "Front elevation")
         self.assertTrue(items[0].thumb_url)
         self.assertEqual(items[1].caption, "Inventory Form")
-        self.assertEqual(items[1].thumb_url, "")  # documents get no thumbnail
+
+    def test_a_document_attachment_gets_a_rendered_thumbnail(self) -> None:
+        """A scanned inventory form is a photograph of the building - it belongs
+        in the gallery as an image, not as an anonymous grey document icon."""
+        data = {"resource_uuid": "res-1", "attachments": [{"id": 2, "kind": "document", "attachment_type": "Inventory Form", "content_type": "application/pdf"}]}
+        items = self.source.media_items(data)
+        self.assertIn("preview=1", items[0].thumb_url)
+        self.assertEqual(items[0].content_type, "application/pdf")
+
+    def test_every_attachment_thumbnails_through_the_proxys_preview_mode(self) -> None:
+        """REData reports content_type as blank until a file has been downloaded
+        once, so the format can't be decided here - the proxy, which holds the
+        bytes, passes an already-displayable file straight through."""
+        data = {"resource_uuid": "res-1", "attachments": [{"id": 1, "kind": "photo", "name": "Front", "content_type": ""}]}
+        items = self.source.media_items(data)
+        self.assertEqual(items[0].thumb_url, f"{items[0].url}?preview=1")
+
+    def test_extracted_images_thumbnail_through_preview_mode_too(self) -> None:
+        data = {"resource_uuid": "res-1", "attachments": [{"id": 2, "kind": "document", "extracted_images": [{"id": 9}]}]}
+        items = self.source.media_items(data)
+        self.assertIn("preview=1", items[1].thumb_url)
+
+    def test_attachments_carry_their_own_resource_uuid(self) -> None:
+        """One payload aggregates the nearest building's attachments and the
+        site record's, so each must proxy through its own resource."""
+        data = {
+            "resource_uuid": "res-1",
+            "attachments": [
+                {"id": 1, "kind": "photo", "name": "Building", "resource_uuid": "res-1"},
+                {"id": 5, "kind": "photo", "name": "District", "resource_uuid": "res-9"},
+            ],
+        }
+        items = self.source.media_items(data)
+        self.assertIn("res-1", items[0].url)
+        self.assertIn("res-9", items[1].url)
 
     def test_no_resource_uuid_yields_no_items(self) -> None:
-        self.assertEqual(self.source.media_items({"attachments": [{"id": 1, "kind": "PHOTO"}]}), [])
+        self.assertEqual(self.source.media_items({"attachments": [{"id": 1, "kind": "photo"}]}), [])
 
     def test_no_attachments_yields_no_items(self) -> None:
         self.assertEqual(self.source.media_items({"resource_uuid": "res-1"}), [])
@@ -203,7 +298,7 @@ class MediaItemsTests(SimpleTestCase):
         data = {
             "resource_uuid": "res-1",
             "attachments": [
-                {"id": 2, "kind": "DOCUMENT", "attachment_type": "Inventory Form", "extracted_images": [{"id": 9}, {"id": 10}]},
+                {"id": 2, "kind": "document", "attachment_type": "Inventory Form", "extracted_images": [{"id": 9}, {"id": 10}]},
             ],
         }
         items = self.source.media_items(data)
@@ -214,7 +309,7 @@ class MediaItemsTests(SimpleTestCase):
         self.assertTrue(items[2].thumb_url)
 
     def test_attachment_with_no_extracted_images_yields_no_extra_items(self) -> None:
-        data = {"resource_uuid": "res-1", "attachments": [{"id": 1, "kind": "PHOTO", "name": "Front", "extracted_images": []}]}
+        data = {"resource_uuid": "res-1", "attachments": [{"id": 1, "kind": "photo", "name": "Front", "extracted_images": []}]}
         self.assertEqual(len(self.source.media_items(data)), 1)
 
 
@@ -294,11 +389,31 @@ class SiteScopeRenderTests(SimpleTestCase):
         self.assertEqual(len(self.source.media_items(data)), 1)
 
 
+# REData's CulturalResourceType value is `building_district`; a plain
+# "district" matches nothing it ever returns.
 _DISTRICT_RESOURCE = {
     "uuid": "res-9",
-    "resource_type": "district",
+    "resource_type": "building_district",
     "attributes": {"USNName": "Hudson River State Hospital Historic District", "EligibilityDesc": "Listed"},
 }
+_DISTRICT_DETAIL = {
+    **_DISTRICT_RESOURCE,
+    "attachments": [{"id": 5, "kind": "document", "attachment_type": "National Register Nomination", "content_type": "application/pdf"}],
+}
+
+
+class SiteResourceTypeTests(SimpleTestCase):
+    def test_a_building_district_is_recognized_as_the_site_record(self) -> None:
+        attributes = site_resource_attributes([_BUILDING_RESOURCE, _DISTRICT_RESOURCE])
+        self.assertEqual(attributes["USNName"], "Hudson River State Hospital Historic District")
+        self.assertEqual(attributes["resource_type"], "building_district")
+
+    def test_a_national_register_listing_is_recognized_too(self) -> None:
+        listing = {"uuid": "nr-1", "resource_type": "national_register_listing", "attributes": {"USNName": "Main Building"}}
+        self.assertEqual(site_resource_attributes([listing])["USNName"], "Main Building")
+
+    def test_a_building_alone_yields_no_site_record(self) -> None:
+        self.assertEqual(site_resource_attributes([_BUILDING_RESOURCE]), {})
 
 
 class DistrictPayloadTests(TestCase):
@@ -309,11 +424,15 @@ class DistrictPayloadTests(TestCase):
         self.location = baker.make(Location, latitude="41.733150", longitude="-73.930370", google_place=None)
         self.pin = baker.make(Pin, profile=_make_profile(), location=self.location)
 
+    @staticmethod
+    def _detail_by_uuid(resource_uuid: str) -> dict:
+        return {"res-1": _BUILDING_DETAIL, "res-9": _DISTRICT_DETAIL}[resource_uuid]
+
     def test_a_district_is_cached_beside_the_building(self) -> None:
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE, _DISTRICT_RESOURCE]),
-            patch.object(RedataGateway, "fetch_cultural_resource_detail", return_value=_BUILDING_DETAIL),
+            patch.object(RedataGateway, "fetch_cultural_resource_detail", side_effect=self._detail_by_uuid),
             patch.object(RedataGateway, "extract_cultural_resource_attachment", return_value={"extracted_images": []}),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
@@ -322,14 +441,33 @@ class DistrictPayloadTests(TestCase):
         self.assertEqual(data["USNName"], "Old Mill", "the building record must stay at the top level")
         self.assertEqual(data["district"]["USNName"], "Hudson River State Hospital Historic District")
 
+    def test_the_site_records_own_attachments_are_fetched_too(self) -> None:
+        """A parcel-scope pin's CRIS media is the district's nomination forms and
+        survey photos, not whichever single building happened to be nearest."""
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE, _DISTRICT_RESOURCE]),
+            patch.object(RedataGateway, "fetch_cultural_resource_detail", side_effect=self._detail_by_uuid),
+            patch.object(RedataGateway, "extract_cultural_resource_attachment", return_value={"extracted_images": []}),
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
+            CrisBuildingPanelSource().fetch(self.pin)
+        attachments = mock_set.call_args[0][2]["attachments"]
+        by_resource = {a["resource_uuid"] for a in attachments}
+        self.assertEqual(by_resource, {"res-1", "res-9"})
+
     def test_a_district_alone_is_still_cached(self) -> None:
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_DISTRICT_RESOURCE]),
+            patch.object(RedataGateway, "fetch_cultural_resource_detail", side_effect=self._detail_by_uuid),
+            patch.object(RedataGateway, "extract_cultural_resource_attachment", return_value={"extracted_images": []}),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             CrisBuildingPanelSource().fetch(self.pin)
-        self.assertEqual(mock_set.call_args[0][2]["district"]["USNName"], "Hudson River State Hospital Historic District")
+        data = mock_set.call_args[0][2]
+        self.assertEqual(data["district"]["USNName"], "Hudson River State Hospital Historic District")
+        self.assertEqual(len(data["attachments"]), 1, "a location with no surveyed building of its own still has the district's media")
 
     def test_no_district_leaves_the_payload_shape_unchanged(self) -> None:
         with (
@@ -377,6 +515,20 @@ class EnrichmentSourceTests(TestCase):
         self.assertIsNone(payload)
         self.assertEqual(query_key, "42.650000,-73.750000")
 
+    def test_enrichment_does_not_claim_the_media_half(self) -> None:
+        """Enrichment fills the info card only - attachments need a per-resource
+        detail fetch it deliberately skips."""
+        location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
+
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]),
+        ):
+            payload, _ = CrisBuildingEnrichmentSource().fetch(location)
+
+        assert payload is not None
+        self.assertNotIn("attachments_fetched", payload)
+
     def test_fetch_returns_none_payload_when_unconfigured(self) -> None:
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
 
@@ -385,6 +537,37 @@ class EnrichmentSourceTests(TestCase):
 
         self.assertIsNone(payload)
         self.assertEqual(query_key, "42.650000,-73.750000")
+
+
+class MediaReadinessTests(SimpleTestCase):
+    """The panel and the background enrichment source share one cache row.
+
+    Enrichment writes the info-card half only. Before this was accounted for,
+    a location enriched in the background rendered as an authoritative "CRIS
+    found nothing" in the gallery for the whole cache window, even though CRIS
+    had photos and inventory forms for it and nothing had ever asked.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.source = CrisBuildingPanelSource()
+
+    def test_an_enrichment_written_row_is_not_media_ready(self) -> None:
+        self.assertFalse(self.source.media_is_ready({"USNName": "Old Mill", "resource_uuid": "res-1", "attachments": []}))
+
+    def test_a_panel_written_row_is_media_ready(self) -> None:
+        self.assertTrue(self.source.media_is_ready({"USNName": "Old Mill", "resource_uuid": "res-1", "attachments": [], "attachments_fetched": True}))
+
+    def test_an_empty_row_is_media_ready(self) -> None:
+        """"CRIS has nothing here" is a real answer - re-polling it forever isn't."""
+        self.assertTrue(self.source.media_is_ready({}))
+
+    def test_other_sources_are_media_ready_by_default(self) -> None:
+        from urbanlens.dashboard.services.pins.external_data import get_panel_source
+
+        panel = get_panel_source("smithsonian")
+        assert panel is not None
+        self.assertTrue(panel.media_is_ready({}))
 
 
 class PluginContributionsTests(SimpleTestCase):
@@ -406,3 +589,72 @@ class PluginContributionsTests(SimpleTestCase):
         self.assertEqual(providers[0].source, "cris")
         self.assertEqual(providers[0].cache_source, "cris_building_usn")
         self.assertEqual(providers[0].keys, ("USNName",))
+
+
+#: A National Register row of the kind REData's nationwide `nps_nrhp` provider
+#: returns for any US coordinate, including every New York one. It shares the
+#: `resource_type` vocabulary with CRIS and publishes its own position, so it
+#: competes on distance - but carries none of CRIS's raw attribute names.
+_NRHP_BUILDING = {
+    "uuid": "nrhp-1",
+    "provider": "nps_nrhp",
+    "resource_type": "building",
+    # Deliberately nearer the query point than _BUILDING_RESOURCE, so it wins
+    # any distance ranking that does not exclude it first.
+    "source_latitude": 42.650001,
+    "source_longitude": -73.750001,
+    "attributes": {"RESNAME": "Some Listed House", "PROPERTY_ID": "77000123"},
+}
+_NRHP_DISTRICT = {
+    "uuid": "nrhp-2",
+    "provider": "nps_nrhp",
+    "resource_type": "building_district",
+    "attributes": {"RESNAME": "Some Historic District"},
+}
+_CRIS_BUILDING = {**_BUILDING_RESOURCE, "provider": "ny_cris"}
+_CRIS_DISTRICT = {**_DISTRICT_RESOURCE, "provider": "ny_cris"}
+
+
+class ProviderScopingTests(SimpleTestCase):
+    """This panel reads CRIS's own attribute names, so it must read CRIS's rows.
+
+    REData answers `/cultural-resources/lookup/` from a registry of state and
+    municipal inventories plus the nationwide National Register. Inside New
+    York both `ny_cris` and `nps_nrhp` answer, and selecting purely on
+    `resource_type` let an NRHP row win - after which `USNName` is absent, the
+    card renders nothing, and a nomination PDF from the wrong source lands in
+    the CRIS-labelled media tab.
+    """
+
+    def test_an_nrhp_building_does_not_win_on_distance(self) -> None:
+        resources = [_NRHP_BUILDING, _CRIS_BUILDING]
+
+        chosen = nearest_resource(resources, "building", 42.650000, -73.750000)
+
+        self.assertIsNotNone(chosen)
+        self.assertEqual(chosen["provider"], "ny_cris", "the nearer NRHP row must not be picked for a CRIS-only card")
+        self.assertIn("USNName", chosen["attributes"])
+
+    def test_an_nrhp_district_is_not_taken_as_the_site_record(self) -> None:
+        """List order across providers is arbitrary, so first-match is not safe."""
+        chosen = site_resource([_NRHP_DISTRICT, _CRIS_DISTRICT])
+
+        self.assertIsNotNone(chosen)
+        self.assertEqual(chosen["provider"], "ny_cris")
+
+    def test_a_response_with_only_foreign_rows_selects_nothing(self) -> None:
+        """Better an absent card than one headed "CRIS" showing another register."""
+        self.assertIsNone(nearest_resource([_NRHP_BUILDING], "building", 42.65, -73.75))
+        self.assertIsNone(site_resource([_NRHP_DISTRICT]))
+
+    def test_untagged_rows_survive(self) -> None:
+        """Cached responses predating REData's provider registry carry no tag."""
+        self.assertEqual(cris_only([_BUILDING_RESOURCE]), [_BUILDING_RESOURCE])
+
+    def test_the_lookup_names_its_provider(self) -> None:
+        """Filtering client-side still pays for the other providers' queries."""
+        location = SimpleNamespace(latitude="42.650000", longitude="-73.750000")
+        with patch.object(RedataGateway, "lookup_cultural_resources", return_value=[]) as mock_lookup:
+            CrisBuildingEnrichmentSource().fetch(location)
+
+        self.assertEqual(mock_lookup.call_args.kwargs.get("provider"), "ny_cris")

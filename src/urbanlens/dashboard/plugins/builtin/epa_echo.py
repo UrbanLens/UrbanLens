@@ -20,166 +20,165 @@ still in flight, both may briefly race to fetch independently (their
 Celery-task single-flight keys differ, per-panel) - harmless, since the loser
 just overwrites the row with equivalent data, but worth knowing about if EPA's
 conservative rate limit ever gets tripped by that.
+
+Backed by REData's shared points-of-interest lookup (``provider="epa_echo"``)
+rather than the direct EPA ECHO REST API this project used before
+(``services.apis.locations.epa_echo``, now removed). That direct API needed a
+two-step, tightly rate-limited (5 calls/minute) dance - a nearby-search call
+with no per-facility longitude, then a separate Detailed Facility Report call
+per candidate to get real coordinates and compliance detail - which is why the
+old version of this module had a wall-clock exact-match budget and a
+closest-by-latitude candidate ordering to spend that scarce per-candidate
+budget wisely. REData's own ``epa_echo`` provider resolves every candidate's
+coordinates and compliance attributes in the single lookup call, so none of
+that per-candidate budgeting exists anymore - see :func:`_fetch_epa_echo_data`.
 """
 
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 logger = logging.getLogger(__name__)
 
 _CACHE_SOURCE = "epa_echo"
 
-#: A facility whose DFR coordinates are within this distance of the pin's own
-#: coordinates is treated as "this facility IS the pin", not just nearby.
+#: A facility whose REData-reported coordinates are within this distance of
+#: the pin's own coordinates is treated as "this facility IS the pin", not
+#: just nearby.
 _EXACT_MATCH_RADIUS_MILES = 0.1
-#: Wall-clock ceiling on the exact-match DFR lookup loop - the real bound on
-#: how many of the (up to 10) nearby-search candidates get checked, not a
-#: fixed candidate count. Earlier versions of this loop capped the candidate
-#: count directly (first 3, then 2, to bound worst-case latency) - but that
-#: traded away correctness for no reason once this budget existed: checking
-#: fewer candidates directly means missing more genuine exact-site matches
-#: whenever the right one isn't checked early - confirmed in production,
-#: where reducing the cap to 2 caused a facility that WAS in the nearby
-#: results to stop being found. The budget alone already bounds worst-case
-#: latency (this whole fetch runs inside a Celery task sharing a worker pool
-#: with ~10 other panel fetches on a cold pin page - see docker-compose.yml's
-#: celery-worker concurrency comment), so there's no latency reason left to
-#: also cap the count. In practice ECHO's OWN 5-calls/minute rate limit (see
-#: EpaEchoPlugin.get_service_defaults) is the tighter constraint - it usually
-#: allows checking only 2-3 candidates per fetch before RateLimitExceededError
-#: cuts the loop short (see _fetch_epa_echo_data) - which is why the loop
-#: below checks candidates in latitude-proximity order rather than raw array
-#: order, to spend that scarce budget on the ones most likely to be the match.
-_EXACT_MATCH_BUDGET_SECONDS = 30.0
 
 
 def _miles_between(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    from urbanlens.dashboard.models.profile.model import _haversine_km
+    """Great-circle distance between two points, in miles.
 
-    return _haversine_km((lat1, lng1), (lat2, lng2)) * 0.621371
+    Args:
+        lat1: First latitude in degrees.
+        lng1: First longitude in degrees.
+        lat2: Second latitude in degrees.
+        lng2: Second longitude in degrees.
+
+    Returns:
+        Distance in miles.
+    """
+    from urbanlens.dashboard.models.profile.meta import DistanceUnit
+    from urbanlens.dashboard.services.core.units import km_to_display
+    from urbanlens.dashboard.services.geo.distance import haversine_km
+
+    return km_to_display(haversine_km(lat1, lng1, lat2, lng2), DistanceUnit.MILES)
+
+
+def _facility_from_poi(poi: dict[str, Any]) -> dict[str, Any]:
+    """Map a REData ``epa_echo`` points-of-interest row onto this plugin's facility shape.
+
+    The compliance data lives in ``attributes``, since the generic
+    ``PointOfInterest`` model promotes only the fields every provider can
+    answer. The keys are REData's own, read from its
+    ``parcels/services/epa_echo/lookup.py``: ``compliance_status``,
+    ``significant_violator``, ``quarters_with_violation``,
+    ``last_inspection_date``, ``inspection_count``, ``active`` and ``address``.
+    Two of them were guessed here before that module existed
+    (``quarters_in_noncompliance``, ``last_inspection``) and guessed wrong, so
+    every facility printed "last inspected no recorded inspection" and no
+    non-compliance count at all until 2026-08-19.
+
+    Unlike the direct EPA ECHO API this replaced - whose Detailed Facility
+    Report broke compliance history down per environmental statute (RCRA, CAA,
+    CWA, ...) - REData's documented attributes are a single flattened status
+    per facility, not a per-program list. A facility's history across
+    multiple statutes is no longer distinguishable; only its overall status is.
+
+    Args:
+        poi: One ``PointOfInterestSerializer``-shaped row with ``provider="epa_echo"``.
+
+    Returns:
+        ``{"registry_id", "name", "address", "latitude", "longitude",
+        "compliance_status", "significant_violator",
+        "quarters_in_noncompliance", "last_inspection", "inspection_count"}``
+        - the two ``quarters``/``inspection`` keys keep this plugin's own
+        names, which the template and the API payload already use.
+    """
+    attributes = poi.get("attributes") or {}
+    return {
+        "registry_id": poi.get("external_id") or "",
+        "name": poi.get("name") or "",
+        "address": attributes.get("address") or "",
+        "latitude": poi.get("latitude"),
+        "longitude": poi.get("longitude"),
+        "compliance_status": attributes.get("compliance_status") or "",
+        "significant_violator": bool(attributes.get("significant_violator")),
+        "quarters_in_noncompliance": attributes.get("quarters_with_violation"),
+        "last_inspection": attributes.get("last_inspection_date") or "",
+        "inspection_count": attributes.get("inspection_count"),
+    }
 
 
 def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
-    """Search EPA ECHO for nearby facilities and look for an exact-site match among the closest few.
+    """Search REData for nearby EPA-regulated facilities and pick out an exact-site match.
 
-    ECHO's own rate limit (5 calls/minute, see ``EpaEchoPlugin.get_service_defaults``)
-    is tight enough that the exact-match loop below - up to 10 ``get_facility_detail``
-    calls plus the initial search - routinely exhausts it before finishing. A
-    ``RateLimitExceededError`` raised mid-loop is caught and treated as "stop
-    checking further candidates", not a fetch failure: the facilities list (and
-    whatever exact-site checking completed before the budget ran out) is still
-    genuinely useful and must not be thrown away. Letting it propagate would
-    abort ``fetch()`` entirely, so nothing gets cached and ``run_panel_fetch``
-    suppresses the panel for 30 minutes (``DISABLED_SKIP_TTL_SECONDS``) - which
-    is exactly what was happening in production before this fix.
+    REData's own ``epa_echo`` points-of-interest provider resolves every
+    candidate's coordinates and compliance attributes in one call - unlike the
+    direct EPA ECHO API this replaced, there is no separate, rate-limited
+    per-candidate detail fetch left to budget (see the module docstring).
 
-    Every facility this function ever sees (from either the nearby-search or a
-    full Detailed Facility Report lookup) is recorded in ``EpaFacility``,
-    project-wide - so a candidate already fetched while checking some OTHER
-    pin's exact-site match is reused directly from the database instead of
-    spending any more of ECHO's rate-limited budget on it. This is what lets
-    fetching nearby facilities for any one pin passively build up reusable
-    knowledge for the whole area (see EpaFacility's own docstring).
+    Every facility this function sees is still recorded in ``EpaFacility``,
+    project-wide, exactly as before - reusable by any other pin's own
+    exact-site check, and by :class:`EpaFacilityNameProvider`, without a
+    second REData call.
 
     Returns the shape persisted to the shared LocationCache row:
     ``{"facilities": [...], "exact_site": {...} | None}``.
     """
     from urbanlens.dashboard.models.epa_facility import EpaFacility
-    from urbanlens.dashboard.services.apis.locations.epa_echo import EpaEchoGateway
-    from urbanlens.dashboard.services.geo_filter import is_usa_coordinates
-    from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+    from urbanlens.dashboard.services.apis.locations.redata_points_of_interest_gateway import RedataPointsOfInterestGateway
+    from urbanlens.dashboard.services.geo.geo_filter import is_usa_coordinates
 
     lat = float(pin.effective_latitude or 0)
     lng = float(pin.effective_longitude or 0)
     if not is_usa_coordinates(lat, lng):
         return {"facilities": [], "exact_site": None}
 
-    gateway = EpaEchoGateway()
-    facilities = gateway.get_nearby_facilities(lat, lng, radius_miles=0.5, limit=10)
+    results = RedataPointsOfInterestGateway().find_near(lat, lng, provider="epa_echo")
+    facilities = [_facility_from_poi(poi) for poi in results]
 
     for facility in facilities:
-        EpaFacility.record_search_result(
-            facility.get("registry_id") or "",
-            name=facility.get("name") or "",
-            address=facility.get("address") or "",
-            latitude=facility.get("latitude"),
-            data={k: v for k, v in facility.items() if k not in ("registry_id", "latitude")},
-        )
-
-    # Candidates whose Detailed Facility Report we've already fetched for some
-    # OTHER pin near here don't cost anything to check again - reuse them and
-    # spend the rate-limited budget only on genuinely new candidates.
-    known_details = EpaFacility.known_details_by_registry_id(facility.get("registry_id") or "" for facility in facilities)
-
-    # ECHO's nearby-search rows aren't distance-sorted (see get_nearby_facilities'
-    # docstring) and the rate limit above usually can't survive checking every
-    # candidate - so check the ones most likely to actually be the match FIRST.
-    # Latitude is the only per-facility coordinate ECHO's search rows include;
-    # not a full distance, but a solid cheap proxy given the tight (0.5mi)
-    # search radius, and far better than raw array order for finding the real
-    # match within whatever budget survives the rate limit. The unsorted
-    # `facilities` list (below) is still what gets returned/cached/rendered -
-    # this ordering is only used to decide which few candidates spend the
-    # scarce DFR-lookup budget.
-    facilities_by_proximity = sorted(facilities, key=lambda f: abs(f["latitude"] - lat) if f.get("latitude") is not None else float("inf"))
-
-    exact_site = None
-    best_distance = _EXACT_MATCH_RADIUS_MILES
-    started = time.monotonic()
-    for facility in facilities_by_proximity:
         registry_id = facility.get("registry_id") or ""
         if not registry_id:
             continue
+        EpaFacility.record_detail_result(
+            registry_id,
+            name=facility.get("name") or "",
+            address=facility.get("address") or "",
+            latitude=facility.get("latitude"),
+            longitude=facility.get("longitude"),
+            data={k: v for k, v in facility.items() if k not in ("registry_id", "latitude", "longitude")},
+        )
 
-        known = known_details.get(registry_id)
-        if known is not None:
-            detail: dict[str, Any] | None = {"latitude": known.latitude, "longitude": known.longitude, **known.data}
-        else:
-            if time.monotonic() - started >= _EXACT_MATCH_BUDGET_SECONDS:
-                logger.warning("EPA ECHO exact-site match budget exceeded for pin %s; stopping early", pin.pk)
-                break
-            try:
-                detail = gateway.get_facility_detail(registry_id)
-            except RateLimitExceededError:
-                logger.warning("EPA ECHO rate limit exhausted mid exact-site match for pin %s; keeping partial results", pin.pk)
-                break
-            # Record every REAL DFR response, even one without coordinates
-            # (ECHO has no Permits data for some facilities) - a coordinate-less
-            # facility can never be an exact-site match, and recording that
-            # fact is exactly what stops every future nearby pin's fetch from
-            # re-spending one of ECHO's 5-calls/minute budget re-ruling it
-            # out. None (transient failure / unknown ID) is NOT recorded, so
-            # a flaky response can't permanently mark a facility coordinate-less.
-            if detail is not None:
-                EpaFacility.record_detail_result(
-                    registry_id,
-                    name=facility.get("name") or "",
-                    address=facility.get("address") or "",
-                    latitude=detail.get("latitude"),
-                    longitude=detail.get("longitude"),
-                    data={k: v for k, v in detail.items() if k not in ("latitude", "longitude")},
-                )
-
-        if not detail or detail.get("latitude") is None or detail.get("longitude") is None:
+    exact_site = None
+    best_distance = _EXACT_MATCH_RADIUS_MILES
+    for facility in facilities:
+        if not facility.get("registry_id"):
             continue
-        distance = _miles_between(lat, lng, detail["latitude"], detail["longitude"])
+        if facility.get("latitude") is None or facility.get("longitude") is None:
+            continue
+        distance = _miles_between(lat, lng, facility["latitude"], facility["longitude"])
         if distance <= best_distance:
             best_distance = distance
-            exact_site = {**detail, "registry_id": registry_id, "name": facility.get("name") or "", "address": facility.get("address") or ""}
+            exact_site = facility
 
     return {"facilities": facilities, "exact_site": exact_site}
 
@@ -216,13 +215,11 @@ def _propagate_exact_site_to_nearby_locations(location: Location, exact_site: di
     the exact-match radius whose own ``epa_echo`` cache has no match yet.
 
     Without this, a Location that happened to strike out on its own exact-site
-    check (most often because ECHO's tight rate limit cut its DFR-lookup loop
-    short before it reached the right candidate - see ``_fetch_epa_echo_data``'s
-    docstring) stays cached with an empty result for up to
+    check stays cached with an empty result for up to
     ``SiteSettings.external_data_cache_days``, even after a neighboring pin
     - sometimes fetched moments later - definitively proves the same facility
     sits right there too. Since the facility's own confirmed coordinates are
-    already in hand, this costs zero extra EPA API calls: it's a plain
+    already in hand, this costs zero extra REData calls: it's a plain
     proximity query against already-pinned Locations, writing the same
     ``exact_site`` payload directly into their cache rows.
 
@@ -259,7 +256,17 @@ def _propagate_exact_site_to_nearby_locations(location: Location, exact_site: di
         LocationCache.set(neighbor, _CACHE_SOURCE, new_data, query_key=(cache_row.query_key if cache_row else ""))
 
 
-class EpaEchoNearbyPanelSource(CoordinateGatedInfoPanelSource):
+class _EpaEchoPanelSourceBase(CoordinateGatedInfoPanelSource):
+    """Shared USA + REData-configured gate for both EPA ECHO panel sources."""
+
+    geo_boundary: ClassVar[GeoBoundary | None] = USA
+
+    def gate(self, pin: Pin) -> bool:
+        """Requires coordinates within the USA (see ``geo_boundary``) and REData to be configured."""
+        return super().gate(pin) and redata_configured()
+
+
+class EpaEchoNearbyPanelSource(_EpaEchoPanelSourceBase):
     """List of EPA-regulated facilities near the pin's location (subscription-gated "Nearby Research" tab)."""
 
     key = "epa_echo"
@@ -312,7 +319,6 @@ class EpaEchoNearbyPanelSource(CoordinateGatedInfoPanelSource):
         return {
             "chips": [f"{len(meta)} nearby"],
             "meta": meta,
-            "nested": True,
         }
 
     def debug_count(self, data: dict) -> int:
@@ -320,7 +326,7 @@ class EpaEchoNearbyPanelSource(CoordinateGatedInfoPanelSource):
         return len((data or {}).get("facilities") or [])
 
 
-class EpaEchoDetailPanelSource(CoordinateGatedInfoPanelSource):
+class EpaEchoDetailPanelSource(_EpaEchoPanelSourceBase):
     """Specific-site EPA compliance detail, shown whenever a regulated facility sits at this exact pin.
 
     Not subscription-gated - this is the integration's primary purpose, as
@@ -368,25 +374,18 @@ class EpaEchoDetailPanelSource(CoordinateGatedInfoPanelSource):
         if not exact_site:
             return None
 
-        facts = []
-        danger_programs = []
-        for program in exact_site.get("programs") or []:
-            statute = program.get("statute") or "Program"
-            penalties = program.get("total_penalties") or "$0"
-            formal_actions = program.get("formal_actions") or "0"
-            last_inspection = program.get("last_inspection") or "no recorded inspection"
-            facts.append(
-                {
-                    "icon": "gavel",
-                    "text": f"{statute}: {formal_actions} formal enforcement action(s), {penalties} in penalties - last inspected {last_inspection}",
-                },
-            )
-            if program.get("quarters_in_significant_noncompliance") not in (None, "", "0"):
-                danger_programs.append(statute)
+        status = exact_site.get("compliance_status") or "Unknown"
+        last_inspection = exact_site.get("last_inspection") or "no recorded inspection"
+        quarters = exact_site.get("quarters_in_noncompliance")
+        fact_text = f"Compliance status: {status} - last inspected {last_inspection}"
+        if quarters not in (None, "", "0", 0):
+            fact_text += f" ({quarters} quarter(s) in noncompliance)"
+        facts = [{"icon": "gavel", "text": fact_text}]
 
+        significant = bool(exact_site.get("significant_violator"))
         meta = [{"label": "Address", "value": exact_site.get("address") or "Unknown"}]
-        if danger_programs:
-            meta.append({"label": "Significant noncompliance", "value": ", ".join(danger_programs)})
+        if significant:
+            meta.append({"label": "Significant noncompliance", "value": status})
 
         registry_id = exact_site.get("registry_id")
         footer_link = (
@@ -397,7 +396,7 @@ class EpaEchoDetailPanelSource(CoordinateGatedInfoPanelSource):
 
         return {
             "heading_name": exact_site.get("name") or "EPA-regulated facility",
-            "chips": ["Significant noncompliance"] if danger_programs else [],
+            "chips": ["Significant noncompliance"] if significant else [],
             "facts": facts,
             "meta": meta,
             "footer_link": footer_link,
@@ -438,29 +437,21 @@ class EpaFacilityNameProvider(NameProvider):
 
 
 class EpaEchoPlugin(UrbanLensPlugin):
-    """EPA ECHO regulated-facility compliance data for pinned locations. USA only."""
+    """EPA ECHO regulated-facility compliance data for pinned locations, via REData. USA only."""
 
     name: ClassVar[str] = "epa_echo"
     verbose_name: ClassVar[str] = "EPA ECHO"
     description: ClassVar[str] = (
-        "Free, keyless EPA Enforcement and Compliance History Online (ECHO) lookup - shows an unconditional "
-        "compliance detail card when a regulated facility sits at this exact pin, plus a subscription-gated "
-        "Nearby Research tab listing nearby facilities and their compliance/violation status. USA only; strong "
-        "urbex signal for industrial and contaminated sites."
+        "EPA Enforcement and Compliance History Online (ECHO) lookup, via REData's shared points-of-interest "
+        "endpoint - shows an unconditional compliance detail card when a regulated facility sits at this exact "
+        "pin, plus a subscription-gated Nearby Research tab listing nearby facilities and their compliance "
+        "status. USA only; strong urbex signal for industrial and contaminated sites."
     )
     author: ClassVar[str] = "UrbanLens"
 
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the EPA ECHO REST API."""
-        return {
-            "epa_echo": ServiceDefaults(
-                display_name="EPA ECHO",
-                calls_per_minute=5,
-                calls_per_day=500,
-                usa_only=True,
-                notes="Free, keyless API; observed to rate-limit aggressively under bursty use - kept conservative.",
-            ),
-        }
+    # No get_service_defaults() override - this plugin calls REData's shared
+    # points-of-interest lookup (service key "redata_points_of_interest"),
+    # already registered by plugins.builtin.yelp.
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the exact-site detail card and the nearby-facilities list."""

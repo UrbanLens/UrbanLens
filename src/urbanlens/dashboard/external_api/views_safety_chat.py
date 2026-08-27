@@ -58,7 +58,7 @@ from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin
-from urbanlens.dashboard.services.safety import (
+from urbanlens.dashboard.services.visits.safety import (
     CheckinArchivedError,
     SafetyValidationError,
     accept_checkin_partner_invite,
@@ -133,7 +133,7 @@ class SafetyCheckinMessagesView(SafetyCheckinViewerScopedView, PaginatedListMixi
     def post(self, request: Request, checkin_slug: str) -> Response:
         """Post a message to the check-in's chat.
 
-        Goes through ``services.safety.post_chat_message``, which is the same
+        Goes through ``services.visits.safety.post_chat_message``, which is the same
         create-then-broadcast pair the no-JS web form uses. That is not a
         stylistic preference: a message merely *saved* is invisible in real time
         to everyone holding an open socket - the owner, the partners, and any
@@ -188,7 +188,7 @@ class SafetyPartnerScopedView(ExternalApiView):
     write would be marking themselves safe through an endpoint whose entire
     audit meaning is "somebody else confirmed they are alright".
 
-    Subclasses resolve through ``services.safety.get_partner_role`` (for the
+    Subclasses resolve through ``services.visits.safety.get_partner_role`` (for the
     caller's own invitation row) or ``get_partnered_checkin`` (for a check-in
     they have accepted), and answer every miss with one of the two constant 404
     bodies below.
@@ -356,9 +356,9 @@ class SafetyPartnerInviteDeclineView(SafetyPartnerScopedView):
         that had silently failed to delete anything.
 
         Note that no status filter guards this (see
-        ``services.safety.get_partner_role``), so an already-ACCEPTED partner can
+        ``services.visits.safety.get_partner_role``), so an already-ACCEPTED partner can
         reach it to resign. That path revokes their live socket as well as their
-        row - see ``services.safety.decline_checkin_partner_invite``.
+        row - see ``services.visits.safety.decline_checkin_partner_invite``.
 
         Args:
             request: The authenticated request.
@@ -382,7 +382,7 @@ class SafetyPartnerCheckinsView(SafetyPartnerScopedView, PaginatedListMixin):
         "GET": frozenset({ApiKeyScope.SAFETY_READ}),
     }
 
-    @extend_schema(responses={200: PartneredCheckinListResponseSerializer})
+    @extend_schema(operation_id="safety_partner_checkins_list", responses={200: PartneredCheckinListResponseSerializer})
     def get(self, request: Request) -> Response:
         """Return one page of the check-ins the caller partners on.
 

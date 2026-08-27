@@ -43,7 +43,7 @@ from urbanlens.dashboard.controllers.media import MediaGateView
 from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -199,12 +199,13 @@ class MediaAuthResolutionTests(TestCase):
         self.assertEqual(response.status_code, HTTPStatus.OK)
         self.assertEqual(response.content.decode(), str(self.profile.pk))
 
-    def test_session_wins_over_a_credential_header(self) -> None:
-        """A logged-in browser is never charged against a credential's budget.
+    def test_a_presented_credential_wins_over_an_ambient_session(self) -> None:
+        """A request carrying both is served as the *credential's* account.
 
-        The session branch returns before the throttle is consulted, so a
-        stray Authorization header on a browser request cannot start
-        rate-limiting the web UI.
+        The reverse (session first) let a WebView sharing the site's cookie
+        jar fetch media as whichever account happened to be logged in, and
+        skipped the scope check entirely whenever a session was also present -
+        see ``resolve_media_profile``'s own docstring.
         """
         stranger = baker.make(User, username="someone-else")
         raw_key = self._key_with_scopes([ApiKeyScope.MEDIA_READ], user=stranger)
@@ -213,7 +214,25 @@ class MediaAuthResolutionTests(TestCase):
         request.user = self.user
         response = self.view.get(request)
 
-        self.assertEqual(response.content.decode(), str(self.profile.pk))
+        self.assertEqual(response.content.decode(), str(stranger.profile.pk))
+
+    def test_an_unscoped_credential_cannot_fall_back_to_the_session(self) -> None:
+        """The scope check can't be bypassed by also being logged in.
+
+        This is the half of the ordering fix with teeth: a token deliberately
+        issued without ``media:read`` must be refused outright, not quietly
+        served under the cookie's authority.
+        """
+        stranger = baker.make(User, username="unscoped-holder")
+        raw_key = self._key_with_scopes([ApiKeyScope.PINS_READ], user=stranger)
+
+        request = self.factory.get("/probe/", **_bearer(raw_key))
+        request.user = self.user
+
+        # Http404 is raised rather than returned, so it flows through the
+        # view's normal 404 handling - see media_auth_failure_response.
+        with self.assertRaises(Http404):
+            self.view.get(request)
 
     def test_credential_resolves_a_profile_that_does_not_exist_yet(self) -> None:
         """An OAuth2-only account with no profile row is still identified."""

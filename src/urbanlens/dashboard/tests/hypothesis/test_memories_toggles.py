@@ -1,6 +1,6 @@
 """Tests for the History toggles (track_pin_visits/track_routes/track_geolocation).
 
-Covers the guard functions in services.visits and the call sites that must
+Covers the guard functions in services.visits.visits and the call sites that must
 create zero rows when disabled - including the "no exceptions, even for
 explicit imports" requirement for GPX route import.
 """
@@ -19,7 +19,7 @@ from urbanlens.dashboard.models.routes.model import Route, RouteSource
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.apis.locations.route_import import import_routes_streaming
 from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute
-from urbanlens.dashboard.services.visits import (
+from urbanlens.dashboard.services.visits.visits import (
     geolocation_tracking_allowed,
     record_geolocation_pin_visits,
     route_import_allowed,

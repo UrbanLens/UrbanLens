@@ -15,12 +15,15 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 
+from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.undo import UndoAction
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo
 
@@ -32,6 +35,29 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _ORGANIZE_KINDS = frozenset({KIND_TAG, KIND_CATEGORY, KIND_STATUS})
+
+#: Most pins one bulk request may name. Not a new policy - every external-API
+#: equivalent already declares `max_length=500` on its uuid list
+#: (`serializers_pin_bulk.py`); this is the same number on the surface the map's
+#: select tool drives, which had no bound at all.
+#:
+#: It matters because these edits cannot be one `UPDATE`. `Pin` carries eight
+#: live `post_save` receivers (map-pin cache, smart-list membership, wiki stat
+#: sync, draft-wiki creation, boundary refit, map-center invalidation,
+#: detail-pin resync, achievements), so every selected pin needs a real
+#: `save()`. Measured cost is ~2 queries per pin for a style or description
+#: edit and ~7 for a rating (`Review.update_or_create` plus its own receivers),
+#: so an unbounded selection turns one click into tens of thousands of queries
+#: inside a single request/response cycle.
+_MAX_BULK_PINS = 500
+
+#: Shared wording so every bulk endpoint refuses identically.
+_TOO_MANY_PINS = f"Select at most {_MAX_BULK_PINS} pins at a time."
+
+
+def _too_many(uuids: list[str]) -> bool:
+    """Report whether a request named more pins than one call may carry."""
+    return len(uuids) > _MAX_BULK_PINS
 
 
 def _request_profile(request: HttpRequest) -> Profile:
@@ -50,6 +76,8 @@ def _parse_uuids_json(request: HttpRequest, key: str = "uuids") -> tuple[list[st
         return None, JsonResponse({"error": "Invalid data"}, status=400)
     if not uuids:
         return None, HttpResponse("No pins specified.", status=400)
+    if _too_many(uuids):
+        return None, HttpResponse(_TOO_MANY_PINS, status=400)
     return uuids, None
 
 
@@ -174,7 +202,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
 
 
 class PinBulkEditView(LoginRequiredMixin, View):
-    """Bulk-edit description, rating, labels, and parent pin across selected pins (JSON POST)."""
+    """Bulk-edit shared content, organization, and marker style across selected pins."""
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
@@ -185,11 +213,53 @@ class PinBulkEditView(LoginRequiredMixin, View):
         uuids = [str(x) for x in data.get("uuids", [])]
         if not uuids:
             return HttpResponse("No pins specified.", status=400)
+        if _too_many(uuids):
+            return HttpResponse(_TOO_MANY_PINS, status=400)
 
         profile = _request_profile(request)
         pins = list(_owned_pins(profile, uuids))
         if not pins:
             return HttpResponse("No matching pins.", status=404)
+
+        style_updates: dict[str, str | int | None] = {}
+        for request_field, model_field, max_length in (
+            ("icon", "icon", 255),
+            ("color", "color", 20),
+            ("bg_color", "detail_bg_color", 20),
+            ("border_color", "detail_border_color", 20),
+        ):
+            if request_field not in data:
+                continue
+            raw_value = data[request_field]
+            value = str(raw_value).strip() if raw_value is not None else ""
+            if len(value) > max_length:
+                return HttpResponse(f"{request_field} is too long.", status=400)
+            if model_field.endswith("color"):
+                # Length alone is not enough: these are interpolated into style="..."
+                # by the map and organize renderers, and `x" onmouse` is ten characters.
+                # Border colours keep the "none" sentinel, which means "no border".
+                value = clean_color(value, default="", allow_none_keyword=model_field != "color") or ""
+            elif model_field == "icon":
+                # Same reasoning one branch over: an icon becomes glyph text, an
+                # <img src="...">, or an emoji depending on its shape, so a value
+                # that is none of the three has no business being stored.
+                value = clean_icon(value, default="")
+            style_updates[model_field] = value or None
+
+        for request_field, model_field in (
+            ("bg_opacity", "detail_bg_opacity"),
+            ("border_opacity", "detail_border_opacity"),
+        ):
+            if request_field not in data:
+                continue
+            raw_value = data[request_field]
+            try:
+                int_value = int(raw_value)
+            except (TypeError, ValueError):
+                return HttpResponse(f"{request_field} must be a percentage.", status=400)
+            if isinstance(raw_value, bool) or not 0 <= int_value <= 100:
+                return HttpResponse(f"{request_field} must be between 0 and 100.", status=400)
+            style_updates[model_field] = int_value
 
         description = data.get("description")
         if description is not None and str(description).strip():
@@ -199,6 +269,13 @@ class PinBulkEditView(LoginRequiredMixin, View):
             for pin in pins:
                 pin.description = description
                 pin.save(update_fields=["description", "updated"])
+
+        if style_updates:
+            update_fields = [*style_updates, "updated"]
+            for pin in pins:
+                for field, field_value in style_updates.items():
+                    setattr(pin, field, field_value)
+                pin.save(update_fields=update_fields)
 
         # rating lives on Review (one per profile/pin pair, see PinEditView.post
         # for the single-pin equivalent) - 0 explicitly clears every selected
@@ -227,7 +304,14 @@ class PinBulkEditView(LoginRequiredMixin, View):
                 Label.objects.filter(id__in=remove_ids, kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct(),
             )
             for pin in pins:
-                pin.labels.remove(*removable)
+                current_ids = set(pin.labels.filter(pk__in=[label.pk for label in removable]).values_list("pk", flat=True))
+                present = [label for label in removable if label.pk in current_ids]
+                for label in present:
+                    # Tombstone first: keyword/AI auto-tagging can otherwise silently
+                    # reattach a label a user just bulk-removed.
+                    PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LABEL, value=str(label.pk))
+                if present:
+                    pin.labels.remove(*present)
 
         reparented = 0
         parent_uuid = str(data.get("parent_uuid") or "").strip()
@@ -299,7 +383,7 @@ class PinBulkExportView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
-        from urbanlens.dashboard.services.export_formats import EXPORT_FORMATS
+        from urbanlens.dashboard.services.import_export.export_formats import EXPORT_FORMATS
 
         fmt = request.POST.get("format", "")
         if fmt not in EXPORT_FORMATS:

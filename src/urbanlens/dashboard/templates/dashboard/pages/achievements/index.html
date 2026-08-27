@@ -1,0 +1,74 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block hero %}
+{% if is_owner %}
+    {% include "dashboard/partials/ui/_page_hero.html" with modifier="top" icon="trophy" title="Your Achievements" subtitle="Awards, streaks, and stats." back_url=profile_url back_label="Back to profile" %}
+{% else %}
+    {% include "dashboard/partials/ui/_page_hero.html" with modifier="top" icon="trophy" title=subject.username|add:"'s Achievements" subtitle="Awards this explorer has earned." back_url=profile_url back_label="Back to profile" %}
+{% endif %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% if is_owner %}
+        {% include "dashboard/partials/profile/_profile_tabs.html" with active="achievements" profile_slug=subject.slug %}
+        {% else %}
+        <nav class="ul-subnav-tabs" aria-label="Achievements views">
+            <a href="{% url 'achievement.list' profile_slug=subject.slug %}" class="ul-subnav-tab is-active" aria-current="page">
+                <i class="material-symbols-outlined">trophy</i>
+                <span>Achievements</span>
+            </a>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="achievements-page page-content">
+
+    <div class="achievement-summary profile-section">
+        <div class="achievement-summary__stat">
+            <span class="achievement-summary__value">{{ earned_count }}</span>
+            <span class="achievement-summary__label">Earned</span>
+        </div>
+        <div class="achievement-summary__stat">
+            <span class="achievement-summary__value">{{ rows|length }}</span>
+            <span class="achievement-summary__label">Available</span>
+        </div>
+    </div>
+
+    {% if streaks %}
+    <div class="profile-section">
+        <h3 class="profile-section-title">Streaks</h3>
+        <ul class="achievement-streaks achievement-streaks--full">
+            {% for streak in streaks %}
+            <li class="achievement-streak{% if streak.current %} achievement-streak--live{% endif %}">
+                <i class="material-symbols-outlined">local_fire_department</i>
+                <span class="achievement-streak__label">{{ streak.label }}</span>
+                <span class="achievement-streak__value">
+                    {{ streak.current }} day{{ streak.current|pluralize }}
+                    <span class="achievement-streak__best">best {{ streak.longest }}</span>
+                </span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="profile-section">
+        <h3 class="profile-section-title">All Awards</h3>
+        {% if rows %}
+        <div class="achievement-grid achievement-grid--full">
+            {% for row in rows %}
+                {% include "dashboard/partials/achievements/_achievement_badge.html" with achievement=row.achievement earned=row.earned earned_at=row.earned_at value=row.value percent=row.percent show_progress=row.show_progress %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="profile-section-empty">No achievements have been defined yet.</p>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% comment %}
+One album's tile in the albums grid.
+
+Destructive and rarely-used actions live in the tile's overflow menu rather
+than on its face, so the grid reads as a set of albums instead of a set of
+controls.
+
+Expects:
+  row - a dict from controllers.albums._album_row (album, cover, photo_count,
+        date_start, date_end, detail_url, delete_url, ...)
+{% endcomment %}
+<li class="album-card" data-album-slug="{{ row.album.slug }}">
+  <a class="album-card-link" href="{{ row.list_url }}?album={{ row.album.slug }}"
+     data-album-open="{{ row.album.slug }}"
+     hx-get="{{ row.detail_url }}" hx-target="#albums-panel" hx-swap="outerHTML">
+    <span class="album-card-cover">
+      {% if row.cover %}
+      <img src="{{ row.cover.display_url }}" alt="" class="album-card-cover-img" loading="lazy">
+      {% else %}
+      <span class="album-card-cover-empty">
+        <i class="material-symbols-outlined">photo_library</i>
+      </span>
+      {% endif %}
+      {% if row.album.spec.badge %}
+      <span class="album-card-kind" data-tooltip="{{ row.album.spec.label }} album" data-tooltip-pos="top">
+        <i class="material-symbols-outlined">{{ row.album.spec.icon }}</i>
+        <span>{{ row.album.spec.label }}</span>
+      </span>
+      {% endif %}
+    </span>
+    <span class="album-card-body">
+      <span class="album-card-name">{{ row.album.name }}</span>
+      <span class="album-card-meta">
+        <span class="album-card-count">{{ row.photo_count }} photo{{ row.photo_count|pluralize }}</span>
+        {% include "dashboard/partials/albums/_album_date_range.html" with date_start=row.date_start date_end=row.date_end %}
+      </span>
+    </span>
+  </a>
+
+  <details class="album-menu album-card-menu">
+    <summary class="album-menu-btn" title="Album options" aria-label="Album options">
+      <i class="material-symbols-outlined">more_vert</i>
+    </summary>
+    <div class="album-menu-list">
+      <button type="button" class="album-menu-item album-menu-item--danger"
+              hx-post="{{ row.delete_url }}" hx-target="#albums-panel" hx-swap="outerHTML"
+              hx-confirm="Delete the album &quot;{{ row.album.name }}&quot;? The photos themselves are kept.">
+        <i class="material-symbols-outlined">delete</i> Delete album
+      </button>
+    </div>
+  </details>
+</li>

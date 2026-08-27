@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, ForeignKey, TextField
+from django.db.models import CASCADE, ForeignKey
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.fields import EncryptedTextField
 from urbanlens.dashboard.models.profile.queryset import ProfileNoteManager
 
 
@@ -17,7 +18,7 @@ class ProfileNote(abstract.FrontendDashboardModel):
     cannot see it.  A viewer may keep multiple notes per subject.
     """
 
-    content = TextField(blank=True, default="")
+    content = EncryptedTextField(blank=True, default="", fail_soft=True)
 
     author = ForeignKey(
         "dashboard.Profile",

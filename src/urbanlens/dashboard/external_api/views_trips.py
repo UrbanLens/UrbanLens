@@ -9,7 +9,7 @@ HTMX form, so a native client could show a trip's rules but never change them.
 The gap was not merely a missing route: the underlying service reset every
 field the caller did not mention, which is harmless behind a form that always
 submits all four and destructive behind a partial-update endpoint. That was
-fixed in ``services.trip_crud`` first; this module is what stands on it.
+fixed in ``services.trips.trip_crud`` first; this module is what stands on it.
 
 **Export was assumed to be browser-only.** It is not. A user's Google tokens
 are stored per profile *with a refresh token*, and ``GoogleCalendarGateway``
@@ -74,11 +74,11 @@ from urbanlens.dashboard.external_api.throttling import (
 from urbanlens.dashboard.external_api.views import TripScopedApiView, _trip_detail_payload
 from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.services.apis.calendar.google import CalendarNotConfiguredError
-from urbanlens.dashboard.services.calendar_sync import export_trip_to_calendar, remove_trip_from_calendar, trip_calendar_status
-from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.google_oauth import GoogleAuthExpiredError
-from urbanlens.dashboard.services.trip_crud import set_trip_permissions
-from urbanlens.dashboard.services.trip_errors import TripError
+from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.trips.calendar_sync import export_trip_to_calendar, remove_trip_from_calendar, trip_calendar_status
+from urbanlens.dashboard.services.trips.trip_crud import set_trip_permissions
+from urbanlens.dashboard.services.trips.trip_errors import TripError
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -157,7 +157,7 @@ class TripCalendarExportView(TripScopedApiView):
     Both directions operate on the *caller's own* calendar - each member of a
     shared trip exports to their own, and one member's export says nothing
     about anyone else's. Locations are filtered per exporter before anything is
-    written (see ``services.calendar_sync.export_trip_to_calendar``): a trip
+    written (see ``services.trips.calendar_sync.export_trip_to_calendar``): a trip
     carries other people's stops, and their ``trip_pin_location_visibility``
     settings decide what may leave the site on this caller's behalf.
 

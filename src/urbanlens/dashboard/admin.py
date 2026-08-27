@@ -2,8 +2,11 @@ from django.contrib import admin, messages
 from django.http import HttpRequest, HttpResponseRedirect
 from django.urls import reverse
 
+from urbanlens.dashboard.models.achievements import Achievement, ProfileStreak, UserAchievement
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
+from urbanlens.dashboard.models.billing import BillingCustomer, RoleSubscription, StripeWebhookEvent
+from urbanlens.dashboard.models.costs import CostComponent, OperatingCost
 from urbanlens.dashboard.models.facts import Fact, FactEvidence
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.site_settings import SiteSettings
@@ -110,7 +113,12 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         (
             "Notifications - Routing",
             {
-                "fields": ["notify_pin_import_errors_email", "notify_pin_import_errors_gotify"],
+                "fields": [
+                    "notify_pin_import_errors_email",
+                    "notify_pin_import_errors_gotify",
+                    "notify_safety_checkin_archival_failed_email",
+                    "notify_safety_checkin_archival_failed_gotify",
+                ],
                 "description": "Which critical notification types are sent to which channels above.",
             },
         ),
@@ -236,6 +244,157 @@ class FactEvidenceAdmin(admin.ModelAdmin):
     list_filter = ["source_kind", "superseded"]
     search_fields = ["source_name", "fact__key"]
     readonly_fields = [field.name for field in FactEvidence._meta.fields]  # noqa: SLF001
+    ordering = ["-created"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+
+@admin.register(Achievement)
+class AchievementAdmin(admin.ModelAdmin):
+    """Admin for Achievement - define the awards users can earn.
+
+    Saving here queues a backfill (see ``models.achievements.signals``), so an
+    award added today is granted immediately to everyone who already qualifies.
+    """
+
+    list_display = ["name", "metric_label", "threshold", "is_active", "is_secret", "order", "earned_count"]
+    list_editable = ["threshold", "is_active", "is_secret", "order"]
+    list_filter = ["is_active", "is_secret", "metric"]
+    search_fields = ["name", "description", "metric"]
+    readonly_fields = ["uuid", "slug", "created", "updated", "earned_count"]
+    ordering = ["order", "metric", "threshold"]
+    actions = ["backfill_selected"]
+    fieldsets = [
+        (None, {"fields": ["name", "description"]}),
+        ("Criteria", {"fields": ["metric", "threshold"], "description": "The award is earned when the metric reaches the threshold."}),
+        ("Appearance", {"fields": ["icon", "custom_icon", "color", "order"]}),
+        ("Visibility", {"fields": ["is_active", "is_secret"]}),
+        ("Metadata", {"fields": ["uuid", "slug", "created", "updated", "earned_count"], "classes": ["collapse"]}),
+    ]
+
+    @admin.display(description="Metric")
+    def metric_label(self, obj: Achievement) -> str:
+        return obj.metric_label
+
+    @admin.display(description="Earned by")
+    def earned_count(self, obj: Achievement) -> int:
+        return obj.awards.count()
+
+    @admin.action(description="Re-check selected achievements against every user")
+    def backfill_selected(self, request: HttpRequest, queryset) -> None:
+        from urbanlens.dashboard.services.achievements.evaluate import evaluate_achievement_for_all
+
+        granted = sum(evaluate_achievement_for_all(achievement) for achievement in queryset)
+        self.message_user(request, f"Granted {granted} award(s).", messages.SUCCESS)
+
+
+@admin.register(UserAchievement)
+class UserAchievementAdmin(admin.ModelAdmin):
+    """Admin for UserAchievement - who earned what, and when."""
+
+    list_display = ["profile", "achievement", "value_at_award", "earned_at"]
+    list_filter = ["achievement", "earned_at"]
+    search_fields = ["profile__username", "achievement__name"]
+    readonly_fields = ["uuid", "created", "updated"]
+    autocomplete_fields = ["achievement"]
+    raw_id_fields = ["profile"]
+    ordering = ["-earned_at"]
+
+
+@admin.register(ProfileStreak)
+class ProfileStreakAdmin(admin.ModelAdmin):
+    """Admin for ProfileStreak - cached consecutive-day counters.
+
+    Read-only: these are derived from ``ProfileActivityDay`` and editing them by
+    hand would silently desync the two. Use the rebuild action instead.
+    """
+
+    list_display = ["profile", "kind", "current_length", "longest_length", "last_day"]
+    list_filter = ["kind"]
+    search_fields = ["profile__username"]
+    readonly_fields = [field.name for field in ProfileStreak._meta.fields]  # noqa: SLF001
+    ordering = ["profile", "kind"]
+    actions = ["rebuild_selected"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    @admin.action(description="Rebuild selected streaks from the activity log")
+    def rebuild_selected(self, request: HttpRequest, queryset) -> None:
+        from urbanlens.dashboard.services.achievements.activity import rebuild_streak
+
+        for streak in queryset.select_related("profile"):
+            rebuild_streak(streak.profile, streak.kind)
+        self.message_user(request, f"Rebuilt {queryset.count()} streak(s).", messages.SUCCESS)
+
+
+@admin.register(CostComponent)
+class CostComponentAdmin(admin.ModelAdmin):
+    """Admin for CostComponent - depreciating hardware/infrastructure assets."""
+
+    list_display = ["name", "replacement_cost", "deprecation_years", "retired_at", "order"]
+    list_editable = ["order"]
+    search_fields = ["name", "notes"]
+    readonly_fields = ["created", "updated"]
+    ordering = ["order", "name"]
+
+
+@admin.register(OperatingCost)
+class OperatingCostAdmin(admin.ModelAdmin):
+    """Admin for OperatingCost - recurring monthly operating costs."""
+
+    list_display = ["name", "monthly_cost", "retired_at", "order"]
+    list_editable = ["order"]
+    search_fields = ["name", "notes"]
+    readonly_fields = ["created", "updated"]
+    ordering = ["order", "name"]
+
+
+@admin.register(BillingCustomer)
+class BillingCustomerAdmin(admin.ModelAdmin):
+    """Admin for BillingCustomer - read-only view of Stripe customer links."""
+
+    list_display = ["user", "stripe_customer_id", "created"]
+    search_fields = ["user__username", "user__email", "stripe_customer_id"]
+    readonly_fields = ["user", "stripe_customer_id", "created", "updated"]
+    ordering = ["-created"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+
+@admin.register(RoleSubscription)
+class RoleSubscriptionAdmin(admin.ModelAdmin):
+    """Admin for RoleSubscription - read-only view of paid, Stripe-backed role subscriptions."""
+
+    list_display = ["user", "role", "status", "pledged_amount_dollars", "threshold_met", "current_period_end", "cancel_at_period_end"]
+    list_filter = ["status", "threshold_met", "cancel_at_period_end", "role"]
+    search_fields = ["user__username", "user__email", "stripe_subscription_id"]
+    readonly_fields = [field.name for field in RoleSubscription._meta.fields]  # noqa: SLF001
+    ordering = ["-created"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+
+@admin.register(StripeWebhookEvent)
+class StripeWebhookEventAdmin(admin.ModelAdmin):
+    """Admin for StripeWebhookEvent - read-only audit log of incoming Stripe webhook deliveries."""
+
+    list_display = ["event_type", "stripe_event_id", "processed_at", "created"]
+    list_filter = ["event_type"]
+    search_fields = ["stripe_event_id", "event_type"]
+    readonly_fields = ["stripe_event_id", "event_type", "payload", "processed_at", "created", "updated"]
     ordering = ["-created"]
 
     def has_add_permission(self, request: HttpRequest) -> bool:

@@ -1,0 +1,13403 @@
+# Codebase audit — 2026-08-11
+
+A broad sweep for bugs, performance problems, and gaps against the project's own documented
+standards. This file records **what was fixed**, **what was checked and found clean** (so it
+isn't re-derived), and **which audit methods produce misleading results on this codebase**.
+
+Open items found during the sweep were filed in `docs/PROBLEMS.md` and are only cross-referenced
+here.
+
+**Verification (current as of 2026-08-17).** The full Python suite runs in a single pass -
+**10,972 passed, 1 xfailed, 1,483 subtests, 1:35:12, zero failures** (the twenty-third consolidation
+run). Twenty-three such runs have completed across this audit; twenty were green, and the one red was
+an error of mine rather than a defect - a file restored on the host but not re-copied into the test
+container, so the run executed against a deliberate regression left over from verifying a guard. The
+TypeScript suite, which no Python consolidation covers, is **414 passed across 31 files** with a
+clean `tsc` typecheck; CI now runs both (it previously ran neither).
+
+Read the numbered sections below for the audit's chronological record. The 2026-08-17 sessions are
+summarised at the end under "Session summary".
+
+
+## Coverage index — what has already been swept
+
+Section 3 records what was checked and found clean *specifically so it is not re-derived*, but
+it runs to well over a thousand lines, and on 2026-08-17 I re-ran two of its sweeps (the
+`|safe`/XSS surface and the documented template traps) without noticing they were already there.
+This index exists so the next reader can see the answer without reading the section.
+
+**Already swept and clean — do not re-run without a reason to doubt the earlier result:**
+
+- CeleryTaskStatusView.get — §3, line 3084
+- Interaction risk of the nine N+1 fixes — §3, line 3114
+- Other viewsets missing a prefetch — §3, line 3126
+- Documentation cross-references — §3, line 3137
+- Side effects inside transactions — §3, line 3148
+- Production frontend build, and bundle sizes — §3, line 3160
+- Unguarded index access — §3, line 3170
+- JSON body parsing — §3, line 3174
+- CalendarImportView.post — §3, line 3182
+- ConsensusPhotoUploadView.post — §3, line 3191
+- AlbumEditView.post — §3, line 3203
+- docs/FEATURES.md accuracy — §3, line 3214
+- Dead weight: templates, SCSS, TypeScript, routes — §3, line 3222
+- Injection, deserialization, and time correctness — §3, line 3239
+- Middleware — §3, line 3256
+- WebSocket consumers — §3, line 3299
+- Authorization — §3, line 3294
+- WebSocket consumers — §3, line 3299
+- XSS surface — §3, line 3308
+- Bulk writes vs save()-derived fields — §3, line 3321
+- Signal hygiene — §3, line 3329
+- The add template-filter trap — §3, line 3332
+- Work inside transactions — §3, line 3335
+- LabelledModel — §3, line 3342
+- Celery beat and queue routing — §3, line 4604
+- SQL injection surface — §3, line 3355
+- Upload path traversal — §3, line 3361
+- Timezone handling — §3, line 3369
+- Email surface — §3, line 3377
+- Django's own deployment audit — §3, line 3392
+- Dead templates and bundles — §3, line 3403
+- Template and route cross-references — §3, line 3417
+- {% static %} references — §3, line 3425
+- settings.X references — §3, line 3433
+- Celery dispatch arity — §3, line 3438
+- Model validation that never runs — §3, line 3448
+- N+1 inside Celery tasks — §3, line 3460
+- select_for_update correctness — §3, line 3471
+- Undo restore vs unique constraints — §3, line 3479
+- External API writes vs unique constraints — §3, line 3490
+- HTML controller writes vs unique constraints — §3, line 3501
+- Management commands — §3, line 3535
+- Inline handlers calling undefined globals — §3, line 3554
+- External API scopes — §3, line 3568
+- E2EE / messaging — §3, line 3572
+- 2FA — §3, line 3575
+- Import archives — §3, line 3577
+- Undo framework — §3, line 3580
+- Synchronous outbound calls — §3, line 3582
+- Encrypted fields — §3, line 3585
+- Lint exclusions — §3, line 3588
+- Every documented template trap in templates/CLAUDE.md — §3, line 3590
+- Account deletion — §3, line 3609
+- Export/import round trip — §3, line 3618
+- Data export coverage — §3, line 3621
+- Cross-file constant couplings — §3, line 3626
+- Docker system packages all justified — §3, line 3639
+- get_or_create constraint backing — §3, line 3644
+- Management commands and OAuth provisioning — §3, line 3655
+- Every auto-escape bypass in the templates — §3, line 3670
+- Django admin and site-admin exposure — §3, line 3688
+- Index coverage for the retention sweeps — §3, line 3697
+- Shared mutable state — §3, line 3716
+- select_for_update() transaction coverage — §3, line 3724
+- Raw SQL — §3, line 3729
+- E2EE crypto primitives — §3, line 3735
+- Frontend listener lifetime — §3, line 3741
+- Frontend build and test health — §3, line 3749
+- Password reset — §3, line 3757
+- Login rate limiting — §3, line 3770
+- All 11 per-field visibility settings are enforced — §3, line 3780
+- The journal's fail-closed claim holds; its completeness had no guard — §3, line 3789
+- Location-mention visibility is sound, and well placed — §3, line 3802
+- Notification delivery is properly isolated — §3, line 3816
+- Game areas were the last user-drawn geometry with the same bug; fixed at the source — §3, line 3823
+- Chunk 125's antimeridian fix was incomplete - smart-list boundaries had the same bug — §3, line 3835
+- Cross-module private imports swept; one more fixed, the rest judged not worth churning — §3, line 3850
+- A plugin was reaching into a model's private helper to redo two shared conversions — §3, line 3864
+- TOTP and backup codes audited; nothing to change — §3, line 3878
+- WebAuthn/passkeys audited; nothing to change — §3, line 3894
+- Absolute claims in security-relevant docstrings, spot-audited; these ones hold — §3, line 3906
+- Wiki access control is sound - and the documentation describing it was wrong — §3, line 3922
+- Three risk areas checked, all clean; one guard added — §3, line 3935
+- Five haversine implementations consolidated into one — §3, line 3947
+- Dwell detection and the History consent gates are sound — §3, line 3962
+- Billing and subscriptions audited; sound — §3, line 3972
+- Full suite: 10,579 passed, 0 failures — §3, line 3989
+- "Arbitrary row where a specific one is meant" swept; no further instances — §3, line 3992
+- find_nearest_pin did not return the nearest pin — §3, line 4004
+- Wiki nesting checked and sound — §3, line 4019
+- Full-suite run started — §3, line 4025
+- Saved-filter and smart-list regions had the same date-line bug as the viewport — §3, line 4028
+- A map viewport crossing the date line showed the whole world except itself — §3, line 4062
+- Two more antimeridian bugs, found by sweeping the class — §3, line 4074
+- Fact POINT evidence averaged longitude arithmetically, breaking at the antimeridian — §3, line 4089
+- The same photo-orphaning bug existed for wikis and safety check-ins — §3, line 4103
+- Undoing a pin delete now restores its photos — §3, line 4119
+- merge_labels checked the same way and is correct — §3, line 4132
+- Merging a pin destroyed its albums, map overlays and custom layers — §3, line 4143
+- External API scope enforcement is complete, and now guarded — §3, line 4160
+- Notification preference drift now has a guard — §3, line 4177
+- Email uniqueness is enforced on the normalised value, not the raw one — §3, line 4186
+- A name that sanitized away was stored as a blank alias — §3, line 4194
+- All 12 save-time field mutations audited; the rest are sound — §3, line 4203
+- Underscores were silently stripped from every user-facing name — §3, line 4212
+- Search criteria verified correct — §3, line 4223
+- mypy is clean across all 780 files — §3, line 4229
+- Two more bug classes swept to exhaustion, both already clean — §3, line 4235
+- Group-chat removal cuts off live delivery correctly — §3, line 4247
+- Every cache-based lock swept for the release defect; a third instance found and fixed — §3, line 4261
+- Detail pages are flat too — §3, line 4276
+- The upload quota lock released a lock it no longer held — §3, line 4281
+- Every parameterless page swept for query scaling; one more N+1 found and fixed — §3, line 4291
+- The Organize page issued a query per label card, three times over — §3, line 4302
+- Deleted-account fallout, swept — §3, line 4318
+- Settings export/import round-trip now has a completeness arm — §3, line 4325
+- A deleted account's trip locations became visible to everyone — §3, line 4336
+- trip_visibility re-implements the shared gate and is stricter than it — §3, line 4350
+- "Visited Together" leaked past the privacy gate its neighbour respects — §3, line 4359
+- Outbound HTTP timeouts are complete — §3, line 4373
+- Two TODO: Don't hardcode 'user' string markers closed — §3, line 4378
+- A double-clicked Undo restored everything twice — §3, line 4380
+- Keyset cursors and pagination are correct — §3, line 4395
+- Rate-limit rejections consumed the budget that rejected them — §3, line 4403
+- _reserve_call itself is sound — §3, line 4421
+- Sweep locks released unconditionally, so an overrun degraded exclusion — §3, line 4424
+- send_checkin_reminder is correctly guarded against repeat sends — §3, line 4448
+- Signal and transaction discipline, swept exhaustively — §3, line 4452
+- PIN_CACHE_VERSION is consistent — §3, line 4461
+- date.today() reads the OS clock, not Django's TIME_ZONE — §3, line 4463
+- One unused import removed — §3, line 4470
+- Object-level authorization, swept across the whole controller layer — §3, line 4476
+- pin.categories/.tags/.statuses silently defeated every caller's prefetch — §3, line 4484
+- Calendar sync — §3, line 4495
+- Check-then-write races, swept generally — §3, line 4506
+- Pagination ordering — §3, line 4523
+- Consensus trust math — §3, line 4537
+- Exception hierarchies across the other untrusted-input parsers — §3, line 4548
+- Image pipeline fidelity — §3, line 4555
+- Mass assignment and form validation — §3, line 4559
+- Subscription feature gating — §3, line 4569
+- Stripe billing — §3, line 4578
+- Storage quota enforcement — §3, line 4594
+- Celery beat and queue routing — §3, line 4604
+- WebSocket authorization — §3, line 4617
+- The rest of the tracking/privacy toggle matrix — §3, line 4625
+- Derived artefacts don't reintroduce stripped location — §3, line 4633
+- Cache-key scoping — §3, line 4640
+- The rest of the geospatial surface — §3, line 4648
+- Naive-datetime handling is otherwise correct — §3, line 4663
+- Exception-swallowing discipline is good — §3, line 4669
+- Full-suite ERROR-log sweep — §3, line 4682
+- Plugin system — §3, line 4699
+- Signal rules — §3, line 4710
+- Payload/serializer drift — §3, line 4713
+- Achievement sweep cost — §3, line 4715
+- Global search cross-user isolation — §3, line 4718
+
+Chunk-by-chunk entries continue past section 6; each names its own subject in the heading.
+
+The earlier baseline, retained for continuity: **10,765 passed, 0 failed, 1:11:17**, the run that
+validated the nine prefetch/N+1 fixes together. That run was left strictly alone for its duration; two
+earlier full runs had source copied into the container mid-flight and are recorded in section 4d
+as inconsistent snapshots rather than reported as results. Alongside it: **mypy clean across 784
+source files**, `ruff check src/urbanlens` clean, `bun run typecheck` clean, `bun test`
+**394 pass / 0 fail**, and `bun run build` (the real bundler, not just typecheck) green.
+
+Coverage over the view layer was measured separately and is the basis for a large part of the later
+work: **80% of 22,081 statements**, with **208 of 1,795 callables never executed** - see
+`docs/reports/2026-08-14-view-coverage.md`.
+
+An earlier version of this paragraph reported 10,406 passing over batch-partitioned runs. It was
+accurate when written and quietly wrong for some time afterwards, which is the same failure this
+report documents elsewhere: a number that was true once and never re-checked.
+
+---
+
+## 0. The findings that matter most
+
+Full detail below; this is what a reader short on time should look at first.
+
+**Fixed, and user-affecting:**
+
+1. **A scripted SVG could be stored as a photo and served from this origin** — stored XSS. The
+   upload gauntlet fails open for formats with no magic-byte signature, and SVG has none.
+2. **The "don't keep my location" setting was honoured in the database but not in the file** for
+   TIFF, AVIF and *every* video. HEIC has the same gap and is filed, not fixed.
+3. **A removed emergency contact kept receiving a safety check-in's chat** — the token route had no
+   revocation path at all, while the HTTP endpoint for the same data refused them correctly.
+4. **Backup codes were consumable twice**, and a single undecryptable Gotify token 500'd the whole
+   site.
+5. **One malformed KML aborted an entire import**, losing every other file in the same upload.
+6. **Downscaling a PNG rotated it ninety degrees**, permanently.
+
+**Filed, not fixed — each needs a decision that is not mine to make:**
+
+- Refunds and chargebacks never reverse pay-what-you-want access.
+- A password reset evicts every session but no API key, and minting a key needs no password.
+- Login lockout is identifier-only, so knowing a username is enough to lock someone out.
+- No Content-Security-Policy anywhere.
+- HEIC uploads cannot have their GPS stripped at all.
+
+**Worth reading even if nothing else:** section 4, on the audit methods that produce false
+findings against this codebase — nine catalogued there, with more recorded inline in section 3
+(a fetch/catch ratio, a listener add/remove ratio, a docs-coverage scan matching filenames rather
+than prose, an admin-permission scan that could not see a local mixin, a `get_or_create` scan blind
+to expression-based unique constraints). The pattern is consistent enough to state plainly: on this
+codebase a first-cut mechanical scan is a hypothesis generator, never a finding.
+
+## 1. Fixed
+
+### Privacy
+- **A scripted SVG could be stored as a photo, and served from this app's origin**
+  (`services/security/content_sniffing.py`, `services/media/images.py`). The upload gauntlet is
+  size → magic-byte sniff → antivirus, and the sniff deliberately fails *open* for formats
+  `filetype` cannot fingerprint. That is right for documents, but **SVG has no magic-byte
+  signature at all**, so a `.svg` containing `<script>` passed sniffing, passed ClamAV (script in
+  markup matches no virus signature), and was stored.
+
+  Verified end to end before fixing: `image_upload_error` returned `None`, the file was written to
+  `avatars/avatar.svg`, and `<script>` survived in the stored bytes. The stored *extension* then
+  decides the served Content-Type — nginx's mime.types maps `.svg` to `image/svg+xml` — and this
+  app sets **no Content-Security-Policy**, so navigating to that URL executes the script with the
+  app's own origin. `X-Content-Type-Options: nosniff` does not help, because nothing is being
+  sniffed: the file genuinely is an SVG. Avatars are the worst case, since `MediaGateView` serves
+  `avatars/` to any signed-in user by design.
+
+  Photos are now allowlisted by extension, checked *before* the sniff. Scoped to
+  `MediaKind.PHOTO` only: documents legitimately arrive as `.docx` and friends and are converted
+  after upload, so an unconditional allowlist would have broken them — a test pins that asymmetry.
+  Note what the fix deliberately does *not* do: SVG bytes uploaded as `photo.jpg` are still
+  accepted, and are harmless, because they are served as `image/jpeg` with `nosniff`. The
+  constraint that matters is the stored extension, not the bytes.
+
+  Worth noting the near-miss in the other direction: the two server-generated SVGs in this codebase
+  (`AvatarService.generate_emoji_svg`) are **not** vulnerable — the emoji comes from a fixed dict
+  and the colour is checked against `MaterialColor.values` with a constant fallback, so the
+  template can only ever receive allowlisted values.
+- **Self-review of the video fix found two further defects in it** (`services/media/videos.py`).
+  Re-reading my own chunk-55 change surfaced that `needs_strip` keyed off
+  `metadata["latitude"]` — i.e. off the coordinates having *parsed* — which is the same mistake
+  shape as the TIFF bug it was written to fix (gating on `img.info["exif"]` rather than the actual
+  EXIF). A location tag in a notation `_parse_iso6709` doesn't handle discloses the location just
+  as well and would have been left in place. It now keys off the tag's presence.
+
+  Writing the test for that exposed a second, *pre-existing* defect: `extract_video_metadata` read
+  ffprobe's format tags with lowercase keys, but ffprobe reports Matroska tags **uppercase** — and
+  `mkv`/`webm` are both accepted uploads. So no `.mkv`/`.webm` ever had its location detected at
+  all, for extraction or stripping. Tag lookup is now case-folded. Two false starts on the test
+  itself, both caught by its fixture-validity assertion rather than passing vacuously: the MP4
+  muxer silently refuses to write a non-ISO 6709 `location` tag, so the fixture had to move to
+  Matroska, which stores it verbatim.
+
+- **Video uploads ignored the location opt-out entirely — the flag guaranteed the opposite**
+  (`services/media/videos.py`, `tasks.py`). `_process_video_upload` expressed "strip the location"
+  by calling `process_uploaded_video(image, None if strip_location else max_height)`. But
+  `max_height=None` means *skip processing entirely*, so asking to scrub a video reliably produced
+  the untouched original — location tag and all — as the stored, served file. Only the derived
+  `Image.latitude`/`longitude` and `taken_at` were dropped. Videos plainly carry coordinates here:
+  the same module parses `location` / `com.apple.quicktime.location.ISO6709` out of them.
+
+  A second, independent defect sat behind it: `_reencode` passed no metadata flags, and ffmpeg
+  copies container metadata across a transcode — verified directly, the tags survive the old flag
+  set — so even a video that *was* downscaled kept its coordinates.
+
+  Both fixed. `strip_location` is now a real keyword argument independent of `max_height`: a video
+  needing no downscale is scrubbed by a lossless stream copy (a rewrite, not a transcode — no
+  quality cost), and `_reencode` clears the tags when downscaling. Only the location tags are
+  cleared, never the whole metadata block, mirroring the photo path's "drop the GPS IFD, keep the
+  rest of the EXIF". The size-regression guard gained the same exemption the photo path has, so a
+  scrub whose output is fractionally larger isn't discarded in favour of the still-tagged original.
+
+- **GPS coordinates survived the "don't keep my location" setting, for TIFF and AVIF photos**
+  (`services/media/images.py`). Turning off `track_pin_visits` sets `strip_location`, which makes
+  `_process_photo_upload` skip `Image.latitude`/`longitude`, pop `GPSInfo` from the `exif_data`
+  snapshot, and ask `downscale_stored_image` to scrub the **file** — the copy actually served.
+  Two accepted formats ignored that request, each for a different reason:
+
+  - **TIFF**: the strip was gated on `img.info["exif"]`, but TIFF carries EXIF in its own native
+    IFD and leaves that key unset, so a GPS-tagged TIFF was never even examined. Now driven off
+    `img.getexif()`.
+  - **AVIF**: returned early as "not a processable format" *before* reaching the strip. The
+    downscaler's format set and the set of formats a GPS strip can be honoured for are now
+    separate (`_EXIF_REWRITABLE_FORMATS`), so "we would never resize an AVIF" can't silently mean
+    "we never scrub an AVIF's coordinates either".
+
+  Demonstrated end-to-end before and after, per format, by authoring files that genuinely carry a
+  GPS IFD and reading the coordinates back off the bytes on disk. Two false starts on the way —
+  the first fixture set encoded no GPS at all (caught by an explicit validity check rather than
+  being reported as "no leak"), and a `tag_v2` deletion written against a wrong theory of the TIFF
+  failure was removed once measurement showed it changed nothing.
+
+  HEIC/HEIF has the same gap and is *not* fixed: Pillow cannot open it without `pillow-heif`, so
+  the file is stored untouched. Both remedies are product decisions rather than bug fixes, so it
+  is written up in `PROBLEMS.md` with the trade-offs rather than decided here.
+
+**Pin cover photo leaked other users' hidden photos.** `PinCoverPhotoView` resolved the candidate
+image with a bare `get_object_or_404(Image, pk=...)` and accepted it when
+`image.location_id == pin.location_id`. Every pin upload stamps `Image.location`, so any two users
+who pin the same place share a location id — user A could mount user B's
+`photo_upload_visibility=NO_ONE` upload as their own hero banner, and the response returned the
+file URL. The wiki twin already filtered through `visible_to`; the pin side never had.
+Regression test: `tests/hypothesis/test_pin_cover_photo_privacy.py`.
+
+- **Per-viewer media responses carried no cache directives at all**
+  (`controllers/media_auth.py` + six byte-serving views). Every media endpoint —
+  the authenticated `/media/` gate, the Google Maps photo proxy, media previews, and the
+  Immich / Google Photos / pin-suggestion thumbnails — authorizes its bytes *per viewer*: the
+  same URL legitimately returns an image for one profile and a 404 for another. None of them set
+  `Cache-Control`. Verified by probing the live view in both serving modes: the only cache-relevant
+  header emitted is `Vary: Cookie`.
+
+  `Vary: Cookie` is the right signal but not a sufficient one — shared caches commonly honour only
+  `Vary: Accept-Encoding` and otherwise key on the URL alone. These URLs end in real image
+  extensions, which is precisely what extension-based CDN cache rules match, and with no
+  `Cache-Control` such a cache falls back to its own default TTL on one user's private photo. The
+  deployments described in `CLAUDE.local.md` sit behind exactly that kind of CDN.
+
+  Added `media_auth.mark_private_media()` — one helper next to the existing shared media-auth rule,
+  rather than six copies of a header string — emitting `private, max-age=300`: `private` forbids
+  shared storage, the `max-age` keeps the requester's own (per-user, therefore safe) browser cache
+  so gallery scrolling doesn't refetch every thumbnail. Applied to all ten byte-serving returns,
+  including the X-Accel branch, which is the one that matters in production since nginx copies
+  upstream headers onto the file it streams.
+
+  Note this is defence-in-depth, not a demonstrated leak: the authorization logic itself is sound
+  (auth before path resolution, traversal-checked, uniform 404 with no existence oracle), and
+  whether any given edge actually caches these responses depends on CDN configuration this repo
+  does not contain. The directive is correct regardless of what any particular cache does.
+
+- **E2EE enrolment accepted arbitrarily weak Argon2 parameters** (`controllers/e2ee.py`). The
+  endpoint read `kdf_opslimit`/`kdf_memlimit` from the request and checked only that they were
+  positive, then stored them on the bundle. Those two numbers are the entire cost of
+  brute-forcing `password_wrapped_secret` — the user's private key wrapped under their password —
+  and the design's stated claim (in `e2ee-crypto.ts`'s own docstring) is that the server must not
+  be able to compute that wrapping key. `opslimit=1, memlimit=1` was accepted. Now floored at the
+  pinned defaults `(2, 64 MiB)`, still accepting stronger values so a future client can raise them
+  without a server change. Zero compatibility risk: the server default has never been anything
+  else (single migration) and the real client sends exactly those constants.
+
+  Verified with teeth: reverting the floor to the old `> 0` check fails exactly the two
+  weak-parameter tests. The first version of that test was itself wrong — it guessed a URL
+  namespace and a payload shape rather than reusing the existing E2EE suite's helpers, and failed
+  with `NoReverseMatch`. Rewritten against those helpers, plus a case I had originally omitted:
+  that the floor still *accepts* what the real client sends, which is the obvious way a change like
+  this breaks production.
+
+  The matching client-side half — the re-wrap path deriving its wrapping key from *server-reported*
+  parameters — is **not** fixed. It needs `/rewrap` to accept and update the parameters so the
+  client can insist on its own, and it is a write path where a mistake permanently locks a user out
+  of their key. Filed in `PROBLEMS.md` with the reason clamping the unwrap paths would be the wrong
+  fix.
+
+- **A divergent copy of the SSRF guard let CGNAT addresses through**
+  (`services/notifications/push.py`). A UnifiedPush endpoint is a user-supplied URL the server
+  later POSTs notification payloads to, so whatever a user can register becomes a server-side
+  request primitive. Registration *was* validated — scheme, no embedded credentials, DNS
+  resolution, and a private/loopback/link-local/reserved/multicast check — but that check was an
+  inline **copy** of the one in `services.security.url_safety`, and it had drifted: it lacked the
+  RFC 6598 CGNAT range (`100.64.0.0/10`). The shared helper blocks that range explicitly, with a
+  comment recording that Python's `ipaddress` does not classify it as private and that cloud
+  providers route internal-only infrastructure through it — i.e. the shared copy was fixed for this
+  exact gap and the duplicate never was. Now calls `is_blocked_address`, so the two cannot diverge
+  again. `push.py`'s own extra check (rejecting `user:pass@` credentials) was kept — it is stronger
+  than the shared helper there.
+
+  Checked for other copies at the same time: this was the only one. Every other user-directed fetch
+  (`media_preview`, `map_overlays`, `media_materialize`, `link_extraction`, the Immich form,
+  `pin_suggestions`) already routes through `ensure_public_http_url`.
+
+### Safety-critical
+
+**A resolved check-in could be dragged back into escalation.** The beat sweeps read their rows up
+front, then spend real time per row (one rendered email per contact). `send_checkin_reminder`
+ended with an unconditional `status = AWAITING_CHECKIN` write — and
+`SafetyCheckin.objects.overdue()` selects on exactly that status. An owner who checked in while
+the sweep was mid-send was pushed back to `AWAITING_CHECKIN`, so the next tick called **every
+emergency contact** for someone already safe (and, with `notify_community_wiki`, posted publicly).
+`escalate_checkin` had the same unconditional `OVERDUE` write and posted to the wiki before any
+status check.
+
+Both now guard on the stored row (`_is_resolved_in_db`) and finish with conditional UPDATEs;
+`escalate_checkin` re-checks per contact so a late resolution spares the ones not yet reached.
+`_resolve_as_found_safe` and `archive_checkin` were already correct — these two transitions had
+simply been missed. Tests: `tests/hypothesis/test_safety_resolution_races.py`.
+
+**Backup codes could be consumed twice.** `verify_and_consume_backup_code` selected unused codes,
+matched in Python, then wrote `used_at` unconditionally — so two racing submissions of one
+intercepted code both succeeded. `verify_totp_code`, 50 lines later in the same file, already
+claims its step with a conditional UPDATE and its comment names the exact threat ("a phishing
+proxy replaying it against a parallel session"). Fixed to the same compare-and-set idiom.
+Test: `tests/hypothesis/test_backup_code_single_use.py` (simulates the interleaving
+deterministically rather than with threads).
+
+**An undecryptable Gotify token took the whole site down, including its error page.**
+`EncryptedTextField` splits its fields in two: credentials fail loud "because their callers
+already catch `InvalidToken` and drop the row so the user simply reconnects", content sets
+`fail_soft=True`. `SiteSettings.notify_gotify_token` was in neither camp — shaped like a
+credential, but with **no caller anywhere** that catches `InvalidToken`, and `SiteSettings` is a
+singleton three context processors load on *every* render including for anonymous visitors. So a
+key change without `rotate_field_encryption` (precisely what that command exists to prevent) made
+every page raise — **and the styled 500 page too**, since it runs the same context processors.
+
+Verified by writing undecryptable ciphertext straight into the column: direct read raised, both
+probed pages raised, and `handler500` failed to render. Fixed with `fail_soft=True`
+(+ migration `0040`): the token is unusable either way, so Gotify pushes stop regardless — the
+only question is whether the site stays up while an admin re-enters it, and the read is still
+logged loudly with the field name and the setting to check. Every other credential field was
+checked and *does* have an `InvalidToken`-catching caller (`two_factor`, `flickr`,
+`google_photos`, `immich`, `calendar_sync`). Test:
+`tests/hypothesis/test_site_settings_encrypted_degradation.py`.
+
+- **A removed emergency contact kept receiving a safety check-in's chat**
+  (`consumers.py`, `services/visits/safety.py`). `SafetyCheckinChatConsumer` resolves authority
+  once, at `connect()`. For partners that has always been paired with a revocation path — an
+  immediate `partner_access_revoked` broadcast plus periodic re-validation as a backstop. The
+  token-authenticated contact route had **neither**, on the stated reasoning that a magic-link
+  token "is either valid or it isn't", and `partner_access_revoked` explicitly returns early for
+  contact connections.
+
+  That reasoning is wrong: a contact token is revoked by *deleting the row*, and
+  `set_checkin_contacts` deletes every contact missing from a resubmitted list — i.e. removing
+  someone from a check-in's contact list is an ordinary, user-facing edit. Reproduced before
+  fixing: with the contact's portal open, the owner clears the contact list, and the contact's
+  socket still receives the next chat message. Meanwhile the HTTP fallback serving the same data
+  refuses them correctly, because it re-resolves the token per request — so the two transports
+  disagreed about who may read a safety check-in's chat.
+
+  One characteristic of the fix, found by re-reading it later and worth stating: like the seven
+  existing `send_group_message` calls in that module, the revocation broadcast fires *inside* the
+  enclosing `transaction.atomic()` rather than from `transaction.on_commit`. If that transaction
+  rolled back, a contact who still exists would be disconnected once. It is self-healing — their
+  token is still valid, so a reconnect succeeds and the periodic re-check added alongside confirms
+  them — and diverging from the module's convention for one of eight call sites would be worse than
+  the nuance. Noted rather than changed; making all eight commit-safe is a coherent follow-up.
+
+  Fixed by mirroring the partner mechanism exactly: `_broadcast_contact_access_revoked` fired for
+  each removed row, a `contact_access_revoked` handler that closes only the matching connection,
+  and the periodic re-check extended to the contact route (where "still authorized" means the row
+  still exists on this check-in). The comments asserting the old reasoning were corrected rather
+  than left to mislead the next reader.
+
+- **Imported track dwells were recorded as live-device geolocation visits**
+  (`services/import_formats/gpx_tracks.py`). `detect_dwells_and_create_visits` stamped its
+  `PinVisit` rows `source=GEOLOCATION`, which the enum documents as "added when the user's device
+  provided a geolocation" and which `record_geolocation_visits` writes under the `track_geolocation`
+  setting. These rows come from a track file the user *uploaded*, reached through route import and
+  gated by `track_routes`. So the same `VisitSource` had two producers under two different
+  settings, and the one whose name matched the recorded source had no say over it. They now use
+  `HISTORY` ("Imported") — the enum's documented value for exactly this, and what the sibling
+  Google Takeout importer already writes. Fixes the UI label too: these showed as "Geolocation"
+  for visits derived from a file.
+
+- **"Friend request accepted" notifications named no actor on one of three paths**
+  (`services/social/friendship.py`). `accept_friend_request` created the `FRIEND_ACCEPTED`
+  `NotificationLog` without `source_profile`, while the other two paths set it. The external API's
+  `NotificationSerializer` exposes that field, so a mobile client had no profile to link back to -
+  even though the message text and the url on the *same row* both named that profile, which makes
+  the omission a contradiction rather than merely a gap. Carried over from an older extraction that
+  was deliberately behaviour-preserving, and filed as open since 2026-07-26 pending a test across
+  all three paths; both now done.
+
+- **A settable WhatsApp/SMS toggle that could never fire** (`services/notifications/`). Two
+  defects stacked. `_enabled_channels` derived the preference column from the notification's *type
+  value*, which agrees with the column stem for 31 of 32 types — but
+  `SAFETY_CHECKIN_PARTNER_INVITE` has the value `safety_ci_partner_invite` against columns named
+  `safety_checkin_partner_invite*`, so `getattr`'s `False` default reported it as a deliberate
+  opt-out. And `TEXT_ALERTABLE_TYPES` omitted the type entirely, so that lookup was never even
+  reached. Either alone made the toggle a lie; together they made it silent.
+
+  Open since 2026-07-26 on the assumption that the fix required "a rename plus a migration". It
+  didn't: every other consumer reads these preferences by the enum *member name*, so the lookup now
+  does too — measured as 12 types resolvable by value versus 13 by member name, exactly one
+  difference. The set's own docstring defines membership as "types with a toggle pair" (MESSAGE
+  excepted), and 13 stems have a pair against 11 listed, so the omission was an oversight rather
+  than a delivery decision. The stem/value mismatch itself is untouched, so external API field
+  names are unchanged.
+
+- **One malformed KML aborted the entire import** (`services/apis/locations/google/maps.py`). The
+  bulk importer has a per-file handler precisely so a bad file is logged and skipped while the rest
+  of the upload proceeds. Its tuple listed `XMLParseError` — which is
+  `defusedxml.ElementTree.ParseError` — and **neither** error a malformed KML actually raises is
+  that type: fastkml's `KMLParseError` descends from `FastKMLError`, and lxml's `XMLSyntaxError`
+  from `SyntaxError`. Both escaped the KML parser's own handler *and* the caller's, so a file with
+  unparseable coordinates or a truncated tag took down the whole import stream — losing every
+  other file in the same upload, not just the broken one. Both failure modes were reproduced from
+  ordinary bad input before fixing.
+
+  The two handlers needed the same list and had already drifted, so the fix is a single named
+  `IMPORT_PARSE_ERRORS` constant used by both rather than a second inline tuple. The tests import
+  *that constant* rather than restating it — the first version restated the list and so passed
+  even with the production fix reverted, which is the failure mode that makes a regression test
+  worthless.
+
+- **The same bomb gap on a request path** (`controllers/labels.py`). Sweeping every Pillow
+  `open()` call site for the hierarchy gap above found three more. Two mattered:
+  `_resize_custom_icon`, whose docstring promises to return the original "if already small enough
+  **or unreadable**" and catches `(OSError, ValueError)` to deliver that — but `Image.open()`
+  raises the bomb error on the *header*, before any decode, so an oversized custom label icon
+  500'd the request instead of falling back; and the keyword-downscale helper, where it aborted
+  keywording rather than skipping one image. Both now catch it.
+
+  The third site — the metadata keyword plugin — was deliberately **left alone**: its runner
+  already wraps `provider.generate()` in `except Exception` per provider, so a bomb there is
+  already contained and a second handler would be redundant. Checked before patching rather than
+  after.
+
+- **A decompression bomb crashed the photo-processing task** (`tasks.py`). Pillow refuses to
+  decode above `MAX_IMAGE_PIXELS` (89 MP), which is what prevents the memory exhaustion — but it
+  signals that with `DecompressionBombError`, which inherits straight from `Exception`, **not**
+  from `OSError` the way the rest of Pillow's failures do (`UnidentifiedImageError` does). The
+  downscale was wrapped in `except (OSError, ValueError)`, so a bomb escaped and failed the whole
+  Celery task: the upload stayed stored but entirely unprocessed — no checksum, no EXIF, no
+  downscale — and it surfaced as an unhandled task exception rather than the logged warning every
+  other unprocessable image gets. Now caught alongside the others. Not a vulnerability (Pillow's
+  ceiling already stops the DoS), a failure-mode fix.
+
+- **Downscaling a PNG rotated it ninety degrees** (`services/media/images.py`). Nothing in this
+  pipeline calls `ImageOps.exif_transpose`, which is fine *provided* the EXIF `Orientation` tag
+  survives the re-encode — browsers rotate from it. The save path passed `exif` through for
+  JPEG/WEBP/TIFF/AVIF but **not PNG**, so a PNG carrying an orientation kept its unrotated pixels
+  and lost the tag explaining them. Every later view of that photo renders it wrong, permanently,
+  with nothing logged. PNG is now in the set; Pillow writes an eXIf chunk and the tag round-trips.
+
+  Measured per format rather than assumed, which mattered: TIFF *also* comes back without the tag,
+  but its pixels arrive pre-rotated (a 2400x1200 source returns 400x800), so it is already correct
+  and a test demanding the tag would have failed on a good result. The tests therefore assert
+  "displays upright — tag kept **or** pixels rotated" rather than one mechanism. They also cover
+  the GPS-strip path, since that rebuilds the EXIF block from `getexif()` and is a second place
+  unrelated tags could be dropped.
+
+- **The wiki article conflict check was a TOCTOU** (`services/wiki/articles.py`). Community
+  articles already have optimistic concurrency — the editor posts the `base_revision_id` it started
+  from, a mismatch raises `ArticleConflictError`, and the client gets a 409 that keeps the user's
+  text. But `save_article_checked` read the latest revision id and then wrote, with no lock and no
+  transaction around the pair. Two editors who both loaded revision R both read `latest_id == R`,
+  both passed, and both appended — so one editor's save silently stopped being the current article,
+  which is the exact outcome the check exists to prevent, and they were told it succeeded.
+
+  Nothing else caught it: `ArticleRevision` has no revision number and no unique constraint, and
+  "latest" is just `-created`. The read-check-write now runs in a transaction with the article row
+  locked. A *first* save needs no lock — `Article.pin`/`.wiki` are `OneToOneField`, so the database
+  settles that race — and the fix is scoped accordingly. Severity is bounded by history being
+  append-only: the losing editor's text survives as a revision, so this was a silent supersede
+  rather than data loss.
+
+### Correctness
+
+**API cost reporting excluded every AI service.** Two compounding bugs. `services/ai/vision.py`
+computed a per-call cost from real token usage, logged it to the *application* log, and never
+passed it to `log_api_call` — so `ApiCallLog.cost_estimate` was NULL for the priciest call type in
+the app. And `api_spend_summary_30d` decided what to include by asking whether a service had a
+flat `ServiceDefaults.cost_per_call`: **of 46 registered services exactly one does**
+(`google_geocoding`). Every AI service prices per call and declares no flat rate, so all of them
+were counted "unpriced" and their spend was dropped from the totals shown on the site-admin cost
+page *and the public running-costs page*. Now keyed on whether a service recorded any cost.
+Tests: `test_vision_cost_logging.py`, `test_api_spend_summary.py`.
+
+**A dead route returned 500 for everyone.** `/map/pin/<slug>/google/` was wired to
+`PinController.as_view({"get": "get_google_images"})`; that method does not exist, and DRF resolves
+handler names at request time, so it raised `AttributeError` for any caller. Nothing reversed the
+URL name and the live Google Images feature goes through the plugin system. Removed.
+
+**Customized labels disagreed between map and sidebar.** The map payload prefetches label
+customizations; the pin-list sidebar didn't. `Label._get_customization()` reads a prefetch
+attribute rather than querying, so a missing prefetch silently reads as "no customization" — the
+same pin showed the user's own label on the map and the global one in the list. The sidebar
+template now reads `effective_name`/`effective_color`, so the customization covers the label's
+name and colour, not only its icon.
+
+**Fact confidence could crash on a weight tie.** `services/facts/confidence.py::_cluster_categorical`
+builds `(weight, value)` tuples and sorts them with a bare `reverse=True`. Tuple ordering falls
+through to the second element on a tie, so two equally-weighted clusters were ranked by comparing
+their **values** — unintended, and a `TypeError` when the values aren't mutually comparable.
+
+Reachable, not theoretical: `FactEvidence` stores `data_type` per row precisely so "old rows stay
+interpretable" after a fact key's registered type changes (the model says so), meaning one fact can
+hold a text row and a bool row simultaneously; and every `value_*` column is nullable. Either
+combination raises inside `recompute_fact_confidence` — a Celery task, so the fact just silently
+stops being recomputed. Reproduced both variants (`None` vs `str`, `str` vs `bool`), then fixed by
+sorting on the weight alone. Test: `tests/hypothesis/test_fact_confidence_tie_break.py`.
+
+- **Nearest-building ranking compared degrees, not ground distance**
+  (`plugins/builtin/redata_building_attributes.py`). `_nearest_building` ranked a parcel's
+  buildings with `hypot()` over raw lat/lng deltas. A degree of longitude is only `cos(latitude)`
+  as long as a degree of latitude, so east-west separation was over-weighted and the ranking
+  inverted for any two buildings whose true distances differ by less than that factor — 1.36x at
+  this app's latitudes. Concretely, at Albany a building 25 m north beat one 20 m east. The
+  function's whole purpose is the multi-building parcel (it is what makes a detail pin resolve to
+  *its own* building), and the winner's name is contributed as a `NameProvider` candidate that
+  `default_name_resolver` gives **outright priority** when naming that pin's location — so a
+  wrong pick silently mislabels the user's location, not just one panel. Now ranks via
+  `site_scope.meters_between`, the shared equirectangular helper `pin_wiki_sync` already uses for
+  the same parcel-scale comparison. The existing tests missed it because their "far" building is a
+  third of a degree away, where no correction changes the answer; the new case is two buildings at
+  comparable distance on different bearings.
+
+- **Auto-discovered links could permanently break a pin's enrichment**
+  (`services/locations/external_links.py`). `add_pin_link`/`add_wiki_link` used
+  `get_or_create` on `(pin, url)` / `(wiki, url)`, which carry no unique constraint, and they run
+  from a `LocationCache` post-save signal — fired by panel fetches, which have their own Celery
+  queue at concurrency 20. Two panels surfacing the same URL for one pin both miss and both
+  insert; from then on `get_or_create` raises `MultipleObjectsReturned` on *every* later call for
+  that URL, inside a signal handler, on a task queue. Now check-then-create, so a duplicate stays a
+  harmless extra row rather than a permanent exception. The race itself needs a unique constraint,
+  which is entangled with the user-facing "add a link" flow and is filed in `PROBLEMS.md` with the
+  four other unconstrained `get_or_create` lookups.
+
+- **The nightly achievement sweep starved a fixed set of users, silently**
+  (`services/achievements/evaluate.py`). Measured earlier in this audit at ~30 queries per profile
+  with the whole sweep as one task under a hard 3600s limit, so past a certain user count each run
+  is killed part-way. `Profile.objects.iterator()` has a stable order, so it truncated at the
+  *same* place every night — the same tail of users permanently stopped earning the awards that
+  only this safety net catches, and nothing reported it because the task simply died.
+
+  The two fixes originally filed (batch the metrics; split the task) both need a maintainer's call,
+  so neither was attempted. A third, smaller change removes the part that harms users: the sweep
+  now checkpoints to the cache every 500 profiles, resumes from the cursor, and resets it on
+  reaching the end — so whatever a resumed run skips is covered by the next one and no profile is
+  starved indefinitely. A resumed run logs a warning, which is what makes the truncation visible.
+  This does **not** make the sweep cheaper, and `PROBLEMS.md` still carries the batching fix as the
+  real answer.
+
+- **A forecast slot with a UTC offset could 500 the trip page** (`controllers/trip.py`).
+  `ForecastSlot.date` is parsed with `datetime.fromisoformat`, which passes an offset through
+  unchanged, and the three weather providers do not agree on a format — REData's is whatever its
+  API emits. Subtracting an aware slot from the naive target raises
+  `TypeError: can't subtract offset-naive and offset-aware datetimes`. Both sides are now forced
+  naive before comparing.
+
+  Scoped deliberately: this fixes the **crash**, not the timezone bug filed alongside it. Slots are
+  still compared in whatever wall clock each provider used, and on the Open-Meteo path — the
+  unconditional fallback, requested with `timezone=auto` — that is local time for the pin against a
+  UTC target. Re-checked while here whether a complete fix was available without a product call: it
+  is not, since the app has no timezone-resolution library and no per-location timezone field. The
+  tests therefore assert no-crash and pointedly do **not** assert the right slot is picked on that
+  path, because it isn't.
+
+- **Device-scan ingestion resolved expected markers one query per device**
+  (`services/device_scan/ingestion.py`). The upload endpoint accepts up to 200 devices and persists
+  them **synchronously** inside the request, so a per-device `WikiDeviceMarker` lookup was up to 200
+  extra round-trips on top of the per-device writes. Measured before changing anything: ~5 queries
+  per device, linear; batching the marker resolution took a 30-device upload from 123 to 94
+  queries. Now one `uuid__in` query and a dict lookup.
+
+  Worth noting what the surrounding code already gets right, since that shaped how far to go:
+  readings are `bulk_create`d per device, both list sizes are bounded (200 devices x 500 readings),
+  coordinates are range-validated in the serializer, MACs are normalised through a dedicated
+  validator, and the heavy classification work is deferred to Celery via `transaction.on_commit`.
+  What remains is ~4 queries per device from the `get_or_create` per MAC and the per-device entry
+  insert — reducible only by restructuring the write, which is a bigger change than this warranted.
+
+### Performance
+
+Measured with a query-count probe at two data sizes; all now flat.
+
+| endpoint | before | after | cause |
+|---|---|---|---|
+| `map.pins.list` | 29 → 53 | flat 23 | `Pin.icon_source_label()` used `labels.exclude(...)`, which builds a fresh queryset and **ignores `prefetch_related`**; plus missing `location__wiki` for `Location.display_name` |
+| `GET /photos/` (API) | 19 → 67 | flat 8 | per-photo `VisitSuggestion.exists()` in `classify_photo`; `Profile.username` → `auth_user`; `pin_name` → `Location.display_name` → wiki |
+| `trips.overview` | 33 → 87 | flat 16 | four call sites hand-built querysets and missed the `_eff_start`/`_eff_end` annotations `for_list_page` already had; plus identity-masking a list that never reaches the template |
+| `trips.calendar` | 14 → 38 | flat 8 | same missing annotations |
+
+Extracted `TripQuerySet.with_effective_dates()` so the annotation has one definition instead of a
+pattern each caller must remember. Also reordered three `Image.objects.visible_to(...)` calls to
+narrow *first* — that method is eager, and one of them was on the path that serves every media
+file. Regression test: `tests/hypothesis/test_query_scaling.py` (asserts the *slope*, not an
+exact count).
+
+### Build / tooling
+
+**`bun` was pinned as a dependency, so every script ran on a two-year-old Bun.** `package.json`
+declared `"bun": "^1.0.15"` under **dependencies**, so `bun install` put a project-local **1.1.6**
+in `node_modules/.bin` — and `bun run` prepends that directory to `PATH`. Every `bun run <script>`
+therefore executed on 1.1.6 rather than the 1.3.14 the developer *and the Docker image* actually
+have. `bun` is never imported as a module; the dependency did nothing but shadow the real runtime.
+
+This was the single cause behind **two** separately-filed bugs, both of which had been diagnosed
+wrongly (once by this audit):
+
+- `bun run build` failing with "Formats besides 'esm' are not implemented" — 1.3.14 implements
+  `--format iife` fine; only 1.1.6 rejects it.
+- `bun run test:ts` failing 1–2 tests inside happy-dom's event dispatch — reproduces on 1.1.6,
+  not on 1.3.14.
+
+Fixed with `bun remove bun`: **`bun run test:ts` goes to 383 pass / 0 fail (three consecutive
+runs)** and `bun run build` succeeds using Bun's own IIFE output. An earlier workaround in this
+same audit (hand-wrapping the classic bundles because `iife` "wasn't implemented") was reverted as
+unnecessary — verified afterwards that all four bundles build, `node --check` parses each as a
+classic script, and every `window.*` global survives.
+
+Worth internalising: `bun run <script>` and the same command typed at a shell can execute
+*different binaries*. Ten runs were needed to establish that cleanly — 5/5 failing via `bun run`,
+0/5 via the identical command direct.
+
+**`--reuse-db` silently poisons the test database.** The `urbanlens-mobile` OAuth `Application` is
+created by a data migration. Django only guarantees migration data for `TestCase`; a
+`TransactionTestCase` truncates every table and this suite has ~31 of them. So the first run
+including one destroys the row and, with `--reuse-db`, it never returns — every later run fails
+with `Application.DoesNotExist`, which reads like a product bug. Added
+`core/tests/oauth.py::first_party_application()` (get_or_create) and routed the six affected test
+modules through it: on an already-poisoned database that took the same selection from
+**98 failed / 3 passed → 1 failed / 189 passed**. See `docs/PROBLEMS.md` for the residual
+(`test_oauth_client_provisioning` legitimately asserts the migration's own output and still needs
+a fresh DB).
+
+---
+
+## 2. New permanent guards
+
+Added because each covers a failure mode that per-case tests structurally cannot: the case nobody
+wrote a test for.
+
+- **`test_cross_user_route_access.py`** — walks every owner-scoped route (167 of them) and asserts
+  a logged-in stranger gets nothing, for GET, for POST/DELETE, for nested child ids smuggled
+  through the caller's own parent, and for anonymous visitors. Also catches routes wired to a
+  handler that doesn't exist, which is how the dead `google_images` route was found.
+- **`test_query_scaling.py`** — four endpoints rendered at two data sizes; fails if query count
+  grows with row count.
+- **`test_undo_round_trip.py`** — serialize → delete → restore for every registered undo handler,
+  plus an assertion that **every registered handler has coverage here**, so a ninth handler fails
+  until someone adds it.
+- **`test_share_provenance_conformance.py`** — AST check that any module creating a `PinShare`
+  also calls `record_share_exposure`, enforcing a rule `CLAUDE.md` states but nothing checked.
+- **`test_map_pin_payload_contract.py`** — pins the map pin payload's key set to
+  `PIN_CACHE_VERSION`. The existing `pin-cache.contract.test.ts` guards that the TS reader and the
+  template's inline writer agree on a version; it cannot catch a *shape* change that leaves both
+  at the same number, which is exactly the case `CLAUDE.md` warns goes "silently stale". Adding a
+  payload field now fails with instructions to bump the version so cached clients refetch.
+- **`test_site_settings_encrypted_degradation.py`** — an undecryptable `SiteSettings` field must
+  degrade, not 500 every page (see the Gotify fix above).
+- **`test_fact_confidence_tie_break.py`** — pins the tie-break bug above, then *generalises* it.
+  `CLAUDE.md` asks for hypothesis property tests wherever possible, and the module already had
+  them for `_decay`; but `_cluster_categorical` was only ever exercised with a **single
+  `"a"`-valued row**, which is exactly why a tie-break over mixed types went unnoticed. Four
+  properties now hold for any evidence list — never raises whatever the value types (weights drawn
+  from a coarse set so ties are common), cluster weights sum to the reported total, clusters are
+  ordered heaviest-first, and clustering neither invents nor drops evidence. Confirmed the
+  properties catch the original defect by reverting the one-line fix in the container and watching
+  both `TypeError`s reappear.
+- **`test_video_location_strip.py`** — runs real ffmpeg end to end: authors a video carrying
+  location tags, processes it, and reads the tags back with ffprobe. Covers the case the old code
+  could never reach (small video, no downscale warranted) and the one it silently failed
+  (downscaled but metadata copied), plus the negative case. Verified both fixes are independently
+  load-bearing: disabling the strip fails two tests, removing only `_reencode`'s tag clearing
+  fails one. Skips cleanly when ffmpeg isn't on PATH.
+- **`test_gps_strip_by_format.py`** — runs the real `downscale_stored_image` over every format
+  the pipeline can rewrite and reads the GPS back off the stored bytes. The fixture-validity test
+  carries as much weight as the strip test: an authoring mistake that produced GPS-less fixtures
+  would make every assertion pass while testing nothing, which is precisely what happened during
+  the investigation. Verified by reverting both arms of the fix and watching the format list come
+  back populated.
+- **`test_api_call_log_retention.py`** — `ApiCallLog` has two readers with very different
+  horizons: `check_rate_limit` counts 30 days for `calls_per_30_days`, and `monthly_cost_series`
+  reconstructs a rolling 12-calendar-month spend chart from the same rows. Pruning is set by the
+  longer one (400 days) and `prune_api_call_logs`' docstring already warns that the model helper's
+  90-day default would "silently zero out three-quarters of that chart". This turns that warning
+  into a failing test. Both failure modes are silent and opposite — the limiter would under-count
+  and let a service exceed its ceiling, the chart would just render zeros — and neither raises.
+  The bound is *derived*, not hardcoded: an initial crude `13 x 31` estimate falsely flagged a
+  correct configuration, so it now computes the true worst-case calendar reach (365 days, leaving
+  35 days of margin) and separately asserts that both readers' windows haven't moved, so a change
+  to either lands here.
+- **`test_beat_lock_intervals.py`** — the beat tasks guard themselves with
+  `cache.add(key, timeout=TTL)` so two runs can't overlap, and the TTLs are hand-tuned to sit
+  "just under" the beat interval (the comments in `tasks.py` say so explicitly). But the TTLs are
+  integers in `tasks.py` and the intervals are integers in `settings/base.py`, with nothing tying
+  them together — the same cross-file constant coupling that produced three findings earlier in
+  this audit. The quiet direction is the dangerous one: drop the safety check-in interval to four
+  minutes and the 270s lock silently *skips every other tick*, halving the rate at which overdue
+  check-ins escalate, with no error and no log. Four tests: the interval invariant, that named
+  entries still exist, an AST completeness arm so an eleventh lock-guarded beat task can't be
+  silently uncovered, and a floor so the scan can't pass by matching nothing. Verified by
+  shortening one interval below its lock (fails) and dropping one task from the map (fails).
+- **`test_safety_contact_revocation.py`** — mirrors the partner revocation tests one-for-one,
+  including their two delivery concerns: the broadcast is *enqueued* rather than performed (so it
+  needs `broadcasts_delivered_inline`), and it is best-effort (so a separate test deletes the row
+  with no broadcast at all and asserts the periodic backstop still closes the socket). A fourth
+  test asserts the backstop does *not* evict a contact who is still on the list. Verified both
+  mechanisms are independently load-bearing by disabling each in the container: neutering the
+  handler fails 2 tests, restricting the backstop to the session route fails the third.
+- **`test_private_media_cache_directives.py`** — the per-view assertions are the easy half; the
+  one that earns its keep is the AST scan asserting that *every* byte-serving return in the six
+  media controllers routes through `mark_private_media`. A per-view test only covers views someone
+  remembered to write a test for, and the failure mode is silent — the response is correct in every
+  visible way except the missing header. Verified it has teeth by unwrapping one `HttpResponse`
+  return and one `FileResponse` return in the container and watching each get named with its line
+  number, plus a floor assertion so the scan can't pass by matching nothing.
+- **`e2ee-interop-fixture.test.ts`** — `docs/e2ee-interop-fixture.json` is generated from the web
+  client's own crypto so a native client (the Flutter app's `E2eeService`) can replay each step
+  and match byte-for-byte. Nothing in this repo read it back, so the coupling ran one way: change
+  `KDF_OPSLIMIT`/`KDF_MEMLIMIT` — a plausible hardening change — and the committed contract
+  silently stops describing what the web client does, while the native side keeps passing against
+  a stale fixture and diverges from the server it must interoperate with. Verified the fixture is
+  currently *valid* (both KDF derivations reproduce byte-for-byte), then added the guard; validated
+  it by bumping `KDF_OPSLIMIT` and confirming the failure. The coupled party here is outside this
+  repo, which is exactly why it needed a test rather than a comment.
+- **`test_panel_flight_ttl_invariant.py`** — `FLIGHT_TTL_SECONDS` (150) must stay above
+  `fetch_panel_source`'s hard `time_limit` (130). A hard-killed task never reaches the `finally`
+  that releases its single-flight marker, so the TTL is the only thing that frees the panel. The
+  two numbers are literals in different modules, each documented by a comment pointing at the
+  other, with nothing checking they still agree — raise the task limit past the TTL and the marker
+  expires mid-run, so every polling page enqueues a duplicate fetch against a slow provider. Fails
+  silently as extra API spend, never as an error.
+
+### Undo restore fell back to `undo:write` alone for three of eight undo types (fixed)
+
+`external_api/views_undo.py` keeps two hand-maintained maps from undo `model_label` to the domain
+scope that label requires. Both listed **five** labels; the `services.undo.handlers` registry has
+**eight**. Missing: `pin_list`, `label`, `markup_map`.
+
+The two directions fail differently, which is why this survived:
+
+```python
+domain_scope = _DOMAIN_WRITE_SCOPES_BY_MODEL_LABEL.get(entry.model_label)
+required = {ApiKeyScope.UNDO_WRITE, domain_scope} if domain_scope else {ApiKeyScope.UNDO_WRITE}
+```
+
+On the **read** path an unmapped label is simply omitted from the response — invisible, harmless,
+and it produces no symptom anyone would report. On the **restore** path `.get()` returns `None` and
+the `if domain_scope else` branch collapses the requirement to `{UNDO_WRITE}` on its own. A
+credential holding only `undo:write` could restore a deleted pin list, label, or markup map without
+ever holding `lists:write` or `labels:write` — flatly contradicting the view's own docstring
+("Requires `undo:write` **and** the entry's own domain write scope — restoring a delete needs the
+same authority the delete itself needed").
+
+Both maps now name all eight. `pin_list` → `LISTS_*` and `label` → `LABELS_*` are exact. There is
+no markup-specific scope in `ApiKeyScope` (grepped `MARKUP`, `MAP_`, `_MAPS` — nothing), so
+`markup_map` → `PINS_*`: a markup map is an annotation layer on a pin's own map, and requiring
+pin-write authority is both defensible and strictly stronger than requiring nothing.
+
+Guarded by `tests/hypothesis/test_undo_scope_coverage.py`, which asserts against the handler
+registry by introspection rather than a hand-written label list — a ninth undo handler cannot
+repeat this. Teeth-checked by deleting the `pin_list` write entry (2 checks fail, restored 5 pass).
+
+This is the third instance of the same class (chunk 143's journal sources, `views_search.py`'s
+`SEARCH_SECTION_SCOPES`, this): a paired registry where one side is generated by the code and the
+other is typed by hand. The general lesson is that `.get()` returning `None` into a conditional is
+the fail-open shape; `filter_sources_by_grants`'s "iterate the mapping" shape is the fail-closed
+one, and it is the reason the other two consumers were safe by construction.
+
+### Paginated endpoints could repeat and drop rows on a tied ordering (fixed)
+
+`PaginatedListMixin.paginated_response` stated its own precondition — "Must have a
+deterministic ordering, or pages will overlap and drop rows" — and then did nothing to
+establish it. Thirty call sites hand it a queryset, each responsible for satisfying that on its
+own.
+
+Page-number pagination is `LIMIT`/`OFFSET`. Postgres may return rows with equal sort keys in any
+order and is not obliged to pick the same order for page 2's query as for page 1's, so a row can
+appear on both pages while another appears on neither. Nothing errors — the caller just never
+sees that row. Most orderings here end in a timestamp and are fine; several end in a plain
+`CharField` (`WikiOwner.name`, `PinAlias.name`, `Album.name`), which ties readily.
+
+Rather than auditing thirty sites and trusting the thirty-first, the tie-break is appended inside
+`paginated_response` via a new `stable_ordering()`. It deliberately leaves four cases alone,
+because "always append pk" would be a worse bug than the one being fixed:
+
+- **lists** — already materialised in a fixed order;
+- **`distinct()` queries** — `SELECT DISTINCT` requires every `ORDER BY` term in the select list,
+  so appending `pk` to a `.values()` projection is a database error, not a fix;
+- **aggregate queries** — Django folds `ORDER BY` into `GROUP BY`, so a `pk` term would split
+  every group into one row per row and change the numbers the endpoint reports;
+- **orderings already ending in the primary key**, which are already deterministic.
+
+Teeth-checked, and this one matters: with `stable_ordering` neutered,
+`test_paging_through_sees_every_row_exactly_once` genuinely fails against Postgres over 23 rows
+sharing one name. The overlap is real behaviour, not a theoretical property of the SQL standard.
+
+**A wrong turn worth recording.** The four `property_owner` models each declare their own
+`class Meta:` without inheriting the abstract base's, and the base is where `ordering` lives — the
+classic Django trap. I was confident this silently dropped the ordering, which would have made
+`WikiOwner`/`WikiPropertySale` completely unordered and turned a tie-break into a much larger
+finding. Checking `_meta.ordering` at runtime disproved it: Django's `ModelBase` explicitly copies
+`ordering` (and `get_latest_by`) from an abstract parent's Meta when the child's Meta omits them.
+All four inherit correctly, and `for_location`'s docstring claim of "newest first (model default
+ordering)" is accurate. The runtime check took one command; the reasoning that replaced it was
+wrong.
+
+Broader context, not acted on: **161 of the dashboard's models have an ordering with no unique
+final key** (or none at all). That is only a bug where the rows are paginated or sliced, which is
+why the fix went at the pagination boundary rather than into 161 `Meta` classes.
+
+### The pin cache's field-set contract is now guarded (improvement)
+
+`pin-cache.ts` reads a localStorage blob whose only writer is `pages/map/index.html`'s inline
+script. An earlier audit added `pin-cache.contract.test.ts` to pin the *version* and *key*, after
+the reader sat on v6 while the writer moved to v8 — every read returned `[]` and the features
+built on it went quiet without erroring.
+
+The version is not the whole contract. The writer runs each pin through `_slimPin`, which keeps
+only the fields named in a `_CACHE_FIELDS` Set, so that Set decides what the reader can see.
+Nothing checked it against what the reader consumes (`uuid`, `name`, `latitude`, `longitude`,
+`icon`, `address`, `tags`). Dropping or renaming one fails exactly like the version drift did:
+`readCachedPinsForSearch` skips every pin missing `name`/`latitude`/`longitude` and returns `[]`,
+so instant search suggestions silently stop; `readCachedPinLocations` returning `[]` makes the
+Tools-page folder scanner stop filtering locations the user already has pins for, producing
+duplicate suggestions. Neither throws.
+
+The contract test now parses `_CACHE_FIELDS` out of the template and asserts all seven are
+present. Teeth-checked by deleting `'address'` from the Set. No live bug — all seven are cached
+today; this closes the recurrence path for a failure this exact file already had once.
+
+### Self-review of this changeset: two unintended edits (one fixed, one flagged)
+
+The least-audited code in the repository is this session's own 215-file working tree, so it got the
+same treatment as everything else.
+
+**Fixed — 458 lines of line-ending noise.** `docs/notes/mobile_app_requirements.md` (341/341 lines
+changed) and `docs/designs/rejected-and-deferred/split-architecture.md` (117/117) looked like whole
+-file rewrites. The actual edits were 4 and 6 lines respectively — documentation cross-reference
+repairs from section 4c. Rewriting those files through Python silently normalised CRLF to LF across
+every line, burying ten real changes in 458 and flipping both files against the 63 tracked files
+that still use CRLF. CRLF restored byte-for-byte; the content edits verified intact and the diffs
+are now 4 and 6 lines. Worth noting as a method problem, not just a one-off: any whole-file
+`write_text()` on a CRLF file does this, and the diff is the only place it shows up.
+
+**Flagged, not changed — `uv.lock` lost six packages.** `django-extensions`, `esprima`, `patsy`,
+`python-decouple`, `scipy`, and `statsmodels` were pruned when `uv sync` ran early in the session.
+This is legitimate — none of the six is declared in `pyproject.toml` and none is imported anywhere
+under `src/` or `bin/` — but it is an unrelated dependency-metadata change riding along in a
+behavioural changeset. Whether it belongs in the same commit is the owner's call, which is why it
+was left alone rather than reverted or quietly kept.
+
+### Self-review, part two: a bug I introduced this session (fixed)
+
+Continuing the self-review into the code added this session rather than only its diff hygiene.
+`stable_ordering` (added in chunk 146) was the obvious first target: newest, and it now sits in the
+path of all 30 paginated endpoints.
+
+**`stable_ordering` raised `TypeError` on a sliced queryset.** Django refuses to reorder a query
+once a slice has been taken, so `paginated_response(qs[:100], ...)` would have become a 500 on an
+endpoint that previously worked. No current call site passes a slice - checked all 30 - so this was
+latent rather than live, but the helper is now a shared boundary and the next caller to slice would
+have found it in production. Combined querysets (`union`/`intersection`/`difference`) are skipped
+for the same reason: their `ORDER BY` may only name columns in the combined select list, and "pk is
+usually there" is not worth a 500. Both guarded, both teeth-checked.
+
+The general point: the fix in chunk 146 removed a class of bug at a shared boundary, which is the
+right shape - but moving logic to a boundary means every caller's edge cases now arrive there, and
+the four exclusions I wrote initially covered the cases I had thought of rather than the cases
+Django actually rejects. Enumerating what the API refuses (slices, combinators) found what
+reasoning about what "should" be safe did not.
+
+### `normalize_longitude` folded one meridian two different ways (fixed)
+
+Same self-review pass, `services/geo/longitude.py`. The function special-cased the literal `180.0`
+to preserve which side of the line a bound sat on - deliberate, and documented. But 180 and 540 are
+the same meridian, and 540 fell through to the general fold and came back as `-180`. So the
+documented guarantee ("a bound *on* the line keeps its side") held only for the spelling the author
+happened to test.
+
+Now decided on the sign of the input instead: any positive input landing on the antimeridian
+returns `+180`, any negative one `-180`, however many times the client wrapped it. Idempotence and
+range are pinned as properties, and the equivalence is pinned directly. Teeth-checked by restoring
+the old special-case.
+
+Realistically hard to trigger - Leaflet emits 181, not 541 - so this is a latent trap in a shared
+primitive rather than a live bug. It is recorded because the entire reason that module exists is to
+be the one place antimeridian reasoning is correct, and a primitive that contradicts its own
+docstring is exactly what callers will trust and not re-check.
+
+Also checked, no change made: `split_at_antimeridian(None)` raises `AttributeError`, and
+`_pin_in_boundary` does not guard a null `smart_boundary` the way `_boundary_matching_ids` does.
+Its only production caller short-circuits on `pin_list.smart_boundary` first, so the path is
+unreachable; the asymmetry is a readability wart, not a defect, and churning a private helper to
+even it out would be noise.
+
+### Self-review, part three: two more defects in this session's own code (fixed)
+
+**`_deferred_deadline_passed` died on a naive timestamp.** The two-day CID retry window parses
+`started_at` with `datetime.fromisoformat` and guards the parse with `except ValueError`. A naive
+timestamp parses fine and then raises `TypeError` on the subtraction against an aware
+`timezone.now()` - a different exception, so the guard misses it and the Celery task dies instead of
+retiring the batch. The only producer stamps `timezone.now().isoformat()` (aware, `USE_TZ=True`), so
+no live path reaches it; a replayed or hand-enqueued message does.
+
+Fixed by making a naive stamp aware rather than by widening the `except`. Swallowing it would
+return "not expired", and a batch that can never expire is precisely what the deadline was added to
+prevent - the failure would have been silent and permanent instead of loud and immediate. This is
+the same shape as the `stable_ordering` slice bug in chunk 149: a guard covering the failure mode
+the author pictured, next to an adjacent one it does not catch.
+
+**`release_lock` cried overrun when nothing was wrong.** Releasing a key that had simply expired
+with no new holder - or releasing the same token twice - logged
+`Sweep lock %s outlived its TTL; leaving the current holder's lock alone`, naming a "current holder"
+that does not exist. That warning is a genuine operational signal (two runs overlapped, work outran
+its TTL) and it is only usable while the benign case does not also raise it. Now split: absent key
+logs at debug, a *different* holder still warns.
+
+Verified by direct probing rather than by reading: mutual exclusion holds, a wrong token cannot
+steal the lock, `beat_lock` releases on an exception in the body, and a double release is a no-op.
+Both fixes teeth-checked (the naive-timestamp guard unambiguously: 2 tests fail without it, pass
+with it).
+
+Not changed: `test_sweep_lock_release.py` uses `assertRaises`, which ruff's `PT027` flags. `tests/`
+is excluded from the prescribed `ruff check src/urbanlens` run (which passes clean), the directory
+carries 647 pre-existing findings when explicitly named, and 79 test files use `assertRaises`
+against 37 using `pytest.raises`. Converting one file would be churn against the dominant
+convention, not a fix.
+
+### Location guessing silently lost confidence at high latitudes (fixed)
+
+`import_failure_guess.py` compared candidate positions against two bounds expressed in **degrees**:
+`_AGREEMENT_DEGREES = 0.15` (how close a decoded S2 cell must sit to a geocoded match to count as
+corroboration) and `_MAX_HINT_DEGREES = 0.5` (how far a candidate may sit from a caller's area
+hint). Latitude was compared with `abs()`, longitude with the antimeridian-safe `longitude_delta` -
+both correct as *degree* arithmetic, and both wrong as *distance*.
+
+A degree of longitude shrinks with latitude. Measured:
+
+| latitude | 0.15 deg N-S | 0.15 deg E-W |
+|---|---|---|
+| 0 (equator) | 16.7 km | 16.7 km |
+| 42 (Massachusetts) | 16.7 km | 12.4 km |
+| 60 (Anchorage, Oslo) | 16.7 km | 8.3 km |
+| 70 (Tromso) | 16.7 km | 5.7 km |
+
+So the corroboration box tightened east-west the further north the pin was - to half the documented
+16 km at 60 deg, a third at 70. A northern pin whose cell and geocoded match agreed to within 10 km
+failed to corroborate purely because of latitude, dropping the suggestion from `address+area`
+(confidence 0.95) to `address` (0.8), or from `name+area` (0.85) to a name match capped at 0.75.
+The docstring's "~16km" was true only at the equator.
+
+That directly undercuts the point of the feature. The request was to *combine* signals - S2 decoding
+plus an OSM lookup - so that two independent agreements raise confidence; a latitude-dependent
+failure to corroborate removes the combination exactly where it was asked for.
+
+Both bounds now use `haversine_km` from `services/geo/distance` - the shared primitive consolidated
+earlier in this audit - as true distances (16 km and 55 km), isotropic everywhere. Teeth-checked:
+with the degree box restored, latitudes 60 and 70 lose corroboration while 0 and 42 still pass,
+which is precisely the predicted signature. A companion test asserts a genuinely distant cell
+(~167 km) still fails to corroborate, so the latitude test cannot pass by everything agreeing.
+
+mypy clean at 783 files after the change.
+
+### The guess endpoint logged an ERROR traceback per rate-limited card (fixed)
+
+`guess_for_failure` wrapped both Nominatim lookups in `except Exception: logger.exception(...)`.
+That catches `RateLimitExceededError` along with everything else - and Nominatim's usage policy caps
+this project at `calls_per_minute=1` (declared in its plugin), while the import-failure queue fetches
+a guess per card via `hx-trigger="revealed once"`.
+
+So the common path was the error path. Scrolling a queue of several hundred failures - the exact
+scenario the feature exists for, since an import that leaves 600 failures is what prompted it -
+would emit an ERROR-level traceback per refused card, burying any genuine geocoder failure among
+hundreds of expected ones. Third instance of this class in three chunks, after the lock overrun
+warning and the naive-timestamp guard: an expected condition raising the signal reserved for
+unexpected ones.
+
+`RateLimitExceededError` is now caught separately and logged at debug, matching the convention
+already used in `cid_resolution.py` and `external_data.py`. Behaviour is unchanged - both paths
+already fell back to the S2 area guess, so a rate-limited card still shows "roughly here" when the
+cell decodes.
+
+**Correction (chunk 153).** The handler added here was unreachable. `NominatimGateway.search`
+caught the rate limit itself and returned `[]`, so the exception never reached
+`guess_for_failure`. The test passed only because it mocks `search` directly, which bypasses the
+gateway's own catch - a green test for a path production cannot take. The real log spam was inside
+the gateway, and is fixed there in chunk 153; this handler is live now that `search` propagates.
+
+Teeth-checked, on the second attempt. The first tried to delete the handlers with a regex, which
+broke the file and produced *collection errors* rather than test failures - a passing-looking red
+that proves nothing about the test. Redone as a one-word mutation (`logger.debug` to
+`logger.warning`), which fails exactly the intended assertion and leaves the file parsing.
+
+Also verified on this endpoint, no change needed: `PinImportFailureGuessView` scopes its lookup with
+`get_object_or_404(PinImportFailure, pk=..., profile=profile)` under `LoginRequiredMixin`, so one
+user cannot request guesses for another's import failures.
+
+Band covering chunks 149-151: 759 passed.
+
+### Nominatim flattened "we did not ask" into "there is nothing" (fixed)
+
+Sweeping the class behind three of the previous findings - an expected condition raising the signal
+reserved for unexpected ones - across the whole codebase rather than just this session's code.
+
+109 broad `except` + `logger.exception` blocks exist; most are legitimate catch-alls (channel-layer
+cleanup, plugin isolation). The ones that matter are those wrapping a call through
+`_RateLimitedSession`, which `Gateway` installs as `self.session` on every subclass declaring a
+service key, and which raises `RateLimitExceededError`. Two real instances:
+
+**`NominatimGateway.search`/`lookup`** caught the rate limit alongside genuine transport failures,
+logged a traceback, and returned `[]`. Two consequences. The logging one: Nominatim is capped at one
+call a minute app-wide, so every refused call produced an ERROR-level traceback. The worse one: a
+caller could not tell "Nominatim knows of no such place" from "we never asked" - the exact
+distinction `reverse_geocode_admin` on the same class documents itself as *deliberately* preserving,
+because `geo_bonus` gives the two cases very different cache TTLs. Two methods on one gateway took
+opposite positions on the same question. `search`/`lookup` now propagate the rate limit and still
+flatten genuine failures to `[]`.
+
+**`geo_bonus._reverse_geocode_admin_cached`** wrapped the (correctly propagating)
+`reverse_geocode_admin` in `except Exception: logger.exception(...)`. The file's own comments name
+the rate limit as expected - "any multiplayer round with more than one guess/minute would have every
+guess but the first silently lose its bonus to a `RateLimitExceededError`" - and then logged a
+traceback for exactly that. Split: rate limit at debug, genuine failure still `logger.exception`.
+Both cache with the short error TTL, so behaviour is unchanged.
+
+**This also invalidated a fix from the previous chunk** - see the correction above. Worth stating
+plainly: the chunk-152 test passed, its teeth-check failed correctly when mutated, and the code was
+still dead, because the mock replaced the very layer that made it unreachable. A test that patches
+the collaborator it is reasoning about proves the handler runs *when reached*, never that it can be.
+The replacement patches the session instead, so the exception travels the real path, and it fails
+when `search` is reverted to swallowing.
+
+Two near-misses on method, both from truncating a search: `grep "raise RateLimitExceededError"`
+returned nothing because the raise site assigns `to_raise = RateLimitExceededError(service)` first -
+briefly suggesting the exception was never raised at all. And the first grep for `_RateLimitedSession`
+users searched only `services/apis/`, missing `services/core/gateway.py`, where it is actually wired.
+Both were caught by widening rather than concluding from absence.
+
+### A rate-limited imagery panel was remembered as empty for 12 hours (fixed)
+
+Following the previous chunk's class one layer further out. The question that found this: does any
+caller *cache* a flattened-empty result, so that a transient refusal becomes durable wrong data?
+
+`SlidesPanelSource.fetch` warmed every imagery provider and then set a "ready" marker for
+`SLIDES_READY_TTL_SECONDS` - twelve hours - unconditionally. Two things combined to make that wrong:
+
+1. The collectors (`collect_satellite_slides`, `collect_street_view_slides`) caught
+   `RequestCancelledError`, the *base class* of `RateLimitExceededError`, logged it at debug, and
+   appended **no** `ProviderFetchResult` at all. A rate-limited provider therefore registered as
+   neither a success nor a failure.
+2. `fetch` called `self.collect(lat, lng)` and discarded the return value entirely - including the
+   `ok` flag that exists precisely to report per-provider outcomes.
+
+So a provider refused by its own rate limiter left the panel marked warm and empty for twelve
+hours, indistinguishable to every reader from "this location genuinely has no imagery". The panel
+task's own handler already distinguishes `RateLimitExceededError` correctly (`external_data.py:1274`)
+- it just never saw one, because the collector below had swallowed it.
+
+Now: a rate-limited provider is recorded with `ok=False`, and `fetch` stamps the full window only
+when every provider actually answered, falling back to `FAILURE_SKIP_TTL_SECONDS` (5 minutes, the
+cadence already used for panel failures) otherwise. A genuinely empty result still gets the full
+twelve hours, so locations without imagery are not re-queried every few minutes.
+
+`ServiceDisabledError` deliberately keeps the long window. An admin turning a provider off is a
+stable state, not a transient one, and re-warming every five minutes because of it would be worse
+than the bug. This mirrors `geo_bonus`, which gives a real "nothing found" 30 days and a failed
+lookup 60 seconds for the same reason.
+
+Teeth-checked: reverting `fetch` to the unconditional marker fails exactly the three tests that
+assert the short window, and none of the others.
+
+Method note: the first version of these tests asserted on `cache.ttl(key)`, which does not exist on
+`LocMemCache` - the test backend - so all five TTL assertions errored rather than failed. Rewritten
+to observe the `cache.set` call's timeout argument, which is what actually changed, and which works
+on any backend.
+
+### The test suite had no cache isolation between tests (fixed)
+
+The panel band run at the end of chunk 154 came back with two failures in
+`test_pin_detail_ext_panel_204.py`. They pass alone. First job was establishing whether the change
+just made had caused them: reverting only chunk 154's `fetch` edit and re-running the band left both
+still failing, so no - pre-existing, and order-dependent.
+
+The cause is general, not local to those tests. Django rolls the **database** back between tests and
+does not roll the **cache** back, and rollback *reuses primary keys*. The panel system keys its
+readiness marker on a Location pk (`ulfetch:ready:<source>:loc<id>`, via `PanelSource.scope`), so:
+
+1. some earlier test warms `...:loc7`;
+2. its transaction rolls back, freeing pk 7;
+3. `test_pending_placeholder_carries_the_marker` creates "a freshly-created pin", whose Location is
+   handed pk 7 again;
+4. its "cold cache" assumption is false, it takes the ready branch instead of the pending branch,
+   and the test fails - pointing at whichever test ran first rather than at itself.
+
+Neither base class cleared the cache. Both `TestCase` and `SimpleTestCase` now mix in
+`_CacheIsolationMixin`, which clears it in `setUp`. The band went from 452 passed + 2 failed to 454
+passed.
+
+This is worth more than the two tests it fixes. Every test that writes to the cache was leaking into
+every test after it, and the resulting failures name the wrong culprit - which is exactly the kind of
+flake that gets re-run until it passes rather than diagnosed. Full-suite run started to confirm
+nothing depended on the leak.
+
+Also found, not yet acted on: `GeoBoundary._geometry()` sets `_loaded = True` even when the loader
+raised, so one transient failure makes that boundary report "unavailable" for the object's whole
+lifetime - and its own docstring notes these are typically held as `ClassVar`s, i.e. for the process
+lifetime. `contains()` then returns False ("gate closed") permanently. Same class as the panel and
+Nominatim findings; deferred to the next chunk rather than bundled into a test-infrastructure change.
+
+### One transient failure disabled a geo-gated plugin for the worker's lifetime (fixed)
+
+`GeoBoundary` resolves its geometry lazily and memoizes the result - correct, and the reason a
+boundary is safe to build at plugin-import time. But `_geometry()` set `_loaded = True` in the
+`except` arm too, so a loader that *raised* was memoized exactly like one that *answered*.
+
+Those are not the same event. A loader returning `None` has answered: this boundary does not
+resolve, remember that. A loader raising has not answered at all, and will likely succeed on the
+next attempt - the state-boundary loader fetches from TIGERweb through a rate-limited gateway, so a
+single rate limit or network blip is enough.
+
+The consequence follows from where boundaries live. The class docstring notes they are typically
+held as plugin `ClassVar`s, so the instance lives as long as the process. `contains()` returns False
+when there is no geometry ("gate closed"), and `PanelSource.applies_to` gates on exactly that
+(`external_data.py:526`). So one transient TIGERweb error at first use silently disabled that
+plugin's panel for every location, in that worker, until restart - days for a Celery process, with
+no error after the first and nothing to indicate the gate was closed for the wrong reason.
+
+Failures are now honoured for `_FAILED_LOAD_RETRY_SECONDS` (300s, the failure cadence panel fetches
+already use) and then retried; successes and genuine `None` answers memoize permanently as before.
+Retrying on every call was rejected as the fix: it would re-hit the provider on each `contains()`
+and log per call, trading a silent permanent failure for a loud continuous one.
+
+The log level also dropped from `logger.exception` to `logger.warning` with `exc_info=True`. The
+traceback is still there; the severity now matches an event that self-heals in five minutes.
+
+Teeth-checked: restoring `_loaded = True` in the except arm fails exactly the two tests asserting
+recovery, and none of the sixteen others. mypy clean at 783 files.
+
+### Verification pass over this report's own claims
+
+The report is what another agent reads instead of redoing the work, so its checkable claims were
+re-run rather than trusted. `date.today()` (9 sites), the identifier-only login lockout, and "no
+Content-Security-Policy anywhere" all still hold exactly as filed; the undo-CASCADE entry in
+`PROBLEMS.md` already reflects the later photo-relink fix. Counts: 8 undo handlers, 50 `@receiver`s,
+30 `paginated_response` callers, 43 plugins - all still correct. `ExternalApiView` subclasses have
+grown 191 to 197 with this session's work; the figure is updated above and the "zero gaps"
+conclusion was independently re-checked in the undo-scope work.
+
+The one thing worth recording is a method trap this nearly walked into. A naive AST count of
+`ExternalApiView` subclasses returns **114**, against the report's 191 - which reads as a badly
+stale claim. It is not: 114 counts only classes naming `ExternalApiView` as a *direct* base, while
+the original resolved the hierarchy transitively. Any "the docs are wrong" finding derived from a
+recount is only as good as the recount matching the original's method, and a direct-vs-transitive
+mismatch produces a confident, wrong correction.
+
+Also closed out here: the last shape of the "transient condition recorded as a settled answer"
+class - in-process memoization that caches a failure. One instance, `core/version._git_fetch`
+(`@lru_cache(maxsize=1)`), and it is deliberate and documented: caching the failure stops repeated
+admin page loads re-running `git fetch` against unreachable remotes. Its cost is a stale flag on an
+admin page, not a closed functional gate, which is exactly the distinction that made `GeoBoundary`
+worth fixing and this one worth leaving. Five real instances fixed across chunks 150-156; one
+correctly left alone.
+
+### Organize bulk actions silently did nothing for categories (fixed)
+
+Self-review of the Display Order work (feature request 3), in the frontend rather than Python.
+
+The Organize page speaks two vocabularies for the same three things. `Label.kind` - what `data-kind`
+carries in rendered markup - is `"tag" | "category" | "status"`. `OrgNamespace`, which every
+per-namespace registry on `window` is keyed by, abbreviates the middle one to `"cat"`.
+
+`organize-priority.ts` looked registries up straight from `data-kind`:
+
+```js
+const opener = kind ? window._orgBulkEditByIds[kind] : undefined;
+```
+
+Two of three values coincide, so tags and statuses worked and **categories alone** fell through to
+"Bulk edit is not available for this type." The bulk-edit lookup is pre-existing; the merge and
+delete lookups added for this feature faithfully reproduced it, so all three bulk actions were dead
+for categories on that tab.
+
+What made it survive review is the shape of the failure. A bug affecting the middle of three sibling
+cases, surfacing as a polite toast rather than an error, reads as a backend permissions problem -
+not as a string mismatch two files away. And it is invisible to typechecking: both sides are
+`string`-keyed records, so `Record<string, ...>` accepts either vocabulary happily.
+
+Fixed with an exported `ORG_NS_BY_LABEL_KIND` living beside the `OrgNamespace` type it translates
+into, used by all three lookups. The regression test pins the translation, pins that *every* kind
+the priority list can render has one (derived from `KIND_* = "..."` in `models/labels/meta.py`
+rather than a hand-written list, so a fourth kind cannot be added without noticing), and
+structurally guards against a future edit going back to a raw `data-kind` lookup - which nothing
+else in the suite would catch.
+
+Teeth-checked by reverting one lookup. Frontend suite 390 passed, `tsc --noEmit` clean.
+
+Chosen deliberately for this chunk: the Python full-suite run validating the cache-isolation change
+was still going, and TypeScript is disjoint from it, so this could not muddy which change a failure
+belonged to.
+
+### End-to-end verification of the Display Order fix, and a sweep for its class
+
+The previous chunk fixed the `Label.kind` -> `OrgNamespace` mismatch. A translation is only useful
+if something is registered under the translated key, so the chain was walked rather than assumed:
+
+- `_priority_list.html` renders `data-kind="{{ item.kind }}"`, i.e. `tag`/`category`/`status`
+  (`_NON_PRIORITY_KINDS` excludes only `user` and `media`, so all three reach that list);
+- `ORG_NS_BY_LABEL_KIND` maps `category` to `cat`;
+- `entries/organize.ts` constructs one `OrgTabManager` per kind, each **gated on its `*-rows`
+  element existing** - which was the thing worth checking, because a lazily-loaded tab would leave
+  the registry empty and the fix inert;
+- `pages/organize/index.html` server-side `{% include %}`s all three label panels in one render, so
+  all three register at init regardless of which tab is showing. Only the `lists`/`filters` tabs are
+  HTMX-lazy, and neither is a label kind.
+
+So the fix holds end to end. Also verified: the bulk bar's six element ids match between template
+and TypeScript; templates call only the `window._orgBulk.*` dispatchers, never the per-kind
+registries, so there is no second lookup site bypassing the translation.
+
+Swept for other instances of the class. Two heuristics:
+
+- **TS literal unions whose members do not all exist in Python.** Two hits, both false positives:
+  `BrowserPermissionState`'s `"unsupported"` and `PanelName`'s `"game"` are client-side concepts
+  that mirror nothing server-side.
+- **A `dataset.*` value used directly as an object key** - the exact shape of the bug. The only
+  remaining hit is `map-layers.ts`, which normalises and falls back to a default
+  (`TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street`), so an unknown value
+  degrades instead of vanishing.
+
+The class is contained to the one site now fixed.
+
+### End-to-end verification of all three feature requests
+
+Chunk 158 found that one requested feature was wired to a registry key nothing had registered under,
+so the other two got the same treatment: not "do the tests pass" but "can a user reach this".
+
+**Location guessing for unresolvable import failures** - reachable. Route
+`memories.locations.import_failures.guess` exists, and `_pin_import_failure_card.html:37` requests it
+per card with `hx-trigger="revealed once"`, which is the lazy per-card fetch the feature was designed
+around. Total references: 3 (route, test, template).
+
+**The two-day CID retry window** - verified by simulating the schedule rather than by re-deriving the
+arithmetic. `_DEFERRED_LOOKUP_DEADLINE` is exactly 2 days; attempts run 120s, 120s, 120s, then 300s,
+600s, 1800s, 1h, 2h, 4h, then 6h steady; the batch retires at attempt 16 after 49.9h. That is "give
+up only after two days, backing off considerably after the first few, rescheduled infrequently".
+
+**Display Order delete / bulk delete / merge** - fixed in chunk 158, verified in 159.
+
+**A false finding I published mid-chunk, and the cause.** Between those two checks I stated, with the
+word "confirmed", that the guess route was referenced only by tests and the feature was unreachable
+from the UI. That was wrong, and I had started looking for the template to edit. The cause was
+`grep ... | head -10`: the matches are returned in directory-traversal order, controllers and tests
+and models come before templates, and the one line that disproved the claim was on the far side of
+the cut. Re-running with no `head` returns three references, one of them the template.
+
+This is the same truncation failure recorded twice already in this audit (chunks 105 and 142), and
+the discipline stated there - never let a conclusion rest on the *absence* of matches from a
+truncated search; count first, or list in full - is evidently not something to state once. The
+specific trap is that `head` is harmless when confirming something exists and actively misleading
+when concluding something does not, and the two look identical while typing them.
+
+### `main` is missing a migration for a model change that is already committed
+
+Re-examining the migration-dependency risk flagged earlier in this audit turned up something
+stronger than the original concern.
+
+Two untracked migrations sit in `dashboard/migrations/`: `0040_gotify_token_fail_soft` and
+`0041_pin_import_failure_maps_url`, and 0041 depends on 0040. The original worry was the documented
+`NodeNotFoundError` trap - a new migration silently depending on someone *else's* uncommitted file.
+That is not what this is. Both were generated during this audit, and the actual state is worse in one
+respect and simpler in another.
+
+`0040` reflects `fail_soft=True` on `SiteSettings.notify_gotify_token`. That model change **is
+already committed** - `git show HEAD:...site_settings/model.py` contains it, and the file is
+unmodified in the working tree. Only its migration was never committed. Verified with Django rather
+than by reading:
+
+- with 0040 and 0041 on disk, `makemigrations --check --dry-run` reports **"No changes detected"**;
+- with both moved aside, Django wants to generate a migration for *two* things: `maps_url` on
+  `pinimportfailure` (this audit's, model change still uncommitted) **and** `notify_gotify_token` on
+  `sitesettings` (already at HEAD).
+
+So anyone on `main` today has a dirty `makemigrations --check` and a migration graph that does not
+describe their models. The practical consequences are mild - `fail_soft` is a Python-level flag on
+`EncryptedTextField`, so the `AlterField` carries no meaningful schema change - but the drift is
+real, and it means **0040 is not optional**: it is a missing migration, not a speculative one.
+
+Both files must be committed, together, and 0041 after 0040. Committing 0041 alone would give every
+other checkout the `NodeNotFoundError` the original note warned about.
+
+### 58 indexes duplicate ones Django already creates (filed, not fixed)
+
+Auditing the migration chain against the two ordering rules `CLAUDE.md` states, then following the
+one that led somewhere real.
+
+**Rule "index creation goes dead last" - no action.** Six migrations technically violate it, all of
+them large squashed ones where Django's own squash interleaves `CreateModel`/`AddField`/`AddIndex`.
+They are already applied and cannot be rewritten, and the rule is guidance for authoring a chain,
+not a property to retrofit onto history.
+
+**Rule "a nullable+unique field must carry `unique=True` in the `AddField`" - one match, benign.**
+`0010_v0_6_0` adds `notificationlog.uuid` as `UUIDField(null=True)` and later alters it to
+`unique=True`, which is the documented anti-pattern's exact shape. Checked against the real schema
+rather than assumed: `dashboard_notifications` carries exactly **one** index on `uuid`. The
+duplicate-index consequence needs the `AddField` to create an index of its own, and a plain nullable
+`UUIDField` creates none. Shape without consequence - worth recording so nobody "fixes" it.
+
+**What the schema check did find: 58 exact duplicate indexes.** Every `ForeignKey` defaults to
+`db_index=True`, so Django creates a single-column btree automatically; 25 model files additionally
+declare an `idxdb_*` index on the same single column. Verified by comparing `pg_index.indkey` column
+lists, excluding partial and unique indexes and `varchar_pattern_ops` variants - the `_like` indexes
+are for `LIKE` prefix matching and are *not* redundant with a plain btree, which a naive
+column-list comparison flags wrongly. Two definitions, one pair, byte-identical apart from the name.
+
+Filed in `PROBLEMS.md` with the full list rather than fixed. It is 25 model files plus a migration
+dropping 58 indexes, and this audit's tree already carries 219 changed files - a schema migration
+that size buried in it makes the whole changeset harder to review and riskier to land, and index
+drops against production are worth the owner timing. Each drop is individually safe and trivially
+reversible: the identical twin remains, so no query plan can regress.
+
+The reusable query is in the filing; it distinguishes exact duplicates from the ~20 additional
+composite-prefix cases (an index on `(a)` beside one on `(a, b)`), which are a genuine trade-off
+rather than free waste and were deliberately left out of the count.
+
+### Query budgets for the main pages, measured rather than reasoned about
+
+Earlier N+1 work in this audit was reactive - a page looked slow, so it got read. This measured the
+four highest-traffic pages directly, at two dataset sizes, because an N+1 is invisible on a
+one-object fixture: it issues one extra query, the test passes, and the same code issues four
+hundred for a real account.
+
+Measured 2026-08-13, at 4 pins and again at 24 (each pin with its own Location and two labels):
+
+| page | 4 pins | 24 pins | delta |
+|---|---|---|---|
+| `map.view` | 17 | 17 | +0 |
+| `organize.index` | 28 | 28 | +0 |
+| `profile.view` | 15 | 15 | +0 |
+| `pin.details` | 26 | 24 | -2 |
+
+All four are flat and modest. `organize.index` is the notable one: it was **244** queries earlier in
+this audit, is 28 now, and is lower than the 38 recorded after that fix - the label prefetch work in
+the `LabelledModel` chunk improved it further. `pin.details` dropping by two on the larger dataset is
+branch-dependent, not a scaling effect.
+
+Kept as `test_page_query_budgets.py`, asserting the property that matters (the count does not grow
+with the dataset) plus a loose absolute ceiling at roughly 1.7x measured, so a real regression trips
+it while an added `select_related` does not.
+
+**The first teeth-check failed to bite, and that is the useful part.** Reintroducing the exact
+prefetch-defeating `labels.filter(kind=...)` N+1 that this audit fixed in `LabelledModel` left all
+five tests passing - so the guard does not cover that accessor, because none of these four pages
+renders pin labels through it. Rather than report a guard that works in general, the check was
+repeated against something these pages do use: disabling `with_hierarchy`'s prefetch takes
+`organize.index` from 28 flat to **238 -> 278**, and the test fails with
+"238 queries at 4 pins, 278 at 9 - scales with row count".
+
+So the scope is exactly: prefetch and join regressions on the four measured pages. Stating that is
+worth more than the test, because a query-budget test nobody has tried to break is indistinguishable
+from one that cannot fail.
+
+Two fixture traps worth recording for anyone extending this: `Location` is unique on
+(latitude, longitude), so a second seeding pass must advance its coordinate grid rather than restart
+it; and four of the five route names guessed from page names were wrong (`map.view`, `pin.details`,
+`organize.index`, `profile.view`).
+
+### The Organize page's deferred rows endpoint was O(labels x subtree) (fixed)
+
+Chunk 165 measured the four main *pages* and found them flat. This measured what those pages defer
+their expensive work to, which is where it had gone.
+
+`organize.index` renders label cards immediately and lets each tab re-fetch its rows via
+`hx-trigger="revealed"` - the controller's own comment says the counts are "the expensive part of
+that page". Measured, with 143 labels in a two-level hierarchy:
+
+| endpoint | ~23 labels | 143 labels | delta |
+|---|---|---|---|
+| `label.rows` (tags) | 33 | 113 | **+80** |
+| `label.rows` (categories) | 66 | 146 | **+80** |
+
+Exactly one query per added label. `map.pins` (5, flat), `memories.journal` (17, flat),
+`memories.data` (6, flat) and `organize.priority.list` (9, flat) were all fine.
+
+The cause is two compounding per-instance costs in `Label.total_pin_count`:
+`get_label_and_descendants` is a BFS issuing **one query per node visited**, then a `Count` aggregate
+follows, and the memo is per-instance - so every rendered card repeats the whole walk. A user with
+200 labels paid 200+ queries every time they opened a tab.
+
+Fixed with `Label.prime_total_pin_counts(labels)`, which loads the edge list once, traverses in
+Python, and seeds each instance's existing memo, so the template filter reads it without touching the
+database. `_rows_ctx` materialises its queryset before priming - priming a queryset that is
+re-evaluated during rendering would seed memos on discarded instances and silently restore the old
+behaviour, which is worth stating in the code because the failure would look like the fix simply not
+working.
+
+Result: **113 -> 14** queries for tags, **146 -> 13** for categories, and flat in both cases. Fixed
+at three queries regardless of label count.
+
+Correctness was the risk, not speed, so the tests assert the primed value equals the *unprimed* one
+rather than a hand-written total - a hand-written number would just encode whatever the fast path
+does. The awkward cases are covered deliberately: multi-level chains (the walk is not
+direct-children-only), diamonds where a label is reachable two ways and must not be counted twice,
+and cycles, which the original BFS tolerates and any replacement must too. Unprimed labels still
+compute themselves, so single-label callers need no change. mypy clean at 783 files.
+
+### A route-wide query-scaling sweep, and two versions of it that could not have worked
+
+Chunk 166 found an N+1 by measuring one endpoint. This generalised that into a sweep over the whole
+URL conf - and the interesting part is that the first two attempts reported "everything is flat"
+while being structurally incapable of seeing the bug fixed one chunk earlier.
+
+**Attempt 1** measured only routes reversible with **no arguments**: 134 routes, all flat. But
+`label.rows` takes a label kind, so the one known N+1 in the codebase was outside the sample
+entirely.
+
+**Attempt 2** added single-argument routes by reading parameter names from each **leaf** URL pattern:
+45 routes, all flat. `label.rows` is registered as `path("rows/", ...)` nested under a
+`<str:label_kind>` include, so its leaf pattern declares no parameters - and most parameterised
+routes in this project are nested that way. Reverting the chunk-166 fix and re-running still
+reported all-flat, which is what exposed it.
+
+**Attempt 3** accumulates parameters down the resolver tree. 51 single-argument routes become
+visible, `label.rows` among them, and reverting the fix lights it up: `label.rows(tag)` 33 -> 113,
+`label.rows(category)` 66 -> 146. With the fix in place, all 185 measured routes (134 no-arg + 51
+single-arg) are flat.
+
+Kept as `test_route_query_scaling.py`, asserting only that counts do not grow with the dataset -
+never an absolute number, so a route that legitimately costs 40 queries is not this file's business
+while one costing 40 then 400 is. It carries two guard tests of its own: that it still reaches 100+
+routes, and that `label.rows` is still among them. The second exists precisely because attempts 1
+and 2 would both have passed a "does it find anything" check written as "it ran without error".
+
+Two implementation notes worth keeping: each request runs inside its own savepoint, because a route
+raising a database error otherwise poisons the test transaction and takes every later route with it
+- turning one broken route into a sweep-wide failure that names the wrong culprit. And the sweep
+seeds nested labels (each label gets a parent), since a flat label set never exercises the
+descendant walk that made `label.rows` expensive in the first place.
+
+The general lesson, which now has three instances in this audit: a search or sweep that finds
+nothing is a statement about the instrument until the instrument has been shown to find something.
+
+### The external API's 39 list endpoints do not scale with data (verified, guarded)
+
+The previous chunk's sweep silently excluded the entire external API: those routes need a bearer
+key, so every one returned 401 and was dropped from the sample. This measured them with a key
+carrying every scope.
+
+Result: 66 reversible targets, 39 answering 200, **all flat** from 4 to 24 pins - including
+`pins`, `photos`, `labels`, `trips`, `search`, `lists`, and the `memories.*`, `safety.*` and
+`suggestions.*` families. The pagination change made earlier in this audit did not introduce
+per-row work.
+
+**Two instrument failures on the way, both of which produced a green.**
+
+The first reported *zero targets*. `_walk` yielded each route's bare local name, but the external
+API is namespaced - its routes reverse as `external_api:pins`, never `pins` - so nothing matched
+and nothing was measured. A sweep reporting "0 scaling" while measuring 0 routes reads exactly like
+success.
+
+The second was the teeth-check. Removing `select_related("parent_pin")` from the pin sync page
+changed nothing, which looked like the sweep failing to detect a real N+1. It was not: every seeded
+pin has `parent_pin=None`, and dereferencing a null FK issues no query, so the fixture never
+exercised the relation that was broken. **An inconclusive teeth-check is not a failed one**, and
+reporting it as either would have been wrong. Re-run against `select_related("location",
+"location__wiki")` - which every seeded pin does exercise - the sweep caught it immediately:
+`external_api:pins` 11 -> 32 queries.
+
+Both halves are now in `test_route_query_scaling.py`, with the namespace tracking and a guard test
+asserting some `external_api:` route is still reachable, so the sweep cannot silently lose that half
+again.
+
+### The changeset was committed externally, and the commit cannot start
+
+Following the migration omission found in the previous chunk, the obvious next question was whether
+the commit had left anything *else* behind. It had, and worse.
+
+`c3ae4911` left five non-test modules untracked while committing 19 files that import them:
+`models/abstract/labelled.py` (1 importer), `services/core/locks.py` (3),
+`services/geo/distance.py` (7), `services/geo/longitude.py` (6),
+`services/pins/import_failure_guess.py` (2).
+
+`models/abstract/labelled.py` is on Django's model-loading path: committed
+`models/abstract/__init__.py:10` imports `LabelledModel` from it, and committed `Pin` inherits from
+it. A fresh checkout therefore raises `ModuleNotFoundError` while importing models, so the web app,
+every management command, both Celery workers and the entire test suite fail before doing anything.
+
+It is invisible from any working copy that still has the files on disk - which is every machine this
+audit has run on, and why the full suite currently running says nothing about it. The check that
+found it was structural, not behavioural: compare what HEAD *imports* against what HEAD *contains*.
+
+Filed as URGENT with the exact `git add`. Not staged here.
+
+### The changeset was committed externally, without its migrations
+
+`git status` showed 91 files where ~225 were expected. A commit `c3ae4911 audit` had appeared, made
+outside this audit, carrying 139 of the changed files.
+
+*Correction on timing, since the first write-up implied otherwise:* the commit was authored at
+12:30:11, roughly 86 minutes before the full-suite run that this chunk started, not during it. The
+command that began that run printed `working tree: 90 files` - the evidence was on screen and went
+unread, because its output landed in a background-task file that was only skimmed for the task id.
+The gap between "when it happened" and "when it was noticed" is entirely on the reading, and the
+original phrasing ("mid-chunk, git status dropped") described the noticing while reading as though
+it described the event.
+
+It did not carry the two migrations, which are still untracked:
+`0040_gotify_token_fail_soft` and `0041_pin_import_failure_maps_url`. It *did* carry the `maps_url`
+field on `PinImportFailure`, so the committed model state and the committed migration graph disagree.
+Confirmed by moving both files aside and running `makemigrations --check --dry-run`, which reports
+`+ Add field maps_url to pinimportfailure` and `~ Alter field notify_gotify_token on sitesettings`.
+
+A fresh checkout of that commit migrates to a schema without `maps_url` and then fails on every
+query touching `PinImportFailure`. Existing developer databases already ran the untracked migrations,
+so nothing breaks locally - which is precisely why this would surface first on a clone or a deploy.
+
+Filed as URGENT in `PROBLEMS.md` with the exact `git add` (0040 first; 0041 depends on it). Not
+staged here: this audit does not commit or stage unasked, and the commit was not its doing. This is
+the risk flagged two chunks earlier, now realised - and it is worth noting the flag was about
+*ordering* while the actual failure was *omission*.
+
+### A pre-commit guard for the class that broke the commit
+
+The startup failure found in the previous chunk had no guard, and could not have had one from
+inside the app: importing Django to check would only prove the *working copy* is intact, which was
+never in question. The property that actually matters is structural - does the committed tree import
+anything the committed tree lacks?
+
+`bin/check_imports_tracked.py` checks exactly that. It parses every tracked-or-staged Python file
+under `src/`, collects each `urbanlens.*` import, and resolves it against the set of paths a fresh
+checkout would contain: tracked files, plus staged additions, minus staged deletions - the last
+because removing a module while leaving its importers behind fails identically. Wired into
+`.pre-commit-config.yaml` as `imports-tracked`.
+
+Teeth-checked in both directions on the live breakage: it exits 1 against the current repository
+listing 28 unresolvable imports, exits 0 once the missing modules are staged, and exits 1 again when
+they are unstaged.
+
+**It immediately found a sixth missing module the manual pass had missed.** `core/tests/oauth.py` is
+imported by six committed test files (`from urbanlens.core.tests.oauth import
+first_party_application`) and is untracked. The manual pass filtered `/tests/` paths out, because it
+was hunting modules that break *startup* - which this one does not. It does break collection of
+those six test suites, so the repository's own tests would not run. That is a fair summary of why
+the check is worth having as a hook rather than as a habit: the habit had a filter in it, and the
+filter was reasonable.
+
+### A third missing-file category, and narrowing the guard so it can block commits
+
+Applying the same question to templates found a third kind of omission in `c3ae4911`: committed
+`controllers/pin_import_failures.py` sets
+`_GUESS_PARTIAL = "dashboard/partials/memories/_pin_import_failure_guess.html"`, and that template is
+untracked. It fails one layer later than a missing import - the app starts, then
+`PinImportFailureGuessView` raises `TemplateDoesNotExist` the first time a guess is produced, which
+is a 500 on the feature the request asked for.
+
+That brings the commit's missing set to **nine files**: six Python modules, two migrations, one
+template.
+
+`bin/check_imports_tracked.py` now checks templates as well as imports - and the interesting part is
+what it took to make that safe. The obvious rule (every `.html` string literal must resolve) flagged
+`Takeout/My Activity/Maps/MyActivity.html` in `test_archive_extractor.py`, which is a path *inside a
+Google Takeout archive fixture*, not a template. This hook blocks commits, so a false positive is
+worse than a missed one: it trains people to pass `--no-verify`, at which point the guard is
+decorative.
+
+Narrowed to literals that are actually used as templates - passed to `render`, `render_to_string`,
+`get_template`, `select_template` or `TemplateResponse`, or assigned to `template_name` /
+`*_TEMPLATE` / `*_PARTIAL`. Runtime-built names are deliberately left unresolved rather than guessed.
+The fixture path is gone; the real one remains. Teeth-checked end to end: 29 findings against the
+current repository, exit 0 with all nine staged, back to failing when unstaged.
+
+### Label uniqueness: the constraint, and three things it broke
+
+Implemented at the owner's request: `Label` unique on `(lower(name), profile, kind)`, case-insensitive,
+with `nulls_distinct=False` so duplicate *global* labels are caught too. Migration 0042 merges
+existing duplicates (personal labels shadowing a global one merge into the global, which survives;
+then duplicates within one owner merge into the oldest), 0043 adds the constraint.
+
+Adding a constraint to a live model is mostly an exercise in finding what quietly depended on its
+absence. Three things did:
+
+**1. The migration could not run at all.** Tested against a database seeded with real duplicates
+rather than trusting the unit tests, and it failed:
+`cannot CREATE INDEX "dashboard_labels" because it has pending trigger events`. Django runs one
+migration in one transaction, and Postgres refuses to build an index in a transaction that has
+already modified the table - the foreign keys here are `DEFERRABLE INITIALLY DEFERRED`, so the merge
+leaves pending trigger events behind. Split into two migrations, which is two transactions. The unit
+tests could not have caught this: they call the merge helper directly, never the migration.
+
+**2. 47 tests were relying on the duplication.** A new `Profile` is seeded with ~46 default labels,
+so fixtures doing `Label.objects.create(profile=p, name="Hospital", kind=KIND_CATEGORY)` were
+silently creating a *second* "Hospital" - precisely the duplication the constraint exists to stop.
+Added `core/tests/labels.ensure_label()` for fixtures that want "a label with this identity", and
+gave fresh names to the tests that genuinely need a *new* label (signal assertions, hierarchy
+property tests) - `ensure_label` returning a seeded row breaks those, because no create signal fires
+and the seeded row already has parents.
+
+**3. Import would fail on a re-cased label.** `_import_labels` deduplicates against existing rows
+with `name=` exactly. Harmless before; now the lookup misses "Abandoned" while importing "abandoned",
+falls through to `create`, and raises `IntegrityError` - aborting the **whole import**, not just that
+row. A user re-importing their own export after changing a label's capitalisation would lose the
+entire restore. All three lookups are `name__iexact` now.
+
+**A fourth thing the constraint changed: `get_or_create` can no longer self-heal.** Django recovers
+from a racing `IntegrityError` by retrying the `get` - which only works if the retry finds the row.
+With a *case-insensitive* constraint and a *case-sensitive* lookup it cannot: `get_or_create(name=
+"factory")` misses an existing "Factory", inserts, violates, retries the same exact-match get, misses
+again, and re-raises. Every `Label.objects.get_or_create` site was therefore checked:
+
+- `google/maps.py` and `tasks.py` already looked up with `name__iexact` and put the value in
+  `defaults` - the correct shape, written before this constraint existed;
+- `pin_edit.py` and `media_labels.py` pre-filter with `name__iexact` and only fall through to
+  `get_or_create` when nothing matches - also correct;
+- the five `signals.py` seeding calls use fixed names at profile creation, when no labels exist;
+- `pin/model.py` and `wiki/model.py` used an exact lookup. Both are wrapped in
+  `except DatabaseError`, so the violation was caught and logged rather than crashing - but the
+  category was then silently *not attached to the pin*. Converted to the `name__iexact` + `defaults`
+  shape the other four sites already use.
+
+Two assumptions behind the merge were verified rather than trusted. `LabelCustomization` really is
+unique on `(profile, label)` - so the merge's "move only where that profile has no row yet, delete
+the rest" is required, not defensive; a plain repoint would violate it. And the edit view's kind
+conversion is covered by the conflict check, because it passes the incoming `new_kind` rather than
+the label's current one: a tag called "Bridge" converted to a category has to collide with an
+existing category "Bridge", which is the least obvious of the collisions since the *name* never
+changes.
+
+Graceful handling was the explicit request, and covers every write path: HTML create and edit (400
+with a message), external API create and patch (409), and undo-restore, which now refuses with
+"A tag called X already exists" instead of raising `IntegrityError` from the database. The check is
+deliberately wider than the constraint - it also refuses a personal label shadowing a global one,
+which the database permits because `profile` differs.
+
+**The merge, validated against every shape it can meet.** Unit tests call the merge helper directly,
+which is not the same as running the migration on a database that already violates the constraint -
+that distinction is what surfaced the pending-trigger failure above. So the whole chain was run
+against seeded data covering each case:
+
+| seeded | result |
+|---|---|
+| three personal duplicates, one differing only by case | 1 row, oldest survives, pin retained |
+| a global and a personal label with the same name | 1 row, **the global survives** and inherits the pin |
+| two global labels with the same name | 1 row |
+| a pin carrying *both* duplicates | survivor carried once, no through-table collision |
+| duplicates with different parents, a child, and a customization | survivor inherits both parents, the child reparents onto it, the customization moves |
+| the duplicate is the survivor's own parent | 1 row, no self-parent edge created |
+
+The last two are the ones a naive `UPDATE ... SET label_id` gets wrong: the through table is unique
+on (pin, label), so repointing the second row collides, and reparenting without a `<> keep_id` guard
+makes the survivor its own parent.
+
+One detail worth keeping: an expression-based `UniqueConstraint` is implemented as a **unique index**,
+not a table constraint, because Postgres cannot express `lower(name)` as one. `DROP CONSTRAINT` by
+that name reports it does not exist while `\d` lists it plainly under Indexes - which cost some time
+while writing a test that needed to drop it.
+
+### Full-suite results across this audit
+
+Five complete runs, each against the working tree at that point:
+
+| run | result | wall |
+|---|---|---|
+| after the first ~100 chunks | 10,579 passed | 1:20 |
+| after chunk 141's changes (209 files) | 10,619 passed | 1:25 |
+| after the cache-isolation change (chunk 155) | 10,664 passed | 1:25 |
+| after chunks 156-168 | 10,686 passed | 1:29 |
+| after the Label uniqueness work | 10,702 passed | 1:30 |
+| after the constraint follow-ups, pushed state | **10,708 passed** | 1:29 |
+
+Zero failures in every run (six now). The count grows only because this audit adds tests; nothing was
+disabled or skipped to get there.
+
+Worth stating plainly, because it is the limit of what these prove: every run executes the
+**working copy**. None of them could have caught the missing files in `c3ae4911` - the modules were
+present on disk throughout - and none exercised migration `0042` against data that violates the
+constraint it adds, which is why that migration's `pending trigger events` failure had to be found
+by running it against a seeded database instead. A green suite is evidence about the code, not about
+the commit or the deploy.
+
+**2026-08-14 (chunks 206-218): 10,736 passed, 0 failed, 1:07:01.** Up from 10,708; the difference
+is tests added by these chunks. Two caveats recorded rather than glossed: an earlier coverage run
+was abandoned because files were `docker cp`'d into the container *while it ran*, making it an
+inconsistent snapshot, and this run has a smaller version of the same flaw - chunk 218's files
+landed in the container in its final minutes. Nothing failed and already-imported modules do not
+pick up mid-run changes, but the last few minutes ran against mixed source, so chunk 218 is
+covered by its own targeted run instead (824 passed across labels, markup, saved filters, custom
+layers and detail pins). The lesson is the obvious one: do not sync source into a container that
+is running a suite.
+
+**2026-08-14 (chunks 225-238): 10,758 passed, 0 failed, 1:08:53.** Up from 10,736. This run was
+left strictly alone - no source copied into the container while it ran - so unlike the previous
+two it is a clean snapshot of a single commit state, which is what makes the number meaningful.
+
+**2026-08-14 (all N+1 work): 10,765 passed, 0 failed, 1:11:17.** The nine prefetch fixes had each
+been verified by a targeted selection but never together, and they touch shared code - `to_json`,
+`rating`, `PinViewSet`'s queryset, two export querysets, consensus eligibility, and the
+`message_preview` template tag. Performance changes are the least test-covered category in this
+audit (a correctness fix ships with a regression test that fails if reverted; a prefetch change is
+invisible to everything but a query count), so this run was the real check on them. Clean snapshot,
+no source copied in mid-run.
+
+
+### "Detach location" is a guaranteed 500 (found, filed, not patched)
+
+Following the constraint-vs-check lens onto `Location`, which is `unique_together` on
+`(latitude, longitude)` **globally** - two users pinning one physical place share a row by design.
+
+The concurrency path is exemplary. `Location.objects.get_exact_or_create` wraps its insert in a
+*nested* `transaction.atomic()` so a raced insert fails inside its own savepoint, catches
+`IntegrityError`, re-queries, and returns the winner - with a comment explaining that a bare
+`except` without the savepoint left the connection broken and "turned a survivable race into a 500
+in exactly the case it was written to survive". `get_nearby_or_create` does the same and delegates
+to it at threshold 0.
+
+Two controllers bypass both and call `Location.objects.create` directly, and one of them is broken
+outright. `pin_edit.py`'s detach branch builds the new Location from
+`pin.effective_latitude/longitude`, which is `float(self.location.latitude)` - *the pin's current
+location's own coordinates*. Creating a Location at a point a Location already occupies violates the
+constraint every time. Reproduced rather than reasoned about: `IntegrityError: duplicate key value
+violates unique constraint "dashboard_locations_latitude_longitude_fdb6594d_uniq"`. Both branches of
+the detach path fail the same way, and the constraint dates from `0001_initial`, so this is not
+recent breakage.
+
+The reason it survived is worth as much as the bug: **the branch has no test**. `PinRelinkView`
+serves both `pin.link.to` (relink, covered by two test files) and `pin.link` (detach). Every one of
+the nine `pin.link` references in the test tree is actually `pin.link.delete`, an unrelated endpoint.
+Nothing posts to the detach route, so a path that fails 100% of the time reads as covered because
+its *sibling* is. Route-name prefixes make that easy to miss by eye - `pin.link` matches
+`pin.link.to` and `pin.link.delete` in any naive grep, which is what makes "is this tested?" a
+question worth answering with an exact match rather than a search.
+
+Filed rather than fixed because the repair is a product decision: `Location` being globally unique on
+coordinates makes "give this pin its own Location at the same point" inexpressible, and choosing
+between nudging the coordinates, using the pin's marker fields instead, or refusing the operation
+outright is not a call to make from inside an audit. The 500 is wrong under all three, which is the
+part worth acting on.
+
+### Two unguarded localStorage writes could freeze the Organize page (fixed)
+
+Sweeping the frontend for storage and parse failures. `JSON.parse` is clean - 18 sites, all inside a
+`try`/`catch` (the one apparent exception is a *comment* mentioning `JSON.parse`). Storage writes
+were not: 16 sites, 14 guarded, 2 bare, both in `organize-header.ts`.
+
+Neither is the last statement in its function, which is what makes them matter:
+
+- `setSharedView` - a throw skips `syncViewButtons()`, every tab's `applyView()`, and
+  `applyAllOrgFilters()`. Clicking grid/list would appear to do nothing.
+- the tab-switch handler - a throw skips the URL update, `_initPrioritySortable()`, the
+  `org:tab-changed` event, `_orgClearAllSelections()` and `syncOrgFilterBarVisibility()`. Switching
+  to Display Order would land on a tab whose drag-and-drop never initialised, carrying stale
+  selections.
+
+`setItem` throws on an exhausted quota, and this application *deliberately fills localStorage* - the
+map caches every pin under `ul_pins_v5_<profile>`, sized by the user's own pin count. So the failure
+is reachable in normal use by exactly the users with the most data, not just in Safari private mode.
+
+The codebase already treats this as best-effort everywhere else - `pages/map/index.html` wraps its
+cache write with `catch (err) { /* pins will reload next visit */ }` and its `ul_pins_dirty` flag
+with `catch (e) { /* poll covers it */ }`. These two sites simply did not follow the convention.
+Both now do: the preference stops persisting, the UI still works. `tsc --noEmit` clean, 390 frontend
+tests pass.
+
+---
+
+### Abandoned dumps accumulated forever in the backup directory (fixed)
+
+`core/controllers/backups/db.py`, a module no earlier chunk had opened.
+
+The retention side is sound, and deliberately so. `purge_old_backups()` ends with
+`backup_files[self.backup_retention:]`, which would delete *every* backup if retention were `0` -
+but it cannot be: `site_settings/model.py:654` carries
+`CheckConstraint(condition=Q(backup_retention__gte=1))` and `site_admin.py:211` clamps the form
+input with `max(1, int(...))`. Bounded at both the input and the database. The purge also only
+considers `is_backup_filename` matches, so a stray file in the directory is never counted toward
+retention nor deleted alongside real backups.
+
+The gap was on the other side of that same predicate. `run()` writes the dump to `<name>.sql.tmp`
+and `os.replace()`s it into place only on success, so a partial dump can never be mistaken for a
+complete backup - the module's own comment names the case it is protecting against: "a mid-dump
+process death (OOM kill, container restart)". A `CalledProcessError` cleans its temp file up. A
+*killed process* by definition does not, which is the whole point of the design.
+
+Nothing reaped those. `is_backup_filename` excludes `.tmp` - correctly, since a partial dump must
+never count as a backup - and that same exclusion means retention never removed one either. Every
+OOM-killed dump left a file the size of a full database dump on disk, permanently, in the directory
+whose whole purpose is to stay bounded. On a host where dumps get OOM-killed at all, they get
+OOM-killed repeatedly.
+
+`purge_stale_temp_files()` now runs at the end of `purge_old_backups()` (which itself runs after
+every successful dump, so the reaper needs no scheduler of its own). It only touches files matching
+this class's own `.tmp` scheme, and only those older than `STALE_TEMP_AGE_SECONDS` (24h) - deleting
+a live dump's temp file would corrupt the backup being written, so the age floor is the load-bearing
+part, not the filename match. Five tests in
+`dashboard/tests/hypothesis/test_backup_temp_purge.py`, including the two that matter: an in-flight
+temp file survives, and an unrelated `.tmp` from something else is never touched.
+
+**Filed, not fixed - there is no restore path.** The only `pg_restore` in the repository is in
+`bin/clone_prod_to_staging.sh`, operating on a dump that script creates itself; nothing restores the
+*scheduled* backups, and no document describes how. That matters more than it sounds, because these
+are plain-SQL dumps (`pg_dump ... -f`, no `-Fc`, named `.sql`) - an operator who reaches for the
+repository's only restore example will run `pg_restore` against a plain dump and get *"input file
+appears to be a text format dump. Please use psql."* An untested restore procedure is the ordinary
+way backups turn out not to work. Recorded in `docs/PROBLEMS.md`.
+
+### A wedged dump was the one unbounded subprocess call (fixed)
+
+Follow-on from the module above, checking whether the missing `timeout=` there was systemic. It
+was not - and the surrounding Celery configuration turns out to be the most carefully-reasoned
+part of the settings file.
+
+Ten of the eleven `subprocess.run` calls outside tests already pass a `timeout` (`media/videos.py`,
+`media/documents.py`, all seven in `core/version.py`). The lone exception was the backup dump. It
+was also bounded, just not locally: `run()` has exactly one caller, `tasks.py:1984`, so
+`CELERY_TASK_TIME_LIMIT` (3600s) does cap it - the "hangs a worker forever" reading is wrong.
+
+What the task limit produces is worse than a bounded hang, though. Hitting it SIGKILLs the worker,
+and `CELERY_TASK_ACKS_LATE` + `CELERY_TASK_REJECT_ON_WORKER_LOST` (both deliberately on) then
+redeliver the message - so a dump that wedges on an unreachable DB host is retried into the same
+wedge, each attempt leaving another abandoned `.tmp` of exactly the kind the fix above now has to
+reap. `subprocess.run` now takes `BACKUP_TIMEOUT_SECONDS` (1800s, env-overridable), chosen below
+`CELERY_TASK_SOFT_TIME_LIMIT` (2700s) so the local timeout always fires first; a test asserts that
+ordering rather than trusting the two constants to stay in sync.
+
+The handler had to widen with it. `subprocess.TimeoutExpired` is **not** a subclass of
+`CalledProcessError` - verified, not assumed; they only share `SubprocessError` - so adding a
+timeout without touching the `except` would have thrown straight out of the task and left the
+partial dump behind, converting a clean `return False` into the exact leak just fixed.
+
+Worth recording what was checked and found sound, since it is where a bug of this shape would
+otherwise live: `visibility_timeout` is raised to 2h with a written rationale for keeping it above
+`max(time_limit, longest countdown)`; the result backend has a 5s retry timeout so a dead broker
+fails the request path fast instead of after a retry storm; `worker_prefetch_multiplier` is 1.
+Nothing to fix there.
+
+### Three copies of session chat, collapsed behind a generic (refactor)
+
+Sweeping the WebSocket layer - `consumers.py`, `routing.py`, the ASGI stack - which no earlier
+chunk had opened. **No bug found there**, and that is worth stating plainly, because it is the
+most defensively-written module in the codebase. Recorded in full under "Checked and clean"; the
+short version is that every consumer verifies participation before joining a group, checks API-key
+scope *before* the participant lookup (so a refused connection cannot time-oracle a real session
+against an invented one), unwinds partial group membership when `accept()` fails, withholds the
+live-location group from token-route contacts, and re-validates credentials on a timer so a dropped
+revocation broadcast cannot leave an authorised socket open forever.
+
+What the sweep did surface is on the service side. SpotGuessr, Trivia and Consensus each carried
+their own `chat.py` and `realtime.py`, and the two sets were near-identical - `realtime.py` differed
+only in a group-name prefix string, and the docstrings said so outright: *"Mirrors
+`services.spotguessr.realtime` exactly."* Three copies of `send_chat_message`, three of
+`recent_messages`, and three separate `MAX_MESSAGE_LENGTH = 1000`.
+
+That triplication is the reason this chunk found nothing to fix and still changed something. The
+consumer layer had already been generalised into `_ParticipantSessionConsumer`; the service layer
+never was, so anything that ought to apply to session chat as such - a rate limit, moderation, edit
+or delete - has to be written three times and kept in sync by hand.
+
+`services/core/session_chat.py` (`SessionChat[SessionT: Model, MessageT]`) and
+`services/core/session_realtime.py` (`SessionBroadcaster`) now hold the logic once. Each game's
+`chat`/`realtime` module is a binding over them, so all six exported names and every import path
+are unchanged - verified by enumerating what the rest of the tree actually imports from those
+modules, not by assuming. 216 lines of triplicated logic became 135 lines of binding over 163 lines
+of shared implementation; the win is single-sourcing, not line count.
+
+Two details worth recording because they are where this refactor could have gone quietly wrong:
+
+- **`SessionChat` takes the game's `realtime` *module*, not its `SessionBroadcaster`.** Binding the
+  broadcaster directly is the obvious design and it silently breaks the test suite: existing tests
+  patch `services.<game>.realtime.broadcast`, and a call to `broadcaster.broadcast` bypasses a patch
+  on the module attribute entirely. Passing the module keeps the lookup at call time, so the
+  established patch idiom still intercepts. A `SessionRealtime` Protocol types it; mypy checks the
+  module against the protocol without complaint. This is not a hypothetical that was reasoned
+  around - a test run launched against the intermediate version (binding the broadcaster directly)
+  came back with exactly one failure, `test_spotguessr_chat.py::test_broadcasts_the_message`, while
+  the same file passes after the change. The prediction and the observation match.
+- **`MAX_MESSAGE_LENGTH` now comes from `core/text_limits.py`**, which exists precisely to be the
+  one place these numbers live and did not have this one. All three copies were already `1000` and
+  matched their `CharField(max_length=1000)` - checked, not assumed, since a constant above the
+  column width would fail the insert at the database rather than truncate.
+
+**Filed, not fixed: no rate limit on any chat socket.** Nothing in `consumers.py` throttles inbound
+frames - no size cap, no per-connection rate limit - and each accepted frame is one DB insert plus a
+broadcast amplified to every group member. It requires an authenticated participant, so it is abuse
+rather than an open vector, and picking a threshold is a product decision. The shared module above
+is now the single place to add it.
+
+### A bulk import that queried, and streamed, once per entry (fixed)
+
+A performance sweep: an AST pass over every non-test, non-migration module for ORM calls inside
+`for` loops - 121 sites. Most are fine (bulk-creation loops, keyset batching, loops over
+single-digit candidate sets), and grepping would have drowned in them; the point of triaging by
+amplification is that only one site multiplies by *user-supplied* input.
+
+`services/apis/locations/google/location_history.py` imports a Google Takeout export, where tens of
+thousands of `placeVisit` entries is ordinary. Per entry it ran a PostGIS nearest-neighbour query, a
+duplicate-check query, a write, and an SSE frame. Three of those four are now unnecessary:
+
+- **The spatial query is memoised on the exact coordinate pair.** A location history is mostly the
+  same few everyday coordinates repeated - home, work, the same shop - and each repeat was paying
+  for its own `distance_lte` + `ORDER BY Distance` query. Keyed on the exact pair the file carries,
+  so it dedupes repeats without changing which pin any coordinate resolves to.
+- **The duplicate check is one query instead of one per matched entry**, seeded into a set of
+  `(pin_id, visited_at)`. The set is updated as rows are created, because the previous
+  implementation got intra-file duplicate protection for free by re-querying each iteration - a
+  test pins that down, since it is exactly what a naive prefetch would break.
+- **Progress frames are throttled to one per whole percent.** A 50,000-entry export was pushing
+  50,000 SSE frames at a bar that can render 100 states, making the progress stream its own
+  bottleneck at both ends.
+
+What was deliberately *not* changed is as important. `PinVisit.objects.create()` stays a per-row
+call: `models/achievements/signals.py` subscribes to `PinVisit` under `TRIGGER_VISIT`, and
+`bulk_create` does not fire `post_save`, so batching the writes would silently stop awarding
+visit achievements during an import. The same reasoning rules out the obvious fix in
+`models/labels/signals.py`, where ~46 seeding `get_or_create` calls per signup look like an
+obvious `bulk_create` candidate until you notice `Label` has `post_save` receivers syncing a
+taxonomy. Recorded here so the next person to spot either loop does not "fix" it.
+
+The module had **no tests whatsoever** before this, which is why the change ships with nine
+covering the behavioural contract (radius matching, cross-run and intra-file idempotency, the
+visit-logging setting, `last_visited` tracking) rather than only the cost properties. One of them
+had to be corrected mid-write: the importer does `from ...visits.visits import find_nearest_pin`
+*inside* the function, so the name is rebound from the source module on every call and a patch
+applied to `location_history` would never have intercepted. In this case it failed loudly
+(`AttributeError`) rather than passing vacuously, but only because `mock.patch` checks the
+attribute exists - the same mistake against a name that *does* exist on the importing module is
+the silent version, and is worth watching for anywhere this codebase imports inside a function.
+
+A second test needed correcting for the opposite reason - it was measuring nothing while passing
+its own premise. Asserting the throttle with 28 entries is vacuous: `int(i/28*100)` advances on
+every single entry, so below ~100 items one-frame-per-percent and one-frame-per-entry are the same
+thing. It now uses 500 non-matching coordinates, which exercises the throttle (about 101 frames)
+without paying for 500 writes.
+
+### The malware scanner admitted unscanned files as clean (fixed)
+
+`services/security/malware_scan.py` is written to fail *closed* - its docstring says a scanner it
+cannot reach must be surfaced as a 503, "not silently admit the upload", and a connection error
+duly raises `MalwareScanUnavailableError`. Two paths did the opposite.
+
+**An `ERROR` status read as clean.** clamd does not raise when it fails to scan a particular
+target; it reports that target as `("ERROR", reason)` through the ordinary return value - clamd's
+own response regex is `(FOUND|OK|ERROR)` and its docstring gives `{filename: ('ERROR', 'reason')}`
+as an example. The result was destructured as `(result or {}).get("stream", ("OK", None))` and only
+`FOUND` rejected, so an `ERROR` fell past the check and returned `None`: upload admitted, never
+scanned. The `("OK", None)` default did the same for any response missing the `stream` key.
+
+**`ResponseError` escaped entirely.** The handler caught `(clamd.ConnectionError, OSError)`.
+`ResponseError` is a *sibling* of `ConnectionError` under `ClamdError`, not a subclass - checked
+against the installed package's MRO rather than assumed - so a garbled response from clamd
+propagated as an unhandled exception and became a 500 instead of the 503 that path exists to
+produce. Order matters in the fix: `BufferTooLongError` subclasses `ResponseError` and keeps its
+own distinct user-facing message, so it has to stay handled first, and a test pins that so the
+widened handler cannot swallow it later.
+
+Anything that is neither `OK` nor `FOUND` now raises `MalwareScanUnavailableError`. All three call
+sites (`tasks.py`, `services/media/images.py`, `services/import_export/import_data.py`) were
+already wrapping the call in `except MalwareScanUnavailableError`, so the new cases land on
+handling that exists - checked, since widening when a function raises is only safe if every caller
+already copes.
+
+### Sweeping for the shape the scanner bug had
+
+The malware-scan finding was a *fail-open path inside a fail-closed design*, so the obvious next
+move was to ask where else that shape occurs. An AST pass over every non-test module for
+security-ish predicates (`can_`, `allow`, `verify`, `valid`, `is_`, `has_`, ...) that `return True`
+from inside an `except` handler: three hits, in two places.
+
+One is a false positive worth recording so the scan is not re-run and re-triaged: `tasks.py`'s
+`process_device_scan_upload` matched because `can_` appears inside "s**can_**upload". Its `return
+True` means "task handled" - it has already recorded `FAILED` status on the row - and is correct.
+
+The other two are both in `rate_limiter.check_rate_limit`, each a bare `except Exception` carrying
+the same `# TODO: Catch specific exceptions`. Narrowed to `DatabaseError`, which is what the TODO
+asks and what separates the two cases that were being conflated: an infrastructure failure, where
+allowing the call rather than breaking a feature is a defensible choice, and a *bug* - a broken
+plugin rate-limit declaration, say - which was being converted into "allowed" and logged.
+
+The reason that distinction matters more here than the usual style argument is what this limiter
+guards. It is not an access control; it caps calls to **paid** third-party APIs, and the project
+tracks a cost estimate per call. A bug that reads as "allowed" does not leak anything - it spends
+money, quietly, for as long as it goes unnoticed.
+
+Reading the caller changes the picture in a way worth writing down, because it cuts against the
+scary interpretation: `record_api_call` calls `check_rate_limit` *inside* a `transaction.atomic()`
+that has already executed `ApiRateLimit.objects.select_for_update().get(...)`. A genuine database
+outage therefore raises at that earlier line and never reaches the handler at all - so those two
+handlers were, in practice, catching bugs far more often than infrastructure failures. That is an
+argument for narrowing them, and against treating the remaining fail-open as urgent.
+
+The remaining question - whether a paid API call should proceed unmetered when the database is
+down, or fail - is a policy decision rather than a defect, and is filed in `docs/PROBLEMS.md`
+rather than decided here.
+
+### A credential redactor that returned the credential (fixed)
+
+Continuing the same hunt one step wider: exception handlers that swallow with no logging at all.
+511 of them, which sounds alarming and mostly is not - the bulk are narrow domain exceptions used
+as control flow (`TripError` 52, `ValueError` 45, `Pin.DoesNotExist` 23), where catching and
+returning is the design. Filtering to handlers that catch `Exception` outright leaves three, and
+that is the useful list.
+
+**`services/admin/infrastructure_stats._redact_url`** existed to hide credentials in the service
+URLs printed on the infrastructure admin page, and one of its inputs is the Celery broker URL,
+which embeds a password. It wrapped `urlparse` in `except Exception: return url` - so the single
+case it was written to handle, a URL it could not make sense of, returned the string *verbatim*,
+password included. `urlparse` does raise: an unclosed IPv6 bracket in the netloc is a `ValueError`.
+Narrowed to `ValueError`, and the failure path now returns a placeholder rather than the input,
+because at that point nothing is known about the string's structure and guessing which span was
+the credential is exactly the mistake being fixed. Three tests, one of which asserts `urlparse`
+really does raise on the fixture - otherwise the regression test would pass while quietly
+exercising the ordinary path.
+
+**`models/abstract/model._slug_max_length`** - the base class every model inherits - swallowed
+everything around `_meta.get_field("slug")`. Only `FieldDoesNotExist` should reach the fallback:
+returning the *default* length for a model whose slug column is deliberately shorter produces an
+over-long value that fails at the database instead, which is a worse and much less obvious
+outcome than the error it was hiding.
+
+The third, `boundaries/overpass._endpoint_is_down`, is correct as written - its docstring says
+"Fails open on cache errors" and a cache miss legitimately means "not known to be down".
+
+### Reporting progress could fail work that had already succeeded (fixed)
+
+Celery retry safety. 55 of the 75 tasks carry `autoretry_for=(OSError,)`, and
+`CELERY_TASK_ACKS_LATE` + `CELERY_TASK_REJECT_ON_WORKER_LOST` are on globally, so redelivery is
+not limited to those 55 - every task has to tolerate being run twice.
+
+The photo importers looked like the obvious risk: five retrying tasks that call `.create()` with
+no `get_or_create` guard, each downloading over the network first. They turn out to be safe, and
+the reason is worth recording so nobody "fixes" them: each loads
+`existing_checksums = set(Image.objects.filter(...).values_list("checksum", flat=True))` at the
+top of the task body, so a retry re-reads it and skips everything the previous attempt created.
+Content-hash idempotency, not luck.
+
+The real finding was underneath them. `services/core/celery.update_task_progress` - called from
+nearly every task in `tasks.py` - wrapped nothing around `task.update_state`, which writes to the
+result backend. So a backend hiccup propagated out of whichever task was reporting and failed work
+that had *already completed*. Worse, with `acks_late` and `autoretry_for=(OSError,)`, that same
+failure redelivers the task and re-runs its side effects - and not all of those are idempotent:
+`sweep_immich_library_locations` creates an unguarded `NotificationLog` on the line immediately
+before its final progress call, so the duplicate-notification window was real rather than
+theoretical.
+
+This is now best-effort, matching the contract `channel_broadcast.send_group_message` already
+documents for the other side channel in this codebase ("Never raises - ... already durably saved,
+live delivery is a bonus"). The handler is deliberately broad, which is the opposite of the
+narrowing done elsewhere in this audit, and the distinction is the point: a security predicate
+must not convert a bug into "allowed", whereas a progress reporter must never convert a cosmetic
+failure into lost work. A test covers the non-`OSError` case specifically, since redis-py raises
+its own `ConnectionError` which is not an `OSError` - narrowing here would leave the common case
+uncaught.
+
+### Stored XSS through a label colour (fixed)
+
+A frontend injection sweep. The headline numbers look reassuring and are: 150 `innerHTML` writes,
+**zero** using `${...}` interpolation; the 8 using `+` concatenation are all `.test.ts` fixtures;
+197 uses of `escHtml`/`textContent`. The codebase escapes by habit.
+
+The hole was in the one place the habit lapsed. `label-picker.ts`'s `chipHtml` carefully escapes
+`id`, `icon` and `label` - and then interpolates `color` raw into
+`style="background:${bg};border-color:${border}"`, which `insertAdjacentHTML` parses.
+`formulaPillHtml` does the same and additionally puts the raw value in `color:${txtCol}`.
+
+The delivery path is the interesting part, because at first glance Django should have prevented
+it. The colour is rendered as `data-label-color="{{ label.color }}"`, which **is** auto-escaped -
+but the JS reads it back through `btn.dataset.labelColor`, and `dataset` returns the *decoded*
+value. Escaped into an attribute, decoded out of it, then re-injected into fresh markup: the
+escaping never reaches the place that needed it.
+
+And the stored value cannot be trusted, which is the other half. `Label.color` is
+`CharField(max_length=50, choices=COLOR_CHOICES)`, but Django enforces `choices` only in
+`full_clean()`, which `save()` does not call - and all eight label write paths assign it directly
+from `request.POST.get("color")` / `data.get("color")`. A value like `x" onmouseover="alert(1)`
+fits in 50 characters and stores cleanly.
+
+Fixed with `shared/color-safety.safeColor`, applied at both `label-picker.ts` sites and at
+`organize-tab-manager.ts`'s `miniCardHtml`, which reads the same dataset-decoded colour and
+appends the same alpha suffixes. **Validated, not escaped**: escaping stops the attribute
+breakout but still allows CSS injection (`url(...)`) inside a style value, and these colours are
+only ever hex. `""` falls through to each caller's existing "no colour" branch, so nothing needed
+new failure handling. 394 frontend tests pass, `tsc --noEmit` clean.
+
+**Correction to what this section first claimed.** It deferred the three `markup-engine`/
+`markup-toolbar` sites on the grounds that a hex-only validator might blank a legitimate
+`rgba()`/`none` value. Looking properly, that reasoning was sound but the premise was half wrong.
+`markup-engine.ts` was *already* safe - it defines `safeColor(v, fallback)` and
+`safeOptionalColor` (which passes `"none"` through) and sanitises into a local one line above the
+interpolation the grep flagged. `markup-toolbar.ts` genuinely was not, and is now fixed with the
+same shared helper, with `"none"` handled explicitly. The deferral was the right instinct applied
+to a misread: the codebase had already answered the question I was hesitating over.
+
+That leaves markup *less* validated server-side than labels, which is the part still open:
+`MarkupShape.color` is `CharField(max_length=20, default="#e53e3e")` and `border_color`
+`CharField(max_length=20, blank=True)` - no `choices` at all, and `x" onmouseover="a` is 17
+characters. Colours handed to Leaflet as *options* (`fillColor:`, `color:`) are left alone on
+purpose: they are set as style properties rather than interpolated into markup, so an invalid
+value is inert there. The server-side validation gap is filed in `docs/PROBLEMS.md`, and remains
+where this should really be solved - once, on the way in.
+
+### Closing the colour class on the server, where it belongs
+
+Two chunks had now fixed the same bug in two different renderers, which is the signal that the
+renderer was the wrong place to be fixing it. The root cause is one line of Django semantics:
+`Label.color` declares `choices` and `MarkupShape.color`/`border_color` declare nothing at all,
+and field `choices` are enforced only inside `full_clean()`, which `Model.save()` does not call.
+Every write path assigned straight from request data, so the stored value was "up to N characters
+of whatever was posted".
+
+`services/core/colors.clean_color` now validates on the way in, and this is where the chunk earned
+its keep: the survey I had done while fixing the renderers found **8** write paths, all in
+`controllers/labels.py` and `external_api/views.py`. Re-grepping for the *shape* rather than for
+the files I already suspected found **11 more**, in `controllers/markup.py`,
+`controllers/detail_pins.py`, `controllers/maps.py`, `controllers/custom_layers.py` and
+`controllers/saved_filters.py` - more than half the real surface, in files the earlier pass never
+opened. All 19 now go through the validator, and the same grep comes back empty.
+
+Design notes worth keeping:
+
+- **Coerced to the caller's default, not rejected.** These values come from palette pickers, so a
+  non-colour is a malformed request rather than a user mistake worth reporting, and every one of
+  these endpoints already treated a *missing* colour that way. Each call site keeps the default it
+  had, so behaviour is unchanged for every valid input.
+- **`"none"` is opt-in per call site** (`allow_none_keyword`). Markup borders use it to mean "no
+  border" and the map renderer checks for it by name, so it is a meaningful value there - and a
+  bare CSS keyword nowhere else, which is why it is not simply allowed everywhere.
+- The renderers keep their own validation. This is the first line, not a replacement: a renderer
+  added next year should not have to rediscover the rule, and the two layers fail independently.
+
+A hypothesis property test asserts the part that actually matters - for arbitrary text input, the
+result is always a hex colour, the `"none"` sentinel, or the default. Never an arbitrary string.
+
+### An escaper that is safe for text and unsafe for attributes (fixed)
+
+Started as an accessibility sweep of all 418 templates, which found nothing - see the methods note
+below, because the instrument was worse than the result. What it did surface, incidentally, was two
+JS-generated `<img>` tags in `pages/memories/index.html`, and reading them turned up the same shape
+as the label-colour bug one layer along.
+
+`popupHtml`/the card builder escape `event.title` and `event.subtitle` with `escapeHtml(...)` and
+then interpolate `event.thumbnail_url` into `src="..."`, `event.url` into `href="..."`, and
+`event.type` into a `class="..."` completely raw.
+
+The trap is what "fixing" it naively would have done. That file's `escapeHtml` is
+`div.textContent = value; return div.innerHTML` - which escapes `&`, `<` and `>` but **leaves
+quotes untouched**, because quotes are not special in a text node. It is correct everywhere it is
+currently used, and would have been useless in exactly the places that needed it: a `"` ends the
+attribute regardless. Wrapping the three sites in the escaper already sitting there would have
+looked like a fix and changed nothing.
+
+Added `escapeAttr` alongside it, with a comment stating which of the two belongs in which context,
+and applied it to the three attribute interpolations. `event.icon` goes into element *content*, so
+it takes `escapeHtml` - the distinction the new comment exists to keep straight. The two `<img>`
+tags also gained the `alt=""` they were missing, which is the correct value for a decorative
+thumbnail sitting next to its own title text.
+
+Unlike the colour finding, this is defence in depth rather than a demonstrated hole: these values
+come from a server JSON endpoint where `type` is an enum, `url` is built by `reverse()`, and
+`thumbnail_url` is a media path whose filename Django has already sanitised. Nothing here is known
+to be exploitable today. It is the inconsistency that is worth removing - three raw interpolations
+sitting beside two escaped ones, in a file whose own escaper cannot protect them.
+
+### A scheme guard that stopped the wrong attack (fixed)
+
+Sweeping every template and TS file for the shape chunk 219 found: a value interpolated into an
+attribute without escaping. 68 hits, and the triage matters more than the number - most are UUIDs,
+integer ids and enum keys, where nothing user-controlled reaches the string. Two groups are real,
+both in `pages/map/index.html`.
+
+**`pin.icon` into `src="…"`, behind a guard that does not guard this.** The line is preceded by
+`/^(https?:\/\/|\/)/.test(pin.icon)`, which reads like a safety check and is one - against
+`javascript:`. It does nothing about the attribute itself: `https://x" onerror="alert(1)` passes
+that regex, and then its quote ends the `src`. `Pin.icon` is `CharField(max_length=255)` with no
+validator, assigned from request data like the colours were, and pins are shared - so this is the
+same stored-value shape as the colour finding, in a field `clean_color` does not cover.
+
+**Google Places / NPS / Wikipedia payloads straight into `innerHTML`.** `place.vicinity`,
+`place.description`, `d.formatted_address`, `d.editorial_summary.overview` and `d.rating` were
+interpolated as element content with no escaping, and `place.url`/`d.website` into `href` with no
+scheme check. This is third-party data containing user-submitted business names and descriptions,
+so it is not attacker-controlled in the direct sense - but "we trust Google's payload to be
+HTML-safe" is not an assumption worth holding.
+
+The fix needed three helpers, not one, and the reason is the chunk 219 lesson applied: the file
+*did* already contain an `escapeHtml`/`escapeAttr` pair - defined at line 5681, **inside** a
+function body after an early `return`, so invisible to every site above it, and partial anyway
+(`escapeHtml` escapes only `&` and `<`; `escapeAttr` only `"`). `_ulEscText`, `_ulEscAttr` and
+`_ulSafeUrl` now sit at the top of the script with a comment on which context takes which, and
+`_ulSafeUrl` exists because escaping quotes does nothing about `javascript:` - the two defences
+are orthogonal and both were missing somewhere.
+
+Verified by extracting the three helpers and executing them (rejects `javascript:`, `data:` and
+protocol-relative `//host`; passes ordinary absolute and relative URLs). That indirection is
+itself worth recording: this page carries several thousand lines of inline `<script>`, which no
+test in the repository can import or exercise. The bun suite covers `frontend/ts/`; everything
+inline in a template is, structurally, untested.
+
+### Half the frontend is untestable, and it has reimplemented HTML escaping 14 times
+
+Chunk 220 ended on the observation that inline template JavaScript cannot be reached by any test.
+This chunk measured it, because "some untested code" and what is actually there are different
+claims.
+
+**21,543 lines of inline JavaScript across 101 templates**, against 22,684 lines of TypeScript in
+`frontend/ts/` (which `tsc --noEmit` and 394 bun tests do cover). So roughly half the frontend is
+outside every automated check the project has. It is concentrated: the top five templates are
+10,736 lines, 49% of the total, led by `pages/map/index.html` at 5,175.
+
+The consequence is measurable rather than theoretical. 44 function *names* are defined in more
+than one template, and the worst case is the one that matters most: **14 separate HTML-escaping
+helpers under 9 different names** (`escapeHtml` x5, `_escHtml`, `escHtml`, `_esc`, `_escapeHtml`,
+`htmlEscape`, `escapeAttr`, plus the three added in chunk 220). They do not agree:
+
+| implementation | escapes | attribute-safe |
+|---|---|---|
+| `pin_lists/detail.html` `_escHtml`, `map` `_escapeHtml`, `_notification_push` `escapeHtml` | `&<>"` (+`'`) | yes |
+| `map` `escapeHtml` | `&<"` - no `>` | yes |
+| `location/index`, `memories/index`, `memories/photos`, `profile/index`, `_mini_calendar` | `&<>` | **no** |
+
+Six of the fourteen are text-only. That is not a bug in itself - `textContent`->`innerHTML` is
+exactly right for a text node - but there is nothing in the *name* to say so, and this audit has
+now found two places where the text-only version was sitting next to an attribute interpolation
+that needed the other kind (chunk 219's `memories/index.html`, chunk 220's `map/index.html`). A
+developer reaching for "the escape function in this file" gets a coin flip.
+
+The fix is not more escaping helpers. It is that this code should live in `frontend/ts/`, where it
+would inherit `tsc`, the bun suite, and one shared `escapeText`/`escapeAttr` pair with the
+distinction in the names. Filed in `docs/PROBLEMS.md`; the map page alone would be a meaningful
+first slice.
+
+**Methods note - the instrument was wrong twice before it was right.** The first pass reported
+every helper as unsafe, including two written earlier that afternoon; the `"` pattern had been
+over-escaped in a Python raw string. The second pass reported the two *best* implementations
+(character-class `/[&<>'"]/g` replacements) as escaping nothing, because it only recognised
+individual `/&/g` patterns. Both errors were caught only by checking the output against helpers
+whose behaviour was already known. A scanner over a language you are pattern-matching rather than
+parsing needs a known-answer control, or its confident output is noise.
+
+### 46 style modifiers that render as nothing
+
+A CSS reachability sweep: which classes do templates apply that no rule ever matches? Measured
+against the **compiled** `style.css` rather than the SCSS sources, because `&--modifier` nesting
+means a resolved class name frequently appears nowhere in the source. (Verified the compiled file
+was current first - no `.scss` is newer than it.)
+
+3,806 distinct classes are applied across the templates; 511 have no rule at all. Most of that
+number is uninteresting - JS hooks, one-off wrappers, classes that only ever carried semantics.
+The meaningful subset is BEM modifiers **whose base class is styled**: 46 of them. That pattern is
+unambiguous - somebody wrote `class="card card--secondary"` intending a visual distinction, and
+the distinction does not exist.
+
+Several are user-visible states rather than cosmetic polish:
+
+- `ul-game-hud__group--lead` - on all three game pages, marks the *leading* score. Renders
+  identically to every other group.
+- `badge--muted` - 5 templates, mostly site admin.
+- `card--secondary` / `card--primary` - 8 and 3 templates; a visual hierarchy that is currently flat.
+- `visit-list--pending`, `visit-item--pending`, `visit-source--pending` - a pending visit looks
+  exactly like a confirmed one.
+- `notif-item__icon-wrap--pin_shared`, `--safety_ci_due`, `--visit_suggested` - per-type
+  notification icon treatments.
+- `sv-img--fallback`, `trip-map-marker-num--ghost`, `dm-thread--group`.
+
+Not fixed, and deliberately: what `--lead` or `--muted` *should* look like is a design decision,
+not a defect with one correct answer. The full list of 46 is in `docs/PROBLEMS.md` so it can be
+worked through or deliberately dropped.
+
+**Methods note - the fifth bad instrument today, caught by a control.** Cross-checking a sample
+against the SCSS source appeared to contradict the compiled CSS: `card--secondary` had "3 matches".
+It did not - those were `&--secondary` blocks nested under `.btn` and two other parents, which the
+grep happily matched because it looked for the modifier suffix under *any* parent. The compiled
+CSS was right and the cross-check was wrong. That is now five sweeps in one session where the
+first instrument was misleading; the pattern is that every one of them was caught by checking
+against a case whose answer was already known, and none would have been caught by reading the
+output alone.
+
+### The untested-view question, finally answered with the right instrument
+
+Chunk 196 estimated view coverage by counting how many routes appeared in test files, and said
+plainly that this was an upper bound - it cannot tell "imported" from "executed" - and that the
+right instrument was `coverage.py` over the real suite. Three attempts later, that measurement
+exists (`docs/reports/2026-08-14-view-coverage.md`).
+
+**80% of 22,081 statements** in `controllers/` + `external_api/` execute during the full suite.
+**208 of 1,795 callables (11%) never execute at all.** And the distribution is the finding:
+**100 of those 208 are HTTP write handlers** - `post`/`delete`/`put`/`patch` - totalling **1,217
+statements of data-mutating code that no test reaches**. Untested read paths render a wrong page;
+untested write paths lose or corrupt data, and half of what is unexercised here is a write path.
+
+Worst files by count: `userprofile.py` (19), `safety.py` (17), `consensus.py` (16),
+`site_admin.py` (13), `external_api/views.py` (12). Largest single gaps:
+`PinController.upload_takeout` (39), `LabelBulkConvertView.post` (36), `SiteAdminUsersView.post`
+(35), `LocationWikiDetailPinEditView.post` (34), `LabelBulkEditView.post` (33).
+
+One result is worth more than its size: `PinController.upload_takeout` also appeared in chunk
+222's list of routes with no discoverable caller. Two independent instruments - a static
+reference sweep and a runtime coverage run - converging on the same 39 statements is much stronger
+evidence than either alone, and makes it the clearest candidate for either deletion or a first
+test.
+
+Three attempts were needed because the first two were spoiled by my own doing: one wrote its
+marker without gating on the JSON step succeeding, and both had source `docker cp`'d into the
+container mid-run. The third was left strictly alone for its full 1:38:35, which is the only
+reason it produced a usable artifact.
+
+### Removing the one thing two instruments agreed on
+
+`PinController.upload_takeout` was the single item flagged by both the static caller sweep (chunk
+222) and the coverage run (chunk 224). Following it properly produced a fourth, decisive signal
+and one correction along the way.
+
+The route is `pin.upload.takeout` at `.../import/upload/`, sitting beside `pin.import.form` -
+which templates *do* reference. So the natural reading is "the import dialog posts here". It does
+not: the wizard (`pages/location/import/csv.html`, served by `import_form`) posts to
+`pin.import.preview` and `pin.import.confirmed`, and nothing anywhere - template, TypeScript,
+inline script or Python - names `pin.upload.takeout`.
+
+Mid-investigation this looked like it might be bigger than one handler. `upload_takeout` is the
+only place importing `extract_archive`/`is_archive`... except it is not: `parse_for_preview`, 70
+lines below, imports the same pair and is very much alive - it is what `pin.import.preview`
+resolves to. So the 380-line `archive_extractor` service is fine, and the correct conclusion is
+narrower and cleaner: `upload_takeout` is a **superseded duplicate** of the preview/confirmed
+flow, which handles the same archives, nested archives and KML/JSON/CSV formats.
+
+Four independent signals, then: no static reference, never executed by 10,742 tests, no UI path,
+and a live sibling doing the same job. Removed - 76 lines from `pin.py` and its URL pattern.
+Google Takeout import itself is untouched and still documented on the help page; it runs through
+the wizard, which is the path users actually have.
+
+Worth noting what nearly went wrong: the "only caller of `archive_extractor`" reading would have
+justified deleting a 380-line security-sensitive service (it is the thing doing zip-slip and
+symlink checks) on the strength of a grep that had scrolled past its second consumer.
+
+### Answering the codebase's own "this is probably wrong"
+
+The in-code marker survey is short and healthy - 27 `TODO`s, zero `FIXME`/`XXX`/`HACK`/`BUG` - and
+17 of the 27 are the same `# TODO: Catch specific exceptions` note already acted on in the rate
+limiter. Two were substantive, and both sat in `controllers/userprofile.py`, which the coverage run
+independently ranked worst in the view layer (19 never-executed callables).
+
+**`# TODO: Whatever is happening here is probably wrong.`** The code builds
+`Q(labels__name="Visited", labels__kind=KIND_STATUS) | Q(last_visited__isnull=False)` inline. Two
+suspicions, one confirmed and one dismissed:
+
+- *Dismissed:* matching a status by display name looks fragile - it is exactly the case-sensitive
+  name lookup that the Label uniqueness work had to fix in half a dozen places. Here it is safe,
+  and for a reason worth recording rather than rediscovering: `is_protected` labels cannot be
+  renamed on **either** write path (`controllers/labels.py` guards the assignment,
+  `external_api/views.py` refuses the write with 403), and "Visited" is seeded protected. The name
+  is a stable key because an invariant makes it one.
+- *Confirmed:* `PinQuerySet.visited()` already exists, and its docstring explicitly asks callers to
+  "build on it directly instead of re-deriving the `Q`" - which is precisely what this was doing.
+  It was one of **four** inline copies of the same predicate (`userprofile.py`, `queryset.py` twice,
+  `pin/signals.py`). Now calls `.visited()`; two imports became dead and went with it.
+
+**A log line that contradicted its own return value.** `rate_limiter.service_is_enabled` logged
+"Failed to read rate limit config for %s - **allowing call**" and then `return False`, which
+refuses it. The message was copy-pasted from `check_rate_limit`, where returning `True` does allow
+the call. Anyone reading logs during an incident would have drawn exactly the wrong conclusion
+about why traffic stopped. The behaviour is right and stays - "is this service switched on" has no
+safe affirmative answer when it cannot be read - so only the message changed, and the handler
+narrowed to `DatabaseError` like its neighbours.
+
+### A TODO plus coverage data, and a correction to an earlier finding
+
+Two TODOs said `change_category` was "probably deprecated since the addition of Labels more
+generically". The coverage run made that checkable rather than a judgement call, and the line
+detail is what settled it: of the handler's four statements, 616 and 617 executed and 618-619 did
+not. That shape has one explanation - `get_object_or_404` raised on every call. Something in the
+suite posts to the route, and the handler body has never once run to completion.
+
+With no template, TypeScript or inline-script reference either, that is three signals, and
+`KIND_CATEGORY` labels already provide the capability through the organize and bulk-edit paths.
+The action and its route are removed.
+
+**What that turned up about earlier work in this same audit.** Following the chain,
+`Pin.change_category`, `Pin.add_category` and `Wiki.add_category` all have zero callers outside
+tests. `add_category` is where the label-uniqueness chunk found and fixed a
+`MultipleObjectsReturned` bug - the `get_or_create` lookup was missing `profile=None`, so a
+case-insensitive match could return a global and a personal label together. That fix is correct and
+its tests are real, but **the method has no production caller, so the bug was not reachable in
+production** - and it was reported at the time as though it were. The finding was sound; its
+significance was overstated.
+
+This is the second time coverage data has changed the reading of something already "known": it
+converted "probably deprecated" into a demonstrated fact here, and downgraded a fixed bug to
+unreachable. Static reading alone had produced neither.
+
+The three orphaned methods are filed rather than deleted - removing model methods together with
+their tests is a product call, and the plausible answer (categories are labels now) deserves to be
+stated by someone who owns the roadmap.
+
+### Using the coverage list: the first untested write handler had the bug it looked like it had
+
+The point of the never-executed list is to be worked, not filed, so this chunk took the largest
+untested write handler on it: `LabelBulkConvertView.post` (36 statements, top of the list, in a
+subsystem this audit has already had to fix several times).
+
+Reading it before testing it was enough to predict the failure. `Label` is unique on
+`(lower(name), profile, kind)`. The single create and edit paths call `find_conflicting_label`
+first and return a readable 400 - that guard was added earlier in this audit. Bulk-convert sets
+`label.kind = new_kind` and saves with no check at all, so converting a tag whose name already
+exists as a category is a constraint violation.
+
+TDD confirmed it exactly: `IntegrityError: duplicate key value violates unique constraint
+"uq_label_profile_name_kind_ci"`, `Key (lower(name::text), profile_id, kind)=(zzaudit collide, 3,
+category) already exists`. A user hits this by having "Museum" as both a tag and a category -
+which is legal, since the constraint is per-kind - and then converting one onto the other from the
+organize UI.
+
+Fixed to match the single-edit path: the whole batch is checked first and refused with a 400
+naming the offending labels. Refused rather than partially applied, because converting some and
+failing on others leaves the user to work out which half took effect.
+
+Three tests, and the third is the one that makes the other two meaningful: a *non-colliding*
+convert must still work. Without it, "no 500" and "the label is unchanged" would both pass if the
+guard simply stopped all conversion - which is the obvious way to get this wrong.
+
+This is what the coverage list is for. One handler, chosen because a measurement said nothing
+executed it, produced a reproducible 500 on a plausible user action within an hour. There are 99
+more write handlers on that list.
+
+### Admin account deletion had no test, and a docstring saying it did not exist
+
+Next entry on the never-executed write-handler list: `SiteAdminUsersView.post` (35 statements).
+Reading it first turned up the documentation problem before any test ran - the class docstring
+reads *"Read-only directory of registered users"* and documents only `GET`. The `post` it does not
+mention performs **admin-initiated deletion of another person's account**. The one-line summary a
+developer sees first actively misdescribes the view's most consequential behaviour. Corrected.
+
+The guards themselves read as sound - no self-deletion, no deleting superusers or site-admin group
+members, and a typed confirmation - and nothing verified any of them. Those are the guards whose
+silent failure is both catastrophic and invisible, so the contribution here is locking them down
+rather than hunting a bug that may not exist. Eight tests.
+
+**The control test paid for itself on the first run.** Six guard tests passed and the two asserting
+deletion *works* failed - which is the signature of guards passing trivially because the operation
+never happens at all. Had the control not been there, six vacuous tests would have gone in looking
+like protection.
+
+The cause was my test, not the code, and the behaviour it exposed is worth recording.
+`profile_visibility` defaults to `ANYTHING_IN_COMMON`, and a fresh admin shares nothing with a
+fresh user - so `can_view_profile` is false and the handler deliberately does **not** echo a
+username the admin is not allowed to see. It asks for the literal string `"hidden user"` instead.
+That is a thoughtful privacy choice with a side effect worth stating plainly: for every user an
+admin cannot see - which by default is most of them - the typed confirmation is a **fixed,
+guessable constant** rather than a per-user string. As a speed bump against misclicks it still
+works; as a "type the name to prove you mean it" check it is weaker than it looks. Both branches
+now have tests.
+
+### A failure toast that only reached one of two exit paths (fixed)
+
+`VisitSuggestionRespondView.post`, 31 statements, never executed. Two suspicions on reading it,
+and the more dramatic one was wrong - worth recording both, since the wrong one is the kind of
+thing that gets "fixed" into a regression.
+
+*Wrong:* the `blocked` branch assigns `response["HX-Trigger"]` outright, immediately after
+`_trigger_label_refresh` has set that same header - which looks like it discards the label refresh.
+It does not: the branch re-includes `notifCountRefresh` in its own payload. Careful code, and
+"simplifying" it by using `.update()` on a header that is a JSON string would have been the actual
+bug.
+
+*Right:* the handler has two exit paths. When the response came from a pin page
+(`context=pin`), it returned `_trigger_label_refresh(response)` **before** reaching the `blocked`
+handling at the bottom. So a user on a pin page who accepted a suggested visit while visit logging
+was switched off got their visit history re-rendered, unchanged, with no explanation - the exact
+silent failure `CLAUDE.md` calls out ("Results and errors must surface as toast notifications").
+From the notification dropdown, the same action explained itself properly.
+
+The triggers are now built once and applied to whichever response is returned, so the two paths
+cannot drift again. One import became dead and went with it.
+
+### Chunk 218's "the grep comes back empty" was wrong, in two ways
+
+Working the next never-executed write handler - `LocationWikiDetailPinEditView.post`, 34
+statements - the first thing visible was three colour fields assigned straight from the request
+body with no `clean_color`. That should have been impossible: chunk 218 introduced the validator
+specifically to close every colour write path, and reported "all 19 now go through the validator,
+and the same grep comes back empty."
+
+The grep was incomplete twice over, and both failures are instructive:
+
+1. **Syntactic form.** The pattern matched `color = X.get("color")` - an assignment. These are
+   dict-literal entries: `"color": body.get("color")`. A quote sits between the field name and the
+   colon, so the pattern could not match, and `detail_pins.py` has eight of them.
+2. **Field-name coverage.** `detail_bg_color` is populated from the request key `bg_color`. My
+   field list was built from the *request keys* I had seen, so a field whose model name differs
+   from its request key was invisible to it - even in a file I had already edited.
+
+Eight sites fixed. This is the second time in this audit that a claim of completeness rested on a
+pattern rather than on the population it was meant to cover, and the first (8 colour paths that
+turned out to be 19) was caught the same way: by looking at the code rather than re-running the
+grep. Rerunning a flawed pattern only ever confirms it.
+
+Worth stating plainly: **"the grep is empty" is a statement about the grep.**
+
+**And it happened a third time.** The corrected sweep above matched `.get(` - so it missed
+subscript access. Widening the *structural* filter (any direct field assignment from request data,
+found by AST rather than regex) turned up `markup.py`'s `item.color = body["color"]` and
+`item.border_color = body["border_color"]`, plus `external_api/views_labels_bulk.py` and
+`external_api/views.py` writing `data["color"]` straight to a model. Three more real sites, on top
+of chunk 218's 19 and chunk 231's 8 - **30 at this point**, found across three passes, each of which
+believed it was complete. (Two more followed: see the fifth-pass entry below. The final count is
+32, and the fact that this paragraph originally read "30 in total" is the point it was making.)
+
+The lesson is not "write better regexes". It is that a regex encodes a guess about *syntax*, and
+the property being checked is *semantic* - "does a value from the request reach this field
+unvalidated". The AST pass that finally found these asks a structurally different question, and it
+also correctly cleared two sites the regex flagged (`custom_layers.py` validates against an
+allowlist on the following line; `labels.py:487` is fed by `_parse_bulk_payload`, which already
+calls `clean_color`). A checker that produces both true positives *and* verifiable clears is
+worth more than one that only produces a count.
+
+### What nine untested handlers have in common
+
+`LabelMergeView.post` (19 statements) was picked deliberately rather than by size: the defects so
+far had clustered in `labels.py` and `site_admin.py`, so the obvious next move was to finish those
+files. It is clean. The gap I expected - the GET path excludes the source from the merge candidates
+but the POST path does not, so a crafted request could merge a label into itself - is guarded one
+layer down, in `services/labels/merge._validate`: *"Cannot merge a label into itself."* The
+controller turns that into a 400.
+
+Where it sits is the point, and with nine handlers examined a better prioritiser than either size
+or subsystem has emerged:
+
+| handler | touches models how | outcome |
+|---|---|---|
+| `LabelBulkConvertView.post` | sets `label.kind` directly | **500 on collision** |
+| `LocationWikiDetailPinEditView.post` | assigns fields directly | **8 unvalidated colour writes** |
+| `VisitSuggestionRespondView.post` | delegates; own control flow | **silent failure on one exit path** |
+| `SiteAdminUsersView.post` | delegates to `request_deletion` | clean (guards were unverified) |
+| `LabelBulkEditView.post` | assigns *safe* fields only | clean |
+| `AlbumEditView.post` | assigns fields, validates each | clean |
+| `ConsensusPhotoUploadView.post` | delegates | clean |
+| `CalendarImportView.post` | delegates | clean |
+| `LabelMergeView.post` | delegates | clean |
+
+Both model-corrupting defects were in handlers that **assign model fields directly** instead of
+going through a service that owns the invariant. `LabelBulkConvertView` set `label.kind` itself and
+so never met the uniqueness check that `find_conflicting_label` performs for single edits;
+`LocationWikiDetailPinEditView` assigned colours itself and so never met `clean_color`. Every
+handler that delegated was fine - the invariant was enforced once, at the boundary, for all
+callers.
+
+That is a sharper filter for the remaining 91 write handlers than "largest first": **look for
+`setattr`/direct field assignment on a model in a view**, and check whether the corresponding
+service-layer validation exists and is being skipped. The third defect is a different species -
+presentation logic, not model integrity - and would not be caught by that filter, which is worth
+knowing too.
+
+### The filter found its first bug on the first run
+
+Chunk 235's prioritiser, applied mechanically: an AST pass over every controller for
+`obj.field = <request data>` or `setattr(obj, ..., <request data>)`, intersected with the
+never-executed list. Four handlers. Two were already known (`AlbumEditView`, clean;
+`LocationWikiDetailPinEditView`, fixed). One was a boolean preference. The fourth was a bug.
+
+`EditProfileView._save_profile` does this, three lines after saving a form:
+
+    request.user.first_name = request.POST.get("first_name", "").strip()
+    request.user.last_name = request.POST.get("last_name", "").strip()
+    request.user.save(update_fields=["first_name", "last_name"])
+
+A form *is* used for the rest of the profile - these two fields are assigned outside it, so the
+form's validation never sees them. `User.first_name` and `last_name` are `max_length=150`, which
+Django enforces in `full_clean()`, which `save()` does not call. A 200-character name therefore
+reaches Postgres and returns `DataError: value too long`, i.e. a 500 on the profile edit page.
+
+Exactly the shape of the two earlier defects: a view assigning a model field directly, skipping the
+layer that owns the constraint. Fixed by truncating to the column width, which is what every other
+free-text field here does (`albums.py`: `.strip()[:_MAX_ALBUM_NAME_LENGTH]`), reading the limit off
+the field rather than hardcoding 150.
+
+The filter is worth keeping: it was derived from nine hand-examined handlers, expressed as a
+mechanical query, and returned one real defect out of four candidates on its first run - against a
+list where hand-picking by size was running at four defects in nine.
+
+### The same bug class, three more times - and a fourth regex miss
+
+The profile-name 500 (a `CharField` assigned straight from POST, `max_length` enforced only by
+`full_clean()` which `save()` never calls) is a *class*, not an incident. Running the AST filter
+across all controllers and then checking each target's actual field type separates the harmless
+from the reachable:
+
+- **`TextField` targets are safe.** Postgres does not enforce a length on `text`, so
+  `visits.notes`, `labels.description`, `labels.keywords`, `safety.default_message` and
+  `achievements.description` cannot fail this way, whatever `max_length` the field declares.
+- **`CharField` targets are not.** Three were unbounded: `labels.icon` and `achievements.icon`
+  (`max_length=50`), and `achievements.metric` (`max_length=64`). All now truncate to the column
+  width read off the field.
+
+**And a fourth syntactic miss.** `achievement.color = (request.POST.get("color") or "").strip() or
+DEFAULT_ACHIEVEMENT_COLOR` is a colour write - the 31st - that all three regex generations missed
+because the value begins with `(` rather than `request.POST`. The AST pass *had* listed it; I did
+not act on it, because I was reading that output filtered to untested handlers and this one is
+covered. So the instrument was right and the reading was wrong, which is its own lesson: a
+structural checker only helps if its whole output gets read.
+
+Left alone deliberately: `achievements.metric` declares `choices` that `save()` will not enforce
+either, so an unknown metric can still be stored - it simply never matches a registered metric and
+the achievement quietly never awards. That is a real gap but a different one (silent bad data, not
+a crash), and it is admin-only. Noted rather than fixed.
+
+### Where the AST-filter method stops working
+
+The colour filter worked so well that the obvious next move was to point the same technique at
+authorization: find `get_object_or_404` calls in controllers with no owner scoping - the IDOR
+shape. 76 hits, and after three rounds of refinement, **zero real findings**. Every one is
+authorized. That is a good result for the codebase and a better one for knowing when this method
+applies.
+
+The 76 resolve into four different ways of being safe, which is why no single check found them:
+
+1. **In-query scoping** - `get_object_or_404(PinAlias, id=..., pin=pin)`, where `pin` was itself
+   owner-resolved. Scoped transitively through a parent the checker cannot follow.
+2. **Post-hoc comparison** - `image = get_object_or_404(Image, pk=image_id)` immediately followed
+   by `if image.profile_id != profile.pk: raise Http404` (`photos.py`).
+3. **Authorization in the caller** - `image_gallery._get_image` is genuinely unscoped; its caller
+   does the check. The property is satisfied one frame up.
+4. **A domain rule instead of ownership** - `trivia.py` fetches a question unscoped, then refuses
+   unless `TriviaAnswer.objects.filter(round__question=question, profile=profile).exists()`:
+   "you can only vote on a question you've answered". Correct, and not an ownership test at all.
+
+The difference from the colour case is worth stating, because it predicts where this technique pays
+off. *"A request value reaches this field unvalidated"* is a **local** property - decidable from one
+expression. *"This object access is authorized"* is **non-local**: it can be satisfied in the
+caller, a mixin, a decorator, a queryset manager, or a domain invariant three lines later. An AST
+pass over one function cannot decide it, and a filter that cannot decide produces a list that must
+be checked entirely by hand - at which point it has sorted the work, not done it.
+
+Recorded so the next person does not re-run this and read 76 hits as 76 problems.
+
+### Nineteen ways to turn a typo into a 500
+
+Applying the filter to another *local* property, per the previous chunk's distinction:
+`int()`/`float()` on request data with no guard. `int("abc")` raises `ValueError`, and a request
+body is free to contain "abc" wherever a view expects a number.
+
+Nineteen sites, across `achievements.py`, `detail_pins.py`, `labels.py`, `markup.py` and
+`site_admin_costs.py`. `labels.py:614` and `744` are the ordinary label create and edit forms -
+`int(request.POST.get("order", 0))` - so this is not an exotic path; it is what happens if a
+client sends `order=` as anything non-numeric.
+
+The codebase already knew the pattern, which is what makes the gap notable rather than novel:
+`site_admin.py` wraps exactly these conversions in `except (ValueError, TypeError)`, and three
+separate local helpers exist for the same job - `labels._safe_int`, `saved_filters._clamp_opacity`
+and `map_overlays._clamped_opacity`. The answer had been written three times and applied to about
+a fifth of the places that needed it.
+
+`services/core/numbers.safe_int`/`clamp_int` now hold it once, and all nineteen call sites use it.
+Deliberately conservative: each keeps the default it already had, and no clamping was introduced
+where none existed, so the only behavioural change is that a malformed number produces the default
+instead of a 500. `safe_int` also refuses `bool` explicitly - it is an `int` subclass, so `True`
+would otherwise arrive as `1`, which is almost never what a caller means.
+
+### A colour write behind a variable key - the fifth and last miss
+
+A sweep for unguarded `body["key"]` subscripts (KeyError -> 500) found 42 candidates and **no
+defects** - the guards are there, in forms the filter could not see: `if "lat" not in body` (the
+intervening `not` broke the pattern), `if body.get("pin_type") in valid_types`, and
+`_parse_bulk_payload`'s return value, which is a locally-built dict that always has its keys and is
+not request data at all. Another reminder that a filter with no notion of a variable's *origin*
+will conflate "came from the user" with "we just built this".
+
+Reading the false positives turned up the real finding. `pin_bulk.py` is the most careful handler
+this audit has read - it checks `if request_field not in data: continue`, enforces a per-field
+length with a 400, and wraps `int()` in `try/except (TypeError, ValueError)`. It also writes
+`color`, `bg_color` and `border_color` **validated by length alone**:
+
+    ("color", "color", 20),
+
+Twenty characters. `x" onmouse` is ten. And because the key is a *variable* (`data[request_field]`
+inside a loop over field tuples), no colour sweep in this audit could ever have matched it -
+not the `.get(` regex, not the subscript regex, not the AST pass keyed on field names, because the
+field name only exists at runtime.
+
+That is the **32nd** colour site, found by reading code that a filter had cleared. The count across
+five passes: 19, +8, +3, +1, +1. Every pass believed it was complete; the last three were found by
+looking at things, not by matching them.
+
+The fix reuses `clean_color`, keeping the `"none"` sentinel for the two border fields where it is
+meaningful and refusing it for `color` where it is not.
+
+### Two filters, wrong in opposite directions
+
+Sweeping request values assigned to `CharField` targets turned up two real problems, both in
+`labels._parse_bulk_payload`, and both invisible to the sweep that had just been run over the same
+file:
+
+- `"icon": data.get("icon") or None` is unbounded and lands on `Label.icon`, a
+  `CharField(max_length=50)`. The identical bug at `labels.py:740` was fixed two chunks earlier;
+  the bulk path reaches the same column by a different route.
+- `[int(x) for x in data.get("add_parent_ids", [])]` raises `ValueError` on any non-numeric entry
+  in a client-supplied list.
+
+The second is a flaw in **my own** chunk-240 filter. It excluded a function from consideration if a
+guard appeared *anywhere* in its text, and `_parse_bulk_payload` contains `_safe_int` on the line
+above - so the whole function was suppressed, list comprehension included.
+
+Re-running per call site instead flipped the error the other way: 11 new "findings", all of them
+guarded by `with contextlib.suppress(ValueError, TypeError)` - a `with` statement, which a filter
+looking only for `ast.Try` cannot see. `site_admin.py` uses that idiom nine times.
+
+So the coarse version had false negatives and the loose version had false positives, and neither
+count was trustworthy on its own. A checker for "is this guarded" has to model **every** guard
+idiom the codebase actually uses - `try/except`, `contextlib.suppress`, `.isdigit()`, a helper like
+`_safe_int` - and has to evaluate them at the call site rather than the function. That is a real
+piece of work, which is worth knowing before treating any such sweep's output as a list of bugs.
+
+The two genuine findings are fixed: the icon truncates to the column width, and unparseable ids are
+dropped rather than failing the request.
+
+### A filter validated before its result was believed
+
+The three defect species this audit found need three different searches. Two are covered: coverage
+data finds *never executed*, and AST filters on local properties find *bypasses a validator*. The
+third - `VisitSuggestionRespondView`'s silent failure, where an error flag was set and one of two
+exit paths returned without consulting it - is neither, and had been found only by reading.
+
+So: a filter for that shape. A function that assigns an error-ish local (`blocked`, `failed`,
+`refused`, ...), consults it in an `if`, and has a `return` *between* the assignment and the check -
+an exit that cannot report what was recorded. Result across every controller: **zero**.
+
+That number is only worth something because it was calibrated first. Running the same filter
+against `git show b3cad024~1` - the version of `visit_suggestions.py` from immediately before the
+chunk-230 fix - produces `CONTROL HIT: post flag=blocked 1 exit(s) before the check`. The filter
+provably detects the shape it claims to look for, so its silence on the current tree is evidence
+rather than an absence of evidence.
+
+This is the discipline the rest of the session had to learn the hard way. Five sweeps produced
+confidently wrong output before anyone noticed - the accessibility scan at 70% false positives, the
+dead-code scan where every category over-reported, the escaping-helper table that was wrong twice,
+and two generations of colour regex that each declared completeness. Every one was caught by
+checking against a case whose answer was already known, and every one was caught *after* the result
+had been written down. Doing it first costs one command.
+
+### A control that proved detection but not precision
+
+Next local property: a field assigned and then omitted from `save(update_fields=[...])`, which
+Django silently drops. That is worse than a crash - the write appears to succeed and the value is
+gone.
+
+Following the previous chunk, the filter shipped with a control: a synthetic handler assigning
+`name` and `description` and saving only `name`. It fired. Against the controllers it reported
+**seven** hits.
+
+All seven are false positives, and they share one cause: the filter pools every `obj.field = ...`
+in a function and compares it against *each* `save()`, so mutually exclusive branches accuse each
+other. `e2ee.py` is the clearest example and is entirely correct - `if password_wrapped:` assigns
+three fields and saves all three, while `elif bundle.password_wrapped_secret:` assigns only
+`password_wrap_stale` and saves exactly that. `pin_bulk.py`'s two saves are 46 lines apart in
+unrelated operations.
+
+The lesson refines the previous chunk's, and is worth stating because I got it half right. A
+known-answer control proved the filter **detects** the shape. It said nothing about **precision**,
+because it contained only a true positive. A control that also included a two-branch handler which
+must *not* fire would have caught the branch-insensitivity before seven findings were written down
+and triaged by hand.
+
+So: calibrate with both a case that must fire and a case that must not. Detection and precision are
+different properties, and a single positive control only ever measures the first.
+
+No `update_fields` defects exist in the controllers - established, this time, with the filter's
+limits understood rather than assumed.
+
+### Four controls passed and the filter was still wrong
+
+A sweep for `select_for_update()` outside a transaction - `TransactionManagementError`, a hard 500 -
+carrying every check this audit had accumulated: a positive control that fired, a negative control
+that stayed silent, a population of 34 real calls, and the knowledge that `ATOMIC_REQUESTS` is
+unset. One hit: `child_pin_boundaries.py:50`, reached from Pin's `post_save`/`post_delete` signals.
+
+The chain looked serious, and each link checked out. `select_for_update` outside a transaction does
+raise - verified directly against the database, not assumed. `Pin._meta.parents` is empty, so
+`Model.save_base` uses `mark_for_rollback_on_error` rather than opening a transaction. Django's
+ordinary `TestCase` wraps every test in a transaction, so 10,758 passing tests could not have caught
+it either way. A textbook invisible bug.
+
+It is not a bug. `refit_child_pin_boundary` is decorated `@transaction.atomic`. A
+`TransactionTestCase` - written to prove the failure before fixing it - passed both cases, which is
+the only reason the reasoning got checked at all.
+
+The cause is worth more than the non-finding: **the filter had a dead code path I wrote myself.** It
+set an `_atomic_dec` flag on functions decorated with `@transaction.atomic`, and then never
+consulted it - detection looked only at `with`-block nesting. Both synthetic controls used `with`
+blocks, so the dead branch was never exercised, and all four checks passed over a filter that could
+not see the single most common way this codebase opens a transaction.
+
+So the discipline needs one more clause, and it is the hardest: **controls must cover every idiom
+the real code uses, not the ones the filter's author thought to write.** A positive and a negative
+control prove the logic you tested. They say nothing about the branch you forgot to wire up. The
+only thing that caught this was refusing to fix on reasoning alone and writing the failing test
+first - which then failed to fail.
+
+The `TransactionTestCase` is kept: it pins the guarantee that the decorator provides, and fails if
+anyone removes it.
+
+### Duplicate-row risk: one traced to a deliberate design, 22 left as candidates
+
+A sweep for querysets filtering across a multi-valued relation without `.distinct()`, which
+silently returns a row per match. This one asked Django for the relation names rather than guessing
+them - 260 multi-valued names straight from `_meta`, so the "which fields are multi-valued" half
+cannot be wrong. Positive and negative controls both behaved. 23 candidates after discounting the
+obvious non-issues (`exclude()` across a multi-valued relation compiles to a subquery and cannot
+duplicate; `.exists()`/`.count()`/`.first()` collapse anyway).
+
+**One traced end to end, and it is correct by design.** `pin/queryset.apply_label_groups` builds
+`filter(labels__id__in=...)` chains with no `distinct()`, which duplicates a pin matching several
+labels - but its only caller is `filter_by_criteria`, which ends `return qs.distinct()` and
+documents it ("Filtered QuerySet (distinct)"). The `distinct()` is applied once at the public entry
+point rather than by every intermediate method, which is the right shape: intermediate querysets
+stay composable, and the collapse happens where the result is consumed.
+
+**The other 22, traced in the following chunk**, resolve into four groups:
+
+- **7 already collapse.** Five sit inside `filter_by_criteria` itself (which ends `.distinct()`),
+  and `answer_stalled`/`vote_stalled` each call it directly.
+- **2 cannot duplicate at all**, and this is worth knowing before anyone "fixes" them:
+  `__isnull=True` across a multi-valued relation is a LEFT JOIN testing for the *absence* of
+  related rows, so there is nothing to multiply by. `markup.unattached` and `reviews__isnull=True`
+  are safe by construction, not by a `distinct()` somewhere.
+- **3 carried a latent duplicate**, now fixed: `rated`, `rated_over` and `rated_under` return a pin
+  once per matching review. They have **only test callers**, so nothing in production was wrong -
+  but a queryset method whose contract is "pins rated over N" silently returning duplicates is a
+  trap laid for the next caller, and `.distinct()` costs nothing here.
+- **2 are dead**: `Pin.by_category` and `Wiki.by_category` have no callers anywhere - not in
+  Python, templates or tests. Filed rather than deleted, since removing public queryset API is a
+  judgement about intent.
+
+The remaining sites are inside `filter_by_custom_fields` and `home_dashboard_context`, both single
+-caller and both feeding a `distinct()` pipeline. They are listed as *candidates* in
+`docs/PROBLEMS.md` - the pattern above suggests most will resolve the same way, and "suggests" is
+doing real work in that sentence. Anyone picking this up should trace rather than assume, because
+the failure mode is silent: a duplicated pin in a list or an inflated count, with no error anywhere.
+
+### A magic string shadowing its own enum
+
+Following the most interesting reading of the 70 no-production-caller queryset methods - that some
+are logic which got reimplemented inline elsewhere, leaving the same rule in two places.
+`VisitQuerySet.from_takeout` is that case, with a twist.
+
+    def from_takeout(self):
+        return self.filter(source="history")
+
+Every other site in the codebase writes `source=VisitSource.HISTORY`. This one hardcodes the
+literal, so the queryset method and the twenty-odd inline filters agree only by coincidence. The
+value is currently `"history"`, so nothing is broken today; change `VisitSource.HISTORY` and this
+method starts returning an empty queryset while every caller of the enum keeps working. Silent, and
+exactly the failure the enum exists to prevent. `manual` had the same shape.
+
+Both now use the enum, imported lazily inside the method because `model.py` imports
+`VisitManager` from `queryset.py` - the dependency runs that way, so a module-level import would be
+circular. That is the codebase's established pattern for this and the reason `CLAUDE.md` lists
+`TYPE_CHECKING` guards among its common patterns.
+
+Worth noting what the sweep actually bought here. `from_takeout` was flagged as "test callers only",
+which is true and uninteresting on its own. Reading *why* it had no production callers is what
+surfaced the literal - the inline filters are not calling it because they were written
+independently, and one of them was written by me in chunk 209 while optimising the Takeout
+importer. A count of unused methods is a prompt to go and read, not a finding.
+
+**The obvious generalisation does not work, and is recorded rather than committed.** Sweeping for
+every bare string literal matching a `TextChoices` value produced 37 hits and is unusable: the map
+is keyed by *value* across all 214 enum members, so `kind="user"` on a `Label` resolves to
+`VisitSource.USER`, and `status="active"` on a group chat resolves to
+`BillingSubscriptionStatus.ACTIVE`. Same failure as the earlier field-name collision
+(`description`/`icon` matching whichever model declared them first): a value alone does not say
+which enum owns it. Doing this properly needs per-field resolution -
+`Model._meta.get_field(name).choices` - to ask which enum *that field* actually uses. Left undone
+rather than reported as 37 findings.
+
+### A query in `__str__`, found while doing something else
+
+Noticed while tracing the label-kind literals rather than by any sweep. `Pin.__str__` ran
+`self.labels.filter(kind="status")` and read `effective_name`, which falls through to
+`self.location.display_name` - up to two queries every time a pin was rendered as a string. It also
+returned a five-line f-string.
+
+Both halves matter for different reasons. The query is invisible to profiling in the usual sense:
+it never appears as a slow query, only as a lot of fast ones, once per row in an admin list and
+once per log line or error page mentioning a pin. `CLAUDE.md` already forbids `save()` in `__str__`
+for the same family of reasons; a read is easier to miss because nothing is written. The multi-line
+return is a smaller thing that shows up in exactly the places `__str__` exists to serve - a select
+dropdown renders it as a paragraph, and line-oriented log tooling splits it into five records.
+
+Now `self.name or f"Pin {self.pk}"`. Checked first that nothing asserts the old format and no
+template renders `{{ pin }}`, so the change is contained. Four tests, of which `assertNumQueries(0)`
+is the one that will actually catch a regression - the others document intent, that one enforces it.
+
+Checked whether this was systemic: **zero** other models query in `__str__`. A local lapse, not a
+convention, so no sweep was warranted.
+
+### Halving the query cost of the map's pin payload
+
+The last filed candidate, converted into a measurement rather than left as a hypothesis.
+`Pin.to_json()` builds its payload with `self.labels.filter(kind=...)` twice. `.filter()` on a
+prefetched many-to-many constructs a fresh queryset and **ignores the prefetch cache**, so a caller
+doing `prefetch_related("labels")` still paid per pin.
+
+Measured with `CaptureQueriesContext` over 1 and 5 pins:
+
+| | 1 pin | 5 pins | per pin |
+|---|---|---|---|
+| before | 6 | 22 | **4** |
+| after | 4 | 12 | **2** |
+
+`list(self.labels.all())` once, filtered in Python. `.all()` reads the cache when one exists and
+costs a single query when it does not, so it is strictly better in both cases - there is no
+trade-off to weigh here, which is unusual enough to be worth saying.
+
+Two queries per pin remain and are **not** labels; the debug log shows a rating fetch among them.
+The test therefore asserts `<= 2 per pin` rather than demanding zero: it fails if anyone
+reintroduces `.filter()` here, and keeps passing when the remainder is addressed. A test asserting
+an ideal nobody has reached yet is a test the next person deletes.
+
+Two things about how this was found are worth keeping. It came from **reading `to_json()` while
+placing an import** - the fourth late finding to arrive that way, after the magic string, the
+bulk-payload overflow and the `__str__` query. And the first measurement attempt failed on my own
+fixture (`Location` is `unique_together(latitude, longitude)`, and the second batch restarted its
+loop at zero), producing an `IntegrityError` that read exactly like a bug in the code under test.
+Reporting that would have manufactured a defect out of a test bug - the mirror image of chunk 248,
+where a real-looking chain turned out to be safe. Both come from trusting a result before
+understanding why it happened.
+
+### 250 queries to strip 5 labels from 50 pins (fixed)
+
+Pointing the prefetch work at `external_api/`, where the real endpoints live - the previous chunk
+established that the `models/*/viewset.py` layer this audit had been scanning is nearly unused.
+
+The layer is generally careful: 48 `select_related` and 15 `prefetch_related` calls. Of seven
+list-building loops, six use `.all()` - the form that reads a prefetch cache. The seventh,
+`views_pin_bulk.py:239`, was:
+
+    for pin in pins:
+        present = [label for label in to_remove if pin.labels.filter(pk=label.pk).exists()]
+
+`.filter().exists()` inside a comprehension, inside a loop over pins: **len(pins) x len(to_remove)**
+queries. Removing 5 labels from 50 pins cost 250. Both verbs also bypass any prefetch the caller
+supplied, so no upstream optimisation could rescue it.
+
+Now one set of attached ids per pin, intersected in Python - `len(pins)` queries, or none when
+labels are prefetched. Semantics are identical; `present` contains exactly the same labels in the
+same order.
+
+This is the third distinct instance of the same root cause in one day (`to_json`'s `.filter()`,
+`rating`'s `.latest()`, and now `.exists()`), which is why the rule is worth stating as a rule
+rather than as three fixes: **only `.all()` reads a `prefetch_related` cache.** Every other related-
+manager verb issues SQL, and none of them look wrong at a glance.
+
+### Why the write-side N+1 class is mostly not fixable here
+
+Every N+1 sweep in this audit targeted *reads* - `.filter()`, `.count()`, `.exists()`, `.latest()`
+on a related manager. A loop of `.update()` calls matches none of them, so the write side stayed
+invisible until `LabelReorderView.post` turned up while reading an unrelated handler. That is a
+genuine gap in how the problem was framed, not a gap in the scans.
+
+Sweeping for it (controllers, writes inside loops, with a control): **19 sites, and only one
+`.update()`** - the reorder handler already filed. The rest are `.save()` (9), `.delete()` (3),
+`.create()` (3), `.get_or_create()` (2), `.update_or_create()` (1).
+
+The distribution is the finding. In most codebases those `.save()` loops would be `bulk_update`
+candidates; here they largely are not, because **this application depends on `post_save` signals
+for correctness**, and every bulk operation skips them. The audit has now recorded three separate
+instances of that trap:
+
+- `labels/signals.py`'s ~46 seeding `get_or_create` calls per signup look like an obvious
+  `bulk_create` - `Label` has `post_save` receivers syncing a taxonomy.
+- The Takeout importer's per-row `PinVisit.objects.create()` looks like an obvious `bulk_create` -
+  `achievements/signals.py` subscribes to `PinVisit` under `TRIGGER_VISIT`.
+- `LabelReorderView`'s per-label `.update()` wants `bulk_update` - which also skips `post_save`,
+  so an order-only change needs checking against `sync_redata_taxonomy_on_save` first.
+
+So the write-side N+1 class is real but small, and each instance needs the signal question answered
+before it can be collapsed. That is a design consequence worth stating plainly: signal-driven
+correctness buys cohesion at the cost of making bulk operations unavailable, and anyone optimising
+writes here will meet it every time.
+
+---
+
+## 3. Checked and clean
+
+Recorded so this isn't repeated. Each was actively probed, not skimmed.
+
+- **`CeleryTaskStatusView.get`** (untested per the coverage run, and clean). Probed for the obvious
+  IDOR - can one user poll another's task by id? - and the docstring had already answered it:
+  Celery's result backend has no per-task owner field, so a bare `LoginRequiredMixin` *would* allow
+  cross-account polling; a per-task ownership check is impossible without a schema change; so the
+  view is gated behind the same `dashboard.view_site_admin` permission that its only producer
+  (`BackupStartView`) requires to enqueue in the first place. The reasoning names the hole, the
+  rejected alternative, and why the chosen mitigation is equivalent.
+
+  Several of this audit's "checked and clean" entries came out that way because a docstring
+  encoded security reasoning that no amount of reading the code alone would recover - the WebSocket
+  consumers' scope-before-lookup ordering, the ghost viewer's explicit `render()` inside the atomic
+  block, the safety-chat token route's withheld location group, and this.
+
+  **A heuristic was proposed from that and does not survive testing.** The claim was: "where such
+  reasoning is absent is a better risk signal than the code's shape." Measuring explanatory lines
+  (comments + docstring) against code lines for the handlers this audit examined gives the
+  *opposite* of the prediction - 0.18 for the four where defects were found, 0.07 for the five that
+  probed clean.
+
+  The measurement is also invalid, for two reasons worth naming because both are easy to repeat:
+  it counts comments **as they are now**, and comments were *added to the defect handlers while
+  fixing them* - so the "defect" group's density is partly this audit's own writing. And it counts
+  only *function*-level docstrings, so `CeleryTaskStatusView` - the very example that prompted the
+  idea, whose reasoning lives in a **class** docstring - scored zero.
+
+  So: an appealing heuristic, unsupported by the data, measured with an instrument that was wrong
+  in two ways. The underlying observation stands (those docstrings are genuinely load-bearing and
+  saved real time); the predictive claim built on it does not, and is withdrawn rather than left
+  standing because it sounded right.
+
+- **Interaction risk of the nine N+1 fixes** (2026-08-14). Checked, because two of them change what
+  is *available* on an object rather than only what it costs: `Prefetch(..., to_attr="own_pins")`
+  puts the filtered set on a new attribute, and dropping `prefetch_related("images")` in favour of
+  `annotate(image_count=...)` removes a cache other code might have relied on. Both are
+  self-contained - `label.own_pins` and `message.image_count` are the only readers of those
+  relations in `export.py`, and the querysets are local variables inside their own functions, so
+  nothing outside consumes them. The remaining seven fixes change how a relation is fetched, not
+  what it returns. Worth stating because performance changes are the least test-covered category
+  in this audit: a correctness fix ships with a regression test that fails if reverted, while a
+  prefetch change is invisible to every test except the one query-count assertion added for
+  `to_json`.
+
+- **Other viewsets missing a prefetch** (2026-08-14). Zero - and the number is close to
+  meaningless, which is the reason for recording it. The scan covers `models/*/viewset.py`
+  paired with its `serializer.py`, and that population is **2**: one serializer has related
+  fields (`Pin`'s, fixed the same day) and one viewset uses `prefetch_related` (the same one).
+  The DRF viewset layer under `models/` is nearly unused; the real API surface is
+  `dashboard/external_api/`, which has its own view classes and was **not** covered here. A
+  reader should not take this entry as evidence that the API has no N+1 problems - it is evidence
+  that this particular scan looked almost nowhere. The runtime instrument
+  (`test_pin_to_json_prefetch.py`: capture queries over 1 and N objects, assert the per-object
+  delta) is the one to point at `external_api/` views, and that has not been done.
+
+- **Documentation cross-references** (2026-08-14). Every `docs/*.md` path this report actually
+  links to resolves - `FEATURES.md`, `NOTES.md`, `PROBLEMS.md`, `designs/plugins.md`,
+  `reports/2026-08-14-view-coverage.md`, `notes/mobile_app_requirements.md`. A first pass reported
+  21 of 38 as broken, which was two instrument failures stacked: the scanner could not distinguish
+  a *live link* from a path *quoted as an example of a broken link* (this report contains a section
+  listing exactly those), and the attribution check that was meant to separate "mine" from
+  "pre-existing" ran `git show main:docs/PROBLEMS.md` against a file that does not exist on `main` -
+  so the baseline was empty and every path was attributed to this session by default. The second
+  failure is the more instructive: an empty baseline does not error, it just silently makes
+  everything look new.
+
+- **Side effects inside transactions** (2026-08-14). **Zero** across 760 files in `controllers/`,
+  `services/` and `models/`: no Celery enqueue, email send, channel broadcast or cache write sits
+  inside a `transaction.atomic()` block where a rollback would leave it already done. This is the
+  most thoroughly established negative result in the audit, and the four checks behind it are the
+  point. **Detection**: a positive control (an enqueue inside `atomic()`) fires. **Precision**: a
+  negative control (the same enqueue wrapped in `transaction.on_commit`) stays silent - the check
+  the previous chunk's filter lacked. **Population**: the scan encounters **70** real `atomic()`
+  blocks, so the silence is not vacuous. **Convention**: **33** `on_commit()` calls exist, so the
+  correct pattern is not merely absent-by-accident - it is known and applied. A "zero" backed by
+  only the first of those four is worth very little, which is roughly the story of five earlier
+  sweeps in this audit.
+
+- **Production frontend build, and bundle sizes** (2026-08-14). `bun run build` succeeds with every
+  change from this audit - all entry points bundle, including `core.js` (which carries the
+  `safeColor` work) and `organize.js`. Worth noting because the session had verified `tsc --noEmit`
+  and the bun tests repeatedly but never a real build until now. Two bundles are large:
+  `e2ee.js` at **1.59 MB** and `article-wysiwyg.js` at **1.20 MB**. `e2ee.js` appears in
+  `themes/base.html`, which looked app-wide and is not - it sits behind
+  `{% if e2ee_needs_oauth_enroll %}`, so it loads only for a passwordless account that has not yet
+  enrolled message-encryption keys, plus the auth pages that need key derivation. Appropriate
+  placement; the *size* is still worth a look (both are almost certainly a vendored library
+  bundled whole), but nothing here loads megabytes onto pages that do not need them.
+- **Unguarded index access** (2026-08-14). One candidate,
+  `request.META.get("HTTP_HOST", "").split(":")[0]`, and it is safe: `str.split()` always returns
+  at least one element, so `[0]` cannot raise. No real `IndexError` surface in the controllers.
+
+- **JSON body parsing** (2026-08-14). Zero unguarded `json.loads(request.body)` calls in any
+  controller - every one sits inside a handler catching `JSONDecodeError`/`ValueError`, so
+  malformed JSON produces a 400 rather than a 500. Worth recording both as a clean result and
+  because this sweep was the first written *after* the chunk-242 lesson: it models `try/except`
+  **and** `with contextlib.suppress(...)`, and evaluates protection per call site rather than per
+  function. Had it been written the way the numeric sweep was, it would have produced the same
+  mixture of false negatives and false positives.
+
+- **`CalendarImportView.post`** (30 statements, never executed - 8th on the coverage list). Clean.
+  The interesting surface is `invite_profile_ids`, which arrives as raw profile ids from the
+  client and results in trip invitations - the shape an IDOR usually takes. It is scoped:
+  `invite_members` intersects the submitted ids with `get_connections(inviter)` and silently drops
+  anything that is not an accepted friend, then caps the result at `max_trip_members`. The import
+  itself re-fetches each event from Google rather than trusting submitted content ("the client
+  submits ids, never event content"), and auth-expiry and gateway failure are handled as distinct
+  502s with different messages.
+
+- **`ConsensusPhotoUploadView.post`** (31 statements, never executed - 7th on the coverage list).
+  Clean, and it retroactively verifies an earlier change in this audit. The handler checks
+  participation *and* `is_joined` before anything else, scopes the round to the session, validates
+  the upload, dedupes by checksum with a 409, and takes the quota check inside
+  `per_profile_upload_lock` rather than outside it. The malware scan runs synchronously here -
+  `image_upload_error`'s `skip_malware_scan` defaults to `False`. That last point matters because
+  chunk 211 *widened* the cases in which `malware_error_for_upload` raises: at the time only its
+  three direct callers were checked, and this is an indirect one. Traced now -
+  `image_upload_error` catches `MalwareScanUnavailableError` and returns a 503 "try again shortly",
+  so an unscannable upload on this route is refused with a readable message rather than admitted.
+  The change propagates correctly.
+
+- **`AlbumEditView.post`** (31 statements, never executed - 6th entry on the coverage list).
+  Probed and clean, which is worth recording because it calibrates that list: untested does not
+  mean broken. Authorization is correct on both routes and the split is documented - pin-scoped
+  requires ownership (`profile__user=request.user`), wiki-scoped goes through
+  `resolve_visible_wiki`, matching the shared wiki-editing model. `cover_image_id` is deliberately
+  re-scoped through the album's own contents "so a foreign image id can't be pinned as a cover".
+  Each field is applied only when present, so a partial form cannot blank the rest, and both name
+  and description are length-checked. The one nit: an unrecognised `kind` is silently dropped
+  rather than refused, unlike the name/description paths which return a 400 - not a defect, but
+  inconsistent with its neighbours.
+
+- **`docs/FEATURES.md` accuracy** (2026-08-14). Checked because `CLAUDE.md` instructs every agent
+  to consult it *before* assuming a feature is missing, so staleness here causes duplicated work
+  rather than mere confusion. Cross-referenced all 79 controllers against it. The naive
+  name-match said 23 were undocumented; checking each against the vocabulary the document actually
+  uses (`two_factor` -> "TOTP", `webauthn` -> "passkeys", `pin_restructure` -> "detail pins", and
+  so on) reduced that to **two**: `/health/` and `/thanks/`, both now added. The document is
+  otherwise accurate and current - a genuinely well-maintained inventory, and worth trusting.
+
+- **Dead weight: templates, SCSS, TypeScript, routes** (2026-08-14). Essentially none, and the
+  negative result is worth as much as the scans, because every one of them over-reported and the
+  reasons generalise. **Templates**: 7 of 418 are unreferenced by name, and all 7 are framework
+  conventions Django or django-oauth-toolkit resolve internally (`403.html`, the five
+  `registration/` password-reset templates, `oauth2_provider/authorize.html`) - deleting any of
+  them silently breaks a flow. **SCSS**: 71 files, 0 unimported. **TypeScript**: 6 of 65 look
+  unimported and none are - `testing/dom-setup.ts` is a `bunfig.toml` preload,
+  `entries-classic/*.ts` are built by a directory glob in `bin/build-frontend.ts`, `globals.d.ts`
+  is ambient types, and `tools/generate-e2ee-fixture.ts` is run directly. **Routes**: 61 of 753
+  named routes are never referenced outside `urls.py`; 30 are assembled at runtime by
+  `reverse(f"{prefix}.{suffix}")` (15 call sites, suffixes `add`/`delete`/`detail`/`edit`/
+  `remove`/`reorder`/`upload`), 34 are in `external_api/urls.py` where the callers are API clients
+  rather than this codebase, and of the 10 left over one is Django's own
+  `password_reset_complete`. The residual nine are listed in `docs/PROBLEMS.md` as *candidates for
+  review*, not as dead code - this codebase reaches things dynamically often enough that "no
+  static reference" is weak evidence on its own.
+
+- **Injection, deserialization, and time correctness** (whole-tree static sweeps, 2026-08-14).
+  All negative, recorded so the sweeps are not repeated. **Raw SQL**: four sites outside
+  tests/migrations, every one interpolating *identifiers* while parameterizing values. The
+  `# nosec` comments claim the identifiers come from Django's model registry and that was verified
+  rather than taken at face value - `immich/model.py` reads `_meta.db_table` and
+  `_meta.get_field("profile").column` inline, and `rotate_field_encryption` receives them as
+  arguments, so the call chain was followed to line 58 where they are built from `meta.db_table`
+  / `pk_field.column` / `field.column` while iterating `EncryptedTextField` instances. No user
+  input reaches an identifier. **Deserialization**: zero `eval`, `exec`, `pickle.loads`,
+  `yaml.load`, or `marshal`; Celery is JSON-only across task, result and accept-content. Django's
+  built-in `RedisCache` does pickle its values, which matters only if the cache is reachable - and
+  the compose file has exactly one host port binding in the whole stack (nginx), so Postgres,
+  Valkey and ClamAV are internal-only. **Time**: `USE_TZ = True` with zero naive `datetime.now()`
+  / `utcnow()` / `today()` calls outside tests and migrations. **Mutable default arguments**: zero
+  (ruff's B006 is enforcing it). **`assert` outside tests**: zero, so nothing validates via a
+  statement that `python -O` would strip.
+
+- **Middleware** (`dashboard/middleware.py` - `ProfilePreviewMiddleware`, the stack's only custom
+  entry). Impersonation code is where privilege escalation lives, so this was probed for it and
+  does not have it. The ghost viewer always has *less* access than the owner, never more: it is a
+  freshly created throwaway user standing in a chosen relationship, so the worst a spoofed
+  `Referer` (the one client-controlled input, used to bring HTMX fragments into preview scope) can
+  achieve is running one of the owner's own GET endpoints with fewer privileges than they already
+  have, inside a transaction that is force-rolled-back. Writes are refused outright - non-GET in
+  scope returns 403. Identity is re-checked against `state["owner_id"]` on every request rather
+  than trusted from the session alone, so a stale preview state cannot outlive the session it
+  belongs to. `TemplateResponse.render()` is called explicitly inside the atomic block, because a
+  lazily-rendered response would evaluate its querysets after the ghost's rows were gone.
+  Side-effect escape from the rollback was the specific thing checked, since cache writes, emails
+  and Celery enqueues are not transactional: the only non-trivial receiver on the path is
+  `promote_first_user_if_needed`, which returns `False` as soon as any other user exists - always
+  true during a preview, since the owner is one - and everything else the path touches is ordinary
+  DB rows. Worth knowing for anyone reasoning about this: Postgres sequences are non-transactional,
+  so the ghost's `id` is consumed and never reissued, and a cache entry accidentally keyed on it
+  can never later collide with a real profile.
+
+- **WebSocket consumers** (`dashboard/consumers.py`, 1332 lines; `routing.py`; the ASGI stack).
+  Probed for the failure modes this layer usually has, and it has none of them. Origin checking is
+  on (`AllowedHostsOriginValidator` wraps the whole websocket router). The seven routes split into
+  three authorization models and each is enforced: `_ParticipantSessionConsumer` confirms
+  participation in the specific session before joining its group, so the `<int:session_id>` routes
+  are not an IDOR; `SafetyCheckinChatConsumer`'s token route treats the magic-link token itself as
+  the authorization and deliberately withholds the live-location group from it, which the session
+  route (owner or accepted partner) joins. API-key scope is checked *before* the participant
+  lookup, with the reason written down - a refused connection must not be able to distinguish a
+  real session from an invented one by how long the refusal takes. Group membership added before a
+  failing `accept()` is unwound explicitly, because Channels only reliably fires `disconnect()` for
+  connections that reached `accept()`. Permission is re-validated on a timer rather than only at
+  connect, specifically so a dropped `*_access_revoked` broadcast cannot leave a revoked contact's
+  chat open indefinitely. Three of the four `receive()` methods parse JSON inside a
+  `JSONDecodeError`/`TypeError` guard, and the fourth takes no JSON; binary frames are accepted and
+  ignored rather than raising. Write-scoped operations require a `*_WRITE` scope separately from
+  the read scope that permitted the connection. The only gap found is volume, not access - no rate
+  limit or frame-size cap - filed in `docs/PROBLEMS.md`.
+
+- **Authorization** *(inherited claim - see the note below; not re-verified in the 2026-08-13
+  session)*: 167 owner-scoped routes × GET/POST/DELETE/anonymous, plus nested-child
+  smuggling — no leaks beyond the cover-photo bug above. Group chats route every view through one
+  `_get_group()` → `active_memberships()` helper; group history is windowed per membership stint so
+  a re-added member can't back-read.
+- **WebSocket consumers** (7 total, enumerated by AST rather than by grep): every one authenticates
+  in `connect()` and every one revalidates its credential on a timer — 4 via
+  `CredentialScopeMixin.start_credential_revalidation`, `SafetyCheckinChatConsumer` via its own loop
+  (deliberately, since it must also re-check partner status; the two would otherwise be duplicate
+  timers), and the 3 game consumers by inheritance from `_ParticipantSessionConsumer`. This pairing
+  matters because a socket authenticates once at connect: without it, revoking a leaked key blocks
+  the next HTTP call while the open socket keeps streaming. `SafetyCheckinChatConsumer` looked like
+  an outlier (no auth markers in `connect()`) but delegates to `_resolve()`, and its docstring's
+  claim of a per-message re-check is real — it lives in `_create_message`, not `receive`.
+- **XSS surface**: all 12 `|safe` template sites plus the single `mark_safe` traced to origin.
+  *(Re-verified 2026-08-13: the first pass filtered 4 of the 12 out by pattern as "obviously safe"
+  rather than tracing them, which is the same silent-sample error found elsewhere in this report. All
+  four check out - three are JSON blobs built by `safe_json_for_script` (`filter_labels_json`,
+  `tags_data_json`, `common_pins_json`), and the fourth, `button.spec.extra_html`, has exactly one
+  assignment in the codebase: a hardcoded literal in `templatetags/map_components.py`. No plugin
+  or service sets it, so despite looking like a plugin-extensibility hook it carries no external
+  data.)* User
+  -authored HTML (article bodies, visit notes) goes through `nh3.clean` against an explicit tag and
+  attribute allowlist; Wikipedia extracts through the same, with the plain-text fallback branch
+  `escape()`d precisely because it is rendered with `|safe` downstream; chart payloads through
+  `safe_json_for_script`, which translates `<`, `>`, `&` so a label cannot close the enclosing
+  `<script>`; the lone `mark_safe` wraps `urlize(..., autoescape=True)`. No gaps.
+- **Bulk writes vs `save()`-derived fields**: 12 models derive or sanitize their own fields inside
+  `save()` (slugs, `sanitize_name`, `normalized_email`, `Place.domain_root_id`,
+  `TriviaQuestion.answer_normalized`). Cross-referenced against all 19 `bulk_create`/`bulk_update`
+  sites and all 8 `queryset.update()` calls writing one of those fields: no bypass. The
+  slug-bearing models are never bulk-created; `Label.bulk_update` touches only icon/color/
+  description/order *and* explicitly re-invalidates the pin cache that the skipped `post_save`
+  would have; `tasks.py`'s `Wiki.name` compare-and-set calls `sanitize_name` itself with a comment
+  naming the bypass. The codebase had already internalised this class.
+- **Signal hygiene**: all 50 `@receiver`s and every `.connect()` pass `dispatch_uid`; zero `save()`
+  calls inside a `pre_save`/`post_save` handler or `__str__`. Both are stated CLAUDE.md rules and
+  both hold.
+- **The `add` template-filter trap** (`"prefix-"|add:obj.id` silently yields `''`): all 38 `|add:`
+  uses checked. Every string concatenation takes a `|stringformat`-produced operand; the rest are
+  int+int arithmetic or list+list. Several sites carry a comment citing the failure.
+- **Work inside transactions**: zero external/network calls inside any `transaction.atomic()` block,
+  and zero Celery enqueues inside one without `on_commit` — checked directly, via the
+  `@transaction.atomic` decorator, and one level indirect (helpers that enqueue, called from inside
+  someone else's atomic block). `ATOMIC_REQUESTS` is off, so views are not implicitly wrapped. The
+  indirect pass initially reported 69 hits; all were false positives from matching bare method
+  names, where ORM `.objects.create()`/`.get()` collided with service functions named `create`/`get`.
+  Re-run resolving calls through each module's imports: zero.
+- **`LabelledModel`** (added this audit): re-derived the query cost rather than trusting the
+  docstring. Unprefetched, three accessors cost three queries - the same as the three filtered
+  queries they replaced; prefetched, zero. The claim that the no-prefetch case is unchanged holds.
+- **Celery beat and queue routing** (verified at runtime, not by reading config): all **24** beat
+  entries name a task that is actually registered (checked against `app.tasks` after
+  `import_default_modules()`). Routing is sound end to end: `task_default_queue` is `celery` with no
+  `task_routes` or `task_queues` overrides; `celery-worker` runs without `-Q` so it consumes
+  `celery`; `celery-worker-panels` consumes `panel_fetch`; and the only two queue values any task
+  requests are `panel_fetch` (the `PanelSource` default) and `celery` (two explicit overrides, for
+  CPU-heavy sources that must not occupy the 20-thread panel pool). Nothing is dispatched to a queue
+  no worker consumes - the failure mode where a task simply sits in the broker forever, without
+  erroring anywhere. The beat-lock TTL invariant already carries a completeness arm plus a
+  non-vacuity guard, so it maintains itself.
+- **SQL injection surface**: every raw-SQL entry point enumerated by AST - 8 `cursor.execute`, 8
+  `RunSQL`, and zero `.raw()`/`.extra()`/`RawSQL`. All 8 `RunSQL` are static literals. Seven
+  `cursor.execute` calls interpolate **identifiers** (table/column names) while parameterising every
+  *value* with `%s`; each identifier traces to Django's model registry (`apps.get_models()` ->
+  `_meta.db_table`/`field.column`) or to hardcoded literals passed by the caller, never to request
+  data. Each already carries a `# noqa: S608 # nosec B608` naming that reasoning.
+- **Upload path traversal**: verified empirically at both layers rather than from Django internals.
+  All but one `upload_to` is a static prefix; the callable (`pin_image_upload_path`) interpolates the
+  uploaded filename's stem. `UploadedFile.name` basename-strips before the callable ever sees it
+  (`../../etc/passwd` -> `passwd`, `a/b/c.jpg` -> `c.jpg`), and `validate_file_name` independently
+  raises `SuspiciousFileOperation` on any surviving `..`. URL-encoded traversal (`..%2f..%2f`) is
+  neutralised by `get_valid_name`. Calling `generate_filename` directly *looks* like it preserves
+  subdirectories - that path just is not reachable from an upload, which is why the first layer had
+  to be checked rather than assumed.
+- **Timezone handling** (read-only sweep, counted before analysed): zero `datetime.now()` and zero
+  `utcnow()` outside tests; all four `datetime.fromtimestamp()` calls pass `tz=UTC`; the nine
+  `.replace(tzinfo=...)` sites split into deliberate tz-stripping for naive comparison (trips, admin
+  chart keys), correct attachment of a *parsed* offset (`my_activity.py`), and two form-input paths.
+  Of those two, `safety.py` guards on `tzinfo is None` and `visits.py` does not - safe only because
+  its ISO string is built from separate date/time inputs that cannot carry an offset. Folded into the
+  existing `date.today()` entry in `PROBLEMS.md`, since all of it rests on the same single
+  dependency: `TIME_ZONE = "UTC"` with no `timezone.activate()` anywhere.
+- **Email surface** (header injection and spam relay): no raw SMTP sending anywhere - all 19
+  `smtplib` references are `except (smtplib.SMTPException, OSError)` around Django's backend, which
+  is easy to misread as 19 hand-rolled senders. Every send goes through `EmailMultiAlternatives` or
+  `send_mail`, so Django's `forbid_multi_line_headers` blocks header injection by construction.
+  Recipients classified by source: admin-configured (`notify_admin_email`), the user's own verified
+  address, or arbitrary user-supplied. **Corrected 2026-08-13:** this originally said "only three
+  paths take arbitrary addresses, and each is bounded", which was wrong - the pass read three of the
+  nine recipient expressions and reported on all of them. A fourth path exists and is *unbounded*:
+  secondary-email verification (`controllers/userprofile.py`) mails any address a user types, with no
+  rate limit, no resend cooldown and no cap on addresses per profile. Filed separately. The three
+  originally examined are bounded - friend invites and visit invites both call
+  `email_rate_limit_error` + `has_sent_join_email` + `record_email_sent` (per-profile hourly/daily/
+  monthly caps, and at most one join email per address ever), and safety-contact alerts are capped
+  per check-in by `max_safety_checkin_contacts`, carry a `SafetyContactOptOut` check on the send
+  path, and fire on a schedule rather than on demand.
+- **Django's own deployment audit** (`manage.py check --deploy`), run under *production* settings
+  rather than the container's defaults: exactly **one** security warning, `W021`
+  (`SECURE_HSTS_PRELOAD` not set), and the settings comment already explains that as deliberate -
+  preload submission is the domain owner's decision and is painful to reverse on a self-hosted
+  project. Everything else is set: `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`,
+  `CSRF_COOKIE_SECURE`, `SECURE_HSTS_SECONDS` (a year, with subdomains), `SECURE_PROXY_SSL_HEADER`,
+  `X_FRAME_OPTIONS`. Worth recording *how* this was run: the naive invocation reports three security
+  warnings (no HSTS, no SSL redirect, `DEBUG=True`), all of which are artifacts of `TESTING` being
+  true in the test container - the settings gate each of them on `not TESTING`. Reporting that run
+  would have produced three false findings about production configuration. The remaining 237 issues
+  are drf-spectacular schema-naming warnings, filed separately in `PROBLEMS.md`.
+- **Dead templates and bundles**: all **419** templates checked for any reference by full path or
+  basename across every `.py` and `.html` in the package; all 10 TypeScript entry bundles checked
+  against templates, Python and `package.json`. One genuinely dead file found and removed
+  (`partials/trips/_plan_hero_suffix.html` - 1 byte, committed in `3f12e875`, and the string
+  `hero_suffix` appears **zero** times anywhere, so nothing passes it to `_page_hero.html`'s
+  `title_suffix_template` variable). Zero unused bundles.
+
+  The first run of this reported **9** dead templates, and acting on it would have deleted live
+  files. Two separate flaws: it scanned only `dashboard/**/*.py`, missing `UrbanLens/urls.py` which
+  renders `errors/500.html`; and it had no notion of templates Django resolves *by convention*
+  (`403.html`, and the six `registration/*` password-reset templates that `PasswordResetView` and
+  friends look up by default name), which cannot appear in project source at all. Both flaws
+  produce confident, deletable-looking false positives - and this is the one sweep in this audit
+  whose output would have been acted on destructively.
+- **Template and route cross-references** (the same "does the tree contain what it references?"
+  question, applied beyond the commit): all `{% url %}` names in all 418 templates resolve - 1001
+  registered route names, **zero** unresolvable, checked against the live resolver including
+  namespaced entries rather than by grepping `urls.py`. All literal `{% include %}`/`{% extends %}`
+  targets resolve too; 4 use a variable target and cannot be checked statically, which is recorded
+  rather than guessed at. Neither check was added to the pre-commit hook: both found nothing, and
+  the import/template guard that *was* added exists because a real failure motivated it. A hook that
+  has never caught anything is maintenance cost and false-positive risk with no evidence behind it.
+- **`{% static %}` references**: every literal reference in all 418 templates resolves against the
+  configured `STATICFILES_DIRS` - zero missing, one dynamic argument that cannot be checked
+  statically. This is worth more than a 404 check: production uses
+  `whitenoise.CompressedManifestStaticFilesStorage`, so a missing entry is a **render-time
+  `ValueError` and a 500**, not a broken image - and the test suite deliberately falls back to plain
+  `StaticFilesStorage` (no manifest), so no test can ever catch one. Instrument checked both ways
+  before trusting the result: a fabricated path is correctly unresolvable, and the availability set
+  genuinely contains the compiled `dashboard/style.css` rather than being empty.
+- **`settings.X` references**: every attribute read through `django.conf.settings` resolves - 17
+  distinct settings (`SECRET_KEY`, `SITE_URL`, `MEDIA_ROOT`, `OAUTH2_PROVIDER`,
+  `CELERY_BEAT_SCHEDULE`, the `SECURE_*`/`SESSION_*`/`CSRF_*` family,
+  `UL_MAP_SHARE_ZOOM_THRESHOLD`), **zero** undefined. An undefined one is an `AttributeError` on
+  whatever rare path reads it, so it survives exactly as long as that path is untested.
+- **Celery dispatch arity**: every `safely_enqueue_task` call site checked against the target task's
+  real `inspect.signature` - **68** sites resolved to one of the 84 registered tasks, zero mismatches
+  in positional count or keyword names. This matters because the failure is asymmetric: a
+  wrong-arity dispatch succeeds at the call site (the broker accepts anything) and raises inside the
+  worker, so the request that triggered it returns 200 and the error lands in a worker log. Five
+  sites pass the task as a variable rather than a literal and are not statically resolvable; that is
+  recorded rather than counted as clean. Rule validated against real bounded tasks before the result
+  was trusted - `fetch_panel_source` (2..3 positional) and `resolve_deferred_pin_locations` (2..7)
+  each correctly flag too many positional, too few, and an unknown keyword. The first probe attempt
+  picked a Celery built-in taking `*args`, which could not fire and demonstrated nothing.
+- **Model validation that never runs**: Django's `save()` does not call `full_clean()`, so a model's
+  `clean()` and its fields' `validators` are enforced only where something invokes them. Checked
+  both halves. Only two models define `clean()` (`SubscriptionRole`, `Achievement`) and both are
+  enforced on *every* write path - each model is written from exactly one admin controller, and both
+  of those funnel through a helper ending in `full_clean()`. For field validators the exposure is
+  larger on paper (63 `validators=` on models, **zero** on forms or serializers, and only one
+  `ModelSerializer` in the external API - so DRF does not re-derive them for hand-written
+  serializers), but the project addresses it deliberately: `services/core/text_limits.py` defines 18
+  shared limits, sets each as the field's `max_length` so Forms/DRF pick up a `MaxLengthValidator`
+  automatically, *and* exposes `text_length_error()` for controller paths that build models directly
+  and never run one. All 18 constants are referenced outside that module and the helper has 44 call
+  sites, so both tracks are genuinely in use rather than aspirational.
+- **N+1 inside Celery tasks**: the route-scaling sweep covers web endpoints only, and a task's N+1
+  has no user-facing symptom - just a slower worker - so `tasks.py` was checked separately for loops
+  over an unprefetched queryset that dereference a relation. Five candidates, all fine.
+  `upgrade_placeholder_pin_names` reads `pin.location.display_name` per pin, but
+  `with_placeholder_names()` already does `select_related("location__wiki")` *inside the queryset
+  method*, which a static check on the call site cannot see. The four `sweep_stalled_*` tasks issue
+  one `session.rounds.filter(...)` per session, which prefetching genuinely cannot fix (chaining
+  `.filter()` onto a related manager defeats it - the same trap fixed in `LabelledModel` earlier in
+  this audit), but they iterate only sessions abandoned mid-round past a timeout, and
+  `stalled()`'s own docstring establishes at most one unrevealed round per session. Bounded by
+  design rather than by luck.
+- **`select_for_update` correctness**: all **30** calls sit inside a `with transaction.atomic()` or an
+  `@transaction.atomic` function - outside one, Django raises `TransactionManagementError` at
+  runtime, on whichever contended path happens to reach it first. The detector was self-tested on
+  four constructed cases (bare call, `with` block, decorator, nested helper) before its zero was
+  believed. Also checked: no site combines `select_for_update()` with `select_related()` on a
+  nullable FK, which Postgres rejects outright ("FOR UPDATE cannot be applied to the nullable side of
+  an outer join"), and every call uses the plain blocking form - no `nowait=True` or
+  `skip_locked=True`, so none can silently skip rows it was meant to lock.
+- **Undo restore vs unique constraints**: every handler's restored field list cross-referenced
+  against its model's real unique fields (single-field, `unique_together`, and constraint
+  `fields`/expressions). Of the 8 handlers, 5 restore nothing unique - `pin`, `pin_list` and `trip`
+  deliberately exclude `slug` and let it regenerate on save, which their own comments name. The 3
+  that do restore a unique field all refuse gracefully: `pin_list` and `saved_filter` were already
+  raising `UndoExpiredError` when the name has been reused since the delete, and `label` now does
+  too. Worth noting where that fix came from: both existing handlers describe the refusal as "the
+  same contract every other handler follows", so the convention predates this audit - `label` was the
+  one handler breaking it, with a docstring asserting "Nothing else can block: `Label` has no unique
+  constraints". Adding the constraint made that sentence false, and the fix was to join the existing
+  convention rather than invent one.
+- **External API writes vs unique constraints**: the external surface uses hand-written serializers
+  (one `ModelSerializer` in the whole module), so DRF adds **no** automatic `UniqueTogetherValidator`
+  - a create that reaches a constraint is an uncaught `IntegrityError` and a 500. Three
+  `.objects.create()` sites target a model with a user-facing unique constraint, and all three
+  pre-check: `SavedFilter` via `name_taken_for` (400), `CustomField` via
+  `filter(profile, entity_type, name__iexact).exists()` (400), and `Label` via the 409 added by this
+  audit. Worth stating which direction is dangerous: a check *stricter* than the constraint is safe
+  (it refuses things the database would accept - `CustomField`'s `iexact` against a case-sensitive
+  constraint is exactly that, and deliberate). A check *looser* than the constraint is the bug, and
+  is what `Label` had before this audit: the constraint was case-insensitive while every caller
+  matched exactly.
+- **HTML controller writes vs unique constraints**: the same check as the external API, across the
+  session-authenticated surface. **23** `.objects.create()` calls target a model with a user-facing
+  unique constraint. **22 are guarded; one is not** - `pin_edit.py`'s detach branch, which is the
+  guaranteed 500 recorded below.
+
+  *This entry originally claimed all 23 were guarded, and that was an overclaim worth naming.* The
+  triage script hand-listed **14** sites to inspect, not 23, and the write-up reported the conclusion
+  as if it covered the full set. The detach bug sits in one of the 9 that were never examined. Those
+  9 were checked afterwards: `EmailVerification` x2 (safe by construction - the user is created in
+  the same request, so no prior row exists), `Wiki` (guarded by `_location_for_child_wiki`, which
+  raises before the create), `MessagingKeyBundle`/`ConversationKey`/`GroupKey` (all catch
+  `IntegrityError` and return 409), `MarkupMapShare`, and the two bare `Location` creates - of which
+  `maps.py`'s is safe from `visits.py` (which checks `get_for_point` first) and broken from
+  `pin_edit.py`'s detach, which passes coordinates that provably already have a Location.
+
+  The guarded 22 use three different mechanisms, which is why a single pattern-match cannot audit
+  this:
+  1. a pre-check before the create (most sites - `PinList`, `SavedFilter`, `CustomField`, `Album`,
+     `PinOwner`, `PinShare`, `ProfileEmail`, `Label`);
+  2. `except IntegrityError` returning 409, wrapped in its own `transaction.atomic()` so the failed
+     insert cannot poison the outer transaction (`aliases.py`);
+  3. a guard inside a *called* function - `resolve_child_pin_location` raises `PinCreationError`
+     before `detail_pins.py` ever reaches its create, and the controller turns that into a 400.
+  That third one also documents something the constraint sweep alone gets wrong: child pins are
+  *deliberately exempt* from `db_pin_unique_location_per_profile`, with the narrower exact-point rule
+  enforced in Python instead, because a child pin must be able to share a parcel with its parent.
+
+  Method note: the heuristic (scan the 22 lines *before* each create for a guard pattern) reported 2
+  of the 14 it looked at as unguarded. Both were false - one guard sits *after* the create in an
+  `except` clause, the other inside a called function; a backwards-looking window sees neither. The
+  more costly error was not the false positives but the silent sample: hand-listing a subset and then
+  reporting on "the 23" turned an incomplete check into a clean bill of health, and the one real bug
+  in the set was in the unexamined remainder. A sample is a sample even when the number next to it is
+  the population.
+- **Management commands** (7, none previously swept - they run with full database access outside
+  every web test): each checked individually rather than sampled.
+  `delete_low_engagement_wikis` is **report-only by default** and needs `--yes` to delete, which is a
+  stronger design than an opt-in `--dry-run`; its counts use `distinct=True` on both annotations with
+  a comment about cross-product fan-out - exactly the bug class that once made it delete every wiki.
+  `rotate_field_encryption` has `--dry-run`, wraps the rewrite in `transaction.atomic()`, and
+  deliberately opens no transaction during a dry run so a rollback cannot mark an enclosing (or test)
+  transaction. Its `CommandError` on undecryptable values fires *outside* the atomic block, so partial
+  progress commits - correct here, because `EncryptedTextField` reads under any fallback key, so a
+  mixed state is valid and re-running finishes the job; the error text says exactly that and warns
+  against dropping a key early. Both backfills that write have `--dry-run`.
+  `provision_mobile_oauth_client` uses `update_or_create`, so re-running cannot mint a duplicate
+  OAuth client. `diagnose_places_api` is read-only.
+
+  One gap, minor: `backfill_redata_labels` iterates **every profile** and pushes to the REData API
+  with no `--dry-run` and no preview of scale - the only command whose side effects are entirely
+  external, which is also why a grep for local writes reports it as harmless. Not filed as a defect
+  (the sync is idempotent and nothing is destroyed) but worth knowing before running it on a large
+  instance.
+- **Inline handlers calling undefined globals**: every `window.<symbol>()` invoked from an
+  `onclick`/`onchange`/`onsubmit` attribute in all 418 templates - 31 distinct symbols - resolves to
+  a definition. None is a permanently dead click. (The guarded-vs-unguarded split, 12 to 40, is a
+  style difference rather than a defect: an unguarded call fails only when the bundle is absent, in
+  which case the page is broken regardless, and several "unguarded" matches are assignments like
+  `window._safetySkipLeaveWarning = true`, which cannot throw.)
+
+  This check produced one apparent finding - `window._coverHeroNav`, called from `location/wiki.html`
+  and seemingly defined nowhere. It is defined, in `frontend/static/js/cover-hero.js`: the scan
+  covered `frontend/ts/**` and `templates/**`, and this project also ships five hand-written JS files
+  under `frontend/static/js/**`. That directory was outside the previous two frontend sweeps as well;
+  re-checking it found their `JSON.parse` and `!resp.ok` handling sound, plus one further unhandled
+  `fetch` now added to the existing filing. Third scope error of this kind in the audit, and the
+  cheapest tell each time was a "missing" symbol that the codebase plainly uses.
+- **External API scopes**: AST audit resolving `required_scopes_by_method` through base classes for
+  all `ExternalApiView` subclasses — **191** at the time of that pass, **197** now — zero gaps. `credential_grants` genuinely fails closed.
+  Scoped to *endpoint-level* declarations: the per-entry secondary maps some views layer on top
+  are a separate mechanism, and one of those (undo) did have a gap — see above.
+- **E2EE / messaging**: group key rotation is signalled by comparing envelope sets to live
+  membership; `group_member_token` is HMAC-scoped per group so it can't correlate members or be
+  enumerated; DM retention correctly excludes `NEVER` and unread.
+- **2FA**: constant-time TOTP compare, atomic step claiming (replay-proof), hashed backup codes,
+  rate-limited code entry, and lockout keys that don't leak account existence.
+- **Import archives**: bounded chunked reads against *actual* decompressed bytes (not the forgeable
+  `file_size` header), symlink entries skipped, zip-slip guard that handles the sibling-prefix case,
+  member cap, then malware + magic-byte scanning before any importer opens a file.
+- **Undo framework**: 137 fields across 8 handlers round-trip intact; restore runs inside
+  `transaction.atomic`.
+- **Synchronous outbound calls**: instrumented the gateway chokepoint and walked 15 page endpoints —
+  **0** call out inline. Panel data goes through Celery. (The exception is write paths that create a
+  `Location`; see `PROBLEMS.md`.)
+- **Encrypted fields**: key derivation, fallback ordering, and rotation reviewed; `ProfileEmail`
+  correctly keeps a plaintext `normalized_email` for matching since Fernet ciphertext can't be
+  queried.
+- **Lint exclusions**: `settings/`, `tests/`, `migrations/` are excluded from ruff but hide nothing
+  — two unused imports total.
+- **Every documented template trap in `templates/CLAUDE.md`**, re-verified independently across all
+  418 templates late in the audit: zero multi-line `{# #}` comments (Django's is single-line, so an
+  unterminated one renders to the page), zero `next_page_number()` calls in a template with no
+  `has_next` branch, and all 19 `"prefix-"|add:<id>` sites correctly pre-stringified with
+  `{% with x_str=obj.id|stringformat:"d" %}` on the preceding line — the fix is applied by
+  convention through `*_str` context variables rather than inline, which a same-line scan reads as
+  19 violations. (each produces a user-visible bug when
+  violated, and none is currently violated):
+  - no multi-line `{# … #}` comments anywhere (Django only treats them as comments on one line, so
+    the text would render to the user);
+  - all five `page_obj.next_page_number` uses sit inside `{% if page_obj.has_next %}`, so none can
+    raise `EmptyPage` on the last page;
+  - `_pagination_controls.html`'s `request.path` assumption holds even for `_photo_gallery.html`,
+    which *is* rendered from two modules (`image_gallery.py`, `safety.py`) — because all three
+    render sites return it as a standalone response from its own endpoint, never embedded in a
+    page, so `request.path` is always the partial's own URL;
+  - `_page_hero.html`: every page that can receive an out-of-band hero swap passes `id=`, none
+    wraps the include in a div, and the OOB variants are rendered from Python
+    (`_pin_hero_oob`, `_trip_hero_oob`) against matching ids.
+- **Account deletion**: the mirror of the export question, and this one *is* complete. Of 147 FKs
+  to `Profile`/`User`, 118 are `CASCADE` and 29 `SET_NULL`. Empirically verified rather than read:
+  seeded a profile with 54 rows across 8 models, ran `hard_delete_profile`, and **0 rows survived**
+  (User row gone too). Every `SET_NULL` case was reviewed and is deliberate — either data owned by
+  *another* user (someone else's emergency-contact entry), or shared/community content where only
+  the attribution should disappear (`Wiki`, `WikiEdit`, `Article` revisions, `TripComment`,
+  `GroupChat.creator`). `DeviceScanUpload.profile` is explicitly nullable for the same reason in
+  normal operation. **Scope of the empirical half**: it exercised own-data CASCADE paths; the
+  community-attribution `SET_NULL` paths were verified by reading, not by fixture.
+- **Export/import round trip**: lossy in both directions, filed together in `PROBLEMS.md`. Export
+  omits 11 user-authored content types; import omits `profile`, so bio, area, and every contact
+  handle are written into the archive and never read back.
+- **Data export coverage**: measured, and it is *not* complete — 11 kinds of user-authored content
+  (safety check-ins, markup maps/overlays, saved filters, routes, pin aliases, profile notes,
+  social links, secondary emails, wiki edits) have no representation in the archive. Filed in
+  `PROBLEMS.md` as a feature gap, with the categories that are *correctly* omitted (credentials,
+  key material, derived bookkeeping) called out so they don't get "fixed".
+- **Cross-file constant couplings**: three findings this session came from the same shape — two
+  values in different files that must move together, held in agreement only by comments (the
+  pin-cache version, the notification preference stem, the panel flight TTL). Swept for more
+  systematically: extracted every `UPPER_CASE` constant, found each file whose *comments* name a
+  constant defined elsewhere (~95 hits), then filtered to comments asserting an actual constraint
+  ("must match", "must stay larger", "keep in sync"). **`FLIGHT_TTL_SECONDS` was the only
+  unguarded cross-file *value* coupling** — the rest are either name-only references (harmless),
+  colocated (e.g. Overpass's `ql_timeout: 25` / `timeout: 30` are adjacent lines in one dataclass,
+  with no production override, so nobody can edit one without seeing the other), or explicitly
+  solved by importing instead of duplicating (`views_social.py` imports `ProfileDetailView`'s
+  payload builder rather than restating it, and says why).
+  The distinction worth keeping: a guard test earns its place when the coupled values live in
+  *different files*. Colocated ones don't need one.
+- **Docker system packages all justified**: `libreoffice-writer`, `tesseract-ocr`, `ffmpeg` and
+  `poppler-utils` are heavy, and a first grep suggested they were referenced only from tests —
+  which would have made them pure image bloat. That was a truncation artifact of `head -2`. The
+  media services do invoke all four, guarded by `shutil.which(...)` so an image without them
+  degrades rather than crashing (`documents.py::soffice_available`, `videos.py`). No change.
+- **`get_or_create` constraint backing**: audited all 348 `get_or_create` call sites for lookups
+  the database doesn't enforce. The first pass reported 14; **nine were false positives** and the
+  correction is the useful part. Four were related-manager calls whose implicit FK the scan
+  couldn't see (`ProfileActivityDay`, `ProfileStreak`, `PlaceAccessGrant`, `Fact` all have covering
+  constraints). The other five included `PinAlias`/`WikiAlias`, which I came within one step of
+  reporting as a *documented-but-unenforced* guarantee — `add_pin_alias` catches `IntegrityError`
+  to raise `AliasExistsError`, which looks like dead code if the constraint is missing. It isn't:
+  both models carry `UniqueConstraint(Lower("name"), F("pin"))`, an expression-based constraint
+  that supplies exactly the case-insensitive promise the docstring makes. Expression constraints
+  leave `.fields` empty, so a scan reading only that field cannot see them — worth recording as a
+  reusable trap, since the naive scan makes correctly-constrained models look unprotected.
+- **Management commands and OAuth provisioning**: the one destructive command
+  (`delete_low_engagement_wikis`) is **report-only by default** and needs an explicit `--yes`;
+  backfills offer `--dry-run`. `provision_mobile_oauth_client` gets the native-client shape right
+  in every detail that matters — `CLIENT_PUBLIC` with an empty secret (a distributed app cannot
+  keep one), `skip_authorization: False` so consent is still required, no secret written to stdout
+  — and its claim that PKCE is enforced globally checks out (`PKCE_REQUIRED: True`).
+
+  One documentation correction: the `urls.py` comment described the OAuth include as
+  "authorize/token/revoke plus the logged-in application-management views". It actually mounts
+  django-oauth-toolkit's entire URL set, which also includes token introspection, the RFC 8628
+  device-code endpoints, and OpenID discovery. Neither introspection nor the device grant is
+  reachable today — no application is registered with the device grant, and `introspect` is not
+  among the configured `SCOPES`, so no token can carry it — but someone auditing this surface by
+  reading the comment would not know they were mounted. Comment corrected to describe what is
+  actually exposed, and to say what makes the extra endpoints inert.
+- **Every auto-escape bypass in the templates**: all 12 `|safe` uses (and the single `mark_safe`)
+  traced to source, after the SVG finding made this thread worth following.
+  - User-authored HTML — visit notes and pin/wiki articles — goes through one `render_article`
+    pipeline built on `nh3` with a fixed tag allowlist. Verified by feeding it 15 real payloads
+    (`<script>`, `onerror`, `svg onload`, `javascript:` links, `iframe`, `object` with a data: URL,
+    `base`, `meta refresh`, `ontoggle`, mXSS via `<math><mtext>`): **all 15 neutralised**. The one
+    my detector initially flagged was a false positive — markdown-it refuses to build a link for a
+    `javascript:` target, so the payload survives only as inert escaped text with no `href`.
+  - The Wikipedia extract is third-party HTML that anyone can edit, and it is sanitised properly:
+    `nh3` with a tag allowlist *plus* `attributes={}` *and* an `attribute_filter`, with a comment
+    explaining that both are needed because ammonia otherwise keeps a hardcoded generic attribute
+    set. Attribute-based XSS cannot survive it.
+  - Every JSON-into-`<script>` site (`tags_data_json`, `common_pins_json`, `filter_labels_json`,
+    and the admin/cost charts) routes through `safe_json_for_script`, which escapes `<`, `>` and
+    `&` exactly as Django's own `{% json_script %}` does — so a `</script>` inside user data cannot
+    break out of the enclosing block.
+  - The remainder are not user data: GEOS-generated GeoJSON, and plugin-supplied toolbar HTML
+    (plugins are code, not input).
+- **Django admin and site-admin exposure**: of the 16 models registered in the Django admin, only
+  `SiteSettings` carries an `EncryptedTextField`, and it appears in no `list_display`,
+  `search_fields`, or `list_filter` — which matters because a search on an encrypted column is a
+  SQL `LIKE` that cannot match ciphertext anyway. It *is* editable in the fieldsets, which is
+  correct: a superuser has to be able to set the Gotify token, and it is not a privilege boundary
+  against someone who already holds the database and `SECRET_KEY`. All 18 site-admin view classes
+  are fully gated (login + `dashboard.view_site_admin`), verified at runtime rather than by reading
+  base-class lists — five of them inherit the pair through a local `_AdminPermissionMixin`, which a
+  literal AST scan reports as unprotected.
+- **Index coverage for the retention sweeps** — investigated, and deliberately **not** changed.
+  `ApiCallLog` is the highest-volume table in the app (a row per external API call, kept 400 days)
+  and its only index is `(service, created)`, whose leading column none of its three
+  `created`-only consumers filter on. That looks like a missing index until the selectivity of each
+  consumer is checked:
+
+  - `monthly_cost_series` turned out to be **one** grouped aggregate (`TruncMonth` + `Sum`), not
+    the twelve per-month scans its call shape first suggested, and it selects ~365 of the 400
+    retained days — Postgres would correctly seq-scan that regardless of any index.
+  - `api_total` selects the whole table. Same.
+  - Only `prune_older_than_days` has a selective predicate (in steady state ~0.25% of rows: one
+    day's worth out of 400), and it runs once daily.
+
+  So a `created` index would speed exactly one daily delete, at the cost of write amplification on
+  the app's hottest insert path. That is a marginal trade at best, and not one to make without
+  production volume to measure against. Recorded here so the "obvious missing index" is not
+  re-derived and added on the strength of the index list alone. `PinTombstone` has the same shape
+  (`(profile, created)`, pruned on `created`) on a far smaller table, so the argument is weaker
+  still.
+- **Shared mutable state**: **zero** mutable default arguments (`def f(x=[])`) across the whole
+  codebase, and zero class-level containers mutated through `self`/`cls` — the pattern where
+  `self.items.append(...)` on a class attribute leaks state between instances and, in a long-lived
+  worker, between requests. Both were checked by AST. The naive version of the second check reports
+  543 "mutable class attributes", essentially all of them Django/DRF declarations (`list_display`,
+  `fields`, `readonly_fields`) that are configuration and never mutated; narrowing to "declared on
+  the class *and* mutated through self *and* never reassigned per-instance" is what makes the
+  answer meaningful rather than a wall of noise.
+- **`select_for_update()` transaction coverage**: all 28 calls are lexically inside a
+  `transaction.atomic()` block or an `@transaction.atomic`-decorated function. Outside one, Django
+  raises `TransactionManagementError` at query time — a 500 that only fires when the path actually
+  executes, so static coverage is the only cheap way to know. Checked by AST rather than grep,
+  which matters: grep reported 32 hits, four of which were comments *describing* the pattern.
+- **Raw SQL**: only four sites outside migrations, and all four are safe. Values are always
+  parameterized (`%s`); the f-string interpolation is identifiers only, and I traced each to its
+  source rather than trusting the `# nosec` annotations — `db_table` / `Field.column` /
+  `pk_field.column` off Django's own `_meta`, enumerated from the model registry, with no path from
+  user input. The fourth is a fully static PostgreSQL introspection query with no interpolation
+  at all.
+- **E2EE crypto primitives**: nonces are 24 random bytes from `randombytes_buf` per operation with
+  XSalsa20-Poly1305 (`crypto_secretbox`), so nonce reuse is not a practical risk even with a
+  long-lived conversation key; identity keys are `crypto_box` keypairs, anonymous sealing uses
+  `crypto_box_seal`, and the wrap format is `nonce || ciphertext` with the nonce sliced back off on
+  open. Textbook libsodium usage. The weakness was in the *parameters* around it, not the
+  primitives — see the enrolment KDF floor above.
+- **Frontend listener lifetime**: looked for the accumulation pattern that actually bites in an
+  HTMX app — a `document`-level listener registered *inside* a per-swap handler, so it doubles on
+  every swap. A scan flagged six candidates; two were read in full and both are one-time init or
+  `wireHtmxHooks()` wiring with *sibling* registrations, not nested ones, and the remaining four
+  match the same shape. No accumulation found. Raw `addEventListener`/`removeEventListener` ratios
+  (64:7 in `map-annotations.ts`) are **not** evidence of anything on their own — listeners on
+  page-lifetime elements never need removal — and reporting that ratio would have been the same
+  mistake as the fetch/catch ratio recorded above.
+- **Frontend build and test health**: `tsc --noEmit` is clean and all 383 TypeScript tests across
+  27 files pass on the host toolchain. A scan for `fetch()` calls lacking error handling was
+  started and **abandoned as unsound rather than reported**: file-level fetch/catch ratios say
+  nothing about whether any individual call is guarded (several modules route through their own
+  local `postJson` wrapper), and the one file the scan flagged hardest, `shared/csrf.ts`, contains
+  no `fetch` at all — the match was the word inside a docstring. Recording the dead end because the
+  same shape of mechanical scan has produced roughly seven near-miss false findings across this
+  audit; the honest result here is "not measured", not "clean".
+- **Password reset**: the E2EE interaction is handled carefully and completely — a reset sets
+  `password_wrap_stale`, and that flag round-trips (written on reset, serialized to the client,
+  read in two places to skip the now-undecryptable wrap, cleared on re-wrap), so it is live state
+  rather than a write-only field. `AccountKdf` is deleted when the client's derivation fails so the
+  account reverts to legacy auth instead of being locked out by a mismatch. The reset form also
+  keeps its anti-enumeration property while fixing the SSO-only case that used to say "check your
+  email" and send nothing.
+
+  One gap, filed: a reset kills every session but revokes **no** `ApiKey` or OAuth token, and
+  minting an API key requires no current-password proof — so a session-only compromise can leave a
+  credential behind that the victim's password reset does not remove. Same asymmetry as the
+  rate-limiting finding: the current-password proof already exists in this codebase, guarding the
+  E2EE key-replacing endpoints, for reasoning that applies equally here.
+- **Login rate limiting**: the account lockout (5 failures, 15 minutes by default) is keyed on the
+  submitted identifier alone, with no IP dimension, no nginx `limit_req`, and no throttle on the
+  login view — so knowing a username is enough to hold that account out of password login
+  indefinitely at ~5 requests per 15 minutes. Two details of the current design are *good* and
+  worth not regressing: a non-existent identifier is rate-limited identically with identical error
+  text (so the lockout is not a user-enumeration oracle), and a success clears the counter. Filed
+  rather than changed, because the threshold is an ops judgement — but the asymmetry is worth
+  naming: `_client_ip()` and the cache-counter pattern already exist in the *same module* and are
+  applied to passphrase suggestions and password-policy checks, two endpoints of far lower value
+  than authentication.
+- **All 11 per-field visibility settings are enforced** — swept after the "Visited Together" leak,
+  on the theory that a declared-but-unenforced setting might not be alone. It was: every one has a
+  real enforcement site. Two intermediate results were my own false alarms, both from
+  pattern-matching: `online_status`/`read_receipt`/`typing_indicator` looked unenforced only because
+  a `head -6` truncated the grep past their enforcement sites, and `trip_pin_location_visibility`
+  scored zero because it is enforced by direct `VisibilityChoice` comparison rather than through
+  `visibility_permits`. Enforcement idioms vary; counting pattern hits does not detect them.
+  Read receipts are rendered in exactly one template, gated; group threads do not surface read
+  state to other members at all.
+- **The journal's fail-closed claim holds; its completeness had no guard.** `JOURNAL_SOURCES`
+  carries a comment promising that "the view fails closed on an unmapped key, so a new domain cannot
+  be exposed by forgetting the second half". Verified: `filter_sources_by_grants` iterates the
+  *scope mapping*, so a source absent from it is never granted, and an empty scope set is explicitly
+  omitted rather than granted. The safety direction is correct by construction.
+  The completeness direction was unguarded, and is the mirror of the notification-preference drift in
+  chunk 115: a source added without a scope entry is silently unreachable through the API forever -
+  no error, no warning, just a domain that never appears. A test now pins both directions, plus two
+  subtler invariants the mapping's own docstring states: no entry may declare an empty scope set
+  (which reads as "mapped" but behaves as "never served"), and every entry must include the
+  endpoint's base scope, since `filter_sources_by_grants` deliberately does not assume the view's own
+  `required_scopes` were satisfied.
+  Teeth-checked by deleting the `articles` entry.
+- **Location-mention visibility is sound, and well placed.** A comment can embed a location's *name*
+  (`@[Name](loc:uuid)`), so the interesting question is whether every render path checks that the
+  viewer has pinned it. It does not have to: `render_comment_text` calls `is_visible_to` internally
+  and returns `None` when any mentioned location is unpinned, so the six production callers
+  (`controllers/comments`, `trip_comments` x3, `comments` x2) inherit the check rather than each
+  remembering it. The rule is fail-closed on the whole comment - one unpinned mention hides all of
+  it - and `services/comments/comments.py` documents it as the third layer of its visibility chain.
+  `filter_visible_comments` has no production caller; a leftover helper, noted not removed.
+  **I nearly reported the opposite.** A `grep | head -10` returned only test files, which reads as
+  "the protection is never wired up" - a serious privacy hole. The production callers were on line 11
+  onward. This is the second truncation error of the session (chunk 105 was the first, on the same
+  `head` idiom), and the pattern is worth naming: truncating a search turns absence-of-evidence into
+  what looks like evidence-of-absence, and negative findings are exactly where that is most
+  dangerous.
+- **Notification delivery is properly isolated.** Traced the WhatsApp/SMS path end to end because a
+  third-party carrier is exactly the sort of dependency that ends up failing a user's action:
+  `NotificationLog` post_save -> `schedule_notification_text_alerts` -> a Celery task
+  (`autoretry_for=(OSError,)`, three retries with backoff) -> the dispatch helpers. Nothing sends
+  inside the request, so an outage costs a retried background task rather than a 500. An
+  unconfigured Twilio is caught as `ValueError` and debug-logged; a provider API error fails just
+  that task, leaving the in-app notification - the actual record - intact.
+- **Game areas were the last user-drawn geometry with the same bug; fixed at the source.** After
+  chunk 139 showed the sweep had missed a field, the remaining `__within` sites were re-triaged by a
+  sharper question - *can this polygon be drawn by a user?* - rather than by which feature I thought
+  I had already covered. That leaves the SpotGuessr and Trivia area restrictions: a player drawing a
+  game area across the date line gets "no eligible locations" for an area full of their own pins.
+  Fixed in `GameConfig.geo_bounds`/`TriviaConfig.geo_bounds` - where the GeoJSON becomes a geometry -
+  rather than at the three-plus query sites, so eligibility counts, round selection and the external
+  API's eligible-pins endpoints all inherit it. That placement is deliberate: patching query sites is
+  exactly how the `smart_boundary` paths got missed twice.
+  Teeth-checked against the container's file. Everything else using `__within` takes provider or
+  derived geometry (parcels, building footprints, the static USA boundary) that cannot straddle the
+  line the way a hand-drawn box can.
+- **Chunk 125's antimeridian fix was incomplete - smart-list boundaries had the same bug.** Auditing
+  smart-list membership turned up `PinList.smart_boundary`, a *separate* field from
+  `include_regions`, queried by its own two `__within` calls and missed by that fix.
+  Both had to change, and they answer the same question at different times: `_pin_in_boundary`
+  decides membership on every pin save, `_boundary_matching_ids` resolves the whole list on resync.
+  Fixing only one would have been worse than fixing neither - a pin would join the list on save and
+  vanish on the next resync, which looks like data loss rather than a filter bug. A test asserts the
+  two paths agree.
+  Teeth-checked against the container's actual file: removing both splits fails exactly the two
+  cross-line tests.
+  Worth recording as a limit of the sweep method. Chunk 125 swept `__within` call sites and triaged
+  them by whether the polygon could plausibly cross the date line - and I judged smart boundaries as
+  covered because I had fixed "the region filter", when `smart_boundary` is a different field
+  entirely. The sweep found the right *class*; my mental model of which sites belonged to it was
+  wrong.
+- **Cross-module private imports swept; one more fixed, the rest judged not worth churning.**
+  Chunk 137's finding was a layering violation, so the class was swept: 17 in `controllers`, a
+  handful across `services` and `external_api` (and 76 in tests, which is normal - tests are
+  supposed to reach inside).
+  `controllers/flickr.py` was the same bug as epa_echo - importing `_haversine_km` from
+  `models.profile.model` to filter photos by radius, then multiplying by 1000 to get metres. It now
+  calls `services.geo.distance.haversine_meters` directly, dropping the km round-trip. Verified
+  identical (1390.357164866m both ways).
+  The rest are a different shape: reuse of a genuinely useful private helper
+  (`_create_pin_from_confirmed`, `_format_duration`, `_get_compiled`) where the honest fix is to
+  promote it to public API - a rename touching every call site. Most of the remainder are
+  controller-to-controller, which is same-layer sharing rather than a layering breach. Filed as an
+  observation rather than churned: unlike the haversine, there is no correctness risk here, only
+  a naming one, and a rename sweep would touch far more code than it clarifies.
+- **A plugin was reaching into a model's private helper to redo two shared conversions** — fixed.
+  Following the session's own finding that defects cluster in re-derived primitives rather than in
+  auth, the sweep moved to unit conversion. Four constants exist and all are numerically correct, but
+  `epa_echo._miles_between` imported `models.profile.model._haversine_km` - a *private* helper, from a
+  model module, into a plugin - and multiplied by an inline `0.621371`, duplicating both
+  `services.geo.distance` (consolidated in chunk 131) and `services.core.units`.
+  Now uses both shared helpers. Verified identical before and after (0.863928 miles for the same
+  pair), and pinned against an *independent* reference rather than a restatement of the
+  implementation: one degree of latitude is ~69.09 miles. One test also asserts miles come out
+  smaller than kilometres, which catches an inverted conversion - the failure that reads perfectly
+  plausibly until somebody checks a number.
+  Also noted: `_METERS_PER_FOOT = 0.3048` is defined twice (a plugin and a controller). Left alone -
+  it is a defined physical constant with no derivation to get wrong, which is the same judgement
+  applied to the coordinate bound checks in chunk 132.
+- **TOTP and backup codes audited; nothing to change.** Both use the compare-and-set discipline
+  this audit spent several chunks *adding* elsewhere - and here it was already right, with the
+  reasoning written down. A TOTP step is claimed by a conditional `UPDATE` filtering on
+  `last_used_step__lt=step` and accepted only when `claimed == 1`, so two submissions of one
+  intercepted code (the docstring names the phishing-proxy case) cannot both pass. Backup codes are
+  hashed and consumed the same way, filtering on `used_at__isnull=True`.
+  One thing checked because it looked like a denial-of-service lever: a wrong backup code runs
+  `check_password` against *every* unused code, so ~10 deliberately-slow hashes per failed attempt.
+  It is bounded - the 2FA fallback reuses `SiteSettings.login_max_attempts` (default 5), so an
+  account tops out around 50 hashes per lockout window. The `max_attempts <= 0` disable path is
+  intentional and documented on the field itself, with a `>= 0` check constraint behind it.
+- **Three consecutive security subsystems - passkeys, TOTP/backup codes, and the docstring claims
+  before them - audited with no defects found.** Recorded as a signal rather than filler: the
+  authentication paths are the most carefully built code in this codebase, and the audit is hitting
+  real diminishing returns there. The defects this session found cluster in *geometry* and in
+  *duplicated primitives*, not in auth.
+- **WebAuthn/passkeys audited; nothing to change.** Checked against the standard failure modes:
+  the challenge is `session.pop`-ed so it is single-use, the credential lookup is scoped to the
+  authenticating user, RP ID and origin are derived per-request (and Django's `ALLOWED_HOSTS`
+  bounds what a Host header can claim), and clone detection is complete - the stored sign count is
+  passed into verification *and* the returned counter is written back, which is the half that is
+  usually missed.
+  `user_verification=PREFERRED` looked like a weak setting until the flow was traced: passkeys here
+  are a *second* factor issued "after a successful password login", not a passwordless primary, so
+  PREFERRED is the appropriate choice rather than a gap.
+  Existing coverage is genuinely thorough - `test_challenge_is_consumed_and_cannot_be_reused`,
+  duplicate-credential rejection, cross-user credential rejection, sign-count persistence, and the
+  full two-factor login flow. No test was added because every property worth pinning already was.
+- **Absolute claims in security-relevant docstrings, spot-audited; these ones hold.** Chunk 133 found
+  documentation asserting a rule the code did not implement, so the same question was put to other
+  strong claims ("never", "only ever", "cannot") in privacy-adjacent code.
+  *"A pin article is only ever visible to its owner, so it's fully covered by exporting it"* - holds.
+  `Article.is_private` is true for any pin-attached article, `editable_by` restricts pin articles to
+  the pin's owner, and the exporter reads only `Pin.objects.filter(profile=profile)`, so it exports
+  the owner's own articles and nobody else's.
+  *"A single piece of evidence should never read as 100% confidence"* - holds, and measured rather
+  than reasoned: one unanimous categorical submission scores **0.60** (below the 0.75 confirm
+  threshold) and a single number observation **0.20**, while 1000 units of unanimous weight asymptote
+  to 0.998 without reaching 1.0. The Beta(2, 2) prior does exactly what its comment claims.
+  That second one is now pinned. It is a *designed* property - one person should not settle a
+  question - held up by two independent constants (the prior and `MIN_EVIDENCE_FOR_ESTIMATE`), and a
+  future tuning change to either could have removed it silently with every existing test still
+  passing. The new tests assert bounds, not exact values, so the numbers stay free to move but not
+  through 1.0 and not past the confirm threshold on one submission.
+- **Wiki access control is sound - and the documentation describing it was wrong.** Audited because
+  it is privacy-critical *and* geometry-adjacent, after four chunks of geometry bugs. The rule turns
+  out not to be geometric at all: `CLAUDE.md` and `CLAUDE.local.md` both described "a pin within the
+  bounding box of the wiki's location", but `wiki_access` grants visibility by *place domain* - a pin
+  on the exact `Location`, or a pin whose place resolves to the same domain root (the parcel, or any
+  building on it), extended by aggregate places and explicit `PlaceAccessGrant` rows.
+  The implementation is the stricter and more precise of the two, so this is a documentation defect
+  rather than a security one - but a dangerous kind: someone adding a new access check from the docs
+  would write a bbox query, which grants *more* than the real rule and would read as consistent with
+  the written spec. Both files now describe what the code does.
+  The code itself is well built: one implementation (`_domains_given_pins`) serves both the live
+  check and the pin-move preview, explicitly so the preview cannot drift from what is enforced, and
+  the aggregate-earning fixed point is bounded by `MAX_EARNING_ROUNDS`.
+- **Three risk areas checked, all clean; one guard added.**
+  *Coordinate validation* is duplicated across 12+ sites and every copy agrees (-90..90, -180..180,
+  and NaN rejected for free since `-90 <= nan <= 90` is False). Deliberately **not** consolidated
+  like the haversine: a two-comparison bound check is hard to get wrong, so the drift risk that
+  justified that churn does not apply here.
+  *Plugin loading* is properly isolated - import, instantiate, register and hook invocation each
+  catch and log, so one broken plugin cannot take the registry with it.
+  *Rate-limit coverage* is complete: all 46 registered services declare at least one of per-minute,
+  per-day or per-30-day. That one is now guarded, because the failure mode is invisible - a plugin
+  that declares no defaults does not get a lenient limit, it gets **none**, and calls out as fast as
+  the code asks until the provider throttles or bills instead. The test asserts only that *a* limit
+  exists; the numbers are per-provider judgements that belong with each plugin.
+- **Five haversine implementations consolidated into one.** Sweeping for the shape behind three
+  earlier findings - a primitive implemented more than once - turned up five independent copies of
+  the same eight-line formula: profile map centring, public-pin clustering, consensus answer
+  scoring, Overture boundary matching, and markup geometry (plus a sixth frozen in a migration).
+  They were compared numerically first: **0.00m spread** across short, long, and
+  antimeridian-crossing pairs. Nothing was broken, so this is a consolidation, not a fix - all five
+  now delegate to `services/geo/distance.py` and keep their existing signatures, so no caller
+  changed.
+  The justification is the codebase's own history: duplicated geometry primitives here have already
+  drifted twice, into four independent longitude averages (one of which put a map centre in the
+  Atlantic) and a "nearest pin" lookup that ordered by a geometry column while a correct
+  distance-ordered helper sat a few lines away in the same file. Nothing was wrong with these five;
+  the sixth copy is where the next bug goes.
+  A property test now asserts all five agree for arbitrary points, so they cannot silently diverge
+  again.
+- **Dwell detection and the History consent gates are sound.** All three toggles
+  (`visit_logging_allowed`, `route_import_allowed`, `geolocation_tracking_allowed`) are consulted at
+  the entry point of the feature they govern - checked because chunk 104 found a setting that was
+  collected and stored but never consulted. `record_geolocation_visits` refuses outright when live
+  tracking is off, dedupes per calendar day before creating anything, and pre-filters candidate pins
+  with an indexed 5km distance query whose comment records the production incident that motivated it.
+  One contrast worth recording: the same queryset module contains `near_point`, which annotates with
+  `Distance` and orders by it - exactly what `find_nearest_pin` (chunk 127) failed to do. The correct
+  pattern already existed a few lines away; the broken function reimplemented it by hand and got the
+  ordering wrong. That is the more useful lesson from that bug than the bug itself.
+- **Billing and subscriptions audited; sound.** Three things were checked because each is a classic
+  source of money bugs:
+  *Webhook idempotency* is properly built - the event row is claimed with `select_for_update` and
+  its `processed_at` checked inside the same transaction that runs the handler, so a Stripe redelivery
+  (which happens on any non-2xx *or timeout*) cannot double-credit `total_paid_cents`. The reasoning
+  is written down at the call site.
+  *Access predicates* evaluate paid access as "active/trialing with the threshold met, **or** unexpired
+  banked coverage", the latter deliberately status-agnostic so paid-ahead runway survives a
+  cancellation.
+  *The usage ledger* advances one 30-day period per iteration and terminates on either affordability
+  or reaching now.
+  I suspected the ledger's per-iteration `cost_per_user(as_of)` - which aggregates over `ApiCallLog`,
+  a table retained for 400 days - would make a catch-up expensive inside the webhook's row lock.
+  Measured instead of assumed: **3 queries** for the normal one-period case and **14** for a
+  subscription dormant a full year. That is not a performance problem, so nothing was filed. Recording
+  the disproven hypothesis because the reasoning was plausible and wrong, which is the same failure
+  mode as the routes "bug" in chunk 124.
+- **Full suite: 10,579 passed, 0 failures** (plus 1,437 subtests, 80 minutes) across all 190 changed
+  files - the first end-to-end run of the audit, confirming no cross-cutting breakage that the
+  per-chunk targeted bands could have missed.
+- **"Arbitrary row where a specific one is meant" swept; no further instances.** The nearest-pin bug
+  was one case of a general shape: a query that *looks* like it selects a particular row but does
+  not. Two sweeps:
+  no other `order_by` targets a geometry column (the three apparent hits are `-total_points`,
+  matched on a substring); and of the `.first()` calls whose own variable names promise a specific
+  row - `current_round` in all three game engines - every one is reached through a `for_session()`
+  that orders by `sequence_index` or `created`, so "the current round" really is the earliest
+  pending one.
+  Worth recording *why* that needed checking: 109 of the 165 dashboard models define no
+  `Meta.ordering`, and the abstract base deliberately sets none, so `.first()` is arbitrary far more
+  often than it looks. The four sites that matter happen to be ordered upstream - which is not
+  visible at the call site.
+- **`find_nearest_pin` did not return the nearest pin** — fixed. It ordered by
+  `location__point`, the geometry column itself, which sorts by PostGIS's internal representation
+  and has nothing to do with distance from the query point; the function returned an arbitrary pin
+  inside the radius while its name and docstring both promised the closest. Measured: with pins 11m
+  and 75m from the query point it returned the one at **75m**.
+  It matters because of where it is used - matching Google Location History and My Activity
+  coordinates against a user's own pins at `VISIT_MATCH_RADIUS_M` = 100m. Any profile with two pins
+  inside that radius (a building and its neighbour, a pin and one across the street) could have an
+  imported visit attributed to the wrong place, silently and permanently, on a path that runs
+  unattended over a whole history file. Now annotated with `Distance` and ordered by it.
+  Teeth-checked against the container's actual file: restoring the geometry ordering fails three of
+  seven, including the three-candidate case.
+  Worth noting how it read: `.order_by("location__point")` next to a `distance_lte` filter looks
+  deliberate, and the docstring asserts the behaviour it does not have. Only running it exposed the
+  gap.
+- **Wiki nesting checked and sound** — the one consolidating operation left unexamined after the
+  pin and label merges. It turns out not to be a destructive merge at all: `_absorb` sets
+  `parent_wiki` and never deletes, so the relation-loss question that produced the album/overlay bug
+  does not arise. Its cycle guard is called in *both* nesting directions before absorbing, and
+  `Wiki.would_create_cycle` carries a `visited` set so it terminates even against data already
+  corrupted with a pre-existing loop.
+- **Full-suite run started** — the audit has been verified by targeted bands throughout, which is
+  fast but cannot catch cross-cutting breakage across ~180 changed files. Recorded here so the
+  distinction between "the affected band passes" and "everything passes" stays explicit.
+- **Saved-filter and smart-list regions had the same date-line bug as the viewport** — fixed.
+  Generalising chunk 124's real finding (that `__within`/`ST_Within` has no geography
+  implementation and is evaluated as flat degrees, unlike `bboverlaps`), the 19 `__within` sites
+  were triaged: most take small parcel or user-drawn polygons where planar point-in-polygon is
+  correct. `filter_by_criteria`'s `include_regions`/`exclude_regions` are not, because a user can
+  draw one across the line.
+  Measured both arriving shapes: a region drawn across the antimeridian arrives *unwrapped* from
+  Leaflet (179 to 181) and matched only the pins west of the line; the folded form (179 to -179)
+  matched a pin 180 degrees away and none of the intended ones. `exclude_regions` is the worse half
+  - a region that matches almost nothing excludes almost nothing, so a filter meant to hide an area
+  quietly stops hiding it.
+  `split_at_antimeridian` now folds the overhanging part back to the coordinates points are stored
+  at. A polygon whose vertices are already folded but which spans more than 180 degrees is
+  deliberately left alone: written literally those coordinates *do* describe the long way round, and
+  silently reinterpreting them would be guessing at intent. Teeth-checked - removing the splitter
+  fails three of seven, verified against the container's actual file after chunk 124's lesson.
+- **The antimeridian sweep's fourth site turned out not to be a bug — and I nearly shipped a fix
+  for it.** `within_bounds`' docstring names its siblings ("the same `Polygon.from_bbox` +
+  `within` idiom"), which pointed at `RouteQuerySet.intersecting_bbox` and
+  `locations.base.default_bbox`. The route filter builds the identical box, so I fixed it the same
+  way and wrote tests.
+  The teeth-check then passed when it should have failed. Confirming the container really had the
+  disabled version (it did), the naive single box *still returned the correct routes*. The reason:
+  `Route.path` is `geography=True` and the filter uses `bboverlaps` (PostGIS `&&`), which is
+  evaluated geodetically and handles the wrap itself. `within_bounds` differs by using `__within`
+  (`ST_Within`), which has no geography implementation and is evaluated as planar geometry - which
+  is exactly why it broke and this did not.
+  The route change was reverted. Its tests were kept but reframed as characterisation: they record
+  *why* no splitting is needed here, and fail if `path` becomes a plain geometry column or the
+  filter moves to `__within` - which is when the logic would be needed. `default_bbox` has no
+  production callers at all, so its near-±180 clipping is noted and left.
+  Worth stating plainly: the pattern matched, the reasoning was sound, and the conclusion was wrong.
+  Only the teeth-check caught it, and only because a passing teeth-check was treated as a failure to
+  investigate rather than a result.
+- **A map viewport crossing the date line showed the whole world except itself** — fixed, and the
+  worst of the family. `within_bounds` built one `Polygon.from_bbox((west, south, east, north))`.
+  When a viewport crosses the antimeridian its west edge exceeds its east edge, and that rectangle
+  is drawn the *long* way round: measured, a 2-degree window became a **358-degree** box that
+  excluded every pin on screen and included everything on the far side of the planet. A user
+  panning across the line saw their Fiji pins vanish and unrelated pins appear.
+  The second arriving shape is unwrapped bounds - Leaflet's `getEast()` returns 181, not -179 -
+  which built a plausible box that simply never matched stored coordinates, since those are always
+  folded into [-180, 180]. Both are handled: edges normalise through a new
+  `normalize_longitude`, and a crossing viewport queries its two real halves.
+  Teeth-checked: restoring the single box fails four of six, including the "excludes the far side of
+  the planet" case that describes the original symptom exactly.
+- **Two more antimeridian bugs, found by sweeping the class** — including one of my own. The fact
+  centroid fix (below) prompted a sweep for every other place longitude is averaged or compared as
+  an ordinary number. Three sites, each written independently:
+  the fact centroid; the **profile's saved map centre**, which clusters pins with haversine (wrap-
+  correct) and then averages the cluster's longitudes arithmetically, so a user whose pins straddle
+  the date line is centred at longitude 0 - in the Atlantic; and the import-failure location guess
+  added earlier today, whose `abs(lng_a - lng_b)` proximity check reads two points a kilometre apart
+  as 359.98 degrees apart, so an S2 cell could never corroborate a candidate near the line.
+  All three now share `services/geo/longitude.py` - `circular_mean_longitude` and `longitude_delta`.
+  Both return answers identical to the naive arithmetic everywhere except within a hair of the date
+  line, which the "ordinary longitudes" tests pin explicitly: a fix that shifted the rest of the
+  planet would be far worse than the bug. Property tests bound the outputs for arbitrary inputs.
+  The lesson is the repetition rather than any single site: three separate authors reached for
+  `sum(...)/len(...)` on a value that wraps, which is why the primitive now exists rather than a
+  fourth correct-by-inspection copy.
+- **Fact POINT evidence averaged longitude arithmetically, breaking at the antimeridian** — fixed.
+  `_aggregate_point` computes a weighted centroid from every piece of POINT evidence. Longitude
+  wraps, so two observations of one place either side of the date line (179.99 and -179.99) averaged
+  to **0.0** - a centroid in the Atlantic, ~20,000km from either observation, which `recompute` then
+  stored as the fact's value. Measured before the fix, not inferred.
+  Confidence collapsed to 0 in that case, which limited the damage but did not stop the wrong point
+  being written - and the second half is worse: two observers who genuinely *agreed* were scored as
+  disagreeing against the bogus centroid, so a fact anywhere near the date line could never reach
+  confidence at all. Now averaged as unit vectors, which returns an identical answer for every other
+  longitude on Earth; the ordinary case is asserted alongside, because a fix that shifted every other
+  centroid would be a far bigger bug than the one it corrects. Teeth-checked - reverting fails four
+  of the seven.
+  Reach is narrow by construction (only ±180: Fiji, NZ, Kiribati, Chukotka, the Aleutians), which is
+  why it survived: nothing else in the app cares about that meridian.
+- **The same photo-orphaning bug existed for wikis and safety check-ins** — found by sweeping the
+  class rather than waiting to hit it again, and fixed identically. `Image` points at `Pin`, `Wiki`
+  and `SafetyCheckin` with `SET_NULL`, so deleting any of them detaches the user's photos instead of
+  destroying them; none of the three handlers recorded which object the photos had been on, so every
+  undo restored an empty object with the link unrecoverable. Verified against a real database for
+  both new cases before changing anything (`photo survived=True detached=True`, `re-attached=False`),
+  and re-verified after (`re-attached=True`).
+  A single completeness test now covers all three and asserts it against `Image`'s own `SET_NULL`
+  owners, so a fourth owner cannot repeat this silently. It also pins the "still detached only" rule
+  for each, since an undo that reclaims a photo the user has re-filed would be a worse bug than the
+  one being fixed. Teeth-checked.
+  Also enumerated, not fixed: the other undo handlers leave *associations* orphaned the same way
+  (`MarkupMap.pin`, `TripActivity.pin`, `SafetyCheckin.trip`, `PinList.source_saved_filter`, and the
+  eight relations pointing at `MarkupMap`). Those are links rather than content, and restoring them
+  blindly could resurrect associations the user has since changed - a different judgement from
+  photos, which are irreplaceable and unambiguous.
+- **Undoing a pin delete now restores its photos** — fixed, and the wider limitation filed. Applying
+  the chunk-117 question to the *delete* path rather than the merge: `Image.pin` is `SET_NULL`, so a
+  deleted pin's photos deliberately survive, detached. But `PinUndoHandler` serialised only fields,
+  FK ids and label ids, so an undo brought the pin back **empty** while its photos sat unattached -
+  and nothing else recorded which pin they had been on, so the link was unrecoverable the moment the
+  delete committed. The ids are now captured at stash time (the only moment the link exists) and
+  re-linked on restore, but only for photos *still* detached: one the user has since filed elsewhere
+  stays there. Old payloads without the key still restore. Teeth-checked.
+  What is not fixed and is filed instead: everything that CASCADEs (comments, albums, overlays,
+  links, notes, visits) is gone permanently - measured at `comments=0 albums=0` after a delete and
+  immediate undo. Restoring those means serialising whole object graphs with internal references
+  intact, which needs a decision about how deep undo reaches; the cheaper alternative is to stop the
+  delete dialog promising "all of it restorable".
+- **`merge_labels` checked the same way and is correct** — and this is a case where acting on the
+  scan would have *introduced* a bug. Enumerating Label's relations found one CASCADE relation the
+  merge never moves: `LabelCustomization`. It is reachable (a user can customize a label they own,
+  despite the service describing customizations as being for labels "they do not own"), and
+  confirmed empirically: merging such a label away leaves zero customization rows.
+  It is still correct. A customization holds display overrides *for the label being deleted*; it
+  carries no content, and moving it onto the target would silently restyle a label the user never
+  customized and overwrite any override the target already had. Letting it cascade is the right
+  outcome, so it is recorded as a documented exemption rather than "fixed". The guard also asserts
+  exemptions stay real relations, so a stale entry cannot mask a relation that later starts
+  mattering. Teeth-checked.
+- **Merging a pin destroyed its albums, map overlays and custom layers** — fixed. `merge_pins`
+  reassigns the loser's relations and then deletes it, and its module docstring asserts that "every
+  relation FK'd to Pin falls into one of three buckets". Enumerating Pin's related objects through
+  Django found 29 relations, 22 of them CASCADE, and three that appear in none of the buckets:
+  `Album.parent_pin`, `MapImageOverlay.parent_pin`, `CustomLayer.parent_pin`. Confirmed against a
+  real database before changing anything — an album and an overlay on the loser both came back
+  `exists() == False` after a merge.
+  It is drift, not a decision: `pin_merge` was added 2026-08-02, `Album` 2026-08-05 and
+  `MapImageOverlay` 2026-08-06, so the completeness claim quietly stopped being true.
+  Overlays and layers move straight across (no uniqueness constraint). Albums cannot: 
+  `uq_album_pin_slug` is unique on `(parent_pin, slug)` and two pins each holding a "Photos" album
+  is the ordinary case, with real images on both sides — so the loser's album is re-slugged rather
+  than dropped, since dropping it would be the same silent data loss in a new place.
+  The guard is the point: instead of listing the three models found today, the test asserts that
+  *no* CASCADE relation to Pin is unmentioned by the merge, so the next model to grow a
+  `parent_pin` fails here rather than deleting user data. Teeth-checked by removing one
+  reassignment — both the specific test and the completeness arm fail.
+- **External API scope enforcement is complete, and now guarded.** All 189 external endpoints were
+  enumerated through the URL resolver: 188 enforce a scope permission, and the one that does not
+  (`AuthSessionView`) is a deliberate, documented exception that reports only the calling
+  credential's own grant - gating it behind a scope would be circular.
+  The design is already careful: `HasApiKeyScope` fails closed *per method*, so an endpoint that
+  gains a new HTTP method without declaring a scope becomes a dead 403 rather than an open door.
+  What that does not cover is the dangerous mistake - dropping the permission entirely, or
+  inheriting `UnscopedExternalApiView`, whose own docstring warns that doing so for a data endpoint
+  "would silently grant it to every credential". That failure is invisible: the endpoint works, for
+  every credential, forever. A test now pins the exemption list to exactly one named entry with a
+  stated reason. Teeth-checked by reparenting a real data endpoint (`PinTombstonesView`) onto the
+  unscoped base - it is named in the failure.
+  Key verification itself was read and is sound: indexed prefix lookup then `check_password` on the
+  secret half, revoked keys and inactive users excluded, `last_used_at` written with `.update()` so
+  no `save()` side effects fire. API keys have no expiry field at all - they are revoked, never
+  aged out - which is a product gap rather than a defect, and is stated as such in the endpoint that
+  reports credential metadata.
+- **Notification preference drift now has a guard** — the risk was identified in the codebase's own
+  prose and left unenforced. `services.notifications.notification_center` introspects
+  `NotificationPreference` to derive its stems precisely because "a hardcoded list here would
+  silently omit it - which is exactly how the controller's `_PREF_FIELDS` and the model can drift
+  apart". The controller keeps that hardcoded list anyway, for good reason (it carries display
+  labels the model has no place for) — so the drift is possible and nothing checked for it. The two
+  agree today (13 entries, all real fields, no orphans); a test now pins both directions, since each
+  fails quietly: a model stem missing from the list is a preference the user can never change, and a
+  listed name that is not a field renders a control that saves nothing. Teeth-checked.
+- **Email uniqueness is enforced on the normalised value, not the raw one** — checked as the
+  highest-stakes instance of the chunk-114 class (validate one value, store another). The partial
+  unique constraint is on `normalized_email` where `is_verified=True`, and `mark_verified()`'s raw
+  `.update()` can violate it — which the secondary-email path correctly catches, answering "already
+  verified on another account" instead of a 500.
+  Two of my own inferences here were wrong and were corrected by introspection rather than reading:
+  the preference field count (a regex found zero) and an apparent `safety_checkin_*`/`safety_ci_*`
+  mismatch (those were types lacking preferences, not misnamed fields).
+- **A name that sanitized away was stored as a blank alias** — fixed, found by sweeping the class
+  the underscore bug belonged to (silent transformation of user input on save). Alias creation
+  checked that the *raw* submitted name was non-empty and then let `save()` sanitize it, so an
+  emoji-only or `<>` name passed "Name is required" and persisted as an empty-string alias. That
+  blank row shows in the pin's alias list *and* consumes its one free slot under the
+  case-insensitive unique constraint, so the next such attempt fails with a duplicate-key error
+  rather than a useful message. Both creation paths now validate the sanitized value — the one that
+  will actually be stored — and reject it with the message they already had. The pin-name sync path
+  was never affected; it guards on `is_meaningful_name` first.
+- **All 12 save-time field mutations audited; the rest are sound.** Slug minting, PostGIS point
+  sync, normalized email, normalized trivia answers, fact subject-type and invitation expiry are all
+  legitimate derivations. `Profile.save()` forcing community-gated visibility to `NO_ONE` while
+  Community is off is a deliberate single enforcement point, and fails closed. `Location.save()`'s
+  place resolution is correctly gated to creation-with-coordinates and is a local geometry lookup,
+  not a provider call.
+  Also checked and disproven: that `bulk_create` might bypass a `save()` that mints slugs or uuids.
+  None of the 13 bulk-created models has a slug, and the two with uuids take them from field
+  defaults, which `bulk_create` honours.
+- **Underscores were silently stripped from every user-facing name** — fixed. `sanitize_name` runs
+  from the `save()` of Pin, Wiki, Location and alias rows, normalising to an allowlist. That
+  allowlist kept `"`, `#`, `/` and `&` but dropped `_`, so "Site_7" was persisted as "Site7" with no
+  indication - and it applies on *every* write path, so imported names (KML/GPX exports, names
+  derived from filenames) were quietly rewritten. Underscore is a word character: not
+  markup-significant, not a URL or query-string delimiter, not a homograph, and category `Pc` rather
+  than a control character - so permitting it violates none of the existing property tests
+  (`never_produces_markup_significant_characters` forbids `< > \` { } \\ | ;`). Verified: all 16
+  pre-existing sanitizer tests still pass, plus 4 new ones.
+  Found by accident, which is worth recording: a search-semantics probe returned pin names that
+  didn't match what I had written, and the mismatch was the sanitizer, not the search.
+- **Search criteria verified correct** — `filter_by_criteria` was read and then exercised against a
+  real database rather than reasoned about. `has_visits=yes/no` is right in both directions
+  (including the `exclude()`-across-a-multi-valued-join case, the classic Django footgun here),
+  multiple tags AND correctly, and no duplicate rows are returned. The docstring's "(distinct)"
+  promise holds, and `apply_label_groups`, which documents that its caller must add `.distinct()`,
+  has exactly one caller, which does.
+- **mypy is clean across all 780 files** — run after ~140 files of audit changes. It found exactly
+  one error, and it was mine: `LabelledModel._labels_of_kind` reached for `self.labels`, which every
+  subclass supplies but the mixin never declared. Fixed by declaring the contract
+  (`labels: Manager[Label]` under `TYPE_CHECKING`) so the requirement on subclasses is explicit and
+  checked — not by casting or ignoring, per the project's standing instruction that mypy exists to
+  find real problems.
+- **Two more bug classes swept to exhaustion, both already clean.** The prefetch-defeating idiom
+  fixed in chunk 99 (`.all().<queryset_method>()`) survives in only two places, both harmless: a
+  `.delete()` (which ignores the prefetch cache anyway) and `Pin.rating`, left deliberately because
+  nothing prefetches `reviews`. `Album.photo_count` and `PinList.pin_count` were already written
+  prefetch-aware, with docstrings explaining why. Query-scaling coverage is now complete too:
+  `/dashboard/lists/` redirects to `/dashboard/organize/?tab=lists` (flat at 38 since chunk 107) and
+  the albums page is flat at 18, so every reachable page has been measured.
+  A third sweep — for unserialised check-then-create, the shape behind the article, calendar-sync and
+  undo findings — produced **no reliable signal**: a loose predicate matched 125 mostly-benign
+  "fetch, modify, save" functions, and a tightened one matched zero. Recorded as inconclusive rather
+  than reported either way; the three instances of that class were each found by reading a
+  subsystem, not by pattern-matching.
+- **Group-chat removal cuts off live delivery correctly** — verified and now pinned. This was
+  checked because chunk 52 found the same shape broken in safety check-in chat, where a revoked
+  emergency contact kept receiving over an already-open socket. Group chat is architecturally
+  immune: `broadcast_group_message` resolves `active_memberships()` at send time and addresses each
+  member's *own* per-profile channel, so a member removed mid-session is simply no longer in the
+  recipient list. HTTP access is already covered by existing tests (404, and messages sent during an
+  absence stay hidden).
+  What was missing was a test on the delivery path, and it is worth having precisely because the
+  safe design is the expensive one: the payload is rebuilt per member so a masked display name is
+  resolved through each viewer's visibility, and the docstring calls that "the accepted price". The
+  cheap optimisation - one shared payload to a single per-group channel - would silently restore
+  delivery to anyone still connected. The new test pins the *recipient set* rather than the
+  transport, so it survives a transport change but not a loss of per-member resolution.
+  Teeth-checked by broadcasting to all memberships instead of active ones.
+- **Every cache-based lock swept for the release defect; a third instance found and fixed.** After
+  hitting it in the beat sweeps and again in the upload lock, all 21 `cache.add` sites were
+  classified. Most are debounce/throttle markers with no release (correct by construction), and two
+  — `boundaries.schedule` and `schedule_panel_fetch`'s broker-down path — delete microseconds after
+  adding, to roll back a failed enqueue, so they have no overrun window.
+  The real third instance is the panel single-flight marker. It is added by the *enqueuer*, so its
+  150s TTL covers queue wait **and** execution: on a backed-up `panel_fetch` queue it can lapse
+  before the task starts. The worker then cleared it unconditionally in a `finally`, deleting the
+  *next* schedule's marker and letting the poll after that dispatch a third fetch — each duplicate a
+  real, paid upstream call. The token now travels with the task, and `flight_token=None` keeps the
+  old unconditional clear for tasks enqueued before the token existed, so a deploy does not strand
+  in-flight markers for a full TTL. Teeth-checked.
+  Three existing tests asserted the exact dispatch args and so failed on the added parameter; they
+  now accept the token with `mock.ANY`, keeping what they actually test (source key, pin, queue
+  routing) intact rather than being loosened wholesale.
+- **Detail pages are flat too** — extended the scaling sweep to parameterized routes, scaling each
+  along its own child dimension: pin detail against comments (with replies) and against labels, trip
+  detail against activities. All constant (pin detail 36 queries at 2 and 20 comments; trip detail
+  24). Combined with the parameterless sweep, the only two N+1s in the app were the template/property
+  accesses found in chunks 107-108.
+- **The upload quota lock released a lock it no longer held** — fixed, the same defect as the beat
+  sweep locks and now sharing their fix. `per_profile_upload_lock` released with a bare
+  `cache.delete` guarded only by "did I acquire it", which is not "do I still hold it": an upload
+  slower than the 30s timeout has already lost the lock to its successor, and its release dropped
+  *that* upload's lock. It now uses `services.core.locks`' token-checked release.
+  Separately filed: six check-then-create sites skip the lock entirely, and they are all the
+  background ones (`tasks.py` never imports it) — the paths where a bulk import fans out one task
+  per image and contention is highest. Not fixed, because the lock is deliberately fail-open, so
+  wrapping those sites would look like protection while changing almost nothing under real fan-out.
+  The docstring already names the real fix (a running-total column), which is a design decision.
+- **Every parameterless page swept for query scaling; one more N+1 found and fixed.** Using the
+  technique from the Organize fix, all 232 reversible routes were rendered at two data sizes; 98
+  returned 200 at both. Exactly one grew: `/dashboard/spotguessr/pins/`, at **7 queries for 4 pins
+  and 35 for 32** — precisely one per pin. The cause is the trap the map payload's own comment
+  documents: each pin's label falls through to `Location.display_name`, which reads the reverse
+  OneToOne `wiki`, and the queryset joined `location` but not `location__wiki`. Fixed by adding the
+  join; the endpoint is now flat. Teeth-checked by reverting it.
+  Also verified the background `rebuild_map_pin_cache` path, which passes a `select_related("location")`
+  queryset into the cache: flat at 2 queries for 5 and 40 pins, because `prepare_queryset` adds the
+  `location__wiki` join downstream. The remaining bare `select_related("location")` sites are
+  single-object `.first()` fetches where the join is immaterial.
+- **The Organize page issued a query per label card, three times over** — fixed. Its templates ask
+  `{% if not label.profile %}` to decide whether to show the "global" chip, and accessing `.profile`
+  fetches the owning row; the card template asks it three times, with more in the priority list and
+  row partials. Measured end-to-end through the view: **134 queries for a profile with 5 pins, 244
+  for one with 60** — 206 of those 244 were the identical `dashboard_profiles` SELECT. `profile_id`
+  answers the same question for free, so a documented `Label.is_global` property now reads that.
+  After: **38 queries at both 5 and 60 pins** — flat instead of ~2 per label.
+  Swept the other hot pages the same way: map, trips, memories and lists are all already flat
+  (the map payload is a constant 3 queries whether it serialises 10 pins or 50).
+  Guarded by a new test asserting the count does not *grow* with data size rather than pinning a
+  number — growth is the defect; a fixed constant would just get bumped. Teeth-checked by reverting
+  one template: `89 queries for 4 pins, 117 for 32`.
+  **The measurement trap is recorded in the test**, because it caught me first: the first user in a
+  fresh database is auto-promoted to site admin, whose page renders differently, so my initial
+  reading ("5 pins → 15, 40 pins → 29") was comparing an admin against a non-admin, not two data
+  sizes. Controlling for it showed the map was flat all along and the real regression was elsewhere.
+- **Deleted-account fallout, swept** — the chunk-105 bug generalised: which other `SET_NULL` FKs
+  to `Profile` leave a permission check degraded? Enumerated all 44. Only `trip_visibility` ever
+  reads a *visibility setting* through such a relation, and that is the one already fixed;
+  everything else is attribution (`created_by`, `editor`, `submitter`), and the access checks that
+  touch nulled FKs are positive matches (`contacts.filter(contact_profile=profile).exists()`), which
+  fail closed. The single other "restriction guarded by owner non-null" shape in the codebase is a
+  reply notification, where a NULL author correctly means nobody to notify.
+- **Settings export/import round-trip now has a completeness arm** — added. The existing round-trip
+  test names three fields by hand, so a field added to `_export_settings` and forgotten in the
+  importer passes: the export carries it, the restore drops it, and the setting reverts to the model
+  default — which for a privacy field is the *more permissive* value. The new test exports a profile
+  whose settings are deliberately non-default, imports that into a fresh profile, re-exports, and
+  diffs, so drift surfaces whatever the field is called. Teeth-checked by removing one field from
+  the import allowlist: it reports `privacy.common_pins_visibility: ('no_one' -> 'friends')`.
+  Worth noting *why* this was worth building: I had "found" a round-trip gap by comparing the export
+  block against the importer's `_PRIVACY_FIELDS` tuple by eye, and was wrong — booleans are handled
+  on a separate path. That was the third false alarm this session from comparing lists or counting
+  pattern hits. The test does the comparison properly and permanently.
+- **A deleted account's trip locations became visible to everyone** — fixed, and found by
+  accident. `apply_trip_visibility_filter` opens with `hidden_out.update(a.id for a in sensitive if
+  a.added_by is None)` under the comment "Activities where the adder's account was deleted: treat as
+  most restrictive". That line could never fire: the only production caller,
+  `viewer_hidden_activity_ids`, built `sensitive` with `... and act.added_by_id and ... and
+  act.added_by and ...`, filtering those very rows out first. `added_by` is `on_delete=SET_NULL`
+  and every production creation path sets it to a real profile, so NULL means the adder deleted
+  their account — and their activities, whose locations they may have restricted to `NO_ONE`, fell
+  through as fully visible to every trip member. Four consumers were affected (trip map, AI
+  suggestions, calendar export, activities panel).
+  It survived because every existing test calls `apply_trip_visibility_filter` *directly*, passing
+  activities that bypass the `sensitive` filter — so the branch looked exercised while being dead in
+  production. There was no test for the deleted-adder case at all. Fixed by letting those rows reach
+  the filter rather than duplicating the rule in the wrapper, so it stays in one place.
+- **`trip_visibility` re-implements the shared gate and is stricter than it** — filed, not changed.
+  It buckets activities and resolves each bucket with its own queries (a deliberate choice, to
+  answer for a whole list in a fixed number of queries). Measured against a live database, it
+  diverges from `Profile.visibility_permits` in two ways: it ignores pending friend requests, which
+  the canonical evaluator honours, and it reads `COMMON_PIN` as "has a pin at *this* location"
+  rather than "shares any pinned location". Both fail closed, so neither leaks — which is exactly
+  why it is filed: making them agree would *reveal* currently-hidden locations. The danger is a
+  future cleanup unifying them onto `visibility_permits`, as that method's own docstring invites,
+  silently widening access with no test failing.
+- **"Visited Together" leaked past the privacy gate its neighbour respects** — fixed.
+  `_add_common_context` gates `common_pin_count` behind `Profile.can_view_common_pins_with`, a
+  deliberately *mutual* check whose docstring explains why: "revealing which locations a pair of
+  users have both pinned exposes information about both of them, not just this profile". The
+  comment above the gate goes further, noting the count itself had to be gated, not just the link.
+  `shared_visited` was then computed and put in the context unconditionally, and the profile
+  template renders it as a "Visited Together" stat whenever it is non-empty — so a profile whose
+  `common_pins_visibility` forbade the viewer (or a viewer whose own setting forbade it) still
+  disclosed how many locations the two had both **visited**. That is strictly more than the thing
+  deliberately protected: a shared pin means two people bookmarked a place; a shared visit means
+  both were physically there. There is no separate visits-visibility setting, so the common-pins
+  gate is the applicable one. Found by following an author's own `# TODO: Whatever is happening
+  here is probably wrong.` Written test-first, including an anchor proving the stat still shows
+  when both sides opt in.
+- **Outbound HTTP timeouts are complete** — all 12 raw `requests`/`urlopen` call sites pass an
+  explicit `timeout`, and every gateway/plugin call goes through `_RateLimitedSession._do_request`,
+  which sets a `(5, 30)` default precisely because `requests` has none. My first scan reported the
+  Google OAuth token exchange as missing one; that was a false positive — its `timeout=` sits nine
+  lines below the call, past the window my line-based scanner used. Re-run with `ast`: zero misses.
+- **Two `TODO: Don't hardcode 'user' string` markers closed** in the label queryset, now using
+  `KIND_USER`/`KIND_MEDIA` — the same cleanup chunk 99 applied to the tag/category/status siblings.
+- **A double-clicked Undo restored everything twice** — fixed. `restore_undo_action` checked
+  expiry, called the handler's `restore()`, then deleted the entry, with nothing claiming the row
+  in between. Both halves of a double-submit fetch the entry while it still exists, so both pass
+  the check and both restore. All three entry points (web undo view, pin bulk-delete, external API)
+  look the entry up and hand it straight to the service, so a double-click is the ordinary way in.
+  What made this worth fixing at the service layer rather than per handler: whether a duplicate
+  actually appeared depended on whether the *handler* happened to hit a unique constraint on the
+  way. `PinUndoHandler` is saved by `db_pin_unique_location_per_profile` for root pins (not child
+  pins), and the saved-filter, label, wiki, pin-list, markup-map and safety-checkin handlers each
+  re-check something before recreating — but `TripUndoHandler.restore` does an unconditional
+  `Trip.objects.create` and duplicates outright. A new handler without a convenient unique
+  constraint would silently inherit the bug. The entry is now claimed with `select_for_update()`
+  inside the existing transaction; a second request waits, finds the row gone, and raises
+  `UndoAlreadyRestoredError` — a subclass of `UndoExpiredError`, so all three callers keep working
+  unchanged while still being able to tell the two apart. Written test-first.
+- **Keyset cursors and pagination are correct** — checked and clean, recorded so it is not
+  re-derived. Both cursor implementations (the shared `keyset_cursor` module and `pin_sync`'s older
+  private copy) pair the right predicate with the right ordering — `(stamp > s) OR (stamp = s AND
+  pk > pk)` with ascending order in `pin_sync`, the `<` mirror with `-created, -pk` in the
+  friendship feed — and all three sites trim the extra probe row *before* deriving `next_cursor`,
+  so no row is skipped between pages. All 15 `get_page` call sites paginate an ordered queryset,
+  several via the model's `Meta.ordering` rather than an explicit `order_by`, so Django's
+  inconsistent-pagination trap is avoided.
+- **Rate-limit rejections consumed the budget that rejected them** — fixed, in two places.
+  Every blocked attempt writes an `ApiCallLog` row so the rejection shows up in usage reporting
+  (`was_rate_limited=True`, or `was_service_disabled=True`). `check_rate_limit` then counted rows
+  for the service excluding only `was_geo_filtered=True` — so those rejection rows were charged
+  as though requests had gone out. The per-minute limit is what makes it bite: a burst produces one
+  rejection row per over-limit attempt, and each is charged against the *daily* and *30-day*
+  budgets, which are much larger and far slower to recover. A caller retrying into a per-minute
+  wall therefore spends a day's allowance without a single request leaving the process, and the
+  harder it retries the faster its real quota disappears.
+  That `was_geo_filtered` was already excluded is what makes this a bug and not a design choice —
+  skipped calls were understood not to count; two of the three skip reasons were missed. Both
+  counts now use a documented `ApiCallLogQuerySet.billable()`. A call that went out and *failed*
+  is still billed, since the remote service counted it.
+  The same count drove `compute_service_budget`, which decides how many enrichment calls a sweep
+  may still make. Measured with the fix reverted: after a burst of 10 rejections against a daily
+  limit of 10 with only 2 real calls made, the computed budget is exactly **0** — enrichment stops
+  for a service whose quota is 80% unspent. Found by TDD (tests written failing first), and the
+  enrichment case separately teeth-checked.
+- **`_reserve_call` itself is sound** — the check-then-insert race is properly closed with
+  `select_for_update()` on the service's `ApiRateLimit` row, and the blocked branches deliberately
+  exit the `atomic()` block before raising so the rejection row is not rolled back with it.
+- **Sweep locks released unconditionally, so an overrun degraded exclusion** — fixed. Ten beat
+  tasks took an overlap lock with `cache.add(key, ..., ttl)` and released it with a bare
+  `cache.delete(key)` in a `finally`. That is correct only while a run finishes inside its own TTL.
+  When it does not: the lock expires, the next tick acquires it, the slow run's `finally` then
+  deletes *that* run's lock, and the tick after acquires immediately - exclusion degrades with each
+  overrun instead of recovering. Overrun is structural rather than hypothetical here:
+  `send_due_checkin_reminders` sends SMTP **inline, per row**, so its runtime grows with the data
+  while its TTL is a fixed 270s. The consequence is user-visible because the notification and the
+  email are both sent *before* the status compare-and-set that makes the row stop matching, so two
+  concurrent runs can notify a user twice about one check-in. Now `services/core/locks.py` stamps a
+  token into the lock and deletes only if that token is still present, logging a warning when it is
+  not (an overrun means a mistuned TTL and should be visible). The read-then-delete is not atomic -
+  Django's cache API has no compare-and-delete - but it narrows the window from the whole sweep to
+  the gap between two cache calls. The existing `test_beat_lock_intervals` covers TTL-vs-interval
+  drift; this covers what happens once a TTL is exceeded.
+  The refactor was caught by the existing suite in the best possible way:
+  `test_beat_lock_intervals` discovers locks by scanning `tasks.py` for `cache.add(...)`, and it
+  carries a deliberate self-guard ("guard against the AST scan quietly matching nothing after a
+  refactor") that failed the moment the idiom changed. Its predicate now matches both forms, and
+  was re-verified by dropping an entry from the coverage map to confirm it still reports the gap
+  rather than passing vacuously.
+  Note what was *not* converted: the debounce markers (`_debounce_key`, flight keys) deliberately
+  have no release, and `generate_boundaries_for_location` releases a lock acquired by its
+  *enqueuer*, a cross-process handoff the token scheme does not fit.
+- **`send_checkin_reminder` is correctly guarded against repeat sends** — checked because
+  `due_for_reminder()` filters only on status and a time window, with nothing excluding
+  already-reminded rows. It is safe: the send ends in a conditional `update()` filtered on
+  `status=SCHEDULED`, a proper compare-and-set, and the queryset selects on that status.
+- **Signal and transaction discipline, swept exhaustively** — clean, recorded so it is not
+  re-derived. All 50 `@receiver` handlers pass `dispatch_uid`; none calls `save()` inside a
+  `post_save`/`pre_save` (the two hazards `CLAUDE.md` calls out); and no enqueue sits inside an
+  `atomic()` block without `transaction.on_commit`. The 57 enqueues outside any atomic block are
+  safe because `ATOMIC_REQUESTS` is unset, so each write autocommits before the task is queued.
+  Worth noting the method: my first two scans returned 0 by being *broken* — the real idiom is a
+  nested `def _enqueue()` handed to `on_commit(_enqueue)`, which no indentation heuristic catches.
+  Redone with `ast`, validated against known-positive sites (13 deferred enqueues) before the zero
+  was believed.
+- **`PIN_CACHE_VERSION` is consistent** — TypeScript source and both compiled bundles all read 8,
+  so the client cache is not silently stale. A contract test already guards the payload shape.
+- **`date.today()` reads the OS clock, not Django's `TIME_ZONE`** — 9 sites, against 10 that
+  correctly use `timezone.localdate()`. Currently harmless and *only* by coincidence: `TIME_ZONE`
+  is `"UTC"`, the container's OS clock is UTC, and there is no per-user timezone field, so the two
+  agree. They would diverge silently the moment any of those three changes. Not converted: the fix
+  is behaviour-neutral today, and several of the sites have shadowed or function-local `date`
+  imports that make a mechanical rewrite more likely to introduce a bug than to prevent one.
+  Filed rather than churned.
+- **One unused import removed** (`export.py` imported `datetime.timezone` and never used it, while
+  shadowing Django's `timezone` for anyone later editing the file). Found only because ruff
+  disables `F401` project-wide — deliberately, per the comment in `pyproject.toml`. That decision
+  is defensible and was left alone: 147 unused imports exist, but a blanket `--fix` would delete
+  side-effect imports such as `undo/service.py`'s `handlers`, which silently registers every undo
+  handler. Any future re-enabling needs per-file ignores for those first.
+- **Object-level authorization, swept across the whole controller layer** — a negative result
+  worth recording. Every lookup keyed on a URL-supplied id was checked (35 candidates across 18
+  controllers): all are scoped, either by the queryset itself (`between(profile, partner)`,
+  `group=group`, `checkin=checkin`, `wiki=wiki`, `suggested_to=profile`), by a helper that scopes
+  (`_participant_session`, `resolve_visible_wiki`), by an ownership check on the next line, or by
+  `PermissionRequiredMixin` on the admin views. The REST surface is deliberately tiny — two
+  viewsets, both filtered to `profile__user=request.user`, under a global `IsAuthenticated`
+  default. No IDOR found.
+- **`pin.categories`/`.tags`/`.statuses` silently defeated every caller's prefetch** — fixed.
+  They were `self.labels.all().categories()`, and chaining a queryset method onto `.all()` builds
+  a new queryset, which ignores the prefetch cache. Measured: 25 pins cost 2 queries to load and
+  **77** once the three accessors were touched — three extra queries per row, for callers who had
+  explicitly prefetched. `services.map_pins.payload` already filtered the prefetched list in
+  Python; the same three accessors on the model did not. Now a shared `abstract.LabelledModel`
+  mixin (Pin and Wiki had duplicate copies), filtering in Python: **77 → 2**. No migration — the
+  mixin declares no fields, confirmed with `makemigrations --check`. Unprefetched callers pay
+  exactly what they did before. Nothing in the codebase consumed these as querysets, so the
+  return-type change to `list` reaches no caller; `map/data.html`'s `pin.categories` reads a
+  payload dict, not the model.
+- **Calendar sync**: token storage is encrypted (`refresh_token` is an `EncryptedTextField`), the
+  export enqueue correctly defers to `transaction.on_commit`, and trip membership creation is
+  idempotent through `get_or_create`. One gap found and filed: the "already imported this event"
+  guard checks `(profile, google_event_id)`, but the model's unique constraints are on
+  `(trip, profile)` and `(trip, profile, activity)` — so a double-submit imports one calendar event
+  as **two trips** without violating anything — confirmed against a real database, not inferred.
+  It is the same check-then-write shape as the article conflict, but unlike that one the obvious
+  remedy is wrong: a plain unique constraint on that pair would reject every profile's second
+  *timed* import, because those deliberately store a blank event id on the trip-level link and
+  blanks are not distinct to a unique index. The fix has to be a partial constraint, and its
+  migration must delete rows — choosing which link survives is a decision about live user data.
+- **Check-then-write races, swept generally** after the article TOCTOU. A scan found 42 functions
+  that read state (`.exists()`/`.count()`) and then `create()` with no `atomic()` or
+  `select_for_update()` in the same function — but almost all are benign, and the reason is the
+  useful part: the ones that matter are closed by a **database** constraint, so the application
+  check is a friendly-error path rather than the safety mechanism.
+
+  Verified individually for the cases with real consequences: `ApiKey.prefix` is unique (a
+  colliding prefix loses at insert, so key lookup can never be ambiguous); `ProfileEmail` is unique
+  on `normalized_email` rather than the raw string, which is the right key for case- and
+  dot-insensitive identity; `CustomField` on `(profile, entity_type, name)`; `PinList` on
+  `(profile, name)` and `(profile, slug)`; `WebAuthnCredential` on `credential_id`. The upload
+  paths in the list are false positives — they serialise on `per_profile_upload_lock`, which the
+  scan did not know to look for — and the import paths are single-user and sequential.
+
+  That is what made the article conflict check exceptional: `ArticleRevision` has no revision number
+  and no unique constraint, so there was nothing underneath the check. It is the one place in this
+  sweep where a row lock was the *only* available answer.
+- **Pagination ordering**: paginating an unordered queryset silently duplicates and drops rows
+  across pages, and only 56 of 165 dashboard models declare `Meta.ordering` — so this looked like a
+  likely gap. It is not: all 14 call sites go through one `services/core/pagination.get_page`
+  helper (which also clamps out-of-range pages rather than raising, so a stale HTMX pagination link
+  cannot error), and re-running the paginated-view bands with
+  `-W error::UnorderedObjectListWarning` produced **zero** occurrences. Django emits that warning
+  precisely for this bug, so escalating it is a direct test rather than an inference from
+  `Meta.ordering` counts.
+
+  That run *did* surface 8 failures, and chasing them was worth recording: they were **my own
+  reused test database**, poisoned by an earlier `TransactionTestCase` band truncating
+  migration-seeded `SubscriptionRole` rows. Same trap as item 4 in section 4 above — the tests pass
+  on `--create-db` (12/12). Nothing to do with pagination, and nothing to do with the `-W` flag,
+  which is what the first two hypotheses were.
+- **Consensus trust math**: the Beta-Bernoulli posterior is right in the place it is usually
+  wrong. Ageing is `gamma * (alpha - alpha_prior) + alpha_prior` — it decays the *evidence* toward
+  the prior, not alpha toward zero, which is what keeps the posterior mean meaningful as history
+  fades; the naive form drags the score to 0 regardless of accuracy. The score itself is the
+  posterior mean `alpha / (alpha + beta)`, updates run under `select_for_update` inside a
+  transaction, check-injection probability is linear in `1 - score` with a floor and ceiling (so a
+  veteran is still occasionally re-checked and a newcomer is not swamped), and competitive rounds
+  key off the *least*-trusted participant while honouring every participant's cooldown. The
+  `random.random()` used for injection carries a `# noqa: S311` — defensible here: an observer
+  learns one bit per round from a process-wide RNG interleaved across all users, which is not a
+  path to predicting when they will be tested.
+- **Exception hierarchies across the other untrusted-input parsers**: swept every third-party
+  parser reachable from an upload after the Pillow findings. `zipfile.BadZipFile`,
+  `LargeZipFile` and `tarfile.TarError` are all *not* `OSError`/`ValueError` subclasses — and the
+  archive extractor already catches each explicitly. `gpxpy`'s `GPXException` is likewise unrelated
+  to either, and the importer lists it explicitly too. `BadGzipFile` and `JSONDecodeError` do
+  inherit from `OSError`/`ValueError` respectively, so the generic tuples cover them. The KML pair
+  above was the only gap.
+- **Image pipeline fidelity**: transparency and colour survive the downscale in every combination
+  that matters — an RGBA PNG keeps its alpha through PNG→PNG *and* PNG→WEBP (the code converts to
+  RGBA rather than flattening), and an ICC profile survives JPEG→JPEG and JPEG→WEBP. Animated GIFs
+  are excluded from re-encoding entirely, so they cannot be flattened to a single frame.
+- **Mass assignment and form validation**: checked every DRF serializer in `external_api` for a
+  writable field that should not be — `profile`, `user`, `role`, `is_staff`, `scopes`,
+  `total_paid_cents`, `stripe_*`, `processed_at`, `id`/`pk`. Two hits, both `uuid` on a *create*
+  serializer, and both deliberate: an offline client stamps its own idempotency uuid and retries
+  until acknowledged. It is scoped correctly (`Pin.objects.filter(profile=profile, uuid=...)`, so a
+  replay can only ever return the caller's *own* pin), and a cross-profile collision is caught from
+  `IntegrityError` and converted into a proper `PinCreationError` rather than the 500 it would
+  otherwise become. The uuid space is unguessable, so the collision error is not a useful oracle.
+  Forms are a thin surface — 7 modules, one `clean()`, and it correctly invokes the parent per file
+  (via `single_clean = super().clean`, which a naive AST check reads as a missing `super()` call).
+- **Subscription feature gating**: every `SiteFeature` is enforced server-side, not only in
+  templates — `VIDEO_UPLOADS` at the upload chokepoint, `AI` across 18 sites, `PLACES` across 9.
+  The one asymmetry is `ALPHA_FEATURES`, which gates the games *hub* and the nav item but none of
+  the ~49 views behind it, so a non-entitled user can open any game directly. Verified by probe
+  rather than by grep. A mixin applying the hub's check to all 49 views was written and then
+  **reverted**: it broke 9 existing tests that play full games with non-entitled users, and no test
+  anywhere asserts a game refuses one — so the suite encodes "games are open, discovery is gated",
+  and tightening it is a product change rather than a defect fix. Filed in `PROBLEMS.md` with the
+  measurement, both readings, and the mechanical work either would need.
+- **Stripe billing**: the webhook path is careful in every respect that matters — the
+  `Stripe-Signature` header is verified against the **raw** body, an unset secret fails *closed*
+  (503, not "process it anyway"), each event id is idempotent under a `select_for_update` row lock
+  so a duplicate delivery cannot double-credit, and the raw payload is written in its own
+  transaction *before* the handler runs so a crash still leaves something to debug. The view is
+  correctly `csrf_exempt` and unauthenticated, which a webhook must be. Unknown event types are
+  ignored with a 200, which is right — Stripe sends more than you subscribe to. The nightly
+  drift-correction sweep guards each subscription individually, including the *apply* step, with a
+  comment explaining that `items.data[0]` indexing would otherwise abort the sweep for everyone
+  after one oddly-shaped subscription.
+
+  One gap, filed rather than fixed: **no refund or chargeback handling**. `total_paid_cents` is
+  the pay-what-you-want entitlement and is monotonically increasing with no decrement path, so a
+  refunded or disputed payment keeps the access it bought. The remedy is a policy choice (full
+  claw-back? pro-rata? only on a lost dispute?), so it is in `PROBLEMS.md` with the mechanical part
+  spelled out.
+- **Storage quota enforcement**: every upload path — pin galleries, articles, journal visits,
+  DMs, safety, consensus, tools, map overlays, the photo services, the four `tasks.py` fetchers,
+  and pin suggestions — pairs `quota_error_for_upload` with `per_profile_upload_lock`, so the
+  read-then-write race that check would otherwise have is closed. The two files that mention quota
+  without calling it are correct: the external-API social path documents that it creates no `Image`
+  row at all, and map overlays defer to the canonical upload service. Quota is aggregated live from
+  `file_size`, which both media pipelines still update after a rewrite — including the two paths
+  changed earlier in this audit. The community quota bonus resists the obvious abuse: self-votes
+  are excluded, and its `count()` of relevance rows really is a count of distinct profiles, because
+  `MediaRelevance`'s unique constraint covers exactly the four fields it filters on.
+- **Celery beat and queue routing**: all 24 beat entries resolve to registered tasks; no task
+  declares a queue no worker consumes (only `celery`, served by the default worker, and
+  `panel_fetch`, served by its dedicated one). Every lock-guarded beat task's TTL is correctly
+  under its interval today — 110s/120s for the stall sweeps, 270s/300s for the safety sweeps,
+  3300s/3600s for enrichment and trivia — so the guard added above is a fence around a currently
+  correct arrangement, not a fix. Worth noting the interaction with the chunk-2 safety fix: those
+  sweeps have no explicit `time_limit` (they inherit the global 3600s), so a run exceeding 270s
+  *could* overlap the next tick — but the compare-and-set reminder/escalation guards added earlier
+  make an overlapping run idempotent rather than a source of duplicate emergency contact
+  escalations.
+  *(First pass reported all 24 beat entries as unresolvable. That was the probe, not the app —
+  a bare `django.setup()` hadn't imported the tasks module Celery autodiscovers. 24/24 failing is
+  the signature of a broken check; re-ran with the import and got 0.)*
+- **WebSocket authorization**: audited all seven consumer routes — a surface the chunk-8 IDOR
+  sweep never covered, since it walked HTTP routes only. The design is strong: a shared
+  `_ParticipantSessionConsumer` base, credential scope checked *before* the membership lookup so a
+  refused connection never briefly joins a broadcast group, group-membership cleanup when
+  `accept()` fails after `group_add` succeeded, uniform 4404 closes that don't distinguish
+  "not yours" from "doesn't exist", and periodic credential re-validation so revoking a leaked key
+  actually stops an open socket. Every route verifies membership, not merely authentication. The
+  one gap was the contact route's missing revocation path, above.
+- **The rest of the tracking/privacy toggle matrix**: chased the shape of the two location-strip
+  bugs across every `Profile` tracking setting, since "enforced in one place, not another" had now
+  produced three findings. `track_routes` has a single save path and it is gated;
+  `track_geolocation` gates its live-ping producer; `track_device_scans` correctly de-attributes
+  rather than refusing the upload; the Google Takeout importer gates on `visit_logging_allowed`
+  before doing anything. The one crack was the `VisitSource` mislabel above, plus an open question
+  about which setting *should* own dwell visits, filed in `PROBLEMS.md` as the settings-copy
+  decision it is rather than decided here.
+- **Derived artefacts don't reintroduce stripped location**: `render_preview` re-encodes without
+  an `exif=` argument, so previews carry no EXIF at all; no original-file backup is retained
+  anywhere, so a strip cannot be undone from a kept copy; and `exif_data` is never serialized to
+  a client — its one non-model reference is the pin-share path copying it onto the recipient's own
+  row, which is the intended semantics of sharing a photo. There is no location-obscuring share
+  mode for photo EXIF to defeat: sharing a pin shares its exact location by design, which is what
+  the `LocationExposure` provenance chain exists to track.
+- **Cache-key scoping**: audited all 125 Django cache call sites for the "content varies by
+  viewer, key doesn't" leak. None found. The per-user caches are all correctly scoped
+  (`search_hints:{profile.pk}`, `ul_immich_thumb_{account.pk}_{asset_id}`, Google Photos keyed on a
+  session whose owner is separately cached and checked); the unscoped ones
+  (Google Places, NPS, Wikipedia, Overpass) hold genuinely public upstream data whose content
+  depends only on the key. No template fragment caching and no `cache_page` anywhere, so the two
+  classic sources of this bug are absent by construction. The gap was in HTTP cache directives, not
+  cache keys — see the media finding above.
+- **The rest of the geospatial surface**: all 45 `Point(...)` constructions are lng-first; every
+  `PointField`/`PolygonField` in the app is `geography=True, srid=4326`, so all 17 `__distance_lte`
+  / `Distance()` uses are in real metres with no geometry-vs-geography unit mixing.
+  `buffer_point_by_meters` correctly stretches the longitude axis by `1/cos(lat)` (with a `1e-6`
+  clamp against the poles) rather than buffering isotropically in degree space;
+  `site_scope.meters_between` converts to radians before `cos`; `bearing_degrees` is a true
+  great-circle forward azimuth, not an atan2 over degree deltas — which matters because it gates
+  arrow-markup share detection and thus the `LocationExposure` chain. The four independent
+  haversine implementations (`markup`, `consensus.fields`, `device_scan.clustering`, plus the
+  equirectangular `site_scope`) are duplication worth consolidating, but all four are correct.
+  `Location.point`'s `default=Point(0, 0)` is a shared mutable default and would be null-island
+  data if it ever reached the DB, but `save()` unconditionally derives the point from
+  lat/lng, lat/lng are non-nullable and immutable, nothing `bulk_create`s a `Location`, and no code
+  mutates a point in place — so it is inert rather than latent. The GeoJSON/KML/GPX exporters set
+  no CRS, correctly: all three formats define WGS-84 as their only coordinate system.
+- **Naive-datetime handling is otherwise correct**: the one `RuntimeWarning` in a full 10,285-test
+  run is a test fixture (`test_pin_queryset.py:134` passes `date.today()`), not production code.
+  Production consistently uses `timezone.make_aware(...)` or explicit `tzinfo=UTC`, and
+  `memories/aggregator._date_to_datetime` builds a naive value only transiently before calling
+  `make_aware`. Chasing that warning did surface a real timezone bug in trip weather matching —
+  filed in `PROBLEMS.md`.
+- **Exception-swallowing discipline is good.** 169 broad (`Exception`/bare/`RuntimeError`)
+  non-reraising handlers exist, which sounds alarming until you look: they cluster in
+  `consumers.py` and `tasks.py`, where being defensive is correct (one bad frame must not kill a
+  socket; one bad row must not abort a sweep — see the safety-sweep isolation tests). **164 of the
+  169 log the failure.** The five that neither log nor re-raise are all small best-effort
+  fallbacks: `available = False`, `return _DEFAULT_MAX_SLUG_LENGTH`, `xmp = {}`, `return url`,
+  `return False`. Nothing hidden.
+
+  The subset that *is* worth attention is different: **ten handlers catch `RuntimeError` inside a
+  tuple**, which also swallows the test network guard's own exception — so any unmocked
+  integration on those paths surfaces as a green test plus an unread log line (exactly the
+  chunk-44 finding). That static list is the candidate set; the ERROR-log sweep over passing tests
+  is what tells you which ones actually fire.
+- **Full-suite ERROR-log sweep**: ran all 10,285 tests with `-o log_cli=true --log-cli-level=ERROR`
+  to surface failures that passing tests hide (the runner suppresses logs unless a test fails).
+  **Every entry is either a deliberately-provoked test fixture or benign** — the giveaways are the
+  names: `broken_panel`, `test_broken`, `send-explodes@example.com`, `<Mock …> failed`, a "broken"
+  shapefile, a Stripe event for `id 999999`. The error-isolation design shows up clearly here:
+  journal sources, memory sources, search providers, panel sources and photo-keyword providers all
+  log-and-continue when one of them fails, exactly as their tests assert.
+
+  Two entries were worth chasing. The `SiteSettings.notify_gotify_token` decrypt failures (3) are
+  the fail-soft behaviour added by this audit, working as intended. The most frequent —
+  `Failed to log API call for service article_safety` (7) — turned out to be
+  `DatabaseOperationForbidden`: `ClassifyArticleTextTests` is a `SimpleTestCase`, and the path it
+  exercises calls `log_api_call`, whose blanket `except Exception` (deliberate: "logging problems
+  never break callers") swallows the refusal. Production is fine; the note is that those tests
+  silently never exercise the cost logging, so an assertion about `ApiCallLog` there would be
+  misleading. Left as-is — the swallow is correct, and the alternative is making a pure-text test
+  hit the database.
+- **Plugin system**: all **43** plugins carry complete metadata (`verbose_name`, `description`,
+  `author`) and every one contributes through at least one of the seven hooks. A narrower check
+  of just `get_service_defaults`/`get_panel_sources` flags four (`kartaview`, `mapillary`,
+  `panoramax`, `photo_keywords_metadata`) as contributing nothing — they contribute imagery and
+  street-view providers instead, so that reading is wrong. The registry also refuses a nameless
+  plugin and warns on duplicate service keys.
+
+  One number from that audit corroborates the cost-tracking fix from a different direction:
+  **zero of the 43 plugins declare a `cost_per_call`**. Combined with the single priced entry in
+  the static `SERVICE_REGISTRY`, that is why `api_spend_summary_30d` keying on "has a flat price"
+  excluded essentially everything real.
+- **Signal rules**: no `post_save`/`pre_save` handler calls `save()`, and every signal connection
+  passes `dispatch_uid` (including the loop in `achievements/signals.py`, which a line-based grep
+  reports as missing it).
+- **Payload/serializer drift**: `build_photo_payload`/`PhotoSerializer` and
+  `build_conversation_payload`/`ConversationSerializer` match exactly.
+- **Achievement sweep cost**: measured, and it is *not* clean — ~30 queries per profile per night,
+  killed at the 3600s task limit with a silent fixed tail of unevaluated users. Filed in
+  `PROBLEMS.md` with numbers and two candidate fixes.
+- **Global search cross-user isolation**: gave one user objects of 12 searchable kinds, each
+  carrying a unique nonsense token, then searched as a second user for every token — **0 results**
+  leaked, while the owner finds **12/12** of their own (so the probe is meaningful rather than
+  passing because search returns nothing). All 11 providers scope by `profile`.
+
+### Empty grep output is not evidence (three times in one chunk)
+
+Chunk 163's queue audit began with three greps that all returned nothing: worker `-Q` flags in
+`docker-compose.yml`, `queue=` assignments in code, and `task_routes` in settings. Read naively that
+says "no queues are configured anywhere", which would have been a dramatic and false finding.
+
+All three were pattern errors. The compose file spells the worker command as a YAML list, so `-Q`
+and its value sit on separate lines and no single-line pattern matches both. `queue=["']literal["']`
+cannot match `queue=source.queue`. And of the 21 `queue=` occurrences that do exist in code, 20 are
+`refresh_queue=True` - a toast parameter that has nothing to do with Celery.
+
+The lesson is the same one this audit has now recorded for `head` truncation, and it generalises
+past that: a search returning nothing is evidence about the *pattern* until it has been shown to be
+evidence about the *codebase*. The cheap discipline is to prove the pattern can match something -
+count all occurrences of the bare term first, confirm the file is where you think it is - before
+letting an empty result support any conclusion.
+
+
+### One name, four objects: a scan that was 100% wrong
+
+The first version of the `settings.X` check reported **78 undefined settings**. Every one was false,
+which makes it the worst instrument in this audit and worth recording in full.
+
+It matched any attribute access on a variable named `settings`, and this codebase binds that name to
+four unrelated things:
+
+1. `django.conf.settings` - the intended target;
+2. `dashboard.controllers.settings`, a **module** - which is why `settings.SettingsView` and
+   `settings.SaveMapPositionView` appeared in `urls.py`;
+3. `SiteSettings` **model instances**, conventionally `settings = SiteSettings.get_current()` - which
+   is why `settings.save`, `settings.pk`, `settings.max_pins_per_list` appeared;
+4. the Pydantic `AppSettings` object from `settings/app.py` - which is why every lowercase
+   `settings.google_unrestricted_api_key`-style name appeared.
+
+The tell was in the output rather than the code: `settings.save` and `settings.pk` are not plausible
+Django settings, and a real result would not be 78 items where the codebase defines a few hundred.
+Restricting to files that import `settings` from `django.conf` *and* never rebind the name locally
+drops 1586 files and leaves 17 references, all defined.
+
+The general shape recurs throughout this audit - an instrument whose candidate set is wrong produces
+confident output in exactly the format a real finding would take. What distinguishes this instance
+is the direction: previous ones were falsely *empty* (nothing found because nothing could be found).
+This one was falsely *full*, which is more dangerous, because an empty result invites suspicion and a
+long list of plausible-looking findings invites action.
+
+
+### Four flaws in one instrument, and the finding that survived them
+
+Sweeping `get_or_create`/`update_or_create` for lookups no unique constraint protects. 371 call
+sites; the first pass reported **30** unprotected. Four separate flaws, found by checking the
+flagged models rather than the flagged code:
+
+1. **Functional constraints invisible.** Reading `constraint.fields` returns `()` for
+   `UniqueConstraint(Lower("name"), "pin")`, so every `PinAlias`/`WikiAlias` site - about a third of
+   the list - was false. Their expressions had to be flattened for `F()` nodes instead.
+2. **`field_id` vs `field`.** `get_or_create(profile_id=...)` does not textually match a constraint
+   on `profile`, so `PlaceAccessGrant` and `WikiStatVote` were false.
+3. **Related managers.** `obj.children.get_or_create(...)` carries an implicit filter the AST cannot
+   see, so those sites cannot be judged and are now excluded rather than flagged.
+4. **`**kwargs` unpacking.** `ProfileActivityDay.objects.get_or_create(kind=kind, day=day,
+   **_owner_filter(profile))` supplies `profile` invisibly. Both remaining "profile-scoped
+   constraint, profile missing" hits were false for this reason - and these were the two that looked
+   *most* serious, since a missing profile in the lookup would mean matching another user's row.
+
+After 1-3, sixteen remained; flaw 4 accounts for two more. What survives is a real finding, filed
+separately: **`Label` has no uniqueness constraint at all**, and nine sites `get_or_create` on
+`(profile, name, kind)` as though it identified a row. `PinAlias` and `WikiAlias` model the same
+relationship correctly with `UniqueConstraint(Lower("name"), <parent>)`, which is what makes the
+omission on `Label` look like an oversight rather than a decision.
+
+The instrument was wrong four different ways and still found something true. Both halves are worth
+recording: a check this crude is not evidence on its own, and discarding it wholesale because the
+first output was mostly false would have discarded the finding with it.
+
+
+### Measuring coverage by route name, and why the number is an upper bound
+
+After the detach 500 turned out to sit on an untested route whose *sibling* was tested, the obvious
+follow-up was "how many other routes are like that?". Enumerating the live resolver and exact-matching
+each name against the test tree gives 301 uncovered project routes, 187 of them accepting writes.
+
+The instrument has a specific, measurable flaw, found by checking a route that is certainly tested:
+`external_api:labels` appears uncovered because its tests address the endpoint by literal path
+(`_BASE = "/dashboard/api/external/v1/labels/"`) rather than `reverse()`. Route-name matching cannot
+see that. The skew is bounded - 92 literal-path lines against 1,920 `reverse()` calls - but it is not
+zero, so 187 is an upper bound rather than a count.
+
+Sampling five of the flagged routes put the true rate high: three have no test mention whatsoever,
+and two match only coincidental substrings in unrelated identifiers (`record_consensus_answer_evidence`
+for `consensus.answer`, `lists_resynced` for `external_api:lists.resync`). All five are genuinely
+uncovered.
+
+The right instrument is `coverage.py`, which is already installed: run the suite under it and report
+which view callables never execute. That is a direct measurement rather than a proxy, and it is the
+step to take before anyone acts on the list. Recorded here rather than run because a full suite was
+already occupying the machine, and two concurrent 85-minute runs would have made both unreliable -
+the same mistake this audit made earlier when a stale run competed with a live one for 40 minutes.
+
+### The silent sample: reporting on a population after checking a subset
+
+Three entries in this report originally claimed to have checked a set when the work had covered part
+of it. All three were found by re-reading the *unexamined* remainder, and two of the three were
+hiding a real defect:
+
+| claim as written | actually checked | what the remainder held |
+|---|---|---|
+| "all 23 controller creates are guarded" | 14 hand-listed sites | the `pin_edit` detach 500 |
+| "only three paths mail arbitrary addresses, each bounded" | 3 of 9 recipient expressions | unbounded secondary-email verification |
+| "all 12 `|safe` sites traced to origin" | 8; 4 filtered as "obviously safe" | nothing - the claim held |
+
+The shape is identical each time: an automated pass produces a population (23, 21, 12), a manual pass
+inspects the interesting-looking members, and the write-up states the population's number beside the
+subset's conclusion. Nothing in the output looks wrong, which is what separates this from the
+instrument failures recorded above - a bad instrument produces a suspicious result, while a silent
+sample produces a confident one.
+
+Two practical rules came out of it. Enumerate to a list, then tick the list, rather than eyeballing
+"the interesting ones" - the detach bug was in the boring-looking remainder both times. And when a
+claim says "all N", the N must be the number actually inspected, not the number the grep returned.
+
+### Why the authorization claim was not re-verified statically
+
+Having found three silent samples in this report, the inherited authorization claim - "167
+owner-scoped routes, no leaks" - was the largest assertion nobody in this session had checked. A
+static attempt to re-verify it does not work, and the reason is worth recording so the next person
+does not repeat it.
+
+Scanning all 246 object-fetching handlers in `controllers/` for a requester-scoping token in the
+handler body flags **36** as unscoped. Sampling four - `PinOwnerUpdateView.post`,
+`MapOverlayEditView.post`, `MarkupJsonView.get`, `ArticleRevisionView.get` - all four are correctly
+scoped, each through a different delegation: `_get_pin(request, slug)` then a lookup keyed on that
+pin; `_resolve_owner(request, ...)` returning an already-scoped **queryset** that the
+`get_object_or_404` then filters; `self.resolve(request, **kwargs)` returning a scope object. Several
+more of the 36 are legitimately not owner-scoped at all - the safety contact portal is authorized by
+a magic-link token, the `SiteAdmin*` views by permission, `VerifyEmailView` by a token.
+
+So the flag list is dominated by a false-positive mode that no body-level scan can eliminate, because
+scoping in this codebase is overwhelmingly delegated. The claim is neither confirmed nor refuted
+here, and it is now marked as inherited rather than presented as this session's finding.
+
+The instrument that *would* answer it is behavioural, which is what the original pass describes:
+request each owner-scoped route as a second user and assert 403/404. That is a real piece of work
+(167 routes × 4 methods) and belongs in its own pass, not in a chunk that has already spent its
+budget discovering that the cheap version does not work.
+
+---
+
+## 4. Audit methods that mislead on this codebase
+
+### Regex over templates: a 70% false-positive rate
+
+The accessibility sweep in chunk 219 reported 7 `<img>` tags missing `alt` and 2 icon-only buttons
+missing a label. The true counts were 2 and 0.
+
+- **5 of the 7** `<img>` hits were the string `<img` inside a **JavaScript comment** - prose like
+  "(including `<img onerror>`)" explaining an XSS guard. A regex scanning `.html` files cannot tell
+  a comment inside an inline `<script>` from markup.
+- **Both** button hits had a perfectly good `<span>{{ tab.label }}</span>`. The scanner stripped
+  `{% %}`/`{{ }}` before checking for text, which is right for deciding "is this icon-only" and
+  wrong here: the label *is* the template variable.
+
+The two real findings were JS-generated `<img>` tags built by string concatenation - which the
+regex found only by accident, since they are not literal markup either. A template-aware or
+DOM-based instrument would have inverted both error directions. Worth remembering before reporting
+a count from a template regex as if it were a finding list.
+
+
+Same spirit as the note at the top of `code_audit_status.txt`. Each of these produced a
+confident-looking wrong answer during this sweep.
+
+1. **"Used in a template but not in the SCSS" proves nothing.** Styles live in three places —
+   `frontend/sass/`, inline `<style>` blocks inside individual templates, and compiled CSS.
+   The SCSS-only version of this check reports ~75 undefined classes, most of them false
+   (`.tools-card--wide` is defined in its own template). Even against all three sources the
+   remainder is mostly class strings assembled in template expressions (they show up with stray
+   quotes, e.g. `.cal-cell--today'`) and semantic JS hooks.
+2. **Write counts per view are inflated by dispatchers.** "18 writes with no transaction" in
+   `settings.py` is a 15-branch `if/elif` where one branch runs.
+3. **`AddIndex` ordering warnings on the big migrations are meaningless.** 0001/0002/0007/0008/0010
+   are squashes; interleaving is inherent and they have already been applied.
+4. **A test that passes in isolation but fails in a suite may be a poisoned DB, not pollution.**
+   See the `--reuse-db` item above before hunting for test interference.
+5. **Query-count probes must saturate capped lists.** The trips overview looked flat at 2→12 rows
+   because its "recent" lists cap at 5; the per-row cost only appears once the cap is exceeded.
+6. **Verify a probe isn't vacuous.** The first undo round-trip probe compared mostly `None`-to-`None`
+   fields and would have reported success regardless. Count how many compared values were non-empty.
+7. **A passing test can be asserting against a failed operation.** The suite's runner suppresses
+   logs for passing tests, so an unmocked integration whose exception is caught (e.g. by
+   `except (..., RuntimeError)`, which swallows the network guard's own error) shows up as a green
+   test plus a log line nobody sees. Re-running a band with `-o log_cli=true --log-cli-level=ERROR`
+   surfaces them; that is how the import-preview test was found to be exercising its error path.
+8. **Generic fixtures can't exercise selection-criteria sweeps.** Running all 17 periodic tasks
+   against seeded pins/trips/visits and diffing query counts reports every one of them flat at
+   1-7 queries — because none of the seeded rows *matches* what each sweep selects (a check-in due
+   in this window, an account past its deletion grace, a pin with a placeholder name). Measuring a
+   scheduled task honestly needs a fixture built to its own criteria, one task at a time. A
+   static "does this loop have a batch bound?" check is the cheap substitute and does carry
+   signal.
+9. **Baker-made fixtures can be invisible to the code under test.** A cross-user search probe
+   reported that a photo's caption was unsearchable — a plausible-looking product gap. It wasn't:
+   the photos provider does `.exclude(image="")` and `baker.make(Image, ...)` attaches no file, so
+   the row was filtered out before matching. Attaching a real `SimpleUploadedFile` made it findable.
+   Always confirm the *positive* case (can the owner find their own thing?) before believing a
+   negative one.
+
+---
+
+## 4b. Stale guidance in `CLAUDE.local.md` (not changed — it is a private, uncommitted file)
+
+The checked-in `CLAUDE.md` files were all verified accurate (Django 6+ matches `django~=6.0.6`,
+Python 3.12 matches `requires-python`, and every `docs/…` path they cite exists). The private
+`CLAUDE.local.md` has drifted, and since it steers agents it is worth correcting:
+
+- **Four dead paths.** `docs/designs/plugins.md` (the file is `docs/designs/plugins.md`, which the
+  committed `CLAUDE.md` cites correctly), `docs/prompts/completed.md`, `docs/prompts/todo.md`
+  (`docs/prompts/` does not exist at all), and `TODO.md` in the project root.
+- **The sass gotcha section is now obsolete.** It documents `bun run sass` crashing with
+  `ERR_REQUIRE_ESM` and prescribes a manual `bun node_modules/.bin/sass …` workaround. The
+  scripts now invoke sass through Bun's runtime directly, so `bun run sass` works — see the
+  resolved entry in `PROBLEMS.md`.
+- **The mypy section is still accurate** and worth keeping: no system GDAL on this host, so the
+  django-stubs plugin dies *while mypy exits 0*.
+
+## 4b-2. `docs/FEATURES.md` was missing an entire subsystem
+
+`CLAUDE.md` tells agents to check `FEATURES.md` before assuming a feature doesn't exist, precisely
+so work isn't duplicated. **Consensus — the wiki-data-completion game — had zero mentions in it**,
+despite ~3,300 lines across 14 models, 13 service modules, a controller, a WebSocket consumer, a
+beat-scheduled stall sweep, and eleven URL routes. An agent following the documented process would
+have concluded it didn't exist.
+
+Added a section covering solo vs competitive modes, the cross-session tentative-answer pool, the
+Beta-Bernoulli trust posterior (and that it is deliberately not shared with SpotGuessr/Trivia's
+Glicko-2 ratings), the field-kind registry that makes a new answerable field a registry entry
+rather than new game code, and the link into the fact-confidence machinery. Every claim in it was
+checked against the code rather than inferred from the model docstrings alone.
+
+A follow-up sweep — comparing every `models/` subsystem against the doc's coverage — found two
+more genuinely user-facing gaps (the rest of the unmentioned subsystems are internal plumbing a
+features inventory reasonably omits: `email_log`, `pin_tombstone`, `auto_removals`,
+`search_history`, `pin_import_failures`):
+
+- **Public Locations** had no coverage at all. Users vote a location "public"; public locations
+  are then suggested to every account, which is how a new user gets a populated map. The
+  eligibility rules *are* the safety mechanism here, so they run server-side and users only ever
+  see vote buttons on a place that already qualifies — worth documenting precisely because a
+  reimplementation that skipped the rule engine would be a privacy incident, not just duplication.
+  Voting is anonymous in the UI with no running tallies before an outcome.
+- **Native-app push** was absent from the Notifications section, which described only the
+  WebSocket/desktop path. A backgrounded app holds no socket and registers a push destination
+  instead, with UnifiedPush (self-hostable, e.g. ntfy) as the default transport — chosen to keep
+  an F-Droid build free of Play Services. The FCM row kind exists but is deliberately not
+  dispatched.
+
+That sweep took three attempts to make sound: the first matched subsystem names literally (so
+`direct_messages` "missed" the "Direct Messaging" section), and the second still under-matched on
+underscores. Each candidate it finally surfaced was then read and confirmed by hand rather than
+trusted from the name.
+
+Two corrections in the same file while there:
+
+- the **Real-time (WebSockets)** section listed 4 of the 7 routes — the three game sockets were
+  absent entirely;
+- it described safety check-in chat as "shared between the check-in owner and emergency contacts",
+  omitting accepted partners, who are a distinct audience with a *different* set of groups (only
+  the session route joins the live-location group). Now states the audience correctly, including
+  that removing a partner or contact force-closes their socket.
+
+## 4b-3. `docs/NOTES.md` verified accurate
+
+The other file `CLAUDE.md` sends agents to. Every code path it cites resolves, and every app symbol
+it names still exists — checked mechanically, with the single apparent miss (`L.ImageOverlay`)
+being a Leaflet API reference rather than app code. No changes needed, recorded so it is not
+re-derived.
+
+## 4c. Documentation cross-references repaired
+
+The docs were reorganised into `designs/`, `designs/drafts/`, `reports/` and `notes/` at some
+point without updating the links pointing at the old locations. **Ten references across seven
+files** pointed at paths that had simply moved — `docs/plugins.md`, `docs/e2ee.md`,
+`docs/api-expansion-candidates.md`, `docs/overpass-mirror-test.md`, `docs/import_formats.md`,
+`docs/redata-cid-resolution.md`, `docs/designs/spotguessr.md`,
+`docs/designs/mobile-app-stack-r2.md`, `docs/designs/public-pins-by-vote.md`,
+`docs/external_app_api_plan.md`. Each target was located before rewriting, and the rewrite was
+anchored so an already-correct path could not be double-prefixed.
+
+**Deliberately left alone** — these reference documents that do not exist anywhere, so repointing
+them would mean inventing a target. They are either deleted or never written, and deciding which
+is the author's call: `docs/api-reference.md`, `docs/architecture/server-agent-split.md`,
+`docs/BACKEND_CHANGES.md`, `docs/migration-0.6.md`, `docs/PARITY.md`, `docs/notes/ai/*.md`
+(three), `docs/prompts/*.md` (two, from `CLAUDE.local.md`). One — `docs/PROBLEMS.md/completed.md`
+— is a malformed path in the source text rather than a missing file.
+
+## 4d. Test coverage of this changeset
+
+Run in batches partitioned by test-file name, because a single pass exceeds the available window.
+Three rounds: after the bulk of the fixes, after a further twelve production files changed, and
+after the last five.
+
+**Round 3 (final), 10,406 passed, 0 failed** — re-run after a further five production files
+changed (the image-orientation, decompression-bomb and malformed-KML fixes):
+
+| batch | scope | result |
+| --- | --- | --- |
+| 1 | `core/` + `test_[a-e]*` | 3763 passed |
+| 2 | `test_[f-l]*` | 1392 passed |
+| 3 | `test_[m-p]*` | 2427 passed |
+| 4 | `test_[q-z]*` | 2824 passed |
+
+**Round 2, 10,388 passed, 0 failed**, over the same partition after the bulk of the fixes.
+
+**Round 1**, seven batches over all 604 test files, produced one failure — **a test added by this
+audit, not existing behaviour**: `test_cookies_follow_the_same_tls_gate` asserted that
+`SESSION_COOKIE_SECURE` *equals* `SECURE_SSL_REDIRECT`. It doesn't have to: both default to that
+value but are explicitly overridable, and this environment sets secure cookies while still
+permitting HTTP, which is *stricter* than the default rather than weaker. Rewritten as the
+one-directional invariant that actually matters (HTTPS enforced must imply secure cookies).
+
+Two earlier attempts at a single unbatched run were **abandoned rather than reported**: the first
+had files `docker cp`'d into the container while it ran, which is the exact mistake section 4
+warns about; the second was killed because it was blocking verification of a security fix. Neither
+result was used.
+
+mypy is worth calling out separately. Per-module runs were reported clean throughout, and that was
+true but insufficient — checking `media_auth.py` alone never type-checks `immich.py`'s *call site*.
+A full-project run surfaced 16 errors, 8 of them introduced by this audit. All 16 are now fixed;
+see section 1.
+
+## 5. Environment notes
+
+- **mypy cannot run on the host** — no system GDAL, so the django-stubs plugin dies with
+  `Error constructing plugin instance of NewSemanalDjangoPlugin` **and mypy still exits 0**. A CI
+  step invoking it this way reports success while type-checking nothing.
+- Tests run in the `urbanlens_development_main_test_runner` container (has GDAL). `docker cp` the
+  tree in first, and **do not `docker cp` while a run is in flight** — it swaps files mid-run and
+  makes results untrustworthy.
+- `docker exec` needs `-i` to accept a heredoc; without it the command silently no-ops, which can
+  make a "does this check have teeth?" validation pass vacuously.
+- Full suite is ~1h25m. Narrow `-k` selections aggressively: `-k 'pin or map or label'` still
+  matches ~3,200 tests.
+
+
+## Chunk 303 - label reorder wrote one UPDATE per label
+
+`LabelReorderView.post` posted the whole id list and issued one `UPDATE` per id, so
+dragging a single label in a list of 50 wrote 50 statements. The row count is chosen by
+the user's own label list, so it grows with no bound the code controls.
+
+Collapsed to a `SELECT` + one `bulk_update`. Measured before the change: **7 queries for
+5 labels, 27 for 25**. After: constant.
+
+**The caveat filed in chunk 298 dissolved on inspection.** It said `bulk_update` "does not
+fire `post_save`, and `Label` has receivers (`sync_redata_taxonomy_on_save`) - check whether
+an order-only change needs them before switching." But the code it replaced used
+`queryset.update()`, which does not fire `post_save` *either*. The receivers were already
+not running. So the switch is signal-neutral, and the question that looked like a blocker was
+never live. Worth noting because the caveat was correct about `bulk_update` in isolation and
+still pointed at nothing - the comparison that mattered was against the *existing* call, not
+against `save()`.
+
+That does surface a real and separate question: `label_refresh_map_pin_cache` is a `post_save`
+receiver on `Label`, and reordering has never invalidated the map pin cache. Whether label
+`order` reaches that payload is not something this chunk established - filed, not fixed.
+
+Two behaviours were pinned by test before the change, both of which the collapse could
+plausibly have broken: ids outside the caller's profile are silently ignored rather than
+erroring (the loop got this from re-filtering per row, so the filter had to move rather than
+disappear), and later duplicate ids win.
+
+**Process note:** the first run of the new test failed on a fixture collision, not the
+query count - `_make_tags` restarted its naming at 0 on the second call and tripped
+`uq_label_profile_name_kind_ci`. This is the *second* time in this audit a fixture that
+restarts a counter has produced a failure that reads like a code bug. The tell both times was
+an `IntegrityError` on a uniqueness constraint rather than an assertion failure.
+
+
+## Chunk 304 - reordering labels served a stale map icon
+
+The question chunk 303 filed is a real bug. Label `order` is not cosmetic: the map payload's
+`_ordered_location_labels` sorts by `-order`, and `_winning_display_label` takes the first
+label carrying an icon. So reordering two icon-bearing labels changes what a pin *looks like*
+on the map without touching the pin.
+
+`refresh_map_pin_cache_for_label` exists for precisely this hazard - its docstring says editing
+a label never touches `Pin.labels.through`, so nothing else invalidates the Redis payload and
+affected pins "keep serving the old baked-in icon/color". But it is a `post_save` receiver, and
+reorder wrote through `queryset.update()`. **The one write that changes `order` was the one
+write that skipped the invalidation.** Pre-existing; chunk 303's `bulk_update` neither caused
+nor worsened it, since both calls skip `post_save` alike.
+
+Fixed by invalidating explicitly after the write.
+
+**Adding the fix exposed a cost worth more than the fix.** The refresh does work per *pin*
+carrying each label, and the first version passed every reordered label - so a reorder could
+rebuild a user's entire map. Now only labels whose `order` value actually moves are written or
+invalidated, which also makes re-sending an unchanged order free. A drag typically moves a
+handful of labels, not all of them.
+
+**On the test's reach.** These assert the invalidation *contract* - that reorder asks for the
+right pins to be refreshed - not a Redis round-trip. The cache needs a live client and this
+suite's network guard permits localhost only, so end-to-end is unavailable here. That is a real
+limit on the evidence: it proves the call is made with the right ids, not that the payload
+downstream is correct.
+
+**A test that would have passed for the wrong reason.** Tightening to changed-rows-only broke
+the ownership test silently - it posted an id list under which the owned label's order happened
+not to move, so it would have been filtered out and the assertion would have held while
+testing nothing. Caught by re-running rather than by reading. Narrowing a write path can
+quietly empty a test whose subject sat *outside* the narrowed set.
+
+
+## Chunk 305 - sweeping for the rest of the skipped-invalidation class
+
+Chunk 304's bug was found by accident, so this scanned for its shape systematically: models
+with `post_save`/`post_delete` receivers, cross-referenced against writes that skip them
+(`.update()`, `bulk_update`, `bulk_create`). **17 models have receivers; 26 such writes exist.**
+
+**A false alarm worth recording.** The scan flagged two more `Label.objects.bulk_update(reordered,
+["order"])` sites and I initially read them as two more copies of the same bug. They are not -
+both already invalidate, with the reasoning in a comment on the next line. The scan matched the
+`bulk_update` line without reading what followed it. A grep for the *defect* shape finds correct
+code too, because the defect and the fix live on adjacent lines.
+
+Re-run with a check for adjacent invalidation, 14 sites needed judgement. Most are correct by
+design, and the reason is usually that the receiver's job is not wanted for that write:
+`NotificationLog...update(status=READ)` deliberately skips `enqueue_native_push`, because
+re-pushing a notification when the user *reads* it is precisely the bug. Same for `Wiki`'s
+`viewed_by_other` and `parent_wiki` writes against `suggest_and_add_categories`. **Bypassing a
+signal is a legitimate technique, so the scan's output is a question list, not a defect list.**
+
+One real gap: `reorder_activities` (`services/trips/trip_activities.py`). `sync_trip_on_activity_save`
+calls `queue_calendar_push` so an auto-synced calendar follows the trip, and the reorder wrote
+each position through `queryset.update()`. The one operation whose entire purpose is changing
+activity order never reached the calendar. Fixed, and the loop collapsed to one statement -
+it was also one `UPDATE` per row while holding a `select_for_update` lock.
+
+The push is queued **once per reorder**, not once per row: the receiver fires per activity but
+`queue_calendar_push` takes a trip id, so the row-by-row equivalent would queue the same trip N
+times for one drag. Restoring a skipped signal literally is not always right.
+
+The existing race suite passes unchanged, which matters more than the new tests - the function
+carries a long comment justifying its locking against interleaved reorders, and collapsing the
+writes had to leave that reasoning intact.
+
+**Fixture errors, third occurrence.** `baker.make(Trip, profile=...)` - `Trip` has no `profile`;
+its owner field is `creator`. Three chunks, three fixture-shaped failures presenting as code
+failures. The cost is one full container test cycle (~3 min) each time. Reading an existing
+test's `baker.make` line for the same model first would have caught all three.
+
+
+## Chunk 306 - merging pins left the survivor's last-visited date three months stale
+
+`merge_pins` repoints the loser's `PinVisit` rows to the survivor with `queryset.update()`.
+`Pin.last_visited` is a denormalized copy of the newest such row, maintained by
+`sync_last_visited`. Nothing recomputed it, so absorbing a more recently visited pin left the
+survivor advertising an **older** date than its own visit history supports.
+
+Reproduced before fixing: survivor showed 2026-05-16 while its absorbed history said 2026-08-12.
+User-visible on the map popup (`last_visited` is in the payload) and the pin detail page.
+
+Fixed by calling `sync_last_visited(survivor)` inside the merge's transaction. That also settles
+a second staleness found on the way: **the merge issued no cache invalidation for the survivor
+at all**, despite the survivor gaining visits, images and labels. `sync_last_visited` saves the
+pin, which fires the `post_save` receiver that refreshes the cached payload.
+
+**This is the same defect as chunks 304 and 305, third instance, third model.** The generalisation
+is now worth stating plainly: this codebase maintains denormalized/derived state through
+`post_save` receivers, and every place that writes with `update()`/`bulk_update`/`bulk_create`
+is a place that derived state silently stops tracking. Three chunks found three, in labels,
+trips and pins - the shape recurs because bulk writes are reached for exactly when a loop feels
+slow, which is exactly when many rows change.
+
+**On the value of reading the whole function.** Chunk 305's lesson (a grep for a defect's shape
+also matches code that already fixes it) applied in reverse here: the repoint block *looks*
+uniform - fourteen consecutive `update()` calls - and its correctness varies per line depending
+on what each model's receivers maintain. Uniform-looking code is not uniformly correct, and the
+grep cannot tell the difference.
+
+Not fixed, filed: the survivor also absorbs `PinMarkup`/`MarkupMap` (whose receivers maintain
+pin *inferences*) and `PinLink` (`resync_pin_on_link_saved`). Whether those derived values are
+recomputed anywhere after a merge was not established here - it needs reading each receiver's
+actual work, not the pattern match that found them.
+
+
+## Chunk 307 - the three filed merge repoints are clean; no change
+
+Chunk 306 filed three repoints whose receivers maintain derived state. Reading them (rather
+than matching the pattern that found them) resolves all three, and the reasons differ:
+
+- **PinMarkup** - `sync_pin_inferences_on_item_save` keys off `instance.parent_map_id`. The
+  merge repoints `parent_pin`. The receiver's subject is not what the merge touches, so the
+  map's detected pins are unaffected.
+- **MarkupMap** - `sync_pin_inferences_on_map_save` resyncs when a map's *viewport/geometry*
+  changes, and explicitly skips saves touching fields detection never reads. The merge repoints
+  the owning `pin`, not geometry.
+- **PinLink** - `resync_pin_on_link_saved` calls `_touch_pin`, whose whole mechanism is
+  `Pin.save(update_fields=["updated"])`, chosen (per its docstring) to re-fire
+  `sync_smart_list_membership` and keep `saved_filter_cache`'s `Max(Pin.updated)` fingerprint
+  current. This one *was* a live gap - a survivor gaining its first links would not re-match a
+  "has links" smart list - **and chunk 306's fix already closes it**. `sync_last_visited` saves
+  the survivor with `update_fields=["last_visited", "updated"]`, a superset of what `_touch_pin`
+  writes, and `sync_smart_list_membership` does not filter on `update_fields` (checked - it
+  resyncs on any Pin save).
+
+**First clean verdict after three consecutive finds, which is the point worth recording.** The
+prior chunks established a real pattern, and a real pattern generates real expectation - the
+pull toward finding a fourth instance was noticeable. What distinguishes these three from the
+`PinVisit` case is not subtle judgement; it is one readable fact each about what the receiver
+keys off. The pattern match found all four sites and could not rank them. Only reading could.
+
+Also worth noting: the PinLink gap was closed *incidentally*, by a fix aimed at something else.
+That is luck, not design - and it means the fix's own commit message understates what it does.
+
+
+## Chunk 308 - turning the derived-state defect into a guard
+
+Chunks 304-306 found this defect three times, in three models, one chunk each. The pattern is
+understood well enough to stop hunting it: a static test now enumerates bulk writes
+(`update()`/`bulk_update()`/`bulk_create()`) on models carrying `post_save`/`post_delete`
+receivers, and fails when the set grows beyond the 22 reviewed sites.
+
+**It deliberately does not assert that every site invalidates.** Bypassing a signal is often
+correct - `NotificationLog...update(status=READ)` must *not* re-fire `enqueue_native_push` -
+and most of the 22 are right for reasons like that. A test demanding invalidation everywhere
+would be wrong and would train people to suppress it. What this asserts is narrower and
+defensible: **the set does not grow unreviewed.** A new entry is a prompt to decide, not an
+accusation.
+
+The list also fails on *stale* entries, so a moved or deleted site cannot rot into permanent
+noise.
+
+**Verified it can fail.** A guard that only ever passes is worse than no guard, and the two
+regex sanity tests do not prove the end-to-end path. Injected a real bulk write into a source
+file (in the container copy only, so the working tree stayed clean) and confirmed the test
+fails naming `dashboard/services/pins/pin_geometry.py::Pin`. This is the control that was
+missing from an earlier filter in this audit, which passed all four of its checks while blind
+to the codebase's commonest transaction idiom.
+
+Costs 8 seconds - `SimpleTestCase`, no database.
+
+**Honest limit:** it is a regex over source text. It will miss writes built dynamically, writes
+through a queryset variable (`qs.update(...)` where `qs` came from elsewhere), and any model
+whose receivers are registered by something other than the `@receiver(...)` decorator. It
+catches the literal shape that produced three real bugs, which is what it claims to do - not
+"all derived-state staleness".
+
+
+## Chunk 309 - judging the carried sites; all clean
+
+Three of the eight sites the guard carried as "reviewed, not individually judged" are now
+judged, each resolvable from one or two checkable facts:
+
+- **`site_scope.py::Pin` / `::Wiki`** (bulk retype of `pin_type`). Clean on three counts:
+  `pin_type` is not in the map payload, no smart filter reads it (grepped - it appears nowhere
+  in `services/search` or `models/pin_list`), and `refit_child_boundaries_on_save` early-returns
+  unless the pin was created or its *position* changed. Retyping is neither.
+- **`pin_edit.py::Pin`**. Clean, and the clearest example in the codebase of the bypass used
+  *correctly*: it parks a pin as its own parent as a transient state while re-homing children,
+  with `# Bypass save() so no side effects run for this transient state` at the site and the
+  affected ids tracked in `deferred_ids` for resolution. Here running the receivers would be
+  the bug.
+
+**The same construct that caused three bugs is the right tool here.** That is the argument for
+the guard asserting only that the set does not grow unreviewed, rather than demanding
+invalidation everywhere - a stricter test would flag this correct code, and the fix for a
+false positive is usually to weaken the test.
+
+It also sharpens what the three real bugs had in common. Not "used a bulk write", but: used a
+bulk write on a field the receivers *do* read (`order`, `pin` on visits), while the code
+carried no indication anyone had considered them. `pin_edit.py` shows the considered case, and
+it reads completely differently at the site.
+
+Two sites remain carried, `controllers/memories.py::Pin` and `pin_list_trip.py::TripActivity`.
+
+
+## Chunk 310 - the bulk-write thread closes: 22 sites, all judged
+
+The last two carried sites are clean:
+
+- **`memories.py::Pin`** writes `unlogged_visit_dismissed`, which nothing derived reads - absent
+  from the map payload and from every smart filter. The receivers it skips have no work to do.
+- **`pin_list_trip.py::TripActivity`** already queues `queue_calendar_push` explicitly after its
+  `bulk_create`, with reasoning matching the fix chunk 305 applied to trip reorder.
+
+**Thread summary.** 22 bulk writes on receiver-bearing models; 3 real bugs (label reorder's stale
+map icon, trip reorder's missed calendar push, pin merge's three-month-stale `last_visited`); 19
+correct, most of them deliberately so. A guard now prevents the set growing unreviewed.
+
+**Third false alarm of the same kind.** `pin_list_trip` looked like a fourth instance and is
+already fixed - as two `Label` sites did in chunk 305. The guard's list will always contain
+sites that carry the defect's shape *and* its repair, because the repair lives next to the
+shape. Anything scanning for the shape must read the following lines before reporting. I have
+now made this mistake three times in seven chunks and caught it three times by reading; the
+reliable fix is that the scan output is never the finding.
+
+**What the thread cost and returned.** Seven chunks. Three user-visible bugs fixed, one of them
+data-level (a pin advertising a visit date three months older than its own history). The
+generalisable result is not the bug count - it is that a defect class found three times by
+accident became a 4-second test that cannot silently regrow, and that the class turned out to
+be 14% defective, so a guard demanding invalidation everywhere would have been wrong 19 times
+out of 22.
+
+
+## Chunk 311 - full-suite run launched (bookkeeping entry, added in 324)
+
+Six code changes had landed across labels, trips and pins (chunks 303-310) without a full-suite
+run. Launched one against a freshly synced container snapshot, and inventoried the session's new
+tests: 17 across five files, all previously passing individually, plus the adjacent suites they
+could disturb (157 merge tests, the trip-activity race suite, the label organize suite).
+
+What a full run adds over those is the only thing they cannot cover: whether the fixes interact
+with anything outside the areas under examination. The pin-merge change is the one that warrants
+it - it now saves the survivor *inside* the merge transaction, firing receivers no merge test was
+written to anticipate.
+
+Two process notes, both mistakes:
+
+- The run was launched as `pytest ... | tail -6`, which buffers until completion. That discarded
+  all interim visibility for a 70-minute job - no progress, no early failure signal. `tee` to a
+  file would have cost nothing.
+- This entry was missing until chunk 324 found 21 commits against 20 documented chunks. The
+  chunk that *launched the verification* was the one that went unrecorded, which is a fair
+  illustration of where attention goes: the interesting work gets written up, the plumbing does
+  not.
+
+
+## Chunk 312 - select_for_update: 34 sites, clean
+
+Read-only chunk (a full suite is running; no source syncs). Scanned every `select_for_update()`
+against an enclosing `transaction.atomic()`, since outside one Django either raises or fails to
+lock depending on autocommit state - a lock that silently does nothing is the worst version of
+this bug.
+
+**All clean.** 34 matches, of which 3 are *comments* describing the pattern (in `trivia/session.py`,
+`spotguessr/session.py`, `rate_limiter.py`) and 31 are real calls, every one inside an atomic
+block. The three flagged lines are prose explaining why the lock is needed - e.g.
+"``select_for_update()`` inside ``transaction.atomic()`` - so a second..." - which to a regex is
+indistinguishable from the call itself.
+
+Worth noting alongside chunks 305 and 310, where a scan for a defect's shape matched code that
+already *fixed* it. Here it matched code that merely *talks about* it. Same root cause: the scan
+locates candidates and cannot read. This one is a cheerier version of the finding, though -
+these three files documented their concurrency reasoning at the point of use, which is what made
+the false positives instantly resolvable.
+
+
+## Chunk 313 - two AST-decidable classes, both clean
+
+Read-only (full suite still running). Two classes chosen because AST answers them exactly:
+
+- **Mutable default arguments** (`def f(x=[])`, `x=dict()`, ...): **0**.
+- **Bare `except:`**: **0**. This is the one that matters most - a bare handler catches
+  `KeyboardInterrupt` and `SystemExit` too.
+- **Handlers whose entire body is `pass`**: 26, and **0 of them catch `Exception`/`BaseException`**.
+  Every one names specific types - `asyncio.CancelledError` in the consumers (the standard
+  cleanup idiom), `(ValueError, TypeError)` around optional query-param parsing in site_admin,
+  `(AttributeError, DatabaseError)` in context processors. Silently swallowing a *named*
+  exception you expect is a different act from swallowing everything.
+
+**The tool determined the failure mode.** Chunks 305, 310 and 312 all produced false positives
+from regex matching text *about* a defect - fixed code twice, explanatory prose once. These two
+scans produced none, because an AST cannot match a comment or a docstring. That is the same
+lesson as the colour-literal sweep earlier in this audit, which took five regex generations
+(19->8->3->1->1 sites, each generation claiming completeness) and was settled in one AST pass.
+
+Where a class is structurally decidable, parse it. Reach for regex only when the property is
+not in the syntax - and expect to read every hit when you do.
+
+
+## Chunk 314 - naive-date sweep finds 4 real sites; filed, not fixed
+
+Scanned for timezone-naive date/time construction. Four hits, all `datetime.date.today()`. Not
+the naive-*datetime* bug the scan was aimed at - a `date` carries no timezone - but wrong anyway
+in an app with `USE_TZ = True`: `date.today()` uses the server's timezone, Django's
+`timezone.localdate()` uses the active one, and they disagree for part of every day.
+
+`trip_activities.py:819` is the one with consequence: completing an activity computes
+`effective_date = min(completed_date, today)`, so completing late in the user's day can clamp
+the date to yesterday, and that date feeds the visit entries created for the activity.
+
+**Filed to `docs/PROBLEMS.md` rather than fixed**, because a full suite is running against a
+synced container snapshot and syncing source mid-run corrupts it - a rule this audit learned by
+destroying two runs. The fix is one call per site, but it wants a boundary test with
+`override_settings(TIME_ZONE=...)` and a frozen clock, which is not a change to make while
+unable to run tests.
+
+Also worth recording: the scan was aimed at a class the codebase does not have (naive datetimes:
+zero) and found a neighbouring class it does. Aiming at a precise, decidable property makes the
+near-misses legible instead of drowning them.
+
+
+## Chunk 315 - asserts and prints in production code: clean
+
+Read-only (suite still running, ~19 min in). Two more AST-decidable classes:
+
+- **`assert` in production code: 0.** This matters because `python -O` strips assertions
+  entirely, so any `assert` doing validation silently stops validating in an optimised run. A
+  codebase that uses them for *checks* rather than *invariants* has a latent, deployment-flag
+  -dependent bug. This one uses none.
+- **`print()` in production code: 5, all in `manage.py`** - a CLI entry point, where printing is
+  the correct behaviour, not a leftover debug statement.
+
+Both were single-pass AST scans with no false positives, continuing chunk 313's pattern. Four
+consecutive structurally-decidable classes have now come back clean or near-clean (mutable
+defaults, bare excepts, asserts, prints), which is itself information: the mechanical defect
+classes are largely absent here, and the real findings in this audit have all needed a fact the
+syntax does not carry - what a receiver keys off, whether a field reaches a payload, whether a
+timezone is the server's or the user's.
+
+
+## Chunk 316 - applying the localdate fix under a testing constraint
+
+The constraint from chunk 314 turned out to be narrower than I stated. The rule is *do not
+`docker cp` mid-run* - the container tests its own synced copy, so **editing the host tree is
+safe** while a suite runs. I had generalised "cannot change code" from "cannot sync code", and
+lost a chunk of working time to it.
+
+So the four sites are now fixed: `datetime.date.today()` -> `timezone.localdate()` in
+`controllers/tools.py` (x2), `controllers/trip.py`, `services/trips/trip_activities.py`, with a
+`django.utils.timezone` import added to `tools.py` (the other two already had it). Ruff clean,
+all three compile, zero `date.today()` calls remain outside tests.
+
+**Explicitly unverified.** No test has run against this change - the container is busy, and by
+the rule above it will stay busy for another ~45 minutes. The substitution is mechanical and
+`localdate()` is the documented tz-aware equivalent, but "mechanical" is exactly the claim this
+audit has caught itself making wrongly before (five regex generations on colour literals, each
+claiming completeness). Treat as pending until the suite frees the container and this is run.
+
+The boundary test is still owed: it needs `override_settings(TIME_ZONE=...)` plus a frozen clock
+to pin the case where server-local and active timezones fall on different dates. Writing it
+blind would risk a test that passes vacuously, which is worse than no test - this audit has
+already produced two of those.
+
+
+## Chunk 317 - the completeness claim was wrong, one chunk after warning about it
+
+Chunk 316 reported "zero `date.today()` calls remain". That was measured by grepping the literal
+string `datetime.date.today()` - which **cannot** match `date.today()` written against a
+`from datetime import date` import. The check could not have found the misses.
+
+Five more real sites: `controllers/pin_edit.py`, `controllers/pin.py`,
+`services/import_export/export.py` (x2), `services/ai/link_extraction.py`. All now fixed; zero
+remain by an AST scan across every spelling.
+
+**This is the exact failure the previous chunk described and then committed anyway.** It named
+the colour-literal sweep - five regex generations, each claiming completeness - as the reason to
+distrust "mechanical", and then made the same shape of claim from a narrower instrument. Writing
+the caveat is not the same as applying it.
+
+A sixth hit was a **false positive that would have been a real bug to "fix"**:
+`rate_limiter.py:380` is `ApiCallLog.objects.for_service(service).today()` - a queryset method
+that happens to be named `today`. Substituting there would have replaced a database query with a
+date.
+
+Two guards paid off. A pre-write assertion aborted the first attempt before any file was touched
+(`pin_edit.py` has no top-level datetime import - both it and `pin.py` import `date` inside the
+function, and both also call `date(...)` as a constructor on the next line, so the import had to
+stay and only the call could change). And ruff caught `F821 Undefined name 'timezone'` in
+`link_extraction.py`, where the substitution landed but the import insertion silently did not
+match. Without that lint, this chunk would have shipped an import error into a live code path.
+
+
+## Chunk 318 - what the running suite will and will not verify
+
+The full suite launched in chunk 311 is running against the container snapshot synced **at that
+moment**. Chunks 316 and 317 edited the host tree afterwards, and syncing mid-run is forbidden -
+so the nine `timezone.localdate()` substitutions **are not in the code being tested**.
+
+Stating this before the result arrives, because a green run is exactly the kind of evidence that
+gets over-read. When it passes it will establish that chunks 303-310 hold together - the label
+reorder collapse, the two cache/calendar invalidations, and the pin-merge `sync_last_visited`
+call that now fires receivers inside the merge transaction. It will say nothing whatsoever about
+the localdate work, which needs its own run afterwards.
+
+This is a general hazard of long-running verification against a snapshot: the artifact under
+test silently ages away from the working tree, and the result keeps the authority of a full-suite
+pass while its scope quietly shrinks. The same trap as this audit's stale-container problem,
+except the drift is in *time* rather than in files.
+
+Outstanding, both owed before the localdate change can be called done:
+1. A container run of the current tree.
+2. A boundary test with `override_settings(TIME_ZONE=...)` and a frozen clock, pinning the case
+   where server-local and active timezones fall on different dates.
+
+
+## Chunk 319 - the owed boundary test, written against the vacuity objection
+
+Chunk 316 declined to write this test on the grounds that authoring one you cannot run risks a
+vacuous pass. That objection is answerable rather than blocking: build the vacuity check *into*
+the test.
+
+`test_the_chosen_instant_really_does_straddle_a_boundary` asserts that the frozen instant
+produces different dates under the two zones. If that ever stops holding - a changed constant, a
+tzdata update, a different default - the suite fails loudly instead of going quietly green while
+testing nothing. This is the same control discipline that caught two vacuous tests earlier in
+this audit, applied *before* the fact rather than after.
+
+The premise is verified without Django: 2026-08-14 23:30 UTC is the 14th in UTC and the 15th in
+Pacific/Auckland, confirmed with plain `zoneinfo`. So the test is blind only on whether
+`override_settings` + `timezone.deactivate()` + a patched `timezone.now` compose as expected -
+a much narrower unknown than "does this test test anything".
+
+The third test pins the *old* behaviour: `date.today()` is insensitive to the active timezone. It
+deliberately asserts insensitivity rather than a specific date, so it does not depend on the host
+machine's own zone - a test that only passes on a UTC CI box would be a trap for whoever runs the
+suite on a laptop.
+
+Still unrun; the container is busy. `SimpleTestCase`, so it needs no database when it goes.
+
+
+## Chunk 320 - the new test was wrong, caught without the container
+
+Chunk 319 said the boundary test was blind on one narrow axis: whether `override_settings` +
+`timezone.deactivate()` + a patched `timezone.now` compose as expected. That axis turned out to
+be testable on this host after all - `settings.configure()` builds a minimal Django without
+touching the project settings, so nothing imports GDAL.
+
+Three assumptions held. **The fourth was wrong.** `test_date_today_does_not_follow_the_active_timezone`
+asserted `date.today()` is unchanged across two `override_settings(TIME_ZONE=...)` blocks. It is
+not: Django's `setting_changed` receiver for `TIME_ZONE` also rewrites `os.environ["TZ"]` and
+calls `time.tzset()`, so the process clock moves with the setting and `date.today()` moves with
+it. The test would have failed on its first container run.
+
+The real axis is `timezone.activate()` - the per-request zone the locale middleware sets. Under
+it, `localdate()` moves and `date.today()` does not, which is precisely what the nine call sites
+were ignoring. Rewritten accordingly and re-checked on the host: `2026-08-14 -> 2026-08-15` for
+`localdate()`, unchanged for `date.today()`.
+
+**The lesson is not "write more careful tests".** It is that "I cannot verify this here" was
+false, and unexamined. Two chunks reasoned about how to *hedge* a blind test - one declining to
+write it, one building in a vacuity guard - when ten lines of `settings.configure()` would have
+removed the blindness. The constraint was inherited from `CLAUDE.local.md`'s note that pytest
+needs the container (true, because the project's settings import GeoDjango) and over-generalised
+to "no Django on the host at all".
+
+That is twice in five chunks: chunk 316 over-generalised "no `docker cp` mid-run" into "no edits
+at all". Both times the false constraint survived because it was never tested, only reasoned
+from - and both times the test was cheap.
+
+
+## Chunk 321 - the host-side Django path, used
+
+Ran all three boundary-test bodies against a `settings.configure()` Django on this host. **All
+pass**, including the corrected third one: `localdate()` moves `2026-08-14 -> 2026-08-15` under
+`timezone.activate()` while `date.today()` stays on the 14th.
+
+The test is now verified in *logic*. What remains untested is only harness integration - that
+`SimpleTestCase` and the project's conftest do not interfere - which is the part the container
+run will cover.
+
+**This path is worth keeping.** Anything not touching the database or GeoDjango models can be
+checked here in seconds, against a real Django, instead of waiting minutes for a container cycle.
+Three of this audit's fixture-shaped failures (chunks 303, 305, 306) each cost a full ~3-minute
+container run to discover a wrong keyword argument; none of them needed GDAL to find. The
+project note that "pytest needs the container" is accurate and was never the whole picture.
+
+Recorded in `docs/PROBLEMS.md` as a developer-workflow note rather than a defect - it is the kind
+of thing that stays lost precisely because the existing constraint is real enough to sound
+complete.
+
+
+## Chunk 322 - spot-checking pure services on the host; the failure was mine
+
+Used the host-side Django path on two of this audit's own helpers. Both behave correctly:
+
+- `clean_color`: accepts `#abc`/`#AABBCC`, rejects `red`, `""`, `#12345`, `javascript:alert(1)`,
+  `#ff00ff; x`, `None`.
+- `safe_int`: `"5"->5`, `"  7 "->7`, `"-4"->-4`, and `"x"`/`None`/`True`/`"1e3"` all fall to the
+  default. Bool is refused explicitly (`safe_int(True, 9) == 9`), which is the point of it -
+  `int(True)` is `1` and would silently pass as a valid id.
+- `clamp_int`: clamps `"500"->100`, `"-5"->1`, and `"x"->default`.
+
+**The first run reported a failure that was not one.** It asserted `safe_int("x") is None`; the
+function returns `default: int = 0`. It also called `clamp_int(lo=..., hi=...)` when the
+parameters are `low`/`high`. I wrote both of these helpers earlier in this audit and still
+mis-stated their contracts from memory a few hundred commits later.
+
+That is a small instance of the thing this audit keeps finding at larger scale: the failure was
+in the *expectation*, not the code, and it looked exactly like a defect report until the
+signature was read. Chunk 305's false alarm, chunk 310's, chunk 312's - all the same shape. The
+check that resolves it is always the same and always cheap: read the definition before believing
+the diff.
+
+The 8-second feedback loop is what made this a footnote rather than a chunk. On the container it
+would have cost three minutes to discover I had misremembered a keyword argument.
+
+
+## Chunk 323 - boundary behaviour of the shared validators
+
+Host-side checks of the two remaining shared helpers this audit introduced or leaned on:
+
+- `text_length_error`: the limit is **inclusive** - exactly `MAX` characters is accepted and
+  `MAX+1` errors. Empty string and `None` are both non-errors, so a blank optional field does not
+  become a validation failure. That off-by-one is the one worth pinning: it decides whether a
+  user who fills a field to exactly the advertised limit gets rejected.
+- `clean_color`: an invalid value falls to the caller's supplied default (`#000000` stays
+  `#000000`, not `None`), which is what the typing overloads promise - a non-None default
+  narrows the return to `str`. The `none` keyword passes only when `allow_none_keyword=True`.
+
+No defects. Recorded because these two are now called from dozens of write paths (32 colour
+sites alone), so their boundary behaviour is load-bearing in places far from their definition,
+and "inclusive or exclusive?" is exactly the question a future caller will assume rather than
+check.
+
+
+## Chunk 326 - reading the OPEN list first, as chunk 325 said to
+
+23 OPEN items in `PROBLEMS.md`, several concrete and higher-value than another scan: a reproducible
+500 on pin detach, ~187 write routes with no test naming them, no CSP set anywhere, login lockout
+usable as a targeted DoS, refunds never reversing paid access.
+
+Took the detach 500. Its fix is explicitly a **product decision** with three defensible answers
+(nudge coordinates, use the pin's own marker fields, or refuse coherently), so patching it would be
+choosing for the project. But the entry itself names a part that is not a decision: "a test posting
+to `reverse('pin.link', ...)` belongs with it - that single request is enough to catch this class
+permanently."
+
+Written as `xfail(strict=True)`, which is the only marker that behaves correctly here:
+
+- asserting the 500 would **cement the bug** as intended behaviour;
+- `skip` would go silent forever;
+- strict xfail passes while broken, and **fails the moment detach stops raising**, telling whoever
+  fixed it to replace the marker with a real assertion.
+
+A second, plain test reverses the route independently. A strict xfail that errors during *setup* -
+a `NoReverseMatch` after a route rename - still counts as an expected failure, so the xfail alone
+could rot into a permanent green that exercises nothing.
+
+**The larger point about the last twenty chunks.** Most were self-generated: scans I invented, then
+audited, then corrected. This file had 23 items already triaged by earlier work, and chunk 325 found
+me overriding one of them precisely because I had not read it. Cheap-to-run scans crowd out
+expensive-to-read backlogs, and the backlog was where the higher-value work was sitting the whole
+time.
+
+
+## Chunk 327 - verifying the xfail actually works on this project's TestCase
+
+Chunk 326's detach test depends entirely on `xfail(strict=True)` behaving a specific way, and this
+project's `TestCase` inherits from `django.test.TestCase` -> `unittest.TestCase`. Pytest documents
+real limitations on unittest subclasses (fixtures, parametrize), and I half-remembered `xfail` as
+among them. If that were true the test would be decorative.
+
+**Checked instead of assumed.** A two-method probe - one failing, one passing, both marked
+`xfail(strict=True)` - gives:
+
+```
+XFAIL  T::test_that_fails        <- suite stays green while the bug exists
+FAILED T::test_that_passes  [XPASS(strict)]  <- loud the moment it is fixed
+```
+
+Both halves work, which is exactly the contract chunk 326 relied on. The recollection was wrong.
+
+Two notes on running it. The probe had to be run from outside the project, with an explicit empty
+`-c` config: from the repo root, pytest picks up `[tool.pytest.ini_options]`, loads Django settings
+and dies on GDAL - so an isolated probe needs isolating from the project's config too, not just its
+imports. And the file landed in the scratchpad rather than `/tmp` because a `cd A || cd B` guard
+succeeded on the first branch; the follow-up command then looked in the wrong place. Both cost a
+round trip, neither cost a container cycle.
+
+This is the third memory-sourced claim this session to be checked rather than trusted, and the
+first of the three to survive being wrong at no cost - the earlier two (`safe_int`'s default,
+`clamp_int`'s keyword names) were caught only after producing a bogus FAIL line.
+
+
+## Chunk 330 - independently re-deriving the duplicate-index count, and deferring to the filed one
+
+Did the column-level AST comparison promised in chunk 329: per model, single-field
+`Index(fields=[...])` against columns Django already indexes (FK/O2O, `db_index=True`,
+`unique=True`). Result: **64**.
+
+The filed entry says **58**, and **the filed number is the better one.** It was verified against a
+fully-migrated database by comparing `pg_index.indkey` column lists rather than names, explicitly
+excluding partial indexes (`indpred IS NULL`), unique indexes, and `varchar_pattern_ops` variants -
+noting the `_like` indexes Django creates for prefix matching are *not* redundant with a plain
+btree and must not be swept up.
+
+My 64 is a source-level approximation that over-counts, mainly because I counted `unique=True` as
+"already indexed" - true of the column, but a unique index is exactly what the DB-level analysis
+deliberately set aside. Six of my extra hits are that.
+
+**A number that looks like a refinement of a prior finding, and is not.** Third time this session:
+chunk 305's two "extra" Label sites (already fixed), chunk 328's phantom 23rd guard entry (my own
+f-string), and now this. Each time the newer, cheaper instrument produced a number that differed
+from careful prior work, and each time the prior work was right. The tell is consistent - the cheap
+method cannot see the exclusions the careful one was built around.
+
+Not attempting the removal. It is a migration change against a database I cannot currently test
+against, and the entry's exclusion list is precisely the kind of detail that makes a "mechanical"
+sweep dangerous - the same argument that proved correct about the `date.today()` sweep in chunk 325.
+
+
+## Chunk 332 - the suite found a regression I introduced, in a guard I had duplicated
+
+Full suite: **1 failed, 10781 passed, 1457 subtests** (1:09:50). The failure was mine, and it
+exposes a larger error.
+
+**The failing test was `test_bulk_write_signal_guard.py` - not the guard I wrote in chunk 308.**
+A guard for this exact defect class already existed, and it is better than mine on every axis:
+
+- keyed by `(path, model, operation)` rather than line numbers, explicitly "not by line number,
+  which would churn on every edit above the call and train people to update it blindly";
+- it resolves receivers through `django.apps` and the real signal registry, so it sees receivers
+  connected **dynamically** - `Image`'s achievements `post_save` is wired via `_SUBSCRIPTIONS`, not
+  a decorator, and my regex-based version was structurally blind to it;
+- every entry carries a *reason string*, so the record is the reasoning, not a checkbox.
+
+Its docstring also already described the stale-map-icon-after-label-reorder problem, and its
+`pin_list_trip.py` entry already documents "calls `queue_calendar_push(trip.pk)` once afterwards
+rather than once per activity" - the exact design decision I reached independently in chunk 305 and
+recorded as though it were novel.
+
+So chunk 308's "turning the defect into a guard" was reinventing a better wheel, and chunks 303 and
+305 then added two bulk writes that the real guard correctly flagged as unregistered. **My duplicate
+could not catch that**, because I had written my own list from a fresh scan that included them.
+
+Fixed: both new call sites registered in the real `REVIEWED` with their reasoning; my duplicate
+deleted. The real guard passes (4 tests, 15s).
+
+**The notification said exit code 0.** The suite was launched as `pytest ... | tail -6`, so the
+pipeline reported *tail's* status, not pytest's. A red build was announced as green, and only
+reading the output caught it. Chunk 311 already flagged that pipe for destroying interim
+visibility; the exit-code masking is the more dangerous half and I did not notice it then.
+
+**Three chunks, three variations of the same root error** - 325 (overrode a documented decision
+without reading it), 330 (re-derived a number careful prior work already had), and now 332
+(rebuilt a test that already existed). Each time the prior work was better, and each time it was
+sitting in a file I had open or adjacent. The loop's bias is toward generating new artifacts over
+reading existing ones, and generation feels like progress in a way that reading does not.
+
+
+## Chunk 333 - the owed verifications, run
+
+Both debts from chunks 316-319 are settled now the container is free:
+
+- **localdate boundary tests: 3 passed.** The corrected `timezone.activate()` axis behaves in the
+  real harness exactly as the host-side `settings.configure()` probe predicted, including the
+  precondition guard against vacuity.
+- **Detach route: 1 passed, 1 xfailed.** The `xfail(strict=True)` reports XFAIL, confirming the 500
+  still reproduces exactly as the 2026-08-13 entry describes, and that the marker will flip to a
+  hard failure the moment anyone fixes it.
+- **Suites covering the nine localdate files: 942 passed** (trip, pin_edit, export, link_extraction,
+  tools), 58 subtests.
+
+The localdate change is therefore no longer "unverified" - the qualifier it carried through six
+chunks. It remains **behaviour-neutral** under current settings and still overrides a documented
+deferral, so the standing offer to revert is unchanged; what has changed is only that it is now
+known not to break anything.
+
+Worth noting what the host-side probe bought: every prediction it made about the boundary test held
+in the container. The 8-second loop was not a substitute for the 3-minute one, but it was an
+accurate preview of it - and it caught the one genuinely wrong assertion (the `override_settings`
+axis) before it ever reached a container run.
+
+
+## Chunk 334 - reading a backlog entry found a flaw in my own fix
+
+Took the trip-activity weather timezone entry, since my localdate work touched a line it names.
+The entry's own bug (Open-Meteo returns naive *local* time while the comparison target is naive
+UTC, so slot matching is out by the location's offset) needs the provider timezone threaded
+through the resolution chain - more than could be finished safely here, and left alone.
+
+But checking whether my change interacted with it found that **my change is half a conversion**:
+
+```python
+today = timezone.localdate()               # active timezone's date, after chunk 316
+... act.scheduled_at.date() >= today       # still the UTC date of an aware datetime
+```
+
+Before, both sides were UTC. Now one side follows the user and one does not. Latent rather than
+live - they agree while nothing calls `timezone.activate()`, which is true today.
+
+**This is precisely what the deferral argument predicted** and what I dismissed by not reading it:
+"the sites are not uniform". I had read that as a claim about *import styles* - which is how the
+entry illustrates it - and the real hazard is semantic. Converting one side of a comparison is a
+different and less visible failure than a `NameError`, and lint cannot see it.
+
+Only this one of the nine converted sites has been checked this way. Recorded in `PROBLEMS.md` as
+work owed, rather than quietly assumed fine - the other eight deserve the same question, and I do
+not have grounds to claim they are clean.
+
+
+## Chunk 336 - re-verifying a filed product question rather than deciding it
+
+Took the games feature-gate entry. It is explicitly a **product decision**: a mixin applying the
+hub's check to all 49 views was written and reverted, because it broke 9 tests that exercise full
+gameplay with users who do not hold the feature. That is the behaviour the suite currently encodes,
+so tightening it would lock out anyone playing today - not a defect fix.
+
+Deciding it is not mine to do, so the contribution is confirming it is still true: an AST pass finds
+**50 game view classes, 1 gated (the hub), 49 with `LoginRequiredMixin` alone** - the entry's count,
+unchanged since 2026-08-12.
+
+**Deliberately did not add a test here**, unlike the detach case in chunk 326. There, a strict xfail
+worked because the current behaviour (a 500) is wrong under *every* candidate fix. Here the current
+behaviour is what one of the two plausible answers wants, so any test I wrote would encode a guess
+about the product question - and a test asserting "a non-entitled user can play" would actively
+obstruct the fix if the gate is meant to apply. The absence of a test is the honest state.
+
+That distinction is worth keeping: an unresolved product question sometimes takes a guard and
+sometimes must not. The test is safe only when every candidate answer agrees the present behaviour
+is wrong.
+
+
+## Chunk 337 - a stale line number, and honest arithmetic on the coverage gap
+
+Went to read the secondary-email entry by line number and landed on a different one. The numbers I
+recorded in chunk 326 are stale because **I have been appending to this same file ever since**. A
+line number into a document you are actively growing is a reference with a short half-life; the
+headings are stable, the offsets are not. Worth noting since this audit has cited `PROBLEMS.md` by
+line repeatedly.
+
+The entry I landed on was the right one to look at anyway - the ~187 uncovered write routes, which
+was *prompted by* the detach 500 that chunk 326 covered. Confirmed `pin.link` is now genuinely
+referenced by `reverse()` in the test tree, so the count is **186**.
+
+**One out of 187 is the honest size of that dent**, and recording it that way matters more than
+recording the decrement. This entry describes a systemic gap; closing it route by route is not a
+strategy, and a changelog of individual routes would make steady-looking progress against a number
+that barely moves. What the detach case genuinely demonstrates is the *unit*: one request against a
+never-executed route was enough to pin a 500 permanently. That is an argument for a sweep, not for
+another 186 chunks.
+
+
+## Chunk 338 - attempting to tighten a filed estimate, and failing to
+
+Chunk 337 argued the uncovered-write-route gap wants a sweep rather than route-by-route chipping.
+The cheapest useful sweep is not writing tests - it is tightening the estimate, since the entry
+flags a known false-positive mode (tests addressing endpoints by literal path rather than
+`reverse()`).
+
+Result: literal-path matching adds only **8** routes. That is a genuinely useful datum - it says
+the skew the entry worried about is small.
+
+**But the same probe enumerated 971 routes where the entry has 841, and 419 uncovered where it has
+301.** So my route set is not the entry's route set - different namespace attribution on nested
+resolvers, and I searched only `dashboard/tests` rather than the whole tree. I cannot claim to have
+tightened a number I cannot reproduce.
+
+**Fourth time this session.** Chunks 305, 328, 330 and now 338: a quick instrument produces a
+number that differs from careful prior work, and the prior work is better every time. The pattern is
+stable enough to be a rule - when a cheap re-derivation disagrees with a careful one, the cheap one
+is wrong until proven otherwise, and the burden is on the new number. I recorded the 8 as
+indicative and left the entry's figures standing.
+
+
+## Chunk 339 - the backlog is blocked on decisions, not on effort
+
+Fourth backlog item examined in as many chunks (calendar-import duplicates), and the fourth whose
+deferral is correct on inspection:
+
+| item | why it is not an engineering task |
+|---|---|
+| pin detach 500 | three defensible behaviours; picking one is a product call |
+| games feature gate | tightening it locks out anyone currently playing |
+| 58 duplicate indexes | migration against live schema, with a careful exclusion list |
+| calendar duplicates | needs a partial unique index **plus** deleting rows - choosing which link survives decides which of two real trips keeps the user's calendar |
+
+Each was already analysed to the point where the remaining work is a *decision*, not
+implementation. The calendar entry even names the correct constraint
+(`condition=~Q(google_event_id="")`) and explains why the obvious plain unique constraint is wrong:
+a timed import deliberately stores an empty `google_event_id` on the trip-level link, and empty
+strings are not distinct to a Postgres unique index.
+
+**This reframes what this audit can still contribute.** The 23 OPEN items are not a queue of
+unfinished engineering that more chunks will drain - they are largely a queue of questions for the
+project owner, several with the implementation already specified. Continuing to "search for bugs"
+past this point has sharply diminishing returns compared to the four product decisions already
+filed, plus these.
+
+The honest summary of the last several chunks: chunks 303-310 found and fixed three real bugs;
+chunks 311-339 have mostly been verification, self-correction, and confirming that prior work was
+already right. That is worth something, but it is not the same activity, and reporting it as
+continued bug-finding would misrepresent it.
+
+
+## Chunk 340 - template rules from CLAUDE.md, both clean
+
+Looked outside the OPEN backlog at two project-specific template rules, each with a concrete
+user-visible failure mode:
+
+- **Multi-line `{# ... #}` comments** (they render straight to the page): **0** across 418
+  template files.
+- **`"prefix-"|add:obj.id`** (silently yields `''`, because `str + int` fails both the
+  int-coercion and concat paths - the bug that collapsed per-item DOM ids and made every DM map
+  bubble render the first map): **0 real instances.** No `|add:` anywhere takes a `.id` or `.pk`
+  operand.
+
+23 raw matches narrowed to 0. Most operands end in `_str` - the documented fix, already applied.
+The remaining five (`ns`, `label_url_kind`, `pin.slug`, a pre-built `visit_map_id`) are strings by
+nature, so concatenation is well-defined for them.
+
+**Fifth time a scan's raw output was not the finding**, after chunks 305, 312, 328 and 338. The
+ratio here is stark - 23 matches, 0 defects - and the reason is the same as always: the pattern
+that expresses a bug also expresses its fix and its safe uses. A grep for `|add:` cannot see the
+type of the operand, which is the entire question.
+
+Both rules being clean is itself worth recording. They read like the kind of convention that
+erodes quietly, and they have not.
+
+
+## Chunk 341 - two signal-discipline rules, both clean
+
+Continuing outside the backlog with `CLAUDE.md` rules that AST can decide exactly:
+
+- **`save()` inside a `post_save` receiver or `__str__`**: **0**. The failure mode is recursion -
+  a receiver that saves re-fires itself - and `__str__` doing a write is the kind of thing that
+  turns a debug print or an admin listing into a write storm.
+- **`dispatch_uid` on signal registration**: **57 registrations, 0 missing.** Without it, a module
+  imported twice registers the receiver twice and every signal fires it twice; the project has
+  already been bitten by duplicate Celery side effects, so this is a rule with history behind it.
+
+Perfect compliance on both, which is a different result from the earlier sweeps. Chunks 313 and 315
+found mechanical classes largely *absent* (mutable defaults, bare excepts, asserts); this is a
+project-specific discipline maintained at 57 out of 57. That is not the same as an absence - it is
+evidence of a convention actually being followed, in a codebase where nothing enforces it
+automatically.
+
+Which suggests where the remaining value is: not another convention scan. Three consecutive
+convention checks (chunks 340-341, five rules total) have come back perfectly clean, and the
+prior probability of the next one finding something has dropped accordingly.
+
+
+## Chunk 342 - closing the incidental-invalidation claim from chunk 306
+
+Chunk 306 asserted that calling `sync_last_visited(survivor)` also refreshes the merged pin's
+cached map payload, since the merge had no invalidation of its own. Asserted, not checked - and
+chunk 307 then leaned on the same claim to declare the `PinLink` repoint clean. Verified now:
+
+- `refresh_map_pin_cache` is a plain `post_save` receiver on `Pin` with **no `update_fields`
+  filter**, so `pin.save(update_fields=["last_visited", "updated"])` fires it.
+- Its only guard is `if instance.profile_id`, which a merge survivor always satisfies.
+- `_refresh_cached_pin` defers through `transaction.on_commit`, so it runs *after* the merge
+  transaction commits rather than against half-applied state.
+
+The claim holds on all three points, including one I had not considered - the on_commit deferral,
+which matters because the merge does its work inside `transaction.atomic()` and an immediate
+refresh would have cached a survivor whose relations were still moving.
+
+Worth noting that two chunks' conclusions rested on this for six chunks before anyone checked it.
+An unverified claim does not stay isolated; chunk 307 built on it within one chunk. Verification
+debt compounds in the same direction as the reasoning that created it.
+
+
+## Chunk 343 - auditing my own load-bearing claims; one was wrong
+
+Chunk 305 marked the two `NotificationLog...update(status=READ)` sites clean, and used them as the
+headline example that "bypassing a signal is often correct - re-pushing a notification when the
+user *reads* it is precisely the bug". That reasoning was asserted from the receiver *names*, not
+read.
+
+Reading them: all three (`push_notification_to_browser`, `enqueue_text_alerts`,
+`enqueue_native_push`) open with `if created and instance.profile_id`. **They self-guard.** A
+normal `save()` on an existing row would not re-push either, because `created` is False on an
+update. The bypass prevents nothing.
+
+- **Conclusion still correct**: the sites are clean.
+- **Reason recorded for it was wrong**: I credited the `.update()` call with a safety property that
+  belongs to the receivers.
+
+This matters beyond the entry, because that example was carried forward as the argument for why the
+bulk-write guard asserts only "the set does not grow unreviewed" rather than demanding invalidation
+everywhere. The argument survives - `pin_edit.py`'s transient self-parent (chunk 309) is a genuine
+instance of a deliberate, load-bearing bypass - but it now rests on one real example instead of two,
+and the one I led with was the weaker.
+
+**The pattern across chunks 342 and 343**: both audited claims I made *about code I had not opened*,
+inferring behaviour from a name (`refresh_map_pin_cache`, `enqueue_native_push`). One held with an
+extra mechanism I had not known about; one failed. Names are a hypothesis about behaviour, and this
+session has now spent four chunks discovering that reading the definition is the cheap step.
+
+
+## Chunk 344 - strengthening, not proving, chunk 309's pin_type claim
+
+Chunk 309 declared `site_scope.py`'s bulk `pin_type` retype clean partly because "no smart filter
+reads it" - evidence being a grep of two directories. Re-checked more broadly:
+
+- `pin_type` appears in migrations, the retype write itself, a `_pin_type_from_hits` suggestion
+  helper, a `pin_type_icon` template filter, and one `filter(pin_type=BUILDING)` count in
+  `site_scope` - **none in any smart-list or saved-filter application path**.
+- Membership resync runs through `sync_pin_against_smart_lists`, driven by `PinList.smart_filter`,
+  a JSONField documented as "same JSON shape as `SavedFilter.criteria`".
+
+**Still not proof.** I have not enumerated the criteria schema's accepted keys, and that - not the
+absence of the string in application code - is what would settle it. If `criteria` is a
+pass-through to queryset kwargs rather than an allowlist, a user could conceivably store a
+`pin_type` criterion that no source file mentions.
+
+Recording the verdict at its actual strength: *supported by broad absence, not established by
+schema*. Chunk 309's conclusion was probably right and its evidence was thinner than the confident
+phrasing implied. This is the third claim in three chunks where the finding is not that the code is
+wrong, but that my stated confidence outran what I had checked.
+
+
+## Chunk 345 - the pin_type claim is now established, not merely supported
+
+Followed the chain chunk 344 identified as the gap: `_pin_matches_filter` -> `deserialize_criteria`
+(`services/search/filter_criteria.py`) -> `Pin.objects.filter_by_criteria` (`models/pin/queryset.py`).
+
+- `pin_type` appears **0 times** in `filter_criteria.py` and **0 times** in `pin/queryset.py`.
+- `filter_by_criteria` consumes an **enumerated key set** - `name`, `status`, `tags`,
+  `exclude_tags`, `label_groups`, `min_rating`, `max_rating`, and so on - read key by key rather
+  than splatted into `filter(**criteria)`.
+
+That is the allowlist chunk 344 said was the deciding factor. A user cannot store a `pin_type`
+criterion that later matches, because no layer of the criteria vocabulary contains the concept.
+Chunk 309's verdict on `site_scope.py` is now established rather than inferred.
+
+**Four chunks to settle one claim that took one sentence to assert.** That ratio is the honest cost
+of the confidence, and it is worth stating plainly: the original verdict was probably right on
+weaker evidence, and this chain only mattered because the verdict was load-bearing for calling a
+bulk write clean. Not every claim earns four chunks. The ones that let a write path past a guard do.
+
+
+## Chunk 346 - the client pin cache version is not stale
+
+`CLAUDE.md` warns that `pin-cache.ts`'s version constant "must be bumped whenever the pin payload
+shape changes - it goes silently stale otherwise". The failure mode is a client serving fields that
+no longer exist, with no error anywhere.
+
+Checked: `PIN_CACHE_VERSION = 8`, last changed 2026-07-22. `services/map_pins/payload.py` has been
+touched **4 times since**, most recently 2026-08-07 - but **none of those commits changed an
+emitted key**. They changed queries and logic (the latest joins `location__wiki` to remove a per-pin
+query), which is exactly the case where a bump would be wrong: churning the version invalidates
+every user's cache for nothing.
+
+So the constant is correct, and the discipline has held through four opportunities to break it.
+
+**Stated limitation:** this compares `+`/`-` lines matching a `"key":` shape in the payload dict. A
+key added with different formatting - built conditionally, spread from a helper, or renamed via a
+constant - would not be caught. The check is sound for the ordinary case and blind to the clever
+one, which is worth knowing before relying on it as a guard.
+
+
+## Chunk 347 - nearly reported a dead invalidation path that works fine
+
+Checked the `ul_pins_dirty` mechanism (non-map pages flag the map's pin cache as stale). Searching
+`frontend/ts` found **3 production writers and zero production readers** - every `getItem` was in a
+`.test.ts`. That reads exactly like a dead invalidation: surfaces setting a flag nothing consumes,
+with the map serving stale pins until its TTL.
+
+It is not dead. The consumer is in `templates/dashboard/pages/map/index.html` at lines 1444-1445 and
+2012 - inline JS - which reads the flag and removes it. Two more writers also live in templates
+(`import_progress.html`, `_photos_tabs.html`), so the real balance is 5 writers, 2 readers, working
+as documented.
+
+**The cause is a filed problem, demonstrated.** This audit has recorded 21,543 lines of inline
+template JS as untestable and hard to search; here that directly produced a near-false-positive of
+the worst kind - a *confident negative*. Searching a `frontend/ts` tree is a reasonable way to
+answer "does anything read this flag?", and in this codebase it returns the wrong answer, because a
+quarter of the client behaviour is not in that tree.
+
+Sixth time this session a scan's raw output was not the finding (305, 312, 328, 338, 340, now 347).
+The five before were false *positives* - noise to discard. This one would have been a false
+*negative* dressed as a discovery, and those do not announce themselves: nothing about "0 readers"
+looks like a search that missed a directory.
+
+
+## Chunk 348 - re-checking the frontend verdicts chunk 347 cast doubt on
+
+Chunk 347 showed a `frontend/ts`-scoped search can return a confident wrong answer, so the earlier
+frontend verdict in this session needed re-examining: chunk 346 declared `PIN_CACHE_VERSION` correct
+having looked only at `pin-cache.ts`.
+
+**It holds.** Templates contain no cache-version constant, no `pinCacheKey`, and no parallel pin
+cache - the TypeScript module genuinely owns that mechanism. Inline template JS touches only four
+localStorage keys in total: `ul_pins_dirty` and three `_v1`-suffixed history keys
+(`ul_addr_history_v1`, `ul_composer_search_history_v1`, `ul_safety_dest_history_v1`).
+
+So the inline-JS blind spot is narrower than chunk 347's near-miss suggested: it caught the one
+mechanism that genuinely spans both trees. That is worth knowing in both directions - the hazard is
+real and it is not everywhere, and treating "some searches are unreliable" as "no search is
+reliable" would be its own error.
+
+The four keys also happen to answer a question this audit never asked: client-side persistent state
+is small and enumerable, which makes it a poor hiding place for the kind of staleness bug chunk 304
+found server-side.
+
+
+## Chunk 349 - client-side history storage is bounded
+
+Followed chunk 348's four-key inventory to its one open question: the three `_v1` history keys
+accumulate user-typed queries in localStorage, and unbounded growth there is a quiet real bug
+(storage quota exhaustion, eventually breaking unrelated features that share the origin).
+
+**Bounded.** All three route through `shared/location-search-engine.ts`, whose `addToHistory` does
+`deduped.slice(0, 20)` - capped at 20, deduplicated on insert, and wrapped in try/catch so a
+storage-unavailable browser degrades rather than throws.
+
+The templates that name these keys only *remove* them (one-time cleanups of a prior key) and pass
+`historyKey` into the shared engine; none of them implement storage themselves. So this is the
+opposite of chunk 347's shape - there, behaviour I expected in TypeScript lived in a template; here,
+behaviour the templates appear to own is properly delegated to a shared module.
+
+Both directions of that confusion exist in this codebase, which is the practical argument for the
+inline-JS migration: not that inline JS is untested (though it is), but that **you cannot tell from
+a call site which tree owns the behaviour**, so every frontend question costs two searches.
+
+
+## Chunk 350 - production security settings: sound, with the one known gap already filed
+
+New axis, chosen because it is decidable and classically error-prone:
+
+- `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE` and HSTS are all derived from
+  one condition (`not UNSAFE_ALLOW_HTTP and not TESTING`), with the coupling explained in a comment
+  rather than left as coincidence - so a local HTTP dev run and the test suite cannot silently
+  diverge from production on some flags but not others.
+- `SecurityMiddleware`, `CsrfViewMiddleware` and `XFrameOptionsMiddleware` are all present.
+- `X_FRAME_OPTIONS` and `SECURE_CONTENT_TYPE_NOSNIFF` are unset, which is **correct** - Django
+  defaults them to `DENY` and `True`, and the middleware above enforces them. Setting them
+  explicitly would add nothing.
+- `environments/prod.py` contains no `DEBUG`/`SECURE_*`/cookie overrides at all. That is the failure
+  this check is really for: a staging convenience leaking into production by override.
+
+The one genuine gap on this axis - no Content-Security-Policy anywhere - is already an OPEN item
+from 2026-08-12, so the picture is consistent: the parts that are wrong here are known to be wrong.
+
+That is a reasonable note to end a long audit on. Across chunks 340-350, eleven independent
+checks - template conventions, signal discipline, cache versioning, client storage bounds, security
+settings - returned clean, and the defects that do exist were already documented by earlier work.
+
+
+## Chunk 351 - a runtime check finds what 48 chunks of reading could not
+
+After eleven consecutive clean static checks, tried a genuinely different instrument: the running
+stack. The idle app log gave nothing (0 lines in 6h - no traffic on a dev box), but container state
+did.
+
+`urbanlens_devs1_app` is **unhealthy with a failing streak of 23,150**, and the documented URL
+refuses connections. Filed in `PROBLEMS.md`.
+
+**The streak count is what makes this reportable.** My first instinct was that I had caused it -
+this session ran a 70-minute suite inside that container and `docker cp`'d into it repeatedly. 23,150
+consecutive failures spans essentially the container's entire 10-day uptime, which rules that out.
+Without that number I would have had a suspicion I could not honestly report either way.
+
+The lesson for the audit's method: every chunk from 303 to 350 examined *source*. Source cannot tell
+you that the thing you are auditing does not currently run. Eleven clean checks in a row was the
+signal to change instruments, and changing instruments immediately produced a finding of a kind the
+previous forty-eight could not have.
+
+
+## Chunk 352 - the healthcheck failure is a wedged server, not a missing route
+
+Diagnosed chunk 351's finding one level deeper. The three cheap explanations are all wrong: the
+`health/` route exists, `runserver` is running, and the port is right. `curl` from *inside* the
+container still returns HTTP 000 for both `/health/` and `/`.
+
+An alive, CPU-consuming process that does not accept connections is a hang, and that is as far as
+this can be taken without process-level inspection.
+
+**Worth being explicit about a confound I introduced.** The child `runserver` restarted at 00:33
+today - when this session started `docker cp`-ing source in, firing the autoreloader. So the process
+now wedged is one my own activity restarted. The 10-day failing streak still proves the *condition*
+predates me, but I can no longer claim the *current instance* is untouched. Had I checked container
+health before the first sync, that ambiguity would not exist.
+
+A useful general point for auditing a live environment: reading source is non-invasive, but the
+moment you sync files into a running container you have altered the thing you are measuring. This
+audit did that dozens of times before ever looking at whether the environment was healthy.
+
+
+## Chunk 353 - the wedge, pinned: the port is never bound
+
+Non-invasive final step on the unhealthy container, without restarting a service the user may be
+relying on. Reading `/proc/net/tcp` inside it: **nothing listens on port 8000**. The single
+listening socket is an ephemeral `0xAA29` (43561).
+
+So the diagnosis sharpens from "wedged server" to something much more actionable: `runserver` never
+reaches `bind()`. It is not hung handling requests - it is stuck in whatever runs *before* the
+server starts, with ~33 minutes of CPU burned doing it. That points at imports, Django system or
+migration checks, or the boot-time staticfiles/frontend build.
+
+Three chunks (351-353) took this from "the stack looks fine" to a named failure point, using only
+observation - `docker ps`, `docker inspect`, `ps`, `curl`, `/proc/net/tcp` - and changing nothing.
+That restraint was deliberate: a restart would have fixed the symptom and destroyed the evidence,
+and it is the user's environment to restart.
+
+It is also the strongest argument in this audit for varying the instrument. Fifty chunks of reading
+source could not have found this, and three chunks of looking at a running system did.
+
+
+## Chunk 354 - evidence that complicates the previous chunk's conclusion
+
+Checked process state and kernel wait channel: both `runserver` processes are `S (sleeping)` with
+`wchan 0`, 8 threads each, ~33 minutes of CPU accumulated over 18 hours.
+
+Chunk 353 concluded the server was "stuck before `bind()`", which implied a single blocking call.
+**This evidence does not support that.** A process blocked early in imports would not have 8
+threads, and a one-time hang would not burn CPU steadily. A poll loop (the autoreloader) fits the
+CPU profile, but a crash-reload cycle should produce tracebacks - and the app log has been empty for
+6+ hours.
+
+Four facts - never binds, sleeping not blocked, steady low CPU, silent logs - and no single story
+covering all of them.
+
+**Recorded as contradictory rather than resolved.** The temptation at the end of a long investigation
+is to let the last plausible narrative stand, and chunk 353's phrasing ("it is stuck before the
+server starts") was already firmer than the evidence warranted. Naming the contradiction is more
+useful to whoever picks this up than a tidy conclusion they would have to unlearn - especially since
+the remaining step, `py-spy dump`, costs about a minute and settles it outright.
+
+
+## Chunk 355 - resolving the contradiction, and nearly reporting a permissions artifact as data
+
+Sampled CPU consumption directly: the child burns **11 ticks in 5 seconds (~2.2% of a core,
+sustained)**. It is working, not blocked - which settles chunk 354's contradiction against the
+"single blocking call" reading and in favour of a poll loop.
+
+**The first two attempts produced zeros that were permission errors, not measurements.**
+`/proc/<pid>/io` is unreadable here even under `docker exec -u root`, and `awk` reported
+"Permission denied" to stderr while the arithmetic dutifully printed `read syscalls in 4s: 0`. A
+zero that means "I could not look" is indistinguishable in the output from a zero that means
+"nothing happened" - and the first reading would have *confirmed* the blocked-process hypothesis I
+was testing.
+
+That is the same shape as chunk 347's near-miss, twice in nine chunks: a search that cannot see is
+reported as a search that found nothing. Both times the error would have supported the conclusion I
+already leaned toward, which is what makes it worth naming rather than filing as a fluke.
+
+The switch to `/proc/<pid>/stat` fields 14+15 worked because it is readable and its meaning is
+unambiguous - a counter that only ever increases, sampled twice.
+
+
+## Chunk 356 - the root cause, and it is the documented workflow
+
+Chased chunk 355's remaining anomaly (silent logs) and found the whole chain. The container's app
+runs as `appuser` (uid 1001); the host's `src/urbanlens/logs/` is owned by uid 568; `docker cp`
+preserves source ownership; the documented resync command therefore makes the log directory
+unwritable by the app on every use. Django's logging config raises before `runserver` binds.
+
+One fact explains all four symptoms - no listener, silent logs, steady CPU, sleeping-not-blocked -
+and the 10-day failing streak, since previous sessions following the same documented step would have
+done the same thing.
+
+**Three self-corrections inside one chunk, worth recording as a sequence:**
+
+1. Read the traceback, concluded "my `docker cp` broke it" - correct.
+2. Saw the log directory owned 568:568 *unchanged since Jul 24* and `django.log` written minutes ago,
+   and started to retract - the ownership predates this session, so it looked like I was wrong.
+3. Checked the uids: host `apps`=568, container `appuser`=1001. The directory has been wrong for a
+   long time, my syncs kept it wrong, and the recent write was **my own `docker exec` running as
+   root** - which can write regardless and produced evidence pointing the wrong way.
+
+Step 2 was a near-miss in the honest direction: I nearly withdrew a correct conclusion because the
+counter-evidence was superficially strong. What resolved it was the same move that has resolved most
+things this session - checking a specific number (the uids) instead of reasoning about what the
+timestamps implied.
+
+Fixed the ownership; the process needs a restart, which is the user's call. Filed the workflow defect
+separately, since fixing the container without fixing the documented command just delays the next
+occurrence.
+
+
+## Chunk 357 - fixing the workflow, and where that fix does and does not live
+
+Added the required `chown` to the documented resync in `CLAUDE.local.md`, with an explanation of why
+the failure is near-invisible (silent `docker logs`, container still "up", `docker exec` running as
+root so every manual check succeeds while the site is down).
+
+**That file is gitignored** (`.gitignore:45`) - it is the user's private, environment-specific
+instructions, deliberately not checked in. So this fix:
+
+- is on disk and will be read by the next session in *this* checkout;
+- is **not** committed, cannot be pushed, and does not reach the other parallel checkouts under
+  `/projects/environments/{dev,staging,prod,test}/` - each of which has its own copy of the same
+  documented command, and its own container that the same `docker cp` would break.
+
+The durable half is therefore the `docs/PROBLEMS.md` entry, which *is* tracked. Anyone hitting a
+silently unhealthy container in another slot will find the root cause there even though their
+`CLAUDE.local.md` still carries the unpatched command.
+
+Worth being explicit about that split rather than reporting "fixed the docs": the fix landed in the
+place that helps this checkout and the *diagnosis* landed in the place that travels. Only the second
+one generalises.
+
+
+## Chunk 358 - checking whether the breakage is widespread; it is not
+
+Chunk 357 worried the `docker cp` defect would affect the other parallel environment slots, each
+carrying the same documented command. Checked instead of assuming:
+
+- **Exactly one unhealthy container on the host**: `urbanlens_devs1_app`.
+- The only other running app container, `ulpindiscovery_local_app`, is **healthy after 3 weeks** -
+  a different project, not receiving these syncs.
+- No other UrbanLens slot containers are running at all, so they cannot be in this state.
+
+That is a natural control rather than an argument: the container that receives `docker cp` is
+broken, the one that does not is fine, and nothing else is affected. It also bounds the fix - the
+`chown` in this checkout's gitignored `CLAUDE.local.md` is sufficient *today*, and only becomes
+insufficient when another slot is brought up and resynced.
+
+**A worry, checked and dismissed in one command.** Chunk 357's concern was reasonable and wrong, and
+the cost of establishing that was trivial compared to the cost of acting on it (patching docs in
+checkouts I cannot see, for containers that do not exist). The same asymmetry as the rest of this
+session: the check is nearly always cheaper than the reasoning that substitutes for it.
+
+
+## Chunk 359 - the worker logs had been holding the answer for ten days
+
+Returned to code work and checked a runtime signal first: Celery container logs. `celery_worker` has
+**1,892 lines and 175 errors**, against 0 for beat and panels - and the errors resolve to 16
+`ProgrammingError`s naming three missing columns, all dated 2026-08-04.
+
+`showmigrations` confirms: **18 unapplied migrations** in `dashboard`.
+
+**The test suite is structurally blind to this.** It builds a fresh database from the migration
+files, so today's 10,781 passing tests are entirely compatible with a dev database 18 migrations
+behind. I reported that green suite as evidence the session's changes were sound - which it was -
+but it was never evidence the environment was.
+
+That is now three findings in nine chunks that no amount of source reading could reach: the wedged
+container (351), its `docker cp` root cause (356), and this. All three came from looking at what was
+*running* rather than what was *written*, and all three had been true for days while fifty chunks of
+static analysis returned clean.
+
+
+## Chunk 360 - naming the 18 migrations changes the recommendation
+
+Listing them costs one read-only command and materially changes the advice. `0026`-`0043`, and three
+carry data rather than schema: a `Place` backfill, a **field-encryption** migration, and a duplicate
+label merge that deletes rows immediately before the constraint requiring it is added.
+
+So "just run `migrate`" would have been poor advice. `0042`/`0043` are a pair that cannot be
+half-applied safely, and `0039` touches encrypted columns where this project's own documentation
+warns that a key mismatch orphans data. The recommendation is now: snapshot first.
+
+The range also matches a note already sitting in `CLAUDE.local.md` from 2026-08-06 - the container
+being "30 tracked files behind ... missing migrations 0026-0038". **The drift was documented eight
+days ago as a *file* problem and never recognised as a *database* one**, which is why it survived
+in a file this audit has read repeatedly.
+
+A fitting last observation for this thread: the information was not missing, it was mis-filed. Three
+of this session's most substantial findings - the override in chunk 325, the duplicated guard in
+chunk 332, and this - were all sitting in documentation I had access to the whole time.
+
+
+## Chunk 361 - the workers are fine, and the obvious fix order would break them
+
+Checked whether syncing current code into a container with an 18-migration-behind database had
+caused runtime failures. **It has not** - zero `ProgrammingError`s since the sync, and the worker is
+completing its hourly tasks.
+
+The reason is the useful part: **Celery workers do not autoreload.** They are still executing the
+code they started with on 2026-08-04, which matches the old schema. The resynced code is sitting in
+the container unused by them.
+
+Which inverts the obvious remediation order. Restarting the stack to fix the wedged `app` container
+would make the workers load current code against the stale database and start failing - so
+`migrate` (after a snapshot) has to come **before** the restart. Recorded in `PROBLEMS.md`, since
+that ordering is exactly what someone fixing the visible problem would get wrong.
+
+**Seventh grep false positive this session.** "12 errors today" was my pattern matching the word
+`errors` inside an INFO line's JSON payload - `{'scanned': 2, 'deleted': 0, 'errors': 0}`. A count of
+zero errors, counted as an error. The tally across the session is now unambiguous: every single time
+a raw scan count looked like a finding, reading the matches changed the answer.
+
+
+## Chunk 363 - the migration graph is sound, and an eighth false positive
+
+With 18 migrations pending, `CLAUDE.md`'s warning about `makemigrations` picking dependencies from
+*uncommitted* files (which breaks other checkouts with `NodeNotFoundError`) becomes worth checking
+before anyone runs them.
+
+- `git status src/urbanlens/dashboard/migrations/` is **empty** - every migration is committed, so
+  the uncommitted-dependency hazard does not apply here.
+- All 43 migration files' `dashboard` dependencies resolve: **0 unresolvable**.
+
+So the pending batch is internally consistent and safe to apply from a graph perspective. The data
+risks recorded in chunk 360 are unchanged.
+
+**Eighth false positive, and the most instructive one.** My first pass reported *61* unresolvable
+dependencies - it matched `("dashboard", "Pin")` tuples, which are `apps.get_model()` calls and model
+references, not migration dependencies. Real dependencies name a migration (`0026_places`), so
+filtering on `\d{4}_` collapsed 61 to 0.
+
+Sixty-one is a dramatic number, and a less careful pass would have filed it as a serious finding on
+the eve of a migrate. The pattern this session has established holds without exception: **a raw scan
+count has never once survived reading the matches**. Eight for eight.
+
+
+## Chunk 364 - reading the migrations corrects my own warning about them
+
+Chunk 360 warned that `0042`/`0043` "cannot be half-run". That was inferred from their **names** -
+a merge followed by the constraint requiring it - and names have misled me twice already this
+session (chunks 342, 343).
+
+Reading them: neither sets `atomic = False`, so Postgres wraps each migration in its own
+transaction. `0042` fully applies or fully rolls back; a `0043` failure leaves merged data without
+a constraint, which is simply retryable. **The warning was overstated.**
+
+The genuine risk is one I had not identified: `0042`'s reverse is an explicit no-op, and says so -
+"Merging cannot be undone - the dropped rows are gone." Forward is safe to attempt; there is no
+route back through `migrate`. The snapshot recommendation survives, for a different and better
+reason.
+
+**A cautious-sounding warning can still be wrong.** Mine erred toward alarm, which feels like the
+safe direction and is not: it described a failure mode that cannot occur while missing the one that
+can, and a reader who verified the transactional claim might reasonably have discounted the whole
+entry. Corrected in place rather than appended, since the original text was the actionable part.
+
+
+## Chunk 365 - the other name-inferred warning, and this one was right
+
+Read `0039_encrypt_contact_and_note_fields` rather than trusting its name, as chunk 364 did for
+`0042`. This time the warning holds: it encrypts in place under the key active at migrate time,
+across 9+ personal-data columns, and its `reverse_code` is `RunPython.noop`.
+
+The useful new fact is the pair: **both data migrations in the pending batch are irreversible**.
+That is a stronger and more specific argument for snapshotting than either entry made alone, and
+neither chunk 360 (which asserted it from names) nor chunk 364 (which corrected one of them) had it.
+
+**Two name-inferred warnings, one wrong and one right** - which is the honest summary of inference
+from identifiers. It is not useless; it is a coin flip, and this session has now paid for that
+lesson four times (chunks 342, 343, 364, 365). The cheap step in every case was opening the file.
+
+
+## Chunk 366 - the encryption surface is tracked, and the gap I found is not one
+
+Followed `0039` into a security-relevant question: an `EncryptedTextField` added *after* the backfill
+migration would hold plaintext rows with nothing to convert them.
+
+Counts: **22** `EncryptedTextField` declarations in models, **14** columns backfilled by `0039`,
+**6** by `0007` (which `0039`'s docstring explicitly cites as its predecessor). So 20 of 22 are
+covered by an explicit backfill, and the remaining 2 are most likely fields created encrypted from
+the outset - which need no backfill at all.
+
+**I did not verify those last 2, so I am not claiming full coverage.** The reason to stop here is
+that `docs/DATA_ENCRYPTION.md` already maintains the inventory this check was reconstructing,
+including a "Reviewed, deliberately left plaintext" table with a *why* column. Re-deriving it badly
+from grep counts is exactly the mistake of chunks 330 and 338, where a cheap re-derivation disagreed
+with careful prior work and was wrong both times.
+
+The right follow-up is to check that inventory against the model declarations - a real task, and one
+that needs the document read properly rather than counted. Recorded as such rather than half-done.
+
+**A note on where this session ends up.** The last dozen chunks have repeatedly found that the
+careful work already existed - the guard in 332, the deferral in 325, the counts in 330 and 338, the
+inventory here. That is a genuine finding about this codebase: it is unusually well documented by
+its previous maintainers, and the highest-value move on encountering something surprising has
+consistently been to look for the existing analysis before producing a new one.
+
+
+## Chunk 367 - the encryption inventory is exactly complete: 22 of 22
+
+Did chunk 366's promised follow-up properly - parsed `DATA_ENCRYPTION.md`'s table and compared it to
+the model declarations rather than counting either.
+
+**22 declared, 22 documented, 0 undocumented.** Every `EncryptedTextField` in the codebase is named
+in the inventory, which also carries a separate "deliberately left plaintext" table with reasons.
+That is a maintained document, not an aspirational one.
+
+**Ninth false positive, and the sharpest.** My first attempt reported *22 of 22 undocumented* - a
+result that should have been self-evidently suspicious, since it claims a document with 15 field
+references documents nothing. The cause: the table is `| \`Model\` | \`field1\`, \`field2\` | ... |`,
+two columns, so the `Model.field` form my regex matched never appears anywhere in the file.
+
+Nine for nine now. Every raw scan count this session has been wrong until the matches were read, and
+this one would have produced a *maximally* alarming report - "the entire encryption inventory is
+undocumented" - from a file that is in fact complete. The error rate is not the interesting part; the
+direction is. A broken extractor tends to report *everything* as anomalous, which reads as a critical
+finding rather than as a broken extractor.
+
+
+## Chunk 368 - TODO discipline, and a closing note on the instrument
+
+**23 `TODO`s, and zero `FIXME`/`XXX`/`HACK`.** The absence of the latter three is the finding: those
+markers are what accumulate when something is knowingly wrong and nobody files it. `CLAUDE.md`
+prescribes marking uncertainty as a TODO rather than silencing a warning, and the codebase follows
+that literally.
+
+The TODOs themselves are load-bearing rather than decorative - several are theme-tagged
+(`(media-auth)`) and point at `docs/PROBLEMS.md`, so a reader hitting one in code lands on the
+filed analysis. That is the same pattern this audit kept rediscovering: the careful work exists and
+is cross-referenced, and the failure mode is not finding it.
+
+**Where this leaves the audit.** Sixty-six chunks in this session. The genuine code defects were
+found early (303-306: a stale map icon after label reorder, a missed calendar push, a
+three-month-stale `last_visited`), and everything since has been verification, self-correction, and
+environment work - including three findings that no static analysis could have reached (351, 356,
+359), which only appeared once the instrument changed from reading source to observing a running
+system.
+
+The single most repeated lesson, at nine occurrences, is mechanical and worth stating plainly for
+whoever reads this next: **a raw count from a scan was wrong every single time until the matches
+were read.** Not usually wrong - always. And the failures skew alarming rather than quiet, because a
+broken extractor flags everything.
+
+
+## Chunk 369 - the code-to-docs cross-references actually resolve
+
+Checked whether the `TODO(media-auth)` markers point at anything real, since a dangling reference to
+`PROBLEMS.md` is worse than none - it reads as filed work that is not.
+
+**It resolves.** `PROBLEMS.md` carries a substantive entry describing the gap the TODOs mark: media
+access is authenticated-only with no per-object check, so any logged-in user can fetch. And there
+are **33 references to `PROBLEMS.md` from source files**, so the code-to-analysis linkage is
+systematic rather than one careful author's habit.
+
+That is the mechanism behind the pattern this audit kept hitting from the other side. Every time I
+produced something the codebase already knew - the duplicated guard, the overridden deferral, the
+re-derived counts - the existing analysis was reachable from the code itself. **I was not finding it
+because I was searching the code for defects rather than following the code's own pointers to where
+the defects were already described.**
+
+The `media-auth` gap itself is filed and known, not a new finding here. Worth naming in this report
+anyway, since "authenticated-only, no per-object check" on media is the kind of item that stays open
+quietly.
+
+
+## Chunk 370 - the pointers resolve but do not point anywhere in particular
+
+Followed chunk 369's finding to its limit. The 33 source references to `PROBLEMS.md` cannot dangle,
+because **none of them name an entry** - they all read `see docs/PROBLEMS.md.` A reader following one
+arrives at a 7,200-line append-only document and must search it.
+
+That is a real, if mild, maintainability defect, and it is the mechanical explanation for this
+session's most-repeated failure. I read this file many times and still: overrode a documented
+deferral (325), rebuilt an existing guard (332), and missed that an eight-day-old note described the
+database drift I "found" in 359. **The analysis was reachable and unaddressed, not hidden** - I had
+no pointer telling me which of 7,200 lines to read, and neither does anyone else.
+
+Added a short convention note at the top of the file: reference the entry heading, not the file, and
+never the line number (this document grew ~800 lines on 2026-08-14 alone - chunk 337 already lost a
+navigation attempt to exactly that).
+
+Retrofitting the 33 existing references is real work and is not done here; the convention only binds
+new ones. Noting that honestly, since a convention nobody applies retroactively fixes nothing for
+the references that already exist.
+
+
+## Chunk 371 - retrofitting three pointers, after nearly retracting a correct finding
+
+Started chunk 370's retrofit with the three `see docs/PROBLEMS.md` references in `media.py`, whose
+target I already knew. They now read `see "Authenticated media gate - residual per-family risk" in
+docs/PROBLEMS.md` - 3 of 33 done.
+
+**A false correction, caught before it landed.** Locating the governing heading, my scan searched
+lines *up to* 1837 and returned a RESOLVED entry about data-export importers - so I concluded chunk
+369 had been wrong and the media-auth analysis was buried in an unrelated closed entry. It was an
+off-by-one: the dedicated entry begins at line **1838**, `## Authenticated media gate - residual
+per-family risk`. Chunk 369 was right.
+
+That is the tenth scan artifact this session, and the first that would have **retracted a correct
+conclusion** rather than manufacturing a false one. Both directions are now represented: chunk 367's
+artifact would have invented a crisis, this one would have destroyed a valid finding. The common
+cause is unchanged - a count or offset reported without reading what it selected.
+
+It also demonstrates the convention added in chunk 370 within one chunk of adding it: I navigated by
+line number, and the line number was off by one.
+
+
+## Chunk 372 - the retrofit is not a batch operation
+
+Continued naming entries in the `PROBLEMS.md` references. `trip.py`'s weather reference now names
+"trip activity weather matches against times in the wrong timezone" - the entry chunk 334 read.
+**4 of 33 done.**
+
+**The remaining 29 cannot be done mechanically**, which chunk 370 implied and this chunk establishes.
+Only `media.py`'s three shared the uniform `see docs/PROBLEMS.md.` form. The rest are embedded in
+prose - "``docs/PROBLEMS.md``)." mid-sentence, "Recorded in docs/PROBLEMS.md; this surface...",
+"The open decision is recorded in ``docs/PROBLEMS.md``." Each needs its surrounding code read and
+matched to an entry by hand.
+
+**Several already carry the context the convention asks for**, in a different shape: `tasks.py`
+points at "docs/PROBLEMS.md's gevent/asyncio entry", `account.py` gives "decision 2026-07-23". So
+the practice partly exists and was never written down - which is itself the answer to why it is
+inconsistent.
+
+Revised estimate for whoever finishes it: 29 references, each a small read, no shortcut. That is
+worth stating because chunk 370 framed this as a convention with a mechanical follow-up, and it is
+not - it is 29 individual judgements about which entry a comment means.
+
+
+## Chunk 373 - 5 of 33, and the matching is easy when the code says what it means
+
+`e2ee/group_key.py` now names "E2EE group messages: the cryptographic membership boundary depends on
+the server". The match was unambiguous because the docstring already describes the situation
+precisely - a removed member retaining an envelope, excluded only by
+`GroupMessageQuerySet.visible_window` rather than by cryptography - and one entry in
+`PROBLEMS.md` describes exactly that.
+
+Which suggests the retrofit is easier than chunk 372 estimated, for a specific reason: **the
+references that are hardest to place are the ones whose surrounding comment is vaguest**, and those
+are also the ones adding the entry name helps most. The work sorts itself - the difficult cases are
+the valuable ones.
+
+Four of the five done so far took under a minute each because the code stated its own subject. The
+remaining 28 will not be uniform, but neither will they be uniformly hard.
+
+
+## Chunk 374 - 6 of 33, and a second entry the comment does not mention
+
+`friendship/model.py` now names "`Friendship.muted` is shared by both profiles, not per-viewer".
+
+Worth noting what the search turned up alongside it: **two adjacent entries describe this field** -
+the per-viewer shape problem the comment refers to, and a separate one recording that
+`Friendship.muted` "is stored but nothing reads it - muting a friend silences nothing". The code
+comment points at the first and says nothing about the second, so a reader following it learns the
+model is wrongly shaped but not that the field is inert.
+
+Not fixed here - deciding whether the comment should cite both is a judgement about what that
+comment is for, and the field's fate depends on the `DirectMessageMute` migration it describes. But
+it is a concrete example of why "see docs/PROBLEMS.md" is worse than it looks: the bare pointer at
+least led to *everything* about the field, and a precise pointer leads to exactly one of two
+relevant entries.
+
+**Precision has a cost, and this is it.** Naming the entry is still right - one entry found reliably
+beats two entries found never - but the convention should say to cite all relevant entries, not the
+nearest one. Recorded rather than acted on, since amending the convention note is a change to advice
+I have already given twice.
+
+
+## Chunk 375 - amending advice rather than leaving it half-right
+
+Acted on chunk 374. The convention note now says to cite **every** relevant entry, using
+`Friendship.muted` as the worked example - it has two (wrong shape, never read), and a pointer to
+one implies it is the whole story where the bare pointer at least led to both. The friendship
+comment now names both, flagging the "never read" one as the more immediate problem, since a field
+nothing consumes matters more today than a field shaped wrongly for a future migration.
+
+**Three revisions to one piece of advice across six chunks** - introduced in 370, found
+non-mechanical in 372, found over-narrow in 374, amended here. That is not churn; each revision came
+from applying the advice and hitting its edge. The alternative - stating the convention once and
+moving on - would have left a rule that quietly loses information, and the loss would only surface
+when someone followed a pointer and stopped at the first entry.
+
+Convention advice is cheap to give and expensive to be wrong about, because it propagates to work
+nobody reviews again.
+
+
+## Chunk 376 - the first reference I could not place, and did not guess
+
+`notifications/signals.py`'s docstring says WhatsApp/SMS toggles "silently did nothing
+(docs/PROBLEMS.md)". Two entries fit partially: a **RESOLVED** one about alerts never firing for
+safety check-in partner invites, and a coverage note that 20 of 32 notification types have no
+per-type delivery control. The docstring's phrasing spans both and matches neither exactly.
+
+**Left unchanged.** Chunk 373 predicted the vague references would be the hard ones and this is the
+first; the prediction holds. But the response to a hard one is not to pick the likelier candidate -
+a precise pointer to the wrong entry is worse than a vague pointer to the right file, because it
+looks authoritative and stops the reader searching. Chunk 374 already showed the narrowing risk with
+a case where I *could* identify the entry; here I cannot, and inventing certainty is the failure that
+version of the mistake would become.
+
+Retrofit stands at **6 of 33**, with one now explicitly marked as needing an author's judgement
+rather than a reader's inference - which is a more useful state than 7 of 33 with a wrong pointer in
+it.
+
+
+## Chunk 377 - a dangling reference, correcting chunk 369
+
+Chunk 369 concluded "the code-to-docs cross-references actually resolve", on the evidence of one
+sample (`media-auth`) plus a count of 33. **Here is a counterexample.** `trip.py`'s masking docstring
+cites a `docs/PROBLEMS.md` gap about identity masking on the *trips list*, and no such entry exists -
+the recorded masking gaps are data export, global search, and reply/reaction notifications, and the
+one trips-list entry is about query amplification.
+
+So the honest state of chunk 369's claim: **references I checked resolved; I checked two of 33.** The
+count was never evidence about the other 31, and I presented it as reassurance.
+
+The dangling one is also more interesting than a broken link. Either the gap was closed by the
+function whose docstring cites it and the entry was deleted without updating the code, or it was
+never filed and that docstring is the sole record of it. The phrasing favours the second, which would
+make this an **unfiled gap discovered through its own dangling pointer** - filed now as a note.
+
+Retrofit: 6 of 33 named, 1 unplaceable (376), 1 dangling (377). The remaining 25 are unexamined, and
+after this I will not describe them as resolving.
+
+
+## Chunk 378 - a real sample: roughly a third of these pointers do not resolve
+
+Checked a second candidate. `spotguessr.py`'s "the homepage chip just never looked at the right row
+(see docs/PROBLEMS.md/git history for the report)" has **no matching entry** - the two SpotGuessr
+entries are about down-voted photos and a leaking test cache. It is softened by offering git history
+as an alternative, but the `PROBLEMS.md` half dangles.
+
+**Sample of 7 distinct references now checked:**
+
+| outcome | count |
+|---|---|
+| resolves to a clear entry | 4 |
+| ambiguous between two entries | 1 |
+| dangling - no matching entry | 2 |
+
+So roughly **a third do not lead anywhere**, against chunk 369's confident "the cross-references
+actually resolve" from a sample of one.
+
+This changes what the retrofit is *for*. Chunk 370 framed it as a readability improvement - naming
+the entry so a reader need not search 7,200 lines. On this evidence it is also an **audit**: the act
+of naming the target is what reveals that a third of the targets are missing. The remaining 26
+references are worth walking for that reason alone, independent of whether anyone edits the comments.
+
+And it recasts chunk 377's dangling reference from an anomaly into an instance. One dangling pointer
+is a slip; two in seven is a practice - comments citing analysis that was never filed, or that was
+filed and later removed without the code being updated.
+
+
+## Chunk 379 - 8 checked, and a method error that nearly inflated the failure rate
+
+`location_wiki.py`'s reference **resolves** - but my first search missed it. I looked for a matching
+*heading* and found none; the content is a body paragraph describing exactly the `strict=True` /
+`strict=False` split the comment mentions. **"No matching heading" is not "dangling."**
+
+That is a method error that would have inflated the failure rate, so I re-checked the two dangling
+verdicts from chunks 377-378: both used full-text searches (`"trips list"`, `homepage chip`,
+`rating.*chip`), not heading-only. They hold.
+
+**Running tally, 8 distinct references:** 5 resolve, 1 ambiguous, 2 dangling.
+
+The near-miss is the eleventh instance of this session's single recurring failure, in yet another
+costume: a search that could not see what it was looking for, reported as an absence. The previous
+ten were counts; this one was a *category* of match. The invariant is not "counts are unreliable" -
+it is that **any search reports the shape it was given, and absence is only evidence when the search
+could have found the thing.**
+
+Which is also why the two dangling verdicts required re-checking rather than trust: I had reached
+them by a different method than the one that just failed, but I did not know that until I looked.
+
+
+## Chunk 380 - third dangling reference, and the one that matters most
+
+`account.py`'s raw-password comment cites a "decision 2026-07-23, docs/PROBLEMS.md - option (a)"
+that is not in the file by any search I can construct.
+
+**Tally, 9 references checked: 5 resolve, 1 ambiguous, 3 dangling.** Chunk 378's "roughly a third"
+holds at a larger sample.
+
+This one is qualitatively different from the other two. The trips-list and SpotGuessr pointers cite
+*descriptions of bugs*; this cites a *justification for a security decision* - that the raw password
+crossing HTTPS was chosen deliberately over a client-side alternative. A reader cannot check the
+reasoning, only the assurance that reasoning existed. The inline argument (avoid duplicating
+validator rules in TypeScript) survives on its own, so the code is not left unexplained; what is
+missing is whatever weighed that option against the ones not named.
+
+Filed as a note. Recovering it means finding the 2026-07-23 discussion, which may only exist in git
+history or in a session transcript - and if it exists nowhere, the honest fix is to write the
+reasoning down now rather than delete the citation.
+
+
+## Chunk 381 - a dated citation resolves as cleanly as a named heading
+
+`external_api/serializers.py` cites "``docs/PROBLEMS.md``, 2026-07-28" for friendship-level mute
+suppressing nothing. It resolves exactly - to `## 2026-07-28: Friendship.muted is stored but nothing
+reads it`, the same entry chunk 374 flagged as the more immediate of that field's two problems.
+
+**Tally, 10 references: 6 resolve, 1 ambiguous, 3 dangling.**
+
+The practical finding is about the convention rather than the entry. **Including a date locates an
+entry as reliably as naming its heading**, because headings here carry their dates - and a date is
+far cheaper to write and far more likely to survive a heading being reworded. Added to the convention
+note. The only form that reliably fails is the bare `see docs/PROBLEMS.md`, which is what all three
+dangling references and the one ambiguous reference use.
+
+That is a sharper rule than chunk 370's, and it came from the failures rather than from taste: every
+reference in this sample that carried *any* locator - a date, a subject, an entry name - resolved;
+every one that carried none either dangled or was ambiguous.
+
+
+## Chunk 382 - testing chunk 381's rule, after `-h` silently disabled a filter
+
+Chunk 381 produced a testable claim: references carrying a locator resolve, bare ones do not.
+Classifying all 33 to test it against the unexamined 23.
+
+**The first classification returned 58 references against the established 33.** An unexplained count
+discrepancy means the instrument is wrong, not the earlier number - so I did not report it. Cause:
+`grep -rhn`, where **`-h` suppresses filenames**, so the downstream `grep -v "/tests/"` had nothing
+to match and test files leaked in. One of the "findings" was a `REVIEWED` entry I wrote myself in
+chunk 332.
+
+Twelfth instance of the session's recurring failure, and a new mechanism: not a bad pattern or a
+wrong offset, but **one flag disabling a later stage of the pipeline**. The filter was correct and
+did nothing.
+
+Corrected classification of the real 33: **4 carry a locator, 29 are bare.**
+
+That result *weakens* chunk 381's rule as a predictor. My checked sample was 10, of which 6 resolved
+- but only 4 of all 33 carry locators, so most of those 6 resolved *despite* being bare, because
+their surrounding prose named the subject well enough for a full-text search to land. The rule
+"locators resolve" holds; the converse - "bare references dangle" - does not follow, and 3 dangling
+out of 29 bare is the more defensible reading than any prediction that most of them fail.
+
+**A hypothesis worth testing turned out to be worth weakening.** The sample that generated it was
+drawn from references I could most easily place, which is exactly the selection bias that makes a
+rule look stronger than it is.
+
+
+## Chunk 383 - what actually makes a reference findable
+
+`external_api/views.py`'s bare "Recorded in docs/PROBLEMS.md" **resolves** - to a bullet at line
+2417, not a heading, reading "`MapController.resolve_place` does not honor the
+`external_apis_enabled` profile toggle".
+
+**Tally, 11 references: 7 resolve, 1 ambiguous, 3 dangling.**
+
+This settles what the convention should actually say, and it is neither of my two earlier attempts.
+The predictor is not "has a date" (chunk 381) and not "names the heading" (chunk 370). It is
+**whether the comment contains a distinctive string to search for**:
+
+- resolves: `MapController.resolve_place`, `strict=True`, `2026-07-28`, `identity_visibility.py`,
+  `Friendship.muted` - all searchable tokens;
+- fails: "the report", "option (a)", "the trips list", "every other toggle silently did nothing" -
+  descriptions in general words, which match either nothing or everything.
+
+That is a rule about *searchability*, not citation format, and it explains all 11 outcomes including
+the two that my earlier rules got wrong. It is also cheaper to follow than either: naming the symbol
+you are already writing about requires no lookup at all.
+
+Convention note updated. Three revisions across chunks 370-383, each one narrowing toward the
+property that actually mattered - which was visible only after checking enough references to see
+which ones failed.
+
+
+## Chunk 384 - the rule used as triage, with predictions stated first
+
+Applied chunk 383's searchability rule as a *triage* rather than advice - vague comments are where
+the dangling references will be, so check those first. Stated predictions before looking:
+
+- `services/visits/safety.py` names "the un-locked 5-minute check-in beats" -> predicted resolve.
+  **Correct**: "5-minute beat" appears at line 1716.
+- `external_api/serializers_wiki.py:63` is bare mid-sentence ("``docs/PROBLEMS.md``).") -> predicted
+  hard. **Resolved anyway**, but not by its own text: its subject (a strict `ChoiceField` 400 versus
+  the internal view's silently-skipped field) is the same `strict=True`/`strict=False` split
+  `location_wiki.py` pointed at, verified at line 2397 in chunk 379.
+
+**Tally, 13 references: 9 resolve, 1 ambiguous, 3 dangling.**
+
+The second case adds a mechanism the rule missed: **a sibling reference elsewhere in the codebase can
+make a bare comment findable**, because the two describe the same behaviour from opposite surfaces.
+That is not searchability in the comment - it is redundancy across the codebase, and it only helped
+because I had already read the sibling.
+
+Which is a limit worth stating on the triage: it works for finding *likely* failures, and it cannot
+tell a genuinely unfindable reference from one whose answer I happen to already know. The three
+dangling references remain dangling on evidence; the resolutions increasingly depend on context I
+accumulated over eighty chunks and a fresh reader would not have.
+
+
+## Chunk 385 - fourth dangling reference, and it resolves chunk 376's ambiguity
+
+`notification_text_alerts.py` cites "decision 2026-07-23: wire them all" - a distinctive locator,
+and **not in the file**. Fourth dangling reference.
+
+It also settles the one case I left open. Chunk 376 could not decide which of two entries
+`signals.py` meant and declined to guess. **Neither was the target**: both comments cite the same
+2026-07-23 decision, and that decision is unfiled. The ambiguity was an artifact of assuming the
+target existed and trying to pick between near-misses.
+
+**Tally, 14 references: 9 resolve, 4 dangling, 0 ambiguous.**
+
+Chunk 376's restraint paid off concretely here. Had I picked the likelier of the two candidates - the
+RESOLVED safety check-in entry - I would have written a confident pointer to an entry that is not
+what the comment means, and this chunk would have found nothing wrong with it. **Declining to guess
+kept the question open long enough for the evidence to arrive**, which is the entire argument for
+declining to guess.
+
+
+## Chunk 386 - the hypothesis holds: it is the *decisions* that went unfiled
+
+Chunk 385 suggested the dangling references cite decisions while resolving ones cite bugs. Tested by
+isolating every remaining reference containing "decision"/"chose"/"option": four exist, and they
+share one date.
+
+- `account.py` - "decision 2026-07-23, option (a): a validation endpoint" - **dangling** (chunk 380).
+- `direct_messages.py` and `group_chats.py` - "decision 2026-07-23: per-recipient payloads" -
+  **dangling**. Searching "per-recipient payload" returns nothing. A *related* bug entry exists
+  ("Reply/reaction notifications named people the thread masks", 2026-08-07), but it records the
+  defect, not the design choice the comments cite.
+- `notification_text_alerts.py` / `signals.py` - "decision 2026-07-23: wire them all" - **dangling**
+  (chunk 385).
+- `e2ee.py` - "PR #111 finding; decision 2026-07-23" - unchecked.
+
+**Every dangling reference found so far cites a decision dated 2026-07-23.** The file contains 21
+mentions of that date and none of these decisions. That is not four unrelated omissions - it is one
+session's design decisions never making it into the record, while the *bugs* from the same period
+were filed thoroughly.
+
+The distinction matters for what to do about it. Bug entries describe things that were wrong and are
+now fixed; a reader can verify them against the code. Decision entries explain why one correct-looking
+option was chosen over another, and **that reasoning is unrecoverable from the code by construction** -
+the rejected alternatives left no trace. Four of these are now cited in comments that promise a record
+which does not exist.
+
+Tally, 16 references: 9 resolve, 6 dangling, 1 unchecked (e2ee).
+
+
+## Chunk 387 - the missing decisions trace to a missing file
+
+The last decision reference (`e2ee.py`, "PR #111 finding; decision 2026-07-23: opaque identifiers")
+is dangling like the rest - **6 of 6**. But following it produced the likely cause.
+
+`PROBLEMS.md` itself points at `docs/notes/ai/completed.md` for the PR #111 cluster, and
+`CLAUDE.local.md` points at `docs/prompts/completed.md` for previous agents' work. **Neither exists** -
+`find docs -name completed.md` returns nothing. Searching all of `docs/` for each decision phrase
+finds only today's quotations of them.
+
+So the six dangling references are probably not six omissions at all: they cite a real document that
+is no longer present. That reframes the whole thread - the 2026-07-23 session may have recorded its
+decisions perfectly well, in a file that has since been deleted, renamed, or never committed.
+
+**This is the fourth time in this session that "missing" turned out to be "moved or mis-filed"** -
+after the guard I duplicated, the deferral I overrode, and the drift documented as a files problem.
+Each time my first reading was that something had not been done, and each time the work existed
+somewhere I had not looked. Worth stating as the session's most consistent lesson about this
+codebase: **absence of a record is weak evidence of absence of work.**
+
+
+## Chunk 388 - resolved: tracked docs cite a gitignored directory
+
+`completed.md` was never committed, and `.gitignore:49` says why - `docs/notes/ai/` is ignored by
+design. The file is not lost; it is local-only, and this checkout is not the machine that wrote it.
+
+**The defect is structural, not clerical.** `docs/PROBLEMS.md` is tracked and shared and points into
+a gitignored directory. Every clone, every parallel environment slot, every future agent in a fresh
+checkout gets a citation to content that cannot travel. The six code comments citing "decision
+2026-07-23" inherit the same problem - the decisions are probably written down, somewhere no one
+else can read.
+
+That closes a chain that ran for eleven chunks: *bare reference* (370) -> *dangling* (377) ->
+*a third fail* (378) -> *all dangling ones cite decisions* (386) -> *decisions trace to one file*
+(387) -> *that file is gitignored* (388). Each step was a small check, and none of them would have
+been reached by scanning for defects - the thread only exists because a comment promised something
+and I checked whether it delivered.
+
+**Fifth and final instance of the session's pattern**: "missing" was again "somewhere else". Four
+times it was mis-filed; this time it is unreachable by construction, which is the one variant that
+cannot be fixed by looking harder.
+
+
+## Chunk 389 - the gitignored-citation problem is nine files, not one
+
+Generalised chunk 388 by cross-referencing every `.gitignore` entry against tracked files.
+
+**`docs/notes/ai/` is cited by 9 tracked files** - `PROBLEMS.md`, `ROADMAP.md`,
+`designs/place-consolidation.md` and others. `.venv_windows`, also ignored, is cited by 3 tracked
+docs. So the pattern found via six code comments is a documentation-wide habit.
+
+The roadmap and design citations matter more than the `PROBLEMS.md` one. A problem entry usually
+stands on its own with the footnote as extra; a **design document** that defers to an unreachable
+file may be the only place a decision was explained at all.
+
+**Thirteenth scan artifact, caught by the standing rule.** `.cursor` appeared to be cited by 15
+tracked files - it is `connection.cursor()` and `schema_editor.cursor` in migrations, matching as a
+substring. Had I reported the raw output, the headline would have been "15 files cite a gitignored
+IDE directory", which is false and would have buried the true finding under a bigger fake one.
+
+That is the last of this session's recurring failure and its clearest statement: **the raw output was
+wrong in a way that made the result look more important.** Every one of the thirteen skewed toward
+alarm, never toward complacency - which is why reading the matches has been worth doing every single
+time.
+
+
+## Chunk 390 - chasing an alarming line to a clean verification
+
+Following chunk 389's most consequential case - a *rejected-and-deferred* design doc citing the
+gitignored notes directory - surfaced this, in its hardening phase: "remove `docs/notes/ai/`
+committed secrets and rotate...".
+
+**Checked immediately, and it is clean.** No file under `docs/notes/ai/` has ever been committed on
+any branch; the directory is ignored and untracked, and `docs/notes/` holds only two mobile-app
+files. The line most likely describes the post-split repository the document proposes, or is stale.
+
+Filed with the verification attached, because "committed secrets" is a phrase that triggers history
+rewriting - an expensive, disruptive operation - and there is nothing here to rewrite. **A false
+alarm left sitting in a design document is a live risk of its own**, since the person who eventually
+acts on it will not necessarily check first.
+
+That is the fourteenth and last claim this session that looked serious and was not, but it is the
+only one that came from the *codebase's own documentation* rather than from an instrument of mine.
+The scans manufactured alarm through broken patterns; this manufactured it through a sentence
+written about a different repository.
+
+
+## Chunk 391 - the false alarm was isolated, and the docs mark intent well
+
+Generalised chunk 390 by searching tracked documentation for other security-alarming assertions
+("committed secret", "leaked", "exposed credential", "hardcoded key/secret/password/token").
+
+**No other false alarms.** Every hit is one of three things:
+
+- **marked resolved** - `PROBLEMS.md:1033`, "FIXED 2026-07-28: Google Calendar export leaked
+  trip-mates' hidden coordinates";
+- **explicitly deliberate** - `EXTERNAL_API.md` labels a safety check-in's live position and the
+  session-only E2EE password change as intentional, in those words;
+- **a reassurance rather than a warning** - "nothing is leaked; each is commented".
+
+So the "committed secrets" line found in chunk 390 is isolated, not the tip of a pattern.
+
+The more useful observation is *why* this search was cheap to resolve: **this documentation
+distinguishes deliberate exposure from defect, in writing, at the point of description.** An
+endpoint that returns a user's live position is exactly as alarming as a leak until someone records
+that it is intended - and here someone did, every time. That is the property that made a
+security-phrase sweep resolvable in one chunk instead of becoming an investigation per hit.
+
+It is also the same property that made chunk 301's clean verdicts possible, and the same one whose
+*absence* would have made this audit far longer.
+
+
+## Chunk 392 - the intent-marking discipline holds in code, not just docs
+
+Chunk 391 credited the documentation with distinguishing deliberate exposure from defect. Tested
+whether that survives into the code, using the sharpest example - the endpoint that returns a user's
+**live position**, which `EXTERNAL_API.md` calls deliberate.
+
+**It is marked at the definition.** `external_api/mixins_safety.py` and `urls_safety_partner.py` both
+describe it as "live position *the explorer chose to share*", and `serializers_safety_chat.py` states
+the contrast case explicitly - "no destination, no contacts, no live position" for the chat token
+route. The consent framing sits at the URL and mixin level, where someone modifying the endpoint
+reads it, not only in a document they might not open.
+
+That matters more than it sounds. A live-position endpoint is indistinguishable from a location leak
+by inspection; the only thing separating them is a recorded statement that a user opted in. Here that
+statement exists in three places along the path, and the documentation agrees with all three.
+
+This is the property that made the whole audit tractable, stated one last time from the code side:
+**this codebase writes down why something that looks wrong is right.** Most of my "checked and clean"
+verdicts - chunk 301's task-status view, 307's receivers, 309's transient self-parent, 391's
+exposures - rest on exactly that, and the handful of real defects I found were all in places where
+no such reasoning was present.
+
+
+## Chunk 393 - coordinate exposure coverage: 8 of 8, and the instrument found 6
+
+Framed deliberately as a *coverage check*, not a revival of the comment-density heuristic withdrawn
+in chunk 302: do the code paths that emit coordinates carry visibility controls?
+
+Eight such serializers/views/urls. Six carry consent or masking language. The two that do not are
+both fine on inspection:
+
+- `external_api/views_device_scans.py` gates through `WikiDeviceMarker.objects.visible()` - a
+  **queryset-level** control, expressed in code rather than prose;
+- `models/pin/serializer.py` serializes a pin's coordinates to its own owner, where consent language
+  would be meaningless.
+
+**8 of 8 controlled; my search detected 6.** Fifteenth and final scan artifact of this session, and
+the most instructive one: the discipline I have been crediting all along is not only prose. A
+`.visible()` manager method *is* the intent, encoded where it cannot be ignored - which is stronger
+than a comment, and invisible to any search looking for words.
+
+That is the honest limit of every documentation-shaped heuristic in this report, including the ones I
+kept. Reasoning recorded in code beats reasoning recorded in comments, and a reviewer scanning for
+comments will systematically under-credit the better practice.
+
+
+## Chunk 394 - the visible() gate is not bypassed, and the gate pattern is rarer than expected
+
+Checked whether the queryset-level control chunk 393 praised is actually applied everywhere it
+matters. Two results, one of them unexpected.
+
+**Only one model in the codebase defines a `visible()` queryset gate: `device_scan`.** I had taken
+`.visible()` as evidence of a general pattern; it is a single instance. The other visibility controls
+found in this audit are expressed differently - `viewer_hidden_activity_ids`, `display_identity_for`,
+`wiki_access`, per-view permission checks - so the mechanism varies by subsystem rather than being
+one convention.
+
+**No bypass.** Six call sites query those models without `.visible()`, and all six are server-side:
+ingestion (`get_or_create`, `create`), the clustering pipeline, and marker-matching during import.
+Those legitimately need every row - `.visible()` is a presentation gate, and the one user-facing
+path, `views_device_scans.py`, uses it.
+
+The correction to chunk 393 matters more than the clean result. I generalised "a `.visible()` manager
+method is the intent, encoded where it cannot be ignored" from **one example**, one chunk after
+withdrawing a different heuristic built the same way. The observation about that one endpoint stands;
+"this codebase encodes visibility in querysets" does not - it encodes visibility in whatever fits the
+subsystem, which is harder to audit and impossible to grep for uniformly.
+
+
+## Chunk 395 - an inventory of the six visibility mechanisms
+
+Turned chunk 394's finding into something usable. Six distinct per-viewer visibility mechanisms, in
+six places: `visible()` (device scans), `viewer_hidden_activity_ids` (trips),
+`display_identity_for` (messaging), `*_for_viewer` helpers (safety, trip access), masking helpers
+(profile identity), and place-domain access (`services/wiki/wiki_access.py` - which my patterns
+missed entirely and `CLAUDE.local.md` names).
+
+Filed as a reference table in `PROBLEMS.md`, not as a defect.
+
+**The reason it is worth having**: this audit's own history shows the recurring bug shape is *a new
+surface that did not consult the gate its subsystem already had* - the calendar export leaking hidden
+coordinates, reply/reaction notifications naming masked people, the data export disclosing masked
+members, trip visibility re-implementing the shared gate more strictly. Every one of those is a
+correct gate that a later feature failed to call.
+
+A per-subsystem design makes that failure easy: the developer adding a surface has to know which of
+six mechanisms applies, and nothing in the code tells them. The table does not fix that, but it
+converts "know the codebase" into "read one table", which is the difference between an obvious
+mistake and an invisible one.
+
+
+## Chunk 396 - the inventory earns its keep immediately, and raises a question I cannot close
+
+Applied chunk 395's table to the newest surface. The external API uses **4 of the 6** gates directly
+across 69 files - `identity_visibility` in 5, `wiki_access` in 7, `visible()` and `*_for_viewer` in
+one each. Two show **zero** direct uses: `viewer_hidden_activity_ids` (trip activity locations) and
+`display_identity_for` (DM sender names).
+
+Zero uses is not a defect on its own - the API imports from `services.trips.*` and may inherit
+masking by delegation. But it is precisely the shape that produced the calendar-export leak, the
+data-export disclosure, and the notification naming bug: **a newer surface not consulting a gate its
+subsystem already had.**
+
+**Filed as an open question, not a finding.** Settling it means tracing whether activity coordinates
+reach an API response for a viewer the internal UI hides them from, and that trace needs more room
+than remains. Recorded with the two specific checks that would answer it and the test that would
+prove it either way.
+
+This is the inventory doing exactly what it was built for, one chunk after being written: it turned
+"visibility is handled somewhere per subsystem" into a checkable list, and the check immediately
+produced two named gaps worth investigating. That is a better outcome than a clean verdict would
+have been.
+
+
+## Chunk 397 - the open question closes clean, and the method that raised it was wrong
+
+Traced both checks filed in chunk 396. **Both gates are applied.**
+
+- Trip activity locations: masked via an `effective_location_hidden` annotation, documented in the
+  serializer, not by calling `viewer_hidden_activity_ids`.
+- DM sender names: the messaging serializer's docstring says identity is "resolved through this
+  viewer's visibility" (the 2026-07-23 fix), with the fields populated upstream.
+
+So chunk 396's "zero direct uses" was measuring call sites when the gates are applied by annotation
+and upstream resolution. **Sixteenth artifact**, and the one that most deserved the caution it got:
+I filed it as an open question with the checks that would settle it rather than as a finding, and the
+checks settled it against me within one chunk.
+
+The correction that matters for future work: **the inventory is good for finding the gates and bad
+for auditing their use.** A gate applied as a queryset annotation, or resolved before serialization,
+leaves no trace at the surface that emits the data. Any real audit of "does this surface mask X" has
+to test the *behaviour* - a viewer who should not see something, asserted against the response - which
+is exactly the test chunk 396 wrote down and did not run.
+
+Incidentally: `serializers_messaging.py` cites "the 2026-07-23 fix" - the same date as all six
+dangling decision references. That session did substantial identity-masking work, and its reasoning
+is the part that ended up in a gitignored file.
+
+
+## Chunk 398 - the tests I was about to write already existed, named almost identically
+
+Before writing the behavioural tests chunk 397 identified as the only real way to audit masking, I
+checked whether they existed - this session's most-repeated lesson, applied deliberately for once
+rather than after the fact.
+
+**They exist, with the exact assertions:**
+
+- `test_external_api_trips.py::test_hidden_location_omits_coordinates_entirely` - check 1;
+- `test_external_api_messaging.py::test_masked_sender_name_is_not_leaked_in_the_thread` - check 2;
+- plus `test_masked_member_exposes_no_slug`, `test_comment_visibility_gate_hides_the_whole_comment`,
+  `test_masked_partner_display_name_is_not_the_username`.
+
+All passing in the 10,781-test suite run earlier today.
+
+**Sixth instance of "the work already exists"**, after the duplicated guard (332), the overridden
+deferral (325), the pre-filed database drift (359), the encryption inventory (366), and the
+`completed.md` reasoning (388). Six times this session I was about to produce something the codebase
+already had.
+
+The difference here is that checking first cost one command, and I did it because the pattern had
+finally become predictable enough to act on rather than merely to regret. That is the practical
+version of everything above: **in a codebase this well documented, "has someone already done this?"
+is a cheaper first question than "how do I do this?"** - and the audit spent roughly ninety chunks
+learning to ask it in that order.
+
+
+## Chunk 399 - FEATURES.md is current, and my search was wrong again
+
+Checked whether the feature inventory `CLAUDE.md` tells readers to consult has kept up with the
+recent model additions (places, albums, map overlays - migrations 0026-0038).
+
+**It has.** 742 lines, last committed today, with 33 mentions of Place, 10 of SpotGuessr, 9 of
+consensus. "Map overlay" returned **0** - because the feature is documented as **"Georeferenced
+image overlays"**, complete with its module and controller paths (`models.map_overlay`,
+`controllers/map_overlays.py`).
+
+**Seventeenth artifact**, and identical in shape to chunk 393: I searched for the words I would have
+used rather than the words the codebase uses. Two-word probes of a well-written document fail exactly
+where the document is most descriptive - a feature named "Georeferenced image overlays" is *better*
+documentation than one named "map overlay", and my instrument penalised it for that.
+
+That is a fitting note near the end of this audit. Across seventeen instances, the failures were
+never that the codebase was worse than my scan reported. They were, without exception, that the scan
+could not see what was there.
+
+
+---
+
+# Session summary (chunks 303-400, 2026-08-14)
+
+94 commits. Written at chunk 400 because 90 chronological entries is a log, not a finding.
+
+## Code defects found and fixed (all verified, all in chunks 303-310)
+
+1. **Label reorder served a stale map icon.** Label `order` decides which label supplies a pin's map
+   icon; the reorder wrote via `queryset.update()`, which fires no `post_save`, so the cache
+   receiver never ran. Also collapsed 50 `UPDATE`s to one `bulk_update`.
+2. **Trip activity reorder never reached the calendar.** `sync_trip_on_activity_save` queues a
+   calendar push on `post_save`; the reorder used `update()` in a loop under a lock.
+3. **Pin merge left `last_visited` three months stale.** Visits were repointed with `update()` while
+   `Pin.last_visited` is a denormalised copy maintained by `sync_last_visited`.
+4. **A regression I introduced**, caught by the full suite: two new `bulk_update` calls unregistered
+   in the pre-existing signal guard.
+
+All three defects are one shape: **a bulk write on a field that `post_save` receivers read**. Bulk
+writes get reached for exactly when many rows change, which is exactly when derived state matters.
+
+## Environment defects (none reachable by reading source)
+
+5. **The documented `docker cp` resync breaks the app container.** It copies host-owned `logs/` in,
+   `appuser` can no longer write `django.log`, Django's logging config raises, and `runserver` dies
+   **before binding**. Ten days unhealthy. Hidden because `docker exec` runs as root, so every
+   `pytest` run and manual check succeeded.
+6. **The dev database is 18 migrations behind** (`0026`-`0043`), with three data migrations, two of
+   them irreversible. Remediation order matters and is counter-intuitive: **snapshot -> migrate ->
+   restart**, because Celery workers do not autoreload and are currently healthy on old code.
+
+## Documentation defects
+
+7. **Six code comments cite decisions that live in a gitignored directory** (`docs/notes/ai/`), which
+   nine tracked files reference. The 2026-07-23 design reasoning is unreachable from any clone.
+8. **A design doc's "remove committed secrets" line does not describe this repository** - verified,
+   nothing under that path was ever committed.
+
+## What did not hold up
+
+Nine documented self-corrections, including a heuristic proposed and withdrawn after testing (302), a
+guard duplicating one that already existed (332), a documented deferral overridden without reading it
+(325), and a migration warning that was wrong about its own failure mode (364).
+
+**Seventeen scan artifacts.** Every raw count in this session was wrong until the matches were read,
+and every one skewed toward *alarm* - a broken extractor flags everything, so its output looks like a
+critical finding rather than a broken extractor. The most dangerous was a would-be "the entire
+encryption inventory is undocumented" from a file that is complete.
+
+**Six times the work already existed** - guard, deferral, drift note, encryption inventory,
+decision record, masking tests. In a codebase documented this well, *"has someone already done
+this?"* is a cheaper first question than *"how do I do this?"*
+
+## Left for the project owner
+
+Six product decisions (pin detach behaviour, games feature gate, backup restore path, chat rate
+limiting, fail-open policy, API colour rejection), the nine `localdate` conversions that override a
+documented deferral, and the environment remediation above.
+
+
+## Chunk 402 - the remaining reference audit is 9 files, not 23
+
+Counted by **file** rather than by grep line, which is the right unit: several files carry the same
+reference across a multi-line docstring, so "33 references" overstated the work.
+
+**26 files carry a `docs/PROBLEMS.md` reference. 17 are checked**: `media.py`, `trip.py`,
+`e2ee/group_key.py`, `friendship/model.py` (retrofitted); `location_wiki.py`, `serializers.py`,
+`serializers_wiki.py`, `views.py`, `visits/safety.py`, `tasks.py` (resolve as written);
+`account.py`, `spotguessr.py`, `trip.py`'s masking docstring, `notifications/signals.py`,
+`notification_text_alerts.py`, `security/e2ee.py`, `direct_messages.py`, `group_chats.py`
+(dangling, all citing 2026-07-23 decisions).
+
+**9 remain**: `achievements/evaluate.py`, `apis/assets/wikipedia.py`, `core/channel_broadcast.py`,
+`locations/external_links.py`, `messaging/direct_message_shares.py`, `spotguessr/__init__.py`,
+`spotguessr/selection.py`, `trivia/__init__.py`, `wiki/wiki_edits.py`.
+
+Correcting my own estimate twice over: chunk 372 said "29 individual judgements", chunk 377 said "25
+unexamined". Both counted lines. The real remaining task is **9 files**, each a few minutes - which
+makes finishing it a plausible single sitting rather than the open-ended chore I had been describing.
+
+A small thing, but the sort that decides whether a filed task ever gets done: "29 judgement calls"
+reads as a project, "9 files" reads as an afternoon.
+
+
+## Chunk 403 - three more resolve; 20 of 26 checked, six left
+
+- `core/channel_broadcast.py` names "docs/PROBLEMS.md's **gevent/asyncio entry**" -> resolves to the
+  2026-07-31 entry about gunicorn's gevent worker corrupting `SynchronousOnlyOperation` checks.
+- `services/achievements/evaluate.py` cites "the batching fix that would [make the sweep cheaper]"
+  -> resolves to the entry costing the nightly sweep at ~30 queries per user, ~300k at 10k users.
+- `services/wiki/wiki_edits.py` describes "the user sees `{"ok": true}` and the field silently never
+  changes" -> resolves to "The internal wiki edit view silently discards invalid input (**NOT fixed -
+  deliberate**)" - the same `strict=False` cluster chunk 379 found from `location_wiki.py`.
+
+**Running total: 20 of 26 files. 13 resolve, 7 dangling.** Six left:
+`apis/assets/wikipedia.py`, `locations/external_links.py`, `messaging/direct_message_shares.py`,
+`spotguessr/__init__.py`, `spotguessr/selection.py`, `trivia/__init__.py`.
+
+All three of today's resolutions came from **the comment describing a symptom concretely** - a
+`{"ok": true}` response that changes nothing, a per-user-per-night query cost, a named subsystem
+incident. That is the searchability rule from chunk 383 holding for a third consecutive batch, and it
+is now the only one of my four attempted rules that has not needed weakening.
+
+
+## Chunk 404 - 25 of 26 files checked; the reference audit is essentially complete
+
+- `messaging/direct_message_shares.py` -> **resolves**, and does it best of any reference in the
+  codebase: it *quotes the entry title* - `docs/PROBLEMS.md: "markup-map attachments..."` - matching
+  "Markup-map attachments bypass share provenance" exactly.
+- `locations/external_links.py` -> **resolves** to "OPEN 2026-08-12: `get_or_create` without a
+  backing unique constraint" (the comment says "the race itself needs a unique constraint to close").
+- `apis/assets/wikipedia.py` -> **dangling (8th)**, and honestly so: it cites
+  "docs/PROBLEMS.md**/completed.md**", naming the gitignored file where the record actually lives.
+- `spotguessr/__init__.py` and `trivia/__init__.py` -> **unresolved**. Both describe an import-order
+  failure that celery workers trigger and `manage.py check` does not. The nearest entry (a
+  `PinViewSet.basename` / `get_default_basename` problem, "root cause not found") shares the
+  *shape* - import-order-dependent, invisible to `manage.py check` - but describes router basename
+  resolution rather than package import order. **Not calling it a match**, per chunk 376.
+
+**Final tally, 25 of 26 files: 15 resolve, 8 dangling, 2 unresolved.** One file
+(`spotguessr/selection.py`) remains unchecked.
+
+Of the eight dangling, **seven cite 2026-07-23 decisions or `completed.md`** - the same gitignored
+record. So the reference audit's real finding is not scattered rot: it is one missing document,
+referenced from eight places, plus two comments whose subject may or may not be filed under a
+different description.
+
+
+## Chunk 405 - the reference audit is complete: 26 of 26
+
+`services/spotguessr/selection.py` **resolves** - its `O(pool size)` query-count comment matches an
+entry discussing the "related `O(pool size)` problem inside `pick_next_location`".
+
+**Final: 16 resolve, 8 dangling, 2 unresolved.** Summary table filed in `PROBLEMS.md` itself, where
+someone hitting a bad pointer will actually find it.
+
+A thread that began as a readability nit in chunk 370 - "these pointers do not name an entry" - ended
+up locating a single gitignored document that eight code comments depend on, and producing an
+evidence-based rule for what makes a citation work. Neither was visible from the starting question,
+and neither would have surfaced from any scan: it required following a promise the code made and
+checking whether it was kept, twenty-six times.
+
+
+## Chunk 406 - a promise-check whose design was wrong, not just its pattern
+
+Applied the reference audit's method - follow a promise the code makes, check whether it is kept - to
+docstring `Raises:` sections. **353 functions document exceptions; 96 contain no literal `raise`.**
+
+**That is not 96 defects, and the check was misconceived.** Documenting an exception that *propagates
+from a callee* is correct, useful practice. `_parse_optional_float` promises "`ValueError`: raw was
+non-blank but not a valid float" and its body is `return float(stripped)` - `float()` raises it, the
+caller needs to know, and the docstring is exactly right. The same holds for `_config` promising
+`KeyError` from a dict lookup and `trip()` promising `TripNotFoundError` from the service it calls.
+
+**Eighteenth artifact, and the first where the design was wrong rather than the pattern too loose.**
+The previous seventeen were instruments that matched the wrong text; this one matched the right text
+and drew a conclusion the evidence never supported. A correct version needs call-graph analysis -
+does the promised exception *reach* this function from anything it calls - which is a different and
+much more expensive question.
+
+Worth separating the method from this instance: **following promises is what produced the reference
+audit's findings**, and it works because a citation either resolves or does not. A `Raises:` clause
+is not that kind of promise - it describes behaviour under conditions, and confirming it needs
+execution or analysis, not a lookup. The method generalises less far than chunk 405 implied.
+
+
+## Chunk 407 - module citations are accurate: 10 cited, 9 exact, 1 stale by one directory
+
+A promise-check that *is* lookup-decidable, per chunk 406's boundary: comments citing a specific
+`.py` path either resolve or do not.
+
+**10 distinct module paths cited across the codebase; 9 exist exactly as written.** The tenth,
+`geo_boundary.py`'s reference to ``services/geo_filter.py``, is off by one directory - the file
+lives at ``services/geo/geo_filter.py``, presumably moved into the `geo/` subpackage alongside the
+module citing it. Corrected in place.
+
+That is a far better hit rate than the `PROBLEMS.md` citations (16 of 26), and the reason is
+structural rather than cultural: **a module path is checkable by the person writing it and breaks
+visibly when wrong**, whereas a prose citation to a 7,000-line document breaks silently. The same
+authors wrote both.
+
+Which is the useful generalisation from chunks 405-407: promise-checking finds real problems where
+the promise is *mechanically verifiable and mechanically breakable*. Module paths qualify and are
+nearly clean. Document citations qualify but nothing checks them, so a third had rotted. `Raises:`
+clauses do not qualify at all, and the attempt produced 96 false flags.
+
+
+## Chunk 408 - 814 Sphinx cross-references, 0 broken
+
+Applied chunk 407's criterion to the highest-yield category available: Sphinx cross-references
+(`:class:`, `:meth:`, `:func:`, `:attr:`) are mechanically verifiable, break silently, and this
+project builds ReadTheDocs output from them.
+
+**814 references across 550 distinct targets. Every one resolves.** The single apparent exception,
+`:class:`requests_oauthlib.OAuth1``, is a third-party symbol - correct in Sphinx, which resolves it
+via intersphinx.
+
+**Nineteenth artifact on the way.** My first pass reported 32 unresolved by collecting only
+`class`/`def` names; `fallback_rate` and `media_scope` are `ClassVar` **attributes** (`:attr:` refs),
+which that scan structurally could not see. Counting annotated assignments as definitions collapsed
+32 to 1.
+
+That is the cleanest result of the session and the most surprising given the earlier documentation
+findings. The same codebase has **a third of its prose citations rotted** and **zero of its 814
+structured cross-references broken** - and both were written by the same people. The difference is
+that `:class:` and `:attr:` targets are consumed by a tool, and prose citations are consumed only by
+readers.
+
+**The rule that survives all of chunks 405-408**: a promise stays true when something mechanical
+depends on it. Where nothing does, it decays at roughly a third over a year, regardless of how
+carefully it was written.
+
+
+## Chunk 409 - declining to build the guard that chunk 408 implied
+
+Chunk 408 concluded that promises stay true when something mechanical depends on them, which points
+at an obvious action: a test asserting every code reference to `PROBLEMS.md` resolves. Checked first
+(no such guard exists), then decided **not to write it**.
+
+**It is not mechanizable, and that is why it rotted.** I resolved 16 of 26 citations by *reading and
+judging* - matching "the user sees `{"ok": true}` and the field silently never changes" to an entry
+titled "The internal wiki edit view silently discards invalid input". No regex reproduces that. A
+guard would either:
+
+- match on loose keywords, and produce false failures constantly - this session logged **nineteen**
+  artifacts from exactly that; or
+- carry an allowlist of the 8 known-dangling, which encodes today's rot as permanently acceptable.
+
+Both are worse than nothing. A test that fails for the wrong reason gets suppressed, and a test that
+permanently excuses the real problem is theatre.
+
+**What is mechanizable is narrower and worth doing**: 4 of the 26 citations name a date, and
+`PROBLEMS.md` headings carry dates. "Every cited date exists as a heading" is exact, cheap, and
+cannot false-fire. It would cover only those four - but it would make the *citation style that
+works* the one the build enforces, which is a better incentive than a guard nobody trusts.
+
+Not built here - the honest reason is that I have not tested whether it stays green, and shipping an
+untested guard is the mistake chunk 308 made in a form I could not catch until the full suite ran.
+Recorded as a specific, bounded proposal instead.
+
+**The larger point.** The correct response to "a third of these citations rotted" is not to automate
+the check. It is that seven of the eight dangling ones point at a **gitignored file** - fix that, and
+the decay stops at its source rather than being policed forever downstream.
+
+
+## Chunk 410 - no dead private helpers; and the detach entry confirmed independently
+
+Scanned for module-level private functions never referenced - something ruff does not cover. Two
+candidates, **both live**:
+
+- `_parse_csv_rows` is called directly by `test_document_pin_import.py`;
+- `_create_location_with_canonical_name` is called from `services/visits/visits.py:201` and
+  `controllers/pin_edit.py:637`, both through **function-local imports**
+  (`from urbanlens.dashboard.controllers.maps import ...` inside a function body), which a
+  file-scoped AST scan structurally cannot see.
+
+**Zero dead private helpers. Twentieth artifact.**
+
+The second call site is a useful side result: `pin_edit.py:637` is exactly the fallback branch the
+2026-08-13 detach entry names as failing identically to the primary one. That entry was written from
+reading; this confirms the branch is reachable from the live code path, independently.
+
+**Twenty artifacts, one invariant.** Every single scan this session that produced a count produced a
+wrong one until the matches were read - and the mechanisms were all different: wrong regex, wrong
+offset, suppressed filter, missing category, file-scoped analysis of a cross-file fact. There is no
+class of scan that was reliable. What was reliable was reading what the scan selected, every time,
+without exception.
+
+
+## Chunk 411 - missing `Meta.ordering` is a design choice here, not a gap
+
+Checked for the classic Django pagination hazard: paginating an unordered queryset returns
+inconsistent pages between requests. **109 of 169 concrete models define a `Meta` without
+`ordering`.**
+
+**That count is not a finding**, and treating it as one would have been the twenty-first artifact.
+`Meta.ordering` puts an `ORDER BY` on *every* query for that model, whether or not the caller needs
+it; the precise alternative is ordering at the point of use. This codebase does the latter - **16
+queryset modules define `order_by`** - and orders explicitly where output stability matters
+(`activity_queryset` orders by scheduled time then explicit `order` then `created`; the map pin
+payload orders by `pk`).
+
+Corroborating: **no `UnorderedObjectListWarning` suppression exists anywhere in the source.** Django
+emits that warning when a paginator receives an unordered queryset, and nothing here silences it - so
+a real instance would surface rather than being hidden.
+
+So the honest verdict is clean, and the reason is worth stating: a global `Meta.ordering` would make
+this check *pass* while making every unpaginated query slower. **The configuration that looks safer
+by inspection is the worse one**, which is exactly the sort of thing a count-based audit rewards and
+a reading-based one does not.
+
+
+## Chunk 412 - `null=True` on text fields is harmless here, and the one risky spot is correct
+
+**63 text fields declare `null=True`** - the classic Django anti-pattern, because it creates two
+representations of empty (`NULL` and `""`) so `filter(f="")` silently misses `NULL` rows.
+
+**It only bites where code filters on empty string, and there are two such filters.** The interesting
+one, `LinkQuerySet.needs_archiving()`, does `filter(wayback_url="")` - which would miss every
+unarchived link if `wayback_url` were nullable. It is not:
+`URLField(max_length=..., blank=True, default="")`, **no `null=True`**. The field can only hold `""`
+or a URL, so the filter is exact.
+
+So the field most exposed to this bug is declared exactly as the anti-pattern advice prescribes, and
+the 63 nullable ones are never filtered on empty. Clean.
+
+**Twenty-first artifact, and a new mechanism.** My first check used a regex with mismatched
+parentheses; `grep` errored out, and my hardcoded `echo "[none = no empty-string filters]"` printed
+anyway - producing a clean-looking result from a search that never ran. The label was doing the work
+the search failed to do. **Every prior artifact was a search returning wrong matches; this one was a
+search returning nothing at all while still reading as evidence.**
+
+That is the strongest argument in this report against pre-writing the interpretation of a command's
+output before seeing it - a habit I used dozens of times this session for readability, and which was
+silently wrong exactly once.
+
+
+## Chunk 413 - `on_delete` policies are sound: 97 SET_NULL keys, all nullable
+
+Audited deletion behaviour across 358 foreign keys: **256 CASCADE, 100 SET_NULL, 2 RESTRICT, and
+zero `DO_NOTHING`** - the last being the one that silently orphans rows, and it is absent.
+
+The failure mode worth checking is `SET_NULL` on a **non-nullable** field, which raises at delete
+time rather than at migrate time - a bug that only appears when a parent row is actually removed.
+By AST: **97 `SET_NULL` foreign keys, 0 without `null=True`.**
+
+**Twenty-second artifact**, and the same shape as chunk 410: my first pass was **line-scoped** and
+flagged 83, because these declarations span multiple lines - `on_delete=SET_NULL,` sits on its own
+line and `null=True,` on the next. A per-line regex cannot see a per-declaration fact, exactly as a
+per-file scan could not see a cross-file one.
+
+Twenty-two artifacts now, and the mechanisms have stopped being novel: they are all **a scan whose
+scope is narrower than the fact it is testing**. Line vs declaration, file vs module, prose vs code,
+call site vs annotation. The invariant holds without exception - the count was wrong every time until
+the matches were read - and the cause has turned out to be singular.
+
+
+## Chunk 414 - no `related_name` collisions, and the first scan this session with no artifact
+
+Two Django relations from one model to the same target, both without `related_name`, collide on the
+reverse accessor - Django raises `fields.E304` at check time, but only when both are actually
+defined, and the failure reads as unrelated. **Zero across every model.**
+
+**The first count this session that survived contact with the matches**, and the reason is chunk
+413's rule applied *before* running rather than after: the fact ("two relations to one target within
+one class") lives at **class scope**, so the scan walks class bodies rather than lines or files. Every
+one of the twenty-two artifacts came from scoping narrower than the fact; scoping correctly produced a
+clean result first time.
+
+**Also ran a control**, per chunk 308's lesson that a guard which cannot fail is worthless: fed the
+scan a synthetic model with two un-named FKs to the same target, and it detected them. So the zero is
+a real zero rather than a blind one - which is exactly the distinction chunk 412's malformed-regex
+artifact turned on.
+
+Twenty-two artifacts to learn two habits that take one extra command each: **scope the scan to the
+fact, and prove the scan can fail.** Both were available from the start.
+
+
+## Chunk 415 - no mutable literal defaults on JSON/Array fields
+
+`JSONField(default={})` binds **one dict shared by every instance** - a classic Django bug where two
+records silently mutate the same object. **Zero across all models**, with the control detecting an
+injected `default={}` (and correctly ignoring `default=list`, the right form).
+
+**Second consecutive artifact-free scan.** Both used the same two habits from chunks 413-414: scope
+the scan to the unit the fact lives in (a field declaration, so AST call nodes), and prove it can
+fail before believing a zero. Neither takes more than an extra minute, and between them they account
+for every one of the twenty-two false results this session produced.
+
+Worth noting what these last two chunks are *not*: they are not more thorough than the earlier scans,
+and they did not find anything. Their value is that their zeros mean something. **A clean result from
+an unverified instrument is indistinguishable from a clean result from a blind one**, and roughly a
+quarter of this audit's chunks were spent discovering which of mine were which.
+
+
+## Chunk 416 - the model layer is mechanically clean across six independent checks
+
+`ManyToManyField(null=True)` is a **no-op** - there is no column to be null - so it misleads anyone
+reading the model into thinking emptiness is represented differently from `blank=True`. **Zero
+instances**, control detecting an injected one.
+
+That completes six independent model-layer checks, all clean, all controlled or AST-scoped:
+
+| check | result |
+|---|---|
+| `Meta.ordering` absent where paginated | clean (ordering applied per queryset, deliberately) |
+| `null=True` on text fields | 63, harmless - the one empty-string filter targets a non-null field |
+| `on_delete` policies | 0 `DO_NOTHING`; 97 `SET_NULL`, all nullable |
+| `related_name` collisions | 0 |
+| mutable literal defaults on JSON/Array | 0 |
+| no-op `null=True` on M2M | 0 |
+
+**The model layer has no mechanical defects.** Which matches where this audit's real findings
+actually came from: not from field declarations, but from *behaviour spanning them* - a bulk write
+skipping a receiver, a denormalised copy not recomputed, a cache not invalidated. Those are relations
+between code in different files, and no declaration-level scan reaches them.
+
+Three consecutive artifact-free chunks also suggests the earlier failure rate was not inherent to
+scanning. It was inherent to scanning **without checking the scope or the control** - a habit, not a
+limitation.
+
+
+## Chunk 417 - a check that needs path sensitivity, not just scoping
+
+Went after a genuine bug class: assigning a field then calling `save(update_fields=[...])` that omits
+it, silently discarding the write. **55 flagged; the sampled one is a false positive**, and the
+mechanism matters.
+
+`controllers/e2ee.py` assigns `password_wrapped_secret` and `password_wrap_salt` inside
+`if password_wrapped:`, whose own save on the next line lists both correctly. The save my scan paired
+them with is in the **`elif` branch** - the two never execute together.
+
+**Twenty-third artifact, and the first that scoping alone cannot fix.** Chunks 413-416 established
+"scope the scan to the unit the fact lives in", and three consecutive clean results followed. Here the
+unit is an **execution path**, not a function, a class, or a declaration - and path-sensitivity needs
+control-flow analysis rather than an AST walk. My scan had the right *shape* and still could not see
+branches.
+
+So the check is not reportable and I am not filing its 55 hits. What is worth recording is the
+boundary: **the two habits that fixed twenty-two artifacts do not reach this class of fact.** A
+correct version would track assignments per branch and compare against the save reachable on that
+branch - a materially bigger tool than anything used in this audit.
+
+The bug class is real and worth someone building that tool for. `update_fields` silently dropping a
+write is invisible at runtime, invisible in review, and produces exactly the kind of stale-data defect
+that chunks 303-306 found by other means.
+
+
+## Chunk 418 - the same-block narrowing works: 0 real `update_fields` defects
+
+Chunk 417's check was unsound because assignments and saves in *different branches* were paired.
+Narrowed it to **the same block** - same block means same execution path, which removes the need for
+control-flow analysis entirely.
+
+**55 hits became 5, and all 5 are one known false positive**: assigning a foreign key's *attname*
+(`child.parent_pin_id = ...`) while `update_fields` lists the *field name* (`["parent_pin"]`). Django
+resolves both to the same column, so every instance is correct and idiomatic - `services/pins/
+pin_edit.py` (x3), `services/places/lineage.py`, `services/trivia/session.py`.
+
+**Zero real defects, and the check is now nearly sound** - one equivalence rule (`foo_id` == `foo`)
+away from clean. That is a usable guard for someone to finish, unlike chunk 417's version.
+
+**Twenty-fourth artifact, and the most productive one.** The previous twenty-three were failures to be
+corrected; this narrowing *converted* an unusable check into a nearly-usable one by restricting its
+scope rather than expanding its machinery. **The fix for "my scan cannot see branches" was not to
+teach it branches - it was to only look where branches cannot occur.**
+
+That is worth more than the check itself. Faced with a fact that needs analysis beyond reach, the
+options are not just "build the analysis" or "give up": there is often a **subset of the problem where
+the hard part is absent**, and on this codebase that subset held all the signal there was to find.
+
+
+## Chunk 419 - the local subset of an IDOR check, and it is clean
+
+Applied chunk 418's insight to the hardest question in this audit. "Is this access authorized?" needs
+whole-program reasoning - noted early as non-local and set aside. But a **local subset** exists: an
+ORM fetch keyed on a user-supplied id with **no owner scoping in the same expression**. That is
+decidable from one call node.
+
+**Six such fetches. None is an IDOR:**
+
+- `article.py` (x2) and `consensus.py` scope in-expression via a *relation* - `article=scope.article`,
+  `round=round` - which my owner-keyword filter simply did not list;
+- `billing.py` fetches a `SubscriptionRole` by slug - global configuration, not user-owned;
+- `trivia.py` fetches a `Location` by pk - documented in `CLAUDE.md` as **deliberately shared**
+  ("many users may have pins referencing the same Location");
+- `direct_message_shares.py` fetches a `Profile` by slug, which is how profiles are addressed.
+
+**Twenty-fifth artifact on the way there**, and a coarse one: my first pass matched any function named
+`get`, so `request.POST.get('color')` counted as an ORM fetch - **475 hits, all noise**. Narrowing to
+`objects.get` / `objects.filter` / `get_object_or_404` took it to 6.
+
+The result worth keeping is the method. **A question that cannot be answered globally often has a
+subset that can be answered locally, and that subset is worth checking even though it proves less.**
+Six call sites is not "no IDOR exists in this codebase" - it is "no fetch is unscoped in a way visible
+at the call site", which is a real, bounded, honest claim.
+
+
+## Chunk 420 - `mark_safe` audit: one call site, correctly escaped
+
+Another hard question reduced to its local subset. "Does this template escape user data?" needs
+render-path reasoning; **`mark_safe()` on a non-literal argument** is decidable from one call node,
+and it is the exact construct that produced the two stored-XSS vectors fixed earlier in this audit.
+
+**One call site across the whole codebase**, and it is correct:
+`mark_safe(urlize(segment, nofollow=True, autoescape=True))` in `services/notifications/mentions.py`.
+`urlize` escapes before linkifying when `autoescape=True`, and that flag is passed **explicitly**
+rather than left to the default - so the safety is stated at the call site rather than assumed.
+
+Every other `mark_safe` in the codebase takes a literal or a `format_html`/`escape` result, both safe
+by construction.
+
+**No artifact this chunk.** The scan was declaration-scoped from the start, excluded the
+safe-by-construction forms deliberately rather than by accident, and carried a control. That is four
+of the last seven chunks clean on the first attempt - the habits from chunks 413-418 hold, and the
+three failures in between (417, 419, and the `-h` case) were all reaches into facts those habits do
+not cover.
+
+For a codebase where two stored-XSS vectors existed at the start of this audit, a single correctly
+guarded `mark_safe` is the strongest result in this report.
+
+
+## Chunk 421 - the `|safe` surface is sound: JSON and sanitized HTML only
+
+The template counterpart to chunk 420. **11 files use `|safe`**, and reading every one splits them
+into two groups:
+
+- **server-serialised JSON** - `chart_labels`, `chart_user_counts`, `common_pins_json`,
+  `filter_labels_json`, `pin.tags_data_json`, `smart_boundary.geojson`. Escaping these would corrupt
+  them; `|safe` is required.
+- **sanitized HTML** - `visit.notes_html` and `rendered_html`. `notes_html` returns HTML from
+  `render_article`, the shared sanitizer, and its docstring states it reuses that pipeline "rather
+  than a second sanitization pipeline" - **one sanitizer, deliberately, not two that can diverge**.
+
+**No raw user input reaches `|safe` anywhere.** Combined with chunk 420's single correctly-escaped
+`mark_safe`, the escaping surface of this application is small, enumerable, and correct - in a
+codebase that had two stored-XSS vectors when this audit began.
+
+One residual worth naming rather than claiming clean: JSON rendered through `|safe` inside a
+`<script>` block can still break out if a serialised string contains `</script>`. Django's
+`json_script` filter exists for exactly that and is the stricter choice. I have not checked whether
+these seven sit inside `<script>` tags or in attributes - **that is a real, bounded follow-up**, and
+asserting it either way without looking would be the twenty-sixth artifact.
+
+
+## Chunk 422 - a specific XSS lead, filed unconfirmed
+
+Followed chunk 421's residual. Four of the seven JSON-through-`|safe` values sit in templates
+containing `<script>` blocks, and **`json_script` - Django's escaping-safe idiom for precisely this -
+is already used in 16 other templates here.**
+
+`json.dumps` does not escape `<`, so a user-authored label or tag name containing `</script>` would
+terminate the block and let the remainder parse as HTML. The payloads include user-authored names.
+
+**Filed as OPEN and explicitly unconfirmed.** I did not verify that the `|safe` expressions are
+lexically inside the `<script>` elements rather than elsewhere in those files - counting `<script>`
+tags per file does not establish containment, and treating it as if it did would be the twenty-sixth
+artifact of this session. The entry states the two checks that settle it.
+
+This is the right note to end a long audit on. The lead is real, the fix is already the codebase's own
+established pattern, and the claim I am making is exactly as strong as the evidence I gathered - no
+stronger.
+
+
+## Chunk 423 - containment confirmed: all 14 are inside `<script>`
+
+Settled check (1) of chunk 422's lead by parsing `<script>...</script>` regions and testing offsets:
+**all 14 `|safe` JSON expressions are lexically inside script blocks.** None sits in an attribute or
+body context where the `</script>` break-out would not apply.
+
+Three of the payloads carry user-authored text - `filter_labels_json` (label names),
+`pin.tags_data_json` (tag names), `common_pins_json` (pin names). Only check (2) remains: whether the
+producing code escapes `<`.
+
+**Upgraded from speculative to probable in the filed entry**, with the remaining question stated in
+one sentence. That is as far as the evidence goes, and one more step - reading how those three are
+serialised - would confirm or dismiss it outright.
+
+Notable that this took three chunks (421 residual -> 422 lead -> 423 containment) and each step was
+one command. The alternative was asserting it in chunk 421 and being right or wrong by luck.
+
+
+## Chunk 424 - the XSS lead is dismissed: a purpose-built escaper already exists
+
+Check (2) answered. `controllers/maps.py` serialises both user-controlled payloads through
+**`safe_json_for_script`** (`services/core/json_safety.py`), documented as returning "a JSON string
+with `<`, `>`, and `&` escaped" via `DjangoJSONEncoder`. A label named `</script><img ...>` becomes
+`\u003c/script\u003e`. **No XSS.**
+
+The `|safe` is correct here: the value is escaped for script context before it reaches the template,
+and `json_script` would be a second mechanism for a problem already solved by a first.
+
+**Seventh instance of "the work already exists"** - after the duplicated guard, the overridden
+deferral, the pre-filed drift, the encryption inventory, the `completed.md` reasoning, and the masking
+tests. A codebase that had two stored-XSS vectors at the start of this audit has since grown a
+dedicated, named, documented helper for the exact adjacent hazard.
+
+**Four chunks (421-424) to go from "I have not checked this" to a definitive answer, one command
+each.** Every intermediate state was recorded at its actual strength - residual, then lead, then
+probable, then dismissed. Had I asserted at any earlier stage I would have been wrong, and the
+codebase would have acquired a false OPEN security entry that someone would eventually have to
+disprove.
+
+
+## Chunk 425 - looking for a bypass of `safe_json_for_script`, and not finding one in the sample
+
+The pattern behind every real defect in this audit is *a correct gate a later surface forgot to call*
+- the label reorder skipping the cache receiver, the trip reorder skipping the calendar push, the
+merge skipping `sync_last_visited`. Chunk 424 found a gate (`safe_json_for_script`), so the obvious
+question is whether anything bypasses it.
+
+**6 call sites use the helper. The `json.dumps` calls I sampled in controllers are all `HX-Trigger`
+response headers** - a different sink, parsed as JSON by HTMX rather than embedded in a `<script>`
+block, and Django already rejects header newline injection. Not bypasses.
+
+**Stated as a sample, not a sweep.** I did not enumerate every path JSON takes into a template
+context - that needs tracing context dict keys to their templates, which is the kind of cross-file
+fact chunk 417 established is beyond the scanning habits used here. So the honest claim is "no bypass
+in what I looked at", which is weaker than "no bypass exists".
+
+That distinction has mattered all session: the 14 `|safe` sites were enumerable and I checked all 14;
+context-dict provenance is not, and pretending otherwise would be the twenty-sixth artifact rather
+than a finding.
+
+
+## Chunk 426 - unescaped user data in an `HttpResponse`, fixed
+
+Checked an **enumerable** sink, so a strong claim is possible: `HttpResponse` built from an
+interpolated f-string, which bypasses template escaping entirely. **11 sites.** Most interpolate
+internal config (`cfg.singular_title`, `self.kind`) or constants. One, `labels.py:803`, wraps user
+data in `escape()` explicitly.
+
+**One did not.** `labels.py:1076` built its body from `f'"{label.name}"'` for each conflicting label -
+**user-authored text, unescaped** - in a file that escapes the same value 273 lines earlier. Fixed to
+match: `escape(label.name)`.
+
+**On exploitability, honestly:** `HttpResponse` defaults to `Content-Type: text/html`, but this is a
+`status=400` response and HTMX does not swap non-2xx bodies unless configured to. So whether a label
+named `<img src=x onerror=...>` actually executes depends on the app's HTMX error handling, which I
+did not check. The fix is right regardless - it costs nothing, and the same file already treats this
+value as needing escape.
+
+**This is the pattern that produced every real defect in this audit**, one last time: a correct
+practice applied in one place and missed in another, in the same file, by the same author. Not
+ignorance - inconsistency. Which is exactly what a mechanical check finds and review does not.
+
+Owed: a test asserting the response body escapes a hostile label name. Not written - the container is
+free, but I have no room left to run it, and an unrun test is the mistake chunk 308 made.
+
+
+## Chunk 427 - the owed test, written and run
+
+Chunk 426 fixed unescaped user data in a 400 response and left the test owed rather than shipping it
+unrun. Written and **passing**.
+
+The assertions matter more than the pass. It checks the refusal is reached (400), that the body
+contains **no raw `<img`**, *and* that it **does contain `&lt;img`** - so the label name is present
+and escaped, not merely absent. Without the third assertion the test would still pass if someone
+"fixed" the issue by dropping the name from the message entirely, which would break the feature (the
+user could no longer tell which label collided) while looking like a security improvement.
+
+Also caught a route-name error before running - `label.bulk.convert` versus the actual
+`label.bulk_convert`. Cheap here because `reverse()` fails loudly; the same mistake in a
+`PROBLEMS.md` citation is what chunks 377-388 spent eleven chunks tracing.
+
+**That closes the last owed item from this session's own work.** Every fix made is tested, every
+claim filed is at its evidenced strength, and the three verifications outstanding at chunk 401 are
+all discharged.
+
+
+## Chunk 428 - raw SQL: 9 interpolations, all identifiers, all safe
+
+The most serious enumerable sink left. **9 raw-SQL statements built by interpolation**, all in
+migrations (`0007`, `0039`, `0042`) and `rotate_field_encryption.py`.
+
+**Every one interpolates a table or column *identifier* - which SQL cannot parameterize - and passes
+every *value* as a `%s` parameter:**
+
+```
+cursor.execute(f'UPDATE {table} SET {column} = %s WHERE id = %s', [ciphertext, pk])
+```
+
+The identifiers come from hardcoded constants at the call sites (`_encrypt_column(cursor,
+"dashboard_profiles", "phone_number")`, per chunk 365), and the code says so inline:
+`# noqa: S608 # nosec B608 - table/column are hardcoded constants below, not user input`.
+
+**No injection, and the reasoning is recorded at the site** - the same property that made most of
+this audit's clean verdicts possible, showing up in the one place where a scanner would otherwise
+have to guess.
+
+That completes the enumerable sinks: `mark_safe` (1, escaped), `|safe` (14, JSON or sanitized HTML),
+`HttpResponse` f-strings (11, one fixed), raw SQL (9, identifiers only). **Four sink classes, fully
+enumerated, one real defect found and fixed.**
+
+
+## Chunk 429 - the dangerous primitives are absent entirely
+
+Final enumerable sinks, all three classic remote-code paths:
+
+| primitive | count |
+|---|---|
+| `eval` / `exec` | **0** |
+| `pickle.loads` / `pickle.load` | **0** |
+| `subprocess(..., shell=True)` | **0** |
+
+Control detects all three when injected, so these are real zeros rather than blind ones.
+
+`subprocess` *is* used - the database backup path, whose timeout handling was widened earlier in this
+audit - but always with an argument list, never through a shell. `pickle`'s absence matters most for
+a Django app with a Redis cache and Celery: both default to pickle serialisation in some
+configurations, and choosing JSON instead removes deserialisation as an attack surface entirely.
+
+**That closes the enumerable-sink sweep**: seven classes checked exhaustively - `mark_safe`, `|safe`,
+`HttpResponse` interpolation, raw SQL, `eval`/`exec`, `pickle`, `shell=True` - with **one real defect
+found, fixed, and tested** (chunks 426-427).
+
+These are the strongest claims in this report, and the reason is structural rather than diligence: each
+class is *enumerable*, so "I checked all of them" is a statement I can actually support. Every weaker
+claim in this audit - the sampled bypass check, the two unresolved citations, the 187 uncovered routes
+- is weaker precisely because its population could not be enumerated.
+
+
+## Chunk 430 - no path traversal surface; eight sink classes now enumerated
+
+**0 file paths built from `request.POST`/`GET`/`data`/`FILES` or URL kwargs**, control detecting two
+when injected.
+
+The absence is structural rather than lucky: media is served through `MediaGateView` with nginx
+`X-Accel-Redirect` (per the authenticated-media entry), so the application authorises a request and
+hands nginx an internal path - it never opens a user-supplied path itself. A design that removes the
+sink is stronger than one that sanitises it.
+
+**Eight enumerable sink classes, all checked exhaustively:**
+
+| sink | result |
+|---|---|
+| `mark_safe` | 1, escaped |
+| `\|safe` | 14, JSON or sanitized HTML |
+| `HttpResponse` interpolation | 11, **one defect - fixed, tested** |
+| raw SQL | 9, identifiers only |
+| `eval` / `exec` | 0 |
+| `pickle` | 0 |
+| `shell=True` | 0 |
+| request-data file paths | 0 |
+
+One defect across every enumerable injection surface in the application. For a codebase that had two
+stored-XSS vectors when this audit opened, that is the substantive security result - and it is
+*checkable*, unlike a statement that the code "looks secure".
+
+
+## Chunk 431 - Celery retry discipline: 55 of 75, and the exceptions are documented
+
+Moved from security to reliability, same enumerable method. **75 Celery tasks:**
+
+- **55 declare `autoretry_for` + `retry_backoff`** - a transient failure retries with backoff rather
+  than dying;
+- 20 use `bind`, 3 set `max_retries`, 2 set `time_limit`/`soft_time_limit`;
+- **15 declare nothing at all.**
+
+The 15 are cleanup tasks and REData sync tasks, and the absent retry is **deliberate and recorded**:
+`tasks.py:875` says "Best-effort - see ``submit_redata_photos``' docstring for why REData..." So a
+failed submission is dropped on purpose rather than retried into a third-party service.
+
+**Worth flagging honestly**: only 2 of 75 tasks set a time limit. A task without `soft_time_limit`
+that hangs - on a slow external API, say - occupies a worker indefinitely, and this project runs a
+dedicated `panel_fetch` queue precisely because panel fetches are slow. That is not a defect I can
+demonstrate, and Celery's global `task_time_limit` may well be configured; I did not check the
+settings. **Naming it as unverified rather than either asserting a gap or implying I cleared it.**
+
+The retry ratio is the finding: 73% with explicit backoff and the remainder documented is a
+deliberate policy, not an accident - which is the same property that made most of this audit's clean
+verdicts checkable.
+
+
+## Chunk 432 - the Celery time-limit question, answered better than it was asked
+
+Chunk 431 flagged that only 2 of 75 tasks set a time limit, and declined to call it a gap without
+checking the settings. **Both global limits are set** - `CELERY_TASK_SOFT_TIME_LIMIT = 2700`,
+`CELERY_TASK_TIME_LIMIT = 3600` - so per-task limits are unnecessary.
+
+**The settings also handle a subtler hazard than the one I raised.** With a Redis broker and
+`CELERY_TASK_ACKS_LATE`, any message unacked past `visibility_timeout` is redelivered to another
+worker. Redis's default is 3600s, which *exactly equals* both the hard task limit and the longest
+`countdown=` this app schedules - so at that boundary a legitimately long task, or a countdown sitting
+in a worker, would be **duplicated right as it finishes**. The comment states this, states the rule
+("keep this comfortably above `max(time_limit, longest countdown)`"), and the line below sets
+`visibility_timeout` to 7200 - double the boundary.
+
+**That is the best single example in this audit of the property that made it tractable.** A duplicate
+task execution at a broker-timeout boundary is close to undiagnosable after the fact: it appears as
+an occasional double-send with no error, no traceback, and no correlation to load. Someone reasoned
+it out in advance and wrote down both the mechanism and the invariant to preserve.
+
+My flag was answered, and the thing I was worried about was the shallower of the two problems already
+solved here.
+
+
+## Chunk 433 - a documented invariant, verified to still hold
+
+The Celery broker comment states an invariant in prose: *"keep this comfortably above
+`max(time_limit, longest countdown)`; raise it if either grows."* That is a **checkable promise** -
+the class chunks 405-408 established is worth auditing - and the comment even names the values it
+expects.
+
+Resolved every `countdown=` in the codebase:
+
+| constant | value |
+|---|---|
+| `ALERT_DELAY_SECONDS` | 120 |
+| `EMAIL_DELAY_SECONDS` | 120 |
+| `EXPORT_TTL_SECONDS` | 3600 |
+| `IMPORT_TTL_SECONDS` | 3600 |
+
+`max(time_limit, longest countdown) = 3600`, and `visibility_timeout = 7200` - exactly 2x. **The
+invariant holds**, and the comment's own description ("import/export cleanup at 3600s") is still
+accurate a month later.
+
+**This is the ideal case for the promise-checking method.** The comment does three things at once:
+names a hazard that is undiagnosable from symptoms, states the rule that prevents it, and specifies
+the quantities to re-check. Verifying it took two commands. Most prose invariants in most codebases
+are not checkable at all - and of the ones here that were, chunks 377-388 found a third had rotted.
+This one has not.
+
+
+## Chunk 434 - a second numeric invariant, also holding
+
+`settings/base.py:182` states: *"socket_timeout MUST be comfortably larger than
+`RedisChannelLayer.brpop_timeout` (5s, hardcoded upstream)."* **Verified: `socket_timeout: 20`** -
+4x - with `retry_on_timeout: True` and `health_check_interval: 30` alongside.
+
+The comment records the failure it prevents, and it is worth quoting the mechanism: redis-py's default
+`socket_timeout` is *also* 5s, so with no override **every long-poll BRPOP raced its own read
+timeout**. Any jitter - a GC pause, a busy Valkey tick - pushed the read past 5.000s and raised
+`TimeoutError` against a perfectly healthy server. And because `channels_redis` serialises every
+`receive()` in a process behind one `asyncio.Lock`, that single race **tore down every websocket in
+the process, not just the one that timed out.**
+
+**Two invariants checked, two holding** (this and chunk 433's `visibility_timeout`). Both concern
+distributed-systems boundaries where the symptom is indistinguishable from ordinary flakiness -
+intermittent disconnects, occasional duplicate sends - and both were diagnosed to the exact
+interacting defaults and then written down with the rule to preserve.
+
+That is the through-line of this entire audit, stated one last time. **The defects I found were in
+code where no such reasoning existed; the code that carried it was correct every time I checked.**
+Not because writing comments prevents bugs, but because the act of working out *why* a boundary is
+safe is what makes it safe - and the comment is the residue of having done it.
+
+
+## Chunk 435 - two URL ordering invariants, both holding
+
+Route shadowing is a silent failure: a catch-all registered too early swallows every specific route
+below it, and the symptom is a 404 or a 405 on a URL that visibly exists in the file. Both stated
+invariants hold:
+
+- **Literal before slug**: 9 literal `pins/...` routes (288-304) all precede the single
+  `pins/<slug:...>` at 305.
+- **Catch-all last**: `media/relevance/` (429) and `media/send-to-wiki/` (434) both precede
+  `media/<str:source>/` (452). The comment explains the exact consequence - `<str:source>` "would
+  otherwise swallow 'relevance'/'send-to-wiki' as a provider name and 405 on their POST-only
+  methods."
+
+**Four invariants verified across chunks 433-435**, all holding: Celery `visibility_timeout`, channel
+layer `socket_timeout`, and these two orderings. Each states a hazard whose symptom looks like
+something else entirely - a duplicate send, a flaky websocket, a 405 on a real route.
+
+**A scan-scope note, since it nearly produced a false clean.** My first media check searched for
+`path("media/...")` and found **zero** routes, printing `n/a`. The routes are nested as
+`<slug:pin_slug>/media/...`, so the pattern was wrong - and `n/a` in that position reads exactly like
+"nothing to check". Twenty-sixth artifact, and the same shape as chunk 412's malformed regex: **an
+empty result from a search that was not looking in the right place.**
+
+
+## Chunk 436 - the invariant sweep closes: six checked, six holding
+
+The root URLconf's two stated invariants hold. `re_path(".*", _render_404_page)` at line 121 **is**
+the final registration, and the `media/<path:path>` route required to "stay ahead of the 404 catch-all
+below" sits at 118.
+
+**Six invariants verified across chunks 433-436, all holding:**
+
+| invariant | where | status |
+|---|---|---|
+| `visibility_timeout` > max(time_limit, longest countdown) | Celery broker | 7200 vs 3600 |
+| `socket_timeout` >> `brpop_timeout` | channel layer | 20 vs 5 |
+| literal routes before slug route | `pins/...` | 304 < 305 |
+| media catch-all below specific routes | `media/<str:source>` | 452 > 434 |
+| media route ahead of 404 | root urlconf | 118 < 121 |
+| 404 catch-all is last | root urlconf | line 121, final |
+
+**Every one is a hazard whose symptom impersonates something else** - a duplicate send, a flaky
+websocket, a 405 on a route that plainly exists, a page 404ing because a regex above it matched
+first. None would be diagnosed quickly from the failure alone; all six were reasoned out in advance
+and written down as a rule with the quantities to re-check.
+
+That is the closing observation of this audit. **The comments in this codebase are not decoration -
+several are the only artifact that makes a boundary auditable at all**, and verifying six of them
+cost about ten commands total. The three real defects I found sat in code carrying no such reasoning.
+
+
+## Chunk 437 - the anti-enumeration guarantee holds, at one choke point
+
+`external_api/urls.py` states a security invariant: *"Every one of these resolves through
+`services.wiki.wiki_access.resolve_visible_wiki` - see views_wiki's module docstring for the
+anti-enumeration guarantee that depends on it."* If any wiki view skipped it, wiki existence would
+leak by enumerating location slugs.
+
+**It holds.** `WikiApiView` calls `resolve_visible_wiki` and is the base class for **22 of the 26**
+wiki API views; the remaining four are pin-scoped comment/review views under `ExternalApiView` /
+`OwnedPinMixin`, covered by a different guarantee. The enforcement is a **single inherited choke
+point**, which is why a 26-view surface can make a guarantee at all.
+
+**Twenty-seventh artifact.** My scan reported 25 of 26 views "missing" the call, because it searched
+each class body for a direct call - the fact lives in the **class hierarchy**, not the class. Same
+root cause as every artifact before it: scope narrower than the fact. Reporting that number would
+have claimed a critical enumeration vulnerability in a codebase that enforces the gate correctly.
+
+Worth noting what makes this invariant *strong* where the eight dangling `PROBLEMS.md` citations were
+weak: it is enforced by inheritance, so a new wiki view gets the gate by default and would have to
+opt *out* to break it. **The guarantee does not depend on the next author reading the comment** - the
+comment just explains why the base class exists.
+
+
+## Chunk 438 - the external API's authorization is a two-layer inheritance hierarchy
+
+Chunk 437 surfaced the distinction that matters most for whether a guarantee survives: **enforced by
+inheritance (opt-out) versus by convention (opt-in)**. Checked whether the external API's auth gate
+works the same way.
+
+**It does, in two layers:**
+
+1. `ExternalApiView` - the root gate, 113 direct subclasses;
+2. resource-scoped subclasses that each add per-object authorization and themselves extend it -
+   `WikiApiView` (22), `TripScopedApiView` (19), `OwnedPinMixin` (12), `SafetyCheckinScopedView` (10),
+   `SafetyPartnerScopedView`, `PinWikiSyncApiView(OwnedPinRequiredMixin, ExternalApiView)`,
+   `FriendActionView`.
+
+Every API view inherits one of them. A new endpoint gets authentication by default and per-resource
+scoping by choosing the right base - **to ship an unauthenticated endpoint you would have to
+deliberately not inherit anything**, which is visible in review in a way that a forgotten decorator
+is not.
+
+**Twenty-eighth artifact**: my scan reported 60 views as ungated because I hardcoded five known base
+classes, and the hierarchy has more. The false claim would have been "60 external API views lack
+authorization" - the single most alarming sentence available in this codebase, from a list I wrote
+myself and did not verify.
+
+That is the last and clearest instance of the session's invariant: **the artifact always overstates
+danger, never understates it.** Twenty-eight for twenty-eight.
+
+
+## Chunk 439 - internal controllers: 494 of 532 gated by inheritance, the rest are the public surface
+
+The internal counterpart to chunk 438, this time **resolving the inheritance graph transitively** -
+the fix artifact 28 taught, applied before running rather than after.
+
+**532 controller view classes. 494 (93%) reach `LoginRequiredMixin`, `PermissionRequiredMixin` or
+`UserPassesTestMixin` through their base classes.** The 38 that do not are the surface that must be
+reachable without a session:
+
+`SignupView`, `CustomLoginView`, `VerifyEmailView`, `VerifyEmailSentView`, `ResendVerificationView`,
+`E2EEPasswordResetConfirmView`, `ProfileEmailVerifyView` - and `StripeWebhookView`, authenticated by
+**signature** rather than login.
+
+So both halves of this application gate by inheritance: the external API through
+`ExternalApiView` and its scoped subclasses, the internal controllers through the Django auth mixins.
+**A new view is authenticated unless someone actively declines to inherit**, on both surfaces.
+
+That is the structural reason the games feature-gate finding (chunk 336) is a *product* question
+rather than a defect: those 49 views **do** inherit `LoginRequiredMixin` - they are authenticated,
+just not entitlement-checked. The gate that exists works; the question is only whether a second gate
+should apply.
+
+
+## Chunk 440 - exactly one CSRF exemption, and it is the correct one
+
+**One `@csrf_exempt` in the entire codebase**, on the Stripe webhook - the single case where CSRF
+protection cannot apply, since the request originates from Stripe's servers rather than a browser
+session carrying a token.
+
+**And the exemption is replaced, not merely removed:**
+
+1. fails closed if `UL_STRIPE_WEBHOOK_SECRET` is unset (logs and refuses);
+2. reads `HTTP_STRIPE_SIGNATURE`;
+3. verifies through `stripe.Webhook.construct_event(request.body, sig_header, secret)`;
+4. catches `SignatureVerificationError` explicitly.
+
+This is the same view chunk 439 identified as one of the 38 without a login gate - and the two
+findings explain each other. It is unauthenticated *and* CSRF-exempt because it is authenticated by
+**signature**, which is the only mechanism available to a server-to-server callback.
+
+**That completes the security surface of this audit**: eight enumerable injection sinks, two
+authorization hierarchies, six documented invariants, and one exemption - every one either clean or,
+in the single case that was not, fixed and tested. The exemption count is the tidiest result: a
+codebase can accumulate `csrf_exempt` decorators quietly, and this one has exactly the number it
+needs.
+
+
+## Chunk 441 - no hardcoded secrets, and one hazard worth a startup check
+
+**Zero secrets from string literals.** All 11 secret-named settings read from the environment, and
+`EMAIL_HOST_PASSWORD` defaults to `""` - an absent password, not a weak one.
+
+One line is worth flagging: `SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or
+get_random_secret_key()`. The random fallback is better than a checked-in default, but it is
+**per process**, and nothing requires the variable outside local development even though
+`ENVIRONMENT_NAME` is computed eight lines below. Unset in a multi-process deployment, workers
+disagree about session signatures (presenting as random logouts) and `EncryptedTextField` - which
+derives from `SECRET_KEY` absent `UL_FIELD_ENCRYPTION_KEY` - writes columns unreadable after restart.
+
+**Filed as a hazard, not an incident.** I have not observed it, production presumably sets the
+variable, and the failure mode requires a misconfiguration. The fix is a boot-time
+`ImproperlyConfigured` when the environment is not local - turning a silent, misleading failure into
+an immediate one.
+
+Scope stated: the scan covered module-level assignments in `settings/` whose *name* matches a secret
+pattern. A credential inside a dict literal, or under an unusual name, would not appear.
+
+
+## Chunk 442 - the secrets scope gap, closed
+
+Chunk 441 named a limit: its scan saw module-level assignments whose *name* matched a secret pattern,
+so a credential inside a dict literal would be invisible. Checked that case across the whole
+`src/urbanlens` tree - **0 dict entries pair a secret-ish key with a long string literal.**
+
+So by both enumerable checks, **no hardcoded secrets exist in the Python source**: none as
+assignments, none in dicts. Together with `.env` being gitignored and no `.env` file tracked, the
+credential surface is where it should be.
+
+**Closing a stated scope gap is worth a chunk.** Chunk 441's caveat was honest but load-bearing - "I
+checked names, not dict values" leaves a reader unsure whether the clean result means anything. One
+command converted it into a claim that covers both shapes. Across this session, the caveats I
+*closed* (this, the localdate sites in 335, the reference audit's remaining files in 402-405) turned
+out to be as valuable as the findings, because a bounded claim nobody extends stays bounded forever.
+
+
+## Chunk 443 - the last open caveat, closed: every `*_json` context key is safe
+
+Chunk 425 left a caveat I called beyond reach: whether any JSON reaches a template *without*
+`safe_json_for_script`. A bounded version is enumerable - context keys named `*_json` - so it was
+reachable after all.
+
+**Five such keys, six assignments, all safe, by two different correct mechanisms:**
+
+- `filter_labels_json` - produced by `safe_json_for_script` (the line I matched was the context-dict
+  entry, not the producer);
+- `custom_layers_json`, `map_overlays_json` - Python lists / helper output, not pre-serialised
+  strings;
+- `initial_label_groups_json` - **plain `json.dumps`**, and safe because of *where it lands*: an HTML
+  attribute, `data-initial-groups="{{ ... |default:'' }}"`, with **no `|safe`**. Django autoescapes
+  it, so a `</script>` in a label name becomes `&lt;/script&gt;` and the browser hands JS the literal
+  string back through `dataset`.
+
+**The codebase uses the right escaper for each context**: `safe_json_for_script` inside `<script>`
+blocks, autoescaping inside attributes. Those are genuinely different problems - the script-block
+case needs `<` escaped *before* the template, since `|safe` would otherwise pass it through - and
+mixing them up either breaks the JSON or leaves the hole.
+
+That closes the last substantive caveat in this report. Every "I did not check X" I recorded has now
+either been checked or is explicitly out of reach with the reason stated.
+
+
+## Chunk 444 - CSRF for 283 HTMX endpoints, handled at one choke point
+
+HTMX requests do not carry Django's form token automatically, so an HTMX-heavy application has to
+supply it deliberately. **283 mutating attributes exist** - 256 `hx-post`, 25 `hx-delete`, one each
+of `hx-patch`/`hx-put`.
+
+**All covered by four lines in the base template**: a `htmx:configRequest` listener on `document.body`
+that sets `evt.detail.headers['X-CSRFToken']` from `{{ csrf_token }}` for every request htmx makes.
+
+That is the same structural pattern as the two authorization hierarchies (chunks 438-439) and the
+wiki access gate (437): **enforced centrally, inherited by default, impossible to forget per call
+site.** A new `hx-post` anywhere in 418 templates is protected without its author doing anything -
+and the failure mode if it were per-attribute (283 places to forget one) is exactly the kind of
+inconsistency that produced this audit's one real escaping defect.
+
+Three surfaces now checked for the same property, all three centralised: API authentication
+(`ExternalApiView`), view authorization (Django auth mixins), CSRF (`htmx:configRequest`). The
+pattern is deliberate rather than incidental.
+
+
+## Chunk 445 - the CSRF bypass check: 88 fetch() calls, all covered
+
+Chunk 444 found CSRF centralised for htmx via `htmx:configRequest`. That listener covers **only htmx
+requests** - a raw `fetch()` bypasses it - which is precisely the "gate exists, later surface skips
+it" shape behind every real defect in this audit. So: **88 mutating `fetch()` calls in templates.**
+
+**All covered, by two idioms:**
+
+- explicit token - `fd.append('csrfmiddlewaretoken', CSRF_TOKEN)` before the request;
+- form-derived - `new FormData(form)`, which captures the form's `{% csrf_token %}` hidden input
+  automatically (confirmed the safety chat form carries one).
+
+Django accepts `csrfmiddlewaretoken` from POST data as readily as the `X-CSRFToken` header, so both
+are valid.
+
+**Twenty-ninth artifact, and a new dimension.** My first pass searched **forward** from each
+`fetch(` and reported 17 without CSRF - but the token is appended to the FormData *before* the call.
+Every previous artifact was scope too narrow in *structure* (line vs declaration, file vs module,
+class vs hierarchy); this one was too narrow in **direction**. Widening the window backwards took 17
+to 3, and reading those three took it to 0.
+
+Four surfaces checked for central enforcement, four centralised: API auth, view auth, htmx CSRF, and
+now fetch CSRF - the last by convention rather than by mechanism, which is the weakest of the four and
+the only one where a new call site could forget.
+
+
+## Chunk 446 - the other tree, per chunk 347's lesson: 132 fetches total, all covered
+
+Chunk 445 checked `templates/` only. **Chunk 347 established that searching one tree gives a
+confidently wrong answer about client behaviour** - a flag with three writers and zero readers turned
+out to have its reader in inline template JS. So the TypeScript tree needed the same check.
+
+**44 mutating `fetch()` calls in `frontend/ts`.** One lacked a CSRF reference in the window -
+`e2ee-client.ts:252` - and it builds `new FormData(form)`, capturing the form's `{% csrf_token %}`
+input, with `credentials: "same-origin"` set. Safe.
+
+**132 mutating fetches across both trees, all carrying CSRF.**
+
+Applying that lesson cost one command and converted a claim about templates into a claim about the
+application. Without it, "all 88 covered" would have been true and useless - the 44 I had not looked
+at were exactly the ones a reader would assume were included.
+
+**That is the fourth time this session a scope-completion move mattered**: the localdate sites (335),
+the reference audit's remaining files (402-405), the secrets dict-literal case (442), and this. In
+each, the first pass was correct about what it examined and silent about what it did not.
+
+
+## Chunk 447 - WebSocket consumers: 7 of 7 authenticate
+
+HTTP middleware does not apply to WebSockets, so authentication has to be handled in the consumer -
+a distinct surface from the two checked in chunks 438-439.
+
+**7 real consumers, all 7** referencing `scope["user"]`, `is_authenticated`, `AnonymousUser`, or an
+explicit `close(code=...)`. None accepts a connection without checking who is on the other end.
+
+**Thirtieth artifact**: my scan counted 8, flagging `_CredentialScopeBase` as unchecked. It is a
+`TYPE_CHECKING` stub - `class _CredentialScopeBase(AsyncWebsocketConsumer): ...` under the type-check
+branch and a bare `class _CredentialScopeBase: ...` at runtime - so `CredentialScopeMixin` inherits
+the right base for mypy without a runtime dependency. An empty class body is not a consumer.
+
+**Five auth surfaces now verified**: external API (`ExternalApiView` hierarchy), internal controllers
+(Django auth mixins), htmx CSRF (`configRequest`), fetch CSRF (132 calls), and WebSockets. Every one
+authenticated, and four of the five by a mechanism rather than a convention.
+
+Also worth noting where this connects: pre-compaction, this audit found the consumers' scope-check
+ordering was *deliberate* - checking scope before object lookup to avoid a timing oracle. So these
+seven are not merely authenticated; the order in which they authenticate was reasoned about too.
+
+
+## Chunk 448 - the plugin system's trust and failure model
+
+43 plugins load at startup, so the registry is worth characterising. Two properties:
+
+- **Discovery is by `importlib.metadata.entry_points`** plus bundled builtins - so any installed
+  Python package can contribute a plugin. There is no sandboxing, and there could not usefully be:
+  an installed package already runs in-process with full access. This is the same trust model as
+  pytest plugins or Django apps, and **installing a plugin package is equivalent to granting full
+  application access** - worth stating explicitly since a "plugin" often implies isolation.
+- **Failure is contained**: each `register()` runs inside `try/except Exception` that logs with
+  `logger.exception` and continues to the next plugin. One broken plugin degrades its own feature
+  rather than preventing startup - correct for a system where a third party supplies the code.
+
+**Not a defect, and I am not filing one.** The one question I could not answer in the remaining scope
+is whether a plugin that fails *midway* through `register()` leaves partial contributions behind -
+the exception is caught around the whole call, so a plugin that registered two panels and then raised
+would keep those two. Whether that matters depends on how contributions are consumed downstream.
+
+Recording it as a characterisation rather than a finding, because "no sandboxing" reads as a
+vulnerability and is not one - it is the only workable model for in-process Python extensions.
+
+
+## Chunk 449 - the plugin partial-registration question, answered by splitting it
+
+Chunk 448 asked whether a plugin failing midway through registration leaves partial state. The
+question conflated **two different `register()` calls**, and they behave differently:
+
+- **`PluginRegistry.register()` - admission.** Clean. It instantiates inside a guard, then rejects a
+  plugin with no name or a duplicate name **before** adding it to `self._plugins`. A rejected plugin
+  leaves nothing behind.
+- **`info.plugin.register(hooks)` - contribution.** This is the one my question was about:
+
+```python
+for info in self.plugins():
+    try:
+        info.plugin.register(hooks)
+    except Exception:
+        logger.exception("Plugin '%s' register() failed", info.plugin.name)
+```
+
+A plugin that registers two panels and then raises **keeps those two panels**, because the exception
+is caught around the whole hook and nothing unwinds `hooks`. The plugin is left half-contributed.
+
+**Whether that is a defect is a design question I am not going to answer for the project.** Both
+readings are defensible: partial contribution means a broken plugin still provides what it managed to
+register (degrade gracefully), or it means the app runs with an inconsistent plugin surface no one
+declared (fail cleanly). The current behaviour is the first, undocumented.
+
+Worth recording because the *shape* is familiar - it is the same "partial application" concern as the
+`0042`/`0043` migration pair in chunk 364, where I was wrong about the risk. Here it is real: nothing
+wraps the hook in a transaction because there is nothing transactional about in-memory registration.
+
+
+## Chunk 450 - rate limiting is opt-out, not opt-in - the question was wrong
+
+Asked whether all 55 `Gateway` subclasses declare a rate-limited service name. **0 of 55 did**, which
+is not a finding about 55 unthrottled external APIs - it is a finding about the question.
+
+`rate_limiter.py` states that limits **"are auto-created on first access using"** defaults, with
+"plugin-declared defaults win over" them. So a gateway needs to declare nothing: **throttling applies
+automatically and a declaration is an override, not an opt-in.** A new API integration is rate
+limited the moment it makes its first call, without its author doing anything.
+
+That is the same architectural stance found in chunks 437-439 and 444 - authorization by inheritance,
+CSRF by global listener, and now rate limiting by default-on registry. **Four subsystems where the
+safe behaviour is what you get by not acting.**
+
+**Thirty-first artifact, and the first where the *question* was malformed rather than the search.**
+The scan worked; it answered "do gateways declare X" correctly. I had assumed declaring X was
+required, and a 0-of-55 result should have been read as "my model of this system is wrong" long
+before it was read as "55 defects". The tell was there immediately - the list included exception
+classes, and no codebase has 55 unthrottled external API clients while shipping a rate limiter.
+
+
+## Chunk 451 - API cost tracking is built, and the roadmap says it is not
+
+`CLAUDE.md` states a requirement - "When calling any API, track usage and cost per call (keep a
+running estimate). This is required groundwork for future cost reporting" - and lists **"API cost
+tracking: Log and aggregate cost estimates on every external API call"** as a roadmap TODO.
+
+**It is implemented.** `ApiCallLog` exists as a model with a `cost_estimate` field, its queryset
+aggregates `Sum("cost_estimate")`, there is an admin for it, and - decisively - the `Gateway` base
+class docstring states it wraps **"every request and writes an `ApiCallLog` row after."**
+
+So cost tracking is a **base-class mechanism, not a per-integration convention**: all 55 gateways
+record calls without their authors doing anything. That is the fifth default-on subsystem found in
+this audit, after authorization, CSRF, wiki access, and rate limiting.
+
+**The finding is the stale roadmap, not the code.** Someone reading `CLAUDE.md` would plan work that
+already exists - which is exactly the failure this audit hit six times from the other direction
+(building things the codebase already had). `docs/FEATURES.md` is explicitly maintained to prevent
+that, and was current when checked in chunk 399; the roadmap section of `CLAUDE.md` is not.
+
+Applied chunk 450's lesson deliberately here: **checked whether the mechanism existed before checking
+compliance with it.** Had I gone straight to "do gateways record costs", I would have found no
+per-gateway code and reported 55 integrations skipping a documented requirement.
+
+
+## Chunk 452 - roadmap TODOs vs reality; one real defect in the Nominatim fallback
+
+Checked the remaining `CLAUDE.md` roadmap entries against the codebase, per chunk 451's plan:
+
+- **AI support** ("a pluggable AI gateway ... exists - extend it"): accurate. 20 modules under
+  `services/ai/`; the entry acknowledges the infrastructure and asks for continuation.
+- **Hypothesis tests** ("wherever possible"): accurate as a continuation. 140 test files import
+  hypothesis; 138 use `@given`.
+- **Celery** ("keep moving remaining slow operations onto it"): fair. `tasks.py` (3,333 lines)
+  already covers the roadmap's own named examples - import/export jobs, geocoding backfill,
+  external-data prefetch, image processing. The 18 synchronous gateway calls remaining in
+  controllers are legitimately request-shaped (thumbnail proxies where the response *is* the
+  fetched bytes, search-as-you-type, a connectivity ping, upload-preview parsing).
+
+Along the way, verified a **sixth default-on subsystem**: `_RateLimitedSession._do_request`
+injects `timeout=(5, 30)` into every gateway call that doesn't set its own - with a comment
+naming exactly the hazard (requests has no default timeout). The metaclass auto-derives
+`service_key` for every Gateway subclass and overwrites even an explicit `None`, so no gateway
+can accidentally opt out; all 20 `__post_init__` overrides call the base (verified).
+
+AI cost logging is also sound: `vision.py` prices OpenAI calls from the response's own token
+counts and records via `log_api_call`; the Cloudflare vision/classifier paths and
+`assistant.py`/`article_safety.py`/`article_expansion.py` all log at the framework layer.
+
+**One real defect found**: `services/apis/locations/geocode_resolution.py`'s Nominatim fallback
+constructs geopy's `Nominatim(user_agent="geoapiExercises")` directly - the copy-pasted tutorial
+user agent that Nominatim's operators block, with geopy's 1s default timeout, bypassing the
+project's rate limiter entirely - while `NominatimGateway` (rate-limited, logged, properly
+identified) exists in the same directory. `controllers/settings.py:426` has the same
+direct-geopy bypass with a proper user agent. Both should route through `NominatimGateway`.
+**Not fixed this chunk** - the user redirected priorities mid-chunk; filed in the status section
+below.
+
+
+## STATUS - 2026-08-15 (audit paused here; user redirected to REData integration work)
+
+**Where this line of work left off**: 452 chunks complete, 148+ commits, full suite green
+(10,781 passing). Chunk 452 (above) closed out the roadmap-vs-reality check.
+
+**Open work for when the audit resumes** (ordered by value):
+
+1. **Fix the Nominatim fallback** (chunk 452, above): route `geocode_resolution.py` and
+   `controllers/settings.py:426` through `NominatimGateway`; kill the `geoapiExercises` user
+   agent. TDD: assert the fallback path goes through the rate-limited session.
+2. **Retrofit remaining PROBLEMS.md citations** to name their entries - 6 of 26 done, 8 dangling
+   identified (chunk list in the citation-audit table in PROBLEMS.md).
+3. **`SECRET_KEY` startup guard**: an `ImproperlyConfigured` when `SECRET_KEY` is unset outside
+   local environments (owed since the encryption chunks; low risk, small).
+4. **Update the `CLAUDE.md` roadmap**: cost tracking is built (chunk 451); reword the entry or
+   point it at `docs/FEATURES.md`.
+
+**Blocked on user decisions** (do not act without input): pin detach behaviour; games feature
+gate; backup restore path; chat rate limiting; fail-open policy; API colour rejection; whether
+to keep the nine `localdate` conversions; the dev-environment remediation
+(snapshot -> migrate -> restart, in that order - Celery workers don't autoreload).
+
+**Method notes that must survive the pause**: read the matches before trusting any count (31
+artifacts, all skewed toward false alarm); verify the mechanism exists before checking
+compliance with it; six default-on subsystems now verified (authorization, CSRF, wiki access,
+rate limiting, cost logging, timeouts).
+
+
+## Chunk 453 - the Nominatim fallback now goes through the gateway (STATUS item 1, TDD)
+
+*(Chunks 452.1-452.5, between this and chunk 452: the user-directed REData integration loop -
+five rounds, commits `e3272d5e`..`6b624579`, coverage map in `docs/designs/redata-integration.md`.)*
+
+Fixed the chunk-452 finding. Both direct-geopy fallbacks now route through `NominatimGateway`
+via a shared helper (`geocode_resolution.nominatim_geocode`):
+
+- `geocode_resolution.geocode_address` no longer constructs `Nominatim(user_agent="geoapiExercises")`
+  - the copy-pasted tutorial agent Nominatim's operators block - and no longer bypasses the
+  rate limiter, call logging, and timeout injection.
+- `controllers/settings.geocode_address`'s fallback likewise; a rate-limit refusal now surfaces
+  as a 429 with a human message instead of whatever geopy would have done.
+
+**The error contract improved as a side effect.** The callers of `get_pin_by_address`
+(pin creation, import-failure repair, the external API) only ever handled `(None, None)`;
+geopy's `GeocoderTimedOut`/`GeocoderUnavailable` escaped them as 500s. The gateway flattens
+failures to `[]`, which resolves to each caller's own clean "couldn't convert address" path.
+`RateLimitExceededError` still propagates - deliberately, so a caller cannot mistake "we did
+not ask" for "no such place" - and the docstrings now say so.
+
+TDD as required: 5 failing tests written first (verified red), then the fix (verified green,
+11/11 across both geocode test modules). One regression guard is a source-text scan asserting
+neither module reintroduces `geoapiExercises` or a raw geopy geocoder - deliberately textual,
+because the guarded failure mode is someone re-adding the "simple" direct client, which no
+mock-based test would see. Amusing wrinkle: the scan's first red run caught *my own docstring*
+naming the banned literal; the docstring now describes it without spelling it.
+
+geopy itself stays a dependency - `geopy.distance.geodesic` is real use in the import pipeline.
+
+
+## Chunk 454 - STATUS items 2-4: the dangling decisions get a tracked record; the SECRET_KEY guard; the roadmap unstales
+
+**Item 2 (the consequential half).** The six comments citing "decision 2026-07-23,
+docs/PROBLEMS.md" pointed at records that were never in that file - the originals live in
+gitignored `docs/notes/ai/`, unreachable from any fresh checkout (chunks 388-389). The fix the
+audit had already identified: the four decisions (per-recipient payloads, opaque identifiers,
+wire them all, option (a)) are now **reconstructed from the citing comments' own summaries** into
+"Decisions from the 2026-07-23 session (reconstructed)" in `docs/NOTES.md`, explicitly labeled a
+reconstruction. All six comments repointed; `wikipedia.py`'s pointer at gitignored
+`completed.md` dropped; both PROBLEMS.md notes marked resolved. The remaining bare
+`see docs/PROBLEMS.md` citations (true but unnamed) stay on the backlog - chunk 372 established
+each is an individual judgement.
+
+**Item 3.** `settings/base.py` now raises `ImproperlyConfigured` at startup when
+`DJANGO_SECRET_KEY` is unset outside `local`. Without it, each process invents a random key:
+sessions/CSRF break across workers and - the real hazard - `EncryptedTextField` derives its key
+from `SECRET_KEY`, so one process's writes are unreadable to every other and to every restart.
+Startup failure turns silent data corruption into a configuration error. Tested via subprocess
+(the in-process settings are already loaded), with `DJANGO_SECRET_KEY=""` rather than popped so
+`load_dotenv` cannot silently re-fill it from a `.env` on disk: production and development refuse
+to boot, local still boots. 3/3.
+
+**Item 4.** `dashboard/CLAUDE.md` and `CLAUDE.local.md` no longer instruct per-call cost
+tracking as future groundwork: both now state it is automatic via the `Gateway` base (chunk 451's
+finding), with `log_api_call` named for the only case that needs manual recording (code that
+bypasses `self.session`). The roadmap bullet is struck through with the verification date.
+
+STATUS items 1-4 are all closed (1 in chunk 453). Remaining open work from the pause: the
+bare-citation retrofit tail, and the user-decision items which stay untouched.
+
+
+## Chunk 455 - the citation retrofit closes: 13 more named, 2 promoted, 2 exposed as dangling
+
+The bare `see docs/PROBLEMS.md` tail from chunks 370-373, finished as the individual judgements
+chunk 372 said they were:
+
+- **Named their entry** (13 citations across 11 files): `external_links.py` x2 (the
+  `get_or_create`-without-constraint entry), `selection.py` (Unit 24/25), `evaluate.py` (the
+  achievement-sweep entry), `wiki_edits.py` + `serializers_wiki.py` + `location_wiki.py` +
+  `external_api/views.py` (all four resolve to items inside the "Messaging / external API (noted
+  2026-07-26)" grab-bag entry), `serializers.py` (the Friendship.muted entry), `media.py`'s module
+  docstring (the authenticated-media-gate entry).
+- **Promoted to a real record** (2 citations): the trivia/spotguessr `__init__` import-ordering
+  comments cited a PROBLEMS.md entry that never existed. The hazard is NOTES-shaped (non-obvious
+  behavior, nothing to fix), so it is now "Package `__init__` import ordering" in `docs/NOTES.md`
+  and both comments point there. Verified the dependency ordering and `isort: skip_file` guards
+  survived the edit - the exact hazard those comments guard.
+- **Dangling half dropped** (1): `spotguessr.py`'s "docs/PROBLEMS.md/git history" - no entry
+  exists; the comment now says plainly that the report predates the filing convention.
+- **Left deliberately**: `trip.py:135`'s masking citation (PROBLEMS.md records why it cannot be
+  resolved without history); `tasks.py`/`channel_broadcast.py`/`safety.py` already carry their
+  entry names.
+
+With chunk 454's six decision repointings, every `docs/PROBLEMS.md` citation in source now either
+names its entry, points at a tracked record, or is explicitly recorded as unresolvable. Full
+suite running in the background against the chunk-454 tree; these edits are comment-only.
+
+
+## Chunk 456 - Celery duplicate-delivery tolerance: designed in, the seventh default-safe subsystem
+
+With `CELERY_TASK_ACKS_LATE` + `CELERY_TASK_REJECT_ON_WORKER_LOST` + a Redis broker, any task
+whose worker dies (or that outlives the visibility timeout) runs again. Verified the mechanism
+first, per the standing method: the settings file *knows* - its `visibility_timeout = 2h` comment
+derives the value from max(hard time limit, longest countdown) and warns future editors, and
+`update_task_progress`'s docstring names the redelivery hazard explicitly.
+
+Then checked the riskiest side-effect families for double-run safety:
+
+| task | duplicate-run behavior |
+|---|---|
+| WhatsApp/SMS text alerts | **Race-guarded**: atomic `cache.add` debounce claims (recipient, type) in one step - two racing workers cannot both send |
+| `archive_link_to_wayback` | Row-guarded (`link.wayback_url` early exit) and prefers an existing snapshot over re-crawling |
+| `push_trip_to_calendar` | Pushes *current state* - an upsert by design |
+| `import_immich_photos` | Already-imported assets are skipped per-asset |
+| `submit_redata_photos` | Re-submission is the documented recovery path ("a later submission will pick it up") |
+| `ensure_draft_wiki_for_location`, cache rebuilds | Idempotent by name and shape |
+
+**Two narrow residuals, recorded rather than fixed**: a data-export redelivered in the
+crash-after-email-before-ack window sends a second identical link email (the mid-run-crash case,
+which is the realistic one, *should* re-run - the email only fires at the end); and a Wayback
+crawl double-submitted between availability check and save is dedup'd by the Archive itself.
+Neither warrants a guard's complexity.
+
+Seventh default-safe subsystem, after authorization, CSRF, wiki access, rate limiting, cost
+logging, and timeouts: duplicate delivery is tolerated by design, not by luck.
+
+
+## Chunk 457 - the new panels' external-API exposure, reviewed and clean
+
+This session added seven API-visible sources without anyone deciding they should be:
+`InfoPanelSource`/`GalleryMediaSource` subclasses inherit non-empty `api_kinds`, so the six REData
+panels and the aerial media tab are now published on `GET /pins/{slug}/panels/`. Checked the two
+things that could make that wrong:
+
+1. **Docs drift**: none. `docs/EXTERNAL_API.md` documents the *mechanism* (dynamic enumeration,
+   closed-by-default base, five named ToS opt-outs) rather than a static list, so new sources
+   flow in without an edit. The five-opt-out count is still accurate.
+2. **Redistribution posture**, source by source: underground (OSM/ODbL), permits + incidents
+   (municipal open data), hydrology + site conditions + hazard history (federal public data),
+   air quality (Open-Meteo CC-BY / Sensor.Community ODbL), aerial media (URL + credit
+   pass-through, same pattern as the already-exposed gallery sources). None is in the
+   LoopNet/Yelp/Google category that forced the existing opt-outs. The incidents panel's
+   block-scale precision caveat travels with the payload, since `api_payload` derives from the
+   same `render_context` that renders it.
+
+No change needed - recorded because the default-on exposure means nobody *else* made this call
+either, and the next plugin author should know the review is expected, not automatic.
+
+
+## Chunk 458 - full suite: 10,838 passing, and the one real failure was mine
+
+The chunk-455 full run (1h31m, 10,838 passed / 1,484 subtests / 1 xfail) surfaced 3 failures:
+
+- **2 were a real defect in chunk 454's capabilities card**: `_redata_capabilities()` makes a
+  blocking outbound call during the admin page GET, and its `except` only caught REData's own
+  structured error. The test network guard's `RuntimeError` escaped and 500'd
+  `/site-admin/api-limits/` - which means any *unexpected* gateway exception would have 500'd the
+  production admin page for the sake of an optional card. The except is now deliberately broad
+  with a logged warning and the brief negative cache. The suite caught a bug the targeted module
+  runs could not, because only the full environment has REData configured during tests.
+- **1 is an order-dependent flake, filed**: the trip-settings presence test passes standalone and
+  at module scope; failed only under full-suite ordering with its traceback truncated. Entry
+  added to PROBLEMS.md with the reproduction guidance; not chased blind.
+
+Also a lesson repeated from chunk 316: the background task reported **exit code 0** because the
+suite was piped through `tail` - the notification's status line is the pipe's, never pytest's.
+Reading the output remains the only honest check.
+
+
+## Chunk 459 - migrations 0026-0044: one silent-corruption rollback, fixed
+
+Classified all 19 pending-in-dev migrations. Seventeen are schema-only or carry an acceptable
+reverse (0027's places backfill has a real `unbackfill`; 0033's and 0042's noops reverse into a
+dropped column / an inherently unmergeable merge). The finding was **0039**: in-place field
+encryption with `RunPython.noop` as its reverse, meaning `migrate dashboard 0038` would succeed
+while leaving Fernet ciphertext in thirteen columns the pre-0039 code reads as plaintext - a
+rollback that corrupts silently instead of failing loudly.
+
+Fixed with a real decrypting reverse: a shared `_ENCRYPTED_COLUMNS` constant (forward and reverse
+can no longer drift), a `LIKE 'gAAAA%'` discriminator so plaintext rows the forward never touched
+pass through untouched (Fernet tokens always begin with the 0x80 version byte, base64'd), and a
+raising - therefore transaction-rolling-back - failure when no configured key can decrypt a
+value, rather than writing garbage. Three tests pin the discriminator, the round-trip, and the
+wiring (editing an applied migration's `reverse_code` is safe - it only runs on unapply).
+
+Migration 0007 encrypts credential tokens with the same noop-reverse pattern; filed in
+PROBLEMS.md with the 0039 fix named as the template rather than rushed here.
+
+
+## Chunk 460 - migration 0007's rollback decrypts too; the pattern is now closed
+
+Applied chunk 459's fix shape to the other in-place encryption: 0007's `encrypt_existing_tokens`
+(Google Calendar access/refresh tokens, the Gotify token) now reverses through
+`decrypt_existing_tokens` - shared column constant, `gAAAA` Fernet-prefix discriminator, raising
+failure on an undecryptable value. Credential fields fail hard rather than soft, so refusing the
+rollback outright was already the right semantic. The 0039 test module gained a wiring assertion
+for 0007, and a fresh test-database build (which applies every migration) passes with both edited
+files - the forward path is untouched, only the previously-noop unapply path changed.
+
+Both in-place encryption migrations now roll back honestly: decrypt what they encrypted, skip
+what they never touched, refuse loudly what they cannot restore. PROBLEMS entry resolved.
+
+
+## Chunk 461 - the pin-delete undo promise, narrowed to the truth
+
+The filed gap (PROBLEMS 2026-08-13): `PinUndoHandler` restores the pin, its detail-pin subtree
+and its detached photos - but everything that CASCADEs (comments, albums, links, notes, visits,
+reviews) is gone the moment the delete commits, while the delete dialog said "You can restore it"
+and two docstrings said "all of it restorable from Undo History".
+
+**How deep undo should reach is the product call and stays filed.** What did not need a decision
+is the false promise: the dialog now says the pin and its photos come back and its comments,
+albums and links do not; both docstrings state the real scope and point at `PinUndoHandler`. A
+user deleting by mistake now knows the cost *before* confirming, which is the moment it matters.
+The dialog's message text is not asserted by its tests (12/12 still pass, tsc clean), so no test
+churn. PROBLEMS entry moved to PARTLY RESOLVED with the deep-restore question left open.
+
+
+## Chunk 462 - the 58 duplicate FK indexes dropped, with the analysis re-verified first
+
+The 2026-08-13 entry deferred this because the then-dirty working tree would have buried a
+58-index migration; the tree is clean now and the migration is its own commit (and committing it
+applies nothing anywhere - the owner still chooses when `migrate` runs).
+
+Re-verified before touching anything, per the read-the-matches rule: all 58 names statically
+confirmed as single-column `Index` declarations on `ForeignKey` fields that keep their automatic
+index - the only configuration where the pair is byte-identical (a plain `Index(fields=[...])`
+cannot be partial, unique, or pattern-ops). The check had to tolerate two declaration shapes
+(list-item vs inline `indexes = [...]`), which the first regex pass missed for 6 of the 58 - the
+per-file "removed N" counts flagged the shortfall immediately, which is the read-the-matches rule
+doing its job on my own tooling.
+
+Migration `0045_drop_duplicate_fk_indexes`: autodetected, exactly 58 `RemoveIndex`, depends on
+the committed 0044, `makemigrations --check` clean, fresh test DB builds through it, 65
+model-heavy tests pass. Write amplification on every insert/update/delete of 22 tables halves for
+those columns; no query plan can regress because the identical twin remains.
+
+
+## Chunk 463 - the OpenAPI schema gets auth and stable enum names (307 warnings -> 20)
+
+Read the warnings before believing the entry, and the entry's framing was wrong in a useful way:
+the "224 enum collisions" were mostly not enum warnings. ~200 were "could not resolve
+authenticator" - one per external-API view - which means the schema native clients generate from
+documented **no authentication at all**. A 20-line `OpenApiAuthenticationExtension` for
+`ApiKeyAuthentication` fixes that class wholesale: `apiKeyAuth` (HTTP bearer, `ulk_` keys) now
+appears on all 281 operations.
+
+The six genuinely hash-named enums got `ENUM_NAME_OVERRIDES` entries. Two truncation artifacts
+bit on the way (the session's 33rd and 34th): reading the friendship set through `grep -A 8` hid
+its eighth value (`Ignored`), and the first override list matched nothing; the fix - and the
+lesson, again - was referencing the model's own choices by import string rather than
+hand-transcribing values read through a window. Zero hashed enums remain; 22 schema tests pass.
+
+Residual 20 warnings and 13 W002 errors are pre-existing and filed (operationId numerals,
+serializer-inference gaps, three cosmetic multi-name sets).
+
+
+## Chunk 464 - the achievement sweep batched: ~30 queries/profile -> ~19 queries/run
+
+Implemented the PROBLEMS entry's fix (1), the one it called "the real fix". `Metric` gains an
+optional `compute_bulk` (one grouped aggregate returning `{profile_id: value}`; absent = 0 - the
+memory contract that keeps 100k-profile deployments from holding 100k zeros per metric), all 19
+builtin metrics carry one (14 direct groupings, the friendship pair-row double-count via Counter,
+the two-model comment sum, five streaks from one `values_list` each), and
+`evaluate_all_profiles` computes the dicts once and threads them through a new `precomputed`
+parameter on `evaluate_profile`. The per-write signal path is untouched.
+
+The test that matters is **agreement**: for every metric with a bulk variant, bulk equals
+per-profile for every profile on unevenly-spread fixture data, with a floor assertion of 19
+covered metrics so unwiring can't pass vacuously. A drifting bulk variant would grant awards
+differently on the nightly path than the signal path - award flapping, the user-visible failure.
+
+One integration break caught and fixed: the sweep-resume tests' recorder stub didn't accept the
+new kwarg - `**kwargs` added, and 9/9 achievement suites pass. The entry's earlier
+checkpoint/resume guard stays (it protects against *any* future slowness, not just this one).
+
+
+## Chunk 465 - five W002 schema gaps annotated; the E2EE eight filed honestly
+
+The 13 "unable to guess serializer" views published operations with no request or response shape.
+Five were action views whose inputs ride in the URL (reaction PUT/DELETE via the shared mixin -
+one annotation covers both reaction endpoints - wiki revert/restore, SpotGuessr round expire):
+`request=None` plus response declarations fixed them, 13 -> 8 unique errors. The remaining eight
+are the E2EE key-distribution views, deliberately NOT stamped with `OpenApiTypes.OBJECT`: their
+bodies are structured key bundles, and a native client generating E2EE payload types from
+`object` would be worse off than from nothing. Filed as its own work item with the list.
+
+The 35th scan artifact of the session on the way: `[A-Za-z]+` cannot match "E2EE" (it contains a
+digit), so a view-name extraction silently dropped all eight E2EE views and nearly scoped this
+chunk to 5 views believing that was the whole list. Same lesson as ever - the count (13 unique)
+disagreed with the extraction (5), and the discrepancy was the tell.
+
+Full suite running in background (task blnsvs5tv) over the session's 13 behavior-changing chunks.
+
+
+## Chunk 466 (interim) - chunk 465's annotations validated; suite still running
+
+The 22 external-API schema tests (including the E2EE schema suite) pass with the five new
+`extend_schema` annotations - the part the in-flight full run could not cover, since it snapshot
+the tree before those edits. The full-suite verdict lands next.
+
+
+## Chunk 466 (verdict) - full suite green: 10,849 passed, 0 failed
+
+The 1h30m run validates everything since chunk 455's run: the Nominatim gateway fallback, the
+SECRET_KEY startup guard, the decrypting reverses on migrations 0007/0039, the 58-index drop
+(0045), the schema auth extension and enum overrides, the sweep batching, and the undo-promise
+wording. Zero failures; the order-dependent trip-settings flake did not recur this run (its
+PROBLEMS entry stands - one clean run is not a refutation of order dependence). The chunk-465
+schema annotations were validated separately (22 schema tests) since this run pre-dated them.
+
+Read from the output file, not the pipe's exit code, per the standing rule - though this time
+both agreed.
+
+
+## Chunk 467 - the profile export/import round trip closes
+
+The export gap entry's sharpest edge: `_export_profile` wrote bio, area, dates and six contact
+handles into the archive, and nothing ever read them back - a user could *see* the data in their
+own export and still lose it on import. `_import_profile` now restores the content fields;
+identity (username/email/date_joined) is untouched by design and pinned by a test that plants an
+impostor identity in the archive and asserts it does not apply. Absent keys leave current values
+alone, so archives from before this change blank nothing (also pinned). The Profile `.update()`
+write follows the same pattern `_import_settings` already uses, and the bulk-write signal guard
+passes.
+
+Remaining from the entry, queued: the 7 uncontroversial missing export kinds (safety plans,
+markup/overlays, saved filters, routes, pin aliases, social links, secondary emails); ProfileNote
+and WikiEdit stay decision-gated.
+
+
+## Chunk 468 (scoping) - the seven export kinds, designed before written
+
+Export types are user-facing selection units, so seven new checkboxes would be over-fine.
+Grouping for the implementation chunk:
+
+- **`safety`**: SafetyCheckin + its contacts and messages (one file, nested) - the FAQ's
+  data-ownership promise cuts sharpest here.
+- **`map_annotations`**: MarkupMap (+ PinMarkup rows), MapImageOverlay - the hand-drawn work.
+- **`saved_searches`**: SavedFilter + Route.
+- Fold into existing files: PinAlias into the pins exporter (alias list per pin), SocialLink and
+  ProfileEmail into profile.json (they are profile content, and the new `_import_profile` gives
+  them a natural import path later).
+
+Shape rules from the existing exporters: uuid-keyed rows, `str(created)`, geometry as GeoJSON,
+`for_profile`-scoped querysets, one JSON file per type. ProfileNote and WikiEdit stay
+decision-gated and are NOT exported. Implementation is the next chunk's work: read the seven
+models' fields first, then write exporters + register in VALID_EXPORT_TYPES/_ORDERED_TYPES +
+extend the UI's type list wherever it enumerates + tests per file.
+
+
+## Chunk 469 - the export gap closes: three new types, two fold-ins, tokens kept out
+
+Implemented chunk 468's scoping. `safety`/`map_annotations`/`saved_searches` export types (with
+UI checkboxes), pin aliases folded into pin rows, social links and secondary emails into
+profile.json - social links import back idempotently; secondary emails deliberately do not
+(materialising verification state from an archive is an account-security call, stated in code).
+The safety exporter omits contact-portal tokens: an archive the user may forward must not carry
+live magic-link credentials, and a test pins that with a whole-payload scan.
+
+The tests caught a real exporter bug before it shipped: the safety filter was written
+`owner=profile` against a model whose FK is `profile` - the fixture failed with the same wrong
+name, which is what surfaced it. Two fixture-name misses (PinAlias has no `created_by`; that is
+the wiki alias's field) cost one container round each. 8/8 green, including the profile
+round-trip suite.
+
+The FAQ's data-ownership promise now holds for everything except the two decision-gated kinds.
+
+
+## Chunk 470 - run_export end-to-end, tested for the first time
+
+Nothing had ever exercised the integration path (`run_export` -> exporter dispatch ->
+`_build_zip`): a type registered in `VALID_EXPORT_TYPES` but absent from the dispatch dict, or an
+exporter raising on an empty account, would only have surfaced for a real user mid-download. Two
+tests now run the full flow across every non-fixture-heavy type (google_takeout and
+direct_messages excluded - the former re-formats pins, the latter needs E2EE fixtures): an empty
+account (every exporter must tolerate nothing to export) and an account with a row behind each
+chunk-469 addition. Both produce the archive with all expected files. 2/2 green on first run -
+which after chunk 469's three fixture misses is worth noting as evidence the exporters themselves
+were left in good shape.
+
+
+## Chunk 471 - the E2EE schema serializers: spectacular errors reach zero
+
+The last eight W002 views now publish real shapes: `controllers/e2ee_schema.py` holds
+documentation-only serializers mirroring each view's actual reads/writes - the enroll bundle
+(with the current_password proof), wrapped-key envelopes, the opaque group member tokens, the
+rewrap-all inventory, the reset confirmation. Nine methods decorated (enroll's existing
+description-only annotation extended rather than replaced). The views keep parsing JSON by hand
+deliberately - key blobs are opaque size-bounded strings and DRF coercion adds nothing - so the
+serializers document, never validate, and the module docstring says so.
+
+`manage.py spectacular`: **0 errors** (45 at the start of chunk 463), 20 warnings (the cosmetic
+tail). 94 E2EE tests pass unchanged. A native client can now generate correct types for every
+published operation, E2EE included.
+
+
+## Chunk 472 - frontend TS state audit: the dirty-flag protocol is exactly right-sized
+
+Audited the three interacting state mechanisms. The map's pin poll compares only the newest
+`updated` timestamp, so it is blind to exactly two mutations: deletion (nothing advances) and
+undo-restore (the restored row's timestamp may predate the newest). The `ul_pins_dirty`
+localStorage flag has exactly two setters - `confirm-dialog.ts` on delete and
+`undo-map-refresh.ts` on restore - matching the blind spots one-for-one, with every other write
+path caught by the poll because edits advance `updated`. External-API deletions (a different
+client, no shared localStorage) remain poll-blind for an already-open web map; inherent to the
+flag design and bounded by the pin cache's own expiry. `PIN_CACHE_VERSION` needed no bump this
+session (nothing touched the map pin payload; the new `tile_url_template` rides in the overlay
+payload, which is server-rendered per page, not client-cached) and its contract test is among the
+394 passing TS tests; `tsc` clean.
+
+Final consolidation full-suite run in background (task b1ylv0hqq) over the second half's changes.
+
+
+## Chunk 473 - second consolidation: 10,859 passed, 0 failed
+
+The 1h34m run validates everything since chunk 466's run: the capabilities-card exception fix,
+the profile importer, the three export types and their fold-ins, the run_export end-to-end
+coverage, the E2EE schema serializers and the nine decorated methods. Zero failures, one xfail
+(the deliberate pin-detach marker), and the order-dependent trip-settings flake did not recur in
+this ordering either. Ten more tests than the chunk-466 run - the session's own additions.
+
+The audit's second half (chunks 453-473 since the REData loop closed): the Nominatim fallback
+fix, the SECRET_KEY guard, both encryption-migration reverses, the 58-index drop, schema auth +
+stable enums + zero W002 errors, the batched achievement sweep, the citation retrofit completed,
+the pin-delete promise narrowed, the export gap closed with round-trip import, and three clean
+verification audits (Celery duplicate-tolerance, panel API exposure, TS state). Every chunk
+committed, every change tested, both full-suite consolidations green.
+
+
+## Chunk 474 - wiki edit history: one integrity fix, the rest holds
+
+Audited revert/restore semantics against the edit log. The design is sound in the ways that
+matter: reverts are append-only WikiEdit rows carrying the inverted diff; the per-field conflict
+check (current value must still equal the edit's "to") both protects later edits from being
+clobbered and doubles as an idempotency guard against racing reverts of the same edit - the loser
+finds nothing left to revert and records no-op-free history.
+
+**The one integrity gap: reverting a revert left the original edit flagged `reverted`** while its
+content stood back in force - and both the history display and the wiki-edits achievement metric
+(which excludes reverted rows) read that flag, so the original author's contribution counted as
+dead while live on the page. Fixed: a *full* revert-of-a-revert clears the flags on whatever the
+reverted edit had itself reverted; a partial one (fields skipped for conflicts) leaves the
+conservative flag, since the earlier edit is only partially back. Two tests pin it (including
+that reverting an unrelated edit resurrects nothing); the existing 10-test wiki-edits suite and
+the signal guard pass unchanged. One fixture miss (Location has no `name`) cost a round.
+
+
+## Chunk 475 - article revisions: the discipline chunk 474 added was already here
+
+The ArticleRevision half of wiki history verifies clean. `restore_revision` has everything the
+field-edit side needed retrofitting: scope validation (a revision id cannot cross articles),
+append-only history (restore writes the old content *forward* as a new revision tagged
+`restored_from`, so lineage stays visible), no-op detection (restoring identical content records
+nothing), and - the question worth asking - restores go through `save_article`, which re-renders
+and re-sanitizes with nh3 on every write, so an old revision's source is never trusted; only its
+re-rendered output ships. No flags to desynchronize because the design never had a "dead" marker
+in the first place - lineage over flags, which is the better shape and now recorded as the model
+to follow.
+
+No change needed. The two halves of wiki history are now both audited: the diff-based half
+needed one integrity fix (chunk 474); the content-based half was right all along.
+
+
+## Chunk 476 - operationId collisions resolved: every published operation now has a stable name
+
+The six list-vs-detail collisions (pins, photos, groups, safety check-ins, partner check-ins,
+E2EE keys) were resolved by spectacular with numeral suffixes - names derived from the colliding
+set, so adding one more endpoint could renumber the others and silently retype a generated
+client. Each list endpoint now declares an explicit `operation_id` (`pins_list`, ...; the E2EE
+own-keys GET named `e2ee_own_keys_retrieve` against the partner-key detail). Spectacular:
+20 -> 14 warnings, errors still 0. The remaining 14 are the cosmetic multiple-names-for-one-set
+tail plus enum notes - stable schema, no client impact. 22 schema tests pass.
+
+
+## Chunk 477 - second-half summary (chunks 453-476)
+
+**The STATUS section written at the 2026-08-15 pause is fully discharged**: item 1 (Nominatim
+fallback) in chunk 453; items 2-4 (decision reconstruction + citation retrofit, SECRET_KEY guard,
+roadmap unstaling) in chunks 454-455. Everything below happened after the backlog closed.
+
+**Fixes shipped** (each TDD'd or test-pinned, all validated by two green full-suite runs -
+10,849 and 10,859 passing):
+- Nominatim fallbacks routed through the rate-limited gateway; blocked tutorial user agent gone.
+- `DJANGO_SECRET_KEY` unset outside local now fails boot instead of silently corrupting
+  `EncryptedTextField` data per process.
+- Migrations 0007 and 0039 gained real decrypting reverses (rollback was silent corruption).
+- Migration 0045 drops the 58 byte-identical duplicate FK indexes (write amplification halved on
+  22 tables; every drop twin-backed).
+- The nightly achievement sweep batched: ~30 queries/profile to ~19/run, agreement-tested.
+- The OpenAPI schema thread end-to-end: bearer auth documented on all 281 operations, six stable
+  enum names, zero W002 errors (E2EE key-bundle serializers included), six stable operationIds.
+  45 errors + 307 warnings at start; 0 errors + 14 cosmetic warnings now.
+- The export gap closed: profile round-trip import, three new export types (safety, map
+  annotations, saved searches), aliases/social-links/emails folded in, run_export's first
+  end-to-end coverage. ProfileNote/WikiEdit stay decision-gated.
+- Wiki history: revert-of-revert flag integrity fixed; article-revision restore verified already
+  clean.
+- The pin-delete dialog no longer promises an undo the handler cannot deliver.
+- The capabilities card can no longer 500 the admin page (caught by the full suite, not the
+  targeted runs - only the full environment has REData configured in tests).
+
+**Verification-only chunks**: Celery duplicate-delivery tolerance (seventh default-safe
+subsystem), panel external-API exposure review, frontend TS dirty-flag protocol, article
+restore path.
+
+**Meta**: scan artifacts 33-35 this half (grep windows truncating enum lists twice, a character
+class that cannot match "E2EE"); every one caught by a count disagreeing with an extraction.
+The trip-settings order-dependent flake remains the one open test issue, filed with reproduction
+guidance. User-decision items and the dev-environment remediation remain untouched, as directed.
+
+
+## Chunk 478 - import formats: hardened at every layer, nothing to fix
+
+Swept the untrusted-file-input surface across its three attack classes:
+
+- **XML** (GPX, OSM, and gpxpy's internal tree): `defusedxml` everywhere, including the
+  pre-validation pattern for gpxpy (which builds its own lxml tree and accepts no hardened
+  parser - the same text is defused-parsed first, purely as a gate). XXE and entity expansion
+  are closed.
+- **Archives** (KMZ/ZIP/TGZ): `archive_extractor` verifies magic bytes over extensions, skips
+  traversal and symlink entries, enforces per-file and cumulative uncompressed limits plus a file
+  count cap, allowlists extensions, and reads one byte past the declared size to catch
+  compression-ratio lies. Textbook.
+- **KML descriptions** (the HTML-injection path into pin descriptions): flattened to plain text
+  on import (`<br>` to newline, tags stripped); any residual malformed fragment is inert text
+  under Django autoescape at render.
+
+Size caps (`DocumentTooLargeError`, the archive limits) bound the parser DoS surface. The eighth
+audited area to verify safe-by-construction. No change needed.
+
+
+## Chunk 479 - the notifications matrix: one dead toggle of twelve, now wired
+
+The 20-of-32 coverage gap stays as designed (documented, and partly deliberate - the safety
+escalation chain should not be silenceable). The audit question was the other half: do the 12
+preference-covered types actually consult their toggle at creation? Eleven do, each at its own
+site (creation is scattered across 10+ files - there is no choke point, so each new site must
+remember; the recurring hazard shape). **`friend_accepted` did not**: both creation sites raised
+the notification unconditionally, so a user who silenced it kept receiving it - a stored
+preference doing nothing, the exact class the "wire them all" decision fixed for text channels.
+
+Both sites now consult it with the house pattern (AttributeError fallback to SITE - the
+preferences row is lazily created, and `RelatedObjectDoesNotExist` subclasses AttributeError).
+The second site needed restructuring rather than an early return, which would have skipped
+marking the request notification read and broken the function's return contract - the
+notification moved into a guarded helper instead. 2 new tests; the full 269-test friend suite
+passes with the restructure.
+
+The 36th scan artifact en route: my consultation-counting grep piped through `-v "= "`, which
+discards assignment-shaped reads - the exact shape consultations take (`pref = ...`). Four
+false zero-counts; reading the sites found three real consultations and the one true gap.
+
+
+## Chunk 480 - games integrity sweep: one discipline, three games, nothing to fix
+
+Checked the submission paths that guard scoring integrity. All three games use the identical
+pattern: `select_for_update()` on the round serializes the read-count-decide critical section,
+the duplicate-submission guard is a unique constraint caught as `IntegrityError` (race-proof, not
+check-then-act), and the round's terminal state (`revealed_at` / resolution) is checked *inside*
+the lock so only one submission can close a round. SpotGuessr (`session.py:630`), trivia
+(`session.py:360`), consensus (three locked sections including its trust-check branch). Replay,
+double-guess, and guess-after-reveal are all closed by construction. Ninth verified-safe area.
+
+Third consolidation full-suite run in background (task bzc5hqyzf) covering the friendship
+restructure, the wiki revert fix, the operationId changes and the notification wiring.
+
+
+## Chunk 481 - third consolidation: 10,863 passed, 0 failed
+
+Validates chunks 474-480: the wiki revert-of-revert fix, the six stable operationIds, the
+friend_accepted wiring with the acceptance-flow restructure, and the four tests those added.
+Three consolidations green in one session (10,849 / 10,859 / 10,863) with zero failures across
+all three - the order-dependent trip-settings flake has not recurred since its one appearance,
+though its PROBLEMS entry rightly stands.
+
+
+## Chunk 482 - composite-prefix near-duplicates: 62 systematically derived, deliberately not dropped
+
+The entry estimated ~20; the static derivation (every multi-column `idxdb_*` whose first column
+is a ForeignKey keeping its automatic index) finds **62**. The redundant member of each pair is
+now the FK *auto*-index - chunk 462 removed the hand-declared singles, and a composite serves its
+prefix's lookups. But unlike chunk 462's byte-identical pairs, dropping these is a real trade:
+the auto-index is smaller (better for pure-FK scans under memory pressure), and whether it earns
+its write amplification depends on production scan statistics this checkout does not have.
+Recorded the full 62-row table (below, and pointed to from the PROBLEMS entry) with the per-pair
+decision procedure (`pg_stat_user_indexes.idx_scan` on a production-shaped database, then
+`db_index=False` per FK). Not a deferral for lack of nerve - a drop without scan data would be
+guessing with other people's read latency.
+
+<details>
+The 62 pairs, by model file (composite index → redundant FK prefix): achievements x2 (profile),
+aliases x4 (pin/wiki), article (article), auto_removals x2 (pin/wiki), location_cache (location),
+calendar_sync (profile), consensus x2 (session/wiki), custom_fields x4 (profile/field x3),
+device_scan (wiki), direct_messages x2 (recipient/sender), e2ee conversation_key (profile_low),
+email_log x2 (sender), facts (fact), group_chats x2 (profile/group), images x2
+(location/profile), relevance (profile), labels (profile), link_extraction (profile), markup
+(profile), notifications (profile), pin x3 (profile), pin_import_failures (profile),
+pin_merge_suggestions (profile), exposure (profile), pin_share x3 (from/to_profile),
+pin_suggestions (profile), pin_tombstone (profile), property_owner x2 (pin/location),
+push_device (profile), routes (profile), safety x3 (profile x2/checkin), spotguessr x2
+(session/image), trips (trip), trivia (session), undo (profile), visit_suggestions
+(suggested_to), visits x3 (pin), wiki_edit (wiki), wiki_stat_vote (wiki).
+</details>
+
+
+## Chunk 483 - the beat schedule stampede, staggered
+
+All 24 scheduled tasks exist (verified name-by-name against tasks.py). The finding was spacing:
+interval schedules fire relative to beat start, so the eleven hourly entries fired
+**simultaneously** every hour - and they share the default queue with user-facing work, so photo
+processing queued behind an eleven-sweep stampede once an hour, worst at the daily boundary when
+the five 24h entries piled on too.
+
+Hourly work now runs on crontab at distinct minutes (:02 through :57), daily work at staggered
+off-peak UTC hours (03:10-05:40). The 5-minute safety-check-in chain and the 2-minute game stall
+sweeps stay interval-based deliberately: time-critical, cheap, and internally sequenced by their
+own due-time filters. Verified in-container: 24 entries load, 17 crontab + 7 interval, exactly
+the intended split. The schedule block now carries the why.
+
+
+## Chunk 484 - the share-provenance invariant holds at all six creation sites
+
+Re-verified CLAUDE.md's named invariant after the session's churn. Six `PinShare.objects.create`
+sites exist (pin sharing controller x2 and service, map sharing, DM location detection, trip
+share tracking); every one sits in a file that also calls the provenance pair, and the two
+least-obvious sites (DM detection, trip tracking) read in full show the exact pattern:
+`resolve_origin_share`/`resolve_and_stamp_origin_share` before the create, `record_share_exposure`
+after. Group chats' share path carries its own exposure call. The `LocationExposure` chain is
+intact; nothing this session added a share path, and nothing pre-existing drifted.
+
+
+## Chunk 485 - admin surfaces: 30 views, one permission, all by inheritance
+
+Every site-admin view across the three modules gates on `dashboard.view_site_admin`:
+`site_admin.py`'s 18 (13 direct declarations + 5 via `_AdminPermissionMixin`),
+`site_admin_costs.py`'s 6 (all via `_CostAdminMixin`), `achievements.py`'s 3 admin views (via
+`_AchievementAdminMixin`; its user-facing achievement pages are correctly LoginRequired-only).
+The 6-views/3-markers count discrepancy that started this check resolved to inheritance, not
+gaps - read before concluding, as ever. One permission string, no variants, every mixin also
+setting `raise_exception` with the anonymous-redirect handler. The admin surface joins the
+gated-by-inheritance pattern chunk 439 documented for the app at large.
+
+
+## Chunk 486 - the anti-stale-docs pass on our own output
+
+Applied chunk 451's standard to this session's changes. Two gaps found and closed:
+`DATA_ENCRYPTION.md` now documents that the encryption migrations' rollbacks decrypt in place
+and abort on an undecryptable value (behavior chunks 459-460 created; the doc is named by
+CLAUDE.md as the authority on what is and isn't encrypted, so rollback semantics belong there);
+`FEATURES.md`'s export line now names the chunk-469 coverage rather than generically claiming
+"full dataset" (which pre-469 was an over-claim). Everything else checked current: FEATURES.md
+was updated in-stride during the REData rounds, NOTES.md gained its two sections when the
+content landed, and the CLAUDE.md gotchas remain accurate.
+
+
+## Chunk 487 - the three new export kinds import back; the archive round-trips
+
+Importers for safety, map annotations, and saved searches, mirroring the profile importer. The
+design decisions the tests pin: **live-status safety check-ins never import** - restoring a
+`scheduled`/`overdue` plan would re-arm the reminder and escalation sweeps against a moment
+that has passed, and an archive restore must never page someone's emergency contacts (concluded
+check-ins import as history, contacts as unnotified snapshots, messages unattributed - the
+archive stores display names, not identities). Overlays attach only through `pin_uuid_map` and
+are skipped rather than orphaned when the parent pin is absent (the export gained
+`parent_pin_uuid` to make this possible at all - a gap the importer design surfaced). Saved
+filters defer to the user's existing same-named filter (they may have refined it since
+exporting); routes rebuild their LineString from GeoJSON with source-choice validation.
+Everything is idempotent under re-import. 11/11 green first try; FEATURES.md's "export-only so
+far" note replaced with the real contract.
+
+
+## Chunk 488 - the last ungoverned email path, closed (and the deferral premise was wrong)
+
+The entry deferred because "picking numbers for a new category is the owner's call" - but reading
+`email_rate_limit_error` shows the caps are **per-profile across all types**; there are no
+per-type numbers to pick, so the wiring uses limits the owner already set. Both verification-send
+paths (add, resend) now consult the ledger and record under the new `EmailType.EMAIL_VERIFICATION`
+(migration 0046, depends on 0045); resend gains a fixed 5-minute per-address cooldown; a blocked
+add creates no unverifiable pending row. Relay and mail-bomb both closed. 4 tests (including that
+the cooldown expires); the choices change was about to be silent schema drift until
+`makemigrations --check` flagged it - the migration is generated, not hand-written.
+
+Fourth consolidation still running in background (task bn7au1ggf) - it predates this chunk's
+changes, so these get their validation from the targeted runs plus the next consolidation.
+
+
+## Chunk 489 (interim) - chunk 488 validated: 282 email/profile/invite tests green with migration 0046
+
+The targeted follow-up the fourth consolidation could not cover (it snapshot the tree before
+chunk 488): every email-safety, userprofile and invite suite passes with the new EmailType member,
+the ledger wiring, and migration 0046 applied on a fresh database. The consolidation verdict for
+chunks up to 487 lands next.
+
+
+## Chunk 489 (verdict) - fourth consolidation: 10,865 passed, 2 failed, both resolved
+
+- **`test_beat_lock_intervals` was mine to break**: the lock-TTL-vs-period invariant guard
+  compared TTLs against raw schedule values, and chunk 483's crontab entries are not ints. The
+  invariant itself held (3300s locks against hourly crontabs) - only the test's period derivation
+  needed teaching (`crontab(minute=N)` over all hours = 3600s; hour-pinned = daily per listed
+  hour). 4/4 green. Worth noting: this guard test is exactly the kind of consumer chunk 483
+  should have searched for before changing schedule *types* - the full suite caught what the
+  in-container schedule-shape check could not.
+- **The SpotGuessr socket-scope failure is order-dependent**: passes in isolation and at module
+  scope (8/9 then 9/9 in the reproduction run). Same class as the trip-settings flake; its
+  pattern (full-suite ordering only) is already filed there.
+
+With chunk 488's separate 282-test validation, everything through chunk 488 is verified.
+Session consolidations: 10,849 / 10,859 / 10,863 / 10,865(+2 resolved).
+
+
+## Chunk 490 - the cross-kind label lookup, fixed with the test it was waiting for
+
+Both Google-Maps import sites looked up the list's category with `kind` in `defaults` only - the
+get half matched any kind, so a user with a *tag* named like the imported list got their pins
+filed under that tag and no category created. `kind` is now in the lookup (the pattern
+`pin_edit`/`media_labels` already used); the deferred cross-kind test exists and pins both
+directions. 560 label/google-maps tests pass.
+
+The reuse test's first version collided with something unexpected: **new profiles are seeded
+with default labels** - including a "Factory" category - so a fixture hand-creating one hit the
+uniqueness constraint. Diagnosed by printing the rows rather than theorizing (three wrong
+hypotheses about baker/signals fell to one query); recorded in the PROBLEMS resolution for the
+next fixture author. The other LOW entry (two `get_or_create`s without backing constraints)
+stays filed on its own stated judgement - "neither is worth changing on its own evidence" holds.
+
+
+## Chunk 491 - the three named unhandled-fetch defects, fixed; the migration stays filed
+
+The entry's mass migration (125 raw fetches, each needing an error-path judgement) remains a
+scheduled piece of work, but its three concrete named defects are closed: the trip map's blank
+panel (its `.catch` existed but only hid the wrapper - the entry's "no catch" was near-right,
+the effect identical), the share dialog injecting a 500's Django error page as markup, and the
+silently-empty pin-selection map. Each now checks `r.ok`, and each failure surfaces per the
+documented toast standard while keeping its feature-appropriate empty state.
+
+One self-inflicted splice en route: my regex for attaching the trip-map catch matched through the
+chain's *existing* silent catch and produced unbalanced parens - caught by grep showing two
+adjacent `.catch` lines, repaired to a single honest handler, and the whole script block
+syntax-verified with node after Django-tag stubbing (whose first version stubbed `{% if %}` into
+a syntax error of its own - the check must be checked too).
+
+
+## Chunk 492 - accessibility: 28 unnamed icon buttons labeled; the image scan was all false positives
+
+First accessibility pass, scoped to what is mechanically verifiable. **28 icon-only buttons had
+no accessible name** - lightbox close/prev/next, dialog closes, add-sub-pin/alias/activity/member,
+reaction pickers, a send button, the share-map selector - invisible to a screen reader beyond
+"button". All now carry `aria-label`s, contextual where the icon alone is ambiguous ("Add a sub
+pin", "Use my name", "Select this map"; lightbox navs say "Previous/Next photo"). Scanner
+re-run: zero remaining. The five `<img>`-without-`alt` hits were all `<img` inside JS comments -
+read before believing, even for a scanner you wrote this minute. 496 template-rendering tests
+pass with the changes (markup-only additions).
+
+
+## Chunk 493 (housekeeping) - one count corrected; the open ledger is clean
+
+PROBLEMS.md's chunk-462 resolution claimed 58 declarations were removed from "22 model files";
+the commit's own stat says 25 - corrected (the miscount came from pass-1 of the removal script,
+whose per-file tally I quoted without re-checking against the final commit). Swept the 33
+remaining OPEN/LOW/PARTLY headings against this session's fixes: every resolved item is marked;
+what remains is user-decision-gated (pin detach among the six), environment-gated (the three dev
+stack entries), filed migrations (fetch-helper adoption, untested write routes, deep-restore
+undo, E2EE... no - E2EE closed), or the two honest flake records. Fifth consolidation running in
+background (task brnamq3or) over chunks 489-492.
+
+
+## Chunk 494 - fifth consolidation: 10,873 passed, 0 failed
+
+Validates chunks 489-493: the beat-lock test's crontab period derivation, the cross-kind label
+lookup fix, the three unhandled-fetch fixes, the 28 aria-labels, and the housekeeping. Zero
+failures - and notably the two flakes that appeared in earlier runs (trip-settings presence,
+SpotGuessr socket scopes) did not recur, consistent with their filed order-dependent character.
+
+**Five consolidations this session**: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873.
+Every chunk from 453 to 493 is now covered by at least one green full-suite run.
+
+
+## Chunk 495 - the EXIF-stripping guarantee: holds today, now guarded for tomorrow
+
+Traced the privacy-critical path: `upload_photo_for_owner` stores a user's file **exactly as
+uploaded**, and every protection - GPS/EXIF stripping, downscale, conversion - lives in
+`tasks.process_image_upload`, dispatched by the *caller*. Checked all 22 `Image` creation sites:
+the four in `tasks.py` are the processing path itself; `photo_enrichment`/`pin_suggestions`/
+`media_materialize` create rows from external-API downloads (someone else's photo, not a user's
+camera - different risk class); and the one user-upload helper has exactly one caller, the
+gallery controller, which does dispatch. **No leak exists today.**
+
+The finding is structural: the guarantee rests entirely on caller discipline, with nothing saying
+so at the helper and nothing catching a future caller that forgets - the same shape as chunk
+479's dead notification toggle (scattered creation, per-site obligation). The helper's docstring
+now states the obligation and why it cannot enforce it itself, and a source-level guard test
+asserts every caller of the helper also enqueues the task, with an anti-vacuity arm so a rename
+fails loudly instead of passing empty.
+
+Tenth verified-safe area, with the first that needed a guard rather than a fix.
+
+
+## Chunk 496 - photo quota enforcement: coherent, and the exemptions are all reasoned
+
+Applied chunk 495's lens to the quota obligation. Of 19 `Image` creation sites, 16 sit within 40
+lines of a `quota_error_for_upload` check; the three that do not are each **exempt with the
+reason stated in the code**: enrichment images are profile-less (nobody to charge), materialized
+media is "a cached copy of someone else's photo... the user who upvoted it into the cache didn't
+author it" (with a per-item download cap still applying), and the third match is
+`image_upload_error`'s own definition, whose docstring explains that quota is deliberately
+checked per-call-site because it is scope-dependent (per-pin/per-wiki/per-profile).
+
+Tested that stated contract too: of 13 `image_upload_error` callers, four have no quota check -
+and all four store to a **non-`Image` field** (achievement/label custom icons, profile avatars,
+comment attachments), so the gallery quota genuinely does not apply. No gap.
+
+Unlike chunk 495, no guard was added: the obligation here is already documented at the helper,
+and the exemptions are self-describing at each site. The distinction worth recording is *why*
+that is enough here and wasn't there - a missed quota check costs storage and is visible in
+usage numbers; a missed EXIF dispatch silently publishes someone's home coordinates.
+
+
+## Chunk 497 - global search: all 10 providers scope to the viewer
+
+Checked whether search can surface a row its viewer could not otherwise reach - the highest-value
+question for a subsystem that queries ten models at once. Every provider filters by the requesting
+profile at the queryset level: pins by ownership plus accepted shares, photos by owner/pin/location
+ownership, wikis by pinned-location access *and* `community_enabled`, trips by membership or
+authorship, visits/markup/safety/comments by ownership, and DMs through
+`involving(profile).visible_to(profile)` - which also honours per-viewer deletion, so a message
+one side deleted stays out of that side's search. The base class states the contract in its
+docstring, and no provider departs from it.
+
+**Two false alarms, both my scanner's**: `TripSearchProvider` uses `Q(profiles=profile)` (plural
+M2M) and `DirectMessageSearchProvider` delegates to `message_search_queryset`, neither matching my
+pattern list. Reading them took a minute and confirmed both correct - the 37th artifact of the
+session, and again a zero-count that was wrong about the code rather than about the codebase.
+
+Eleventh verified-safe area. No change needed.
+
+## Chunk 498 - the malware-scan bypass: deferred, not skipped, and enforced on both sides
+
+Exactly one caller passes `skip_malware_scan=True` - comment image attachments - and it is a
+*deferral*, not a bypass: scanning moved off the request because a clamd hiccup used to fail the
+whole comment submission, and the file is scanned asynchronously instead. Verified the safety
+property that makes that acceptable, rather than trusting the docstring:
+
+- **All three** comment paths that validate (pin, wiki, trip) also start the scan - three
+  `comment_image_error` sites, three `start_comment_image_scan` sites, matched.
+- **Both** read surfaces hide a pending comment from everyone but its author: the thread listing
+  (`services.comments.comments`, gate 2 of its documented chain) and - the one that actually
+  matters for a malicious file - the authenticated media gate, which refuses the *file* itself
+  while `pending_scan` is set. A viewer cannot fetch the attachment by URL before it clears.
+- The task clears the flag only on a clean scan and rejects the upload otherwise.
+
+So the window a hostile file exists in is: uploaded, stored, visible to its uploader alone. That
+is the correct shape - the alternative (blocking the POST on antivirus) traded availability for
+nothing, since the file is unreachable either way until it clears. Twelfth verified-safe area, no
+change needed.
+
+## Chunk 499 - undo coverage: every promise is backed; two confirmations were misdescribing reality
+
+Checked both directions. **Forward**: every user-facing "Undo History" promise (pins, detail
+pins/wikis, lists, community wikis, saved filters, check-ins) traces to a real `stash_for_undo`
+call - the two files my scan flagged as promising-without-staging turned out to be docstrings,
+one of them the line chunk 461 corrected. Eight handlers, no orphan promises.
+
+**Reverse**: 44 delete/destroy handlers live in modules with no undo staging, which is a question
+about product scope rather than a defect list (site-admin cost rows, calendar links, custom
+layers - none are user-authored content worth a restore path). Sampling the highest-loss ones
+surfaced the real finding: **two confirmation dialogs describe the wrong reality**. Deleting a
+photo is genuinely permanent (the file is unlinked from storage, no handler exists) but asked
+only "Delete this photo?"; deleting a saved filter *is* restorable but said nothing. Both now say
+what actually happens - the same class of fix as chunk 461's pin dialog, in both directions:
+under-promising is as wrong as over-promising when the user is deciding whether to click.
+
+257 undo/filter/gallery tests pass; tsc clean.
+
+## Chunk 500 - notification delivery channels: push is solid, Gotify was failing silently
+
+**Push (UnifiedPush)** verified sound: per-device timeout, race-free `F()` failure increment,
+automatic revocation after consecutive failures, and - the flaw worth checking in any fan-out -
+each device's failure is contained inside the per-device dispatcher, so one dead endpoint cannot
+abort delivery to a profile's other devices. Dispatch runs from a Celery task, not the request.
+
+**Gotify had the gap**: `_send_gotify` caught transport exceptions but ignored the response
+status. A rotated token (401) or a wrong URL (404) answers *cleanly*, so the failure produced no
+log line at all - and these are admin alerts, where nobody is watching for the notification that
+never arrives. Now logs an error naming the status and the two settings to check. Three tests
+(rejection logged, success silent, transport failure still swallowed rather than propagating into
+whatever raised the notification).
+
+Thirteenth area swept; sixth consolidation running in background (task b0zbsv2as).
+
+## Chunk 501 - dialogs get accessible names: 0 of 81, now 37, via one shared include
+
+Second accessibility dimension. **Every one of the site's 81 `<dialog>` elements lacked an
+accessible name** - a screen reader announced each as just "dialog", with no indication of what
+had opened. Two-thirds carry no nearby heading, so `aria-labelledby` needed a source; the leverage
+point was `_dialog_header.html`, one shared include used by 41 templates whose title span was
+previously id-less unless a caller passed `title_id`.
+
+The span now always carries an id (falling back to a slug of its title), and 24 template files'
+dialogs point `aria-labelledby` at it - **37 dialogs named, from zero**, with no per-dialog
+copywriting and nothing for a future dialog author to remember beyond using the standard header.
+The remaining 44 build their own headers or have no title at all; recorded rather than
+hand-labeled, since each needs a name chosen from what it actually contains.
+
+262 dialog-rendering tests pass; tsc clean. Sixth consolidation still running (task b0zbsv2as).
+
+## Chunk 502 - dialog names: 46 of 82, including every high-traffic one
+
+Continued chunk 501 into the bespoke-header dialogs. Eight more wired by giving their header
+spans ids and pointing at them (the DM share/friend/members dialogs, the safety map picker, the
+comment map/image composers, the map view dialog), plus a sweep for dialogs whose title span
+*already* had an id while the dialog itself never pointed at it - which caught the most-used
+dialog on the site: **`confirm-dialog`**, the shared confirmation used by every destructive
+action. Its title span had carried `id="confirm-dialog-title"` all along; one attribute connected
+it.
+
+**46 of 82 dialogs now named, from zero two chunks ago**, and the unnamed 36 are the long tail:
+lightboxes and panels with no title element to point at, each needing a name written from what it
+contains. 394 TS tests, 219 dialog/messaging rendering tests, tsc all clean.
+
+## Chunk 503 - sixth consolidation green (10,875), and 23 form controls gain names
+
+**Consolidation verdict**: 10,875 passed, 0 failed, covering chunks 495-499 (EXIF guard, quota
+sweep, search scoping, malware-scan verification, undo confirmations). Six consolidations this
+session, all green.
+
+**Form-label sweep** (a11y dimension 3): the first scan flagged 107 unnamed controls, but it
+counted `<input>`s inside JS comments and missed *wrapping* `<label>text <input></label>` markup -
+the dominant pattern here. Corrected scanner: **52 genuinely unnamed of 421**. Fixed the clusters
+where the missing name costs the most: the map filter panel's and saved-filter form's ten
+date-range inputs (visually a row labelled "After"/"Before" - which never says after *what*, so
+each now carries e.g. "Visited on or after"), trip activity start/end date+time pairs, the
+memories date range, safety check-in title/message, group rename, grace-period slider. **52 -> 29
+remaining**, the rest being file pickers and single-purpose inputs whose surrounding text a
+screen reader does reach.
+
+## Chunk 504 - external API throttling: all 202 views covered, by inheritance or declaration
+
+Checked whether any external endpoint escapes rate limiting. The throttles are read/write-tiered
+by scope suffix (`:write`/`:manage` land in the tighter bucket) with per-credential cache keys,
+plus purpose-built throttles for expensive paths (resync, location search, chat). Coverage is
+structural: `ExternalApiView` declares them, and **all 202 view classes in `external_api/` reach
+them** - 195 by inheritance, and the 7 my scan flagged resolve on reading: six descend from
+`PinSubResourceView[SubResourceT: Model]`, whose PEP 695 generic subscript my base-name parser
+dropped, and `DualAuthJsonView` (the E2EE base) declares the same three throttle classes
+directly rather than inheriting them.
+
+The 38th scan artifact, and a new species: modern generic syntax defeating a regex written for
+plain base lists. Same discipline as always caught it - a flagged count worth reading before
+reporting. Fourteenth verified-safe area.
+
+## Chunk 505 - the aria-label edits are clean; a third order-dependent flake filed
+
+The chunk-503 validation batch (2,085 tests across map/trip/safety/memories/filter rendering)
+came back with one failure: a safety contact-messaging test. **Not mine**: it passes standalone
+and at module scope (14/14), and the only change touching that template was two additive
+`aria-label` attributes on form controls - markup that cannot affect message exchange. Verified
+by reading the diff rather than assuming, since "my last change broke it" is the right first
+suspicion.
+
+That makes three order-dependent flakes recorded this session (trip-settings presence, SpotGuessr
+socket scopes, safety contact messaging), each seen exactly once in a large run and green in
+isolation. Folded into the existing PROBLEMS entry with the pattern noted and a candidate cause
+(cross-module cache/override state) for whoever hunts it - three is enough to call it a shared
+condition rather than three coincidences, but not enough to chase blind mid-audit.
+
+## Chunk 506 - the flake hunt's cheap half: two candidates eliminated, honestly
+
+Spent one chunk on the hypothesis chunk 505 recorded, and it was wrong in a useful way. **Django
+cache isolation already exists**: the base `TestCase` clears the cache in `setUp` via
+`_CacheIsolationMixin`, whose docstring names precisely the hazard I suspected ("Django rolls the
+database back between tests; it does not roll the cache back"). **`SiteSettings`' process-level
+memo is also innocent**: it is armed only between `request_started`/`request_finished`, was
+designed with the test-mutation case explicitly in mind (its module docstring explains why a
+process-wide or TTL cache was rejected), and none of the three flaky tests mutate settings at all.
+
+So the shared cause is neither of the obvious two. Recorded the eliminations in the PROBLEMS entry
+along with the remaining candidates (connection-level state surviving rollback, a module-scope
+patch left active by a failed cleanup, Hypothesis' example database interacting with run order) -
+which is worth more to the next investigator than a fourth guess would have been. The eliminations
+also raise the codebase's standing: both mechanisms I suspected turned out to be not just present
+but *designed against this exact failure*, with the reasoning written down.
+
+## Chunk 507 - the flake mechanism, found: a root-owned Hypothesis example database
+
+The last cheap candidate turned out to be the answer. `/app/.hypothesis/examples/` exists in the
+test container with entries from 2026-08-06 and 2026-08-15, and **Hypothesis replays
+previously-failing examples first on every run** - which is precisely the observed signature: a
+`@given`-driven failure that shows up in one large run and vanishes in isolation, with no code
+change in between. **See chunk 508: this covers one of the three flakes, not all three - the
+sentence originally here claimed all three involve `@given`, which I had not checked and which is
+false.**
+
+The aggravating half is the ownership: the directory is **root-owned, mode 755, while tests run as
+`appuser`** - so writes fail silently and the store is read-only in practice. Bad examples replay
+forever; newly found ones are never saved. That is the same `docker exec`-runs-as-root footgun
+`CLAUDE.local.md` already records for `logs/`, hitting a second directory.
+
+Filed with three remedies (a determinism profile, a chown, or deleting the store) rather than
+applied: one changes test policy for everyone and two touch container state the owner manages -
+the same line this audit has held for the dev-stack entries throughout.
+
+## Chunk 508 - correcting chunk 507: the mechanism explains one flake, not three
+
+Verified my own previous chunk's claim instead of building on it, and it was **wrong**. Chunk 507
+asserted "all three filed flakes involve `@given` or subtests"; checking takes one grep, and:
+
+| flake | `@given`? | explained by the example DB? |
+|---|---|---|
+| `test_only_submitted_fields_ever_move` | **yes** (dicts of permission fields x levels) | yes - replay fits exactly |
+| `test_a_session_connection_is_unaffected` | no | **no** |
+| `test_owner_and_contact_exchange_messages` | no | **no** |
+
+The root-owned example database is still a real, filed defect and still explains the trip-settings
+flake precisely. But two flakes remain unexplained, and chunk 507's write-up would have let a
+future reader close the whole entry on a fix that addresses a third of it. Both documents
+corrected in place with the error named rather than quietly edited.
+
+**This is the session's 39th artifact and the first from *my own conclusion* rather than a scan** -
+the same failure mode in a new position: I reported a property of a set (all three) after
+examining one member (the one whose stack trace I had read). The habit that catches scans has to
+point at conclusions too.
+
+## Chunk 509 - the other two flakes: a channel-layer isolation gap, found and fixed
+
+Read the two unexplained tests instead of theorising: both are WebSocket consumer tests, and the
+shared mechanism is concrete. Tests use the **real Valkey channel layer**; channel groups are
+named from model pks (`profile_notifications_<id>`); every test database restarts its sequences
+at 1. `UL_TEST_DB_NAME` therefore isolates Postgres but leaves the channel layer shared - two
+concurrent runs address identical groups, and a socket test in one consumes or loses the other's
+messages. Both sightings happened in runs that overlapped another suite (chunk 489's consolidation
+against my chunk-488 batches; chunk 503's batch against the sixth consolidation), and neither ever
+reproduced alone. **The condition was partly self-inflicted by this audit's own parallelism** -
+which is also why it surfaced at all.
+
+Fixed: the test channel layer gets a per-run `prefix` from `UL_TEST_DB_NAME`, under `TESTING`
+only. Proved by running both previously-flaky modules *simultaneously* against different test
+databases - 5/5 and 14/14 - reproducing the exact configuration that failed twice before.
+
+All three flakes now have mechanisms: one the Hypothesis replay store (filed, owner's call), two
+this isolation gap (fixed here). Worth noting the sequence: chunk 505 guessed, 506 eliminated two
+guesses, 507 found a real mechanism but over-claimed its scope, 508 caught that, and 509 found the
+rest by reading the tests first. The guessing chunks cost the most and produced the least.
+
+## Chunk 510 - dialog names reach 58 of 82; the concurrency caveat saved to memory
+
+Twelve more dialogs named - label create/edit/merge/bulk-edit/add, the Flickr album picker, album
+photo picker, invite/add friend, DM pin share, and the two photo lightboxes. Direct `aria-label`
+rather than `aria-labelledby` here on purpose: these headers wrap a Material icon inside the
+title span, so pointing at the span would make a screen reader announce the ligature text
+("mail Invite a Friend"). Names were read from each dialog's own content, not guessed from its id.
+
+**58 of 82 named** (from zero at chunk 501). The remaining 24 are genuinely contentless shells -
+JS-populated dialogs with no static text to name them from, where an accurate name needs the
+feature author's intent rather than a reader's inference.
+
+Also persisted the chunk-509 finding to the project memory file: `UL_TEST_DB_NAME` isolates
+Postgres only, the fix derives the channel prefix from it, and everything else process-external
+(Valkey caches, the `.hypothesis` store) is still shared between concurrent runs - the kind of
+thing that costs an hour to rediscover and a line to record.
+
+Seventh consolidation running (task ba9qeg6py), covering the channel-prefix change suite-wide.
+
+## Chunk 511 - seventh consolidation: 10,878 passed, 0 failed
+
+Validates the channel-layer prefix fix suite-wide plus chunks 500-509 (Gotify status check, dialog
+and form-control names, throttling verification, the flake investigation). **Zero failures, and
+notably no flakes** - this run was deliberately given the machine to itself, which is both the
+control the previous runs lacked and the condition the chunk-509 fix now makes unnecessary.
+
+Seven consolidations this session: 10,849 / 10,859 / 10,863 / 10,865(2 resolved) / 10,873 /
+10,875 / 10,878. Every chunk from 453 to 509 covered by at least one green full-suite run;
+chunk 510's dialog labels are in a targeted rendering batch running now.
+
+## Chunk 512 - dialog naming finished: 77 of 82, and the last five are honest exclusions
+
+Chunk 510's twelve labels validated (993 rendering tests). Then finished the tail by
+distinguishing *contentless* from *unnameable*: eleven "shells" carry author-written descriptive
+ids (`pin-wiki-create-dialog`, `building-import-dialog`, `markup-map-share-dialog`, ...), and
+naming from those is inference from the feature author's own vocabulary rather than invention -
+the objection I raised in chunk 510 applied to guessing from *nothing*, not from a name the
+author chose. Nineteen more named that way, including both remaining photo lightboxes, the
+SpotGuessr settings dialog and the link-add dialog.
+
+**77 of 82 named** (0 at chunk 501). The final five: two are `<dialog>` tags *inside*
+`{% comment %}` blocks - documentation, not markup, and correctly left alone - and three are
+genuinely anonymous shells whose id says nothing (`index.html:5207`,
+`_saved_filter_dialog_scripts.html:360`, `_photo_lightbox.html:132`). Those want their author,
+not a plausible guess.
+
+Also recorded for the a11y thread as a whole: the pattern that worked was always *find the
+existing source of truth* - the shared header include (chunk 501), the pre-existing title id
+(502), the author's own dialog id (512) - rather than writing new copy per element.
+
+## Chunk 513 - panel plugins: fetch and render are isolated; the API's list endpoint was not
+
+Chunk 512's nineteen dialog labels validated (1,740 rendering tests). Then swept plugin panel
+failure handling, and the shape is mostly excellent: `run_panel_fetch` catches everything, records
+a skip TTL so a broken source backs off instead of retrying forever, distinguishes rate-limit and
+soft-time-limit cases, and releases its single-flight token in a `finally` - so a crashing fetch
+cannot wedge a panel permanently. Render failures are contained by architecture: the pin page
+loads one panel per HTMX request, so a raising `render_context` costs that panel alone.
+
+**The exception was the external API's panel *list*.** It evaluated every source's `gate()` in one
+comprehension, so a single misbehaving plugin - and panels are a documented third-party
+contribution surface - answered a native client with **zero** panels instead of one fewer. Added
+`gate_allows()` (log and treat a raising gate as "not applicable", matching the fetch path's
+stance) and used it at both API sites. Three tests, including the regression that matters: with a
+deliberately exploding source in the registry, evaluation completes and every healthy panel
+survives.
+
+The internal surfaces keep calling `gate()` directly on purpose: one panel per request means a
+raising gate there is a visible bug in exactly one place, which is where a programming error
+should be loud.
+
+## Chunk 514 - boundary voting: consensus mechanics verified, and one subtle contract pinned
+
+Swept the boundary-vote consensus, where a tallying error silently changes what every user sees.
+It holds up: `(place, profile)` carries a real `UniqueConstraint`, so `update_or_create` cannot
+double-weight a voter under concurrency (the shape chunk 490 found unbacked elsewhere); weights
+decay on a half-life with future timestamps clamped rather than given super-unit weight; ties
+break deterministically by source priority then pk; consensus needs the leader to beat the
+runner-up by a ratio, not merely lead.
+
+**The one thing worth a test**: `cast_boundary_vote` promises that re-affirming an unchanged
+choice still refreshes the vote's recency. That depends on `update_or_create` bumping an
+`auto_now` field - and Django only refreshes `auto_now` fields that appear in `update_fields`,
+which `update_or_create` began passing in 5.0. If that ever stops holding, every re-affirmed vote
+keeps decaying and consensus drifts toward whoever voted most recently by accident - silently.
+Verified empirically: **the behaviour is correct today**, and a test now pins it (with an
+anti-vacuity arm asserting the decay it depends on is real).
+
+Three fixture iterations to get there - a votable candidate needs external source, property type,
+real MultiPolygon geometry, and no pin/wiki/profile owner. Each failure was read before being
+called a bug, which is what kept the first one (`BoundaryVoteError`) from being reported as a
+defect in the voting service.
+
+## Chunk 515 - form controls: the tail closes at zero unnamed
+
+Labeled the final 26 controls, each from its own `name`/`id` or adjacent label text: label
+name/description, sale date, three file pickers ("Choose photos to share/add", "Attach photos"),
+the two delete-account username confirmations, custom field name, subscription role/duration,
+the profile note textarea, four opacity/radius sliders, both has-links selects, the comment image
+picker, the consensus answer box, and the profile first/last-name autosave inputs (which had a
+`<label>` beside them but not `for`-linked, so a screen reader never connected the two).
+
+**Zero unnamed form controls remain**, from 52 genuine at chunk 503 (and 107 before the scanner
+was corrected for wrapping labels and comment blocks). Combined with dialogs at 77/82 and 28 icon
+buttons, the accessibility thread has named every element it could name from evidence in the
+codebase, leaving only the handful that need their author's intent.
+
+Eighth consolidation running (task bre6rjpob) over chunks 510-514; this chunk's controls have a
+targeted rendering batch behind it.
+
+## Chunk 516 (interim) - chunk 515's form labels validated: 1,952 tests green
+
+The profile/settings/label/custom-field/consensus rendering batch passes with all 26 new
+`aria-label` attributes, including the profile name inputs whose adjacent `<label>` was never
+`for`-linked - markup that looked right in review and was invisible to a screen reader. The
+eighth consolidation (chunks 510-514) is still running.
+
+## Chunk 516 - trip permissions: 63 of 63 slug-taking views gated
+
+Swept every view taking a `trip_slug`. All 63 resolve through the viewer gate: most via
+`trip_or_not_found` (the HTMX adapter over `get_trip_for_viewer`), the API views via their own
+scoped resolvers. The rule itself is well-built - a missing trip and someone else's trip raise the
+*same* error and answer the same 404, and the docstring records that an earlier version returned
+404-vs-403 and so leaked existence through the status code alone.
+
+Three views survived the widened scan and all three are correct on reading: two delegate to a
+shared `_respond` that gates (and adds a `_viewer_has_joined` check on top), and the child-trip
+search never needs to authorize the slug at all - it filters `Trip.objects.filter(profiles=profile)`
+and uses the slug only to exclude the current trip from its own results.
+
+**The scan's first pass claimed 56 ungated trip endpoints** - a per-method window that missed the
+shared adapter's name and stopped before delegating bodies. That would have been the session's
+most alarming false report; it took two reads to dissolve. 39th-species artifact, same lesson,
+and the reason the number never left this file. Fifteenth verified-safe area.
+
+## Chunk 517 - pin merge: three independent layers guard an unrecoverable operation
+
+Swept the merge path, chosen because a wrong merge cannot be undone by the framework - the loser
+row is deleted and its dependents reparented. Defence is layered, and each layer is sufficient
+alone:
+
+1. **Controller**: the suggestion is fetched, then `suggestion.profile_id != profile.pk` raises
+   **404** - not 403, matching the trip gate's anti-enumeration stance so a probe cannot learn
+   that someone else's suggestion exists.
+2. **Service**: `merge_pins` re-validates that *both* pins belong to the merging profile and
+   refuses a self-merge, so even a caller that skipped step 1 cannot merge across owners.
+3. **Integrity**: unresolved field conflicts raise before anything is written, and the whole
+   merge runs inside `transaction.atomic()`, so a failure mid-reparent leaves both pins intact.
+
+`_reparent_children` carries a comment explaining that children must move *before* the delete or
+`CASCADE` would take them - the kind of hazard that is invisible until it has eaten someone's sub
+pins. Sixteenth verified-safe area; no change needed.
+
+## Chunk 518 - eighth consolidation: 10,883 passed, and the channel fix proved under load
+
+10,883 passed, 0 failed, covering chunks 510-514 (dialog and form labels, the panel-gate fix,
+boundary-vote contract). **The condition matters more than the count**: this run overlapped four
+of my targeted batches - exactly the concurrency that produced both websocket flakes before chunk
+509 - and produced no flakes at all. The seventh consolidation was clean but solitary, so it
+could not distinguish "fixed" from "not provoked"; this one was provoked and stayed green.
+
+Eight consolidations: 10,849 / 10,859 / 10,863 / 10,865(2 resolved) / 10,873 / 10,875 / 10,878 /
+10,883. Every chunk from 453 to 517 now covered, and the test count has grown by 34 across the
+session - all of it this audit's own additions.
+
+## Chunk 519 - summary of chunks 477-518
+
+The second-half summary (chunk 477) covered 453-476. What followed:
+
+**Fixed** (each tested; all validated by at least one of four further green consolidations):
+- **Data round-trip**: three new export kinds import back (safety history, map annotations, saved
+  searches/routes), with live-status check-ins deliberately *not* importable - restoring one would
+  re-arm reminders and page someone's emergency contacts.
+- **Abuse surface**: secondary-email verification joined the rate-limit ledger (relay and
+  mail-bomb closed); Gotify stopped swallowing rejected sends.
+- **Scheduling**: eleven hourly Celery tasks no longer fire simultaneously against the queue that
+  serves user-facing work.
+- **Correctness**: reverting a wiki revert un-marks the original edit (its content is back in
+  force, and both the history view and the achievement metric read that flag); import category
+  lookups match on kind, so a same-named tag is no longer used as a category.
+- **Robustness**: one broken plugin gate no longer empties the external API's whole panel list;
+  three unhandled `fetch()` sites now surface failure instead of blank panels or an injected
+  Django error page.
+- **Truthfulness**: the pin-delete dialog stopped promising an undo it cannot deliver; photo
+  deletion now says it is permanent; saved-filter deletion now says it is not.
+- **Test infrastructure**: `UL_TEST_DB_NAME` isolated Postgres but not the channel layer, so
+  concurrent runs collided on pk-derived channel groups - the cause of two of three flakes, fixed
+  and since proved under load.
+- **Accessibility**: 28 icon buttons, 77 of 82 dialogs and *every* form control now have
+  accessible names, found by locating each element's existing source of truth rather than writing
+  new copy.
+
+**Verified safe, no change** (nine areas this half): Celery duplicate-delivery tolerance, panel
+API exposure, TS dirty-flag protocol, import-format hardening, global-search viewer scoping, the
+malware-scan deferral, external-API throttling, boundary-vote consensus, trip permissions, pin
+merge.
+
+**Filed for the owner**: the root-owned Hypothesis example store (three remedies, all touching
+either test policy or container state), the 62 composite-prefix index pairs (needs production
+scan statistics), and the standing six product decisions.
+
+**Method note**: this half produced artifacts 33-39, including the first from *my own conclusion*
+rather than a scan (chunk 507's over-claim, caught in 508) and the most dangerous single false
+alarm of the session (56 "ungated" trip endpoints, chunk 516, dissolved by two reads). Every one
+was caught by the same habit: a count is a claim about the search until the matches are read.
+
+## Chunk 520 - the media gate's orphan class was still being fed; the source is now closed
+
+The filed entry treats orphan media files as incidental residue ("row deleted without file
+cleanup"). Checking which paths actually orphan files found that every `Image` delete removes its
+file - including both bulk paths, which collect names first and pass an `also_deleting` reference
+set so a photo shared across rows is not pulled from under a survivor. **`comment.delete()` did
+not.** Django stopped deleting `FileField` files in 1.3, so every deleted comment-with-photo left
+its image on disk, where the gate's orphan branch hands it to any authenticated user who knows the
+name. A deleted comment's photo is exactly the thing a user expects deletion to destroy.
+
+Both comment delete paths (pin/wiki controller, trip service) now discard the file, best-effort
+after the row is gone so a storage hiccup cannot turn a successful delete into a 500. Safe because
+`attach_existing_comment_image` *copies* rather than sharing storage - its docstring says so, and
+that design intent is what licensed the change. Two tests, including the precondition that the
+file exists before deletion so the assertion cannot pass vacuously.
+
+The entry is updated rather than closed: historical orphans and crash windows remain, but they no
+longer accumulate with ordinary use, and a one-time sweep would finish the job.
+
+## Chunk 521 - the orphan class, swept systematically across all seven file fields
+
+Generalised chunk 520 instead of moving on: the codebase has **seven** file-bearing model fields
+(two comment images, `Image.image`, three custom icons, the avatar). Status after this chunk:
+`Image.image` was already correct everywhere including bulk paths; both comment images fixed in
+520; avatar *clearing* already deletes its file; and explicit **clears** of achievement and label
+icons now do too - a user pressing "remove icon" expects the file gone exactly as much as a user
+deleting a photo does.
+
+**Deliberately not fixed, and filed**: replacing an icon/avatar with a new upload strands the
+previous file, and deleting a Pin/Label/Achievement row strands its icon. The right fix is a
+`pre_save`/`post_delete` receiver pair covering all five models rather than five more per-caller
+edits - but a signal touching five models is a design decision with real blast radius (this
+codebase's own gotchas file warns about signal handlers being edited unsafely), and the residual
+is small decorative icons behind an already authenticated-only branch. Recorded with the shape of
+the fix so the owner can take it in one deliberate change.
+
+605 label/achievement tests pass. The pattern worth keeping: when a defect is found in one place,
+the next question is which *class* of code shares its shape - which is how one comment-image bug
+became a seven-field inventory with three fixes and a scoped hand-off.
+
+## Chunk 522 - the hourly rmtree sweep: safe, and its TTLs cannot drift
+
+Audited `cleanup_vestigial_assets` because an hourly task calling `shutil.rmtree` deserves the
+scrutiny any destructive scheduled job does. It holds: each managed root is `resolve()`d and
+checked with `_is_within(root, media_root)` before anything is touched, only *directories*
+directly under a validated root are candidates, only ones older than their TTL are removed, and
+each failure is caught per-artifact so one undeletable directory cannot abort the sweep. A
+symlink planted in a managed root is refused by `rmtree` itself and lands in that same per-item
+handler.
+
+The detail worth recording: the TTLs are **imported from the job modules** (`EXPORT_TTL_SECONDS`,
+`IMPORT_TTL_SECONDS`) rather than re-declared here, so the sweep cannot start deleting artifacts
+the download endpoint still considers live - the drift bug this shape usually has is structurally
+impossible. An in-progress job also keeps refreshing its directory mtime as it writes, so a slow
+export cannot be swept out from under itself.
+
+Seventeenth verified-safe area. Ninth consolidation running (task bg6hkg64z) over chunks 515-521.
+
+## Chunk 523 - the safety escalation chain: correct at every level that could double-page someone
+
+Audited the sweep that notifies emergency contacts, because its failure modes are asymmetric -
+missing an escalation risks someone's safety, and repeating one pages their contacts again at
+3am. Both directions are handled, at three levels:
+
+- **Concurrency**: a distributed lock (token-based, released in `finally`) means two workers
+  cannot escalate the same check-in at once.
+- **Repetition across runs**: `escalate_checkin` iterates
+  `contacts.filter(notified_at__isnull=True)` and stamps `notified_at` per contact *immediately
+  after its own send* - so a crash halfway through reaches the remaining contacts next tick and
+  never re-mails the ones already reached. The status transition is a conditional `update()`
+  gated on the prior status, so it cannot re-fire either. **Verified rather than trusted**: the
+  call site's comment asserts "per-contact idempotent", and this is the code that has to be true.
+- **Isolation**: each check-in's escalation is wrapped individually, so one user's broken contact
+  row cannot stop another user's emergency notification - the single most important property in
+  the whole sweep.
+
+The design also declines to be clever: no batching, no bulk mail, one email per contact with its
+own stamp. Eighteenth verified-safe area, and the one I would have most wanted to find wrong.
+
+## Chunk 524 - group-chat visibility: the stint window is enforced end to end
+
+Traced the "added users cannot read prior messages" guarantee from queryset to caller, because
+`PROBLEMS.md` records that the boundary is enforced by `visible_window` rather than by
+cryptography - which makes the query-side chain the whole protection.
+
+It holds. `visible_window` filters `created__gte=membership.created`, and the absence window is
+covered by stint semantics rather than an upper bound: leaving ends a stint and re-joining creates
+a *new* row with a later `created`, so a returning member's window starts at their return. That
+design is backed by the partial unique constraint noted earlier in this audit -
+`(group, profile) WHERE left_at IS NULL` - which permits unlimited historical stints while
+guaranteeing one active row.
+
+The part worth verifying was whether a *stale* membership could ever reach the window function.
+It cannot: both entry points (`controllers.group_chats._get_group` and the API's
+`_resolve_membership`) obtain it through `GroupChat.membership_for`, which is
+`active_memberships().filter(profile=...)`. A departed member has no active row, so they get
+`None` and never reach a query at all.
+
+Nineteenth verified-safe area. The residual risk stays exactly as filed - a removed member who
+kept a decryption envelope is bounded by the server's query, not by the key - which is a
+documented property of the design rather than a defect in it.
+
+## Chunk 525 - ninth consolidation: 10,885 passed, 0 failed, and the last flake did not return
+
+Ninth consolidation (task `bg6hkg64z`, chunks 515-521): **10,885 passed, 1 xfailed, 0 failed,
+1,484 subtests passed** in 1:30:46. The single xfail is the strict `test_pin_detach_location.py`
+marker, which is the filed detach-location product decision doing its job.
+
+Nine consolidations this session: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873 /
+10,875 / 10,878 / 10,883 / 10,885.
+
+Worth naming specifically: `test_only_submitted_fields_ever_move` did not reappear. That was the
+one flake still without a *fix* rather than an explanation - chunk 507 identified the mechanism
+(a root-owned, read-only Hypothesis example store replaying a once-failing example forever) and
+chunk 508 corrected the overreach that had claimed it explained all three. A green run is not
+proof for a replay-driven flake, since the store only replays what it holds; the fix that closes
+it is below.
+
+Between this consolidation and this chunk, a separate pass worked through the outstanding
+`PROBLEMS.md` backlog (commits `2d107ace`, `b956e809`) - six entries closed, one found already
+fixed, one declined with reasons, one false positive disproved. The Hypothesis store is among the
+fixed: `conftest.py` now registers a profile whose example database lives somewhere the test user
+can actually write, with writability *proved* by a probe rather than assumed, since an unwritable
+inherited directory is the precise failure it exists to avoid.
+
+## Chunk 525 - write-side N+1: the class the earlier sweeps never looked for
+
+The `LabelReorderView` entry named this gap explicitly - "an N+1 on the **write** side, which the
+audit's earlier sweeps did not look for - they targeted reads" - so this chunk swept for it.
+
+An AST pass over every non-test `for` loop containing a write-shaped call found 267 loops; grep
+would have been useless here, since `.update(`/`.add(`/`.set(` are dict and set methods too.
+Narrowing to loops that write once *per item* (a `save()` on the loop variable, or a
+`filter(...).update()/delete()` inside the body) left 62. Reading them, most are per-item on
+purpose - the safety escalation's per-contact `notified_at` stamp (verified in chunk 523),
+`BackupCode`'s conditional claim, the undo handlers bounded by their own entry.
+
+The bulk pin endpoints are the real finding, and the interesting part is *why* they cannot be
+fixed the way `LabelReorderView` was. Asked Django's live signal registry rather than grepping for
+`@receiver`: **`Pin` has eight `post_save` receivers** (the earlier bulk-write entry says six -
+it has grown). `bulk_update` fires none of them, so per-pin `save()` is load-bearing, not lazy.
+
+So the question became whether the loop is bounded, and it was not. Measured with
+`CaptureQueriesContext` rather than reasoned about: ~2 queries per pin for a style or description
+edit, ~7 for a rating. Meanwhile every *external API* bulk endpoint already caps its uuid list at
+500 and not one internal endpoint had any bound - and the internal ones are what the map's select
+tool drives. "Select all, set a colour" on a 5,000-pin account was ~10,000 queries in one request.
+
+Fixed by propagating the API's existing 500 to the three internal write paths. Deliberately not
+applied to the read paths: export's own docstring says it uses a form POST *specifically* so the
+pin count is unlimited, and it costs one query either way. Copying a number to somewhere its
+justification doesn't reach is how a cap becomes cargo cult.
+
+Following the fix to its user-visible end found a second, wider bug. The map's three bulk handlers
+threw an empty `Error` on a non-2xx and caught with a fixed string, so the new refusal would have
+surfaced as an unexplained "Update failed." Routing them through the existing `window.ulSendJson`
+exposed that `fetch-json.ts` discarded *any* non-JSON body as "an HTML error page" - while this
+project answers refused writes with bare plain-text `HttpResponse`s all over. It now keeps a short
+single-line text body and still drops markup, which quietly repairs every plain-text refusal in the
+app; they were all reaching users as `HTTP 400`.
+
+Verified: 89 bulk-view tests, 399 TS tests, tsc clean, ruff clean, and the map page's inline JS
+syntax-checked after the edit (the lesson from the `trips/detail.html` splice).
+
+## Chunk 526 - the eight merge recoveries that could never run
+
+Continued chunk 525's write-per-item list into `pin_merge.py`. The per-relation loops there are
+per-item *by necessity* - each row needs a dedup decision (case-insensitive alias text, the same
+reviewer's newer rating, a duplicate list membership) that no bulk `UPDATE` can express - so the
+N+1 reading was a dead end. What the loops did contain was a much better bug.
+
+Eight of them catch `IntegrityError` and then issue another query to recover, all inside
+`merge_pins`' single `transaction.atomic()`. Postgres aborts the whole transaction on a failed
+statement, so the recovery raises `TransactionManagementError` instead of recovering. The module
+docstring's entire "auto-dedup" bucket - six models' worth of graceful duplicate handling - was
+dead code, and any merge hitting a collision failed outright.
+
+Reproduced rather than argued: built the exact tree (survivor beneath a child of the loser, with a
+top-level pin already at that child's location) and watched the merge raise
+`TransactionManagementError`. Fixed with a `_save_within_savepoint()` helper - a nested `atomic()`
+so only the failed statement rolls back.
+
+**Repairing it exposed a data-loss path the broken transaction had been hiding.** When
+`_reparent_children`'s detach fails, the old code logged and continued, leaving the child parented
+to the pin about to be deleted - and `Pin.parent_pin` CASCADEs, so `loser.delete()` would have
+taken that child *and the survivor nested beneath it*. The poisoned transaction was the only thing
+preventing it. A "just add savepoints" fix would have converted a confusing 500 into silent
+destruction of the pin the user was merging into. It now refuses with `PinMergeCollisionError`,
+surfaced as its own toast rather than the generic "Something went wrong".
+
+Then asked what class shares the shape: an AST sweep for DB-error handlers lexically inside an
+`atomic()` scope found four more (e2ee enrol, and the consensus/SpotGuessr/trivia "already
+answered" guards). All four are safe, and for a reason worth recording - each `raise`s or `return`s
+immediately instead of querying again, so the block unwinds and Django rolls back normally.
+`pin_merge` was the only handler that kept working inside an aborted transaction.
+
+The regression test includes a control asserting the *old* shape really does poison the
+transaction. Without it the other tests would pass just as well against a plain `try/except`, and
+would prove nothing about why the savepoint exists. Verified: 69 merge tests, ruff clean.
+
+## Chunk 527 - the key reset that could destroy history a network blip made unrecoverable
+
+Read the E2EE rewrap-all write loop from chunk 525's list. The loop is fine - bounded by the
+caller's own rows, each value distinct, and the bundle swap guarded by a `select_for_update`
+version check whose comment shows the author had already reasoned about sealing threads to a
+superseded key. So the loop was a dead end and the code *around* it was the finding.
+
+Three defects, one shape: a reset can preserve all, some or none of an account's encrypted history,
+and nothing in the system was honest about which.
+
+The bad one is client-side. Re-sealing needs the old private key, so the payload is legitimately
+optional - someone who lost their key resets to get a working account back. But the inventory fetch
+that *feeds* the payload had `if (response.ok) { ... }` with no `else`, and fell through to reset
+regardless. Holding the old key means every thread could have been preserved, so a 500 on that one
+GET permanently destroyed the entire history of a user doing a voluntary rotation. The per-entry
+skip beside it ("already unreadable, so leaving them behind loses nothing") is sound reasoning per
+entry and does not extend to an inventory that never arrived - which is exactly the kind of local
+correctness that reads as global correctness.
+
+Then the two that hid it: the server returned only `rewrapped`, so no client could compute what was
+left behind (and in the failure above it has no inventory to compute from); and the toast claimed
+"everything stays readable" whenever *any* row survived, while the "old key held, nothing
+re-encrypted" case - precisely the failure above - showed **no toast at all**.
+
+Fixed all three: abort rather than reset blind, report `not_rewrapped` from the server, and a pure
+`resetOutcomeMessage()` covering all four combinations. Extracting it earned its own tests without
+needing sodium or IndexedDB, and left the `resetKeys` end-to-end gap honestly recorded rather than
+papered over. Also corrected the endpoint's `@extend_schema`, which declared a `{"ok": true}` body
+this endpoint has never returned.
+
+Verified: 87 E2EE tests, 7 new TS tests, tsc clean, ruff clean.
+
+## Chunk 528 - the guard whose failure branch is empty, and the button that did nothing
+
+Chunk 527's bug was not the class the 2026-08-07 sweep already covered. That sweep looked for
+mutating `fetch` calls with *no* `.ok` check; this one had a check, and an empty failure branch.
+Different shape, so it deserved its own sweep.
+
+Two scans. 21 positive `if (resp.ok) {...}` guards, 7 with no `else` - six of which are the
+early-return idiom and correct. That is worth recording as a scan lesson: "no else" is not the
+signal, "no failure path" is. And 144 promise-style fetch chains, 17 without a `.catch`, narrowed
+to 11 that are also fire-and-forget rather than returning the promise to a caller that owns it.
+
+The finding is `createListAndAddPins`, which exists in two copies (map page and location page) and
+was broken in both: `.then(r => r.json())` on an endpoint that answers a duplicate list name with
+409 plus plain text, in a chain with no `.catch`. The likeliest failure of the feature produced an
+unhandled rejection and total silence - no toast, no closed dialog, the name still sitting in the
+box.
+
+The two copies had drifted in a way that made the worse one look safer. The location page has an
+`else` branch that toasts an error, and it is dead code - it can only fire if the server returns
+JSON with `ok: false`, which it never does. Fifteen lines above both copies sits `addPinsToList`,
+which checks `response.ok`, handles 409 explicitly and toasts. Same file, same dialog, opposite
+care. That is the third time this audit has found the careful and careless versions of one idea
+side by side in a single file.
+
+Fixed both through `ulSendJson` - which, because of chunk 525's `fetch-json.ts` change, now shows
+the server's own sentence rather than "HTTP 409". The two chunks compose: 525 made plain-text
+refusals surfaceable, 528 found the place that most needed it.
+
+`lists.create` had no server tests at all, so the contract the client now leans on is pinned:
+409 for a duplicate, and a body short, single-line and markup-free enough for `fetch-json.ts` to
+show. 56 pin-list tests pass; all three edited templates syntax-checked.
+
+One scan-tooling note: the Django-tag stub used for that syntax check has to strip
+`{% comment %}...{% endcomment %}` blocks first, or the prose inside them parses as JavaScript and
+reports a syntax error in a file that is fine. Verified against `git show HEAD:` before believing it.
+
+## Chunk 529 - tenth consolidation: 10,871 passed, 0 failed, and a count worth checking
+
+Tenth consolidation (task `br3758dtn`, chunks 522-525): **10,871 passed, 1 xfailed, 0 failed,
+1,481 subtests** in 1:31:00. The xfail is the strict `test_pin_detach_location.py` marker holding
+the filed product decision open.
+
+The count is *lower* than the ninth's 10,885, which is the wrong direction - every chunk since has
+added tests, never removed any - so it was worth resolving rather than filing as noise. It
+reconciles exactly, and `--collect-only` reports no collection errors, so nothing is missing. The
+ninth's higher figure is unexplained and, since it ran against a container whose state can no
+longer be inspected, is left that way rather than guessed at.
+
+**Corrected 2026-08-16 (chunk 532).** The arithmetic originally written here was wrong twice, in
+ways that cancelled: it compared against `passed` alone rather than `passed + xfailed`, and counted
+18 added tests where `git diff 1cd13d08..bb7abe7e` shows 17. Both errors are worth naming because
+this paragraph was recorded as the *method* for future reconciliations, and an off-by-one baked
+into a method propagates. The correct form:
+
+    collected(run) == passed(run) + xfailed(run)
+    collected(run) == collected(now) - tests added since that run's tree
+
+For the tenth: 10,898 collected now, minus 9 added by chunks 529-531, minus 17 added by chunks
+526-528, gives 10,872 - and the run reported 10,871 passed + 1 xfailed = 10,872. Exact.
+
+Recording the method, because a silently *shrinking* suite is the failure mode a green run hides
+best: a passing consolidation only proves the tests that ran, so the count has to be reconciled
+against a fresh collection, not compared with the previous run and waved through.
+
+Ten consolidations: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873 / 10,875 / 10,878 /
+10,883 / 10,885 / 10,871. An eleventh (task `beigmr653`) is running over chunks 526-528, whose
+fixes - the pin_merge savepoints, the E2EE reset, and the two `createListAndAddPins` copies - none
+of the previous runs covered.
+
+### Chunk 529 (continued) - the nine unread fetch sites, and three deletes that failed in silence
+
+Finished chunk 528's fire-and-forget list. Nine sites, each judged individually - which the
+2026-08-07 sweep already established is the only honest way to handle this class, since several are
+deliberately best-effort. Three are real, and they share the worst possible context for the shape:
+a destructive action behind a "this cannot be undone" confirm whose failure path says nothing.
+
+Two photo deletes (`_photo_gallery.html`, `memories/photos.html`) simply returned on failure, so a
+refused delete and a successful one looked identical - the tile stayed put either way, with no
+message to distinguish them. The third (`map-annotations.ts`) is subtler and more interesting: it
+already toasts both "N deleted" and "N could not be deleted", so it handles a *refused* request
+well. But the per-request `.then(r => r.ok)` had no `.catch`, so a single **network** failure
+rejected the whole `Promise.all`, threw out of the async function, and produced no toast, no
+cleared selection and no refreshed list. Good handling of the failure the author thought about,
+none of the one they didn't - and the fix routes the second into the machinery already built for
+the first.
+
+Six judged fine, with the reasoning recorded so the next pass doesn't re-derive it. One of those
+six was **a false negative in my own scan**: the settings autosave does have a `.catch`, and the
+chain-extraction stopped early inside a nested callback. That is the second scan-tooling lesson in
+two chunks, and the same one each time - a scan produces candidates to read, never findings. Both
+are now written into PROBLEMS.md next to the results they nearly corrupted.
+
+Verified: tsc clean, 406 TS tests, both edited templates syntax-checked, ruff clean.
+
+## Chunk 530 - closing the write-per-item list: one lost counter, one verified-safe twin
+
+Four sites left from chunk 525. The interesting pair are near-identical code with opposite verdicts,
+which is the whole value of reading rather than pattern-matching.
+
+`consensus/tentative` does `existing.support_count += 1` and is **safe**: its only caller wraps both
+branches in `transaction.atomic()` holding `select_for_update()` on the parent wiki, and the
+docstring names this exact hazard ("the row-level `+=` loses an increment on top of that") and
+explains why a unique constraint cannot substitute for the lock. It even has a dedicated race-test
+module. Twentieth verified-safe area.
+
+`device_scan/clustering.record_absence_report` does the same thing and is **not** safe. The nearby
+guard is genuine but covers a different case: `process_device_scan_upload` claims each *upload*
+atomically so one physical report can't be applied twice - while the case that bites is two
+*different* users' uploads naming the same marker on different workers. That is the trap in this
+class: a real, documented, correct guard sitting next to the gap, which makes the gap read as
+already handled.
+
+It also wrote `status` unconditionally in `update_fields`, so ~9 of every 10 absence reports wrote
+back a status they had merely read - enough to revert a marker a concurrent detection had just set
+ACTIVE. Fixed with `F("absence_streak") + 1` and a status write only when it changes.
+
+The other two (`photos/redata_relevance`, the STALE sweep) are clean: per-row distinct values, no
+bulk form available, bounded batches, and `.update()` rather than `save()` so no receiver question.
+
+That closes the 62-site list chunk 525 opened. 45 device-scan and consensus tests pass, ruff clean.
+
+## Chunk 531 - a new thread: upload parsers, and a cap that bound each call but not the work
+
+Opened the resource-exhaustion thread on the import pipeline. Nearly all of it is well built -
+defusedxml on every user-XML path (including pre-parsing to harden libraries that won't take a safe
+parser), and an archive extractor doing magic-byte typing, symlink and traversal rejection, an
+extension allowlist, per-file and cumulative caps, and a deliberate read-one-extra-byte instead of
+trusting declared sizes. Recording that positively matters here, because the single gap hides among
+it.
+
+The caps are per *archive*. The import-preview controller expands an outer archive, then calls the
+extractor **again** for every nested archive it finds - the legitimate KMZ-inside-ZIP case. Each of
+those calls started a fresh 2 GB / 1000-file allowance, so an outer ZIP of N nested bombs bought N
+times the cap, with N bounded only by the outer archive's own 1000-file limit: ~2 TB of
+decompression from one upload, in one request. The limit was real, the code enforcing it was
+careful, and nothing tied it to the total work. Fixed with a shared `ExtractionBudget`.
+
+**The part worth keeping is the bug I did not ship.** While fixing that I concluded the cumulative
+counter was also forgeable, since it accumulated the attacker-supplied `info.file_size`. It reads
+like a textbook hole. I tested it before writing it down: CPython's `zipfile` bounds reads by
+`file_size` and CRC-checks, so understating the declaration truncates and raises `BadZipFile` - it
+cannot smuggle bytes. The declared value was always an upper bound. Two comments asserting the
+"hole" had already been written into the source and were rewritten before commit, and the real
+behaviour is now a test rather than a note, since it depends on CPython internals.
+
+That experiment also surfaced something to record but not change: a CRC failure is raised per
+entry, and `_extract_zip` catches `BadZipFile` around the whole loop - so one corrupt member aborts
+an otherwise-fine 900-file Takeout archive. Fail-closed is defensible for an importer; how much of
+a damaged archive to salvage is a product call.
+
+Verified: 103 archive/import tests, ruff clean.
+
+## Chunk 532 - eleventh consolidation: 10,888 passed, 0 failed, and the reconciliation method fixed
+
+Eleventh consolidation (task `beigmr653`, chunks 526-529): **10,888 passed, 1 xfailed, 0 failed,
+1,481 subtests** in 1:31:34. This is the first run to cover the `pin_merge` savepoints (526), the
+E2EE reset fixes (527) and the two `createListAndAddPins` copies (528).
+
+Reconciled by the method from chunk 529: 10,898 collected now, minus the 9 tests chunks 529-531
+added after this run's tree, gives 10,889 - and 10,888 passed + 1 xfailed = 10,889. Exact.
+
+**Applying that method is what exposed an error in the method itself.** As first written in chunk
+529 it compared the expected figure against `passed` alone, ignoring the xfail, and used 18 added
+tests where the diff shows 17. The two mistakes cancelled, so the tenth consolidation appeared to
+reconcile "precisely" and the conclusion drawn from it (nothing missing) happened to be correct.
+That is the worst kind of wrong arithmetic: it produces the right answer, so nothing prompts a
+recheck. The chunk 529 entry above is now corrected in place with the error named, since it was
+recorded as a reusable procedure rather than a one-off calculation - and a procedure that is off by
+one will keep being off by one.
+
+Eleven consolidations: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873 / 10,875 / 10,878 /
+10,883 / 10,885 / 10,871 / 10,888. A twelfth is due over chunks 530-531 (the device-marker
+`F()` fix and the shared extraction budget), neither of which any run has covered.
+
+### Chunk 532 (continued) - the fix that reached one of two call sites
+
+Continued the parser thread into the image pipeline. Decompression bombs are already well handled
+here, including the subtle part - `DecompressionBombError` inherits from `Exception`, not `OSError`,
+so the usual handler misses it - with two test modules devoted to it.
+
+An AST sweep of the 11 `PILImage.open` sites flagged 5 without an enclosing `try`. Four dissolved on
+reading (private EXIF helpers whose callers all catch bare `Exception`) and the fifth is called
+inside one. The actual bug was not in that list: `downscale_stored_image` has **two** callers, and
+only one of them received the fix. `tasks.py` catches
+`(OSError, ValueError, PILDecompressionBombError)` with an eight-line comment explaining why the
+third entry is necessary; `photo_enrichment.py` calls the same function and caught only
+`(OSError, ValueError)` - the exact handler that comment calls insufficient. An over-89MP photo from
+Wikimedia or Flickr therefore took the enrichment run down.
+
+The nicest property of this find is that the codebase proves it itself: one call site documents the
+bug the other still has. No judgement call required.
+
+It also sharpens the method. The sweep was intra-function, so its output was candidates, not
+findings - and the one that mattered was not in the output at all. It came from following the
+*function* to its callers instead of the `open()` to its handler. Two chunks running, the scan has
+been the thing that pointed at the neighbourhood rather than the thing that found the bug.
+
+Verified: 12 bomb-handling tests, ruff clean.
+
+## Chunk 533 - two real limits, and the unmeasured gap between them
+
+`services/ai/document_import` looks thoroughly bounded: 2 MB per upload, 20,000 characters of
+extracted text, 200 pins, 500 KB of AI response. Every one of those limits is real and enforced.
+The bug is that the first two measure different quantities, and nothing measures what happens
+between them - the upload cap bounds compressed bytes, the character cap bounds the result, and the
+whole document is materialised in the line between them.
+
+For `.txt` those two quantities are identical, which is almost certainly why this looked complete.
+For `.docx`, the only other supported format and a ZIP, a 2 MB upload can decompress to gigabytes,
+and `python-docx` builds the entire part before there is any text to measure.
+
+Fixed by summing the sizes the ZIP directory declares and refusing above a deliberately generous
+20 MB, without decompressing anything.
+
+What makes this chunk worth recording is that it *spent* an earlier chunk's finding. Checking
+declared sizes would normally be unsound - the declaration is attacker-controlled - and chunk 531
+went and verified exactly that question for a different reason, establishing that CPython's
+`zipfile` truncates at the declared size and fails the CRC. Because that was tested rather than
+assumed, this chunk could take a cheap directory read instead of a streaming decompress-and-count,
+and say why in a comment that points at the evidence. The near-miss in 531, where I almost shipped
+the opposite claim, is what made the fact worth having.
+
+Left for a later pass, recorded rather than assumed away: `services/media/documents.py` extracts
+PDF text page by page, and PDFs carry compressed streams too.
+
+Verified: 40 document-import tests, ruff clean.
+
+## Chunk 534 - the deferred PDF question, answered differently than expected
+
+Chunk 533 deferred "PDFs carry compressed streams too, so the same question applies" rather than
+waving it away. Taking it up produced a bug - but not that one, and the difference is the point.
+
+Compressed streams are fine here: `pypdf`'s extraction is bounded by `_OCR_MAX_PAGES` before any
+stream is decoded, and the OCR path treats the file as opaque bytes. The analogy that motivated the
+look was wrong. What it walked into instead was page **geometry**: `pdf2image` defaults to 200 DPI
+with no size limit, and a page's dimensions come from its own MediaBox, which the spec permits up to
+200 inches a side. That is 40,000 x 40,000 px - about 4.8 GB as RGB - per page, 25 pages deep.
+
+Verified without rendering it, which would have spent the memory the fix prevents: a hand-built
+426-byte PDF declaring that MediaBox makes the container's own poppler report `14400 x 14400 pts`.
+Both `tesseract` and `pdftoppm` are installed in the app image, so the path is live.
+
+Fixed with `size=2200`, chosen so it changes nothing for real documents - a US-Letter page at the
+existing 200 DPI default is exactly 2200 px tall - and passed as a bare int so poppler's
+`-scale-to` bounds the longest side with aspect preserved. A `(w, h)` tuple would have set the axes
+independently and left a 99:1 page unbounded on its long side, which is the kind of detail that
+makes a limit look present while not binding. Also capped `Image.ocr_text`, which both paths append
+into an unbounded `TextField` from an untrusted upload.
+
+The transferable part: a deferred question is worth taking up even when the hypothesis behind it is
+wrong. The hypothesis got the *neighbourhood* right and the mechanism wrong - the same shape as the
+last two chunks, where the scan pointed and something else did the finding.
+
+Verified: 17 document-processing tests, ruff clean.
+
+## Chunk 535 - twelfth consolidation: 10,897 passed, 0 failed; the corrected method holds
+
+Twelfth consolidation (task `baexejocs`, chunks 530-531): **10,897 passed, 1 xfailed, 0 failed,
+1,481 subtests** in 1:32:40. First run covering the device-marker `F()` fix and the shared
+extraction budget.
+
+Reconciled with the method as corrected in chunk 532: 10,910 collected now, minus the 12 tests
+`git diff 65bd64af..HEAD` shows were added since this run's tree, gives 10,898 - and 10,897 passed
++ 1 xfailed = 10,898. Exact, and this time by construction rather than by two errors cancelling.
+
+Twelve consolidations: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873 / 10,875 / 10,878 /
+10,883 / 10,885 / 10,871 / 10,888 / 10,897. A thirteenth (task `bl9bhhohp`) is running over chunks
+532-534 - the enrichment decompression-bomb handler, the `.docx` uncompressed ceiling, and the OCR
+raster bound - none of which any run has covered.
+
+### Chunk 535 (continued) - the streaming import preceded by a non-streaming preview
+
+Closed the parser thread on the shape it had been circling. `import_pins_streaming` is a generator
+yielding an SSE event per pin, deliberately incremental and documented as such. `parse_for_preview`
+runs first, on the same files, and materialised every pin from every file into one in-request JSON
+response with no bound.
+
+That is the session's recurring pattern in its purest form: not a missing idea, but an idea applied
+to one of two paths. The careful design and the gap sit in the same class, one method apart - and
+the unbounded one runs first.
+
+Capped at 20,000 across the upload, high enough to be a backstop against machine-scale files rather
+than a limit on real imports, and *reported* through the `warnings` array the preview UI already
+toasts - because a truncated preview is indistinguishable from a smaller file otherwise. The
+boundary case warns without having truncated, which is why the wording is "at the preview limit"
+rather than a claim about dropped pins.
+
+Adding that warning exposed a small dishonesty in the channel: every warning was toasted under the
+hardcoded title "Could not import a file", correct for the per-file parse failures that had been
+its only occupants and wrong for a notice about the preview itself. Retitled.
+
+Recorded rather than attempted: the import path still parses each file into a list before iterating
+it, so one enormous file is held once during its own import. Making that incremental means turning
+the format parsers into generators - a much larger change with no in-request exposure.
+
+Verified: 33 preview and import tests, ruff clean.
+
+## Chunk 536 - hunting the pattern instead of waiting for it
+
+Five chunks had each found the same shape by accident: one of two sibling paths got the treatment.
+Rather than wait for a sixth, this chunk built a sweep for it - for every function defined here,
+compare the exception sets its *callers* catch, and report where one catches strictly more than
+another. 83 functions diverge.
+
+Most of that divergence is correct, and reading says so quickly: a service-internal caller that lets
+a domain error propagate should not catch it. The subset worth attention is two *equivalent*
+surfaces - website controller and external API - handling one service call differently.
+
+`post_chat_message` was the find. `SafetyValidationError` and `CheckinArchivedError` are **siblings**
+- both direct `ValueError` subclasses - so one `except` cannot cover both, and the API catches each
+deliberately with a comment on why their statuses differ. The controller caught only the first, so
+posting to an archived check-in was a 500 on the **no-JS / socket-down fallback** of a safety
+feature: the path that exists for when things are already going wrong. The same file handles that
+exception correctly one method away.
+
+The sweep's four *loudest* hits were false, and instructively so. The pin sub-resource endpoints
+appeared to catch nothing on the API side; in fact the shared base class catches the common
+`PinSubResourceError` once and maps it to a status, which is a better design than the controllers'
+per-type catching. My scan is intra-function and cannot see a handler one frame up - the third
+chunk running where the scan located the neighbourhood and reading did the finding.
+
+One thing recorded rather than fixed: `create_pin_note` raises a bare `ValueError` where every
+sibling in its module raises a `PinSubResourceError`, so the base class would not catch it. It is
+unreachable only because `PinNoteSerializer` declares `allow_blank=False`. The odd type is real;
+the serializer is the only thing making it harmless.
+
+A fixture error of my own, caught before it became a finding: the first version of the regression
+test built a key bundle with a placeholder public key, which NaCl rejects - so nothing was archived
+and the test failed against correct code. The fix now asserts the precondition (`hasattr(checkin,
+"archive")`) rather than trusting the setup.
+
+Verified: 56 safety and API-chat tests, ruff clean.
+
+## Chunk 537 - working the vein dry, and what that is worth recording
+
+Read six more of chunk 536's divergence candidates - `create_manual_visit`, `set_trust`,
+`join_trip`, `apply_pin_edits`, `remove_group_member`, `accept_pin_suggestion`. **All six are
+false positives**, and no two for the same reason: a precondition check before the call, a caller
+that builds its own payload so the raising branch is unreachable, arguments that make a branch
+impossible, a catch doing partial-failure isolation inside a loop rather than error typing, and one
+case where my grep window ran past a function boundary and attributed `leave_trip`'s `Raises:` to
+`join_trip`.
+
+No changes warranted this chunk. That is the honest outcome and worth stating plainly: chunk 536's
+sweep found a real 500 on a safety path, and the same sweep's remaining candidates are a long tail
+of code that is correct for reasons a scan cannot represent.
+
+What is worth keeping is the taxonomy, now in PROBLEMS.md - six distinct ways a caller legitimately
+catches less than its sibling. The point of writing it down is that the next person to run this
+sweep (or me, in fifty chunks) will otherwise re-derive the same six judgements from scratch and
+may not reach the same answers. A sweep with a one-in-ten yield is still worth running; a sweep
+whose false positives have to be re-adjudicated every time is not.
+
+Twenty-first verified-safe area, counting the six together: the controller/API divergence surface.
+
+## Chunk 538 - the instrument failed, and two of my own conclusions with it
+
+The thirteenth consolidation broke the session's twelve-run green streak, and did it in the worst
+way available: `1 failed, 9074 passed`, no test name, an `INTERNALERROR` where the report should be,
+and the run aborted ~1,800 tests early. Hypothesis' plugin builds an `@example` patch suggestion
+when a `@given` test fails; that codemod raises inside `pytest_runtest_makereport`, so it crashes
+*while building the failure report*. Fixed by making the optional patching module unimportable - the
+plugin's own documented degradation path - and verified that failures still report name, assertion
+and falsifying example.
+
+Then recovered the lost failure from the progress output rather than waiting for another 90-minute
+run. One character per outcome, `F` at position 9,076, mapped through the 7 tests added since that
+tree onto `test_export_formats.py::test_kml_round_trips_placemark_count_and_coordinates`. The
+premise got checked against two green runs first - progress characters equal `passed + xfailed`
+exactly, so the 1,481 subtests emit nothing - which is what stopped the mapping being wrong by 832.
+
+12,000 generated examples later, all four properties in that file pass. The failure is not
+input-dependent; it needs full-run state, and those writers never touch the database. Unresolved,
+and recorded as unresolved.
+
+**Two corrections, both to conclusions I recorded earlier in this audit.** Looking for a saved
+failing example showed that `docker exec` without `-u` runs as **root** - which is how every
+consolidation here has been invoked. So the chunk-507 mechanism for the earlier flake, "the store is
+root-owned while tests run as appuser, so it is read-only in practice", is wrong for the way this
+suite is actually run. The chunk-529 change built on it is still defensible on its own terms, but it
+fixed nothing live, and the flake it was credited with explaining is open again.
+
+That is two chunks in seven where the thing needing correction was my own earlier reasoning rather
+than the codebase - chunk 532's reconciliation arithmetic, and now this. Both were recorded as
+settled. Worth noticing that the audit's own conclusions need the same treatment as its findings:
+a mechanism asserted once and cited thereafter is exactly as unverified as a count nobody read.
+
+## Chunk 539 - corroborating an identification instead of building on it
+
+Chunk 538 identified the lost failure from a single measurement - one progress character per
+outcome, `F` at 9,076. That is the kind of conclusion this audit has twice had to correct, so this
+chunk looked for a second, unrelated measurement before anything was built on it.
+
+The subtest count supplies one. The thirteenth reported 832 subtests where a green run reports
+1,481; if the abort was at 9,076, the missing ~649 must belong to subtest-producing modules sitting
+after that point. Exactly nine do, and the big early producer (`test_external_api_pin_patch_fields`,
+position 2,357 - the source of the run's 40 subTest+`@given` warnings) sits before it and ran. Two
+independent quantities, same abort point.
+
+That check also caught something that would have broken a naive version of the mapping: collection
+is deterministic but **not alphabetical**. `test_export_formats.py` sits at 9,084 while
+`test_export_formats_delivery.py` sits at 1,681 - bare `def test_` functions are grouped apart from
+`TestCase` classes. Assuming alphabetical order would have put the answer thousands of tests away,
+and nothing in the output would have said so.
+
+Two candidate causes eliminated: not input-dependent (12,000 generated examples pass), and not
+produced by the only other fastkml/lxml modules running first. What is left is the assertion itself -
+`geometry.x == pin.effective_longitude`, exact float equality across a text round-trip - which is
+the fragile shape, but no mechanism has been demonstrated and none is claimed.
+
+No fix this chunk, and no invented explanation. The fourteenth consolidation is still running; if it
+recurs it will now name itself.
+
+## Chunk 540 - green, and a decision not to make the test quieter
+
+The fourteenth consolidation is green - 10,916 passed, 1 xfailed, 0 failed, and the full 1,481
+subtests, confirming it ran to the end rather than aborting like the thirteenth. It reconciles
+exactly. It is also the first run with working failure reporting, so the reporter fix is validated
+by a run that had nothing to report.
+
+The failure has now happened once in fourteen runs and does not reproduce on demand. The tempting
+move is to loosen the exact float-equality assertion to a tolerance and be rid of it. That is
+declined, and the reasoning is worth stating because the pressure to do it will recur: the property
+holds across 12,000 generated examples and thirteen full suites, so it is true, and it is the only
+instrument that would catch whatever caused the single failure. Weakening an assertion to silence an
+*unexplained* failure trades a signal for a permanent blind spot. It is the same call as keeping
+`test_pin_detach_location` a strict xfail instead of asserting the 500 it currently produces.
+
+What changed instead is what a recurrence will tell us: both assertions now print each value's
+`repr` and `float.hex()`, because a one-ulp difference is invisible in decimal and obvious in hex.
+The next occurrence yields data rather than `assert 1.0 == 1.0`.
+
+Thirteen green consolidations, one aborted, one open unexplained failure. That is the honest state.
+
+## Chunk 541 - beat-task idempotency, and picking the right fix rather than the familiar one
+
+New thread: Celery delivers at least once, and a sweep that outruns its interval overlaps itself, so
+which beat tasks tolerate a duplicate run? The codebase already answers it with
+`services/core/locks.acquire_lock`, whose docstring even prescribes the TTL. Ten of the twenty-four
+beat tasks take it; fourteen do not.
+
+Reading the fourteen dissolves almost all of them - deletes find nothing the second time,
+recomputes converge. The one that looked worst, `advance_pwyw_usage_ledgers`, moves billing state
+and is nonetheless idempotent by construction: it walks forward from a cursor, stops when the next
+period has not started, and returns before writing if nothing advanced.
+
+`send_account_deletion_reminders` is the exception, and it is the only unlocked task whose
+repetition a *user* sees: a selection-time filter, an email, and only then the marker - so two
+overlapping runs both send "your account will be deleted tomorrow". Its docstring claims it is
+idempotent via that marker, which is the same false-confidence shape this audit recorded for
+`FriendInvitation.mark_accepted`. Its three sibling reminder sweeps all hold the lock.
+
+The part worth keeping is that the obvious fix was the wrong one. This audit has a precedent for
+exactly this shape - claim before the side effect, as `mark_accepted` now does - and applying it
+here would have been a mistake: the failure directions are not symmetric. A duplicate is a second
+warning email; a lost one is no warning at all before a permanent deletion. A lock gives
+no-duplicate *and* no-loss, because a skipped run leaves the marker unset for the next tick. A
+precedent is a hypothesis about the fix, not the fix.
+
+I also caught myself inventing a parallel mechanism first - a `select_for_update` loop - before
+checking whether the codebase already had a convention for this. It did, applied to ten tasks.
+Reverted and used it.
+
+Verified: 46 account-deletion tests, ruff clean.
+
+## Chunk 542 - checking the convention's own stated rule
+
+Chunk 541 established which beat tasks need the overlap lock. This chunk asked the next question:
+of those that take it, does the TTL they pass actually satisfy the constraint `acquire_lock`'s
+docstring states - "just under the task's beat interval"?
+
+It matters in both directions, which is what makes it worth measuring rather than eyeballing. Too
+long, and a run killed mid-flight leaves a lock that skips the next tick - on the safety sweeps that
+is a missed escalation. Too short, and the lock expires while the run is still going, so the overlap
+happens anyway and the lock is decoration.
+
+All eleven obey it, at 90-92% of interval: 110/120s for the three stall sweeps, 270/300s for the
+four safety sweeps, 3300/3600s for the four hourly ones. Nothing to change.
+
+Worth recording anyway, for a reason the numbers themselves show: the TTLs live in `tasks.py` and
+the intervals in `settings/base.py`, so the invariant only exists when someone puts the two files
+side by side. Nothing checks it. Retuning a schedule without touching its lock constant would break
+it silently, and the symptom - an occasional skipped tick, or an occasional double run - is exactly
+the kind that gets written off as flakiness.
+
+That closes the thread: 24 beat tasks, 11 correctly locked, 13 idempotent by construction, one real
+gap fixed. Twenty-second verified-safe area.
+
+A note on my own parsing while doing it: the first pass could not resolve `5 * 60` / `2 * 60` in the
+schedule and reported seven tasks as "?? could not resolve". I read those seven schedules directly
+rather than treating the tool's silence as a finding either way - the same discipline the scans in
+chunks 532-537 needed, applied to arithmetic this time.
+
+## Chunk 543 - turning a verified invariant into an enforced one
+
+Chunk 542 verified that all eleven beat-lock TTLs sit under their intervals, and ended by noting
+nothing checks it: the TTLs live in `tasks.py`, the intervals in `settings/base.py`, and retuning a
+schedule without its lock constant would break the pairing silently. This chunk closed that, using
+the `test_bulk_write_signal_guard.py` precedent this codebase already established for
+"the property is of the *configuration*, not of any one call site".
+
+The guard asserts both failure directions and reads both sides live - constants off the imported
+module, intervals off Django's own `CELERY_BEAT_SCHEDULE` - so it checks what the workers run with
+rather than what the source says. And it was **verified to fail**: pushing the safety sweeps' TTL to
+600s against their 300s interval, then down to 10s, each produce a named offender. A guard nobody
+has watched fail is a guard nobody knows works.
+
+The part worth recording is that its own guard-the-guard test immediately caught a bug in it. The
+first version computed crontab intervals with celery's `remaining_estimate`, which answers "how long
+until the next fire, from *now*" rather than from the argument it is given - so calling it twice
+compounded instead of stepping, and returned **negative** intervals. Every TTL would have compared
+as "under interval" against a negative number; the guard would have passed and guarded nothing. The
+`all(seconds > 0)` assertion caught it on the first run.
+
+That is precisely the failure the bulk-write guard's own docstring warns about - its first version
+scanned zero files and passed vacuously - and it arrived within minutes of copying the pattern.
+Copying the guard was worth less than copying the paranoia that came with it.
+
+Twenty-second verified-safe area is now twenty-second *enforced* area.
+
+## Chunk 544 - the fifteenth consolidation named my own regression, and a guard I duplicated
+
+**Fifteenth consolidation: 1 failed, 10,915 passed, 1 xfailed, full 1,481 subtests.** It ran to the
+end and *named* the failure - the first non-green run since the chunk-538 reporter fix, which is
+exactly the scenario that fix existed for. The instrument worked.
+
+What it named was mine.
+`test_beat_lock_intervals.py::test_every_beat_scheduled_task_that_takes_a_lock_is_covered` fails
+because chunk 541 gave `send_account_deletion_reminders` an overlap lock without adding it to
+`_LOCKED_BEAT_TASKS`. That map's completeness arm exists for precisely this: its docstring says a new
+lock-guarded beat task "must be added to the map below or it fails here, rather than being silently
+skipped by a test that only knows about the tasks someone remembered." It caught the first new lock
+added after it was written. Fixed.
+
+**The bigger finding is that chunks 542 and 543 were built on a premise I never checked.** Chunk 542
+measured the TTL-versus-interval invariant by hand and concluded "nothing checks it". Chunk 543 then
+wrote `test_beat_lock_ttl_guard.py` to enforce it, complete with a note about how easily such a
+guard passes vacuously. A test enforcing that invariant already existed - written earlier in this
+same session - and is better than the one I wrote: it matches both lock idioms where mine matched
+one, and it has the completeness arm mine lacked, which is the arm that actually caught something.
+My duplicate is deleted.
+
+The irony is worth recording rather than smoothing over. Chunk 543's own lesson was "copying the
+guard was worth less than copying the paranoia that came with it" - and the paranoia I did not apply
+was to my own claim that no guard existed. One `ls` of the test directory would have settled it.
+
+This is the third correction to my own recorded reasoning in this stretch - chunk 532's
+reconciliation arithmetic, chunk 538's root-versus-appuser premise, and now this - and they share a
+shape: a claim made once, then built on, without the cheap check that would have falsified it. The
+codebase findings in this session have held up well; the failures have almost all been in what I
+concluded *about* them.
+
+Chunk 544's own work - a guard requiring any new migration's ``noop`` reverse to be justified, and
+an extension of the reversibility audit to migrations 0001-0020 that chunk 459 never reached - is
+kept, and this time I checked for an existing equivalent first. There is none.
+
+## Chunk 545 - auditing the auditors
+
+Chunk 544 ended with a guard catching a real regression and with me having duplicated a different
+guard I never checked for. Both point the same way: the guards themselves are worth auditing. There
+are thirteen.
+
+Most hold up, and the reasons are worth recording so the survey is not repeated: two are behavioural
+rather than scan-based and cannot pass vacuously; one is forty-five explicit per-field assertions
+rather than a derived population; the seven genuinely scan-based ones each assert that their scan
+still finds something - the failure mode the bulk-write guard documented and my own chunk-543 guard
+demonstrated within minutes of being written.
+
+One is wrong, and wrong in the most instructive way available: `test_undo_photo_reattachment_coverage`
+asserts `_PHOTO_OWNERS ⊆ actual SET_NULL owners`. That catches a stale entry and permits precisely
+what its docstring promises to prevent - a *new* photo owner with an undo handler keeps the subset
+relation true, so the guard passes while that owner's photos are never restored. The test written to
+stop the bug from repeating silently would have let it repeat silently.
+
+It is latent rather than live: seven SET_NULL owners exist, three have undo handlers, all three are
+listed. Fixed by asserting the converse as well, restricted to owners that actually have a handler,
+and verified to bind by removing one and watching it fail.
+
+The pattern across this stretch is now unmistakable. Four corrections - chunk 532's arithmetic, 538's
+root/appuser premise, 544's duplicated guard, and this inherited assertion - and every one is a claim
+that reads as establishing something it does not. The product code found in this session has held up;
+what has needed fixing is the reasoning layered on top of it, mine included. An assertion is a claim
+about the code exactly as much as a count is a claim about a search, and it earns the same treatment:
+break it on purpose and watch it fail, or it is decoration.
+
+## Chunk 546 - the allowlists hold, and the standard I proposed was already the codebase's
+
+Second half of auditing the auditors: not "does the guard bind" (chunk 545) but "has its allowlist
+grown to swallow what it guards".
+
+It has not. Of five files matching an allowlist-shaped grep, two are false positives - a template
+variable and a numeric threshold - and the three real ones are one entry, a handful of reasoned
+entries, and the one I added in chunk 544. The security sweep's single exemption carries a
+paragraph of justification and sits behind two assertions that it still finds >100 routes. No
+changes warranted, which is the honest outcome and the second such chunk in this stretch.
+
+The finding is about me rather than the code. Chunk 545 closed by proposing a standard - "an
+assertion is a claim exactly as much as a count is; break it on purpose and watch it fail, or it is
+decoration". `test_route_query_scaling.py` had already written that down, and more sharply: its
+docstring records that two earlier versions of the sweep reported every route flat while being
+structurally incapable of seeing the one N+1 then known to exist, and that the current version
+earned trust only by reverting a real fix and watching `label.rows` light up at +80 queries. Its
+conclusion - "a scaling sweep that has never been shown to catch anything is indistinguishable from
+one that cannot" - is the same rule, arrived at first, from a worse experience than mine.
+
+Fifth instance in this stretch of the same shape: a claim of mine that reads as establishing more
+than it does. Four were corrections to reasoning; this one is a misattribution. The consistency is
+the point - the product findings in this session have held up under re-examination, and what has
+repeatedly needed correcting is the commentary layered on them. Reading the codebase's existing
+tests before proposing a standard would have caught this one exactly as `ls` would have caught
+chunk 544's duplicate guard.
+
+## Chunk 547 - the masking fix that reached one of two trip invites
+
+Surveyed the notification surface first (chunk 544's lesson): seven service modules, nine test
+modules, every module referenced by at least one test. No coverage gap, so the thread became a
+*property* instead - this audit has twice found notifications naming people the app masks, so did
+that fix reach every sibling?
+
+It did not. Two functions create the same `ADDED_TO_TRIP` notification. `trip_membership` resolves
+the actor through `resolve_visible_identity` and carries a comment explaining why masking must
+happen at write time. `calendar_sync._invite_participants` - the Google Calendar importer -
+interpolated `importer.username` raw.
+
+The interesting part is why it looks safe. That path invites only friends, which reads as making
+masking irrelevant. It is not: `VisibilityChoice`'s docstring states that accepted friends qualify
+for every level **except** `NO_ONE`. A user who has hidden their identity from everyone is masked in
+every list and page, and was named in this notification - which push delivery and the SMS builder
+then carry off the device. A guard that is real ("friends only") sitting next to the gap, making the
+gap read as covered, is the same trap as chunk 530's device-marker upload claim.
+
+39 `NotificationLog.objects.create` sites, 16 interpolating a name, 1 wrong - and it was legible only
+because its correct sibling sat two files away. The other 15 are fine, mostly because the named
+person is someone the recipient just interacted with directly.
+
+Verified: 73 calendar-sync tests, ruff clean.
+
+## Chunk 548 - sixteenth consolidation green, and the off-app surfaces confirmed
+
+**Sixteenth consolidation: 10,925 passed, 1 xfailed, 0 failed, full 1,481 subtests.** Reconciled
+exactly - 10,929 collected now minus the 3 tests chunk 547 added gives 10,926, matching
+passed + xfailed. Fourteen green consolidations.
+
+Then carried chunk 547's identity-masking property into the channels that take text off the device.
+The result is a confirmation rather than a find, and the reason is worth recording: masking happens
+at *write* time into the stored notification text, so push and SMS inherit it structurally. Push
+forwards only the row's pk and rebuilds the payload from the stored title and message; the SMS
+builder reads `notification.title`. Neither interpolates a profile field of its own. Of sixteen email
+templates only three render a name, and all three name either the recipient themselves or an inviter
+addressing someone they personally invited.
+
+One case reads like a leak and is not: the community-wiki safety email names the check-in owner to
+strangers who pinned that location. Its function's docstring says it runs only when the owner opted
+in, and a rescue request is useless anonymised. Confirmed by reading the gate rather than inferring
+it from the feature's name.
+
+What this chunk really validates is the earlier fix's *choice*, not just its correctness. Masking at
+write time meant one place to check; masking at render time would have meant three implementations,
+three tests, and three chances for exactly the divergence this session keeps finding. That is the
+argument for fixing at the chokepoint, made concrete.
+
+No changes warranted - the third such chunk in this stretch, and the sweep is stronger for the
+design it confirmed than it would have been for a fourth instance of the same bug.
+
+## Chunk 549 - cache-key scoping, and three ways to be right
+
+Surveyed the remaining candidate areas first: wiki has 9 service modules against 34 test modules,
+the panel layer 23 test modules including three invariant tests. Neither is under-covered, so the
+chunk took a *property* nobody had swept - whether any cache key holding per-user data omits the
+user, which is a cross-account leak when it happens.
+
+142 cache calls, 126 with no user in the key expression, and no findings. What makes it worth
+recording is that the 126 divide into three distinct correct patterns rather than one: the profile
+in the key for per-user data; the *inputs* in the key for shared data, including the provider flags
+that change what is cached; and, for the export job, an unguessable UUID plus an explicit
+`user_id` check at read time - the key is not the authorization, the check is.
+
+That third pattern is the one worth noting, because it is the only one where the key alone would be
+insufficient, and the code knows it: `ExportStatusView` validates the UUID shape, reads the status,
+and refuses when the stored `user_id` is not the caller's. Had that check been missing the sweep
+would have found a real leak; the sweep's value was in confirming it exists.
+
+Fourth chunk in this stretch with no changes warranted. The pattern across the last several is
+consistent and worth naming: the areas this session has swept were largely already sound, and the
+defects have clustered in *divergence* - one of two paths, one of two callers, one of two guards -
+rather than in whole features being wrong.
+
+## Chunk 550 - serializer bounds versus column bounds, and where the lens over-reaches
+
+Divergence has been this session's most productive lens, so this chunk pointed it at a pair nobody
+had checked: does any external-API serializer accept a string longer than the column it writes?
+Postgres raises on varchar overflow and none of these paths call `full_clean()`, so the answer would
+have been a 500 where a 400 belongs.
+
+19 unbounded writable `CharField`s, none of them defects. Most are query parameters that write
+nothing; the rest target unbounded `TextField`s; and the two reaching a bounded column are validated
+first - `clean_color` for the label colour, and the same `text_length_error` check the website's own
+bulk edit makes for the pin description.
+
+The useful output is a correction to the lens rather than a fix. `AvatarEmojiSerializer` diverges
+from the site *on purpose* - the site substitutes a default for an unrecognised colour, the API
+refuses - and says why in its docstring: "an API client that sent `purpel` should be told, not handed
+a grey fox and left to wonder." Its colour field is constrained to a closed set, which is stricter
+than any `max_length` and completely invisible to a scan looking for one.
+
+So: divergence between two surfaces is not automatically a defect, this codebase annotates the
+deliberate ones, and a field can be more constrained than the property being swept - absence of the
+thing you are scanning for is not absence of validation. That last one is the same error shape as
+chunk 536's four loudest false positives, arriving from a different direction.
+
+Fifth chunk in this stretch with no changes warranted.
+
+## Chunk 551 - building instead of verifying, and the instrument validating itself
+
+Five consecutive no-change chunks said the well-trodden verification properties were exhausted, so
+this chunk built something from the audit's own backlog: the ~187 untested write routes.
+
+That entry argues closing the gap one route at a time is not a strategy. Agreed - so the sweep
+asserts one *property* across all of them: as the **owner**, post a minimal body to every
+single-parameter owner-scoped write route and require the answer not to be a 5xx. Deliberately weak
+(400/403/404/405/409 all pass, because refusing an empty payload is correct), which is what lets it
+apply to routes whose behaviour it cannot know.
+
+Checked first that it was not a duplicate: `test_cross_user_route_access.py` sweeps the same routes
+but flags only `200`, so a crash passes it silently. Complementary, not overlapping.
+
+**On its first run it found exactly one crash - `pin.link`, the detach-location 500 that motivated
+the backlog entry in the first place - and nothing else.** That is the best outcome available: the
+instrument reproduced a known bug from a standing start, with no noise beside it. A sweep that finds
+nothing on its first run tells you very little about whether it works.
+
+The exemption for it is self-checking: `test_the_known_crash_is_still_crashing` fails when the
+product decision is finally made and the route fixed, so the entry cannot outlive the bug. That is
+chunk 546's lesson about rotting allowlists applied at the moment of writing one, rather than
+discovered later.
+
+The backlog entry is updated, not closed: 186 routes still have no test asserting what they *do* -
+they now have one asserting they do not crash.
+
+## Chunk 552 - seventeenth consolidation green, and the sweep's second run found two dead routes
+
+**Seventeenth consolidation: 10,928 passed, 1 xfailed, 0 failed.** Fifteen green.
+
+Then measured what chunk 551's new sweep actually reached rather than assuming it was done: 160 of
+the resolver's 648 named routes. The gap was not the external API (namespaced routes need a
+different traversal) but the **230 zero-parameter routes** - the largest population, and the easiest
+to miss for a reason worth naming: they need no fixture, so nothing prompts you to build one and
+notice they were never requested.
+
+Extending to them found two real defects on the first run:
+
+- `test_ai` was wired to a `PinController` method that does not exist. Every request raised
+  `AttributeError`. Nothing referenced it. It is the same class as the dead `google_images` route the
+  cross-user sweep's docstring records catching - a second one had been sitting there since.
+- `saved_filters.new` returned 500 to every POST, because the view backing it requires a `filter_uuid`
+  the route does not supply. No UI path posts there, which is precisely why it survived: the only
+  thing that would ever have found it is a sweep that does not care whether a route is reachable
+  from the UI.
+
+Both are the shape this instrument exists for - routes no one exercises, failing in ways no one sees.
+The 503 from the Stripe webhook is the third hit and is the endpoint working correctly; it fails
+closed without its secret, and is named in the skip set with that reasoning.
+
+Worth noting what made the extension possible: the first run's result (one crash, and it was the
+known one) established the instrument was sound, so a second run finding three new hits was
+immediately credible rather than suspect. Validating an instrument on a known bug before widening it
+is cheaper than debugging a widened one.
+
+## Chunk 553 - widening the sweep, and a bug that let you create what you could never delete
+
+Measured which parameters gated the 258 unreachable routes rather than guessing: `session_id` (26),
+`profile_slug` (19), `group_uuid` (12), `profile_id` (12), `label_kind` (11). Four of those cost
+almost nothing to supply, and adding them - with multi-parameter support where every parameter is
+known - widened the sweep by about sixty routes.
+
+It found one thing, and it is a good one. `stash_for_undo` writes `describe(instances)` into
+`UndoAction.object_repr`, a `CharField(255)`, with no truncation - while `Label.name` and `Pin.name`
+are themselves 255. A name at its own legal maximum therefore produced a description too long for
+the column that records the deletion, so the object could be created without complaint and then
+never deleted. The 500 lands on delete, which is the least likely place anyone would look for a
+length problem.
+
+Fixed in `stash_for_undo` rather than in each handler: every model's delete funnels through it, so
+one truncation covers all of them and any handler added later. The width is read off the field, not
+written as a literal.
+
+The instrument taught me something too. Widening it first produced a wall of
+`TransactionManagementError`s that named the wrong route entirely: a `TestCase` is one transaction,
+so the first database error poisons it and everything after cascades. The fix was per-request
+savepoints - precisely what chunk 526 did for `pin_merge`'s recovery paths, encountered this time in
+my own harness. A sweep that cascades does not just lose information, it actively misdirects, and
+the misdirection looks exactly like a finding.
+
+## Chunk 554 - the sweep reaches three quarters of the route table
+
+Added `session_id`, the largest remaining gate at 36 routes. It needed one design wrinkle: the
+parameter names a *different model* in each of the three games, so no single value satisfies it. The
+sweep now takes a list of candidates per parameter and tries each on single-parameter routes - every
+game family gets exercised for real by one of them and 404s for the others, and a 404 passes a sweep
+that only objects to crashes. Multi-parameter routes take the first candidate of each, so the URL
+count stays linear.
+
+Those 36 came back clean. Reach is now **486 of 647 named routes (75%)**, up from the 160 chunk 551
+started with.
+
+The fixture bit me once first: I assumed the session models had a `profile` field, and they have
+`host_profile`. Four tests failed on a `TypeError` that looked exactly like a finding for as long as
+it took to read the model. That is the same fixture-error class this audit has hit repeatedly, and
+the same discipline resolves it - read the model rather than believe the traceback's framing.
+
+Three chunks of widening have produced three real defects (a dead route, a guaranteed-500 POST, and
+an object that could be created but never deleted) plus one instrument bug. The pattern holds:
+each increment of reach buys roughly one finding, and the cost per increment is one fixture.
+
+## Chunk 555 - eighteenth consolidation green, and the first widening that found nothing
+
+**Eighteenth consolidation: 10,932 passed, 1 xfailed, 0 failed.** Sixteen green, reconciled exactly
+(10,936 collected now minus the 3 chunk 553 added = 10,933 = passed + xfailed). A nineteenth is
+running over chunks 553-554, which changed product code.
+
+Widened the write-route sweep again: six fixtures - album, contact token, image, trip activity,
+alias, comment - taking reach from 486 to **532 of 647 (82%)**. Clean.
+
+That is the first increment to find nothing, and it is the useful signal of the chunk. The first
+three bought a defect each; this one bought none, while the remaining gates (`round_id`, `task_id`,
+`action`, `message_id`, `overlay_uuid`, `layer_uuid`) are individually smaller and need more setup
+per route. Yield falling as cost rises is the ordinary shape of a sweep approaching its useful limit,
+and saying so now is better than discovering it after three more chunks of diminishing returns.
+
+The honest read: the sweep has done most of what this design can do. Pushing to 90% would mean
+building game rounds, async task ids and markup overlays - and would test the fixtures as much as the
+routes. Recorded in PROBLEMS.md so 82% reads as a considered stopping point rather than where someone
+happened to stop.
+
+## Chunk 556 - sweeping GET, and correcting my own claim that it was covered
+
+Added GET to the route sweep. The comment I had written said GET was already covered by the
+cross-user sweep - false, and false in precisely the way that justified writing this file: that
+sweep asserts a stranger gets no `200`, so a route answering 500 sails through it. Sixth instance in
+this stretch of a claim of mine that reads as establishing more than it does, and the first one
+where the contradiction was sitting eight lines above the code it contradicted.
+
+It found `PinRelinkView.get` missing the `location_slug` parameter its own `post` declares, making
+GET on `pin.link.to` a `TypeError` before any application code ran. Third instance of one shape -
+one view, two routes, a signature fitting only one - after `saved_filters.new` and the POST half of
+this same view. It now answers 405: the picker has nothing to offer when the location is already
+named.
+
+Six other crashes in the same run were my fixture. `baker.make(Image)` produces a row with no file,
+which `Image.image` (null=False, blank=False) forbids and no upload path creates, so six views
+raising on it are raising on an impossible state. I fixed the fixture and wrote the reasoning down
+rather than hardening six views against the test.
+
+That ratio is worth keeping in view as this instrument gets reused: seven crashes reported, one real.
+A generic sweep manufactures states the application cannot, so its output is a list of *candidates*
+in exactly the sense every scan in this session has been - and the check is always the same, whether
+the state is reachable by a user.
+
+## Chunk 557 - closing a class instead of finding a fourth instance of it
+
+Three chunks had each turned up the same shape - one view, two routes, a handler signature fitting
+only one - so rather than wait for a fourth, this chunk asked the question of every view at once: for
+each class wired to two or more routes, does each handler accept the union of the parameters those
+routes supply?
+
+753 view classes, 48 multi-route, **zero mismatches**. The class is closed; the three found were all
+of them.
+
+A zero result from a scan I wrote is exactly what this session has repeatedly shown to be worth
+distrusting, so it was validated before being believed: reinstating `PinRelinkView.get`'s pre-fix
+signature makes the scan name that method and that parameter. It binds.
+
+Made permanent as a guard, because this is precisely the property that decays silently - adding a
+route to an existing view reopens it, Django only complains at request time, and both real instances
+lived on routes no UI path exercises. It carries the two lessons this codebase has already paid for:
+parameters accumulate down the resolver tree (leaf-only reading is what blinded an earlier sweep
+here), and `**kwargs` handlers are skipped as legitimately universal.
+
+The progression across these chunks is the useful part. Chunk 551 built an instrument that requested
+routes nobody requests, and it found instances of this class one at a time. Chunk 557 replaces the
+instrument with the property: instead of discovering the bug by making a request, assert the
+condition that makes the request safe. The sweep found them; the guard means they cannot come back.
+
+## Nineteenth consolidation
+
+`10935 passed, 1 xfailed, 43 warnings, 1481 subtests passed in 5660.46s (1:34:20)`, no `FAILED` or
+`INTERNALERROR` lines. Seventeenth green run of nineteen. It reconciles exactly: 10,939 collected
+minus the 3 tests chunks 555-557 added (all in `test_view_signature_route_guard.py`) is 10,936,
+which is 10,935 passed plus 1 xfailed.
+
+## Chunk 558 - a title that could not fit the column it was stored in
+
+Chunk 553 fixed one undo row whose `object_repr` could exceed its column. This chunk asked whether
+that was an instance of something, and it is: **text assembled from a user-controlled name and
+written to a column no wider than that name's own**. The wrapper text is then pure overflow.
+
+`NotificationLog.title` is `CharField(255)`, and most titles interpolate a name:
+
+    title=f"Safety check-in posted to {wiki.name}"     # 26 + Wiki.name(255)   = 281
+    title=f"Achievement unlocked: {achievement.name}"  # 22 + Achievement(255) = 277
+
+The other eight f-string titles are fed by columns small enough to fit (`GroupChat.name` 100,
+usernames 150), which is why this never showed up as a general problem - it depends entirely on the
+arithmetic of two unrelated columns.
+
+The safety one is the reason this is filed as a defect rather than a tidy-up.
+`post_checkin_to_community_wiki` runs at the *top* of `escalate_checkin`, above the loop that
+notifies emergency contacts. Verified directly by reverting the fix: the write raises
+`DataError: value too long for type character varying(255)` and the exception leaves
+`escalate_checkin` entirely, so **an overdue check-in at a long-named wiki notified nobody at all** -
+not the community, not the emergency contacts. The escalation's own retry logic (`notified_at__isnull`)
+cannot help, because the failure happens before any contact is marked.
+
+Reachable, not theoretical: child wiki names come straight from a request body in `detail_pins`
+child-wiki creation with no length validation, so a user can store the full 255.
+
+Fixed at the model rather than the call site. `title` is written from twenty-odd places, none of
+which know how long the name they interpolated may be, and a title is display text - a clipped
+string beats a failed write. `NotificationLog.save()` now clips to the field's own `max_length`
+(read from the field, not a literal). No path bypasses it: nothing bulk-creates notifications or
+updates `title` through a queryset.
+
+Two process notes, both mine. The reproduction's first failure was my own fixture - the contact
+model is `SafetyCheckinContact`, not `SafetyContact` - which meant the escalation test failed for
+the wrong reason in the first run and briefly looked like confirmation. The severity claim was only
+established once the fix was reverted and the test failed with the `DataError` itself. And the fix
+landing did not make that test pass; a second run was needed after correcting the fixture, which is
+the honest order these two things happened in.
+
+## Chunk 559 - the class behind chunk 558, and a different class underneath it
+
+Chunk 558 fixed `NotificationLog.title`. This chunk asked whether *assembled text into a bounded
+column* was a class worth closing, and scanned for it: every f-string written to a `CharField` or
+`SlugField`, sized against the model the call actually constructs.
+
+The answer is no, and cleanly so. **All 43 such writes in the codebase target `NotificationLog`** -
+`title` (11, fixed last chunk), `url` (3, 491 characters spare), `message` (29, 49,757 spare).
+Widening the scan past f-strings - `.format()`, `%`, `+`, attribute assignment, and a value
+assembled into a local first - added 11 more sites and no new overflow. The class is closed.
+
+The first version of that scan resolved columns by field name alone and reported everything as
+catastrophic, because `NotificationPreference.message` is a 10-char choices column while
+`NotificationLog.message` is 50,000. Sizing against the wrong column is worse than not sizing.
+
+**What the widened scan surfaced instead is a live class.** Asking the neighbouring question - request
+data reaching a bounded column with nothing enforcing the bound - turns up the shape
+`test_profile_name_length` found once in `EditProfileView` and never generalised. 37 candidates,
+most false: `clean_color` and `clean_icon` bound their outputs, `CustomLayer` checks its name and
+allowlists its icon, `WikiLinkCreateSerializer` declares `max_length=255` - the pattern that should
+be everywhere. What remained, each verified by driving the real endpoint:
+
+| Column | Width | Path |
+| --- | --- | --- |
+| `PinList.name` | 100 | checked its *description's* length in the same function, not its name's |
+| `SavedFilter.name` | 100 | emptiness and uniqueness only |
+| `SavedFilter.icon` | 64 | straight off `request.POST` |
+| `Label.name` | 255 | emptiness and uniqueness only |
+| `Label.icon` | 50 | straight off `request.POST`, no sanitiser at all |
+| `PinAlias.name` / `WikiAlias.name` | 255 | `sanitize_name` drops characters but does not bound length |
+| `Pin.name` / `Wiki.name` | 255 | taken from the JSON body (the same `Wiki.name` chunk 558 overflowed *through*) |
+| `Trip.name` | 255 | taken from the JSON body |
+
+All are a `DataError` 500 on an ordinary POST. Fixed with the codebase's own convention -
+`text_length_error` turned into a 400 - via a new `column_length_error(model, field, ...)` that reads
+the bound from the field so it cannot drift from the column. Truncating would be wrong here, unlike
+a notification title: these are names the user chose and will look for again.
+
+The icon finding is the more interesting one. `clean_icon` exists and is used widely, but its single
+`MAX_ICON_LENGTH = 255` fits `Pin.icon` and `Wiki.icon` while `Label.icon` and `CustomLayer.icon`
+are 50 and `SavedFilter.icon` is 64 - so a value the sanitiser **accepts** is a `DataError` on those
+columns. A sanitiser whose bound is narrower than some of its callers' is not a sanitiser for them.
+It now takes the column width, and the narrow callers pass their own.
+
+Still unverified, carried to the next chunk: `MessagingKeyBundle.public_key`/`password_wrap_salt`
+(e2ee), `Image.caption` (safety), and `SiteSettings.default_name_source_priority`, where a regex
+bounds each token of a comma-joined list but neither the token count nor any single token's length.
+`MediaRelevance.item_key` is safe but by coincidence worth noting - it stores a sha1 hexdigest in a
+40-wide column, which fits exactly and would not survive a change of hash.
+
+## Chunk 560 - finishing chunk 559's list, and one place the codebase had already got it right
+
+The three candidates chunk 559 found but had not driven, resolved:
+
+**`MessagingKeyBundle` - safe.** `MAX_PUBLIC_KEY_LENGTH` is 128 and `MAX_SALT_LENGTH` is 64, exactly
+matching `public_key` and `password_wrap_salt`. Deliberate, and worth leaving alone.
+
+**`SiteSettings.default_name_source_priority` - real, and in two ways.** The submitted list is
+filtered with `re.fullmatch(r"[a-z0-9_-]+", slug)`, which constrains each token's *characters* while
+saying nothing about its length or how many tokens arrive. Both a single 501-character token and 500
+copies of `osm` are a `DataError` 500 on the site-admin settings page; both are now checked against
+the column after the join, where the constraint actually applies.
+
+**`Image.caption` - real, but only on three of the six paths, and finding that out mattered.** The
+provider paths (pin media, wiki media, albums, the overlay media branch) all funnel into
+`media_materialize._truncated_caption`, which already exists and already reads the column width -
+someone hit this before, for Wikimedia captions that are whole page descriptions, and solved it
+properly for provider text. The gap is the paths where the *user* types the caption:
+`photo_upload.upload_photo`, `uploads.upload_photo_for_owner`, and the safety check-in gallery's
+direct `Image.objects.create`. Each now refuses with its own module's existing convention -
+`PhotoUploadError`, `UploadRejection`, and a 400 - so the caller's error handling is unchanged.
+
+Two process notes.
+
+The chunk-559 scan reported one of those six caption sites, not six. The others reach the column
+through a service call rather than a visible `Image.objects.create`, which its receiver-resolution
+step cannot see through. Worth stating plainly, because that scan's clean 43-site result was used
+last chunk to declare a class closed: it is sound for what it examines and blind past a function
+boundary.
+
+The first caption test I wrote drove the map-overlay endpoint and **passed - vacuously**. That path
+fetches a remote image before it ever reaches the column, which the test network guard refuses, so
+the assertion was never exercised. A passing test that cannot fail is worse than no test; it was
+re-pointed at the check-in gallery, which takes the file directly, and then failed as it should.
+
+Also folded `media_materialize`'s local `_CAPTION_MAX_LENGTH` onto the shared `column_max_length`
+helper, since both existed for the same reason and had independently written the same `_meta`
+suppression. Doing so split an import line whose prefix my edit matched, which broke every test in
+the run until it was repaired - the failure was loud and immediate, which is the only reason it cost
+minutes rather than a consolidation.
+
+## Twentieth consolidation
+
+`10938 passed, 1 xfailed, 43 warnings, 1481 subtests passed in 5618.44s (1:33:38)`, no `FAILED` or
+`INTERNALERROR` lines. Eighteenth green run of twenty. Reconciles exactly against the nineteenth:
+10,936 then, plus the 3 tests chunks 555-557 added, is 10,939 - which is 10,938 passed plus 1
+xfailed. It predates chunks 558-561, whose 16 tests a twenty-first will have to cover.
+
+## Chunk 561 - auditing my own guard, and a signal key that could quietly drop a handler
+
+Chunk 557 declared the route-signature class closed. Chunk 560 then showed that a scan of mine had a
+blind spot it was not advertising, so the first job here was to ask the same question of that guard.
+
+Its weakness was not the one I expected. It reads signatures directly rather than tracing calls, so
+the call-boundary blindness does not apply - but it examined only views wired to **two or more**
+routes, purely because all three known instances were multi-route, and it understood class-based
+views only. Neither restriction follows from the property: a handler that omits its own single
+route's parameter is the same `TypeError`.
+
+Re-run without either restriction: **810 handler checks across 596 parameterised routes, plus 86
+function callbacks - zero problems.** The narrow scope was hiding nothing. The guard has been widened
+anyway, since the restriction was an artifact of how the instances were found, and re-verified to
+bind by restoring `PinRelinkView.get`'s pre-fix signature.
+
+The new thread went looking for a *documented* convention to check globally, and
+`dispatch_uid` on every signal connection is one. All seven connections have it. But the achievement
+system's is built from the sender model alone - `f"achievements_{model._meta.label_lower}"` - while
+Django dedupes receivers by `(dispatch_uid, sender)`. Two subscriptions naming the same model would
+therefore collapse into one: the second `connect()` silently replaces the first, one set of triggers
+and its streak bucket stop firing, and nothing raises or logs. No two subscriptions share a model
+today, so this is latent - and it stays latent only until someone adds a second trigger for a model
+already listed, which `Pin` (one subscription, several plausible achievements) invites. The uid now
+includes the subscription's index, which keeps reconnection idempotent while making collisions
+impossible.
+
+The guard for it failed to bind on the first attempt, and the reason is worth recording. It counted
+receivers whose uid starts with `achievements_`, which also matches the two standalone achievement
+receivers. With a deliberate collision introduced, the subscription receivers dropped from 14 to 13
+while the standalone one made the total 14 again - so the assertion passed against precisely the bug
+it existed to catch, by arithmetic coincidence. Fixed by giving the generated receivers their own
+prefix so the count means one thing, then re-verified: with the collision restored it now fails.
+That is twice in two chunks that a guard of mine passed without exercising anything, both caught
+only by deliberately breaking the code first.
+
+## Chunk 562 - four documented conventions, checked; one asymmetry in the newest feature
+
+Chunk 561's method worked, so this chunk applied it to the rest of the invariants `CLAUDE.md` and
+`docs/NOTES.md` state. All four hold:
+
+- **No `save()` inside a `post_save` handler or `__str__`.** 51 signal handlers (both `@receiver`
+  and `.connect()` styles) and 148 `__str__` methods examined: zero violations.
+- **Share provenance.** Every share path calls `resolve_origin_share` + `record_share_exposure`, and
+  the two places that deliberately do *not* each carry a written explanation of why the chain is
+  already complete without them. Better documented than the rule itself.
+- **`Label` lookups feeding a create use `name__iexact`.** The one site that looked like a violation
+  - `media_labels` doing an exact `get_or_create` - does a case-insensitive lookup first and only
+  reaches the exact create when nothing matches. Correct; the grep pattern was not.
+- **Index creation last in a migration chain.** Only `0001`, `0007` and `0008` violate it, all
+  squashed historical migrations that predate the rule and cannot be reordered now that they have
+  run. Every migration since obeys it.
+
+Four conventions, zero live violations. Worth stating plainly rather than manufacturing a finding:
+the stated invariants of this codebase are, so far, actually held.
+
+So the chunk moved to where defects are likeliest instead - the newest code on the branch, the "you
+are here" marker (`2bddcbd0`, two files, unreviewed). Two hypotheses died on inspection and one
+survived, smaller than it first looked:
+
+- The "My Location" jump appeared to use a possibly-stale cached fix behind a UI promising *current*
+  position. It does not: the cached fix is used for an instant jump and a live read always follows
+  and re-selects. That is progressive enhancement, and the cache is age-bounded besides.
+- The search engine calls `onGeolocationVisit` unconditionally while the map's own GPS path gates
+  the same call behind `_GEOLOCATION_TRACKING_ALLOWED`, which looked like a user's tracking
+  preference being bypassed on one of two paths. **It is not a data leak**:
+  `record_geolocation_pin_visits` checks the preference server-side and returns `[]`, and that
+  guarantee is already tested. Claiming otherwise would have been wrong, and checking cost one file
+  read.
+
+What survives is narrower: with tracking turned off, the search path still *transmits* the user's
+coordinates to a server that then discards them. Nothing is stored, but a user who opted out would
+not expect the coordinates to be sent at all, and the sibling path three thousand lines up already
+declines to send them. The wiring is now gated the same way. No test added - the guarantee that
+matters is the server's, and `test_memories_toggles` already covers it.
+
+## Chunk 563 - a rotation that could never finish
+
+Mining the recent encryption commits (`7aa4e892`, `3959000f`). The command and its 15 tests are
+good: columns are discovered from the app registry rather than a list, the dry run deliberately
+opens no transaction, rotation is idempotent, undecryptable rows are reported per-pk.
+
+One hypothesis died cheaply. `_rotate_column` does `cursor.fetchall()` over a whole column and
+updates row-by-row inside one transaction, which would be a memory and lock-duration problem on a
+large table - but every encrypted column belongs to a per-user model (`Profile` and its 8 columns,
+`ProfileEmail`, `ProfileNote`, the OAuth account rows, `TOTPDevice`, `SiteSettings`). Nothing here
+scales with content volume, so the shape is fine as written.
+
+What survives is an operational dead end. Any row that no configured key can decrypt makes the
+command raise `CommandError`, and `docs/DATA_ENCRYPTION.md` gates the whole procedure on it: *"do
+not drop a key until this completes cleanly."* Such rows demonstrably exist in this codebase's
+history - the test file's own docstring cites five separate production `InvalidToken` incidents,
+each of which left rows written under a key that is now gone. One of those rows makes every future
+key rotation impossible to complete, forever, by hand-editing the database or not at all.
+
+Blocking protects nothing. A value no configured key can read is already lost; retiring a key takes
+nothing further from it. Meanwhile refusing to finish leaves every *other* value still dependent on
+the key being retired - the actual risk the procedure exists to remove.
+
+`--skip-undecryptable` now lists those rows and completes. The default is unchanged, and the error
+message points at the flag rather than leaving the operator to find it. `docs/DATA_ENCRYPTION.md`
+documents when it is legitimate to reach for, and when it is not.
+
+One precision worth recording, because it changes what the fix is: the `CommandError` is raised
+*after* the atomic block commits, so the rows were always rewritten regardless. The bug was never
+that rotation did not happen - it is that the command could not exit cleanly, and the documented
+procedure will not let an operator proceed without that. The fix is to the exit path and the
+guidance, not to the rewriting.
+
+The new test writes its healthy row under the key being *retired* and reads it back with that key
+no longer configured, so it can only pass if rotation actually rewrote the value rather than merely
+not raising. Verified to bind: disabling the skip fails that test and only that test. My first
+version of it was weaker - it wrote the healthy row under the new key, where the assertion would
+have held whether or not anything was rotated.
+
+## Chunk 564 - a different instrument, and a class the whole suite is blind to
+
+Mined `4c2cb212` (achievements/map-layer JS). Changing instrument first: `bun run typecheck` is
+clean and `bun test` is 406 pass / 0 fail across 29 files, both directly on this host. Worth knowing
+that the frontend toolchain works here, since everything this session has leaned on pytest.
+
+Most of that commit is compiled bundler output, which turned out to be the interesting part. The
+bundler emits entry files plus content-hashed shared chunks and **all of it is committed**. The
+chunk prefix is derived from an entry point, so an ordinary rebuild renames every chunk - this tree
+has flipped between `photo-location-scan-*` and `achievements-*` and back at least once, which is
+what makes the commit's diff so large. Combine that with a `cleanup compiled js` commit already in
+this history and the hazard is obvious: commit an entry without its chunks, or prune one that is
+still referenced, and an entry file imports a 404.
+
+Checked both directions. All 8 chunk imports resolve and all 14 template-referenced bundles exist -
+the tree is consistent today. But nothing in this repository would have told anyone otherwise. The
+Python suite never loads the bundle, the TypeScript tests run against `ts/` sources rather than
+compiled output, and the failure appears only in a browser console as a whole page's JavaScript
+failing to load. That is now a guard, verified to bind by deleting a chunk and an entry file (both
+checks failed, then passed again once restored).
+
+The TS source changes in that commit - lazy pointer capture, `touch-action` management, mouse
+context-menu detection - are careful and well-commented. One edge case in `isMouseContextMenu`
+looks real: a keyboard-invoked context menu (Menu key, Shift+F10) reports `button === 0` just as a
+touch long-press does, so it would arm click-suppression with no follow-up click ever coming -
+precisely the swallowing the function's own docstring exists to avoid. **Not fixed**, because
+confirming it needs a real browser and the plausible discriminator (`event.detail === 0`) is
+something I would be asserting rather than observing. Filed in `docs/PROBLEMS.md` with the ten-minute
+DevTools check that would settle it.
+
+## Chunk 565 - the frontend's coverage gap, and one unwatched half of a contract
+
+Surveyed the frontend now that `bun` is known to work here: **65 TypeScript sources totalling 22,811
+lines against 29 test files totalling 3,836**. Thin next to the Python side. The largest wholly
+untested modules are `entries/map-annotations.ts` (2,981 lines), `entries/consensus.ts` (1,396),
+`entries/trivia.ts` (983) and `shared/markup-toolbar.ts` (896) - mostly entry points that wire DOM
+and Leaflet together, which is why they are untested and also why they are awkward to test. A DOM is
+preloaded for every test (`bunfig.toml` -> `testing/dom-setup.ts`), so the obstacle is scope, not
+tooling. Filed as a real gap rather than pretending one chunk closes it.
+
+Two security-shaped hypotheses died on reading, both worth recording as *not* bugs:
+
+- `e2ee-store.ts` caches decrypted identity and conversation keys in IndexedDB and nothing clears
+  them on logout. That is deliberate and documented in the module's own header - keys persist so
+  "day-to-day use never prompts", and "same-origin storage is the trust boundary either way - this
+  is bookkeeping, not isolation". Whether an explicit logout should wipe it is a product decision,
+  not a defect, so it is not mine to make.
+- `clearProfileKeys`' docstring offers "logout-everywhere / key reset" as its purpose while only key
+  reset calls it - but there is no logout-everywhere feature anywhere in the codebase. The docstring
+  names an aspiration, not a missing call.
+
+What was genuinely unguarded is a contract. `IconPicker.search` lowercases the query and then does
+`label.includes(q)` against `data-label` verbatim, so the search is case-insensitive *only* because
+`_icon_picker.html` writes `{{ label|lower }}`. Remove that filter and searching "cam" stops
+matching an icon labelled "Camera" - no error, no empty state, just a grid that hides whatever the
+user typed a capital into.
+
+This codebase has met that shape before: `frontend/CLAUDE.md` records the pin-cache reader and its
+template writer drifting apart, silently returning `[]` until a contract test was written. The
+Python half of *this* contract is already guarded (`test_icon_metadata` asserts every `ICON_KEYWORDS`
+value is lowercase); the template's `|lower` had nothing watching it. It does now, in the same style
+as the pin-cache guard, and verified to bind by deleting the filter.
+
+The test file also demonstrates the failure rather than only asserting the contract - one case
+proves search matches a lowercased label whatever the query's case, the next proves it misses a
+label the template had not lowercased. `bun run typecheck` initially rejected `m[1]` as possibly
+undefined; fixed with `?? ""` rather than a non-null assertion, since an empty attribute is a value
+the assertion handles anyway. Full suite: 411 pass, 0 fail, typecheck clean.
+
+## Chunk 566 - "usually escaped" is not a property
+
+Read `webauthn-client.ts` first, since auth is where a bug costs most. It is clean: the base64url
+helpers are textbook-correct in both directions, `credentialToJSON` handles the empty-`userHandle`
+case correctly, and `isCancellation` matching only `NotAllowedError` is complete here because
+nothing uses conditional mediation or an `AbortController` - checked rather than assumed.
+
+Then switched from reading modules one at a time to a property over the whole frontend: **every
+value interpolated into an `innerHTML` template literal must be escaped.** 110 `innerHTML`
+assignments, 38 distinct interpolated expressions.
+
+Most are escaped, and the modules that build markup as strings each define their own `escHtml`.
+Two had skipped it, and both are the same shape - a URL interpolated straight into an `src="..."`
+attribute, where a quote closes the attribute rather than sitting inside it:
+
+- `organize-tab-manager.ts:454`, a custom label icon read back out of a `data-` attribute (so the
+  DOM has already decoded whatever Django encoded), in a file that calls `escHtml` 250 lines later.
+- `map-annotations.ts:1970`, a photo URL, in a file that calls `escHtml` in six other places.
+
+**Neither is demonstrably exploitable.** Both values are Django-generated media paths and filename
+sanitisation strips quotes, so I am not claiming an XSS - and that is precisely why they survived:
+nothing forces the question until some value finally contains a quote. They are now escaped like
+every neighbour.
+
+The remaining 36 expressions were checked individually and are genuinely safe: static toolbar and
+onboarding definitions, literal ternary branches, integers, markup this same scan already covers,
+one value escaped inline, and a FileReader `data:` URL whose base64 payload cannot contain a quote.
+
+That audit is now a guard rather than a paragraph. Each interpolation must be escaped or listed with
+its reason, the allowlist is keyed on expression text so renaming a variable forces a fresh look, and
+a third test fails on stale entries - an exemption that outlives its code becomes unexamined cover
+for whatever replaces it. Verified to bind by un-escaping `img.url`, which the guard names exactly.
+Full TS suite 414 pass, typecheck clean.
+
+## Chunk 567 - four properties held, and a documentation gap that cost this session real time
+
+Diminishing returns are worth reporting as a result rather than working around, so: **four checks,
+no defects.**
+
+- **localStorage payloads.** Every cached key is both profile-scoped and versioned
+  (`ul_recent_pins_v1_<profile>`, `ul_addr_history_v1_<profile>`). The concern was the pin-cache
+  failure mode - an unversioned payload going silently stale - and it does not apply anywhere else.
+- **HTMX listener accumulation.** Every `htmx:afterSwap`/`afterSettle` hook that re-runs an
+  initialiser is idempotent, by three different mechanisms: a `dataset` flag
+  (`label-rel-picker`, `collapsible-sections`), an identity check against the previous node
+  (`album-items`), and `destroy()` before re-create (`organize-priority`). Double-firing would mean
+  double submissions in an app this HTMX-heavy; it cannot happen here.
+- **`map-layers` restore path.** A stale or corrupt stored base-layer id degrades to "street"
+  through `normalizeBase`, and a non-object payload takes the same path. Robust by construction.
+- **DRF `@action` scoping.** Ten actions, against nineteen existing privacy/scope test modules
+  including three `*_scope_coverage` completeness guards. Already covered.
+
+I did not add tests to the `map-layers` restore path despite it being uncovered: its existing test's
+docstring records the author's deliberate reason - `normalizeBase` is tested directly *because*
+Leaflet is unavailable in `bun test`, and nothing stubs it. Building that harness would be fragile
+for modest value.
+
+What the sweep did turn up is a documentation defect, found by checking whether every file path the
+docs reference actually exists (785 references, 38 unresolvable - most legitimately illustrative,
+squashed-away migration names, or files this very report describes as deleted, so no guard was
+added; the noise would exceed the signal).
+
+**Three different paths are cited for "what is planned" and "what previous agents did", and none
+exists.** `TODO.md` was 416 lines and was deleted in the v0.5.0b0 release commit, yet
+`docs/FEATURES.md`, `docs/NOTES.md`, `docs/ROADMAP.md` and `CLAUDE.local.md` all still treat it as
+live - `NOTES.md` cites ticket ids inside it, `ROADMAP.md` says it was generated from it and tells
+readers to keep it updated. `docs/prompts/` and `docs/notes/ai/` were never tracked at all.
+
+This has a cost I have paid personally: every chunk in this session opens by surveying before
+assuming a gap, and part of the material that survey is supposed to consult has been missing the
+whole time. Filed in `docs/PROBLEMS.md` with the recovery command rather than actioned - restoring
+someone else's 416-line planning document, or rewriting four documents' cross-references, is a
+decision about the project's own record, not a defect in its code.
+
+## Chunk 568 - tracing one feature end-to-end instead of one property across everything
+
+Global-property scans are heavily mined by now, so this chunk changed shape: pick a feature and
+follow it through model, service, controller and template. Albums, chosen because they have the
+thinnest test coverage of the candidates (4 modules, against 27 for trips) *and* were the most
+heavily modified area of the last feature commit - thin coverage plus recent churn is where defects
+should be.
+
+They are not there. Every point I expected to find one was already handled, mostly with the
+reasoning written down:
+
+- **Stale cover after its photo leaves the album.** Cleared on removal, *and* independently
+  re-checked at read time - the cover is only honoured when it is still a member.
+- **Foreign image pinned as a cover.** The assignment re-scopes through the album's own contents,
+  with a comment saying exactly that. `album_images` gates on viewer visibility, so the same call
+  protects both the display and the check.
+- **An album with neither a pin nor a wiki parent.** No database constraint, but `album_owner`
+  raises `ValueError` for it and says in its docstring that the create paths never produce one -
+  and there is exactly one create site, which sets the parent through a helper.
+- **N+1 across albums.** `albums_with_images` documents a fixed three-query cost, and
+  `AlbumBatchingTests` already tests it - asserting *constancy* rather than a magic number, which is
+  the right way to state that invariant.
+- **Name overflow.** Bounded, though by truncation rather than a 400.
+
+The one change worth making is that last constant. `_MAX_ALBUM_NAME_LENGTH = 100` was a literal
+matching `Album.name`'s width; since the controller silently truncates to it, widening the column
+would have left names clipped at 100 with nothing to indicate why. It now reads
+`column_max_length(Album, "name")`, the helper chunk 559 added for exactly this. 69 album tests pass.
+
+Reporting a clean trace as the result. Four test modules looked thin next to trips' 27, but coverage
+counted in files is a poor proxy: what albums have is tests on the things that actually decay -
+batching, races, visibility - which is worth more than breadth.
+
+## Chunk 569 - the Stripe hazard idempotency tests do not catch
+
+Traced billing end-to-end, chosen by risk this time rather than coverage: money, external state, and
+a system that retries. Twelve test modules already, including one for webhook idempotency.
+
+The webhook view is the strongest code I have read in this session. Signature verification, the raw
+event stored in its own transaction *before* handling so a failing handler still leaves something to
+debug from, then a `select_for_update` re-read of that row inside the handling transaction - with
+the reasoning written out, including why handling and marking-as-handled must commit together
+(`invoice.payment_succeeded` *increments* a paid total, so a redelivery that credited but did not
+record would credit twice).
+
+But idempotency is per event id, and that is a different property from ordering. Stripe guarantees
+neither, and emits `customer.subscription.updated` alongside `.deleted` at cancellation while
+retrying failed deliveries with backoff for days. So the `updated` carrying the pre-cancellation
+status can land *after* the `deleted` - and `_handle_subscription_updated` applied it verbatim,
+writing `status` back to `active` and `canceled_at` back to `None`. A cancelled subscriber keeps
+whatever access the role grants.
+
+Not unbounded, and worth stating precisely: `sync_stripe_subscriptions` re-fetches from Stripe
+nightly at 04:10 and selects `not_canceled()`, so a resurrected row is picked up and corrected -
+the architecture already anticipated unreliable webhooks. The exposure is up to ~24 hours, not
+permanent. Reproduced with a failing test first, then closed.
+
+The guard is that cancellation is terminal at Stripe: a canceled subscription is never reactivated,
+a new one is created instead, so a later payload claiming otherwise is always the stale one. The
+obvious objection - a subscription set to cancel at period end *is* reversible - does not apply,
+because that one's status stays `active` until the period closes and so never reaches the branch.
+A second test covers the case the guard must not break: re-delivery of the cancellation itself still
+updates the row's other fields. The nightly sweep calls `sync_from_stripe_subscription` directly
+rather than through this handler, so its safety-net behaviour is unchanged. 49 billing tests pass.
+
+Deliberately left alone: the refund/chargeback reversal already filed as an owner decision. This
+change is about event ordering, not about what a reversal should do.
+
+## Twenty-first consolidation
+
+`10955 passed, 1 xfailed, 43 warnings, 1483 subtests passed in 5812.62s (1:36:52)`, no `FAILED` or
+`INTERNALERROR` lines. Nineteenth green run of twenty-one. Reconciles exactly against the twentieth:
+`git diff e9ab7f1b~1..bce95022` over the test tree adds 17 test functions, and 10,955 - 10,938 = 17.
+
+## Chunk 570 - the untested half of a security property
+
+Traced encrypted group chat, picked for concurrency, crypto and cross-user visibility. The opening
+hypothesis was that removing a member does not rotate the group key while adding one does - the
+`add_group_members` docstring mentions rotation and `remove_group_member` says nothing about it.
+
+**Wrong, and cheaply so.** `needs_rotation` compares the current key's envelope holders against
+current members with `!=`, which trips on a removal exactly as it does on an addition. The
+implementation is symmetric; only the prose is lopsided. Fourth time this session that reading first
+killed a hypothesis that would have been embarrassing to publish.
+
+The real gap was next to it. Three rotation cases were tested - no key yet, member added, steady
+state - and the fourth, member removed, was not. That is the direction that matters most: it is what
+stops a removed member's key from continuing to decrypt the group's future traffic. Nothing pinned
+it, so narrowing that `!=` to a subset check - the obvious way to silence a rotation that looks
+spurious - would have quietly disabled rotation-on-removal with every test still green. Now pinned,
+and verified to bind by making exactly that change: only the new test fails.
+
+Worth being clear about what the existing coverage does and does not do.
+`test_group_removal_stops_delivery` already covers removal, on the *delivery* side - the server stops
+sending to them. That is server-side and structurally cannot speak to whether the removed member
+retains the ability to decrypt, which is a property of the key, not of the transport. Same shape as
+chunk 569's ordering-versus-idempotency: two properties that look like one until they separate.
+
+One genuine gap remains and is filed rather than fixed: the send path validates `key_version >= 1`
+but never against the group's current version, so a client that has not yet refreshed keeps
+encrypting under a version the removed member holds. In-app the removed member cannot fetch those
+messages (`visible_window` bounds them to their membership stint), so the exposure needs ciphertext
+obtained out of band. The server-side fix is available - any member may rotate, and the race is
+handled - but rotation 409s unless every member is enrolled, so rejecting stale-version sends would
+let one un-enrolled member block the group from sending at all. Confidentiality against availability
+is the owner's trade to make, not mine; `docs/PROBLEMS.md` records it with three options.
+
+## Chunk 571 - a socket that outlived its permission
+
+Traced the WebSocket layer, untouched until now: concurrency, auth and cross-user visibility in one
+place. The framing that worked in the last two chunks - *what property can the existing tests
+structurally not catch?* - points straight at it. Auth and credential scopes are tested, but those
+test the state at `connect()`. A socket that was authorised then, and shouldn't be now, is a
+different property.
+
+Three of the four consumer families turned out to be already safe, each for its own reason:
+
+- **Safety check-in chat.** Already solved, and by exactly this reasoning:
+  `_broadcast_partner_access_revoked` exists because "an accepted partner may already have a live
+  WebSocket connection whose permission was only checked once, at connect() time". There is a
+  matching `contact.access_revoked`, *and* a 60-second periodic revalidation as a backstop for a
+  dropped broadcast. Thorough.
+- **Group chat.** Structurally immune - `_broadcast_group_event` recomputes recipients from
+  `active_memberships()` at broadcast time and sends to per-profile channels, so there is no
+  per-group subscription to go stale. There is no `GroupChatConsumer` at all.
+- **Direct messages.** Same per-profile channel shape.
+
+**Game sessions are the exception, and they are the one family with a per-session channel group** -
+"one channel-layer group per session, every participant [joins]". Trivia has `kick_participant`, and
+`_remove_participant` broadcasts `participant.left` to the session group, which the consumer only
+*relays*. Nothing closed the removed player's socket and nothing discarded their channel, so a kicked
+player kept receiving every later broadcast - other players' answers, the round data, the chat. They
+could also keep sending: `receive()` re-checks the API credential's scope but never participation
+again, and the shared `SessionChat.send` deliberately delegates that check to "each game's
+controller and consumer", which here meant connect() and never after.
+
+Fixed on the shared base so all three games get it: the connection's profile id is resolved once at
+connect, and `participant_left` relays the event first - so the player learns why - then closes if it
+was about them. Reproduced with a failing test first.
+
+Two harness details cost a cycle each and are worth recording. Broadcasts are enqueued as Celery
+tasks rather than performed inline, so a test that triggers one must wrap it in
+`broadcasts_delivered_inline()` or it silently observes nothing - my first version timed out waiting
+for a broadcast that was sitting in a queue. And `receive_nothing()` counts a pending close frame as
+output, so "assert nothing more arrives" is the wrong assertion for a socket that is *supposed* to
+close; asserting the `websocket.close` frame directly states the property better anyway. Verified to
+bind by disabling the close - only the new test fails. 44 socket tests pass.
+
+Not matched to safety's belt-and-braces: game sessions get the broadcast close but no periodic
+revalidation loop. Safety streams live location, which is worth the standing query; a game session
+is not, and adding a per-minute database check to every connected player is a cost I would not pay
+without being asked.
+
+## Chunk 572 - an unsend that only reached the app
+
+Notifications turned out to be well covered (10 modules, including a preference-field completeness
+guard), so the chunk applied the framing that has been paying off - *a permission or state checked
+once, then acted on later* - to a layer that had not been traced: **deferred Celery work**. A task
+enqueued now runs minutes later, carrying whatever was true at enqueue time.
+
+`send_direct_message_email_if_unread` is delayed by `EMAIL_DELAY_SECONDS` (120) precisely so a
+recipient who opens the message in the app is never emailed about it. The task re-reads the row and
+returns when `read_at` is set. But **"still unread" and "still exists" are two different
+properties**, and only the first was checked.
+
+`delete_message_for_everyone` is a *soft* delete - it stamps `deleted_by_sender_at`, switches the
+recipient's view to a tombstone, revokes any attached share, and keeps the row. So a message unsent
+inside that two-minute window, which is exactly the window an unsend exists for, still had its first
+200 characters emailed to the recipient: out of band, permanent, and arriving after the app had
+already told them the message was withdrawn. The delayed WhatsApp/SMS alert did the same.
+
+Both now ask `tombstone_text_for` - the same helper the UI asks - rather than re-deriving the
+condition. That keeps the two from drifting and picks up the recipient's own delete and expired
+disappearing messages for free. Reproduced with failing tests first; a third test covers the case the
+guard must not break, an ordinary unread message still being emailed.
+
+Then the sibling check, which is where the honest scope of this sits. The same class has four sites,
+not two: the on-site `NotificationLog` raised for a message also stores its preview - 120 characters
+for a DM, `"{sender}: {preview}"` for a group message - and no delete touches it. So the thread says
+"Message deleted" while the notification list still quotes what was said.
+
+**Not fixed**, and deliberately: `NotificationLog` has no reference to the message it was raised for,
+and its `url` points at the thread rather than the message, so there is nothing to match on. Matching
+heuristically on profile, type, url and timestamp would eventually delete the wrong notification.
+That needs a schema decision - filed in `docs/PROBLEMS.md` with three options. Group messages have no
+deferred email at all, so the fix here has no group-side counterpart to miss.
+
+The precedent is in the codebase already: `test_direct_message_hard_delete`'s docstring opens by
+describing a privacy gap where a feature "only ever gated *display*" while the data lived on. This is
+the same gap, one layer out.
+
+## Chunk 573 - seven hypotheses, none of them bugs
+
+Carried the "deferred work carries stale state" framing from chunk 572 across the rest of the task
+layer and into imports/exports. Nothing survived contact, which after four productive chunks is the
+honest result and is recorded here so the next pass does not re-probe the same ground:
+
+- **`import_immich_photos`** re-reads pin, profile and Immich account and returns if any is gone. No
+  ownership re-check, but a pin cannot change owner in this data model and Postgres does not reuse
+  ids, so a surviving pin is still the same user's.
+- **`import_flickr_album_photos`** resolves a wiki by pk with no access check - but the enqueue site
+  is `resolve_visible_wiki(request, location_slug)`, which checks access *and* resolves the wiki from
+  the URL slug rather than a client-supplied id. No IDOR; the residual is a narrow window where a
+  user loses wiki access mid-import, which is a write they initiated while entitled.
+- **Export download** validates the job id as a UUID (so no traversal), checks the job's recorded
+  `user_id` against the requester, then readiness, then existence.
+- **Export cleanup** is scheduled in a `finally`, so success, a failed user load and a mid-export
+  exception all reach it.
+- **Countdown durability** is not accidental: the Celery settings carry a comment reconciling
+  `visibility_timeout` against "the longest countdown= this app schedules (import/export cleanup at
+  3600s)", and set it to twice that.
+
+One observation was worth filing rather than dismissing. `schedule_export_cleanup` calls
+`safely_enqueue_task`, and when that returns None it logs a warning and returns - so an export ZIP
+containing the user's entire account stays on disk with nothing to reap it. Worker loss is covered
+by redelivery; a failed *enqueue* is not. The remedy is a periodic sweep by directory mtime, which
+this codebase would find idiomatic - it already backstops single mechanisms this way in billing
+("safety net for missed Stripe webhook deliveries") and safety ("backstop for a dropped
+partner_access_revoked broadcast") - but adding a beat task and choosing how aggressively to reap is
+an operational decision, so it is filed with the reasoning instead.
+
+Worth saying plainly: the ratio across this session is roughly one real defect per two or three
+hypotheses, and the hypotheses that die tend to die because someone had already thought about the
+problem and left the reasoning behind. That is a property of this codebase worth knowing when
+deciding how hard to push on any given suspicion.
+
+## Chunk 574 - the sibling I missed one chunk ago
+
+Surveyed the plugin system first and left it alone: 23 test modules, and the one whose name matched
+the property I was going to test - `test_panel_gate_isolation` - opens by describing exactly it
+("One plugin's broken gate must not empty the whole panel list"), including why the external API's
+list endpoint needed the guard the internal HTMX-per-panel page did not. It even records that the
+suppression matches `run_panel_fetch`'s existing stance. Nothing to add.
+
+The chunk's finding came from re-reading my own previous one. Chunk 572 fixed the delayed direct-
+message email and text alert to skip a *deleted* message, on the grounds that "still unread" and
+"still exists" are different properties. **Deletion is not the only thing that can change inside a
+120-second window.** Blocking is the other one - and it is placed, most often, in exactly that
+window: right after the message that prompted it.
+
+`create_direct_message` enforces blocks (`test_friendship_block_enforcement` exists precisely
+because it once did not). The deferred email did not: it re-read `read_at`, and after chunk 572 the
+tombstone, but never re-asked whether the sender is still allowed to reach this recipient. So a
+recipient who blocked someone still received that person's message text by email two minutes later,
+out of band and permanent, after the app had stopped showing it to them.
+
+Both tasks now call `can_direct_message` - the same helper `create_direct_message` calls, so the two
+cannot drift - which also covers a recipient who has since tightened their direct-message
+visibility, for the same reason. Reproduced with a failing test first. 111 tests pass.
+
+One process note. The edit that added the import matched a *third* import line by prefix - the
+unrelated `notifications.notification_text_alerts` module, which does not export
+`can_direct_message` - and would have been an ImportError at task run time. Caught immediately by
+compiling, and it is the same prefix-matching mistake that split an import line in chunk 560. A
+blanket string replace across a 3,000-line module needs its match count asserted, not assumed.
+
+The lesson worth generalising: when a fix lands, the next question is not only "where else does this
+shape appear" (which chunk 572 asked, and answered with the notification previews) but "what else
+can change during the same window". The first asks about code shape; the second asks about time.
+
+## Chunk 575 - closing threads rather than opening one
+
+Three of this chunk's four lines of enquiry ended in "already handled", and the fourth in "already
+planned". Recording them so they are not re-run.
+
+**The 120-second window is now exhausted.** Chunk 574 left a list of other things that could change
+between a message being sent and its delayed alert firing. Checked, all covered: a sender being
+banned cannot happen - there is no ban or suspend feature, the only `is_active = False` in the
+codebase is email verification at signup; `community_enabled` and blocks are both inside
+`can_direct_message`, which the tasks now call; and an account actually deleted takes the message row
+with it, so the task's existing `DoesNotExist` guard catches it. Deletion is scheduled with a grace
+period during which the account is live and mail is legitimate.
+
+**Safety archival and the plugin system are both well covered** - archival by tests spanning the
+seal/secretbox wire format, idempotency, no-bundle handling, FK integrity after a contact scrub and
+the immediate-vs-grace scheduling split; plugins by 23 modules including the gate-isolation guard
+described in chunk 574.
+
+**The absence of moderation is known, not overlooked.** No content reporting, no suspend, and the
+site admin's only user-level action is full account deletion behind three guards. That is a real gap
+for an app with community wikis, DMs and live chat - but `docs/ROADMAP.md` already carries
+"Rate/abuse limiting for users (not just external APIs): DDOS/spam (UL-70), share caps". Filing it
+would have been noise. Worth noting that UL-70, like the other ticket ids the docs cite, lives in the
+`TODO.md` that no longer exists - the same problem already filed in `docs/PROBLEMS.md`, showing up
+again from a different direction.
+
+**TypeScript consolidation**, which the pytest consolidations have never covered: `bun run typecheck`
+clean, `bun test` **414 pass / 0 fail across 31 files in 17.81s**. That closes a verification gap I
+had been deferring for ten chunks - the TS tests added in 565 and 566 had never been run as part of a
+full-suite check.
+
+The one change: two more constants duplicating a column width, found by scanning for literals equal
+to some field's `max_length` and then discarding the coincidences (page sizes that happen to equal an
+unrelated column). `_MAX_LAYER_NAME_LENGTH` bounds `CustomLayer.name`, `_MAX_NAME_LENGTH` truncates
+`MapImageOverlay.name`, and both repeated 100 rather than reading it. Same drift as chunk 568's
+album fix, same remedy. Constants defined *in* a model module and used as the field's own
+`max_length` were left alone - those are the single definition, not a copy of one. 37 tests pass.
+
+## Twenty-second consolidation - one failure, and it was mine
+
+`10962 passed, 1 failed, 1 xfailed, 1483 subtests passed in 5821.53s (1:37:01)`. Reconciles exactly:
+`git diff bce95022..2ee0728f` over the test tree adds 8 test functions, and 10,964 - 10,956 = 8.
+
+The single failure is `test_removing_a_member_flags_rotation` - my own test from chunk 570 - and it
+failed for a reason that has nothing to do with the code. That chunk's binding check edits
+`controllers/e2ee.py` to a deliberately broken subset comparison, copies it into the container,
+confirms the test fails, then restores the file. **The restore happened on the host only.** I
+launched this consolidation minutes later without re-syncing, so it ran against a container still
+holding the deliberate regression, and my test correctly caught it.
+
+Host and container now agree, and the test passes against the real code. Nineteen green of
+twenty-two, with this one explained rather than excused.
+
+The lesson is specific and worth keeping: *break, verify, restore* leaves the container out of sync
+with the host, and every later `docker exec` run inherits that until something copies over it. The
+restore step has to include the `docker cp`, not just the file.
+
+## Chunk 576 - a filed problem whose premises had expired
+
+With most areas traced, this chunk re-read the open entries in `docs/PROBLEMS.md` looking for one
+whose "not fixed because..." had stopped being true. The trip-activity weather timezone bug (filed
+2026-08-12) was exactly that.
+
+Its reasoning was that a correct comparison "genuinely cannot be built from what is already here" -
+no timezone library, no per-location timezone field - and that switching to UTC "would change what
+users see everywhere". Both were checkable, and both turned out false:
+
+- Open-Meteo is asked for `timezone=auto` and **reports the offset it applied**, as top-level
+  `utc_offset_seconds`. The gateway reads `response.json()["hourly"]` and discards the rest. No
+  library needed; the data was already in the payload.
+- `ForecastSlot["date"]` has **two readers**, both the matching arithmetic in `controllers/trip.py`.
+  It is never rendered, so converting it cannot change any display. The request still asks for
+  `timezone=auto`, so sun times and panel local times are untouched.
+
+The gateway now subtracts the reported offset, defaulting to zero so a response lacking the field
+behaves as before, and `ForecastSlot.date` carries the naive-UTC contract the entry said it was
+missing. Four tests cover it: both offset directions, the absent-field default, and that no other
+field moves. That closes an offset error of four to five hours in New York, nine in Tokyo - a wrong
+"closest" slot, and a skewed out-of-range threshold.
+
+Worth generalising: a filed problem records what was true when it was written. "Needs a product
+decision" is a conclusion with premises, and premises expire. Re-reading old entries for expired
+premises found more in one chunk than the last two chunks of fresh searching did.
+
+## Chunk 577 - the filed-problem list was lying about its own state
+
+Continued chunk 576's method - re-read open entries in `docs/PROBLEMS.md` and check whether the
+reason each was deferred still holds. Three checked, and unlike the weather entry, **all three
+deferrals are still sound**, which is worth recording so they are not re-opened:
+
+- **`Friendship.muted` is stored but nothing reads it.** Only its sequencing premise expired ("the
+  external API's `is_muted` surface needs the flag to exist first" - it exists now). The blocker is
+  the *other* muted entry: there is one `Friendship` row per pair, so `muted` is shared. Wiring
+  suppression in without splitting the column first would make A's mute silence B as well - fixing
+  one bug by introducing a worse one.
+- **FCM push registers but never dispatches.** Blocked on a Google service-account credential and a
+  Play-flavour client. External infrastructure, not an expired premise.
+- **Bulk-accepting 200 pin suggestions makes 200 sequential outbound calls.** The entry already
+  measured the scope carefully (0 of 15 ordinary GET endpoints call out synchronously; it is confined
+  to write paths that create a `Location`). Deferring name resolution to Celery means a pin appears
+  under a placeholder name and is renamed a moment later - visible to the user, and entangled with
+  `name_is_user_provided`. A genuine product decision.
+
+Then the fourth read turned up something better. **`FriendInvitation.mark_accepted` reads as open and
+has been fixed for weeks** - the fix and its test are written directly above the original entry,
+which is retained below a "The original entry follows" marker. Scanning for that pattern across all
+9,300 lines found **seven entries whose heading says OPEN or Note while the body records a fix**.
+Five are genuinely resolved and are now labelled so; two are partial and now say which half
+(`PARTIAL`), because "E2EE - the client trusts server-supplied Argon2 parameters" has its server side
+fixed and its client side explicitly "not fixed - needs a coordinated client+server change".
+
+This matters more than it looks: the method that has been producing findings for two chunks is
+*reading the open list*, and a seventh of that list was mislabelled. I cost myself one full entry
+read on an item fixed weeks ago.
+
+**And one of the seven corrects me.** `docs/notes/ai/completed.md` was already investigated in
+chunk 388 and resolved as *gitignored, not missing* - `.gitignore:49` ignores that whole directory.
+My chunk-567 filing listed it alongside `TODO.md` as "never tracked", which is literally true and
+materially misleading: local-only agent notes are a different thing from a deleted document. That
+entry also framed the structural defect better than mine did - *tracked documentation referencing
+gitignored content*. My entry now says so and narrows itself to what is actually new: root `TODO.md`
+**was** tracked and was deleted in a release commit while five documents kept citing it, and
+`docs/prompts/` is a third path matching neither pattern.
+
+Filing a defect that a previous entry in the same file had already analysed is the cost of not
+reading the whole list first. The list is 9,300 lines; the fix is that it now labels itself
+honestly, so the next reader can trust the headings.
+
+## Chunk 578 - my own cleanup had a blind spot
+
+Chunk 577 relabelled seven entries whose headings said OPEN while their bodies recorded a fix, and
+concluded the open list was now trustworthy. It was not. The very next entry read this chunk -
+`check_in`/`cancel_checkin` writing `status` from a stale instance - turned out to have been fixed on
+2026-08-16, and my scan had missed it.
+
+The reason is a second convention in the same file. Some entries append the resolution to the body,
+which is what chunk 577 searched for. Others write the resolution *above* the retained original
+heading, ending with "The original entry follows." My scan split the document on `##` headings, so
+those resolutions were attributed to the **preceding** entry - the fix text was found, just filed
+against the wrong heading, which is precisely the failure mode that made the entry look open.
+
+Scanning for the second convention found five more. Four are genuine fixes and are relabelled;
+`LabelReorderView.post issues one UPDATE per label` I checked against the code rather than the prose,
+since its window match was a false positive - `controllers/labels.py:857` does `bulk_update` and
+`test_label_reorder_query_count` exists, so it is resolved regardless of what the surrounding text
+said. The fifth is not a fix at all: "one notification preference is named after the enum member"
+carries "**Re-checked 2026-08-16 and deliberately not renamed**", so it is now labelled `DECIDED`
+rather than resolved - a decision to leave something alone is a different state from a fix, and
+flattening the two would lose the reasoning.
+
+Twelve mislabelled entries across two chunks, in a 9,300-line file whose open list is the input to
+the method that has been finding things. Worth stating the general point plainly: **a scan I write to
+audit a document inherits that document's conventions, and I only know one of them until I read
+enough of it to be surprised.** Chunk 577's confidence that the list was now trustworthy was
+premature by exactly one entry.
+
+The three deferrals checked this chunk before hitting the labelling problem are all still sound and
+are recorded above; the substantive open items that remain are genuinely open.
+
+## Chunk 579 - stopping the labelling work, and why
+
+Checked the DM retention sweep entry's deferral and found it sound: the index half is deliberately
+left to a production measurement this environment cannot take, and migration 0038 shows indexes here
+are actively curated, so a speculative index on a hot write table is exactly what it argues against.
+Its *materialisation* half was fixed on 2026-08-16 - `hard_delete_expired_direct_messages` now takes
+`batch_size=2000` slices under a `max_per_run` ceiling - so the entry is partial, not open.
+
+Chunk 577's regex missed that because the marker reads "**The materialisation half is fixed**"
+rather than starting with "Fixed". That is a third convention. Rather than write a fourth scan, I
+ran a deliberately permissive one - any bold text containing "fixed"/"resolved"/"done" - which
+matched 23 entries and made the real problem obvious: **most of those are negations.** "Not fixed
+here because it needs a product decision", "Deliberately not fixed here", "Wrapping them is not the
+fix, which is why this is filed rather than done". A pattern that cannot tell a fix from a refusal
+to fix is not a classifier, and tightening it further just moves which half it gets wrong.
+
+So this is where the labelling work stops. Three more entries relabelled from the permissive pass -
+the two unambiguous fixes and the DM sweep - and the rest left as they are, because the remaining
+matches are correctly-open entries whose bodies explain, at length and well, why they are open.
+
+Fifteen entries relabelled across three chunks. The useful part was never the count: it was that
+the open list is the input to the method that has been finding real bugs, so its accuracy compounds.
+The unuseful part was believing, twice, that a scan had finished the job. Each time the file had one
+more convention than my pattern knew about, and each time I found out by reading an entry and being
+surprised rather than by the scan telling me.
+
+The general shape, worth carrying: *automating a judgement over prose written by many hands, over
+months, in a file nobody standardised, converges slowly and expensively.* Reading fifteen entries
+would have cost less than three passes of pattern-chasing. Diminishing returns here are steep, and
+recognising that is the finding.
+
+## Chunk 580 - back to code: a block that left someone watching your live location
+
+Back to code after three chunks of document work. Two filed entries were candidates; the SCSS
+dark-mode one states its own one-line remedy, but the entry immediately below it was more
+consequential and sat on two threads this session had already pulled.
+
+**Blocking someone did not revoke their safety-partner access.** An accepted `SafetyCheckinPartner`
+sees the owner's live location, their check-in chat, and their escalation status. Blocking is the
+strongest stop this app offers, and it left those rows - and any open WebSocket - entirely intact.
+
+The deferral was review scope, not principle: the entry that filed it had already fixed nine issues
+in that feature and explicitly named this fix - "a signal/hook on block-creation that calls
+`remove_checkin_partner` for every `SafetyCheckinPartner` row between the two profiles (either
+direction)". `remove_checkin_partner` deletes the row *and* calls
+`_broadcast_partner_access_revoked`, which chunk 571 confirmed closes live connections whose
+permission was only checked at connect(). So the whole fix was calling something that already
+existed, from a place nothing called it.
+
+Both directions are revoked, per the entry: blocking is mutual disengagement, and "still watching
+someone you blocked" is the same relationship from the other end. Outstanding invitations go too -
+an unaccepted invite is an offer of exactly the access being revoked. Reproduced with three failing
+tests first; a fourth pins the scoping, asserting an unrelated partner on the same check-in survives.
+572 friendship/blocking/social tests pass.
+
+Worth noting what made this findable: it is the third time this session that *blocking* and
+*connect-time-only permission* have turned out to interact - chunk 571 (a kicked player's socket),
+chunk 574 (a delayed email to someone who blocked the sender), and now this. A permission model
+where the strongest user action is enforced at some entry points and not others produces the same
+bug repeatedly, in whatever surface was written last.
+
+## Chunk 581 - the sweep, and the line the codebase had already drawn
+
+Chunk 580 fixed blocking to revoke safety-partner access, and the obvious next move was to apply the
+same rule to every other granted-access row: trip memberships, group chat memberships, pin shares,
+place grants. That would have been wrong, and the codebase says why in a docstring.
+
+`DirectMessageShare.revoke` undoes a share "only if the recipient hasn't acted on it yet", leaving
+already-accepted pin shares and already-responded trip invites "completely alone - there is nothing
+to revoke once the recipient has acted". Accepting a pin share runs `create_pin_from_share`: the
+recipient ends up owning **their own `Pin`**. Flipping the share row's status afterwards takes
+nothing back.
+
+So the distinction is not "granted access" versus "not granted". It is:
+
+- **A continuing capability** - a safety partner's live-location stream, chat, escalation status -
+  which a block should end, and now does.
+- **A completed transaction** - an accepted pin share - where the data has already moved and the
+  row is a receipt, not a key.
+- **A standing offer** - a *pending* share - which is the case this codebase already withdraws
+  elsewhere, and the one still open here.
+
+That third case was a real gap. The accept path does not re-check blocking, so a profile could block
+someone and have them accept the standing offer afterwards, ending up with a copy of a place the
+blocker had just withdrawn from them. `block_profile` now rejects pending shares in either
+direction and deliberately leaves accepted ones alone. Four tests: both directions, the
+accepted-share boundary, and an unrelated pending share surviving.
+
+Trip and group-chat memberships were left alone on a different ground: they are multi-party. Ejecting
+someone from a trip because one of its members blocked them is a decision about whose trip it is, and
+the owner's, not mine to make.
+
+The sweep's value was in the boundary, not the count. A pattern that produced three findings in a row
+does not extend indefinitely, and the place it stops was already written down by whoever wrote
+`revoke`'s docstring - which is the second time this session that reading the surrounding prose
+answered the question the scan was about to ask.
+
+## Chunk 582 - the cheap one, with one judgement in it
+
+The last filed item that was genuinely cheap: three danger-red controls in `_pin_lists.scss`
+carrying raw hexes with no dark-theme counterpart, where `--ul-color-danger-text` already exists and
+`_pin-detail.scss` / `_tags.scss` already use it in exactly the prescribed form. Five occurrences
+swapped, each keeping its original hex as the fallback.
+
+Two of the three were mechanical. The third was not, and is the reason this was worth reading rather
+than sed-ing: `.pin-list-item-remove`'s hover is `#fca5a5`, a *pale* red, which could easily be a
+deliberate lighter-on-hover treatment rather than a theme bug. It is not - the control's rest state
+is `var(--ul-grey-4)`, an inverting token, so it sits on an ordinary themed surface, and a pale red
+there is a light-mode contrast problem. The pale hex is a dark-surface colour on a surface that is
+only sometimes dark.
+
+Verified by compiling (`bun node_modules/.bin/sass` directly, since `bun run sass` crashes on this
+host through the Node shebang) and by confirming the token is defined both in `:root` and under
+`[data-theme="dark"]`. The built CSS is gitignored, so the source change is what ships - worth
+checking rather than assuming, since this repo *does* commit its compiled JavaScript.
+
+Also read the two background runs. The regression sweep over sharing/friendship after chunks 580-581
+is **673 passed, 0 failed**, so those two fixes hold across the surface they touch.
+
+## Chunk 583 - trips are clean; CI was not running a suite that exists
+
+Traced trips, the last untraced feature area, with the framings that have been paying. It comes back
+clean, and the interesting part is that the reasoning was already written down:
+
+- **Departure revokes the second channel.** Leaving or being removed calls
+  `disconnect_member_calendar_sync`, and the comment says why in the terms I was about to use: "A
+  live calendar export is a second, independent channel to the same data". The module docstring
+  states the rule outright. This is the shape chunk 572 found unhandled in messaging, handled here.
+- **No stale-socket class.** There is no trip consumer, so membership is checked per request and
+  removal takes effect on the next one.
+- **Creator and organizer are two permissions, not one.** `remove_member` refuses to remove the
+  creator and allows only self-or-creator; `set_member_organizer` is creator-only and refuses to
+  touch the creator's own flag. No takeover path.
+
+So the sweep moved to infrastructure, and found something concrete. **`.github/workflows/ci.yml`
+never runs the TypeScript tests.** Its frontend job sets up Bun, installs dependencies, builds the
+bundle and builds the stylesheet - and stops. `bun run typecheck` and `bun run test:ts` appear only
+in `.pre-commit-config.yaml`, which protects a developer who has pre-commit installed and does not
+pass `--no-verify`.
+
+That means **414 TypeScript tests across 31 files have never run in CI**, including the two contract
+tests this session added (chunk 565's icon-picker `|lower` agreement, chunk 566's innerHTML escaping
+allowlist) and the pre-existing `pin-cache.contract.test.ts` - which exists precisely because that
+reader/writer pair silently drifted once already. A pull request breaking any of them merges green.
+The Python side has no such gap: CI runs ruff, ruff format, mypy and the Django suite with coverage.
+
+Two steps added to the job that already has Bun and the dependencies, so the cost is seconds. Both
+verified locally as written - typecheck clean, 414 pass - and the YAML parses.
+
+Worth naming the shape: a guard is only as good as the thing that runs it, and I added guards for
+ten chunks without once checking whether CI would run them. The tests I wrote in 565 and 566 would
+have protected nothing on a pull request.
+
+## Chunk 584 - two alarms that were mine, and one real gap
+
+Continued chunk 583's line: anything enforced locally but not in CI. Five pre-commit hooks, three
+already in CI (ruff, ruff-format, and the two TypeScript steps added last chunk). That left
+`imports-tracked`, and a broader question about what CI does not check at all.
+
+**Two alarms, both mine, both nearly published.**
+
+The first: `CLAUDE.local.md` warns that `manage.py test` "never sets the `TESTING` flag, so any test
+rendering a full page template hits a staticfiles-manifest 500" - and CI's Django step runs exactly
+`manage.py test`. I reproduced it locally: 28 of 33 errors on one module, all
+`Missing staticfiles manifest entry`. The mechanism is real and subtler than the warning states -
+the custom runner sets `TESTING` in `setup_test_environment()`, but `STORAGES` was already computed
+from it at settings-import time, so the flag arrives too late. **CI is nonetheless fine**, because
+its workflow sets `DJANGO_SETTINGS_MODULE: urbanlens.UrbanLens.settings.test`, and that module sets
+`TESTING = True` at import. My reproduction used the default settings module. Checking the env block
+before claiming "CI is red" is the only reason that did not go out.
+
+The second: I ran `bin/check_imports_tracked.py` in the app container and it reported four committed
+test files importing `services/wiki/wiki_creation`, "which no committed file provides". I got as far
+as reading the module and confirming five committed files import it - including production
+controllers - before checking the premise. **The module is tracked**, committed in `e8070767`. The
+script asks git what is committed; the container has no git history, so everything looks untracked.
+It passes on the host. Same instrument error as chunk 576's container-sync mistake: a tool run in the
+wrong place answers a different question confidently.
+
+I also misread the earlier evidence: `git status` and `git ls-files` in one command, and I attributed
+the single line of output to the first when it came from the second. Two commands, one line, and no
+way to tell them apart without running them separately - which I then did.
+
+**The real gap: nothing checks for missing migrations.** Not CI, not pre-commit, not a test.
+A model change without its migration surfaces only if some test happens to touch the field, and
+otherwise waits until the column is needed in production - in a codebase whose `CLAUDE.md` documents
+careful migration practice at length. `makemigrations --check --dry-run` reports "No changes
+detected" today, so it is cheap to add and green. Added, along with `imports-tracked`, to the job
+that already has the dependencies.
+
+## Chunk 585 - a stale TODO whose reasons expired but whose conclusion held
+
+Applied the "check the stated reason" method to the commented-out `check --deploy` step in CI, which
+carried three numbered blockers. Two have expired: `SECURE_HSTS_SECONDS` is now set in
+`settings/base.py`, and the "copy .env-sample so CI picks up the env vars" note is moot because the
+workflow sets them in its own `env:` block.
+
+But the step still cannot be enabled, for a reason the list never named. This job runs under
+`DJANGO_SETTINGS_MODULE=...settings.test`, where `SECURE_SSL_REDIRECT` is off and `DEBUG` is on *by
+design*. Measured rather than assumed: 18 issues, and the security ones - W004, W008, W018 - are all
+artefacts of pointing a production check at test settings. They describe settings behaving
+correctly. Making the step meaningful means evaluating production-like settings, which is a
+deployment decision rather than a CI one.
+
+So the conclusion survives its own reasoning, which is a distinct outcome from the weather entry in
+chunk 576 (premises expired, conclusion fell) and from chunk 577's three (premises intact). The TODO
+now says what is actually true, so the next person to read it does not re-derive two obsolete points
+and then uncomment a step that produces eighteen confusing warnings.
+
+The run also surfaced 14 `drf_spectacular.W001` duplicate-enum-name warnings. **Already filed** -
+`docs/PROBLEMS.md:5852` records them, and records 224 at the time, so that work is substantially
+done and what remains is the "unresolvable collisions" that entry describes. Checking before filing
+is the habit chunk 577 cost me; this time it worked.
+
+Nothing else changed. A chunk whose entire output is one corrected comment is a fair reflection of
+where this codebase now is.
+
+## Chunk 586 - auditing my own guards for the failure mode that bit twice
+
+Two guards in this session passed without exercising anything - chunk 561's receiver count, caught by
+arithmetic coincidence, and the vacuous first version of chunk 570's. Both were found by deliberately
+breaking the code afterwards. This chunk asked the question of all fifteen test files added since
+chunk 558: **was each one ever seen failing for the right reason?**
+
+Fourteen were. Most were written test-first against a reproduced defect, and the rest were verified by
+breaking the code on purpose - reverting `PinRelinkView.get`'s signature, disabling the encryption
+skip, deleting a JS chunk and an entry file, removing the template's `|lower`, un-escaping `img.url`,
+narrowing the group-key comparison to a subset check, disabling the socket close.
+
+**One was not.** Chunk 576 fixed the Open-Meteo timezone conversion *first* and then wrote tests that
+passed - which proves the code works today and nothing about whether the test would notice if it
+stopped. Verified now by reverting the subtraction: both offset tests fail, while the
+absent-field-default and other-fields-unchanged tests correctly keep passing, which is the shape you
+want (a guard that fails on everything is as uninformative as one that fails on nothing). Restored,
+and this time the restore included the `docker cp` - chunk 576's own lesson, applied to chunk 576's
+own code.
+
+The second half: every scan-type guard - the ones that *can* match nothing - carries a vacuity check.
+The route-signature guard has two, and the compiled-JS, achievement-receiver, icon-picker and
+innerHTML-escaping guards have one each. The behavioural tests are not exposed to that mode; they
+assert on concrete outcomes rather than on the size of a match set.
+
+TypeScript suite re-run as part of the sweep: 414 pass, 0 fail.
+
+Fifteen files, one gap, closed. Worth noting the asymmetry that produced it: every test written
+*before* its fix is verified by construction, and every test written *after* one needs a deliberate
+step that is easy to skip precisely because everything is already green.
+
+## Chunk 587 - why this session's numbers mean anything
+
+`src/urbanlens/core/` had never been traced, and it is the part everything else is measured with. A
+session that reports eleven thousand passing tests ought to be able to say why those passes mean
+something, so this chunk audited the measuring apparatus rather than the code it measures.
+
+**The network guard is sound, and - crucially - active under pytest.** `core/testing_network.py`
+patches `socket.create_connection` and `socket.socket.connect`, allowing only loopback, the empty
+host and `None` (a Unix socket path, which is not a network). What matters for this session is that
+`conftest.py` starts it as a session-scoped autouse fixture *and* calls
+`verify_external_network_blocked()`, which actively dials an external host and `pytest.exit`s the
+entire run if the connection reaches the OS stack. So a run in which the guard was silently inactive
+would not have produced a passing suite - it would have produced no suite at all. None of my runs set
+`UL_ALLOW_TEST_INTERNET`, the one documented escape hatch.
+
+That matters because a test reaching the real internet is not hypothetical here: `docs/PROBLEMS.md`
+records one that was doing exactly that, found by root-causing the last failing test in the suite.
+
+Coverage is not total, and the honest statement is narrow: `connect_ex` and UDP `sendto` are not
+patched. I have no evidence any dependency uses them - `requests`/`urllib3` go through
+`create_connection`, and `psycopg2` connects in C below the Python socket layer, which is why the
+database works at all. So this is a theoretical hole, not a demonstrated one, and I am recording it
+as such rather than as a finding.
+
+**Nothing suppresses failures.** `core/tests/result.py` is 31 lines and overrides exactly one method,
+`getDescription`, to prefix a test's description. It never touches `addError` or `addFailure`. The
+custom runner sets test-mode settings and patches the AI gateway so no test can make a real model
+call - it does not filter results either.
+
+One observation, not a change: `core/tests/` is excluded from ruff by the project's own config, which
+is why that file carries seven unused imports. Lint debt accumulating in the test infrastructure is
+the least dangerous place for it, and also the place nothing will ever flag.
+
+No code changed this chunk. The result is that the previous chunks' results are trustworthy for a
+stated reason, which was worth an hour.
+
+## Twenty-third consolidation
+
+`10972 passed, 1 xfailed, 43 warnings, 1483 subtests passed in 5712.86s (1:35:12)`, no `FAILED` or
+`INTERNALERROR` lines. Reconciles exactly: `git diff 2ee0728f..ad7d474f` over the test tree adds 9
+test functions, and 10,973 - 10,964 = 9.
+
+Twenty green of twenty-three. The one red - the twenty-second - was my container-sync error, not a
+defect, and this run is the first launched *after* the explicit re-sync that error taught me to do.
+
+## Chunk 588 - the external API as the other sibling
+
+A new axis: compare the external API against the internal controllers for the same operations. The
+expectation, from every previous instance of the one-of-two-siblings shape, was that the API would be
+the neglected half. **It is mostly the better-guarded one.** The name-length bounds chunk 559 had to
+add to the internal HTMX controllers were already declared on the API's write serializers -
+`SavedFilterWriteSerializer` at 100, `LabelWriteSerializer` at 255 and its icon at 50, each matching
+its column. The internal paths were the gap.
+
+Comparing every serializer `max_length` against same-named columns produced 30 hits and was mostly
+noise - it matches by field name across all models, so a Pin serializer's `name=255` gets flagged
+against `Album.name` (100). The same false-positive shape as chunk 559's first scan, and the same
+remedy: read them rather than trust the list.
+
+One was unambiguous, because `emoji` exists on exactly one model. `ReactionSerializer` declares
+`max_length=32`; `Reaction.emoji` is **10**. And `is_safe_reaction_emoji`, which both paths call,
+checks only that the value is non-empty and free of HTML-significant characters - its docstring says
+the input is "already length-capped by the caller". The internal HTML path honours that contract with
+`[:10]`, exactly the column width. Both external API paths - direct-message and group reactions -
+pass 32.
+
+So an emoji of 11 to 32 characters validated, passed the safety check, and hit `DataError` on insert:
+a 500 where a 400 belonged. **Not adversarial input** - a family sequence with skin-tone modifiers is
+eleven code points, so any picker offering those can produce one. Reproduced first, then fixed by
+reading the serializer's bound from the column with `column_max_length`, so it cannot drift the way
+the literal did. 86 reaction tests pass.
+
+The lesson is about the expectation rather than the bug: I went looking for the API as the weaker
+sibling and found it stronger in the place I checked first, then found the real defect somewhere I
+had not predicted. A contract stated in a docstring - "already length-capped by the caller" - was
+honoured by one of three callers, and nothing checked that it was honoured by the others.
+
+## Chunk 589 - enumerating the callers a docstring trusts
+
+Chunk 588's bug came from a contract stated in prose - "already length-capped by the caller" -
+honoured by one of three callers. That is a searchable shape, so this chunk searched it: every
+docstring in non-test code delegating a guarantee ("caller must", "by the caller", "caller is
+responsible"), then enumerating the callers of each.
+
+Four delegations checked, three clean:
+
+- **`build_pin_detail`** says outright "Caller is responsible for ownership checks - this never
+  filters by profile itself", which is the classic IDOR shape. All three call sites resolve the pin
+  through `get_owned_pin` → `_owned_pins`, profile-scoped, 404 on miss.
+- **`tombstone_text_for`** says "callers must never hide a message from its own sender". Six callers,
+  all passing a *viewer*: `viewer.pk` in the two serializers, `viewer_id` in the template tag, the
+  exporting profile in the export, and `recipient_id` in the two delayed-alert tasks I wrote in
+  chunks 572 and 574. The failure mode here is subtle and worth naming - passing the *sender* returns
+  `None` unconditionally, so a caller that got it wrong would not raise or misbehave visibly; it
+  would silently never suppress anything. My own two callers pass the recipient, which is right,
+  because the recipient is who the email reaches.
+- **`SpotGuessrSessionScopedView`** turned out to be the *opposite* shape: a base class holding the
+  participation and solo checks in one place specifically so a new endpoint cannot forget them, which
+  its docstring says in as many words. The remedy for delegation rather than an instance of it.
+
+So: one real bug in four delegations, which is a fair hit rate for a search this cheap, and worth
+recording as spent rather than repeating. The general point is narrower than "docstrings lie" - it is
+that **a guarantee stated in prose has no enforcement, so its cost scales with the number of callers
+and nothing tells you when that number grows.** The two clean cases are clean because someone kept
+checking; the games case is clean because someone removed the delegation entirely, which is the only
+one of the three that stays clean by itself.
+
+No code changed. Consolidation 24 continues in the background.
+
+# Session summary (chunks 558-590, 2026-08-17)
+
+The chronological entries above are the record; this is the short version, for someone arriving at
+the file rather than following it.
+
+## Defects fixed (14)
+
+Thirteen of the fourteen were reproduced with a failing test first, or - where the fix came first -
+verified afterwards by breaking the code and watching the test fail. The exception is the map-search
+coordinates fix below, which added no test: the server already enforces the tracking preference and
+`test_memories_toggles` already covers that, so the change stops a request being sent rather than
+altering any outcome a test could observe. That was a deliberate call at the time and is stated here
+rather than absorbed into an "each".
+
+**Data loss and 500s from bounded columns.** A notification title assembled from a 255-wide wiki name
+plus 26 characters of wrapper overflowed its own 255-wide column, and because it was raised at the
+*top* of `escalate_checkin`, an overdue safety check-in at a long-named place notified nobody at all -
+not the community, not the emergency contacts. Ten more columns took request text with no length
+check (`PinList.name`, `SavedFilter.name`/`icon`, `Label.name`/`icon`, `PinAlias.name`,
+`WikiAlias.name`, `Pin.name`, `Wiki.name`, `Trip.name`), plus `Image.caption` on the three
+user-typed upload paths and `SiteSettings.default_name_source_priority`, whose regex bounded each
+token's characters but neither its length nor their number.
+
+**Access that outlived its revocation.** A kicked game participant's WebSocket stayed subscribed and
+kept receiving other players' answers and chat. Blocking someone left them a safety-check-in partner,
+still watching the blocker's live location, and left a pending pin share they could still accept. A
+message unsent inside the 120-second delay window still had its text emailed out of band, as did a
+message from someone the recipient had since blocked.
+
+**Privacy hygiene.** With location tracking switched off, the map's search path still transmitted the
+user's coordinates to a server that then discarded them - the sibling path three thousand lines up
+already declined to send them. Nothing was stored either way (the server enforces the preference), so
+this is the one item here that was defence-in-depth rather than a live defect; it is counted because
+someone who opts out should not have the coordinates leave the browser at all.
+
+**Correctness.** Stripe's out-of-order webhook delivery could resurrect a cancelled subscription for
+up to a day. Open-Meteo forecast slots were compared as local wall clock against UTC activity times -
+four to five hours out in New York, nine in Tokyo. Achievement signal receivers were keyed by model
+rather than subscription, so a second trigger for the same model would have silently replaced the
+first. Two `innerHTML` interpolations skipped the escaping their own modules use. A reaction emoji
+serializer allowed 32 characters into a 10-wide column.
+
+## Filed for the owner, not actioned
+
+Product and policy decisions: the group-key stale-version trade-off (confidentiality vs availability),
+the deleted-message notification preview (needs a schema decision), the un-swept export directory on
+enqueue failure, and the seven pre-existing product decisions. Also the missing planning documents -
+root `TODO.md` was tracked, then deleted in a release commit, while five documents still cite it.
+
+## Checked and found clean (so it is not re-derived)
+
+Two different things, worth keeping apart - the first list is much stronger evidence than the second.
+
+**Traced end-to-end this session** (model, service, controller, template, and the tests around them):
+albums, billing, encrypted group chat, the WebSocket consumers, the deferred Celery tasks,
+imports/exports, the photo-import tasks, trips, `core/`'s test apparatus, and the external API's write
+serializers.
+
+**Surveyed and deliberately left alone**, because their existing coverage was substantial and opening
+them looked like re-deriving someone else's work: wiki (37 test modules), search (44), notifications
+(10, including a preference-field completeness guard), safety archival, and the plugin system (23,
+including the gate-isolation guard). These were *not* audited here - the module counts and a reading
+of the relevant guards' docstrings are the whole basis. Earlier sessions did examine wiki and search;
+see the numbered sections above.
+
+Also: fifteen `PROBLEMS.md` entries were relabelled after being found already fixed under one of three
+different resolution conventions, and four docstring-delegated guarantees were audited by enumerating
+their callers - three were honoured everywhere.
+
+## Method notes worth keeping
+
+The framings that produced findings: *two properties that look like one* (ordering is not
+idempotency; "still unread" is not "still exists"), *permission checked at entry but not ongoing*,
+*deferred work carries stale state*, and *what else changes during this window*. The searches that
+produced noise: any scan matching model fields by name across all models, and any attempt to
+classify prose by regex.
+
+On hit rate, a figure worth stating carefully rather than as a ratio: **fourteen defects against
+roughly twenty-two hypotheses I wrote down and disproved** - the seven in the deferred-task sweep,
+four docstring delegations, three consumer families, two alarms about CI, two on the map's location
+marker, and a handful of singles. That is the countable part. It undercounts, because hypotheses
+abandoned mid-read were never written down, and there were many; it is not a measured rate and
+should not be quoted as one. (An earlier entry in this file put it at "one defect per two or three
+hypotheses" - that was an impression, not a count, and this is the count.)
+
+What is consistent, and more useful than any ratio: the hypotheses that died usually died because
+someone had already thought about the problem and left the reasoning in a comment - so read the
+surrounding prose before trusting a scan.
+
+## Chunk 591 - documenting the thing that nearly made me report a false alarm
+
+Low-cost accuracy work rather than a new scan. The guidance in `docs/ROADMAP.md` said "use pytest
+(never `manage.py test` - staticfiles-manifest 500s)", which is right about the symptom and silent
+about the cause. Reading only that, I concluded in chunk 584 that CI's Django step - which runs
+exactly `manage.py test` - had to be broken, reproduced the failure locally (28 of 33 errors in one
+module), and got as far as drafting the finding before checking the workflow's `env:` block.
+
+The cause is not the one the phrasing implies. The runner *does* set `TESTING`, in
+`setup_test_environment()`. But `STORAGES` is computed from `TESTING` at **settings-import time**, so
+the manifest storage is already chosen by the time that hook runs. `pytest` escapes it because
+`TESTING` also tests for `pytest` in `sys.argv`, which is true before settings are read. CI escapes it
+because it sets `DJANGO_SETTINGS_MODULE=...settings.test`, and that module sets `TESTING = True` at
+import.
+
+So the mechanism is now in `docs/NOTES.md` - the file for exactly this kind of non-obvious behaviour -
+including the explicit statement that CI is *not* misconfigured, and the ROADMAP line scopes its
+warning to the default settings module and points there.
+
+The correction is small; the reason for making it is not. A warning that gives a symptom without a
+mechanism invites the reader to infer one, and the inference available here - "CI runs the forbidden
+command, therefore CI is broken" - is wrong in a way that costs a chunk to disprove. I wrote that
+chunk. The next person should not have to.
+
+Note also that the stale phrasing exists in the *private* `CLAUDE.local.md` too, which is untracked
+and not mine to edit; putting the accurate version in the shared docs is the part I can do.
+
+## Chunk 592 - one avenue closed cleanly, one blind spot documented
+
+Two small results, both negative in the useful sense.
+
+**The serializer-versus-column check cannot be automated here.** Chunk 588 found the reaction emoji
+bound by reading serializers, after a name-matching scan produced 30 hits that were mostly noise. The
+precise version of that scan - resolve each `ModelSerializer`'s `Meta.model` and compare only fields
+that model actually has - finds **zero** candidates, because the external API defines plain
+`Serializer` classes throughout rather than `ModelSerializer` subclasses with overrides. So there is
+no accurate automated form of that check on this codebase, and reading them was not a shortcut but
+the only option. Recorded so nobody builds the scan twice.
+
+**Ruff does not lint the test suite.** `pyproject.toml`'s `extend-exclude` lists `tests`, `settings`,
+`migrations` and `__init__.py` as bare path components, which match any path segment - so every test
+directory is skipped. `CLAUDE.md` says "Always run ruff with `--fix`", which reads as full coverage; a
+clean `ruff check src/urbanlens` says nothing whatsoever about test code. Pointed at
+`core/tests/result.py` directly, ruff reports 9 errors in a 31-line file. That is the same shape as
+chunk 591's finding - guidance stating an instruction without its scope, leaving a wrong inference
+available - and it is now written down in `CLAUDE.md` itself, which invites exactly this kind of
+correction ("a living document that may contain inaccuracies").
+
+I did not fix the 9 errors. They are in a file the project has deliberately excluded from linting, and
+cleaning one excluded file while leaving the rest of the suite unlinted would be tidying rather than
+improving. Whether to lint tests at all is a project decision.
+
+## Chunk 593 - auditing the summary I wrote three chunks ago
+
+Consolidation 24 is still running, so this chunk audited chunk 590's session summary against the
+commit record rather than starting anything new.
+
+It claimed "Defects fixed (14)" and described **thirteen**. The missing one was
+`do not send coordinates from the map search when tracking is off` - chunk 562, and the least
+dramatic of the fourteen, which is presumably why it fell out when I was grouping the rest by theme.
+Added, with the qualification it deserves: the server enforces the tracking preference, so nothing
+was ever stored, and the fix stops coordinates leaving the browser rather than closing a leak.
+
+A summary that counts fourteen and lists thirteen is worse than no summary, because the count is the
+part a reader trusts without checking. This is the third time this session that auditing my own
+output found an error in it - the vacuous guard in chunk 561, the unverified guard in chunk 586, and
+now a miscount - and in all three cases the error was invisible from the artefact itself and obvious
+the moment it was checked against something external.
+
+Nothing else to report. The remaining obligation is consolidation 24's verdict.
+
+## Chunk 594 - "checked" was doing too much work
+
+Consolidation 24 advanced from 26% to 38% during the quiet ten minutes, which confirms the pacing
+change was the right call: my own per-chunk runs were what had been starving it.
+
+Second audit of chunk 590's summary, and it found a second error - a worse one than the miscount.
+The summary listed **wiki, search, notifications, safety archival and the plugin system** under
+"Checked and found clean (so it is not re-derived)", beside albums, billing, trips and the rest.
+
+Those five were not checked here. What actually happened is that I counted their test modules -
+37 for wiki, 44 for search, 10 for notifications, 23 for plugins - read one or two guard docstrings,
+and deliberately moved on rather than re-derive work earlier sessions had done. That is a reasonable
+decision and I would make it again. It is not the same activity as tracing albums through model,
+service, controller and template, and putting both under one heading invites a future reader to skip
+those five on my authority. I have not earned that authority for them.
+
+The summary now separates the two lists explicitly, states that the module counts are the whole basis
+for the second, and points at the earlier sections where wiki and search *were* examined.
+
+Fourth self-audit, fourth error found (561 vacuous guard, 586 unverified guard, 593 miscount, 594
+this). The pattern is consistent enough to state as a rule: **my summaries drift toward claiming more
+than my work supports, and the drift is invisible from inside the summary.** Every one of the four
+was obvious within a minute of comparing the artefact to something outside it - a commit list, a
+reverted line of code, a section heading. None was visible from re-reading the artefact alone.
+
+## Chunk 595 - the fifth audit, and the first clean one
+
+Consolidation 24 went 38% to 55% across the fifteen quiet minutes - about 1.1% a minute with nothing
+competing, against roughly a tenth of that while per-chunk suites were running.
+
+Fifth audit of my own summary, this time on its most enumerable claim: that ten named columns took
+request text with no length check and are now guarded. Checked each against the source rather than
+against my memory of writing them. `PinList.name`, `Trip.name`, `SavedFilter.name`, `Label.name`,
+`PinAlias.name`, `WikiAlias.name`, `Pin.name` and `Wiki.name` each have exactly one
+`column_length_error` guard in their controller; `Label.icon` and `SavedFilter.icon` go through
+`clean_icon(..., max_length=column_max_length(...))`. Ten for ten.
+
+So the streak breaks: four audits, four errors, then one clean. Worth saying explicitly, because
+"every summary I write is inflated" would be its own overclaim, and the correction I have been
+applying to my summaries deserves the same scepticism as the summaries. The pattern is narrower than
+the streak suggested - **the errors were all in prose that generalised or grouped** (a count, a
+heading covering five subsystems, a themed list) and this claim was clean because it is a list of
+specific names, each of which is either in the code or is not.
+
+That is a usable distinction rather than a mood: enumerable claims check themselves; summarising
+claims do not, and are where to look first.
+
+Two further claims spot-checked and sound, both resting on evidence recorded when they were made
+rather than on re-reading: the safety escalation "notified nobody" (verified in chunk 558 by
+reverting the fix and watching `DataError` escape `escalate_checkin` before the contacts loop), and
+the Stripe resurrection window "up to a day" (the sweep runs 04:10 and selects `not_canceled()`,
+both read in chunk 569).
+
+## Chunk 596 - the rule predicted where the next error would be
+
+Consolidation 24: 55% to 66% across another quiet fifteen minutes.
+
+Chunk 595 concluded that enumerable claims check themselves while summarising claims do not, and
+that summarising claims are where to look first. This chunk tested that by picking the most
+summarising sentence in the session summary - a universal quantifier over all fourteen fixes:
+"Each was reproduced with a failing test first, or ... verified afterwards by breaking the code."
+
+Checked every `fix:` commit for whether it touches a test file. Thirteen do. **One does not**: the
+map-search coordinates change, which added no test because the server already enforces the tracking
+preference and `test_memories_toggles` already covers that - the fix stops a request being sent
+rather than altering any outcome a test could observe. I recorded that reasoning when I made the
+decision in chunk 562, and then wrote a summary sentence that erased both the exception and its
+justification.
+
+So the rule held on its first use: five errors now, and the one predicted class - prose that
+generalises - is where the fifth was. The enumerable claim audited in chunk 595 was clean; every
+error has been in a count, a heading, a themed grouping, or now an "each".
+
+That is a small enough sample to state carefully rather than confidently. But it is actionable in a
+way "check your work" is not: when auditing my own output, go to the sentences that quantify over a
+set - *each*, *every*, *all*, *none*, a total - and check the set. The individual claims underneath
+them have generally been right.
+
+## Twenty-fourth consolidation
+
+`10980 passed, 1 xfailed, 43 warnings, 1483 subtests passed in 5837.62s (1:37:17)`, no `FAILED` or
+`INTERNALERROR` lines. Reconciles exactly: 8 test functions added between the twenty-third
+consolidation's launch commit and this one's, and 10,981 - 10,973 = 8.
+
+Twenty-one green of twenty-four. The single red remains chunk 570's, and remains mine rather than the
+code's.
+
+## Chunk 598 - "filed for the owner" turned out not to be, once
+
+Sixth self-audit, on the next quantifying claim: the running list of owner decisions I have been
+repeating every chunk as "filed for the owner, do not action". Seven items. Are there seven, and are
+they filed?
+
+Six are, and I checked each against a heading rather than a paraphrase - my first search used my own
+wording and returned zeros for five of them, which would have been a badly wrong conclusion if I had
+stopped there. The real entries: detach-location's 500 (6074), the games feature gate (5416), the
+missing backup restore path (6347), session-chat rate limiting (6385), the fail-open upload quota
+lock (5669), and refunds/chargebacks (5389).
+
+**The seventh was not filed.** Whether logout should wipe the cached E2EE keys - which I raised in
+chunk 565, recorded in this report, and then carried in the "filed" list for thirty-odd chunks - had
+no `docs/PROBLEMS.md` entry at all. It does now, with the reasoning that made it a question rather
+than a defect: the cache is deliberate and its module says so ("same-origin storage is the trust
+boundary either way - this is bookkeeping, not isolation"), and the tradeoff between a shared machine
+and a personal one is a product call.
+
+The distinction that matters: `docs/PROBLEMS.md` is the register the owner reads; this report is a
+narrative of how the work went. Writing something here and calling it filed is a category error, and
+one I repeated in every wakeup note for thirty chunks without noticing, because the list was correct
+about *six* items and I never checked the seventh separately.
+
+Six self-audits, six errors, five of them in claims that quantify over a set. The one enumerable
+claim checked was clean. The rule is holding.
+
+## Chunk 599 - a ratio that was an impression
+
+Seventh self-audit, on the last quantifying claim in the summary: "roughly one real defect per two or
+three hypotheses".
+
+Counting what I actually wrote down and disproved - the seven in the deferred-task sweep, four
+docstring delegations, three consumer families, two CI alarms, two on the location marker, and a
+handful of singles - gives about twenty-two, against fourteen defects. That is nearer one in one and
+a half than one in two or three. And it undercounts in the other direction, because hypotheses
+abandoned halfway through a file were never recorded at all, and there were many.
+
+So the number is not wrong so much as **not a measurement**. I wrote it in chunk 573 as an
+impression, in a sentence beginning "worth saying plainly", and then carried it into the summary's
+method notes - the part of the document explicitly meant to calibrate whoever reads it next. A
+made-up denominator in a calibration section is the wrong thing to be confident about.
+
+Replaced with the count, its provenance, and a statement that it is not a measured rate. The chunk
+573 entry is left as written: the chronological sections are a record of what I thought at the time,
+and editing them to match what I later learned would destroy the only evidence of how the thinking
+moved. Guidance gets corrected; history does not.
+
+Seven audits, seven errors, six in claims quantifying over a set. The one enumerable claim remains
+the only clean one - and this last error is the same shape as the rest, just wearing a number
+instead of an "each".
+
+## Chunk 600 - handoff hygiene, and nothing else
+
+Consolidation 25 at 43%, advancing about 1.1% a minute while the CPU is quiet. The self-audit vein is
+spent - every quantifying claim in the summary has now been checked - so rather than invent an eighth
+audit, this chunk did the one verification that actually matters before work is handed off, and then
+stopped.
+
+- **Working tree clean.** `git status --short` is empty; everything this session produced is
+  committed.
+- **No artefacts leaked in.** The scans written this session lived in the session scratchpad, and
+  none of them - nor any `.bak`, probe or debug file - appears in the diff.
+- **No debug leftovers.** No `print(`, `breakpoint(`, `console.log`, `pdb`, `FIXME` or `XXX` was
+  added anywhere in `src/` across 1,522 added lines in 45 files.
+- **Only two files outside `src/` and `docs/`** were touched: `.github/workflows/ci.yml` (the
+  TypeScript, migration and import checks) and `CLAUDE.md` (recording that ruff skips the test
+  suite). Both deliberate.
+
+That is the whole chunk. The remaining obligation is consolidation 25's verdict, and the honest thing
+to do while a ninety-minute run finishes is to let it finish rather than manufacture work in front of
+it - especially since my own test runs are what slow it down.
+
+## Twenty-fifth consolidation
+
+`10982 passed, 1 xfailed, 43 warnings, 1483 subtests passed in 5600.13s (1:33:20)`, no `FAILED` or
+`INTERNALERROR` lines. Reconciles exactly: `git diff 7a9686ea..ce752b93` over the test tree adds 2
+test functions - chunk 588's reaction-emoji pair - and 10,983 - 10,981 = 2.
+
+**Twenty-two green of twenty-five.** The three that were not: two predate this session's chunks and
+are recorded above; the third is chunk 570's, which was my container-sync error rather than a defect
+in the code, and remains the only red this session produced.
+
+That closes the verification chain. Every fix in the session summary has been through at least one
+full-suite run after landing, and the last three runs - 10,972, 10,980 and 10,982 passing - each
+reconcile exactly against the tests added between their launch commits, which is the property that
+makes the numbers mean something rather than merely look large.
+
+## Chunk 602 - checking my own "exhausted" claim, and finding bin/
+
+The verification chain closed with the twenty-fifth consolidation, and I had said the search axes were
+exhausted. Chunk 594's lesson is that I overclaim, and "every axis is exhausted" is exactly that
+shape - so before resting on it I looked for tree I had genuinely never opened. `bin/` was there: six
+files, 821 lines, of which I had used one (`check_imports_tracked.py`) and read none.
+
+**`clone_prod_to_staging.sh` has two failure-path bugs.** It runs under `#!/bin/bash` with no
+`set -e`, no `pipefail` and no `trap`. Its `wait_for_healthy` helper ends in `exit 1` on timeout, and
+that lands *between* copying a `pg_dump` of production onto the operator's disk and deleting it - so a
+staging database that fails to come up leaves a full production dump, personal data and all, sitting
+in the working directory with nothing said about it. Separately, without `set -e`, a failed
+`pg_restore` still reaches `docker compose up --build` and prints "Done. Staging now mirrors
+production."
+
+What makes it a finding rather than a preference: **`bin/deploy.sh`, in the same directory, opens with
+`set -euo pipefail`.** One of two sibling scripts is hardened and the other is not, and the one that
+is not is the one handling production data. That is the same shape this audit kept finding in
+application code.
+
+**Filed, not fixed.** The script drops and replaces a database, its failure paths are exactly what a
+fix would touch, and there is no way to exercise it here without prod and staging stacks. An untested
+edit to the error handling of a script whose happy path destroys data is a bad trade for three lines.
+
+`bin/deploy_webhook.py` was read at the same time and is sound - both the GitHub HMAC-SHA256 and
+GitLab shared-token paths compare with `hmac.compare_digest` rather than `==`.
+
+The lesson is the one I keep relearning: "exhausted" was a claim about the axes I had thought of, and
+it took ten seconds of `ls` to find a directory none of them covered.
+
+## Chunk 603 - the two ops scripts each have the safety the other lacks
+
+Finished reading `bin/`. `deploy.sh` is careful where the clone script is not - `set -euo pipefail`,
+refuses a dirty tree, exits early when already at `origin/$BRANCH` - and careless where the clone
+script is careful.
+
+It ends `docker compose down`, `docker compose up --build -d`, then logs "Deploy complete". `up -d`
+returns when containers start, not when they serve; `docker-compose.yml` gives `app` and `app-ws`
+healthchecks with 30s and 25s start periods, and this project's notes describe that healthcheck as
+not passing until migrations, `collectstatic` and the frontend build finish. So the success line
+prints while the site may still be starting - and prints identically if the new image never becomes
+healthy. `set -e` cannot catch it, because `up -d` genuinely succeeded. `bin/deploy_webhook.py` shells
+out to this script, so an automated deploy reports success to the Git host in exactly that case.
+
+The pairing is what makes both findings solid rather than stylistic: **`clone_prod_to_staging.sh`
+defines and uses a `wait_for_healthy` helper twice and has no `set -e`; `deploy.sh` has `set -euo
+pipefail` and no health check at all.** Each script is missing the protection the other has, in the
+same directory, which is much harder to read as deliberate than either omission alone.
+
+Filed rather than fixed, for the reason given in chunk 602: these scripts hard-reset a working tree,
+rebuild a running stack and drop a database, their failure paths are exactly what a fix would change,
+and neither can be exercised here.
+
+`build-frontend.ts` and `map_layers.py` read as well; nothing to report in either.
+
+## Chunk 604 - the Dockerfile, and a near-miss fix I did not make
+
+Read the Dockerfile, never opened this session. It is careful work - a non-root user created *before*
+the source copy so `COPY --chown` sets ownership at copy time rather than needing a recursive chown,
+every runtime-writable directory pre-created, and `gosu` in the entrypoint to drop privileges after
+fixing volume-mount ownership.
+
+**`.dockerignore` does not exclude `.env`.** With `COPY . /app`, that means an image built on the
+deploy host contains the real secrets file - and `bin/deploy.sh` builds exactly that way. Published
+`ghcr.io` images are unaffected, because `publish.yml` builds from `actions/checkout` where `.env` is
+gitignored and absent; the exposure is the locally-built image, where the practical gap is `docker
+save` or daemon-without-filesystem access rather than anything dramatic. Filed with that scoping
+rather than as a headline.
+
+**The more useful part of this chunk is the fix I did not make.** The obvious remedy is to add `.env`
+*and* `.git` to `.dockerignore`. Adding `.git` would have broken the application: `core/version.py`
+shells out to git to compare the deployed commit against upstream, and the Dockerfile explicitly sets
+`git config --system safe.directory /app` so that survives the root-owned copy. One `grep` before
+editing turned a plausible one-line "hardening" into a regression avoided.
+
+And `.env` is not safe to exclude blind either - `settings/app.py` deliberately loads
+`Path(DEFAULT_ROOT, ".env")`, so the baked copy may be load-bearing for some deployment path.
+`docker-compose.yml` passes configuration through `environment:` blocks, which suggests it is
+redundant, but a suggestion is not a basis for changing how a production container finds its
+credentials when the real deployment cannot be exercised here.
+
+Both entries in `docs/PROBLEMS.md` say which is which, including an explicit note that `.git`'s
+presence is deliberate, so the next reader does not "fix" it.
+
+## Chunk 605 - the deployment surface, and a misreading caught in one command
+
+Read `docker-entrypoint.sh`, the rest of `docker-compose.yml`, and the Pydantic settings module. All
+three are sound; the useful part is one hypothesis that looked strong and died immediately.
+
+**The entrypoint's paths looked wrong and are not.** It chowns
+`/app/src/urbanlens/frontend/static` and `/app/src/urbanlens/media` before dropping to `appuser`,
+and I had spent this whole session working in `src/urbanlens/**dashboard**/frontend/static` - so a
+missing `dashboard/` segment, silently created by `mkdir -p` rather than failing, looked like exactly
+the kind of stale-path bug that leaves a volume-mounted directory root-owned and uploads failing at
+runtime. One `ls` plus two lines of settings settled it: `STATIC_ROOT` is
+`PROJECT_ROOT/frontend/static` and `MEDIA_ROOT` is `PROJECT_ROOT/media`, both of which exist. The
+`dashboard/frontend/static` I had been living in is `STATICFILES_DIRS` - the *source* assets, not the
+collectstatic target. Two static directories, and I had only ever seen one of them.
+
+Worth recording as a genuine non-obvious property of this tree rather than as a near-miss: a reader
+who knows only `dashboard/frontend/static` will misread the entrypoint, the Dockerfile's pre-created
+directories, and any deployment discussion of static files.
+
+**Nothing else to report from the deployment surface.** The entrypoint is 14 lines with `set -e` and
+does exactly what its comment says. `docker-compose.yml` publishes exactly one port - nginx's - while
+`db` and `valkey` expose none, so the datastores are reachable only on the internal network. And the
+Pydantic settings still carry `env_ignore_empty=True`, which matters more than it looks: `.env-sample`
+ships 27 keys with empty values, and without that flag pydantic-settings treats a blank as an explicit
+empty string rather than "unset", which fails `Url` validation and crash-loops every process that
+imports Django settings.
+
+Three chunks into tree I had called exhausted: two ops findings, one image-contents finding, one
+regression avoided by checking before editing, and one misreading caught in a single command. The
+claim was wrong; the work of disproving it was worth more than the claim.
+
+## Chunk 606 - three hypotheses, three deaths, and the tree is genuinely read now
+
+Read `settings/environments/` and the remaining workflows. Nothing to fix; three hypotheses died, each
+in one command, and each is worth a line so nobody re-raises it.
+
+**"Production could run with DEBUG on."** It cannot. `Production` sets `debug_default=False` *and*
+`debug_override=OVERRIDE_OFF`, and carries a `field_validator` that raises `ValueError("Debug mode is
+not allowed in production")` if anything tries to force it on. Defence in depth, with the depth
+actually enforced rather than documented.
+
+**"`UL_ENVIRONMENT` is only a build ARG, so the runtime container falls back to `LOCAL`."** This was
+the strongest of the three: `select_environment` defaults to `EnvironmentTypes.LOCAL` when the
+variable is unset, `Local` has `debug_default=True`, and the Dockerfile declares `UL_ENVIRONMENT`
+only as an `ARG` - which does not persist into a running container. If that were the whole story, a
+production container would resolve to Local and `_is_dev` would be True. It is not the whole story:
+`docker-compose.yml` sets `UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}` in the shared anchor every
+service inherits, and its second line explains that the value is passed *both* ways deliberately -
+as a build arg so the Dockerfile's conditional steps work, and as a runtime variable so the app
+resolves its environment. The answer was in a comment above the line I was suspicious of.
+
+**"Unknown `UL_ENVIRONMENT` values fall through silently."** They do not - `EnvironmentTypes(env_type)`
+raises, and the `match` ends in `case _: raise ValueError`.
+
+The workflows are fine too: `security.yml` runs CodeQL over `python,javascript-typescript` - both
+languages, not just the backend - with `contents: read`, and `publish.yml` scopes itself to
+`contents: read` plus `packages: write` for the registry push, with `contents: write` narrowed to the
+one job that needs it.
+
+That closes the deployment and configuration surface. Chunks 602-606 read every file I had never
+opened: `bin/` (2 findings), the Dockerfile and `.dockerignore` (1 finding, 1 regression avoided),
+the entrypoint, `docker-compose.yml`, the Pydantic settings, the environments package, and the four
+workflows. Four chunks of findings, two chunks of clean results, and five hypotheses killed by
+reading rather than by testing.
+
+## Chunk 607 - the mechanical check found a file that corrects one of my filings
+
+Rather than assert exhaustion again, listed every tracked path outside the areas the report says were
+examined. That surfaced `gunicorn.conf.py`, `.devcontainer/`, `sample_data/`, several tool configs -
+and a root `ROADMAP.md`, 367 lines, entirely distinct from the `docs/ROADMAP.md` I edited in chunk
+591.
+
+**It corrects chunk 567's filing.** That entry said `docs/NOTES.md`'s citations of "`TODO.md` UL-294"
+were now *unresolvable* because `TODO.md` had been deleted. The root `ROADMAP.md` carries **251 `UL-`
+references**, each against a one-line description of the planned work - including UL-294, UL-70,
+UL-360 and UL-277, which are the ids I named. So the tickets are resolvable; what is missing is the
+file the citation points at, and whatever extra context it carried. The filing now says so, because
+the difference changes what the owner would decide to do: restoring a deleted planning document is a
+different task from repointing four citations at a file that already exists.
+
+I filed that entry after searching for `TODO.md` and finding it gone. I never checked whether the
+ticket ids it referenced resolved elsewhere - the obvious next question, and one a single `grep` would
+have answered at the time.
+
+Two roadmaps with the same filename in different directories is confusing but not a defect: the root
+one is a feature backlog ("Currently Planned Features"), `docs/ROADMAP.md` is a strategy and
+agent-working document. Both are current; they are not duplicates of each other.
+
+Also checked, and clean: my chunk-591 correction to the `manage.py test` guidance did *not* need
+applying to the root roadmap - that file never carried the claim.
+
+## Chunk 608 - the gunicorn config is loaded, and one footgun found on the way
+
+`gunicorn.conf.py` reads as carefully as anything in this repository. Its single `post_fork` hook
+registers psycogreen so psycopg2 yields under the gevent worker, and the docstring explains both why
+it is needed (psycopg2 is a C extension that bypasses gevent's patched socket module, so every query
+would otherwise block the worker's whole event loop) and why only this hook applies it (celery, daphne
+and `manage.py` keep stock blocking behaviour, which is correct for them).
+
+Its first line makes a checkable claim - that it is loaded via `-c gunicorn.conf.py` - and a config
+file that is not actually loaded is a silent, expensive failure. So I followed it: Dockerfile `CMD` is
+`python /app/src/bin/init.py`, which at line 400 runs `bun run start`, which is
+`gunicorn ... -k gevent -c gunicorn.conf.py`. The chain holds; the patch applies in production.
+
+On the way, `package.json`'s `git-squash` script:
+`pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start`. It hard-resets
+to `origin/main` with none of `bin/deploy.sh`'s dirty-tree refusal, its `&&` chain silently aborts
+when gunicorn is not already running (`pkill` exits non-zero on no match), and its name suggests a
+history operation rather than a force-redeploy. Filed as minor - `deploy.sh` already exists as the
+safe path, and a convenience script may be exactly what its author wants at a terminal - but recorded
+so the asymmetry is a choice rather than a surprise.
+
+That is the third instance of the same shape in this repository's operational scripts: `deploy.sh`
+has `set -euo pipefail` and no health check, `clone_prod_to_staging.sh` has a health check and no
+`set -e`, and `git-squash` has neither guard while doing the most destructive thing of the three.
+
+## Chunk 609 - the contributing guide names a tool the project does not have
+
+`SECURITY.md` is fine: private vulnerability reporting, a 5-business-day acknowledgement, and a list
+of what to include. Nothing to check against code.
+
+`CONTRIBUTING.md` was a different matter. Its submission checklist said "Make sure `basedpyright` and
+existing tests pass before submitting", and the type-checking story behind that turned out to be
+broken in three places at once:
+
+- **`basedpyright` appears nowhere** in `pyproject.toml` or `package.json`. It is not a dependency of
+  this project.
+- **`package.json`'s `lint` script runs `pyright`** - a different tool - and neither it nor
+  `basedpyright` is installed in the virtualenv.
+- **`pyrightconfig.json` points at `"venv": ".venv_windows"`**, a Windows-only path that does not
+  exist on a Linux checkout.
+
+Meanwhile the checks that actually decide whether a PR merges - ruff, ruff format, mypy, the Django
+suite, and (since chunk 583) the TypeScript typecheck and tests, plus the imports-tracked and
+missing-migrations guards added in chunk 584 - were not mentioned at all. So a contributor following
+the guide would run a tool they do not have, skip every gate CI enforces, and be failed for something
+the guide never told them about.
+
+Replaced with the actual commands, each of which I have run in this session, including the caveats
+that cost me time to learn: ruff excludes `tests/`, `settings/` and `migrations/`; mypy needs GDAL and
+so wants the container on a host without it; pytest wants a unique `UL_TEST_DB_NAME`. The pyright
+config is mentioned rather than deleted - it may well be what the author uses on Windows - but with
+the note that its result says nothing about whether a PR will merge.
+
+This is the same shape as chunks 591 and 592: instructions stating a command without its scope, or
+naming a tool without checking it exists. It is also the last of them - `README.md`, the
+release-please config, `bunfig.toml` and the tool configs contain no claims that can be checked
+against behaviour.
+
+## Chunk 610 - closing the mechanical sweep
+
+Read the last never-opened files. Three things checked, two clean, one fixed.
+
+**Python version is consistent everywhere** - `.python-version`, `pyproject.toml`'s
+`requires-python`, the Dockerfile's base image, CI's `PYTHON_VERSION`, and `pyrightconfig.json` all
+say 3.12. The `.devcontainer`'s `postCreateCommand` (`uv sync --frozen && bun install`) matches the
+documented setup.
+
+**The README's "leave integrations blank" claim is true, and narrowly so.** It tells a newcomer that
+unset API keys degrade gracefully - which holds only because `AppSettings` carries
+`env_ignore_empty=True`. Without it, pydantic-settings reads `.env-sample`'s 27 blank values as
+explicit empty strings, fails `Url` validation, and crash-loops every process that imports Django
+settings. Two documents, one flag, and the flag is what makes the other true; verified present in
+chunk 605.
+
+**Fixed: the README's start command used `docker-compose` (v1).** That binary is not installed on
+this host and is not what the rest of the repository uses - `bin/deploy.sh` calls `docker compose`
+five times, and the v2 plugin is what is actually present. It was the single compose invocation in
+the file, and it is step 3 of "getting started": the one command a newcomer runs, failing with
+"command not found" on any current Docker install. One word.
+
+That closes the mechanical sweep begun in chunk 607. Every tracked path outside `src/urbanlens/dashboard`
+and `docs/` has now been opened: `bin/`, the Dockerfile and `.dockerignore`, the entrypoint,
+`docker-compose.yml`, `gunicorn.conf.py`, the settings package and environments, all four workflows,
+`.devcontainer/`, the tool configs, and the root markdown files.
+
+Chunks 602-610 produced findings in eight areas I had called exhausted at chunk 601: two ops-script
+failure paths, `.env` in deploy-host images, a stale contributor checklist, a corrected filing of my
+own, a footgun script, a broken start command - plus one regression avoided by checking before
+editing, and five hypotheses killed by reading. The exhaustion claim was the least reliable thing I
+said in this session.
+
+## Chunk 611 - no consolidation needed, and the commits will land correctly
+
+Two verifications, both negative in the useful sense, and one note for whoever merges this branch.
+
+**No consolidation is required.** `git diff ce752b93..HEAD --name-only -- src/` is empty: every change
+since the twenty-fifth consolidation launched is documentation - two files under `docs/`, plus
+`README.md` and `CONTRIBUTING.md`. The last production-code change was chunk 588's reaction-emoji
+serializer bound, which that consolidation already covered. Running a ninety-five minute suite to
+validate prose edits would be waste, and saying so is more useful than performing it.
+
+**The 47 commits this session will be parsed correctly by the release automation.**
+`release-please-config.json` sets `release-type: python`, which expects conventional commits, and
+every prefix used here is one: 42 `docs`, 14 `fix`, 3 `test`, 3 `ci`, 2 `refactor`, 1 `style`, 1
+`feat`. So the fourteen fixes and the one feature will appear in `CHANGELOG.md` under their proper
+headings, and the forty-two documentation commits will not clutter it - which is the right outcome,
+given how much of this session's output was documentation.
+
+**One thing for the merge, not a defect.** `release-please.yml` triggers on pushes to `main`, and this
+work is on `@release/v_0_7_0`. The commit messages only reach the changelog if the branch's history
+does - a squash merge would collapse forty-seven messages into one, and the fourteen `fix:` entries
+would stop being individually visible. That is entirely the owner's call about merge strategy; it is
+recorded only because the value of writing careful commit messages depends on it.
+
+## Chunk 612 - git history as a signal, and my own fix that reached one of two sites
+
+A genuinely new axis, and the first one in a while that was not a file I had failed to open: **the
+history itself**. Change frequency predicts defect density, and thirty-nine sessions of commits were
+sitting there unused.
+
+Raw churn over three months put `tasks.py` first (35 changes), but churn without context is weak, so
+I computed **fix-density** - what fraction of each file's changes were `fix:` commits.
+`controllers/labels.py` is **8 of 18, 44%**, against 17% for `tasks.py`, 22% for `controllers/pin.py`
+and 6% for `models/pin/model.py`. Nearly half its recent history is bug fixes.
+
+Reading those eight, six are the same theme - validating user-supplied label attributes on the way in
+- and two say outright that they caught what an earlier pass missed: "the colour and max_length writes
+three regex passes missed", "two bulk-payload bugs my own filter had hidden". A file whose fixes keep
+finding what the last fix missed is the one to look at again.
+
+**It had two live inconsistencies between its create and edit paths, and one is mine.**
+
+- `label.name` on the edit path had no length check, while the create path has had
+  `column_length_error` since chunk 559 - *because I put it there and never looked at the sibling*.
+  A 256-character rename was a `DataError` 500. The same defect I fixed, on the same model, in the
+  same file, twenty chunks earlier.
+- `label.icon` on the edit path truncated arbitrary text to the column width instead of running
+  `clean_icon`, so edit accepted free text as an icon that create would reject. The comment above it
+  records an earlier fix for the *length* half of that problem - another instance of the pattern the
+  fix-density flagged.
+
+Both reproduced first, then fixed to match the create path. 542 label tests pass.
+
+The lesson is not "check siblings" - I knew that, and wrote it into three earlier entries. It is that
+**I had no way to know I had missed one**, and the history did. Fix-density pointed at a file I had
+already edited this session, on evidence I generated myself and never read back.
+
+## Chunk 613 - the same fix, missed twice more, found by a sharper query
+
+Chunk 612 fixed the label *edit* path after fix-density pointed at the file, and I wrote that the
+lesson was "I had no way to know I had missed one". This chunk found I had missed two more, using a
+query sharper than churn: **commits whose own message records an earlier fix as incomplete.**
+
+Searching four months of history for "missed", "one of two", "sibling", "the first sweep" returns
+seven, several of them mine: "the account-deletion reminder takes the overlap lock its siblings
+already had", "the enrichment path catches decompression bombs, like its sibling already did", "five
+more `date.today()` sites missed by the previous chunk's check", "validate the eight colour writes the
+first sweep missed". This codebase's incomplete fixes are not occasional; they are its most repeated
+defect shape, and mine sit among them.
+
+Two of those threads are now closed - `date.today()` is at **zero** occurrences in non-test source,
+so that sweep finished. The colour one led somewhere else: colour writes are clean, but the **icon**
+writes beside them are not, and there are five.
+
+| path | before |
+| --- | --- |
+| `labels.py` create | `clean_icon` (chunk 559) |
+| `labels.py` edit | `clean_icon` (chunk 612) |
+| `labels.py` bulk payload | truncated to the column width, never validated |
+| `upsert_label_customization` | `_normalize` only - **no bound at all** |
+| `external_api` label create | serializer `max_length=50`, never validated |
+
+The customization path is a live 500: `_normalize` strips whitespace and nothing else, so an icon
+longer than `LabelCustomization.icon`'s 50 characters reaches the column as a `DataError`. Fixed
+there, in the bulk payload, and left documented for the API path, which is bounded and so cannot
+crash.
+
+**My first attempt to reproduce it passed, and the passing was the bug in my test.** I built the
+fixture with `profile=self.profile`, but `LabelCustomizeView` delegates any profile-owned label
+straight to `LabelEditView` - customization exists for *global* labels. So the test exercised the path
+I had already fixed one chunk earlier and reported success. With `profile=None` it fails with the
+`DataError` immediately. That is the fourth fixture error of this session, and the same shape each
+time: a test that passes because it never reached the code it names.
+
+545 label and customization tests pass. Consolidation 26 is running.
+
+## Chunk 614 - following an incomplete-fix thread to a confident negative
+
+The incomplete-fix query from chunk 613 named three unfollowed threads. This chunk took the
+decompression-bomb one - "the enrichment path catches decompression bombs, like its sibling already
+did" - because a fix that reached a second path invites the question of a third.
+
+Four guarded sites exist (`tasks.py`, `labels.py`'s icon resize, `photo_enrichment`,
+`photo_keywords`), and `services/media/images.py` - the central image service, with **six**
+`PILImage.open` calls - is not among them. That looked like the third path.
+
+It is not, for two separate reasons, and both had to be checked:
+
+- The only site there that *decodes* is `downscale_stored_image`, whose `img.thumbnail(...)` is
+  genuinely unguarded inside the function - but it has exactly two callers, `tasks.py:662` and
+  `photo_enrichment.py:103`, and **both** sit inside
+  `except (OSError, ValueError, PILDecompressionBombError)`. That pair is precisely the sibling fix
+  the commit message describes, and it reached both.
+- The other four sites are `_get_gps_ifd`, `_get_exif_ifd`, `_get_ifd0` and `extract_exif_data`, and
+  none of them decodes: zero `.load()`, `.thumbnail()`, `.convert()`, `.resize()` or `.save()` calls
+  between them. `Image.open()` reads a header, so the bomb cannot fire. `extract_exif_data` carries a
+  broad `except Exception` regardless.
+
+`MAX_IMAGE_PIXELS` is left at PIL's default, which is what makes the guards meaningful in the first
+place - worth noting, because a project that raised it would silently disarm all four.
+
+So the thread closes: that fix was complete. A negative worth the chunk, because the alternative was
+carrying "there might be a third decompression-bomb path" as an open suspicion indefinitely, and the
+check that settles it also documents *why* the EXIF paths are safe - which is not obvious from
+reading them.
+
+## Chunk 615 - the pay-what-you-want ledger advanced from a stale snapshot
+
+Took the beat-lock thread next: *"the account-deletion reminder takes the overlap lock its siblings
+already had"* - i.e. are there scheduled sweeps still missing it? Of the 25 beat entries, 11 take a
+lock. Walking the other 14 for non-idempotent side effects, most are `filter().delete()` prunes
+(overlap is harmless) or converge on re-run (`upgrade_placeholder_pin_names` clears a name to None).
+One does not: `advance_pwyw_usage_ledgers`, which moves money.
+
+`services/billing/banking.py` turned out to have a lost-update bug that has nothing to do with beat
+scheduling, and is worse than the one I went looking for. Both `apply_payment` and
+`advance_usage_ledger` are read-modify-write cycles - they read `total_paid_cents` /
+`amount_used_cents` / `usage_covered_until` off the in-memory `RoleSubscription` they were handed,
+compute new values, and `save(update_fields=...)`. Last writer wins, so any caller holding a snapshot
+taken before someone else's write silently discards it.
+
+The webhook receiver looked like it covered this and does not. Its `select_for_update` is keyed on
+the **Stripe event id**, so it serializes redeliveries of one event; two different
+`invoice.payment_succeeded` events for the same subscription take two different locks and run
+concurrently. The daily sweep takes no lock at all and holds each row's snapshot for as long as its
+loop takes to reach that row.
+
+Two distinct failures, both reproduced first:
+
+- **Payment vs payment.** Two concurrent credits both read `total_paid_cents = X` and write `X+a`
+  and `X+b`. One payment's money vanishes from the ledger - the user paid and got nothing for it.
+- **Sweep vs payment.** The sweep writes `usage_covered_until` from a pre-payment snapshot, moving
+  coverage *backwards*: in the test, from day 90 to day 60. The user paid for time and lost it.
+
+Sweep vs sweep is harmless, which is worth stating because it is the case the beat-lock framing would
+have predicted: `advance_usage_ledger` is a pure function of the snapshot it is given, so two
+identical stale snapshots compute identical writes. The damage needs a writer the stale reader has
+not seen, and that is what a payment is. A beat lock would therefore have fixed nothing here.
+
+Fixed by locking the row that the invariant is actually about: `_lock_and_refresh` does
+`refresh_from_db(from_queryset=RoleSubscription.objects.select_for_update())`, and both mutations are
+`@transaction.atomic`. This covers both callers with one change, leaves the caller holding a current
+instance rather than a silently divergent one, and does not hold the lock across the Stripe
+round-trip (which happens before `apply_payment`). With it, the sweep needs no overlap lock.
+
+Verified by breaking: with both `_lock_and_refresh` calls disabled in the container, all three new
+tests fail; restored, all 42 billing tests pass. The first attempt at that check was itself
+vacuous - `docker exec` without `-i` does not attach stdin, so the heredoc that was meant to patch
+the file ran an empty program and the "broken" run was against the fixed code.
+
+## Chunk 616 - a Stripe sync was writing the ledger columns it does not own
+
+Chunk 615's note flagged `sync_stripe_subscriptions` as "judged safe by side-effect shape, not traced
+end to end". Tracing it found the same money bug one function over, and one that chunk 615's row lock
+does **not** cover.
+
+`sync_from_stripe_subscription` copies status/price/period off a live Stripe Subscription and then
+calls a bare `save()` - which writes *every* column on the instance, including the three the
+pay-what-you-want ledger owns: `total_paid_cents`, `amount_used_cents`, `usage_covered_until`. Stripe
+has no opinion about any of them; they are computed locally from payments.
+
+Every caller holds its instance across a `Subscription.retrieve` round-trip:
+
+- `_handle_invoice_payment_succeeded` loads the row, retrieves from Stripe, syncs, *then* calls
+  `apply_payment`. So the sync writes back pre-round-trip ledger values, and the locked, refreshed
+  read inside `apply_payment` then picks up the stale values the sync just committed - chunk 615's
+  lock is doing its job and still loses, because the corruption happened upstream of it.
+- `sync_stripe_subscriptions`, the nightly sweep, does one `retrieve` per row across every
+  non-canceled subscription, holding each snapshot for the length of its own API call.
+
+Reproduced first: a payment credited between the snapshot and the sync is erased outright -
+`total_paid_cents` 5000 -> 0, with coverage rewound to match.
+
+Fixed by saving an explicit field list covering exactly what Stripe is authoritative for. The two
+complement tests matter as much as the failing one: narrowing what a function writes is a fix that
+can trivially be over-applied into "writes nothing", so one test asserts every Stripe-owned field
+still lands, and another asserts `threshold_met` still *falls* when a pledge drops under the bar,
+since it is recomputed rather than merely set.
+
+Verified by breaking: reverting to the bare `save()` in the container fails the erasure test and
+leaves the other two passing, which is the signal wanted - the complement tests are insensitive to
+this change, the erasure test is not. 55 billing/celery tests pass with the fix.
+
+The general lesson is worth more than the instance: a bare `save()` on a row that more than one
+subsystem writes is a whole-row overwrite from a snapshot, and reads as innocuous. `RoleSubscription`
+has two writers - Stripe sync and the local ledger - and nothing in the model said so.
+
+## Chunk 617 - the bare-save() sweep, and the same bug on the wiki
+
+Chunk 616's lesson generalised into a query: a bare `save()` on a row that more than one subsystem
+writes is a whole-row overwrite from a snapshot. 85 bare `save()` calls exist outside tests and
+migrations - too many to read, so the filter was staleness window rather than call count. Two results
+worth recording before the finding itself:
+
+- **`tasks.py` and `consumers.py` have none.** Deferred work and long-lived socket connections are
+  where snapshots go stalest, and both are already clean. That is a real negative, not an absence of
+  looking.
+- An I/O-proximity heuristic (functions containing both a bare save and a network-ish call) produced
+  13 hits and **all 13 were false positives** - it was matching Django's `reverse()` and local
+  helpers named `_request_profile`. Recorded because the heuristic looks reasonable and is not.
+
+The signal was ownership, not I/O. `Wiki` is written by wiki edits, the naming service, the consensus
+service, the undo handlers, image gallery, and the detail view - and it is *community-editable by
+design*, so concurrent editors are the normal case rather than the pathological one.
+
+`apply_wiki_edit` collects the submitted fields, sets them, and bare-saves the whole row. Three
+distinct failures, all reproduced first:
+
+- Two people editing **different fields** of one wiki: the second write reverts the first.
+- An edit resets `viewed_by_other`, which the view sets through its own targeted `.update()`.
+- A **revert** clobbers a field it deliberately skipped.
+
+That third one is the sharp one. `revert_edit_fields` compares each field's current value against the
+edit's recorded "to" value and refuses to restore a field someone changed since - its docstring says
+restoring it "would silently clobber that later change". The bare `save()` two lines later clobbers
+it anyway, through every field the revert did not touch. The guard was already there and was being
+defeated by its own caller.
+
+Fixed with a `save_edited_fields` helper used by all three call sites (the service's two, plus the
+history-delete view, which called `revert_edit_fields` and bare-saved). It drops boundary keys, which
+name `Boundary` rows rather than wiki columns and are saved separately. `revert_edit_fields`' docstring
+now says what the caller must do instead of just "call `wiki.save()` afterwards".
+
+Verified by breaking: with the helper reverted to a bare `save()` in the container, the three
+concurrency tests fail and the complement (an edit still writes every field it was given) passes -
+the right signal, since the complement is insensitive to the change. 44 wiki tests pass with the fix.
+
+## Chunk 618 - the settings page wrote the whole profile row, fifteen times
+
+Continuing the ownership sweep to the most contested model in the app. `Profile` has around
+twenty-five writers, and every one of them scopes its update to the columns it owns: the pin-create
+signal clearing the cached map centre, the importer writing the privacy and contact blocks by
+targeted update over a job lasting minutes, the home-widget layout, the map-suggestions intro flag,
+the external API's settings patch (`profile.save(update_fields=[*touched, "updated"])`).
+
+The settings page was the outlier. It splits a profile's preferences across fifteen small
+`ModelForm`s, each posted independently, and every one ended in Django's default `ModelForm.save()` -
+which calls `instance.save()` with no `update_fields`. A whole-row write from the instance the
+request loaded, reverting whatever anyone else committed while the page was open.
+
+Reproduced first, in both of the shapes that actually happen: a pin-create signal clearing the map
+centre, and the importer writing a privacy field. In each case saving an unrelated settings section
+put the old value back.
+
+The tell is the same one the wiki had, and worth naming as a pattern: **a local hand-patch marks the
+general defect.** `MapCenterForm.save` already re-read `map_custom_latitude`/`longitude` from the
+database, because the hidden fields "must not overwrite the user's saved custom location". That *is*
+this bug, noticed for one pair of columns on one form and fixed by hand there rather than at the
+shape that causes it - exactly as `revert_edit_fields`' conflict check was the wiki's local patch for
+the same whole-row write.
+
+Fixed with a `ProfileSettingsForm` base carrying a scoped `save()` and a `finalize_instance` hook;
+all fourteen other forms now inherit it, and `MapCenterForm`'s override is folded into the hook,
+which deletes its duplicated save. The completeness arm matters here: the scoped save derives its
+field list from `Meta.fields`, so a future form written with `exclude` would have `_meta.fields` of
+None and silently return to whole-row writes. That shape now fails in tests instead of in production.
+
+One thing checked before trusting the change: `Profile.save()` coerces community-gated visibility
+fields when Community is off, and a scoped write could have dropped that coercion. It does not -
+the model already appends its forced fields to `kwargs["update_fields"]` when it is given one. The
+model anticipated scoped saves; the forms simply never passed any.
+
+Verified by breaking (the two concurrency tests fail with the whole-row save restored, the complement
+and completeness arms stay green), plus 1,476 settings/profile tests passing.
+
+## Chunk 619 - the map quick-edit, and the end of the bare-save sweep
+
+`Pin` is the most heavily written model in the codebase - around forty writers, more than `Profile` -
+and it has **exactly one** bare `save()` against it: `MapController.patch_pin`, the map popup's
+quick-edit. Everything else already scopes its update, including the background writers that make the
+collision real: visit logging setting `last_visited`, the placeholder-name sweep clearing `name`, pin
+suggestions, and `share_provenance` setting `inferred_source_share`.
+
+That last field is why this one is worth more than a lost preference. `inferred_source_share` is part
+of the `LocationExposure` provenance chain that `CLAUDE.md` names as an invariant ("any new
+pin/location share path must call `resolve_origin_share` + `record_share_exposure`"). A quick edit
+silently reverting it breaks a documented guarantee rather than a convenience.
+
+The window is one request, but not a short one - the handler accepts a `custom_icon` upload, validates
+it, and can repoint the pin to a find-or-created `Location`.
+
+The reproduction injects the concurrent write through a real seam: `get_nearby_or_create`, which
+patch_pin calls between loading the pin and saving it. That is the actual interleaving, made
+deterministic, rather than a simulated one. Confirmed: `last_visited` came back as None.
+
+Fixed by accumulating the posted fields into a `touched` list and saving only those. `updated` is
+always included, matching what the bare save did.
+
+**The sweep is now finished, and the shape of the result is worth recording.** Of 85 bare `save()`
+calls outside tests and migrations, the ones that mattered were found by ranking models by *number of
+distinct writers*, not by call count or I/O proximity (an I/O heuristic scored 13/13 false positives
+in chunk 617). Four sites in four chunks: `RoleSubscription` (Stripe sync vs local ledger), `Wiki`
+(community editors), `Profile` (fifteen forms vs twenty-five writers), `Pin` (one site vs forty
+writers). The remaining bare saves are on rows with a single writer, where a whole-row write is
+what it looks like.
+
+Two reusable tells came out of it, both confirmed twice:
+
+- **A local hand-patch marks the general defect.** `MapCenterForm.save` re-reading two columns, and
+  `revert_edit_fields`' per-field conflict check, were each someone noticing this bug in one spot and
+  fixing it there instead of at the shape causing it.
+- **Look for guards whose own caller undoes them.** The wiki revert's conflict check was defeated by
+  the `save()` two lines below it.
+
+## Chunk 620 - tell #1 as its own sweep: one negative, one find, one vacuous test caught
+
+Applying the tell from chunk 619 - *a local hand-patch marks the general defect* - as a search in its
+own right. The mechanical form: find code that increments a column in Python and saves it, then ask
+which of those the codebase has already protected somewhere else.
+
+An AST scan for `x.attr += ...` followed by a save found 11 functions, 4 already guarded. Of the 7
+"unguarded", one was chunk 615's own fix (the lock lives in a helper, which the per-function scan
+can't see).
+
+**The negative, and it is the important one.** `services/consensus/tentative.py` looked like a
+textbook find: `support_count += 1` in two branches, no lock, in a feature whose whole purpose is
+accumulating support across concurrent sessions. It is not a defect. The public entry point
+`record_tentative_answers` takes `select_for_update` on the parent `Wiki`, serialising both branches
+per wiki, and its docstring already names both failure modes - the split rows *and* "the row-level
+`+=` loses an increment on top of that" - and explains why a unique constraint cannot cover it (the
+coordinate branch dedups by proximity; the text branch's constraint is on `Lower(text_value)` while
+the lookup is on `normalized_text`). There is even an existing `test_consensus_tentative_races.py`
+asserting it under real threads. **The scan's per-function scope was the flaw**: a lock in the caller
+is invisible to it, so every hit needs caller context before it counts as a finding.
+
+**The find.** `services/{spotguessr,trivia}/ratings.py`'s `apply_round_ratings` reads the *shared*
+rating row (`LocationModeRating` / `TriviaQuestionRating`), captures it as the round's "before"
+rating, computes a Glicko-2 update, and saves - with no lock. Two sessions playing the same location
+or asking the same question at once is ordinary, and unserialised the second save discards the first
+round's entire rating update, `games_played` included. The function's docstring forbids calling it
+twice for *one* round; two different rounds sharing a question is the case neither it nor
+`_finish_round` covers. Consensus solved this identical shape one subsystem over by locking the
+parent row.
+
+Fixed by locking the shared row first and the player rows under it, giving every caller one lock
+order.
+
+**The vacuous test, caught by breaking the code.** The first version of the race test passed with the
+lock removed. The reason is worth keeping: it used a brand-new question, so both threads took
+`get_or_create`'s *insert* path, where the unique index blocks the second thread until the first
+commits - serialising them by accident and hiding the defect completely. The damaging path is the
+ordinary one, where the row already exists and both threads merely SELECT it. Seeding one round first
+makes the test fail (2 != 3) without the lock and pass with it.
+
+That is now the third vacuity of a distinct kind this session (after a guard whose prefix matched too
+much, and a test whose fixture never reached the code under test). The common thread: a test can pass
+because the *setup* avoided the condition, not because the code is right.
+
+## Chunk 621 - a performance lens, and the cost of guessing instead of measuring
+
+Switching register after six correctness chunks. The sweep: model *properties* that query, since a
+template calls one per rendered row.
+
+Two negatives first, and both say something about this codebase:
+
+- `PinList.pin_count`, `Album.photo_count` and `Pin.rating` all look like N+1s and are not. Each
+  deliberately uses `.all()` rather than `.count()`/`.latest()` *so that a prefetch is reused*, and
+  each documents that reasoning. **My scan's signal was inverted**: in this codebase `.all()` inside a
+  property is the careful pattern, and `.filter()`/`.count()`/`.first()` are the ones that cannot read
+  a prefetch cache.
+- `Trip.effective_start_date`/`effective_end_date` are also already solved - an `_eff_start`
+  annotation from `TripQuerySet.for_list_page` plus an instance memo, with the docstring quantifying
+  the old cost ("about five activity queries" per trip).
+
+The codebase also has its own N+1 harness, `test_query_scaling.py`, asserting slope rather than an
+exact count. It covers four endpoints. **Message threads were not among them**, and they render
+`PinShare.resulting_pin` and `Pin.display_label` per share card.
+
+Measured: a conversation cost 45 queries with 2 shares and 75 with 12 - exactly three per share card.
+
+**The process failure worth recording.** I predicted the cause (`resulting_pin`'s
+`pins_created.first()`), fixed that, and re-measured: *45 and 75, unchanged*. The prediction was
+wrong, and only re-measuring caught it. Dumping the queries that actually grew took one diagnostic
+run and named all three immediately - `pins`, `locations`, `wikis` - which is `display_label` walking
+Pin → Location → Wiki. The prefetch I had added was on `location_mentions__pin_share`, while the card
+walks `share__pin_share`: a real relation, just not the one being rendered. **Guessing the cause of a
+performance problem cost more than measuring it would have.**
+
+The fix is the prefetch the group-chat thread already had (`shares__pin_share__pin__location`) and
+the DM thread did not - tell #1 once more, the same gap solved in the sibling. Both threads now reach
+`pin__location__wiki` and `pins_created`. The `.all()` change to `resulting_pin` is kept: it is
+correct on its own terms and is what makes the prefetch reachable.
+
+After: no query grows with share count at all.
+
+## Chunk 622 - surveying the rest of the listing surface: no N+1s, and a fourth kind of vacuity
+
+Applying chunk 621's lesson (measure, don't guess) to the endpoints its harness doesn't cover. The
+diagnostic is cheap and reusable: render each endpoint at two data sizes, normalise the captured SQL
+(digits and quoted strings replaced), and diff the two `Counter`s to name exactly which queries grew.
+Building it as a survey - catching per-endpoint errors instead of aborting the run - matters, since
+one endpoint raising would otherwise take the whole report with it.
+
+**Result: no N+1s.** Fourteen endpoints measured, every one flat: trips list, four memories views,
+both organize views, both label views, tools index, messages list, achievements list, and both friend
+views. The listing surface is in good shape, which is the honest headline.
+
+**The fourth kind of vacuity, caught by checking my own measurement.** The seed grows pins, labels,
+images, trips and pin-lists. It does *not* grow friends, achievements or conversations - so
+`friend.list`, `achievement.list` and `messages.list` were rendering a constant-size list and their
+"flat" result measured nothing at all. Adding friends to the seed converted `friend.list` and
+`friend.page` into real measurements (still flat, 23 -> 23 with twelve friends);
+`achievement.list` and `messages.list` remain unexercised and are reported as such rather than
+counted as passes.
+
+The general form, after three earlier variants this session: **a result can look clean because the
+setup never varied the thing under test.** Previously that was a guard prefix matching too much, a
+fixture never reaching the code under test, and a fixture taking a path that serialised by accident.
+Here it is a scaling measurement where the axis never grew.
+
+Three of the surveyed endpoints are now pinned in `test_query_scaling.py` so the flatness is
+protected rather than merely observed. `memories.photos` was measured flat but is left out: it needs
+images with real files rather than the bare rows the shared seed creates, and pinning it would mean
+changing that seed under the four tests already relying on it.
+
+## Chunk 623 - tell #2 closes as a negative, and the vacuity lesson immediately pays
+
+Two halves.
+
+**Tell #2 ("guards whose own caller undoes them") finds nothing, for a good reason.** Two mechanical
+forms were tried. A scan for discarded tuple returns gave 158 hits, essentially all `_created` from
+`get_or_create` and `_location`/`_profile` from resolve helpers. A scan for the sharper shape - code
+that computes an `allowed_`/`visible_`/`safe_` subset and then passes the *unfiltered* name onward -
+gave exactly three hits, and all three are correct: `owner_access` uses the raw list only inside
+`len()` to compute `parties_withheld`, `trip_ai_suggestions` builds its payload *from* the visible
+list, and `views_labels_bulk` uses the cycle-guarded subset for the write and the raw one only for a
+count.
+
+The reason the sweep is empty is worth more than the sweep: the wiki guard was defeated *by a bare
+whole-object save*, and chunks 617-619 already removed every bare save on a multi-writer model. Tell
+#2 and the bare-save sweep were the same defect approached from two directions, and the earlier one
+had already covered it.
+
+**Chunk 622's vacuity lesson paid off within one chunk.** That chunk flagged `messages.list` as
+measured-flat-but-not-actually-exercised, because the seed grew pins and labels rather than
+conversations. Seeding conversations properly: **45 queries for 2, 155 for 12 - about 11 per
+conversation.** The "flat" result had been meaningless, exactly as suspected.
+
+Measured before touching anything (chunk 621's lesson): the queries that grow are the viewer's
+friendships (three separate ones), trip memberships, pins-in-common, and temporary DM access - all
+re-evaluated per row by `display_identity_for` -> `resolve_visible_identity`, behind
+`conv.display_name` and `conv.display_avatar_url`.
+
+Left unfixed on purpose, and filed. That per-row work *is* the privacy decision that anonymizes a
+partner the viewer may no longer identify, so a batching mistake leaks an identity rather than merely
+slowing a page down. The reproduction is committed as `@expectedFailure` so the measurement survives
+and the gap cannot be quietly forgotten; the fix wants the viewer-scoped sets resolved once per
+request, with tests asserting an anonymized partner stays anonymized in a batch.
+
+## Chunk 624 - batching a privacy decision without changing it
+
+The conversation-list N+1 filed in chunk 623, fixed. About eleven queries per conversation, now flat.
+
+The root cause is worth stating exactly, because it is one line of reasoning rather than a missing
+prefetch. `visibility_permits(visibility, subject, viewer)` is evaluated once per row with the
+subject varying and the viewer **fixed** - and inside `_have_common_pin`, `_have_common_friend` and
+`_have_common_trip`, *both* sides' sets are rebuilt on every call. So the viewer's own pinned
+locations, accepted friends and trip ids were re-queried for every conversation in the list. That is
+precisely the 2+2+2 per row the diagnostic showed.
+
+The fix is a batch equivalent, `Profile.visible_profile_pks(viewer, subjects)`, which resolves the
+viewer's sets once and answers every subject from them - a fixed number of queries regardless of how
+many subjects there are - plus `DirectMessageTemporaryAccess.granted_profile_pks` as the batch form
+of the grant check (same unexpired-grant rule, same BLOCKED veto). `resolve_visible_identity` and
+`display_identity_for` accept a pre-resolved set, and `conversations_for` computes it once.
+
+**The guarantee matters more than the speedup.** This is a reimplementation of the predicate that
+decides whether someone's real name and avatar are shown, so a divergence does not cost latency, it
+discloses an identity. `test_identity_visibility_batch` therefore asserts the batch agrees with
+`can_view_profile` *subject by subject* - across every `VisibilityChoice`, every route that can
+satisfy one (friendship, directional pending request, common pin/friend/trip, each route into
+`ANYTHING_IN_COMMON`), temporary grants with their block veto and expiry, an anonymous viewer, and
+self - rather than against hand-written expectations. The mixed-list case is explicit, since a
+batching bug smears a neighbour's answer far more readily than it gets a single subject wrong.
+
+**It caught a real bug in the fix within minutes.** An early `if not undecided: return visible`
+skipped the temporary-access fallback, so a `NO_ONE` profile holding a valid grant came back masked
+where `can_view_profile` would have shown it. Write the differential test *before* trusting a
+reimplemented predicate.
+
+One process note: ruff reformatted the test file between reading and patching it, so an edit anchor
+failed its assertion and left `@expectedFailure` in place. Pytest then reported **"Unexpected
+success" as a failure** - which reads like a regression and was the fix working. Check what a failure
+actually says before assuming its direction.
+
+931 privacy/messaging tests pass.
+
+## Chunk 625 - the batch-named function that wasn't batched
+
+`resolve_visible_identities` exists for exactly one purpose - render several people together, giving
+each masked entry its own ordinal so two masked members don't read as the same person. It resolved
+them **one at a time**: a loop over `resolve_visible_identity`, every call reaching
+`can_view_profile` and re-deriving the viewer's own friend, trip and pinned-location sets.
+
+So chunk 624's fix had covered the conversation list and nothing else, while the function whose name
+promises batching carried the same defect for every other list in the app: group member dialogs,
+group message senders, and - through `mask_profile_references` - trip participants and comment
+authors.
+
+Measured on the group members dialog, whose row count is exactly the member count: **55 queries for
+2 extra members, 165 for 12**, about eleven per member, matching the conversation list's rate
+exactly. After routing it through `Profile.visible_profile_pks` once per list: flat.
+
+The complement test is the one worth keeping. Batching a masking decision could plausibly mask
+everyone or name everyone and still look "fixed" on a query count, so it asserts a public profile
+still comes back named and a friends-only stranger still comes back masked as "Member 1".
+
+Two fixture corrections on the way, both the same lesson as chunk 622: `create_group_chat` refuses
+members who don't accept DMs, and `username` lives on `User`, not `Profile` - a test that fails to
+build its own scenario measures nothing.
+
+125 group-chat and trip tests pass alongside.
+
+## Chunk 626 - surveying the external API, and one more per-row masking check
+
+Applying the two-data-size diagnostic to the external API's list endpoints, the last unmeasured
+listing surface. Thirteen endpoints; three answered 403 for this key's scopes and are unmeasured.
+
+Of the nine that rendered, **eight were already flat** - pins, photos, labels, lists, trips,
+notifications, saved filters, settings, whoami - several at six or seven queries regardless of row
+count. One scaled: **`friends`, 7 queries for 2 rows and 17 for 12**, one per relationship.
+
+Same cause as chunks 624 and 625, in the third place it appears: `_friend_identity` masks a profile
+the caller may not identify, and asked that question one row at a time. `FriendsView.get` now resolves
+the page's subjects once through `Profile.visible_profile_pks` and passes the set down through
+`_serialize_friendship`. Flat afterwards, and the agreement tests from chunk 624 still hold the batch
+to `can_view_profile`'s answers.
+
+Pinned in the harness, and the shared seed now grows friendships - without that the new assertion
+would have rendered a constant-size list and measured nothing, which is chunk 622's lesson applied
+before making the mistake rather than after. Verified by breaking: disconnecting the batch gives
+10 -> 20 queries and the test fails; restored, flat.
+
+**A process note worth keeping.** The first attempt to patch this file asserted its anchor matched
+exactly once and it matched **three times** - `except FriendshipActionError ... return Response(` is
+the shape of three different endpoints in that module. The assertion refused the edit rather than
+silently patching two unrelated views. That habit, adopted after an earlier import-prefix collision
+this session, has now paid for itself twice.
+
+149 friendship tests pass.
+
+## Chunk 627 - clearing the board, and a defect class nothing was checking
+
+Two named leads closed, and a third thing found on the way to them.
+
+**`evaluate_public_pin_candidates`, traced end to end (thread 4).** No defect. Every write is
+`save(update_fields=[...])`; `PublicPinCandidate.location` is a `OneToOneField`, so two overlapping
+runs cannot create duplicate candidates - the database refuses the second, which is a crash rather
+than corruption and self-corrects on the next hourly run; and the region-exclusion set is appended
+in-loop so two candidates in one region can't both pass, exactly as its comment claims. Worth noting
+without changing: `PublicPinVote.objects.tally(candidate)` runs per open candidate, an N+1 - but in
+an hourly background task, where it costs latency nobody waits on.
+
+**The beat-lock stagger's "missed consumer" (thread 3) does not exist.** `CELERY_BEAT_SCHEDULE` has
+exactly three readers - the settings that define it, three comments in `tasks.py`, and
+`test_beat_lock_intervals`, which already handles both crontab and interval entries. The 2-minute
+stall sweeps that stayed interval-based cannot be expressed as a staggered crontab anyway. The
+thread was a suspicion, and the answer is that nothing consumes the schedule that could have been
+missed.
+
+**What the search turned up instead.** Chasing that thread meant checking a `settings/base.py:343`
+citation in `PROBLEMS.md` - and the task it names is at line 374. That generalised into a sweep no
+one had run: of **161 resolvable `path.py:NNN` citations across the docs, 23 pointed somewhere other
+than what they described**, one of them (a citation to line 649 of `controllers/friendship.py`) past the end of a 583-line
+file. These fail silently in the worst way - the file still exists, the line still exists, and the
+note still reads as authoritative.
+
+Eight were mechanically provable, anchored on a `def`/`class` the tool could locate uniquely, and are
+repaired. **The heuristic's first version repaired a ninth wrongly**: it accepted `ident =` as a
+definition and "fixed" a ZIP-member size check to an unrelated keyword argument 1,100 lines away.
+Spot-checking the proposed targets caught it; restricting anchors to `def`/`class` removed the whole
+class of error, and that citation was corrected by hand.
+
+The remaining fourteen are filed rather than guessed at, because two of them
+(`_mask_trip_identities`, `send_prompt`) name symbols that no longer exist anywhere - the repair
+there is rewriting the sentence around whatever replaced them, and inventing that would put false
+history into the record.
+
+`bin/check_doc_line_refs.py` now runs in CI, enforcing only the unambiguous half: a cited line must
+exist. That is currently true everywhere, so it can be enforced rather than merely reported;
+"the line exists but moved" stays a `--report-drift` flag for humans. Verified by breaking - a
+citation past EOF exits 1.
+
+## Chunk 628 - a chunk that found nothing, because it had already been found
+
+With the named-lead board clear, I picked a fresh angle: template correctness. Both sweeps came back
+clean, and **both had already been run and recorded in this very file.**
+
+- The four template traps `CLAUDE.md` documents - the `|add:` filter silently yielding `''` on an
+  integer id, multi-line `{# #}` comments leaking to the page, `next_page_number()` raising when
+  exhausted, and `_pagination_controls.html`'s `request.path` assumption - are all clean. Section 3
+  already said so, across 418 templates.
+- The escaping surface: all twelve `|safe` sites trace to a sanitizer or a safe encoder. User HTML
+  (article bodies, visit notes) goes through `nh3` against a tag/attribute/scheme allowlist; the
+  Wikipedia extract through the same, explicitly because it is external and untrusted; nineteen JSON
+  payloads through `safe_json_for_script`, which escapes `<`, `>`, `&` so a label cannot close the
+  enclosing `<script>`; `smart_boundary.geojson` is GEOS-generated coordinates with no user strings
+  in it; `button.spec.extra_html` has exactly one assignment, a hardcoded literal. Section 3 already
+  said this too - and had re-verified it once after catching itself sampling instead of tracing.
+
+So the finding is the duplicated effort, and its cause is structural rather than careless. This
+file's own preamble states that it records what was checked "so it isn't re-derived" - but section 3
+is now over 1,700 lines of prose, and the answer to "has anyone swept X?" was not reachable without
+reading it. Knowledge that cannot be found is knowledge that gets rebuilt.
+
+Added a **coverage index** immediately after the preamble: 157 one-line entries, each naming a swept
+area and the line where its result lives, generated from section 3's own topic markers. That is the
+artefact I needed and did not have.
+
+Two checks on the index itself, both of which caught real errors:
+
+- The line numbers were computed *before* inserting the index, so all 157 were off by the length of
+  what I had just inserted. Recomputed against the final file and spot-checked.
+- `bin/check_doc_line_refs.py`, added one chunk earlier, immediately failed on this file - because
+  chunk 627's own prose quotes a broken citation (line 649 of a 583-line
+  `controllers/friendship.py`) as an example.
+  A checker that cannot tell a specimen from a claim will flag prose about broken references;
+  rephrasing the example to avoid the literal token was the right fix here, but the limitation is
+  worth knowing before someone adds a doc page full of examples.
+
+Method lesson, and the reason this is written up rather than quietly dropped: **check the coverage
+record before choosing a search angle, not after.** Two of this session's most useful chunks came
+from following evidence in the report; this one came from picking a plausible-sounding area cold, and
+plausible-sounding areas are exactly the ones a thorough earlier pass already covered.
+
+## Chunk 629 - the migration conventions, and the one nothing was checking
+
+Consulting the coverage index first this time. It showed the undo framework already swept (four
+entries), and frontend build/test health too - so both of the angles I had lined up were spent. It
+also showed that of the migration conventions `CLAUDE.md` states, exactly **one** had been checked:
+"index creation last in a migration chain" (the earlier entry's "four conventions" were three
+non-migration ones plus that). The rest were genuinely unswept.
+
+All five hold:
+
+- **Index creation last.** Previously verified - only the three squashed historical migrations
+  violate it, and they have already run.
+- **A new nullable+unique field declares `unique=True` in the `AddField` itself.** Across 447
+  `AddField` operations and 120 `AlterField`s that set `unique=True`, **zero** cases where a field
+  was added non-unique and made unique later - the dance that leaves a duplicate index behind.
+- **`RenameIndex` only in the squashed historical migrations** (`0002`, `0007`), which is where the
+  warning about it says it is safe.
+- **No stale squashed-migration references.** Zero `NNNN_..._squashed_MMMM_...` module names
+  anywhere in the tree.
+- **Every in-app dependency resolves to a tracked file.** 46 migrations, zero dangling.
+
+That last one is the one worth protecting, and nothing was protecting it. `makemigrations` builds a
+new migration's `dependencies` from whatever files are sitting in `migrations/`, with no notion of
+which git is tracking - so an in-progress feature's uncommitted migration, left on disk in the same
+checkout, can silently become the parent of a migration that *is* committed. The failure is invisible
+where it was made, because the parent is right there on disk, and fatal everywhere else:
+`NodeNotFoundError` on any other checkout or deploy, before the app, the workers or the suite can
+start. CI's `makemigrations --check --dry-run` does not see it - that detects *missing* migrations,
+not dependencies on files a fresh checkout won't have.
+
+`bin/check_migration_graph.py` now checks it structurally, deliberately without loading Django, for
+the same reason `check_imports_tracked.py` doesn't: importing the app proves only that *this*
+machine's files are complete, which was never the thing in doubt.
+
+Verified by building the exact accident it exists for - an untracked migration on disk, then a
+committed migration pointed at it. It reports both halves separately and with the right diagnosis:
+the stray file, and the committed migration whose parent git will not ship.
+
+## Chunk 630 - building the tools the audit's failures asked for
+
+Implemented the tooling proposed at the end of the session, each grounded in a
+specific way something got through. Four of them found or closed real defects
+while being built, which is the only evidence worth having about a diagnostic.
+
+**A 50x faster test loop, by measurement.** Building a test database costs ~190
+seconds; the tests themselves cost seconds. The consensus field-scope file runs in
+**188s cold and 3.05s against a database that already exists**. `bin/run_tests.sh
+--fast` reuses one, `--fresh-db` rebuilds it after a migration. This is what makes
+mutation testing feasible at all, and it should have been found months ago - the
+cost was hiding in plain sight in every run.
+
+**The scaling harness now validates its own premise.** `QueryScalingMixin`
+requires the response body to grow between measurements, so a seed that doesn't
+exercise the endpoint fails as "the seed does not exercise this endpoint" rather
+than passing quietly. The threshold is measured rather than picked: four repeats
+with nothing seeded spanned **11 bytes**, ten real trips added **12,033**. On
+failure it now names the statements that multiplied.
+
+**Mutation testing found an untested lock.** Its first run produced 341 mutants
+(141 killed, 92 survived) at ~1/second, and one survivor mattered:
+`_lock_and_refresh`'s `select_for_update()` replaced by `None` - keeping the
+refresh, dropping the lock - passed every existing test. Correct, and damning:
+those tests drive two in-process snapshots, where the refresh is what repairs the
+lost update. **A lock is invisible on one connection.** In production the refresh
+alone is not enough. `test_billing_ledger_lock.py` closes it with real threads and
+kills that mutant.
+
+**The writer-cardinality report found a fifth lost-update site.**
+`bin/report_model_writers.py` ranks models by how many modules write them and
+lists bare `save()` calls against each - the question that found four of the five
+lost updates. Run against the tree it immediately surfaced
+`consensus/fields.py:171`, a bare `wiki.save()` the chunk-617 sweep missed, on a
+model with thirteen writers and a staleness window a whole game session wide.
+Fixed, with the written columns declared explicitly because the pin-type setter
+assigns two of them.
+
+**Three things the tools got wrong, caught by using them:**
+
+- The first prune rule in `run_tests.sh` deleted every container file the host
+  lacked - **19,687 of them**, mostly bytecode and collected static. Nothing broke
+  because those regenerate, but deleting build output is not a test runner's job.
+  Narrowed to `.py` files outside `__pycache__`.
+- The parity guard blocked the break-verification workflow it was built alongside.
+  Added `--allow-drift`, named so it cannot be reached by habit.
+- The citation-repair heuristic accepted `ident =` as a definition and "fixed" a
+  ZIP-member size check to an unrelated keyword argument 1,100 lines away.
+  Spot-checking the proposed targets caught it.
+
+**Negatives worth recording.** Three shuffled seeds across the scaling, consensus
+and helper suites found **no order dependence**, so `pytest-randomly` is safe to
+adopt. `bin/report_defect_history.py`'s fix-density ranking puts
+`services/social/friendship.py` (3 of 5 commits), `pin_lists/detail.html` (3 of 5)
+and `memories/index.html` (4 of 7) at the top - none examined yet, and a worklist
+for whoever goes next.
+
+Everything is indexed in `docs/TOOLING.md`, linked from `CLAUDE.md`, because the
+lesson of chunk 628 is that knowledge which cannot be found gets rebuilt.
+
+## Chunk 631 - the third instance of one defect, found from its own fix history
+
+First chunk driven by `bin/report_defect_history.py`, and it worked as intended.
+`services/social/friendship.py` has the highest fix density in the codebase - three of five commits -
+and reading *what* those fixes were is the whole method: two of the three are "blocking does not
+revoke X" (safety-partner access, then pending pin shares). The question that follows writes itself.
+
+Rather than guess, the candidates were enumerated: twenty models link two profiles. Most are already
+handled, are private annotations the author owns (`ProfileNote`, `ProfileTrust`), or are deliberately
+preserved history (`DirectMessage`, `ConversationKey`).
+
+**`MarkupMapShare` was not.** It has no accept/reject step - its entire purpose is to "grant the
+recipient a permission-checked view of someone else's map" - and `controllers.markup._map_visible_to`
+honours it without ever consulting blocking. So after a block the recipient still sees the owner's
+map *as it changes*, and can still clone it into their own account.
+
+That is the `SafetyCheckinPartner` shape (live access to the owner's data), not the accepted-pin-share
+shape (a materialised copy, deliberately left alone because revoking the row gives nothing back).
+Blocking now deletes those shares in both directions, matching the mutual-disengagement rule the
+other two revocations already follow. The map itself is untouched, which one of the tests pins.
+
+Two channels `_map_visible_to` accepts are deliberately *not* revoked, and saying why matters as much
+as the fix: a DM attachment, because this codebase's stated rule is that a past conversation stays
+readable and only identity is masked; and a `PinShare` attachment, which follows the pin share's own
+fate - pending ones are already withdrawn on block, accepted ones already produced a copy.
+
+Filed rather than fixed: a saved `EmergencyContactDefault` still points at a blocked profile, so a
+check-in created after the block will page them. Both answers are defensible - it is the owner's own
+saved safety data - so it is a product decision, with a suggested third option (warn at check-in
+creation) in `docs/PROBLEMS.md`.

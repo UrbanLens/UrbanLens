@@ -18,7 +18,7 @@ below mirror the wiki article views closely *except* here.
 takes a ``pin=`` argument (``get_article``, ``save_article_checked``,
 ``restore_revision`` via ``scope_article``), so this module is pure exposure:
 resolve the caller's own pin, hand it to the service, render the shared
-payload. The payload itself is ``services.articles.article_payload``, used by
+payload. The payload itself is ``services.wiki.articles.article_payload``, used by
 both hosts so the pin and wiki article bodies cannot drift into disagreeing
 about, say, whether ``base_revision_id`` is present.
 
@@ -54,7 +54,7 @@ from urbanlens.dashboard.external_api.serializers_wiki import (
 from urbanlens.dashboard.external_api.views import ExternalApiView, OwnedPinMixin
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.article.model import ArticleRevision
-from urbanlens.dashboard.services.articles import (
+from urbanlens.dashboard.services.wiki.articles import (
     ArticleConflictError,
     article_payload,
     diff_revisions,
@@ -62,7 +62,7 @@ from urbanlens.dashboard.services.articles import (
     restore_revision,
     save_article_checked,
 )
-from urbanlens.dashboard.services.wiki_detail import masked_editor_name
+from urbanlens.dashboard.services.wiki.wiki_detail import masked_editor_name
 
 if TYPE_CHECKING:
     from rest_framework.request import Request

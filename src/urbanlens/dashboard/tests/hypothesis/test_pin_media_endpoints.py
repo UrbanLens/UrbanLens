@@ -82,7 +82,7 @@ class CsrfEnforcedPinMediaEndpointTests(TestCase):
             # hostname lookup to a fixed public IP so this stays a pure
             # routing/CSRF test with no DNS dependency.
             mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
-            mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=response_mock),
+            mock.patch("urbanlens.dashboard.services.media.media_materialize.requests.get", return_value=response_mock),
         ):
             response = self._post_json(
                 reverse("pin.media.relevance", args=[pin.slug]),

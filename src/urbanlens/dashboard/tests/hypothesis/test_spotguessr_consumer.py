@@ -14,16 +14,20 @@ from itertools import count
 import json
 
 from asgiref.sync import async_to_sync
+from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
 from django.test import TransactionTestCase, override_settings
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
+from urbanlens.core.tests.features import grant_alpha_features
 from urbanlens.dashboard.consumers import GameSessionConsumer
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import SpotGuessrMode
+from urbanlens.dashboard.models.subscriptions import UserSubscription
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_multiplayer_session
 
 _IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
@@ -44,8 +48,12 @@ def _make_location() -> Location:
     return baker.make(Location, latitude=f"42.{650_000 + offset}", longitude=f"-73.{760_000 + offset}")
 
 
-def _make_profile() -> Profile:
-    return Profile.objects.get(user=baker.make("auth.User"))
+def _make_profile(*, alpha: bool = True) -> Profile:
+    user = baker.make("auth.User")
+    if alpha:
+        # The socket is gated on the same entitlement as every game HTTP route.
+        grant_alpha_features(user)
+    return Profile.objects.get(user=user)
 
 
 @override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
@@ -107,6 +115,24 @@ class GameSessionConsumerTests(TransactionTestCase):
         self.assertFalse(connected)
         self.assertEqual(close_code, 4404)
 
+    def test_a_participant_without_alpha_features_is_rejected(self) -> None:
+        """Gating only the HTTP routes left this socket as the way around them.
+
+        The participant is real and invited - what they lack is the entitlement
+        every game view enforces. Without this check they could still watch
+        live rounds and the scoreboard and post chat while every HTTP route
+        answered 403.
+        """
+        _run(self._a_participant_without_alpha_features_is_rejected())
+
+    async def _a_participant_without_alpha_features_is_rejected(self) -> None:
+        revoke = database_sync_to_async(UserSubscription.objects.filter(user=self.guest.user).delete)
+        await revoke()
+        comm = self._communicator(self.guest.user)
+        connected, close_code = await comm.connect()
+        self.assertFalse(connected)
+        self.assertEqual(close_code, 4404)
+
     def test_a_chat_message_is_broadcast_to_every_connected_participant(self) -> None:
         _run(self._a_chat_message_is_broadcast_to_every_connected_participant())
 
@@ -118,9 +144,11 @@ class GameSessionConsumerTests(TransactionTestCase):
         connected, _ = await guest_comm.connect()
         self.assertTrue(connected)
 
-        await host_comm.send_to(text_data=json.dumps({"body": "hello team"}))
-
-        host_recv = json.loads(await host_comm.receive_from())
+        # The consumer enqueues its broadcast rather than performing it (see
+        # core.tests.celery_inline), so without this the group_send never happens.
+        with broadcasts_delivered_inline():
+            await host_comm.send_to(text_data=json.dumps({"body": "hello team"}))
+            host_recv = json.loads(await host_comm.receive_from())
         guest_recv = json.loads(await guest_comm.receive_from())
         self.assertEqual(host_recv["type"], "chat.message")
         self.assertEqual(host_recv["message"]["body"], "hello team")

@@ -238,7 +238,7 @@ def import_my_activity_streaming(
     pin gets an idempotent PinVisit(source=HISTORY) created directly, mirroring
     ``location_history.import_location_history_streaming``. Entries that match
     no pin are queued as a self-directed VisitSuggestion instead of being
-    discarded or auto-creating a pin - see ``services.visits.create_visit_suggestion``.
+    discarded or auto-creating a pin - see ``services.visits.visits.create_visit_suggestion``.
 
     SSE event shapes emitted:
 
@@ -262,7 +262,7 @@ def import_my_activity_streaming(
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
     from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-    from urbanlens.dashboard.services.visits import create_visit_suggestion, find_nearest_pin, visit_logging_allowed
+    from urbanlens.dashboard.services.visits.visits import create_visit_suggestion, find_nearest_pin, visit_logging_allowed
 
     def sse(data: dict) -> str:
         return f"data: {json.dumps(data)}\n\n"

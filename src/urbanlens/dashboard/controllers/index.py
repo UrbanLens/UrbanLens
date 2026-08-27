@@ -11,13 +11,15 @@ from django.views import View
 from djangofoundry.controllers import ListController
 
 from urbanlens.dashboard.models.profile import Profile
-from urbanlens.dashboard.services.home_widgets import effective_widget_layout, home_dashboard_context, save_widget_layout
+from urbanlens.dashboard.services.home.home_widgets import effective_widget_layout, home_dashboard_context, save_widget_layout
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
 
 class IndexController(ListController):
+    """The signed-out landing page."""
+
     template_name = "dashboard/pages/home/index.html"
     model = Profile
 
@@ -25,6 +27,21 @@ class IndexController(ListController):
         if request.user.is_authenticated:
             return redirect("home.view")
         return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        """Add the page name the stylesheet keys off.
+
+        Every rule in ``_homepage.scss`` is scoped under ``body.page-home``,
+        and ``base.html`` sets that class from ``page_name`` - which this view
+        never supplied, so the landing page rendered with none of its own
+        styles at all.
+
+        Returns:
+            The template context, with ``page_name``.
+        """
+        context = super().get_context_data(**kwargs)
+        context["page_name"] = "home"
+        return context
 
     @staticmethod
     def page_not_found(request, _exception=None):

@@ -34,6 +34,23 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet):
         """Filter to calls made in the last 30 days."""
         return self.since(timedelta(days=30))
 
+    def billable(self) -> Self:
+        """Filter to calls that actually consumed the service's quota.
+
+        Excludes the three kinds of entry the limiter writes for calls it
+        *skipped* - geo-filtered, rate-limited, and service-disabled. Those rows
+        exist so a skipped attempt is visible in usage reporting, not because a
+        request went out; counting them against a limit lets a burst of
+        rejections spend a budget no request ever used.
+
+        A call that went out and failed is still billable - the remote service
+        counted it.
+
+        Returns:
+            Filtered queryset.
+        """
+        return self.filter(was_geo_filtered=False, was_rate_limited=False, was_service_disabled=False)
+
     def successful(self) -> Self:
         """Filter to successful calls."""
         return self.filter(success=True)

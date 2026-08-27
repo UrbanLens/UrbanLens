@@ -21,6 +21,8 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 
+from .test_places_campus import square as _square
+
 
 def _profile() -> Profile:
     return baker.make(User).profile
@@ -46,6 +48,17 @@ class SlugOrUuidQuerySetTests(TestCase):
 
 
 class PinRelinkViewTests(TestCase):
+    """PinRelinkView's merge-vs-relink behaviour.
+
+    Every ``target`` here sits within ~50 m of ``self.origin`` on purpose. Relinking
+    is what confers wiki access (``location_visible_to`` grants on an exact Location
+    match), so the view only accepts a target the profile can already reach or one
+    covering the pin's own coordinate - the 50 m proximity fallback for place-less
+    coordinates is what puts these inside the pin's own access domain. These
+    coordinates used to be kilometres apart, which quietly asserted that relinking to
+    an arbitrary Location was allowed; that is the hole, not the contract.
+    """
+
     def setUp(self) -> None:
         baker.make(User)  # first user is auto-promoted to bootstrap site admin
         self.user = baker.make(User)
@@ -59,7 +72,7 @@ class PinRelinkViewTests(TestCase):
         return self.client.post(reverse("pin.link.to", args=[self.pin.slug, location_slug]), **headers)
 
     def test_relinks_to_a_location_with_no_existing_pin(self) -> None:
-        target = baker.make(Location, latitude="40.71", longitude="-74.01")
+        target = baker.make(Location, latitude="40.7001", longitude="-74.00")
         response = self._post(target.slug)
         self.assertEqual(response.status_code, 200)
         self.pin.refresh_from_db()
@@ -68,7 +81,7 @@ class PinRelinkViewTests(TestCase):
 
     def test_relinks_to_a_target_location_with_null_slug_via_uuid_fallback(self) -> None:
         """Regression: the client sends `loc.slug or str(loc.uuid)` - the server must accept either."""
-        target = baker.make(Location, latitude="40.72", longitude="-74.02")
+        target = baker.make(Location, latitude="40.7002", longitude="-74.00")
         Location.objects.filter(pk=target.pk).update(slug=None)
         response = self._post(str(target.uuid))
         self.assertEqual(response.status_code, 200)
@@ -99,14 +112,14 @@ class PinRelinkViewTests(TestCase):
         self.assertIn(existing_pin.slug, payload["existing_pin_url"])
 
     def test_plain_relink_via_xhr_reports_not_merged(self) -> None:
-        target = baker.make(Location, latitude="40.75", longitude="-74.05")
+        target = baker.make(Location, latitude="40.7003", longitude="-74.00")
         response = self._post(target.slug, xhr=True)
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["merged"])
 
     def test_another_profiles_pin_at_the_target_location_does_not_trigger_a_merge(self) -> None:
         """The unique constraint is scoped per-profile - someone else's pin there isn't a conflict."""
-        target = baker.make(Location, latitude="40.76", longitude="-74.06")
+        target = baker.make(Location, latitude="40.7004", longitude="-74.00")
         baker.make(Pin, profile=_profile(), location=target)
 
         response = self._post(target.slug)
@@ -118,7 +131,13 @@ class PinRelinkViewTests(TestCase):
 
 
 class ConflictingLocationsPayloadTests(TestCase):
-    """MapController.post_add_pin's conflicting_locations payload."""
+    """MapController.post_add_pin's conflicting_locations payload.
+
+    Two *unrelated* parcels whose recorded outlines overlap - the only case
+    that still produces a choice now that everything inside one property
+    resolves to one place. The smaller wins resolution; the larger is offered
+    as the alternative the user may have meant.
+    """
 
     def setUp(self) -> None:
         baker.make(User)  # bootstrap site admin
@@ -126,38 +145,43 @@ class ConflictingLocationsPayloadTests(TestCase):
         self.profile = Profile.objects.get(user=self.user)
         self.client.force_login(self.user)
 
+    def _overlapping_places(self, latitude: float, longitude: float):
+        """A tight parcel and a looser one covering the same coordinate."""
+        from urbanlens.dashboard.models.place.model import PlaceKind
+
+        from .place_helpers import make_place
+
+        tight = make_place(PlaceKind.PARCEL, _square(longitude, latitude, 0.002))
+        loose = make_place(PlaceKind.PARCEL, _square(longitude, latitude, 0.01))
+        return tight, loose
+
     def test_candidate_with_existing_pin_gets_existing_pin_url(self) -> None:
-        current = baker.make(Location, latitude="41.00", longitude="-73.00")
-        other = baker.make(Location, latitude="41.001", longitude="-73.001")
+        _tight, loose = self._overlapping_places(41.0, -73.0)
+        other = baker.make(Location, latitude="41.008", longitude="-73.008")
+        self.assertEqual(other.place, loose)
         existing_pin = baker.make(Pin, profile=self.profile, location=other, name="Old Mill")
 
-        with (
-            mock.patch("urbanlens.dashboard.controllers.maps.Location.objects.get_or_create", return_value=(current, False)),
-            mock.patch.object(type(Location.objects), "get_all_for_point", return_value=[current, other]),
-        ):
-            response = self.client.post(
-                reverse("pin.add"),
-                {"name": "New Pin", "latitude": "41.00", "longitude": "-73.00"},
-            )
+        response = self.client.post(
+            reverse("pin.add"),
+            {"name": "New Pin", "latitude": "41.00", "longitude": "-73.00"},
+        )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         entries = {entry["uuid"]: entry for entry in payload["conflicting_locations"]}
         self.assertIn(existing_pin.slug, entries[str(other.uuid)]["existing_pin_url"])
-        self.assertNotIn("existing_pin_url", entries[str(current.uuid)])
+        current_uuid = next(uuid for uuid, entry in entries.items() if entry["is_current"])
+        self.assertNotIn("existing_pin_url", entries[current_uuid])
 
     def test_candidate_with_no_existing_pin_omits_the_field(self) -> None:
-        current = baker.make(Location, latitude="41.10", longitude="-73.10")
-        other = baker.make(Location, latitude="41.101", longitude="-73.101")
+        _tight, loose = self._overlapping_places(41.1, -73.1)
+        other = baker.make(Location, latitude="41.108", longitude="-73.108")
+        self.assertEqual(other.place, loose)
 
-        with (
-            mock.patch("urbanlens.dashboard.controllers.maps.Location.objects.get_or_create", return_value=(current, False)),
-            mock.patch.object(type(Location.objects), "get_all_for_point", return_value=[current, other]),
-        ):
-            response = self.client.post(
-                reverse("pin.add"),
-                {"name": "New Pin", "latitude": "41.10", "longitude": "-73.10"},
-            )
+        response = self.client.post(
+            reverse("pin.add"),
+            {"name": "New Pin", "latitude": "41.10", "longitude": "-73.10"},
+        )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()

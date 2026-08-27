@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSException
@@ -47,10 +47,10 @@ from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.external_data import schedule_panel_fetch
-from urbanlens.dashboard.services.geo import InvalidPolygonGeoJSONError, geometry_to_geojson as _geojson, parse_multipolygon_geojson as _parse_multipolygon
+from urbanlens.dashboard.services.geo.geo import InvalidPolygonGeoJSONError, geometry_to_geojson as _geojson, parse_multipolygon_geojson as _parse_multipolygon
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.pins.external_data import schedule_panel_fetch
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -103,12 +103,38 @@ def _pin_boundary_payload(pin: Pin, *, pending: bool, refreshing: bool = False) 
     }
 
 
-def _wiki_boundary_payload(wiki: Wiki, *, pending: bool, refreshing: bool = False) -> dict:
-    """Full boundary payload for a wiki page map."""
+def _wiki_boundary_payload(wiki: Wiki, *, pending: bool, refreshing: bool = False, just_drawn: tuple[str, Any] | None = None) -> dict:
+    """Full boundary payload for a wiki page map.
+
+    Args:
+        wiki: The wiki whose boundaries to resolve. May be a concealed
+            projection - ``resolve_for_wiki`` hides a wiki-drawn boundary for
+            one when concealed, since (unlike markup or layers) a wiki-scoped
+            ``Boundary`` row records no author at all.
+        pending: Whether provider generation is still running.
+        refreshing: Whether a stale generated boundary is being refreshed.
+        just_drawn: ``(boundary_type_value, polygon)`` for a boundary this
+            same request just saved, or None. Concealment would otherwise
+            hide a concealed viewer's own drawing from the very response
+            that just confirmed saving it - there is no author to check
+            (see the note above), but *this* request's own write needs no
+            authorship check at all: the caller already knows, with
+            certainty, that this profile is who just drew it. Bypasses
+            ``resolve_for_wiki`` for exactly that one boundary type; every
+            other entry (including this same type on a plain GET) still goes
+            through the normal, concealment-respecting resolution.
+
+    Returns:
+        The payload dict.
+    """
     boundaries = {}
     for boundary_type in (BoundaryType.PROPERTY, BoundaryType.BUILDING):
+        key = str(boundary_type.value)
+        if just_drawn is not None and just_drawn[0] == key:
+            boundaries[key] = {"polygon": _geojson(just_drawn[1]), "source": "wiki"}
+            continue
         polygon, source = Boundary.objects.resolve_for_wiki(wiki, boundary_type)
-        boundaries[str(boundary_type.value)] = {"polygon": _geojson(polygon), "source": source}
+        boundaries[key] = {"polygon": _geojson(polygon), "source": source}
     location = wiki.location
     return {
         "latitude": float(location.latitude) if location and location.latitude is not None else None,
@@ -201,6 +227,10 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
         else:
             # Clearing removes the custom row entirely - fall back down the chain.
             Boundary.objects.filter(pin=pin, boundary_type=boundary_type).delete()
+            if boundary_type == BoundaryType.PROPERTY:
+                from urbanlens.dashboard.services.geo.child_pin_boundaries import refit_child_pin_boundary
+
+                refit_child_pin_boundary(pin.pk)
 
         pending = False
         refreshing = False
@@ -292,6 +322,12 @@ class WikiBoundaryView(LoginRequiredMixin, View):
 
         already_ran = boundary_generation_ran(location)
         in_flight = schedule_location_boundary_generation(location, profile)
-        payload = _wiki_boundary_payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran)
+        # A clear needs no override: with the row gone, resolve_for_wiki
+        # correctly falls through to place/circle for every viewer alike,
+        # concealed or not. A save does - see _wiki_boundary_payload's
+        # just_drawn parameter for why concealment must not hide this
+        # request's own write from its own response.
+        just_drawn = (boundary_type, geom) if polygon_geojson else None
+        payload = _wiki_boundary_payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran, just_drawn=just_drawn)
         payload["ok"] = True
         return JsonResponse(payload)

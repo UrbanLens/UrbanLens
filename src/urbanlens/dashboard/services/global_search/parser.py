@@ -19,6 +19,8 @@ import re
 
 from django.utils import timezone
 
+from urbanlens.dashboard.services.global_search.operators import OperatorScan, scan
+
 #: Words users type mapped to RESULT_TYPES slugs. Matched as whole tokens only,
 #: and only when the token is the FIRST word of the query (see
 #: ``_extract_type_keywords``) - many of these are ordinary English words
@@ -131,11 +133,21 @@ class ParsedQuery:
     near_lat: float | None = None
     near_lng: float | None = None
     person: str | None = None
+    labels: tuple[str, ...] = ()
+    exclude_labels: tuple[str, ...] = ()
+    has: tuple[str, ...] = ()
+    states: tuple[str, ...] = ()
+    author: str | None = None
+    sort: str | None = None
+    date_field: str | None = None
+    clauses: list = field(default_factory=list)
+    unknown_keys: tuple[str, ...] = ()
+    unsupported: tuple[tuple[str, str], ...] = ()
 
     @property
     def has_structure(self) -> bool:
         """Whether any structured part (type, date, place, person, near-me) was recognized."""
-        return bool(self.types or self.date_start or self.place or self.near_me or self.person)
+        return bool(self.types or self.date_start or self.place or self.near_me or self.person or self.labels or self.exclude_labels or self.has or self.states or self.author)
 
     @property
     def is_empty(self) -> bool:
@@ -171,7 +183,29 @@ class ParsedQuery:
             chips.append("near you")
         if self.person:
             chips.append(f"from {self.person.title()}")
+        if self.author:
+            chips.append(f"by {self.author.title()}")
+        for label in self.labels:
+            chips.append(f"labelled {label}")
+        for label in self.exclude_labels:
+            chips.append(f"not labelled {label}")
+        for facet in self.has:
+            chips.append(f"has {facet}")
+        chips.extend(self.states)
+        if self.sort:
+            chips.append(f"sorted by {self.sort.replace('-', ' ')}")
         return [chip for chip in chips if chip]
+
+    def describe_problems(self) -> list[str]:
+        """Warnings to show beside the results.
+
+        Covers the two cases where an empty result would otherwise be
+        misleading: a key that looks like an operator but is not one, and an
+        operator that is real but cannot currently be answered.
+        """
+        notes = [f"\u201c{key}:\u201d isn't a search operator, so it was searched as text." for key in self.unknown_keys]
+        notes.extend(f"\u201c{key}:\u201d {reason}" for key, reason in self.unsupported)
+        return notes
 
 
 def _month_range(year: int, month: int) -> tuple[date, date]:
@@ -456,14 +490,20 @@ def _extract_place(text: str) -> tuple[str, str | None]:
 
 
 def _extract_type_keywords(working: str) -> tuple[str, set[str]]:
-    """Strip type-restricting keywords from ``working``, but only as the first word.
+    """Strip type-restricting keywords from ``working``, at either end of the query.
 
     Many entries in ``TYPE_KEYWORDS`` are ordinary English words ("pin",
-    "map", "trip", "visit", "comment"). Restricting the match to the query's
-    first word preserves the useful "type-scoped search" pattern (e.g.
-    "photos of the abandoned mill") while eliminating false-positive hijacks
-    from the word appearing later in the sentence (e.g. "please visit my
-    page" should not become a visits-only search).
+    "map", "trip", "visit", "comment"), so a match anywhere in the sentence
+    produces false-positive hijacks - "please visit my page" must not become a
+    visits-only search. Only the first and last tokens are considered, which
+    is where a deliberate type scope actually lands in English: people write
+    both "photos of the abandoned mill" and "abandoned mill photos", but a
+    type word buried mid-sentence is almost always incidental.
+
+    A trailing keyword that turns out to be part of the target's real name
+    (searching for a pin literally called "Road Trip") is recovered by
+    ``GlobalSearchEngine``'s zero-result fallback, which retries with the
+    inferred types cleared.
 
     Args:
         working: Lowercased query text with dates already removed.
@@ -473,10 +513,11 @@ def _extract_type_keywords(working: str) -> tuple[str, set[str]]:
     """
     # Type keywords are whole tokens; hyphens survive tokenization for "check-ins".
     tokens = re.findall(r"[a-z0-9][a-z0-9'-]*", working)
+    edges = {0, len(tokens) - 1}
     types: set[str] = set()
     kept_tokens: list[str] = []
     for index, token in enumerate(tokens):
-        slug = TYPE_KEYWORDS.get(token) if index == 0 else None
+        slug = TYPE_KEYWORDS.get(token) if index in edges else None
         if slug:
             types.add(slug)
         else:
@@ -527,23 +568,132 @@ def parse_query(raw: str) -> ParsedQuery:
     if not cleaned:
         return parsed
 
-    working = cleaned.lower()
+    # Operators are exact, so they are read first and the English heuristics
+    # below only ever see what is left over. That ordering is what lets
+    # `place:"Poughkeepsie, NY"` survive a place-guesser that would otherwise
+    # have split it at the comma.
+    scanned = scan(cleaned)
+    _apply_clauses(parsed, scanned)
+    working = scanned.text.lower()
+    if not working and not parsed.has_structure:
+        return parsed
 
-    working, parsed.date_start, parsed.date_end, parsed.date_phrase = _extract_dates(working, today)
+    # Each heuristic still runs, because its job is also to *consume* the words
+    # it recognized so they don't fall through into free-text terms. But an
+    # operator already answered is never overwritten: what the user stated
+    # outranks what we guessed.
+    working, guessed_start, guessed_end, guessed_phrase = _extract_dates(working, today)
+    if parsed.date_start is None:
+        parsed.date_start, parsed.date_end, parsed.date_phrase = guessed_start, guessed_end, guessed_phrase
 
-    working, parsed.types = _extract_type_keywords(working)
+    working, guessed_types = _extract_type_keywords(working)
+    parsed.types |= guessed_types
 
-    working, parsed.near_phrase = _extract_near_me(working)
-    parsed.near_me = parsed.near_phrase is not None
+    working, guessed_near = _extract_near_me(working)
+    if not parsed.near_me:
+        parsed.near_phrase = parsed.near_phrase or guessed_near
+        parsed.near_me = guessed_near is not None
 
     # "from <person>" only means a person for types that actually have a
     # sender/sharer concept - messages (from/to) and pins (shared with me by).
     # Otherwise "photos from paris" would misread "paris" as a person's name.
     if parsed.types & {"messages", "pins"}:
-        working, parsed.person = _extract_person(working)
+        working, guessed_person = _extract_person(working)
+        parsed.person = parsed.person or guessed_person
 
-    working, parsed.place = _extract_place(working)
+    working, guessed_place = _extract_place(working)
+    parsed.place = parsed.place or guessed_place
 
     parsed.terms = [token for token in re.findall(r"[a-z0-9][a-z0-9'-]*", working) if token not in _STOPWORDS]
     parsed.text = " ".join(parsed.terms)
     return parsed
+
+
+#: Operator keys that name a date field rather than filtering some other way.
+_DATE_OPERATORS = ("visited", "created", "updated", "viewed", "taken", "starts", "ends")
+
+
+def _apply_clauses(parsed: ParsedQuery, scanned: OperatorScan) -> None:
+    """Fold scanned operator clauses into *parsed*, in place.
+
+    Operators set the same fields the English heuristics would, so downstream
+    consumers never learn which register the user wrote in.
+
+    Args:
+        parsed: The query being built. Mutated.
+        scanned: The operator scan of the raw query.
+    """
+    parsed.clauses = list(scanned.clauses)
+    parsed.unknown_keys = tuple(scanned.unknown_keys)
+    parsed.unsupported = tuple((clause.key, clause.operator.unsupported_reason) for clause in scanned.clauses if clause.operator.unsupported_reason)
+
+    labels: list[str] = []
+    exclude_labels: list[str] = []
+    facets: list[str] = []
+    states: list[str] = []
+
+    for clause in scanned.clauses:
+        key = clause.key
+        if key == "type":
+            parsed.types |= _resolve_types(clause.values)
+        elif key == "label":
+            (exclude_labels if clause.negated else labels).extend(clause.values)
+        elif key == "has":
+            facets.extend(f"-{value}" if clause.negated else value for value in clause.values)
+        elif key == "is":
+            states.extend(f"-{value}" if clause.negated else value for value in clause.values)
+        elif key == "place":
+            parsed.place = clause.value
+        elif key == "near":
+            parsed.near_phrase = clause.raw
+            parsed.near_me = clause.value.lower() in {"me", "here"}
+        elif key == "from":
+            parsed.person = clause.value
+        elif key == "by":
+            parsed.author = clause.value
+        elif key == "sort":
+            parsed.sort = clause.value.lower()
+        elif key in _DATE_OPERATORS:
+            _apply_date_clause(parsed, key, clause.value)
+
+    parsed.labels = tuple(labels)
+    parsed.exclude_labels = tuple(exclude_labels)
+    parsed.has = tuple(facets)
+    parsed.states = tuple(states)
+
+
+def _apply_date_clause(parsed: ParsedQuery, key: str, value: str) -> None:
+    """Resolve one date operator's value onto *parsed*.
+
+    Reuses the same phrase vocabulary the English path uses, so
+    ``visited:"last march"`` and "visited last march" resolve identically
+    rather than being two date parsers that drift.
+    """
+    today = timezone.localdate()
+    spoken = value.lower().replace("-", " ").strip()
+    _, start, end, phrase = _extract_dates(spoken, today)
+    if start is None:
+        # A bare value ("2019", "march") carries no preposition, which is what
+        # most of the phrase patterns key on. Saying it the long way reuses
+        # that vocabulary rather than growing a second date parser here - and
+        # it keeps a value meaning an *interval* ("2019" is the whole year)
+        # rather than the instant _resolve_calendar_date would return.
+        _, start, end, phrase = _extract_dates(f"in {spoken}", today)
+    if start is None:
+        return
+    parsed.date_start, parsed.date_end, parsed.date_phrase = start, end, phrase or value
+    parsed.date_field = key
+
+
+def _resolve_types(values: tuple[str, ...]) -> set[str]:
+    """Result-type slugs named by a ``type:`` clause.
+
+    Accepts the same words the English path accepts (``photo``, ``photos``,
+    ``picture``...), so the two registers share one vocabulary.
+    """
+    resolved: set[str] = set()
+    for value in values:
+        slug = TYPE_KEYWORDS.get(value.lower())
+        if slug:
+            resolved.add(slug)
+    return resolved

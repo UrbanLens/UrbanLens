@@ -14,7 +14,7 @@ deleted since <timestamp>". Rows contain nothing but the pin's public uuid -
 no name, notes, or coordinates survive the deletion.
 
 Tombstones are pruned by the daily ``prune_pin_tombstones`` Celery beat task (see
-``tasks.py`` and ``services.pin_sync.TOMBSTONE_RETENTION``), via
+``tasks.py`` and ``services.pins.pin_sync.TOMBSTONE_RETENTION``), via
 ``PinTombstoneManager.prune_older_than``. Retention must stay longer than the longest
 supported client offline window - a client whose last sync predates the retention
 floor gets a ``410 Gone`` + ``full_resync_required`` from ``pins/deleted/`` rather than

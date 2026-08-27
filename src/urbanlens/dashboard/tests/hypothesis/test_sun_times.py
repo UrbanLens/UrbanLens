@@ -58,6 +58,18 @@ class GetSunTimesTests(SimpleTestCase):
 
 
 class WeatherPanelSunTimesTests(TestCase):
+    """The weather panel's *direct-provider* path.
+
+    Both the forecast and the sun-times lookup now go through
+    ``weather_resolution``, which asks REData first whenever it is configured
+    and only then falls back to OpenWeatherMap/Open-Meteo. These tests are
+    about that fallback chain (UL-345 is a fact about Open-Meteo's endpoint),
+    so REData is explicitly switched off rather than left to whether the
+    machine running the tests happens to have credentials - which is what let
+    them start making a real outbound call and tripping the suite's network
+    guard. REData's own branch is covered in ``test_weather_resolution.py``.
+    """
+
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
@@ -65,6 +77,9 @@ class WeatherPanelSunTimesTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
         self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
         self.client.force_login(self.user)
+        redata_off = patch("urbanlens.dashboard.services.apis.locations.weather_resolution.redata_configured", return_value=False)
+        redata_off.start()
+        self.addCleanup(redata_off.stop)
 
     def test_weather_panel_shows_sun_times(self) -> None:
         sun_times = {

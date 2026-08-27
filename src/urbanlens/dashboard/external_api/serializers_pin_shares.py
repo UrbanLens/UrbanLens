@@ -2,7 +2,7 @@
 
 Small surface, two deliberate choices:
 
-- ``action`` is a strict ``ChoiceField``. ``services.pin_sharing.apply_pin_share_response``
+- ``action`` is a strict ``ChoiceField``. ``services.sharing.pin_sharing.apply_pin_share_response``
   answers an unrecognized action with "Unknown action." and leaves the share
   pending, which is right for the internal HTMX forms (a typo must not 500) but
   wrong for an API: a client sending ``"Accept"`` would get a cheerful 200 back

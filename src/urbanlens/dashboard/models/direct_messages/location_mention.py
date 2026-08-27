@@ -1,7 +1,7 @@
 """DirectMessageLocationMention - coordinates/address detected in a message's text.
 
 One row per distinct place detected in one direct message (see
-``services.dm_location_detection``). The mention is what the chat UI renders
+``services.messaging.dm_location_detection``). The mention is what the chat UI renders
 under the bubble: an "Add to map" button for the recipient when the place
 counted as a share, or - for the recipient only, since it is their private
 data - the name of their own existing pin at that place.
@@ -77,7 +77,7 @@ class DirectMessageLocationMention(abstract.DashboardModel):
         Returns:
             The recipient's Pin near this mention's location, or None.
         """
-        from urbanlens.dashboard.services.share_provenance import find_profile_pin_near_location
+        from urbanlens.dashboard.services.sharing.share_provenance import find_profile_pin_near_location
 
         return find_profile_pin_near_location(self.message.recipient_id, self.location)
 
@@ -92,9 +92,7 @@ class DirectMessageLocationMention(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_dm_location_mentions"
         ordering = ["created"]
-        indexes = [
-            Index(fields=["message"], name="idxdb_dmlocm_message"),
-        ]
+        indexes = []
         constraints = [
             UniqueConstraint(fields=["message", "location"], name="db_dmlocm_one_per_msg_loc"),
         ]

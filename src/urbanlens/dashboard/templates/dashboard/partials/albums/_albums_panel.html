@@ -1,0 +1,91 @@
+{% comment %}
+Photos subpage body for a pin or wiki: albums first, then photos not filed in
+any album. Swapped wholesale by every album mutation, so it carries its own
+root id.
+
+Expects (from controllers.albums._photos_context):
+  album_rows   - one dict per album (album, cover, photo_count, date_*, *_url)
+  loose_images - photos not in any of this owner's albums
+  create_url   - POST target for creating a new album
+  list_url     - GET target for this view, used for browser history restore
+  context_type - "pin" or "wiki", for text that differs between the two
+  album_kind_specs - AlbumKindSpec list, for the create form's kind select
+{% endcomment %}
+<div id="albums-panel" class="albums-panel" data-refresh-url="{{ create_url }}" data-list-url="{{ list_url }}">
+
+  <header class="albums-toolbar">
+    <h3 class="albums-toolbar-title">
+      <i class="material-symbols-outlined">photo_library</i>
+      <span>Albums</span>
+      {% if album_rows %}<span class="albums-count">{{ album_rows|length }}</span>{% endif %}
+    </h3>
+    <button type="button" class="btn btn--primary albums-create-btn"
+            data-album-create-toggle aria-expanded="false" aria-controls="album-create-form">
+      <i class="material-symbols-outlined">add</i>
+      <span>New album</span>
+    </button>
+  </header>
+
+  <form id="album-create-form" class="album-create-form" hidden
+        hx-post="{{ create_url }}" hx-target="#albums-panel" hx-swap="outerHTML">
+    {% csrf_token %}
+    <div class="album-create-fields">
+      <label class="album-create-field album-create-field--name">
+        <span class="album-create-label">Album name</span>
+        <input type="text" name="name" class="album-create-name" maxlength="100" required
+               placeholder="e.g. Interior, 2019 visit">
+      </label>
+      <label class="album-create-field">
+        <span class="album-create-label">Type</span>
+        <select name="kind" class="album-create-kind">
+          {% for spec in album_kind_specs %}
+          <option value="{{ spec.kind }}">{{ spec.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="album-create-actions">
+        <button type="button" class="btn btn--ghost" data-album-create-cancel>Cancel</button>
+        <button type="submit" class="btn btn--primary">Create album</button>
+      </div>
+    </div>
+    {% include "dashboard/partials/albums/_album_kind_explainer.html" with album_kind_specs=album_kind_specs %}
+  </form>
+
+  {% if album_rows %}
+  <ul class="albums-grid">
+    {% for row in album_rows %}
+    {% include "dashboard/partials/albums/_album_card.html" with row=row %}
+    {% endfor %}
+  </ul>
+  {% elif loose_images %}
+  <p class="albums-empty settings-help">
+    No albums yet. Create one to group these photos - by area, by visit, or as a timelapse series.
+  </p>
+  {% endif %}
+
+  {% comment %}
+  The loose section is the "everything else" bucket, so it only earns its
+  heading once something is in it. With no albums at all it is simply the
+  photo list, and says so.
+  {% endcomment %}
+  {% if loose_images %}
+  <section class="albums-loose">
+    <h3 class="albums-toolbar-title">
+      <i class="material-symbols-outlined">photo</i>
+      <span>{% if album_rows %}Not in an album{% else %}Photos{% endif %}</span>
+      <span class="albums-count">{{ loose_images|length }}</span>
+    </h3>
+    <ul class="gallery-grid albums-loose-grid">
+      {% for img in loose_images %}
+      <li class="gallery-item" data-id="{{ img.pk }}">
+        <img src="{{ img.display_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% elif not album_rows %}
+  <p class="albums-empty settings-help">
+    No photos on this {{ context_type }} yet. Upload some from the Photos panel, then group them into albums here.
+  </p>
+  {% endif %}
+</div>

@@ -14,14 +14,16 @@ from defusedxml.ElementTree import ParseError as XMLParseError
 from django.core.cache import cache
 from django.db import DatabaseError
 from fastkml import kml
+from fastkml.exceptions import KMLParseError
 from gpxpy.gpx import GPXException
+from lxml.etree import XMLSyntaxError
 from pyogrio.errors import DataSourceError as ShapefileDataSourceError
 import requests
 from shapely.errors import ShapelyError
 from shapely.geometry import shape as shapely_shape
 
 from urbanlens.core.cache_keys import make_cache_key
-from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
@@ -32,18 +34,38 @@ from urbanlens.dashboard.services.apis.locations.google.place_info import Google
 # TEMPORARY: legacy CID coordinate repair - remove this import together with the
 # blocks it feeds (each marked with a matching TEMPORARY comment below) once
 # every user has re-imported. See legacy_cid_coordinate_fix's module docstring.
-from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import is_legacy_location, repair_legacy_pin_coordinates
+from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import is_legacy_location, preview_needs_legacy_repair, repair_legacy_pin_coordinates
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.import_formats.heuristics import (
     DEFAULT_LATITUDE_KEYS,
     DEFAULT_LONGITUDE_KEYS,
+    normalize_header_key,
     pick_latlon,
     pick_name_and_description,
 )
 from urbanlens.dashboard.services.import_formats.html_description import extract_image_urls, extract_link_urls, strip_html
 from urbanlens.dashboard.services.labels.style_suggestions import suggest_label_style
-from urbanlens.dashboard.services.redact import redact_coordinate, redact_text
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
+from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_text
 from urbanlens.UrbanLens.settings.app import settings
+
+#: Every error that means "this uploaded file is unusable, skip it and carry on".
+#: Named rather than inlined because two handlers need the same list - the KML
+#: parser's own and the bulk importer's per-file guard - and they drifted apart
+#: once already: fastkml's ``KMLParseError`` (a ``FastKMLError``) and lxml's
+#: ``XMLSyntaxError`` (a ``SyntaxError``) are neither ``ValueError`` nor
+#: defusedxml's ``ParseError``, so a malformed KML escaped both and aborted the
+#: whole import stream instead of skipping one file.
+IMPORT_PARSE_ERRORS: tuple[type[Exception], ...] = (
+    UnicodeDecodeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+    GPXException,
+    ShapelyError,
+    XMLParseError,
+    KMLParseError,
+    XMLSyntaxError,
+)
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -76,7 +98,7 @@ def _attach_description_extras(pin: Pin, image_urls: list[str], link_urls: list[
     """
     from urbanlens.dashboard.models.images.model import ImageSource
     from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink
-    from urbanlens.dashboard.services.media_materialize import MaterializeError, materialize_media_item
+    from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
 
     for url in link_urls:
         if len(url) > MAX_LINK_URL_LENGTH:
@@ -209,7 +231,7 @@ def _create_pin_from_confirmed(
         if image_urls or link_urls:
             _attach_description_extras(pin, image_urls, link_urls, user_profile)
         if auto_tag:
-            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
             from urbanlens.dashboard.tasks import suggest_pin_category
 
             safely_enqueue_task(suggest_pin_category, pin.pk)
@@ -255,7 +277,7 @@ def _notify_pin_import_parse_failure(fmt: str) -> None:
     """
     from django.utils import timezone
 
-    from urbanlens.dashboard.services.notifications import NotificationEvent, notify
+    from urbanlens.dashboard.services.notifications.notifications import NotificationEvent, notify
 
     notify(
         NotificationEvent.PIN_IMPORT_ERROR,
@@ -292,8 +314,7 @@ def _google_maps_api_key() -> str:
     Deliberately does not raise when unset - most of GoogleMapsGateway's own
     methods (file-format parsing in particular) never touch the network, and
     the ones that do (e.g. ``_generate_satellite_slides``) already check
-    ``self.api_key`` themselves before making a request, matching how
-    BingMapsGateway/MapboxGateway treat their own optional keys.
+    ``self.api_key`` themselves before making a request.
     """
     return settings.google_unrestricted_api_key or ""
 
@@ -380,6 +401,27 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             detail="High resolution - current imagery",
         )
 
+    def get_satellite_image_bytes(self, latitude: float, longitude: float) -> bytes | None:
+        """Return the raw JPEG bytes of a Google Maps Static satellite image, or None if unavailable.
+
+        Decodes the same ``data:`` URI :meth:`_generate_satellite_slides` builds for the live
+        carousel, so there is exactly one place that talks to the Static Maps API - for callers
+        (background photo enrichment) that need to persist the bytes to storage rather than embed
+        them in an HTML response.
+
+        Args:
+            latitude: WGS-84 latitude of the target location.
+            longitude: WGS-84 longitude of the target location.
+
+        Returns:
+            Raw JPEG bytes, or None when no API key is configured or the request fails.
+        """
+        slide = next(self._generate_satellite_slides(latitude, longitude), None)
+        if slide is None:
+            return None
+        _prefix, _sep, b64_data = slide.img_src.partition(",")
+        return base64.b64decode(b64_data)
+
     def get_street_view_single(
         self,
         latitude,
@@ -394,6 +436,16 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
     ):
         """
         Get the closest Street View image to the given latitude and longitude.
+
+        Returns:
+            Tuple of ``(image_bytes, capture_date, pano_latitude, pano_longitude)`` -
+            the pano's own coordinates are returned alongside the image (rather than
+            just echoing back the input) since a widened search radius can resolve to
+            a pano some distance from the requested point.
+
+        Raises:
+            ValueError: No Street View imagery was found within ``max_radius``, or
+                the API returned a non-recoverable status.
         """
         street_view_url = "https://maps.googleapis.com/maps/api/streetview/metadata"
         logger.debug("Getting street view for %s, %s", redact_coordinate(latitude), redact_coordinate(longitude))
@@ -442,9 +494,15 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 if len(image_response.content) < 2000:
                     radius += radius_increment
                     continue
-                return image_response.content, metadata.get("date")
+                return image_response.content, metadata.get("date"), metadata["location"]["lat"], metadata["location"]["lng"]
 
-            if status in {"REQUEST_DENIED", "INVALID_REQUEST", "UNKNOWN_ERROR"}:
+            if status not in {"ZERO_RESULTS", "NOT_FOUND"}:
+                # Anything other than "genuinely no pano here yet" (e.g.
+                # OVER_QUERY_LIMIT, REQUEST_DENIED, INVALID_REQUEST,
+                # UNKNOWN_ERROR) is an account/request-level failure a wider
+                # radius can never fix - looping through the whole radius
+                # range would just repeat the identical failure up to
+                # (max_radius - radius) / radius_increment times per call site.
                 raise ValueError(f"Street View API error: {status}")
 
             radius += radius_increment
@@ -452,19 +510,21 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
         raise ValueError("No Street View imagery found within the maximum search radius.")
 
-    def _street_view_slide(self, image_bytes: bytes, capture_date: str) -> StreetViewSlide:
-        """Return a StreetViewSlide from the given image bytes and capture date."""
+    def _street_view_slide(self, image_bytes: bytes, capture_date: str, pano_latitude: float, pano_longitude: float) -> StreetViewSlide:
+        """Return a StreetViewSlide from the given image bytes, capture date, and the pano's actual coordinates."""
         image_b64 = base64.b64encode(image_bytes).decode("ascii")
         return StreetViewSlide(
             img_src=f"data:image/jpeg;base64,{image_b64}",
             source="Google Street View",
             date=capture_date or "Unknown",
+            latitude=pano_latitude,
+            longitude=pano_longitude,
         )
 
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
         """Yield Street View slides for the given latitude and longitude."""
-        image_bytes, capture_date = self.get_street_view_single(latitude, longitude, radius=int(radius))
-        yield self._street_view_slide(image_bytes, capture_date)
+        image_bytes, capture_date, pano_latitude, pano_longitude = self.get_street_view_single(latitude, longitude, radius=int(radius))
+        yield self._street_view_slide(image_bytes, capture_date, pano_latitude, pano_longitude)
 
     def calculate_heading(self, lat1, lng1, lat2, lng2):
         """
@@ -501,9 +561,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             dict with pin fields, or None when a row cannot be resolved to coordinates.
         """
         gateway = GoogleGeocodingGateway()
-        reader = csv.DictReader(file_contents.splitlines())
+        # utf-8-sig decode at the call site strips a file-level BOM; also guard
+        # here so a BOM left on the first header (Excel "CSV UTF-8") still
+        # matches latitude/URL column names.
+        reader = csv.DictReader(file_contents.lstrip("\ufeff").splitlines())
         for row in reader:
-            lowered_row = {str(k).strip().lower(): v for k, v in row.items() if k is not None}
+            lowered_row = {normalize_header_key(k): v for k, v in row.items() if k is not None}
             url = next((lowered_row[key] for key in _TAKEOUT_URL_COLUMN_KEYS if lowered_row.get(key)), "")
             if url:
                 try:
@@ -528,6 +591,17 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     "name": row.get("Title", "")[:255],
                     "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
                     "cid": cid,
+                    # Carried through to a deferred cid lookup (see
+                    # cid_resolution.resolve_cids) - REData resolves faster and
+                    # more reliably from a place's own URL than from cid alone.
+                    "maps_url": url,
+                    # TEMPORARY (see _preview_pins below): this row's cid came out of
+                    # the same !1s0x{s2_cell}:0x{cid} URL segment that
+                    # extract_coordinates_from_url decodes via the imprecise
+                    # _imprecise_guess_s2_cell() first - wrong roughly a third of
+                    # the time. Remove once every user's previously-imported data
+                    # has been repaired.
+                    "s2_guess": bool(cid_match),
                 }
                 continue
 
@@ -545,7 +619,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             # serialised into the description by the "no description column
             # found" fallback in pick_name_and_description.
             latlon_keys = {*DEFAULT_LATITUDE_KEYS, *DEFAULT_LONGITUDE_KEYS}
-            remaining = {k: v for k, v in row.items() if k is not None and k.strip().lower() not in latlon_keys}
+            remaining = {k: v for k, v in row.items() if k is not None and normalize_header_key(k) not in latlon_keys}
             name, description = pick_name_and_description(remaining)
             yield {
                 "latitude": latitude,
@@ -602,7 +676,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         )
         from urbanlens.dashboard.services.apis.locations.google.my_activity import import_my_activity_streaming
         from urbanlens.dashboard.services.apis.locations.route_import import import_routes_streaming
-        from urbanlens.dashboard.services.archive_extractor import validate_content_type
+        from urbanlens.dashboard.services.import_export.archive_extractor import validate_content_type
         from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
         from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute, gpx_tracks_to_routes
         from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
@@ -665,7 +739,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     parsed.append((filename, fmt, data_list, len(data_list)))
                     grand_total += len(data_list)
                 elif fmt == "csv":
-                    text = raw_bytes.decode("utf-8")
+                    text = raw_bytes.decode("utf-8-sig")
                     file_total = max(0, len(text.splitlines()) - 1)
                     parsed.append((filename, fmt, text, file_total))
                     grand_total += file_total
@@ -686,7 +760,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     data_list = osm_xml_to_dict(raw_bytes, user_profile)
                     parsed.append((filename, fmt, data_list, len(data_list)))
                     grand_total += len(data_list)
-            except (UnicodeDecodeError, ValueError, KeyError, AttributeError, GPXException, ShapelyError, XMLParseError) as exc:
+            except IMPORT_PARSE_ERRORS as exc:
                 logger.warning("Failed to parse '%s', skipping: %s", filename, exc)
                 _notify_pin_import_parse_failure(fmt)
 
@@ -721,6 +795,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         skipped_count += 1
                     else:
                         cid = pin_data.pop("cid", None)
+                        # Preview/deferred-lookup-only bookkeeping from
+                        # _csv_row_iter, not Pin fields - left in pin_data (used
+                        # as get_nearby_or_create's **defaults below) these raise
+                        # a TypeError on every Takeout-URL CSV row.
+                        pin_data.pop("s2_guess", None)
+                        pin_data.pop("maps_url", None)
                         location = Location.objects.by_cid(cid).first() if cid is not None else None
                         if location:
                             pin_data["location"] = location
@@ -852,6 +932,20 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         if parsed_routes:
             yield from import_routes_streaming(parsed_routes, user_profile)
 
+    #: Most pins one preview may materialise, across every file in the upload.
+    #:
+    #: The import itself is a generator that streams SSE events per pin, so it
+    #: never holds the whole set; the *preview* that runs first builds every pin
+    #: dict at once and serialises them into a single JSON response, in-request.
+    #: Nothing bounded that, so a large upload could exhaust the web worker
+    #: before any response existed - and after the archive extractor's own limit
+    #: was raised to a shared 2 GB budget, "large" is a lot of pins.
+    #:
+    #: 20,000 is far above any hand-curated import; it is a backstop against
+    #: machine-scale files (a county parcel export, say), not a product limit on
+    #: what someone can bring in.
+    MAX_PREVIEW_PINS = 20_000
+
     def parse_for_preview(
         self,
         files: list[tuple[str, bytes]],
@@ -869,13 +963,14 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 - ``pins`` (list[dict]): serialisable pin dicts with keys
                   ``name``, ``lat``, ``lng``, ``description``, ``cid``.
         """
-        from urbanlens.dashboard.services.archive_extractor import validate_content_type
+        from urbanlens.dashboard.services.import_export.archive_extractor import validate_content_type
         from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
         from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
         from urbanlens.dashboard.services.import_formats.shapefile import extract_shapefile_bundles, shapefile_to_dict
         from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
 
         result: list[dict[str, Any]] = []
+        previewed = 0
 
         # Shapefiles ship as a set of same-stem sidecar files rather than one file,
         # so they must be grouped before the per-file loop below.
@@ -887,9 +982,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 logger.warning("Failed to parse shapefile bundle '%s' for preview: %s", bundle.stem, exc)
                 _notify_pin_import_parse_failure("shapefile")
                 continue
-            pins = self._preview_pins(raw_pins)
+            pins = self._preview_pins(raw_pins, user_profile)[: self.MAX_PREVIEW_PINS - previewed]
             if pins:
+                previewed += len(pins)
                 result.append({"stem": bundle.stem, "pins": pins})
+            if previewed >= self.MAX_PREVIEW_PINS:
+                return result
 
         for filename, raw_bytes in files:
             fmt = validate_content_type(filename, raw_bytes)
@@ -903,7 +1001,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 elif fmt == "kml":
                     raw_pins = self.takeout_kml_to_dict(raw_bytes, user_profile)
                 elif fmt == "csv":
-                    text = raw_bytes.decode("utf-8")
+                    text = raw_bytes.decode("utf-8-sig")
                     raw_pins = [row for row in self._csv_row_iter(text, user_profile) if row is not None]
                 elif fmt == "gpx":
                     raw_pins = gpx_to_dict(raw_bytes, user_profile)
@@ -920,22 +1018,29 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 _notify_pin_import_parse_failure(fmt)
                 continue
 
-            pins = self._preview_pins(raw_pins)
+            pins = self._preview_pins(raw_pins, user_profile)[: self.MAX_PREVIEW_PINS - previewed]
             if pins:
+                previewed += len(pins)
                 result.append({"stem": stem, "pins": pins})
+            if previewed >= self.MAX_PREVIEW_PINS:
+                break
 
         return result
 
     @staticmethod
-    def _preview_pins(raw_pins: Iterable[dict[str, Any] | None]) -> list[dict[str, Any]]:
+    def _preview_pins(raw_pins: Iterable[dict[str, Any] | None], user_profile: Profile) -> list[dict[str, Any]]:
         """Convert internal pin dicts into the serialisable preview shape.
 
         Args:
             raw_pins: Pin dicts as returned by any of the format parsers (``None``
                 entries, e.g. from a failed CSV row, are skipped).
+            user_profile: The profile the import is for - used only to flag
+                legacy-repair candidates, see the TEMPORARY block below.
 
         Returns:
-            List of dicts with keys ``name``, ``lat``, ``lng``, ``description``, ``cid``.
+            List of dicts with keys ``name``, ``lat``, ``lng``, ``description``, ``cid``,
+            and - on records the TEMPORARY legacy CID repair would apply to, or
+            whose own cid came from the imprecise S2-cell URL guess - ``needs_repair``.
         """
         pins: list[dict[str, Any]] = []
         for p in raw_pins:
@@ -945,20 +1050,46 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             lng = p.get("longitude")
             if lat is None or lng is None:
                 continue
-            pins.append(
-                {
-                    "name": (p.get("name") or "")[:255],
-                    "lat": float(lat),
-                    "lng": float(lng),
-                    # The preview UI never displays this - it's only carried through
-                    # so the confirm step (which re-uses this exact dict, not a fresh
-                    # parse of the file) has the real description to save. A tight
-                    # display-oriented cutoff here used to silently truncate every
-                    # saved pin's description to 500 characters.
-                    "description": (p.get("description") or "")[:MAX_PIN_DESCRIPTION_LENGTH],
-                    "cid": p.get("cid"),
-                },
-            )
+            name = (p.get("name") or "")[:255]
+            cid = p.get("cid")
+            pin: dict[str, Any] = {
+                "name": name,
+                "lat": float(lat),
+                "lng": float(lng),
+                # The preview UI never displays this - it's only carried through
+                # so the confirm step (which re-uses this exact dict, not a fresh
+                # parse of the file) has the real description to save. A tight
+                # display-oriented cutoff here used to silently truncate every
+                # saved pin's description to 500 characters.
+                "description": (p.get("description") or "")[:MAX_PIN_DESCRIPTION_LENGTH],
+                "cid": cid,
+                # Also just carried through to the confirm step - not displayed -
+                # so a deferred lookup can pass it to REData. See _csv_row_iter.
+                "maps_url": p.get("maps_url"),
+            }
+            # --- TEMPORARY (legacy CID coordinate repair) -----------------------
+            # This record's (lat, lng) may be the same S2-derived guess that
+            # mis-placed one of this profile's own pre-cutoff pins - the client's
+            # "already on your map" proximity check would then match that legacy
+            # pin and pre-deselect the very record that would fix it. Flag it so
+            # the client skips that check for this pin instead. Remove with
+            # services.apis.locations.legacy_cid_coordinate_fix.
+            #
+            # Also flagged - independent of any legacy-pin match above - whenever
+            # the record's own cid came straight out of the imprecise
+            # !1s0x{s2_cell}:0x{cid} URL pattern (see _csv_row_iter's "s2_guess"
+            # and GoogleGeocodingGateway._imprecise_guess_s2_cell), which is wrong
+            # roughly a third of the time: not every affected row still has a
+            # matching legacy pin to find (the user may never have imported it
+            # before, or already fixed it), but every such row is still worth
+            # re-selecting on its own merits so it gets re-resolved rather than
+            # silently trusted. Remove this condition, and the "s2_guess" key on
+            # the CSV row parser, once every user's previously-imported data has
+            # been repaired.
+            if preview_needs_legacy_repair(user_profile, cid=cid, name=name) or p.get("s2_guess"):
+                pin["needs_repair"] = True
+            # --- end TEMPORARY ----------------------------------------------------
+            pins.append(pin)
         return pins
 
     def import_preview_streaming(
@@ -974,15 +1105,20 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             - ``create_category`` (bool): create a ``kind="category"`` label from *stem*.
             - ``label_ids`` (list[int]): label IDs to apply to every pin in the list.
             - ``pins`` (list[dict]): dicts with ``name``, ``lat``, ``lng``,
-              ``description``, ``cid``, and ``label_ids`` (list[int]) fields.
-              Imports never create community wiki entries or hit external APIs;
-              wikis are created explicitly by the user from the pin detail page.
+              ``description``, ``cid``, ``maps_url`` (the source Google Maps
+              URL, when the pin came from one - passed to REData for a more
+              reliable deferred lookup), and ``label_ids`` (list[int]) fields.
+              Imports never hit external APIs synchronously; each created pin's
+              ``Pin`` post_save signal (``models.pin.signals``) does queue a
+              background task that creates the Wiki row for its Location
+              (see ``tasks.ensure_wiki_for_location``), enriched in the
+              background rather than on the import's critical path.
 
         A pin whose ``cid`` has no existing ``Location`` *and* no cached
         Places lookup is never placed from the client-supplied ``lat``/``lng``
         here - those preview-time coordinates come from a free heuristic
         (decoding the Maps URL's embedded S2 cell) that's wrong roughly a
-        third of the time (see ``docs/redata-cid-resolution.md``). Instead
+        third of the time (see ``docs/designs/redata-cid-resolution.md``). Instead
         it's queued and handed off to ``tasks.resolve_deferred_pin_locations``
         once this stream completes, so it only ever gets placed once its real
         coordinates are known. This keeps this generator itself free of any
@@ -1034,7 +1170,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     category_label, _ = Label.objects.get_or_create(
                         profile=user_profile,
                         name__iexact=stem,
-                        defaults={"name": stem, "kind": "category"},
+                        # kind belongs in the lookup, not defaults: with it only
+                        # in defaults, the get half matches any kind, so a
+                        # same-named *tag* was returned and used as the list's
+                        # category (see PROBLEMS.md, label lookups by name alone).
+                        kind=KIND_CATEGORY,
+                        defaults={"name": stem},
                     )
 
                 list_deferred_pins: list[dict[str, Any]] = []
@@ -1147,7 +1288,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         )
 
         if deferred_lists:
-            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
             from urbanlens.dashboard.tasks import resolve_deferred_pin_locations
 
             safely_enqueue_task(resolve_deferred_pin_locations, user_profile.pk, deferred_lists, auto_tag)
@@ -1208,7 +1349,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 )
 
             logger.debug("Converted %s pins from KML file to dicts.", len(pins))
-        except (ValueError, AttributeError, UnicodeDecodeError) as e:
+        except IMPORT_PARSE_ERRORS as e:
+            # fastkml's KMLParseError descends from FastKMLError, and lxml's
+            # XMLSyntaxError from SyntaxError - neither is a ValueError, and neither
+            # is defusedxml's ParseError, so both used to escape this handler *and*
+            # the caller's. A KML with unparseable coordinates or a truncated tag
+            # then aborted the whole import stream instead of skipping one file.
             logger.exception("Failed to import pins from KML: %s", e)
             raise
 

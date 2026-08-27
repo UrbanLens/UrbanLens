@@ -22,22 +22,26 @@ from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAl
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, WikiAutoRemoval
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.locations.naming import (
     normalize_name_for_comparison,
     persist_official_aliases_for_location,
+    sanitize_name,
 )
-from urbanlens.dashboard.services.pin_subresources import (
+from urbanlens.dashboard.services.pins.pin_subresources import (
     AliasExistsError,
     AliasIsCurrentNameError,
     create_pin_alias,
     delete_pin_alias,
     promote_alias_to_name,
 )
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
-from urbanlens.dashboard.services.wiki_aliases import promote_wiki_alias_to_name
+from urbanlens.dashboard.services.wiki.concealment import visible_rows, writable_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_aliases import promote_wiki_alias_to_name
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
@@ -106,15 +110,33 @@ def _render_pin_panel(request, pin: Pin) -> HttpResponse:
     )
 
 
-def _render_location_panel(request, location: Location, wiki: Wiki) -> HttpResponse:
-    """Render the wiki aliases panel with current-name annotation."""
-    aliases = _annotated(wiki.aliases.order_by("name"), wiki.name)
+def _render_location_panel(request, location: Location, wiki: Wiki, profile: Profile) -> HttpResponse:
+    """Render the wiki aliases panel with current-name annotation.
+
+    Takes the profile rather than re-deriving it from the request: every caller
+    has just had one back from ``resolve_visible_wiki``, and a second derivation
+    can disagree with the first. ``getattr(request.user, "profile", None)``
+    swallows ``RelatedObjectDoesNotExist`` (Django makes it an ``AttributeError``
+    so ``hasattr`` works), and a None viewer means ``visible_actor_ids`` returns
+    the empty set - silently costing the viewer their own and their friends'
+    rows, on the one path whose job is to show them.
+    """
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
+
+    rows = wiki.aliases.order_by("name")
+    if concealment_active(wiki, profile):
+        rows = conceal_rows(rows, profile)
+    # Annotated against the *shown* name, not the stored one: "is current" is a
+    # comparison, and comparing to a name this viewer cannot see would mark the
+    # wrong alias - or none - and say so on the page.
+    shown = conceal_wiki(wiki, profile)
+    aliases = _annotated(rows, shown.name)
     return render(
         request,
         "dashboard/partials/pins/aliases_panel.html",
         {
             "location": location,
-            "wiki": wiki,
+            "wiki": shown,
             "aliases": aliases,
             "panel_id": "location-aliases-panel",
             "collapse_scope": "wiki",
@@ -154,6 +176,9 @@ class PinAliasView(LoginRequiredMixin, View):
         name = (request.POST.get("name") or "").strip()
         if not name:
             return HttpResponse("Name is required.", status=400)
+        name_error = column_length_error(PinAlias, "name", name, "Alias")
+        if name_error:
+            return HttpResponse(name_error, status=400)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
             create_pin_alias(pin, name=name, kind=kind)
@@ -202,18 +227,24 @@ class LocationAliasView(LoginRequiredMixin, View):
     """GET: HTMX partial listing a wiki's aliases.  POST: add a new alias."""
 
     def get(self, request, location_slug):
-        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         # Wikis are created lazily, so official-name candidates gathered before
         # the wiki existed have no alias rows yet; backfill them from the cache
         # (DB reads only - no network) now that there is a wiki to attach to.
         persist_official_aliases_for_location(location)
-        return _render_location_panel(request, location, wiki)
+        return _render_location_panel(request, location, wiki, profile)
 
     def post(self, request, location_slug):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        name = (request.POST.get("name") or "").strip()
+        # Sanitized before the emptiness check: WikiAlias.save() applies
+        # sanitize_name, so a name of only dropped characters would otherwise
+        # store as a blank alias (see pin_subresources.add_pin_alias).
+        name = sanitize_name((request.POST.get("name") or "").strip()) or ""
         if not name:
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
+        name_error = column_length_error(WikiAlias, "name", name, "Alias")
+        if name_error:
+            return JsonResponse({"ok": False, "error": name_error}, status=400)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
             # See PinAliasView.post's atomic() comment - same reasoning here.
@@ -226,13 +257,13 @@ class LocationAliasView(LoginRequiredMixin, View):
             editor=profile,
             changes={"alias_added": {"from": None, "to": name}},
         )
-        return _render_location_panel(request, location, wiki)
+        return _render_location_panel(request, location, wiki, profile)
 
 
 class LocationAliasDeleteView(LoginRequiredMixin, View):
     def delete(self, request, location_slug, alias_id):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
+        alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
         if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(wiki.name):
             return HttpResponse("This alias is the current name - pick another name first.", status=400)
         alias_name = alias.name
@@ -246,7 +277,7 @@ class LocationAliasDeleteView(LoginRequiredMixin, View):
             editor=profile,
             changes={"alias_removed": {"from": alias_name, "to": None}},
         )
-        return _render_location_panel(request, location, wiki)
+        return _render_location_panel(request, location, wiki, profile)
 
 
 class LocationAliasUseView(LoginRequiredMixin, View):
@@ -254,9 +285,13 @@ class LocationAliasUseView(LoginRequiredMixin, View):
 
     def post(self, request, location_slug, alias_id):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
-        edit = promote_wiki_alias_to_name(wiki, profile, alias)
-        response = _render_location_panel(request, location, wiki)
+        alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
+        # Renaming saves the wiki (through apply_wiki_edit), so it needs the
+        # real row - see concealment.writable_wiki. The panel then re-renders
+        # from what was written, not from the pre-write projection.
+        target = writable_wiki(wiki)
+        edit = promote_wiki_alias_to_name(target, profile, alias)
+        response = _render_location_panel(request, location, target, profile)
         if edit is None:
             # The alias was already the wiki's name, so nothing was written.
             # Announcing a rename anyway would push a "renamed" toast and a
@@ -267,15 +302,19 @@ class LocationAliasUseView(LoginRequiredMixin, View):
         # wiki.name, not alias.name: Wiki.save() sanitizes the incoming name, so
         # the alias text and what actually got stored can differ. The toast has
         # to state what was stored or it lies about the result of the edit.
-        response["HX-Trigger"] = json.dumps({"wikiRenamed": {"name": wiki.name}})
-        return _show_toast(response, f"Renamed to “{wiki.name}”.")
+        # `target`, not `wiki`: the rename went through the real row, and the
+        # projection resolve returned still holds the pre-rename name - so this
+        # comment's own promise, that the toast states what was stored, only
+        # holds for the row that was written.
+        response["HX-Trigger"] = json.dumps({"wikiRenamed": {"name": target.name}})
+        return _show_toast(response, f"Renamed to “{target.name}”.")
 
 
 class LocationAliasToggleNicknameView(LoginRequiredMixin, View):
     """POST: flip one of the wiki's aliases between nickname-only and a plain alias."""
 
     def post(self, request, location_slug, alias_id):
-        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
-        alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        alias = get_object_or_404(visible_rows(WikiAlias.objects.filter(wiki=wiki), wiki, profile), id=alias_id)
         alias.toggle_nickname()
-        return _render_location_panel(request, location, wiki)
+        return _render_location_panel(request, location, wiki, profile)

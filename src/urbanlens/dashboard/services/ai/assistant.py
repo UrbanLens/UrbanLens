@@ -29,7 +29,7 @@ from django.db.models import Exists, OuterRef, Q
 
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.json_answer import parse_json_answer
-from urbanlens.dashboard.services.rate_limiter import log_api_call
+from urbanlens.dashboard.services.core.rate_limiter import log_api_call
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -167,7 +167,7 @@ def _tool_create_trip(profile: Profile, args: dict) -> dict:
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
     from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-    from urbanlens.dashboard.services.trip_names import random_trip_name
+    from urbanlens.dashboard.services.trips.trip_names import random_trip_name
 
     # Lock the profile row for the duration of the check-then-create so two
     # concurrent requests from the same user can't both pass the upcoming-trip
@@ -192,7 +192,7 @@ def _tool_add_trip_activity(profile: Profile, args: dict) -> dict:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.models.trips.model import Trip, TripActivity
-    from urbanlens.dashboard.services.trip_share_tracking import record_trip_activity_shares
+    from urbanlens.dashboard.services.trips.trip_share_tracking import record_trip_activity_shares
 
     trip = Trip.objects.filter(slug=str(args.get("trip_slug") or ""), profiles=profile).first()
     if trip is None:
@@ -266,7 +266,7 @@ def _history_block(history: list[dict[str, Any]]) -> str:
 
 
 # Alias: the assistant's step protocol is the same "one JSON object" shape
-# used elsewhere (e.g. services.trip_ai_suggestions) - shared parser, kept
+# used elsewhere (e.g. services.trips.trip_ai_suggestions) - shared parser, kept
 # under this module's original name since tests reference it directly.
 _parse_step = parse_json_answer
 

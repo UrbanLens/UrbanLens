@@ -7,8 +7,8 @@ class FriendshipStatus(TextChoices):
     """What kind of relationship two profiles have - and nothing else.
 
     ``MUTED`` is retained but **deprecated and never written**. Mute is a
-    notification preference, not a relationship state, and it now lives on
-    ``Friendship.muted``; see that model's docstring for the data-integrity
+    notification preference, not a relationship state, and it now lives in
+    ``Friendship``'s per-side mute columns; see that model's docstring for the data-integrity
     bug that conflating the two caused (muting an accepted friend overwrote
     ``ACCEPTED``, so ``Profile.are_friends`` - and therefore every visibility
     gate in the app - stopped seeing them as friends). The value stays in the

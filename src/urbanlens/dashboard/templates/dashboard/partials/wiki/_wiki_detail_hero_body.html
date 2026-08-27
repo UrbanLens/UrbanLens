@@ -1,7 +1,7 @@
 {% comment %}
 Hero body for the wiki page (pages/location/wiki.html) - so this page uses
 the same shared gradient hero every other page uses instead of its own
-one-off banner. Expects `wiki`, `location`, `can_delete_wiki`, and `user_pin`
+one-off banner. Expects `wiki`, `location`, and `user_pin`
 in context.
 
 The suggest-edits/delete/back-to-pin actions and the community-wiki notice
@@ -13,6 +13,7 @@ the hero's fixed height has no room to fit everything at once that small.
 {% endcomment %}
 <p class="ul-page-hero__eyebrow wiki-eyebrow">
     <i class="material-symbols-outlined">public</i> Community Wiki
+    {% include "dashboard/partials/ui/_scope_badge.html" %}
 </p>
 <h1 class="ul-page-hero__title wiki-title">{{ wiki.name }}</h1>
 {% if location.address %}
@@ -28,15 +29,14 @@ the hero's fixed height has no room to fit everything at once that small.
         <i class="material-symbols-outlined">edit_note</i>
         Suggest edits
     </button>
-    {% if can_delete_wiki %}
-    <button type="button" class="wiki-delete-btn btn btn--danger btn--sm"
-            hx-delete="{% url 'location.wiki.delete' location.slug %}"
-            hx-confirm="Delete this community wiki? No one else has viewed it yet, so this can't be undone by anyone but you. This cannot be undone."
-            hx-target="body"
-            title="No one else has viewed this wiki yet, so you can still delete it.">
-        <i class="material-symbols-outlined">delete</i>
-        Delete wiki
-    </button>
+    {% if parent_wiki %}
+    {# Wikis nest themselves (a building's inside its campus's), so a nested #}
+    {# page needs a way up. Only rendered when the viewer has earned the     #}
+    {# parent - see the controller's visible_parent_wiki call.               #}
+    <a href="{% url 'location.wiki' parent_wiki.location.slug %}" class="wiki-parent-link btn btn--secondary btn--sm"
+       title="This place sits inside {{ parent_wiki.name }}">
+        <i class="material-symbols-outlined">arrow_upward</i> {{ parent_wiki.name|truncatechars:32 }}
+    </a>
     {% endif %}
     {% if user_pin %}
     <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--secondary btn--sm">

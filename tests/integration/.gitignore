@@ -1,0 +1,22 @@
+# Installed by `npm ci` inside this directory (or by the Docker runner into a volume).
+node_modules/
+
+# npm is the canonical package manager here, because the official Playwright
+# Docker image - the path that needs nothing installed locally - carries npm and
+# not bun. `bun install` works fine for a quick local type-check, but its
+# lockfile is not the one anything else reads, so it is not committed.
+bun.lock
+bun.lockb
+
+# Browser session state minted by setup/auth.setup.ts. These are live credentials
+# for the staging accounts - never commit them.
+.auth/
+
+# Run artefacts: HTML report, traces, videos, JUnit/JSON output.
+reports/
+test-results/
+
+# The provisioning manifest written by `manage.py provision_integration_env`.
+# It carries plaintext passwords and API keys.
+accounts.json
+.env

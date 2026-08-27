@@ -33,6 +33,34 @@ class NotificationType(TextChoices):
     TRIVIA_INVITE = "trivia_invite", "Trivia Invitation"
     CONSENSUS_INVITE = "consensus_invite", "Consensus Invitation"
     PIN_IMPORT_COMPLETE = "pin_import_complete", "Pin Import Complete"
+    ACHIEVEMENT_EARNED = "achievement_earned", "Achievement Unlocked"
     ERROR = "error", "Error"
     WARNING = "warning", "Warning"
     INFO = "info", "Info"
+
+
+#: Notification types a friendship mute must never suppress.
+#:
+#: Mute is a volume control on someone's social activity - their shares, their
+#: comments, their invitations. A safety check-in is not that: the whole point
+#: of the feature is that somebody notices when a person does not come back
+#: from a site, and a preference set weeks earlier about a friend's chatter is
+#: not consent to stop watching for that. The partner invite/accepted pair is
+#: here for a related reason - it is an actionable request whose sender is left
+#: waiting for an answer that would never be asked for.
+#:
+#: Listed rather than derived from the ``safety_ci_`` value prefix so that a
+#: new safety type is a decision somebody makes; ``test_friendship_mute``
+#: fails when one is added and not considered here.
+MUTE_EXEMPT_TYPES = frozenset(
+    {
+        NotificationType.SAFETY_CHECKIN_DUE,
+        NotificationType.SAFETY_CHECKIN_FINAL_WARNING,
+        NotificationType.SAFETY_CHECKIN_OVERDUE,
+        NotificationType.SAFETY_CHECKIN_RESOLVED,
+        NotificationType.SAFETY_CHECKIN_PLAN_UPDATED,
+        NotificationType.SAFETY_CHECKIN_PARTNER_INVITE,
+        NotificationType.SAFETY_CHECKIN_PARTNER_ACCEPTED,
+        NotificationType.WIKI_SAFETY_CHECKIN,
+    },
+)

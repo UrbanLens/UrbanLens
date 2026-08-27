@@ -1,0 +1,3034 @@
+/**
+ * Gesture tests for the floorplan editor, in a real browser.
+ *
+ * Everything else about the editor can be tested as pure functions, and is.
+ * Dragging cannot: it is the point where this code meets Leaflet, pointer
+ * capture, and a DOM that rebuilds itself mid-gesture, and every serious defect
+ * in the drag work came from that seam rather than from the arithmetic either
+ * side of it. Two of them - a drag that ended after one frame because render()
+ * destroys the element it was bound to, and a drag that froze because it
+ * snapped to the wall it was itself dragging - are invisible to a unit test by
+ * construction.
+ *
+ * The page is a harness rather than the Django template: the template needs a
+ * server, and what is under test is the bundle's behaviour, not Django's
+ * rendering. The bundle is the real built artifact.
+ *
+ * Run with `bun run test:browser`. It lives outside `frontend/ts/` on purpose:
+ * bunfig.toml preloads happy-dom for everything under there, and unregistering
+ * it - which this file must do, since a simulated DOM and a real browser cannot
+ * both own the globals - would strip the DOM from every other test in the same
+ * process. A separate directory means a separate `bun test` invocation.
+ *
+ * Requires `bun run build` first, and a chromium Playwright can launch; see
+ * bin/browser_libs.sh for the shared libraries this host needs.
+ */
+
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { type Browser, type Page, chromium } from "playwright";
+
+// bunfig.toml preloads happy-dom for every test file, which is right for the
+// rest of the suite and wrong here: this file drives a *real* browser, and the
+// simulated globals it installs are not inert. Bun.serve handed a happy-dom
+// Response does not recognise it and quietly serves its own welcome page
+// instead, so the harness never loads and the editor looks broken.
+GlobalRegistrator.unregister();
+
+const ROOT = join(import.meta.dir, "../../../../..");
+const STATIC_DIR = join(ROOT, "src/urbanlens/dashboard/frontend/static");
+const BUNDLE = join(STATIC_DIR, "dashboard/js/floorplan-editor.js");
+
+/**
+ * These drive the built bundle, so they need `bun run build` to have run.
+ * Skipped rather than failed without it: a missing build is a setup gap, and a
+ * red suite that means "you did not build" trains people to ignore red suites.
+ */
+const BUILT = existsSync(BUNDLE);
+
+/**
+ * Test-controlled save behaviour.
+ *
+ * A conflict is a server state, not a client one, so the only honest way to
+ * reach it is for the server to answer the way a real one would when another
+ * tab has saved first.
+ */
+const saves = { conflict: false, fail: false, attempts: 0, lastPool: -1, lastPoolUuid: "", lastHadUuid: true, lastName: "", lastValidFrom: "" as string | null, lastRotation: -1 };
+
+/**
+ * Answer a save the way the server does: with the document it was given, every
+ * client-side id replaced by a real one.
+ *
+ * The fixture used to answer with a fixed plan whatever it was sent, which
+ * meant applyServerIds never had anything to apply and the whole
+ * local-id-to-real-id cycle went unexercised in the browser.
+ */
+function echoSaved(document: unknown, versions: unknown): unknown {
+    let issued = 0;
+    // The real save view answers with the row's actual provenance and the uuid
+    // it was stored under - "local" once the save has forked a community plan
+    // into the viewer's own, which is what stops the next autosave forking it
+    // again. Echoing the payload alone would leave both fields absent and the
+    // fixture would fork forever.
+    const rename = (value: unknown): unknown => {
+        if (Array.isArray(value)) return value.map(rename);
+        if (!value || typeof value !== "object") return value;
+        const entry: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+        for (const [key, held] of Object.entries(entry)) entry[key] = rename(held);
+        if (typeof entry.uuid === "string" && entry.uuid.startsWith("local-")) entry.uuid = `srv-${++issued}`;
+        return entry;
+    };
+    const saved = rename(document) as Record<string, unknown>;
+    const uuid = saved.uuid ?? "srv-plan";
+    // save() strips `versions` before sending and the real view answers with the
+    // list rebuilt from rows, so echoing only what arrived emptied the version
+    // list on every save - which hid it, and left everything past the first save
+    // unexercised. The entry just written carries the name it was written with.
+    const list = Array.isArray(versions)
+        ? (versions as Array<Record<string, unknown>>).map((entry) =>
+              entry.uuid === uuid ? { ...entry, name: saved.name, valid_from: saved.valid_from ?? null } : entry,
+          )
+        : [];
+    return { ...saved, versions: list, origin: "local", uuid };
+}
+
+/** Publish requests the fixture has been asked for. */
+const publishes = { attempts: 0 };
+
+/** The version list of whichever plan was served last, so /save can answer with
+ * it the way the real view does - rebuilt from rows rather than from the
+ * payload, which never carries it. */
+let servedVersions: unknown = [];
+
+/** Serve a plan, remembering its version list. */
+function servePlan(plan: unknown): Response {
+    servedVersions = (plan as { versions?: unknown }).versions ?? [];
+    return Response.json(plan);
+}
+
+/** A minimal page carrying every element boot() reaches for. */
+/** The fixture page, kept beside this file so harness-parity.test.ts can read
+ * the same bytes the browser does. */
+const HARNESS = readFileSync(join(import.meta.dir, "harness.html"), "utf8");
+
+/** Where the middle of the plan sits on screen. */
+async function planCentre(): Promise<{ x: number; y: number }> {
+    const point = await page.evaluate(() => {
+        const nodes = [...document.querySelectorAll(".floorplan-wall")];
+        let top = Infinity;
+        let left = Infinity;
+        let bottom = -Infinity;
+        let right = -Infinity;
+        for (const node of nodes) {
+            const rect = node.getBoundingClientRect();
+            top = Math.min(top, rect.top);
+            left = Math.min(left, rect.left);
+            bottom = Math.max(bottom, rect.bottom);
+            right = Math.max(right, rect.right);
+        }
+        return { x: (left + right) / 2, y: (top + bottom) / 2 };
+    });
+    return point;
+}
+
+/** A four-wall square, 10m on a side, as the editor's own document shape. */
+/**
+ * A grid of rooms, for asking what a real survey costs to redraw.
+ *
+ * Args:
+ *     cells: Rooms per side. 12 gives 312 walls and 144 faces.
+ */
+/** Markers scattered over a grid plan.
+ *
+ * A survey-sized plan is not only walls: a hazard or a stairwell per few rooms is
+ * ordinary, and every one of them is a Leaflet marker rebuilt on each drag frame.
+ * The perf fixture carried `markers: []`, so the measured cost of a drag excluded
+ * markers entirely - and with them the most expensive thing render() does per
+ * marker, which is assembling the popup's DOM.
+ */
+function gridMarkers(cells: number, step: number): unknown[] {
+    const out: unknown[] = [];
+    const kinds = ["hazard", "stair", "elevator"];
+    for (let index = 0; index < 30; index++) {
+        const cell = (index * 7) % (cells * cells);
+        out.push({
+            uuid: `marker-${index}`,
+            kind: kinds[index % kinds.length],
+            name: `Marker ${index}`,
+            x: ((cell % cells) + 0.5) * step,
+            y: (Math.floor(cell / cells) + 0.5) * step,
+        });
+    }
+    return out;
+}
+
+function gridPlan(cells = 12): unknown {
+    const step = 3;
+    const walls: unknown[] = [];
+    for (let line = 0; line <= cells; line++) {
+        for (let span = 0; span < cells; span++) {
+            const edge = line === 0 || line === cells;
+            const kind = edge ? "exterior" : "interior";
+            walls.push({ kind, thickness: "normal", ax: line * step, ay: span * step, bx: line * step, by: (span + 1) * step, openings: [] });
+            walls.push({ kind, thickness: "normal", ax: span * step, ay: line * step, bx: (span + 1) * step, by: line * step, openings: [] });
+        }
+    }
+    return {
+        uuid: "plan-big",
+        name: "grid",
+        valid_from: null,
+        origin: "local",
+        plan_origin: { lat: 41.733, lng: -73.928 },
+        rotation_degrees: 0,
+        floors: [{ uuid: "floor-1", level: 0, designation: "", name: "Ground", walls, rooms: [], markers: gridMarkers(cells, step) }],
+    };
+}
+
+/** A square building with a closet partitioned off its north-west corner. */
+function closetPlan(): unknown {
+    const wall = (kind: string, ax: number, ay: number, bx: number, by: number) => ({ kind, thickness: "normal", ax, ay, bx, by, openings: [] });
+    return {
+        uuid: "plan-closet",
+        name: "closet",
+        valid_from: null,
+        origin: "local",
+        plan_origin: { lat: 41.733, lng: -73.928 },
+        rotation_degrees: 0,
+        floors: [
+            {
+                uuid: "floor-1",
+                level: 0,
+                designation: "",
+                name: "Ground",
+                walls: [
+                    wall("exterior", 0, 0, 10, 0),
+                    wall("exterior", 10, 0, 10, 10),
+                    wall("exterior", 10, 10, 0, 10),
+                    wall("exterior", 0, 10, 0, 0),
+                    // The closet: a partition across, and one down to meet it.
+                    wall("interior", 0, 4, 4, 4),
+                    wall("interior", 4, 4, 4, 0),
+                ],
+                rooms: [{ name: "Closet", x: 2, y: 2 }],
+                markers: [],
+            },
+        ],
+    };
+}
+
+/** A square building with a free-standing box inside it, touching nothing. */
+function islandPlan(): unknown {
+    const wall = (kind: string, ax: number, ay: number, bx: number, by: number) => ({ kind, thickness: "normal", ax, ay, bx, by, openings: [] });
+    return {
+        uuid: "plan-island",
+        name: "island",
+        valid_from: null,
+        origin: "local",
+        plan_origin: { lat: 41.733, lng: -73.928 },
+        rotation_degrees: 0,
+        floors: [
+            {
+                uuid: "floor-1",
+                level: 0,
+                designation: "",
+                name: "Ground",
+                walls: [
+                    wall("exterior", 0, 0, 10, 0),
+                    wall("exterior", 10, 0, 10, 10),
+                    wall("exterior", 10, 10, 0, 10),
+                    wall("exterior", 0, 10, 0, 0),
+                    wall("interior", 3, 3, 6, 3),
+                    wall("interior", 6, 3, 6, 6),
+                    wall("interior", 6, 6, 3, 6),
+                    wall("interior", 3, 6, 3, 3),
+                ],
+                rooms: [{ name: "Island", x: 4.5, y: 4.5 }],
+                markers: [],
+            },
+        ],
+    };
+}
+
+/** A square building split down the middle into two named rooms sharing one partition. */
+function duplexPlan(): unknown {
+    const wall = (kind: string, ax: number, ay: number, bx: number, by: number) => ({ kind, thickness: "normal", ax, ay, bx, by, openings: [] });
+    return {
+        uuid: "plan-duplex",
+        name: "duplex",
+        valid_from: null,
+        origin: "local",
+        plan_origin: { lat: 41.733, lng: -73.928 },
+        rotation_degrees: 0,
+        floors: [
+            {
+                uuid: "floor-1",
+                level: 0,
+                designation: "",
+                name: "Ground",
+                walls: [
+                    wall("exterior", 0, 0, 10, 0),
+                    wall("exterior", 10, 0, 10, 10),
+                    wall("exterior", 10, 10, 0, 10),
+                    wall("exterior", 0, 10, 0, 0),
+                    wall("interior", 5, 0, 5, 10),
+                ],
+                rooms: [
+                    { name: "West", x: 2.5, y: 5 },
+                    { name: "East", x: 7.5, y: 5 },
+                ],
+                markers: [],
+            },
+        ],
+    };
+}
+
+/** A plan with nothing drawn on it yet - what a new building starts as. */
+function emptyPlan(): unknown {
+    return {
+        uuid: "plan-empty",
+        name: "",
+        valid_from: null,
+        origin: "local",
+        plan_origin: { lat: 41.733, lng: -73.928 },
+        rotation_degrees: 0,
+        floors: [{ uuid: "floor-1", level: 0, designation: "", name: "", walls: [], rooms: [], markers: [] }],
+    };
+}
+
+function squarePlan(): unknown {
+    const corners = [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+    ];
+    return {
+        uuid: "plan-1",
+        name: "harness",
+        versions: [
+            { uuid: "plan-1", name: "harness", valid_from: null },
+            { uuid: "plan-2", name: "after the fire", valid_from: "2019-04-01" },
+        ],
+        valid_from: null,
+        origin: "local",
+        plan_origin: { lat: 41.733, lng: -73.928 },
+        rotation_degrees: 0,
+        floors: [
+            {
+                uuid: "floor-1",
+                level: 0,
+                designation: "",
+                name: "",
+                walls: corners.map((corner, index) => ({
+                    uuid: `wall-${index}`,
+                    // All exterior: this is a building outline, which is what
+                    // makes it a shell rather than a room.
+                    kind: "exterior",
+                    thickness: "normal",
+                    ax: corner[0],
+                    ay: corner[1],
+                    bx: corners[(index + 1) % 4]?.[0],
+                    by: corners[(index + 1) % 4]?.[1],
+                    openings: [],
+                })),
+                rooms: [],
+                markers: [],
+            },
+        ],
+    };
+}
+
+let browser: Browser;
+let page: Page;
+let server: ReturnType<typeof Bun.serve>;
+
+/**
+ * Load the harness with the real bundle and a stubbed server.
+ *
+ * Served over HTTP rather than injected: the bundle is a module that imports a
+ * chunk by relative URL, which cannot resolve without a real origin.
+ */
+async function openEditor(
+    viewport = { width: 1200, height: 800 },
+    hasTouch = false,
+    plan: "square" | "grid" | "closet" | "island" | "duplex" | "empty" | "community" | "empty-unsaved" = "square",
+): Promise<void> {
+    page = await browser.newPage({ viewport, hasTouch });
+    page.on("pageerror", (error) => console.error("PAGEERROR", String(error).slice(0, 300)));
+    page.on("console", (message) => {
+        if (message.type() === "error") console.error("browser console:", message.text().slice(0, 200));
+    });
+    await page.goto(`http://127.0.0.1:${server.port}/${plan === "square" ? "" : `?plan=${plan === "empty-unsaved" ? "unsaved" : plan}`}`, { waitUntil: "load" });
+    if (plan === "empty" || plan === "empty-unsaved") {
+        // Nothing is drawn on it, so there is no wall to wait for - wait for the
+        // prompt that stands in for one.
+        await page.waitForSelector("#floorplan-empty", { state: "attached", timeout: 20000 });
+    } else {
+        // "attached", not the default "visible": a straight wall is an SVG line
+        // whose bounding box has zero height, which Playwright reads as invisible.
+        await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
+    }
+    // Walls existing is not the same as the page having settled - Leaflet is
+    // still placing panes on the frame they appear, and a measurement taken
+    // then reads the layout moving as the plan moving.
+    await settle();
+}
+
+/**
+ * Wait until the plan stops moving on screen.
+ *
+ * The editor fits the view to the plan once it loads, and Leaflet animates
+ * that. Measuring during the animation reads the zoom settling as the geometry
+ * changing, which is the difference between a test that fails once in ten runs
+ * and one that means something.
+ */
+async function settle(): Promise<void> {
+    let previous = "";
+    for (let attempt = 0; attempt < 40; attempt++) {
+        await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+        const current = await page.evaluate(() => {
+            const nodes = [...document.querySelectorAll(".floorplan-wall")];
+            return nodes.map((node) => {
+                const rect = node.getBoundingClientRect();
+                return `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)},${Math.round(rect.height)}`;
+            }).join("|");
+        });
+        if (current && current === previous) return;
+        previous = current;
+    }
+}
+
+/**
+ * The screen extent of every wall on the floor, and a point on the topmost one.
+ *
+ * Measured as a union rather than per element, and read in the page rather than
+ * through Playwright's boundingBox(). Both matter: render() destroys and
+ * rebuilds every layer on each frame, so "the first .floorplan-wall" is not the
+ * same wall before and after a gesture - measuring one that way reports a plain
+ * click as a 70px move - and a straight wall is a zero-height line, which
+ * Playwright treats as invisible and refuses to measure at all.
+ */
+async function planExtent(): Promise<{ top: number; left: number; bottom: number; width: number; height: number; grab: { x: number; y: number } }> {
+    const measured = await page.evaluate(() => {
+        const nodes = [...document.querySelectorAll(".floorplan-wall")];
+        if (!nodes.length) return null;
+        // Relative to the map, not the viewport: selecting something fills the
+        // sidebar, which reflows the page and slides the map sideways. That is
+        // the harness moving, not the plan.
+        const frame = document.getElementById("floorplan-map")?.getBoundingClientRect();
+        const originX = frame?.left ?? 0;
+        const originY = frame?.top ?? 0;
+        let top = Infinity;
+        let left = Infinity;
+        let bottom = -Infinity;
+        let right = -Infinity;
+        let highest: DOMRect | null = null;
+        for (const node of nodes) {
+            const rect = node.getBoundingClientRect();
+            top = Math.min(top, rect.top - originY);
+            left = Math.min(left, rect.left - originX);
+            bottom = Math.max(bottom, rect.bottom - originY);
+            right = Math.max(right, rect.right - originX);
+            // The topmost horizontal run: a wide, flat rect near the top.
+            if (rect.width > rect.height && (!highest || rect.top < highest.top)) highest = rect;
+        }
+        const target = highest ?? nodes[0]!.getBoundingClientRect();
+        return { top, left, bottom, width: right - left, height: bottom - top, grab: { x: target.left + target.width / 2, y: target.top + target.height / 2 } };
+    });
+    if (!measured) throw new Error("no walls are rendered");
+    return measured;
+}
+
+beforeAll(async () => {
+    if (!BUILT) return;
+    // Chromium needs libraries this host has no root to install; they are
+    // unpacked under ~/browserlibs instead. Set before launch so the browser
+    // process inherits it.
+    const libs = join(process.env.HOME || "", "browserlibs/root/usr/lib/x86_64-linux-gnu");
+    process.env.LD_LIBRARY_PATH = process.env.LD_LIBRARY_PATH ? `${process.env.LD_LIBRARY_PATH}:${libs}` : libs;
+    browser = await chromium.launch({ args: ["--no-sandbox", "--disable-gpu"] });
+    server = Bun.serve({
+        port: 0,
+        // The plan is served here rather than intercepted with page.route: a
+        // route that fails to match is indistinguishable from a 404, and the
+        // editor is right to refuse to render a plan it could not fetch - which
+        // makes a mis-typed glob look exactly like a broken editor.
+        async fetch(request) {
+            const path = new URL(request.url).pathname;
+            if (path === "/") {
+                // The plan url is substituted rather than fixed, so a test can
+                // ask for a big one without a second copy of the harness.
+                const params = new URL(request.url).searchParams;
+                const which = params.get("plan");
+                let page = which ? HARNESS.replace('data-json-url="/json"', `data-json-url="/json-${which}"`) : HARNESS;
+                // Leaflet and leaflet-rotate come from unpkg on the real page too.
+                // Dropping the tags is what an unreachable CDN looks like: the
+                // scripts are simply not there and `L` is undefined.
+                if (params.get("nomap")) page = page.replace(/<script src="https:\/\/unpkg\.com[^"]*"><\/script>/g, "");
+                // Two separate requests, so one can land without the other. This is
+                // the half that leaves Leaflet working and view rotation gone.
+                if (params.get("norotate")) page = page.replace(/<script src="[^"]*leaflet-rotate[^"]*"><\/script>/g, "");
+                return new Response(page, { headers: { "content-type": "text/html" } });
+            }
+            if (path === "/publish") {
+                publishes.attempts += 1;
+                return Response.json({ ok: true });
+            }
+            if (path === "/json") {
+                // A different plan for the other version, so a switch is
+                // visible as more than a redraw of the same thing.
+                const wanted = new URL(request.url).searchParams.get("version");
+                if (wanted === "plan-2") return servePlan({ ...(closetPlan() as Record<string, unknown>), uuid: "plan-2", versions: (squarePlan() as { versions: unknown[] }).versions });
+                return servePlan(squarePlan());
+            }
+            // A wall citing a reference whose image is gone: the photo was deleted
+            // from its owner's media and FloorplanReference.image is SET_NULL, so
+            // the citation survives with nothing to draw.
+            if (path === "/json-lostphoto") {
+                const plan = squarePlan() as Record<string, unknown>;
+                const floors = plan.floors as Array<{ walls: Array<Record<string, unknown>> }>;
+                for (const wall of floors[0].walls) wall.references = ["ref-gone"];
+                plan.reference_pool = [{ uuid: "ref-gone", kind: "photo", title: "South elevation", url: "https://example.test/south.jpg", image_uuid: null }];
+                return servePlan(plan);
+            }
+            // Turned to face its building, which every other fixture leaves at 0.
+            if (path === "/json-rotated") return servePlan({ ...(squarePlan() as Record<string, unknown>), rotation_degrees: 30 });
+            if (path === "/json-grid") return servePlan(gridPlan());
+            if (path === "/json-closet") return servePlan(closetPlan());
+            if (path === "/json-island") return servePlan(islandPlan());
+            if (path === "/json-duplex") return servePlan(duplexPlan());
+            if (path === "/json-empty") return servePlan(emptyPlan());
+            // Never saved: no uuid, so nothing to fork or publish yet.
+            if (path === "/json-unsaved") {
+                const { uuid, ...rest } = emptyPlan() as Record<string, unknown>;
+                void uuid;
+                return servePlan(rest);
+            }
+            if (path === "/json-community") return servePlan({ ...(squarePlan() as Record<string, unknown>), origin: "community", versions: [] });
+            if (path === "/save") {
+                saves.attempts += 1;
+                // What the editor actually sent, so a test can ask about the
+                // payload rather than about the screen. Awaited rather than
+                // left to settle: once the response goes out the request body
+                // is gone, and a fire-and-forget read of it never resolves.
+                let echoed: unknown = squarePlan();
+                try {
+                    const body = (await request.json()) as { reference_pool?: Array<{ uuid?: string }> };
+                    saves.lastPool = (body.reference_pool ?? []).length;
+                    saves.lastPoolUuid = body.reference_pool?.[0]?.uuid ?? "";
+                    saves.lastHadUuid = "uuid" in (body as Record<string, unknown>);
+                    const doc = body as { name?: string; valid_from?: string | null };
+                    saves.lastName = doc.name ?? "";
+                    saves.lastValidFrom = doc.valid_from ?? null;
+                    saves.lastRotation = (body as { rotation_degrees?: number }).rotation_degrees ?? -1;
+                    echoed = echoSaved(body, servedVersions);
+                } catch {
+                    saves.lastPool = -1;
+                }
+                if (saves.fail) return Response.json({ ok: false, error: "nope" }, { status: 500 });
+                if (saves.conflict) {
+                    return Response.json({ ok: false, error: "Someone else saved this plan while you were editing it.", stale: true }, { status: 409 });
+                }
+                return Response.json({ ok: true, floorplan: echoed });
+            }
+            return new Response(Bun.file(join(STATIC_DIR, path.replace(/^\//, ""))));
+        },
+    });
+});
+
+afterAll(async () => {
+    await browser?.close();
+    server?.stop(true);
+});
+
+describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
+    test("the plan renders", async () => {
+        await openEditor();
+        expect(await page.locator(".floorplan-wall").count()).toBeGreaterThanOrEqual(4);
+        expect(await page.locator(".floorplan-joint").count()).toBeGreaterThan(0);
+        await page.close();
+    });
+
+    test("a mouse drag moves a wall, and keeps moving past the first frame", async () => {
+        // The regression that motivates this file: binding the drag to the
+        // layer's own element meant render() destroyed it on the first move,
+        // so the wall travelled a few pixels and stopped.
+        await openEditor();
+        const before = await planExtent();
+        await page.mouse.move(before.grab.x, before.grab.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 10; step++) await page.mouse.move(before.grab.x, before.grab.y - step * 6);
+        await page.mouse.up();
+
+        const after = await planExtent();
+        // The topmost wall moved up, so the plan's top edge did too.
+        expect(before.top - after.top).toBeGreaterThan(30);
+        await page.close();
+    });
+
+    test("a touch drag moves a wall", async () => {
+        // Every drag was bound to mouse events, which a finger never emits, so
+        // this is the whole of "the editor works on a phone".
+        await openEditor();
+        const before = await planExtent();
+        const target = await page.evaluateHandle((point) => {
+            const spot = point as { x: number; y: number };
+            return document.elementFromPoint(spot.x, spot.y) ?? document.querySelector(".floorplan-wall");
+        }, before.grab);
+        await page.evaluate(
+            ([element, start]) => {
+                const node = element as Element;
+                const from = start as { x: number; y: number };
+                const fire = (type: string, x: number, y: number): void => {
+                    node.dispatchEvent(new PointerEvent(type, { pointerId: 7, pointerType: "touch", isPrimary: true, bubbles: true, cancelable: true, clientX: x, clientY: y, buttons: type === "pointerup" ? 0 : 1 }));
+                };
+                fire("pointerdown", from.x, from.y);
+                for (let step = 1; step <= 10; step++) {
+                    window.dispatchEvent(new PointerEvent("pointermove", { pointerId: 7, pointerType: "touch", isPrimary: true, bubbles: true, clientX: from.x, clientY: from.y - step * 6, buttons: 1 }));
+                }
+                window.dispatchEvent(new PointerEvent("pointerup", { pointerId: 7, pointerType: "touch", isPrimary: true, bubbles: true, clientX: from.x, clientY: from.y - 60, buttons: 0 }));
+            },
+            [target, before.grab] as const,
+        );
+
+        const after = await planExtent();
+        expect(before.top - after.top).toBeGreaterThan(30);
+        await page.close();
+    });
+
+    test("a press that does not move selects instead of nudging", async () => {
+        await openEditor();
+        const before = await planExtent();
+        await page.mouse.click(before.grab.x, before.grab.y);
+
+        // Selecting a wall is what opens its form. Waited for rather than
+        // asserted immediately: filling the sidebar reflows the page, and
+        // measuring mid-reflow reads the harness moving as the plan moving.
+        await page.waitForSelector("#floorplan-form h3", { state: "attached", timeout: 10000 });
+        expect(await page.locator("#floorplan-form h3").count()).toBe(1);
+        await settle();
+
+        // The plan's own size, not its position on screen. Filling the sidebar
+        // reflows the page and moves the map, which any position-based check
+        // reports as the plan having moved; nudging a wall is what would change
+        // the size of what the walls enclose.
+        const after = await planExtent();
+        expect(Math.abs(after.width - before.width)).toBeLessThan(1.5);
+        expect(Math.abs(after.height - before.height)).toBeLessThan(1.5);
+        await page.close();
+    });
+
+    test("undo takes back exactly one drag", async () => {
+        await openEditor();
+        const before = await planExtent();
+        await page.mouse.move(before.grab.x, before.grab.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(before.grab.x, before.grab.y - step * 8);
+        await page.mouse.up();
+        expect(await page.locator("#floorplan-undo").isDisabled()).toBe(false);
+        expect((await planExtent()).top).toBeLessThan(before.top - 20);
+
+        await page.keyboard.press("Control+z");
+
+        const after = await planExtent();
+        expect(Math.abs(after.top - before.top)).toBeLessThan(2);
+        await page.close();
+    });
+
+    test("arming a tool changes the cursor, and Escape disarms it", async () => {
+        await openEditor();
+        await page.locator('[data-tool="rotate"]').click();
+        expect(await page.locator("#floorplan-map").evaluate((el) => getComputedStyle(el).cursor)).toBe("grab");
+
+        await page.keyboard.press("Escape");
+
+        expect(await page.locator('[data-tool="select"]').getAttribute("aria-pressed")).toBe("true");
+        await page.close();
+    });
+
+    test("clicking inside a bare outline does not turn the building into a room", async () => {
+        // A region is derived from whatever encloses it, so an un-subdivided
+        // outline encloses exactly as validly as a room - and used to become
+        // one the moment anybody clicked the middle of the plan to look at
+        // something.
+        await openEditor();
+        const centre = await planCentre();
+        await page.mouse.click(centre.x, centre.y);
+        await settle();
+
+        expect(await page.locator(".floorplan-room-label").count()).toBe(0);
+        expect(await page.locator("#floorplan-form h3").count()).toBe(0);
+        await page.close();
+    });
+
+    test("the outline can still be named deliberately", async () => {
+        await openEditor();
+        const centre = await planCentre();
+        await page.mouse.click(centre.x, centre.y, { button: "right" });
+        await page.waitForSelector("text=Name this space", { timeout: 10000 });
+        await page.locator("text=Name this space").click();
+        await settle();
+
+        expect(await page.locator("#floorplan-form h3").first().textContent()).toBe("Room");
+        await page.close();
+    });
+
+    test("on a phone, undo and the floor switcher stay on the canvas", async () => {
+        // They used to live in the sidebar, which stacks below the map under
+        // 900px - so for the whole time anyone was drawing on a phone, the one
+        // control you reach for after a mistake was off the bottom of the page.
+        await openEditor({ width: 375, height: 812 });
+        // Delete only appears with a selection, and it is on this list for the
+        // same reason as the other two: the sidebar it also lives in is below a
+        // 72vh map, and a phone has no Delete key.
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+
+        for (const selector of ["#floorplan-undo", "#floorplan-floors", "#floorplan-delete"]) {
+            const placement = await page.evaluate((which) => {
+                const node = document.querySelector(which as string);
+                if (!node) return null;
+                const rect = node.getBoundingClientRect();
+                return {
+                    // Structural, not positional: a control can be made to
+                    // overlap the map with CSS while still living in a panel
+                    // that scrolls away, which is what this is guarding against.
+                    inShell: Boolean(node.closest(".floorplan-map-shell")),
+                    rendered: rect.width > 0 && rect.height > 0,
+                    onScreen: rect.top >= 0 && rect.bottom <= window.innerHeight,
+                };
+            }, selector);
+            expect(placement, `${selector} is missing`).not.toBeNull();
+            expect(placement!.inShell, `${selector} should live in the map shell`).toBe(true);
+            expect(placement!.rendered, `${selector} should be rendered`).toBe(true);
+            expect(placement!.onScreen, `${selector} should be reachable without scrolling`).toBe(true);
+        }
+        await page.close();
+    });
+
+    test("the floating controls do not sit on top of each other", async () => {
+        // Five things float over this canvas - the tool pill, the tool options,
+        // the undo/zoom/delete row, the floor strip, the layers panel -
+        // positioned across two stylesheets. Overlap is the failure mode nobody
+        // notices until a button cannot be pressed, and it turns up at whatever
+        // width the pieces happen to rearrange, which is why this runs at four
+        // of them rather than one.
+        for (const viewport of [
+            // 320 is the narrowest phone still in use, and the width where the
+            // tool pill wraps to a second row - which makes it taller, which is
+            // exactly when a floating control starts reaching something else.
+            { width: 320, height: 568 },
+            { width: 375, height: 812 },
+            // 700 and 768 straddle the width where the tool pill moves from
+            // the bottom of the canvas to the top right, which is the
+            // rearrangement that has produced two collisions so far.
+            { width: 700, height: 800 },
+            // Inside the single-column range but nothing like a phone: the pill
+            // is at the bottom and unwrapped, which is a different arrangement
+            // again from either neighbour.
+            { width: 768, height: 1024 },
+            { width: 1200, height: 800 },
+        ]) {
+            await openEditor(viewport);
+            await page.locator('[data-tool="wall"]').click(); // give the options panel content
+            await settle();
+
+            const overlaps = await page.evaluate(() => {
+                // Leaflet's own zoom control is on this list too - it is no
+                // longer reparented into .floorplan-canvas-controls (undo and
+                // redo moved into #floorplan-tools instead), so it is once
+                // again a free-floating control that could collide with the
+                // rest, same as on every other map.
+                const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls", ".leaflet-control-zoom"];
+                const boxes = selectors
+                    .map((selector) => ({ selector, node: document.querySelector(selector) }))
+                    .filter((entry) => entry.node && !(entry.node as HTMLElement).hidden)
+                    .map((entry) => ({ selector: entry.selector, rect: (entry.node as HTMLElement).getBoundingClientRect() }))
+                    .filter((entry) => entry.rect.width > 0 && entry.rect.height > 0);
+                const clashes: string[] = [];
+                for (let i = 0; i < boxes.length; i++) {
+                    for (let j = i + 1; j < boxes.length; j++) {
+                        const a = boxes[i]!;
+                        const b = boxes[j]!;
+                        const gap = a.rect.right <= b.rect.left || b.rect.right <= a.rect.left || a.rect.bottom <= b.rect.top || b.rect.bottom <= a.rect.top;
+                        if (!gap) clashes.push(`${a.selector} over ${b.selector}`);
+                    }
+                }
+                return clashes;
+            });
+
+            expect(overlaps, `at ${viewport.width}px`).toEqual([]);
+            await page.close();
+        }
+    });
+
+    test("the plan can be reached and moved with the keyboard alone", async () => {
+        // The canvas had no keyboard path to anything: geometry could be drawn,
+        // selected, moved and deleted only with a pointer.
+        await openEditor();
+        await page.locator("#floorplan-map").focus();
+
+        await page.keyboard.press("Tab");
+        expect(await page.locator("#floorplan-form h3").count()).toBe(1);
+        expect(await page.locator("#floorplan-live").textContent()).toContain("wall");
+
+        const before = await planExtent();
+        for (let press = 0; press < 12; press++) await page.keyboard.press("Shift+ArrowRight");
+        await settle();
+
+        // One wall moved east, so the plan reaches further east than it did.
+        const after = await planExtent();
+        expect(after.width).toBeGreaterThan(before.width + 10);
+
+        await page.close();
+    });
+
+    test("Shift+Tab steps back, and Escape gives focus up rather than trapping it", async () => {
+        await openEditor();
+        await page.locator("#floorplan-map").focus();
+        await page.keyboard.press("Tab");
+        const first = await page.locator("#floorplan-live").textContent();
+        await page.keyboard.press("Tab");
+        expect(await page.locator("#floorplan-live").textContent()).not.toBe(first);
+
+        await page.keyboard.press("Shift+Tab");
+        expect(await page.locator("#floorplan-live").textContent()).toBe(first);
+
+        // Once for the selection, once to leave. Taking Tab is only defensible
+        // because this gives it back.
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("Escape");
+        expect(await page.evaluate(() => document.activeElement?.id)).not.toBe("floorplan-map");
+        await page.close();
+    });
+
+    test("box select follows the rectangle on screen, even when the plan is turned", async () => {
+        // The selection used to be tested against a latitude/longitude box built
+        // from the rectangle's corners, which is only the same shape while the
+        // map faces north. Turning the plan to face its building is the first
+        // thing anyone does here.
+        await openEditor();
+        await page.locator('[data-tool="box"]').click();
+
+        const selectAll = async (): Promise<number> => {
+            const frame = await page.locator("#floorplan-map").boundingBox();
+            if (!frame) throw new Error("no map");
+            await page.mouse.move(frame.x + 4, frame.y + 4);
+            await page.mouse.down();
+            await page.mouse.move(frame.x + frame.width - 4, frame.y + frame.height - 4, { steps: 8 });
+            await page.mouse.up();
+            await settle();
+            const heading = await page.locator("#floorplan-form h3").first().textContent();
+            const match = /^(\d+) items/.exec(heading || "");
+            return match ? Number(match[1]) : 0;
+        };
+
+        const facingNorth = await selectAll();
+        expect(facingNorth).toBeGreaterThanOrEqual(4);
+
+        // Turn the plan with the tool that does it, rather than reaching into
+        // the map from the test - the rotation path is worth exercising too.
+        await page.keyboard.press("Escape");
+        await page.locator('[data-tool="rotate"]').click();
+        const frame = await page.locator("#floorplan-map").boundingBox();
+        if (!frame) throw new Error("no map");
+        const centre = { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
+        await page.mouse.move(centre.x + 160, centre.y);
+        await page.mouse.down();
+        await page.mouse.move(centre.x + 130, centre.y + 90, { steps: 10 });
+        await page.mouse.up();
+        await settle();
+
+        await page.keyboard.press("Escape");
+        await page.locator('[data-tool="box"]').click();
+        const turned = await selectAll();
+
+        expect(turned).toBe(facingNorth);
+        await page.close();
+    });
+
+    test("drawing a wall with a finger shows the rubber band", async () => {
+        // The preview was driven by Leaflet's mousemove, which a finger never
+        // emits, so on a phone every corner was placed blind: no rubber band,
+        // no length, no snap readout.
+        await openEditor();
+        await page.locator('[data-tool="wall"]').click();
+        const frame = await page.locator("#floorplan-map").boundingBox();
+        if (!frame) throw new Error("no map");
+        const start = { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
+
+        // Place the first corner, then aim for the second with a finger down.
+        await page.mouse.click(start.x, start.y);
+        await settle();
+        // Captured after the mouse has already drawn one: the question is not
+        // whether a rubber band exists, it is whether it follows the finger.
+        const ghostPath = () => page.evaluate(() => document.querySelector('#floorplan-map path[stroke-dasharray="5 5"]')?.getAttribute("d") ?? "");
+        const beforeTouch = await ghostPath();
+
+        await page.evaluate((from) => {
+            const at = from as { x: number; y: number };
+            const map = document.getElementById("floorplan-map") as HTMLElement;
+            const fire = (type: string, x: number, y: number): void => {
+                map.dispatchEvent(new PointerEvent(type, { pointerId: 9, pointerType: "touch", isPrimary: true, bubbles: true, cancelable: true, clientX: x, clientY: y, buttons: type === "pointerup" ? 0 : 1 }));
+            };
+            fire("pointerdown", at.x + 20, at.y);
+            for (let step = 1; step <= 6; step++) fire("pointermove", at.x + 20 + step * 10, at.y);
+        }, start);
+        await settle();
+
+        const afterTouch = await ghostPath();
+        expect(beforeTouch).not.toBe("");
+        expect(afterTouch).not.toBe(beforeTouch);
+        await page.close();
+    });
+
+    test("a slide-and-lift finger gesture actually places the corner", async () => {
+        // Driven through CDP rather than synthetic DOM events, because the
+        // question is exactly what the browser's own touch pipeline does with a
+        // finger that moves before it lifts. A hand-dispatched MouseEvent would
+        // be assuming the answer.
+        //
+        // Desktop viewport deliberately: this asks about touch semantics rather
+        // than layout, and a full-width map gives the gesture room to run.
+        await openEditor({ width: 1200, height: 800 }, true);
+        const before = await page.locator(".floorplan-wall").count();
+        await page.locator('[data-tool="wall"]').click();
+        const frame = await page.locator("#floorplan-map").boundingBox();
+        if (!frame) throw new Error("no map");
+        const at = { x: frame.x + 200, y: frame.y + frame.height - 80 };
+
+        const cdp = await page.context().newCDPSession(page);
+        const stroke = async (x0: number, y0: number, x1: number, y1: number): Promise<void> => {
+            await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: x0, y: y0 }] });
+            for (let step = 1; step <= 5; step++) {
+                await cdp.send("Input.dispatchTouchEvent", {
+                    type: "touchMove",
+                    touchPoints: [{ x: x0 + ((x1 - x0) * step) / 5, y: y0 + ((y1 - y0) * step) / 5 }],
+                });
+            }
+            await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        };
+        await stroke(at.x, at.y, at.x + 30, at.y);
+        await stroke(at.x + 30, at.y, at.x + 160, at.y);
+        // Tapping the last corner again finishes the chain open-ended.
+        await stroke(at.x + 160, at.y, at.x + 160, at.y);
+        await settle();
+
+        expect(await page.locator(".floorplan-wall").count()).toBe(before + 1);
+        await page.close();
+    });
+
+    test("tapping the zoom control does not drop a corner underneath it", async () => {
+        // Leaflet's controls live inside the map container and stop their own
+        // click from reaching the map - but they stop "click", not
+        // "pointerdown", so a handler listening for pointers sees every tap on
+        // every control. The mouse path is protected by Leaflet; the touch one
+        // has to exclude them itself, which is what the two drag handlers
+        // above already do.
+        await openEditor({ width: 1200, height: 800 }, true);
+        await page.locator('[data-tool="wall"]').click();
+        const dashed = () => page.evaluate(() => document.querySelectorAll('#floorplan-map path[stroke-dasharray="5 5"]').length);
+        expect(await dashed()).toBe(0);
+
+        const zoomIn = await page.locator(".leaflet-control-zoom-in").boundingBox();
+        if (!zoomIn) throw new Error("no zoom control");
+        const at = { x: zoomIn.x + zoomIn.width / 2, y: zoomIn.y + zoomIn.height / 2 };
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: at.x, y: at.y }] });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        await settle();
+
+        // No rubber band means no corner was placed.
+        expect(await dashed()).toBe(0);
+        await page.close();
+    });
+
+    test("switching tools closes a marker's open popup instead of leaving it to eat the next tap", async () => {
+        // A popup that outlived a switch away from Select used to eat the
+        // very next click as "just dismissing that" - including a click on a
+        // newly-armed drawing tool that had every intention of doing
+        // something else, which read to a user as their first tap on a new
+        // tool silently doing nothing. Closing the popup as part of the
+        // switch removes the stale state instead of working around it per
+        // click.
+        await openEditor({ width: 1200, height: 800 }, true);
+        await page.locator('[data-tool="marker"]').click();
+        const frame = await page.locator("#floorplan-map").boundingBox();
+        if (!frame) throw new Error("no map");
+        await page.mouse.click(frame.x + 260, frame.y + frame.height - 90);
+        await settle();
+        // Placing selects it; clicking it in select mode is what opens the popup.
+        await page.locator('[data-tool="select"]').click();
+        await page.locator(".leaflet-marker-icon").first().click();
+        await settle();
+        // Waited for, not asserted outright: the marker layer is rebuilt on
+        // select, so for a moment the outgoing popup is still fading out
+        // alongside the incoming one.
+        await page.waitForFunction(() => document.querySelectorAll(".leaflet-popup").length === 1, undefined, { timeout: 5000 });
+
+        await page.locator('[data-tool="wall"]').click();
+        // The switch itself closed it - there is nothing left standing for
+        // the next tap to be mistaken for dismissing.
+        await page.waitForFunction(() => document.querySelectorAll(".leaflet-popup").length === 0, undefined, { timeout: 5000 });
+
+        const dashed = () => page.evaluate(() => document.querySelectorAll('#floorplan-map path[stroke-dasharray="5 5"]').length);
+        const at = { x: frame.x + 480, y: frame.y + frame.height - 90 };
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: at.x, y: at.y }] });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        await settle();
+
+        // With no stale popup to eat it, the tap does its actual job.
+        expect(await dashed()).toBe(1);
+        await page.close();
+    });
+
+    test("the floor strip adds where it says it will, basements included", async () => {
+        // One "Add floor" button now opens a dialog to choose the direction -
+        // there used to be two buttons (above/below) and no way to tell them
+        // apart except by which end of the strip they sat at.
+        await openEditor();
+        const strip = "#floorplan-floors";
+        const chips = () => page.evaluate((sel) => Array.from(document.querySelectorAll(`${sel} .floorplan-floor-tab__chip`)).map((n) => (n.textContent ?? "").trim()), strip);
+        expect(await chips()).toEqual(["G"]);
+
+        const addFloorVia = async (where: "Above" | "Below") => {
+            await page.locator(`${strip} [aria-label="Add floor"]`).click();
+            const dialog = page.locator(".floorplan-add-floor-dialog");
+            await dialog.locator(`button:text-is("${where}")`).click();
+            await dialog.locator('button:text-is("Add floor")').click();
+            await settle();
+        };
+
+        await addFloorVia("Above");
+        // Highest first: the strip reads top-of-building downwards.
+        expect(await chips()).toEqual(["1", "G"]);
+
+        await addFloorVia("Below");
+        expect(await chips()).toEqual(["1", "G", "B1"]);
+        await page.close();
+    });
+
+    test("a marker's colour is picked with the site's own colour picker", async () => {
+        // Not a set of swatches this editor grew for itself: the same markup,
+        // classes and pickColor() call as the label and pin dialogs, so the
+        // control cannot drift from the rest of the site. That means the page
+        // has to install the window global those inline handlers call - which
+        // only two other entries did.
+        await openEditor();
+        await page.locator('[data-tool="marker"]').click();
+        const frame = await page.locator("#floorplan-map").boundingBox();
+        if (!frame) throw new Error("no map");
+        await page.mouse.click(frame.x + 300, frame.y + frame.height - 100);
+        await settle();
+
+        const panel = page.locator("#floorplan-marker-appearance");
+        expect(await page.evaluate(() => (document.getElementById("floorplan-marker-appearance") as HTMLElement).hidden)).toBe(false);
+        await panel.locator('.color-swatch[data-color="#e53935"]').click();
+        await settle();
+
+        // The swatch shows as picked, and the marker actually took the colour.
+        expect(await panel.locator(".color-swatch.selected").getAttribute("data-color")).toBe("#e53935");
+        const saved = await page.evaluate(() => (document.getElementById("color-value-floorplan-marker") as HTMLInputElement).value);
+        expect(saved).toBe("#e53935");
+        expect(await page.locator('#floorplan-map .leaflet-marker-icon [style*="e53935"], #floorplan-map [style*="#e53935"]').count()).toBeGreaterThan(0);
+        await page.close();
+    });
+
+    test("room labels stand down while a drag is running", async () => {
+        // A room label is a permanent Leaflet tooltip - a DOM node Leaflet
+        // positions itself - and render() rebuilt every one of them on every
+        // frame of every drag. This is the behaviour behind the timing below,
+        // asserted directly because a threshold alone would not say what broke.
+        await openEditor({ width: 1200, height: 800 }, false, "grid");
+        // Exactly one label per face, not "some". The old drag path left a
+        // stale generation of tooltips behind and read 288 for 144 rooms, and
+        // an at-least assertion cannot tell a duplicate from a redraw.
+        //
+        // Waited for rather than sampled: 144 tooltips do not all arrive in the
+        // same frame on a loaded machine, and a count read too early is a
+        // flake, not a finding. A count stuck at the wrong number still fails,
+        // which is the whole point of the exact figure.
+        const ROOMS = 144;
+        const settleLabels = async (want: number): Promise<void> => {
+            await page.waitForFunction((n) => document.querySelectorAll(".floorplan-room-label").length === n, want, { timeout: 10000 });
+        };
+        await settleLabels(ROOMS);
+
+        const before = await planExtent();
+        await page.mouse.move(before.grab.x, before.grab.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 4; step++) await page.mouse.move(before.grab.x, before.grab.y - step * 6);
+        await settleLabels(0);
+
+        await page.mouse.up();
+        await settle();
+        // And come back on release, which needs a frame after the drag ends.
+        // Back, and not doubled: a render that left the previous frame's
+        // tooltips behind would show here as 288.
+        await settleLabels(ROOMS);
+        await page.close();
+    });
+
+    test("a survey-sized plan still drags at a usable frame rate", async () => {
+        // The same gesture is run on the four-wall plan first and subtracted.
+        // Playwright dispatches each move over a pipe, which costs about as
+        // much as a small redraw; timing one plan alone measures that pipe as
+        // much as the editor. The difference is the editor.
+        //
+        // The bound is deliberately loose. This runs on whatever machine is
+        // free, so a tight one would be flaky - but the regression it exists to
+        // catch (rebuilding every room label per frame) cost 205ms, so there is
+        // still a wide margin between "slower than we would like" and "broken".
+        const MOVES = 10;
+        const dragTime = async (plan: "square" | "grid"): Promise<number> => {
+            await openEditor({ width: 1200, height: 800 }, false, plan);
+            const before = await planExtent();
+            await page.mouse.move(before.grab.x, before.grab.y);
+            await page.mouse.down();
+            const started = Date.now();
+            for (let step = 1; step <= MOVES; step++) await page.mouse.move(before.grab.x, before.grab.y - step * 6);
+            const elapsed = Date.now() - started;
+            await page.mouse.up();
+            // A run where nothing moved would be fast and meaningless.
+            const after = await planExtent();
+            expect(before.top - after.top, `${plan} plan did not move`).toBeGreaterThan(30);
+            await page.close();
+            return elapsed / MOVES;
+        };
+
+        // Best of two, per plan. A single pass picks up whatever else the
+        // machine was doing, and a timing test that fails for that reason gets
+        // ignored, which is worse than not having one.
+        const best = async (plan: "square" | "grid"): Promise<number> => Math.min(await dragTime(plan), await dragTime(plan));
+        const small = await best("square");
+        const large = await best("grid");
+        console.log(`drag: 4 walls ${small.toFixed(1)}ms/move, 312 walls ${large.toFixed(1)}ms/move`);
+
+        expect(large - small).toBeLessThan(80);
+    });
+
+    test("holding the snap-off key suspends snapping, and letting go restores it", async () => {
+        // The wall tool's readout names the snap it found ("1.20 m - corner"),
+        // so what the tool would do is legible without drawing anything.
+        await openEditor();
+        const wall = await planExtent();
+        await page.locator('[data-tool="wall"]').click();
+        const readout = async (x: number, y: number): Promise<string> => {
+            await page.mouse.move(x, y);
+            await settle();
+            return page.evaluate(() => document.querySelector(".floorplan-measure")?.textContent ?? "");
+        };
+
+        // Start a chain, then aim at an existing corner, which is snappable.
+        // The bottom-left one, not the top-left: the floating tool-options
+        // panel legitimately covers part of the canvas near the top-right of
+        // the map, and a corner tucked under it would make this a test of
+        // panel layout rather than of snapping.
+        await page.mouse.click(wall.left + 40, wall.bottom - 40);
+        const snapped = await readout(wall.left, wall.bottom);
+        expect(snapped).toContain("·");
+
+        await page.keyboard.down("`");
+        const free = await readout(wall.left + 1, wall.bottom - 1);
+        expect(free).not.toContain("·");
+
+        await page.keyboard.up("`");
+        const again = await readout(wall.left, wall.bottom);
+        expect(again).toContain("·");
+        await page.close();
+    });
+
+    test("the snap-off key does not stick when the window loses focus", async () => {
+        // A held key whose keyup lands on somebody else - alt-tab, a system
+        // shortcut, the browser's own find bar - leaves the mode latched, and
+        // the editor goes on silently not snapping until the key is pressed and
+        // released again. The user's report of that is "snapping stopped
+        // working", with nothing to reproduce it from.
+        await openEditor();
+        const wall = await planExtent();
+        await page.locator('[data-tool="wall"]').click();
+        // The bottom-left corner, not the top-left: see the same note in the
+        // previous test - the floating tool-options panel legitimately
+        // covers part of the canvas near the top-right of the map.
+        await page.mouse.click(wall.left + 40, wall.bottom - 40);
+
+        await page.keyboard.down("`");
+        await page.mouse.move(wall.left, wall.bottom);
+        await settle();
+        // Focus goes elsewhere while the key is still down, so no keyup ever
+        // arrives for it.
+        await page.evaluate(() => window.dispatchEvent(new FocusEvent("blur")));
+        await page.mouse.move(wall.left + 1, wall.bottom - 1);
+        await page.mouse.move(wall.left, wall.bottom);
+        await settle();
+
+        const readout = await page.evaluate(() => document.querySelector(".floorplan-measure")?.textContent ?? "");
+        expect(readout).toContain("·");
+        await page.close();
+    });
+
+    test("a door can be dragged from one wall onto another", async () => {
+        await openEditor();
+        const plan = await planExtent();
+
+        // Cut a door into the top wall, then drag it down onto the left one.
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        const doorMidpoint = async (): Promise<{ x: number; y: number } | null> =>
+            page.evaluate(() => {
+                const node = document.querySelector("#floorplan-map path.floorplan-opening");
+                if (!node) return null;
+                const rect = node.getBoundingClientRect();
+                return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            });
+        const before = await doorMidpoint();
+        expect(before, "no opening was cut").not.toBeNull();
+
+        await page.locator('[data-tool="select"]').click();
+        await page.mouse.move(before!.x, before!.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 12; step++) {
+            await page.mouse.move(before!.x - ((before!.x - plan.left) * step) / 12, before!.y + ((plan.height / 2) * step) / 12);
+        }
+        await page.mouse.up();
+        await settle();
+
+        const after = await doorMidpoint();
+        expect(after, "the opening vanished").not.toBeNull();
+        // It left the top wall: it is now down the left-hand side.
+        expect(after!.y - before!.y).toBeGreaterThan(50);
+        expect(Math.abs(after!.x - plan.left)).toBeLessThan(30);
+        await page.close();
+    });
+
+    test("a door's swing is offered where it applies, and drawn once set", async () => {
+        // The field was modelled, persisted and round-tripped, and no control
+        // ever set it and nothing ever drew it.
+        await openEditor();
+        const plan = await planExtent();
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        // Cutting an opening selects it, so the form is already showing it.
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+
+        const swing = page.locator("#floorplan-form select").nth(1);
+        expect(await swing.count()).toBe(1);
+        expect(await page.locator("#floorplan-map path.floorplan-door-swing").count()).toBe(0);
+
+        await swing.selectOption("left");
+        await settle();
+        expect(await page.locator("#floorplan-map path.floorplan-door-swing").count()).toBe(1);
+
+        await swing.selectOption("double");
+        await settle();
+        expect(await page.locator("#floorplan-map path.floorplan-door-swing").count()).toBe(2);
+
+        // A window has nothing that sweeps, so the question goes away with it.
+        await page.locator("#floorplan-form select").first().selectOption("window");
+        await settle();
+        expect(await page.locator("#floorplan-form select").count()).toBe(1);
+        expect(await page.locator("#floorplan-map path.floorplan-door-swing").count()).toBe(0);
+        await page.close();
+    });
+
+    test("a room inside a building can be moved, and leaves the shell alone", async () => {
+        // It could not. A wall counted as the room's own only if it bordered no
+        // other face, and in a planar subdivision every partition borders two -
+        // so a closet inside a building owned nothing, and the drag, the turn
+        // and the delete all declined on the grounds that there was nothing to
+        // act on.
+        await openEditor({ width: 1200, height: 800 }, false, "closet");
+        const shell = async (): Promise<string> =>
+            page.evaluate(() => {
+                const walls = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-wall"));
+                // The building's outline is whatever the walls span overall.
+                const boxes = walls.map((n) => n.getBoundingClientRect());
+                const left = Math.min(...boxes.map((b) => b.left));
+                const top = Math.min(...boxes.map((b) => b.top));
+                const right = Math.max(...boxes.map((b) => b.right));
+                const bottom = Math.max(...boxes.map((b) => b.bottom));
+                return [left, top, right, bottom].map(Math.round).join(",");
+            });
+        const before = await shell();
+
+        // Select the closet, then drag it.
+        const closet = async (): Promise<{ x: number; y: number; w: number } | null> =>
+            page.evaluate(() => {
+                const fills = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"));
+                const smallest = fills.map((n) => n.getBoundingClientRect()).sort((a, b) => a.width * a.height - b.width * b.height)[0];
+                return smallest ? { x: smallest.left + smallest.width / 2, y: smallest.top + smallest.height / 2, w: Math.round(smallest.width) } : null;
+            });
+        const room = await closet();
+        expect(room, "no room fill").not.toBeNull();
+        await page.mouse.click(room!.x, room!.y);
+        await settle();
+
+        await page.mouse.move(room!.x, room!.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(room!.x + step * 5, room!.y + step * 2);
+        await page.mouse.up();
+        await settle();
+
+        // The closet actually went somewhere - without this the test passes
+        // just as well when the drag is declined, which is what it is here to
+        // catch.
+        const moved = await closet();
+        expect(moved, "the closet vanished").not.toBeNull();
+        expect(Math.abs(moved!.x - room!.x) + Math.abs(moved!.y - room!.y), "the closet did not move").toBeGreaterThan(10);
+
+        // ...and the building is exactly where it was. Both halves are needed:
+        // with the old rule the drag was declined, Leaflet took the gesture as
+        // a pan, and the closet "moved" only because the whole plan slid under
+        // it - which is what this reads as when it is checked on its own.
+        expect(await shell(), "the whole plan moved, so that was a pan").toBe(before);
+        await page.close();
+    });
+
+    test("a free-standing room moves rigidly and can snap to the shell", async () => {
+        // Two things at once, because they are the same drag: a room touching
+        // nothing translates as a block, and the shell is a snap target for it.
+        // The shell used to be excluded on the grounds that this drag stretched
+        // it, which it no longer does - it stays exactly where it is, which is
+        // what makes it worth lining up against.
+        await openEditor({ width: 1200, height: 800 }, false, "island");
+        const island = async (): Promise<{ x: number; y: number; w: number; h: number } | null> =>
+            page.evaluate(() => {
+                const fills = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"));
+                const smallest = fills.map((n) => n.getBoundingClientRect()).sort((a, b) => a.width * a.height - b.width * b.height)[0];
+                return smallest ? { x: Math.round(smallest.left), y: Math.round(smallest.top), w: Math.round(smallest.width), h: Math.round(smallest.height) } : null;
+            });
+        const before = await island();
+        expect(before, "no island").not.toBeNull();
+
+        const grab = { x: before!.x + before!.w / 2, y: before!.y + before!.h / 2 };
+        await page.mouse.click(grab.x, grab.y);
+        await settle();
+        await page.mouse.move(grab.x, grab.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 10; step++) await page.mouse.move(grab.x - step * 6, grab.y);
+        await page.mouse.up();
+        await settle();
+
+        const after = await island();
+        expect(after, "the island vanished").not.toBeNull();
+        // It went somewhere...
+        expect(before!.x - after!.x).toBeGreaterThan(20);
+        // ...as a block: a room that deformed would not keep its size. Within a
+        // pixel, since the box is measured off a rendered path.
+        expect(Math.abs(after!.w - before!.w)).toBeLessThanOrEqual(1);
+        expect(Math.abs(after!.h - before!.h)).toBeLessThanOrEqual(1);
+        await page.close();
+    });
+
+    test("moving a room detaches the wall it shares with its neighbour, rather than dragging the neighbour's side of it too", async () => {
+        // splitRoomBoundary correctly counts a shared partition as "unique" to
+        // both rooms that border it - right for delete, where removing it
+        // merges the neighbour in, but wrong for a move: dragging the west
+        // room used to drag the partition (and the east room's own side of
+        // it) along, tearing a piece off a room nobody selected.
+        await openEditor({ width: 1200, height: 800 }, false, "duplex");
+        // Identified as the rightmost fill rather than "the other of two":
+        // once west's own edge detaches and slides away from the partition,
+        // the vacated strip between the two is itself a newly enclosed
+        // (unnamed) region - a real, correct third fill in this model, not a
+        // symptom to assert away. East, at the far side, is unaffected either
+        // way and stays identifiable as whichever fill is furthest right.
+        const eastBox = async (): Promise<{ left: number; top: number; width: number; height: number } | null> =>
+            page.evaluate(() => {
+                const rooms = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room")).map((n) => n.getBoundingClientRect());
+                if (!rooms.length) return null;
+                const east = rooms.reduce((a, b) => (a.left > b.left ? a : b));
+                return { left: Math.round(east.left), top: Math.round(east.top), width: Math.round(east.width), height: Math.round(east.height) };
+            });
+        const before = await eastBox();
+        expect(before, "no room fill found").not.toBeNull();
+
+        const west = await page.evaluate(() => {
+            const rooms = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room")).map((n) => n.getBoundingClientRect());
+            const room = rooms.reduce((a, b) => (a.left < b.left ? a : b));
+            return { x: room.left + room.width / 2, y: room.top + room.height / 2 };
+        });
+        await page.mouse.click(west.x, west.y);
+        await settle();
+        await page.mouse.move(west.x, west.y);
+        await page.mouse.down();
+        // West, away from the shared partition - snapping against it (an
+        // unmoved wall) would otherwise mask a detach failure as "it snapped
+        // back to where it started".
+        for (let step = 1; step <= 10; step++) await page.mouse.move(west.x - step * 4, west.y);
+        await page.mouse.up();
+        await settle();
+
+        const after = await eastBox();
+        expect(after, "the east room's fill vanished").not.toBeNull();
+        // The neighbour, and the wall that bounds it, never moved - only the
+        // west room's own new copy of that wall did.
+        expect(Math.abs(after!.left - before!.left)).toBeLessThanOrEqual(1);
+        expect(Math.abs(after!.top - before!.top)).toBeLessThanOrEqual(1);
+        expect(Math.abs(after!.width - before!.width)).toBeLessThanOrEqual(1);
+        expect(Math.abs(after!.height - before!.height)).toBeLessThanOrEqual(1);
+        await page.close();
+    });
+
+    test("a room drag stops rather than let one room's area cover another's", async () => {
+        // The west room's own walls are free to move once detached from the
+        // shared partition (previous test) - free enough, without a check,
+        // to be dragged clean across the building and over the east room.
+        await openEditor({ width: 1200, height: 800 }, false, "duplex");
+        const eastBox = async (): Promise<{ left: number; width: number } | null> =>
+            page.evaluate(() => {
+                const rooms = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room")).map((n) => n.getBoundingClientRect());
+                if (rooms.length !== 2) return null;
+                const east = rooms.reduce((a, b) => (a.left > b.left ? a : b));
+                return { left: Math.round(east.left), width: Math.round(east.width) };
+            });
+        const east = await eastBox();
+        expect(east, "no two-room fill found").not.toBeNull();
+
+        const west = await page.evaluate(() => {
+            const rooms = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room")).map((n) => n.getBoundingClientRect());
+            const room = rooms.reduce((a, b) => (a.left < b.left ? a : b));
+            return { x: room.left + room.width / 2, y: room.top + room.height / 2 };
+        });
+        await page.mouse.click(west.x, west.y);
+        await settle();
+        await page.mouse.move(west.x, west.y);
+        await page.mouse.down();
+        // Aimed well past the east room's far side - if the guard did nothing
+        // this would land the west room's fill on top of, or past, the east
+        // room's own bounding box.
+        for (let step = 1; step <= 30; step++) await page.mouse.move(west.x + step * 20, west.y);
+        await page.mouse.up();
+        await settle();
+
+        const westAfter = await page.evaluate(() => {
+            const rooms = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room")).map((n) => n.getBoundingClientRect());
+            const room = rooms.reduce((a, b) => (a.left < b.left ? a : b));
+            return { left: Math.round(room.left), right: Math.round(room.right) };
+        });
+        // West stopped short of east's own left edge - it never tunnelled
+        // into or past the room next door.
+        expect(westAfter.right).toBeLessThanOrEqual(east!.left + 1);
+        await page.close();
+    });
+
+    test("undo takes back a typed name in one press, and the drag before it in the next", async () => {
+        // "Undo sometimes undoes one thing, sometimes a group" is the report.
+        // Both are right, and the rule is what has to be predictable: a run of
+        // keystrokes in one field is one step, and anything else is its own.
+        await openEditor({ width: 1200, height: 800 }, false, "island");
+        // Waited for, not read: renaming rebuilds the room layer, and Leaflet
+        // fades a tooltip out over 200ms rather than removing it, so for that
+        // long the outgoing label is still in the pane beside the incoming one
+        // and whichever is read first is a coin toss. Nobody sees two labels -
+        // the outgoing one is at opacity 0 throughout - but a test reading the
+        // DOM does.
+        const expectRoomNamed = async (want: string): Promise<void> => {
+            await page.waitForFunction(
+                (expected) => {
+                    const named = Array.from(document.querySelectorAll(".floorplan-room-label__name"))
+                        .map((n) => (n.textContent ?? "").trim())
+                        .filter((text) => text !== "Unnamed room");
+                    return named.length === 1 && named[0] === expected;
+                },
+                want,
+                { timeout: 10000 },
+            );
+        };
+        const island = await page.evaluate(() => {
+            const fills = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"));
+            const smallest = fills.map((n) => n.getBoundingClientRect()).sort((a, b) => a.width * a.height - b.width * b.height)[0];
+            return smallest ? { x: smallest.left + smallest.width / 2, y: smallest.top + smallest.height / 2 } : null;
+        });
+        expect(island).not.toBeNull();
+        await expectRoomNamed("Island");
+
+        // One drag...
+        await page.mouse.click(island!.x, island!.y);
+        await settle();
+        await page.mouse.move(island!.x, island!.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(island!.x - step * 5, island!.y);
+        await page.mouse.up();
+        await settle();
+        const moved = await page.evaluate(() => {
+            const fills = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"));
+            const smallest = fills.map((n) => n.getBoundingClientRect()).sort((a, b) => a.width * a.height - b.width * b.height)[0];
+            return smallest ? Math.round(smallest.left) : -1;
+        });
+
+        // ...then a name, typed a character at a time.
+        const field = page.locator("#floorplan-form input.form-input").first();
+        await field.click();
+        await field.fill("");
+        await page.keyboard.type("Plant room", { delay: 15 });
+        await field.blur();
+        await settle();
+        await expectRoomNamed("Plant room");
+
+        // One press takes back the whole name, not one letter of it.
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        await expectRoomNamed("Island");
+
+        // The next takes back the drag, which was never part of that group.
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        const back = await page.evaluate(() => {
+            const fills = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"));
+            const smallest = fills.map((n) => n.getBoundingClientRect()).sort((a, b) => a.width * a.height - b.width * b.height)[0];
+            return smallest ? Math.round(smallest.left) : -1;
+        });
+        expect(back).toBeGreaterThan(moved);
+        await page.close();
+    });
+
+    test("duplicating a floor copies the plan and leaves the original alone", async () => {
+        // Re-tracing an exterior by hand for every storey is the bulk of the
+        // work in a multi-floor plan, and the copy must not carry the source's
+        // uuids: the server matches items to rows by uuid and deletes by
+        // omission, so a carried-over one would move the source floor's rows
+        // rather than duplicate them - emptying the floor that was copied from.
+        await openEditor({ width: 1200, height: 800 }, false, "closet");
+        const chips = () => page.evaluate(() => Array.from(document.querySelectorAll("#floorplan-floors .floorplan-floor-tab__chip")).map((n) => (n.textContent ?? "").trim()));
+        const wallCount = () => page.locator(".floorplan-wall").count();
+        expect(await chips()).toEqual(["G"]);
+        const before = await wallCount();
+        expect(before).toBeGreaterThan(4);
+
+        // The toolbar's copy tool opens the add-floor dialog prefilled to
+        // copy the active floor, above it by default - submitting as-is
+        // reproduces the old dedicated "duplicate" button exactly.
+        await page.locator("#floorplan-copy-floor").click();
+        const dialog = page.locator(".floorplan-add-floor-dialog");
+        expect(await dialog.locator("select").inputValue()).not.toBe("");
+        await dialog.locator('button:text-is("Add floor")').click();
+        await settle();
+
+        // A new storey above, and it is the one being shown - without checking
+        // which tab is active, an empty copy would pass on the source's walls.
+        expect(await chips()).toEqual(["1", "G"]);
+        const active = () => page.evaluate(() => document.querySelector("#floorplan-floors .btn--primary .floorplan-floor-tab__chip")?.textContent?.trim() ?? "");
+        expect(await active()).toBe("1");
+        expect(await wallCount()).toBe(before);
+
+        // The floor it was copied from still has everything it had.
+        await page.locator('#floorplan-floors button:has(.floorplan-floor-tab__chip:text-is("G"))').click();
+        await settle();
+        expect(await wallCount()).toBe(before);
+        await page.close();
+    });
+
+    test("a duplicate lands above the floor it was copied from, not on top of the building", async () => {
+        // On a one-storey plan those are the same place, which is why this went
+        // unnoticed: duplicating the ground floor of a three-storey building
+        // put the copy on the roof.
+        await openEditor({ width: 1200, height: 800 }, false, "closet");
+        const strip = () =>
+            page.evaluate(() =>
+                Array.from(document.querySelectorAll("#floorplan-floors .floorplan-floor-tab")).map((tab) => [
+                    (tab.querySelector(".floorplan-floor-tab__chip")?.textContent ?? "").trim(),
+                    (tab.querySelector(".floorplan-floor-tab__name")?.textContent ?? "").trim(),
+                ]),
+            );
+        // Two empty storeys on top of the named ground floor.
+        const dialog = page.locator(".floorplan-add-floor-dialog");
+        for (let i = 0; i < 2; i++) {
+            await page.locator('#floorplan-floors [aria-label="Add floor"]').click();
+            await dialog.locator('button:text-is("Above")').click();
+            await dialog.locator('button:text-is("Add floor")').click();
+            await settle();
+        }
+        expect(await strip()).toEqual([
+            ["2", ""],
+            ["1", ""],
+            ["G", "Ground"],
+        ]);
+
+        await page.locator('#floorplan-floors button:has(.floorplan-floor-tab__chip:text-is("G"))').click();
+        await settle();
+        // The copy toolbar tool defaults to "Above" and prefills the active
+        // (now "G") floor as the copy source.
+        await page.locator("#floorplan-copy-floor").click();
+        await dialog.locator('button:text-is("Add floor")').click();
+        await settle();
+
+        // The copy carries the source's nickname, so it is the one sitting
+        // directly above it - everything else having been pushed up a storey.
+        expect(await strip()).toEqual([
+            ["3", ""],
+            ["2", ""],
+            ["1", "Ground"],
+            ["G", "Ground"],
+        ]);
+        await page.close();
+    });
+
+    test("a room whose enclosure is gone takes its name with it", async () => {
+        // Otherwise the seed stays behind as a dot labelled "Room - not
+        // enclosed", sitting in the middle of nothing: the name belonged to a
+        // region that no longer exists.
+        //
+        // Deleting one wall of a room *inside* a building is a different case
+        // and deliberately behaves differently - the region merges with its
+        // surroundings and the name goes with it, because the seed still lands
+        // in a face. This is the case where it lands in none.
+        await openEditor();
+        const centre = await planCentre();
+        await page.mouse.click(centre.x, centre.y, { button: "right" });
+        await page.waitForSelector("text=Name this space", { timeout: 10000 });
+        await page.locator("text=Name this space").click();
+        await settle();
+        const field = page.locator("#floorplan-form input.form-input").first();
+        await field.fill("The shed");
+        await field.blur();
+        await settle();
+        await page.waitForFunction(
+            () => Array.from(document.querySelectorAll(".floorplan-room-label__name")).some((n) => (n.textContent ?? "").trim() === "The shed"),
+            undefined,
+            { timeout: 10000 },
+        );
+
+        // One wall of the only enclosure, so nothing encloses anything after it.
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        const walls = await page.locator(".floorplan-wall").count();
+        await page.keyboard.press("Delete");
+        await settle();
+        expect(await page.locator(".floorplan-wall").count()).toBeLessThan(walls);
+
+        await page.waitForFunction(
+            () => !Array.from(document.querySelectorAll(".floorplan-room-label__name")).some((n) => (n.textContent ?? "").trim() === "The shed"),
+            undefined,
+            { timeout: 10000 },
+        );
+        // And no dot where the room used to be.
+        expect(await page.evaluate(() => document.querySelectorAll('#floorplan-map path[stroke="#ef6c00"]').length)).toBe(0);
+        await page.close();
+    });
+
+    test("a plan saved elsewhere stops autosaving and says so", async () => {
+        // The one failure that must never be retried into: the other tab is not
+        // going to un-save, so every further attempt either fails the same way
+        // or overwrites their work.
+        saves.conflict = true;
+        saves.attempts = 0;
+        try {
+            await openEditor();
+            const plan = await planExtent();
+
+            // An edit, which schedules an autosave.
+            await page.mouse.click(plan.grab.x, plan.grab.y);
+            await settle();
+            await page.keyboard.press("ArrowRight");
+            await page.waitForFunction(() => document.getElementById("floorplan-save-status")?.textContent === "Changed elsewhere", undefined, { timeout: 15000 });
+
+            const after = saves.attempts;
+            expect(after).toBeGreaterThan(0);
+
+            // Reload is offered: told to reload and given nothing to press is a
+            // dead end.
+            expect(await page.evaluate(() => (document.getElementById("floorplan-reload") as HTMLElement).hidden)).toBe(false);
+            expect(await page.evaluate(() => (document.getElementById("floorplan-retry-save") as HTMLElement).hidden)).toBe(true);
+
+            // And further edits do not go on hammering it.
+            for (let nudge = 0; nudge < 3; nudge++) {
+                await page.keyboard.press("ArrowRight");
+                await settle();
+            }
+            // Comfortably past queueAutosave's 1200ms debounce: at 1500 a timer
+            // running late would land after the assertion and the test would
+            // pass for the wrong reason.
+            await page.waitForTimeout(2500);
+            expect(saves.attempts, "kept trying after the conflict").toBe(after);
+            await page.close();
+        } finally {
+            saves.conflict = false;
+        }
+    });
+
+    test("a door's locks can be recorded, and a window is not asked", async () => {
+        // "Is this door locked" is close to the most useful thing a plan of a
+        // derelict building can say, and it was modelled, stored and served
+        // without ever being reachable from the editor.
+        await openEditor();
+        const plan = await planExtent();
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+
+        const locks = () => page.locator(".floorplan-lock").count();
+        expect(await locks()).toBe(0);
+        await page.locator("#floorplan-form .floorplan-locks button", { hasText: "Lock" }).click();
+        await settle();
+        expect(await locks()).toBe(1);
+
+        // A door can carry several: a padlock and a chain are two answers.
+        const row = page.locator(".floorplan-lock").first();
+        await row.locator("input.form-input").fill("padlock");
+        await row.locator("select").selectOption("locked");
+        await settle();
+        await page.locator("#floorplan-form .floorplan-locks button", { hasText: "Another lock" }).click();
+        await settle();
+        expect(await locks()).toBe(2);
+
+        // The first one kept what it was given.
+        expect(await page.locator(".floorplan-lock").first().locator("input.form-input").inputValue()).toBe("padlock");
+        expect(await page.locator(".floorplan-lock").first().locator("select").inputValue()).toBe("locked");
+
+        // A lock is a floorplan item like any other, so it carries the same
+        // details block - which is where "broken" belongs, as opposed to the
+        // state above, which asks only whether the door is presently secured.
+        const details = page.locator(".floorplan-lock-entry").first().locator("details.floorplan-details");
+        expect(await details.count()).toBe(1);
+        await details.locator("summary").click();
+        // Material, then Condition - the same block every other item gets.
+        const condition = details.locator("input.form-input").nth(1);
+        await condition.fill("seized, rusted shut");
+        await condition.blur();
+        await settle();
+
+        // What opens it, free-form: the model keeps this shapeless on purpose,
+        // and the FEATURES entry promised it before there was anywhere to type
+        // it.
+        await page.locator(".floorplan-lock-entry").first().locator(".floorplan-lock__key").fill("brass yale, on the office ring");
+        await settle();
+
+        // Removing the other one rebuilds the whole panel, so a value that
+        // survives that was written to the lock and not just to the input.
+        await page.locator(".floorplan-lock").nth(1).locator("button").click();
+        await settle();
+        expect(await locks()).toBe(1);
+        const survived = page.locator(".floorplan-lock-entry").first().locator("details input.form-input").nth(1);
+        expect(await survived.inputValue()).toBe("seized, rusted shut");
+        expect(await page.locator(".floorplan-lock-entry").first().locator(".floorplan-lock__key").inputValue()).toBe("brass yale, on the office ring");
+        expect(await page.locator(".floorplan-lock").first().locator("input.form-input").inputValue()).toBe("padlock");
+
+        // A window has no lock worth recording for getting in, so it is not
+        // asked - the question goes away with the type.
+        await page.locator("#floorplan-form select").first().selectOption("window");
+        await settle();
+        expect(await page.locator(".floorplan-locks").count()).toBe(0);
+        await page.close();
+    });
+
+    test("the measurements the model stores can actually be entered", async () => {
+        // built_date, sill_meters, height_meters and elevation_meters are all
+        // declared client-side, sent, parsed and stored, and none of them had
+        // any way to be filled in.
+        await openEditor();
+        const plan = await planExtent();
+
+        // A storey's own dimensions, behind the sidebar's one "Add more
+        // details" disclosure - shared with the plan's own name/date/
+        // versions rather than a second disclosure of its own, since neither
+        // is needed to draw a floor.
+        await page.locator(".floorplan-details-accordion summary").click();
+        const ceiling = page.locator('#floorplan-floor-advanced-fields input[aria-label="Ceiling height"]');
+        await ceiling.fill("2.4");
+        await page.locator('#floorplan-floor-advanced-fields input[aria-label="Ground level"]').fill("41.5");
+        await settle();
+
+        // A window's sill, on the opening panel.
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+        const sill = page.locator("#floorplan-form input[type=number]").first();
+        await sill.fill("1.2");
+        await settle();
+
+        // And a date on the item itself, which is a date input rather than free
+        // text: the column is a DateField and the serializer parses it
+        // strictly, so "1897" would refuse the whole save rather than be stored
+        // as a fuzzy year.
+        const details = page.locator("#floorplan-form details.floorplan-details").first();
+        await details.locator("summary").click();
+        const built = details.locator("input[type=date]");
+        expect(await built.count()).toBe(1);
+        await built.fill("1897-06-01");
+        await settle();
+
+        // Everything survives a rebuild of the panel, so it went to the model.
+        await page.keyboard.press("Escape");
+        await settle();
+        expect(await ceiling.inputValue()).toBe("2.4");
+        expect(await page.locator('#floorplan-floor-advanced-fields input[aria-label="Ground level"]').inputValue()).toBe("41.5");
+        await page.close();
+    });
+
+    test("an empty plan offers a way in, and taking it produces a room", async () => {
+        // The first thing anyone sees. A wall-first editor is not self-evident
+        // from a blank canvas, so the way in draws the building's outline for
+        // them - four exterior walls, which is the shell and deliberately not
+        // captioned as a room. Subdividing it is what produces rooms.
+        await openEditor({ width: 1200, height: 800 }, false, "empty");
+        expect(await page.evaluate(() => (document.getElementById("floorplan-empty") as HTMLElement).hidden)).toBe(false);
+        expect(await page.locator(".floorplan-wall").count()).toBe(0);
+
+        await page.locator("#floorplan-start-rectangle").click();
+        await settle();
+
+        expect(await page.locator(".floorplan-wall").count()).toBe(4);
+        // The shell itself gets no label, which is the whole point of the rule:
+        // an outline nobody has divided up is the building, not a room in it.
+        // (Subdividing one is what makes rooms; the closet, island and grid
+        // fixtures cover that, and doing it here only made this test depend on
+        // where a fitted plan happens to land.)
+        expect(await page.locator(".floorplan-room-label").count()).toBe(0);
+
+        // And the prompt gets out of the way once there is something to edit.
+        expect(await page.evaluate(() => (document.getElementById("floorplan-empty") as HTMLElement).hidden)).toBe(true);
+
+        // Undo puts the blank canvas back rather than leaving a plan nobody
+        // asked for.
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        expect(await page.locator(".floorplan-wall").count()).toBe(0);
+        expect(await page.evaluate(() => (document.getElementById("floorplan-empty") as HTMLElement).hidden)).toBe(false);
+        await page.close();
+    });
+
+    test("room, opening and box-select are disabled until a boundary exists", async () => {
+        // A room can't be generated with no enclosed geometry, an opening has
+        // no wall to cut into, and a box selection has nothing to select -
+        // offering them on a boundary-less floor is what made a first
+        // floorplan confusing to start.
+        const disabledness = () =>
+            page.evaluate(() =>
+                Object.fromEntries(
+                    ["room", "opening", "box"].map((tool) => [tool, (document.querySelector(`[data-tool="${tool}"]`) as HTMLButtonElement).disabled]),
+                ),
+            );
+
+        await openEditor({ width: 1200, height: 800 }, false, "empty");
+        expect(await disabledness()).toEqual({ room: true, opening: true, box: true });
+        // Select and rotate are never gated - there is always something to
+        // select (or nothing, which select already handles), and turning an
+        // empty canvas is harmless.
+        expect(await page.evaluate(() => (document.querySelector('[data-tool="select"]') as HTMLButtonElement).disabled)).toBe(false);
+
+        await page.locator("#floorplan-start-rectangle").click();
+        await settle();
+        expect(await disabledness()).toEqual({ room: false, opening: false, box: false });
+
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        expect(await disabledness()).toEqual({ room: true, opening: true, box: true });
+        await page.close();
+    });
+
+    test("the right-click menu cuts an opening and deletes a wall", async () => {
+        // The two actions on the menu that were never exercised. Both are
+        // reachable no other way for someone who does not know the toolbar.
+        await openEditor();
+        const plan = await planExtent();
+        const walls = () => page.locator(".floorplan-wall").count();
+        const openings = () => page.locator("#floorplan-map path.floorplan-opening").count();
+        expect(await openings()).toBe(0);
+        const before = await walls();
+
+        await page.mouse.click(plan.grab.x, plan.grab.y, { button: "right" });
+        await page.waitForSelector("text=Add opening", { timeout: 10000 });
+        await page.locator("text=Add opening").click();
+        await settle();
+        expect(await openings()).toBe(1);
+
+        // The menu is gone once it has been used.
+        expect(await page.locator(".floorplan-context-menu").count()).toBe(0);
+
+        // Away from the opening just cut: it is drawn over the wall, so the
+        // same point now belongs to it and Delete would take the opening.
+        // Deleting the *wall* takes the opening with it, which is the point of
+        // storing an opening as an interval along its wall rather than as
+        // geometry of its own.
+        await page.mouse.click(plan.grab.x - 80, plan.grab.y, { button: "right" });
+        await page.waitForSelector("text=Delete", { timeout: 10000 });
+        await page.locator(".floorplan-context-menu >> text=Delete").click();
+        await settle();
+        expect(await walls()).toBeLessThan(before);
+        expect(await openings()).toBe(0);
+        await page.close();
+    });
+
+    test("delete is on the canvas, not only in the sidebar", async () => {
+        // Under 900px the sidebar stacks below a map that is 72vh tall, so the
+        // Delete button living there is below the fold for the whole time
+        // anyone is drawing - and a phone has no Delete key either. Same
+        // reasoning that put the floor strip on the canvas.
+        //
+        // Structural rather than positional: which container the control
+        // belongs to is the claim, and it holds at every width.
+        await openEditor();
+        const button = page.locator("#floorplan-delete");
+        const hidden = () => page.evaluate(() => (document.getElementById("floorplan-delete") as HTMLElement).hidden);
+
+        // Nothing selected, nothing to offer.
+        expect(await hidden()).toBe(true);
+
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        expect(await hidden()).toBe(false);
+        // On the canvas, not in a panel that scrolls away.
+        expect(await page.evaluate(() => Boolean(document.getElementById("floorplan-delete")?.closest(".floorplan-canvas-controls")))).toBe(true);
+
+        const before = await page.locator(".floorplan-wall").count();
+        await button.click();
+        await settle();
+        expect(await page.locator(".floorplan-wall").count()).toBeLessThan(before);
+        // And goes away again with the selection it acted on.
+        expect(await hidden()).toBe(true);
+        await page.close();
+    });
+
+    test("a phone gets no sideways scroll and a map it can reach", async () => {
+        // Askable at last. This was "found" early on, chased, and turned out to
+        // be the fixture's own 900px map - the site was never measured. With
+        // the fixture laid out by the site's stylesheet alone, it is.
+        for (const width of [320, 375, 414]) {
+            await openEditor({ width, height: 812 });
+
+            const page_ = await page.evaluate(() => ({
+                docWidth: document.documentElement.scrollWidth,
+                bodyWidth: document.body.scrollWidth,
+                viewport: window.innerWidth,
+                map: Math.round((document.getElementById("floorplan-map") as HTMLElement).getBoundingClientRect().width),
+                shell: Math.round((document.querySelector(".floorplan-map-shell") as HTMLElement).getBoundingClientRect().width),
+            }));
+
+            // A page wider than the screen means a plan you have to scroll the
+            // whole document sideways to see the rest of.
+            expect(page_.docWidth, `document at ${width}px`).toBeLessThanOrEqual(page_.viewport);
+            expect(page_.bodyWidth, `body at ${width}px`).toBeLessThanOrEqual(page_.viewport);
+            // And the canvas should be most of what is on screen, not a sliver.
+            expect(page_.map, `map at ${width}px`).toBeGreaterThan(width * 0.8);
+            await page.close();
+        }
+    });
+
+    test("the zoom buttons render exactly like every other map's", async () => {
+        // Leaflet's own default top-left control, untouched - the same
+        // classes and position as the main map, rather than reparented into
+        // a custom row with its own override CSS. The floor strip that once
+        // collided with this corner is bottom-right at every breakpoint now,
+        // so nothing else claims it.
+        await openEditor();
+        expect(await page.evaluate(() => Boolean(document.querySelector(".leaflet-top.leaflet-left .leaflet-control-zoom")))).toBe(true);
+        expect(await page.evaluate(() => Boolean(document.querySelector(".floorplan-canvas-controls .leaflet-control-zoom")))).toBe(false);
+
+        // And it still zooms, which is the thing reparenting used to risk.
+        // Zoom out rather than in: the plan is fitted on load, which can leave
+        // zoom-in already at the maximum and disabled.
+        const span = async (): Promise<number> => (await planExtent()).width;
+        const before = await span();
+        await page.locator(".leaflet-control-zoom-out").click();
+        await settle();
+        expect(await span()).toBeLessThan(before);
+        await page.close();
+    });
+
+    test("naming the plan, or dating it, is enough on its own to save it", async () => {
+        // Both fields are read at save time rather than when they change, so they
+        // only ever reached the server when something *else* had already marked the
+        // document dirty. Typing a name and leaving lost it - and beforeunload
+        // stayed quiet on the way out, because state.dirty was never set.
+        saves.attempts = 0;
+        saves.lastName = "";
+        saves.lastValidFrom = null;
+        await openEditor();
+
+        // Plan name and date live behind "Add more details".
+        await page.locator(".floorplan-details-accordion summary").click();
+        await page.locator("#floorplan-name").fill("Boiler house");
+        for (let waited = 0; waited < 40 && saves.attempts === 0; waited++) await page.waitForTimeout(250);
+        expect(saves.attempts, "typing a plan name never saved it").toBeGreaterThan(0);
+        expect(saves.lastName).toBe("Boiler house");
+
+        const after = saves.attempts;
+        await page.locator("#floorplan-valid-from").fill("1994-06-15");
+        for (let waited = 0; waited < 40 && saves.attempts === after; waited++) await page.waitForTimeout(250);
+        expect(saves.attempts, "dating the plan never saved it").toBeGreaterThan(after);
+        expect(saves.lastValidFrom).toBe("1994-06-15");
+        await page.close();
+    });
+
+    test("clearing the plan name leaves it unnamed, and the list still labels it", async () => {
+        // The default used to be applied inside save(), so "no name" was stored as
+        // a copy of whatever the floor happened to be called at that moment: the
+        // placeholder stopped applying once saved, and renaming the floor left the
+        // plan carrying the old name. The version list has always had a fallback of
+        // its own, which is where a derived default belongs.
+        saves.attempts = 0;
+        await openEditor();
+
+        // Give the floor a nickname first: the default that used to be frozen in
+        // was the floor's name, so without one the two behaviours agree and this
+        // test would pass against the bug it exists for.
+        await page.locator(".floorplan-floor-fields__name").fill("Boiler floor");
+        for (let waited = 0; waited < 40 && saves.attempts === 0; waited++) await page.waitForTimeout(250);
+
+        // Plan name and the version list live behind "Add more details".
+        await page.locator(".floorplan-details-accordion summary").click();
+        saves.lastName = "unset";
+        await page.locator("#floorplan-name").fill("");
+        for (let waited = 0; waited < 40 && saves.lastName === "unset"; waited++) await page.waitForTimeout(250);
+        expect(saves.lastName, "stored the floor's name instead of leaving the plan unnamed").toBe("");
+
+        // Still labelled on screen, and still told apart from its siblings, which
+        // is the only thing this list has to do.
+        const current = page.locator("#floorplan-versions button", { hasText: "(current)" });
+        await current.waitFor({ state: "attached", timeout: 10000 });
+        const labels = (await page.locator("#floorplan-versions button").allTextContents()).map((text) => text.trim());
+        expect(labels.length, "the version list emptied itself on save").toBeGreaterThan(1);
+        expect(new Set(labels).size, `two versions labelled the same: ${labels.join(" / ")}`).toBe(labels.length);
+        await page.close();
+    });
+
+    test("undo takes back a renamed plan the way it takes back a moved wall", async () => {
+        // The plan name and date are the only fields in static markup rather than a
+        // panel renderSidebar() rebuilds, which is how they came to sit outside the
+        // undo framework: undo restores state.doc, and these were read out of the
+        // DOM at save time instead of ever being written into it.
+        saves.lastName = "unset";
+        await openEditor();
+        // The plan name lives behind "Add more details".
+        await page.locator(".floorplan-details-accordion summary").click();
+        const nameField = page.locator("#floorplan-name");
+        const before = await nameField.inputValue();
+
+        await nameField.fill("Boiler house");
+        for (let waited = 0; waited < 40 && saves.lastName !== "Boiler house"; waited++) await page.waitForTimeout(250);
+        expect(saves.lastName).toBe("Boiler house");
+
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        expect(await nameField.inputValue(), "undo left the renamed plan on screen").toBe(before);
+
+        // And the name that undo restored is the one that gets saved, rather than
+        // the field quietly re-supplying the typed one on the next save.
+        saves.lastName = "unset";
+        await page.locator("#floorplan-valid-from").fill("1994-06-15");
+        for (let waited = 0; waited < 40 && saves.lastName === "unset"; waited++) await page.waitForTimeout(250);
+        expect(saves.lastName, "the undone name came back on the next save").toBe(before);
+        await page.close();
+    });
+
+    test("naming a storey, or renumbering it, shows on the strip when you leave the field", async () => {
+        // Both fields defer their redraw to the commit rather than the keystroke,
+        // because rebuilding the strip under the cursor would take the focus with
+        // it - and on commit the focus has already gone, which is the whole point
+        // of waiting. The commit called renderSidebar(), which rebuilds the
+        // selected item's form and touches neither the strip nor these fields, so
+        // a storey stayed unlabelled until some unrelated edit called render().
+        await openEditor();
+        const strip = "#floorplan-floors";
+        const tab = () => page.locator(`${strip} .floorplan-floor-tab`).first();
+
+        await page.locator(".floorplan-floor-fields__name").fill("Attic");
+        await page.locator(".floorplan-floor-fields__name").blur();
+        await settle();
+        expect(await tab().textContent(), "the nickname did not reach the strip").toContain("Attic");
+
+        // The code relabels the storey itself, and every derived label above it.
+        await page.locator(".floorplan-floor-fields__code").fill("M");
+        await page.locator(".floorplan-floor-fields__code").blur();
+        await settle();
+        expect(await tab().locator(".floorplan-floor-tab__chip").textContent(), "the renumbered storey kept its old label").toBe("M");
+        await page.close();
+    });
+
+    test("tabbing from the floor code to its nickname keeps the focus", async () => {
+        // The commit redraws the strip, and the strip's own render rebuilds these
+        // two fields at the end of it. Tab is what fires that commit, and by then
+        // the focus has already moved to the next field - the very element about
+        // to be replaced. Redrawing has to not cost the user their place.
+        await openEditor();
+        await page.locator(".floorplan-floor-fields__code").focus();
+        await page.keyboard.type("M");
+        await page.keyboard.press("Tab");
+        await settle();
+
+        expect(await page.evaluate(() => document.activeElement?.className ?? ""), "tabbing between the floor fields dropped the focus").toContain("floorplan-floor-fields__name");
+        await page.close();
+    });
+
+    test("deleting a storey from the middle renumbers the rest without moving their contents", async () => {
+        // The destructive one, and the only floor operation the editor's own path
+        // to it was never driven for. The stack has to close up behind a deletion:
+        // a storey above a deleted one keeps a level with nothing underneath, so
+        // "the floor below" quietly starts meaning two down. deriveDesignations is
+        // unit-tested, but nothing checked that renumbering relabels the storeys
+        // rather than shuffling what is drawn on them.
+        await openEditor();
+        const strip = "#floorplan-floors";
+        const chips = () => page.evaluate((sel) => [...document.querySelectorAll(`${sel} .floorplan-floor-tab__chip`)].map((n) => (n.textContent ?? "").trim()), strip);
+        const named = () => page.evaluate((sel) => [...document.querySelectorAll(`${sel} .floorplan-floor-tab`)].map((tab) => `${(tab.querySelector(".floorplan-floor-tab__chip")?.textContent ?? "").trim()}:${(tab.querySelector(".floorplan-floor-tab__name")?.textContent ?? "").trim()}`), strip);
+
+        const dialog = page.locator(".floorplan-add-floor-dialog");
+        for (let i = 0; i < 2; i++) {
+            await page.locator(`${strip} [aria-label="Add floor"]`).click();
+            await dialog.locator('button:text-is("Above")').click();
+            await dialog.locator('button:text-is("Add floor")').click();
+            await settle();
+        }
+        expect(await chips()).toEqual(["2", "1", "G"]);
+
+        // A plain .click() intermittently reports this freshly-rebuilt strip's
+        // buttons as covered by the panel's own collapse toggle, even though
+        // their own measured boxes do not overlap it - a stale hit-test frame
+        // in this host's chrome-headless-shell, not a real layering bug (the
+        // same coordinates, clicked directly, land correctly). Clicking the
+        // measured centre point sidesteps the actionability check that trips
+        // on it.
+        const clickAt = async (locator: ReturnType<typeof page.locator>) => {
+            const box = await locator.boundingBox();
+            if (!box) throw new Error("not rendered");
+            await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        };
+
+        // Name the top storey, so the assertion after the delete is about which
+        // storey survived rather than about how many did.
+        await clickAt(page.locator(`${strip} .floorplan-floor-tab`).first().locator("button").first());
+        await settle();
+        await page.locator(".floorplan-floor-fields__name").fill("Attic");
+        await page.locator(".floorplan-floor-fields__name").blur();
+        await settle();
+        expect(await named()).toEqual(["2:Attic", "1:", "G:"]);
+
+        // Delete the middle one. Its control only appears on the storey being
+        // viewed, which is deliberate - so select it first.
+        await clickAt(page.locator(`${strip} .floorplan-floor-tab`).nth(1).locator("button").first());
+        await settle();
+        page.once("dialog", (confirmDialog) => {
+            expect(confirmDialog.message()).toContain("removes everything drawn on it");
+            void confirmDialog.accept();
+        });
+        await clickAt(page.locator(`${strip} .floorplan-floor-tab`).nth(1).locator(".floorplan-floor-tab__delete"));
+        await settle();
+
+        // The attic is still the attic; it is simply the first storey up now.
+        expect(await named(), "renumbering moved the storeys' contents rather than their labels").toEqual(["1:Attic", "G:"]);
+
+        // And it is undoable, like every other edit here.
+        await page.locator("#floorplan-undo").click();
+        await settle();
+        expect(await named(), "undo did not put the deleted storey back").toEqual(["2:Attic", "1:", "G:"]);
+        await page.close();
+    });
+
+    test("a citation whose photo is gone can be seen and let go of", async () => {
+        // FloorplanReference.image is SET_NULL precisely so deleting a photo from
+        // somebody's media does not delete the plan's note about it. That leaves a
+        // citation with nothing to draw, and the photo strip is built from photos
+        // that still exist - so without a form of its own it is attached, invisible
+        // and impossible to remove.
+        page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+        await page.goto(`http://127.0.0.1:${server.port}/?plan=lostphoto`, { waitUntil: "load" });
+        await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
+
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+
+        const chip = page.locator(".floorplan-photo-missing");
+        await chip.waitFor({ state: "attached", timeout: 10000 });
+        // Named by whatever the reference still knows, rather than a bare "missing".
+        expect(await chip.textContent()).toContain("South elevation");
+
+        await chip.locator("button").click();
+        await settle();
+        expect(await page.locator(".floorplan-photo-missing").count(), "the citation could not be let go of").toBe(0);
+        await page.close();
+    });
+
+    test("a plan turned to face its building keeps its angle, plugin or no plugin", async () => {
+        // rotation_degrees is the plan's own north, and every other fixture leaves
+        // it at 0 - so nothing exercised a turned plan at all. It matters most in
+        // the degraded case: without leaflet-rotate the view cannot be turned, and
+        // an editor that answered by saving 0 would flatten the building's angle
+        // on the first autosave after opening it on a bad connection.
+        for (const query of ["plan=rotated", "plan=rotated&norotate=1"]) {
+            saves.lastRotation = -1;
+            page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+            await page.goto(`http://127.0.0.1:${server.port}/?${query}`, { waitUntil: "load" });
+            await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
+
+            // Any edit at all; the plan name is the cheapest one that saves -
+            // it lives behind "Add more details".
+            await page.locator(".floorplan-details-accordion summary").click();
+            await page.locator("#floorplan-name").fill("turned");
+            for (let waited = 0; waited < 40 && saves.lastRotation === -1; waited++) await page.waitForTimeout(250);
+            expect(saves.lastRotation, `saved a different angle than it opened with (${query})`).toBeCloseTo(30, 6);
+            await page.close();
+        }
+    });
+
+    test("losing only the rotate plugin costs rotation, not the editor", async () => {
+        // Leaflet and leaflet-rotate are two requests, so one can land without the
+        // other. leaflet-rotate patches L.Map in place, and setBearing() is called
+        // partway through loading the document - so its absence used to throw there
+        // and take the rest of the load with it, blanking an editor whose only
+        // missing piece was a convenience.
+        page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+        await page.goto(`http://127.0.0.1:${server.port}/?norotate=1`, { waitUntil: "load" });
+        await page.waitForSelector(".floorplan-wall", { state: "attached", timeout: 20000 });
+
+        // The plan is there, and the rest of the load ran: the name field is filled
+        // from the document, which happens on the line after the setBearing() call.
+        expect(await page.locator(".floorplan-wall").count()).toBe(4);
+        expect(await page.evaluate(() => (document.getElementById("floorplan-name") as HTMLInputElement).value)).toBeTruthy();
+        // Not the whole-editor failure notice - that is for Leaflet itself.
+        expect(await page.evaluate(() => (document.getElementById("floorplan-unavailable") as HTMLElement).hidden)).toBe(true);
+        // And neither route to the tool is left open: not the toolbar button,
+        // and not the shortcut, which would otherwise arm a tool with nothing on
+        // screen to show for it and nothing behind it when dragged.
+        expect(await page.locator('[data-tool="rotate"]').count(), "offered a rotate tool with no rotation behind it").toBe(0);
+        await page.locator("#floorplan-map").click();
+        await page.keyboard.press("t");
+        expect(await page.evaluate(() => document.getElementById("floorplan-map")?.classList.contains("is-rotating")), "the T shortcut armed a tool that was removed").toBe(false);
+        await page.close();
+    });
+
+    test("a map library that never loaded says so, rather than showing a blank rectangle", async () => {
+        // Leaflet and leaflet-rotate are CDN scripts, so an unreachable CDN leaves
+        // `L` undefined and every line of the editor is built on L.map(). Unguarded,
+        // the entry threw on the first call: a blank rectangle, no message, and no
+        // sign that the plan on the server was untouched. Which it must be - nothing
+        // is wired at that point, so nothing can save the empty screen over it.
+        saves.attempts = 0;
+        page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+        await page.goto(`http://127.0.0.1:${server.port}/?nomap=1`, { waitUntil: "load" });
+
+        await page.waitForSelector("#floorplan-unavailable:not([hidden])", { state: "attached", timeout: 20000 });
+        // The "Draw the walls" prompt is server-rendered visible and normally hidden
+        // by the editor, so without hiding it here the two would stack.
+        expect(await page.evaluate(() => (document.getElementById("floorplan-empty") as HTMLElement).hidden), "the empty-plan prompt showed underneath the failure notice").toBe(true);
+        expect(saves.attempts, "saved a blank document over the stored plan").toBe(0);
+        await page.close();
+    });
+
+    test("a failed save keeps retrying when the toast library never loaded", async () => {
+        // toastr is fetched from a CDN, so window.toastr is simply absent when
+        // that request does not land - and the network that loses the script is
+        // the same network that loses the save. The warning toast sits directly
+        // above the call that arms the retry, so a throw on the missing library
+        // strands the document: dirty, unsaved, nothing scheduled to try again.
+        // The harness never loads toastr, so this is that machine.
+        saves.fail = true;
+        saves.attempts = 0;
+        try {
+            await openEditor();
+            const plan = await planExtent();
+            await page.mouse.click(plan.grab.x, plan.grab.y);
+            await settle();
+            await page.keyboard.press("ArrowRight");
+
+            // The first attempt is the debounced autosave; the backoff arms the
+            // second 2s later. Waiting to 12s covers both with room to spare.
+            for (let waited = 0; waited < 48 && saves.attempts < 2; waited++) await page.waitForTimeout(250);
+            expect(saves.attempts, "a failed save was never retried").toBeGreaterThanOrEqual(2);
+            await page.close();
+        } finally {
+            saves.fail = false;
+        }
+    });
+
+    test("publishing says what it will publish, and taking it back publishes nothing", async () => {
+        // Publishing decides what other people see, and it publishes the last
+        // *saved* version - so doing it with unsaved work in front of you means
+        // sharing something other than what is on screen.
+        saves.fail = true;
+        publishes.attempts = 0;
+        try {
+            await openEditor();
+            const plan = await planExtent();
+
+            // An edit that cannot be saved, so the document stays dirty.
+            await page.mouse.click(plan.grab.x, plan.grab.y);
+            await settle();
+            await page.keyboard.press("ArrowRight");
+            // Either wording means the same thing here - the document has
+            // changes the server does not have. Which one shows depends on
+            // whether a retry is in flight at the moment it is read.
+            await page.waitForFunction(
+                () => ["Unsaved changes", "Not saved"].includes(document.getElementById("floorplan-save-status")?.textContent ?? ""),
+                undefined,
+                { timeout: 15000 },
+            );
+
+            // Turned down: nothing is published.
+            page.once("dialog", (dialog) => {
+                expect(dialog.message()).toContain("Unsaved changes are not included");
+                void dialog.dismiss();
+            });
+            await page.locator("#floorplan-more-toggle").click();
+            await page.locator("#floorplan-publish").click();
+            await settle();
+            expect(publishes.attempts, "published despite being told not to").toBe(0);
+
+            // Accepted: it goes.
+            page.once("dialog", (dialog) => void dialog.accept());
+            await page.locator("#floorplan-more-toggle").click();
+            await page.locator("#floorplan-publish").click();
+            await settle();
+            expect(publishes.attempts).toBe(1);
+            await page.close();
+        } finally {
+            saves.fail = false;
+        }
+    });
+
+    test("dragging a corner moves the walls that meet there and no others", async () => {
+        // A corner shared by three walls is three coordinate pairs that happen
+        // to be equal, so "grab the corner" has to gather them - and gather
+        // only them, or dragging one corner drags the building.
+        await openEditor();
+        const before = await planExtent();
+
+        const corner = await page.evaluate(() => {
+            const joints = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-joint"));
+            const boxes = joints.map((n) => n.getBoundingClientRect());
+            // The top-left one: nearest the origin of the plan's own box.
+            const best = boxes.sort((a, b) => a.left + a.top - (b.left + b.top))[0];
+            return best ? { x: best.left + best.width / 2, y: best.top + best.height / 2, count: joints.length } : null;
+        });
+        expect(corner, "no joint handles").not.toBeNull();
+        // A square has four corners, however many walls meet at each.
+        expect(corner!.count).toBe(4);
+
+        await page.mouse.move(corner!.x, corner!.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(corner!.x - step * 5, corner!.y - step * 5);
+        await page.mouse.up();
+        await settle();
+
+        const after = await planExtent();
+        // The two walls meeting at that corner followed it up and left...
+        expect(before.left - after.left).toBeGreaterThan(20);
+        expect(before.top - after.top).toBeGreaterThan(20);
+        // ...and the far corner stayed exactly where it was, which is the half
+        // that says only the connected walls moved.
+        expect(Math.abs(after.left + after.width - (before.left + before.width))).toBeLessThanOrEqual(2);
+        expect(Math.abs(after.top + after.height - (before.top + before.height))).toBeLessThanOrEqual(2);
+        await page.close();
+    });
+
+    test("dragging a wall's midpoint splits it into two, at that corner", async () => {
+        // A bend added to a straight run, without redrawing the whole wall
+        // from scratch - the inverse of removing a joint's point, below.
+        await openEditor();
+        const wallCount = () => page.locator(".floorplan-wall").count();
+        expect(await wallCount()).toBe(4);
+        const before = await planExtent();
+
+        // Selected walls only offer this handle - it sits exactly at the
+        // wall's own midpoint, which is also the natural place to click the
+        // wall itself, so select from a point off-centre first.
+        await page.mouse.click(before.grab.x - 30, before.grab.y);
+        await settle();
+
+        const midpoint = await page.evaluate(() => {
+            const handles = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-wall-midpoint"));
+            const boxes = handles.map((n) => n.getBoundingClientRect());
+            return boxes[0] ? { x: boxes[0].left + boxes[0].width / 2, y: boxes[0].top + boxes[0].height / 2, count: handles.length } : null;
+        });
+        expect(midpoint, "no midpoint handle on the selected wall").not.toBeNull();
+        expect(midpoint!.count).toBe(1);
+
+        await page.mouse.move(midpoint!.x, midpoint!.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(midpoint!.x, midpoint!.y - step * 5);
+        await page.mouse.up();
+        await settle();
+
+        expect(await wallCount()).toBe(5);
+        const after = await planExtent();
+        // The bend pulled the top edge up and out, and left the rest of the
+        // box alone - the sides it did not touch stayed where they were.
+        expect(before.top - after.top).toBeGreaterThan(20);
+        expect(Math.abs(after.left - before.left)).toBeLessThanOrEqual(2);
+        expect(Math.abs(after.width - before.width)).toBeLessThanOrEqual(2);
+        await page.close();
+    });
+
+    test("removing a joint's point merges the two walls that met there", async () => {
+        // The corner disappears, and what met there becomes one wall running
+        // straight between the two far ends.
+        await openEditor();
+        const wallCount = () => page.locator(".floorplan-wall").count();
+        expect(await wallCount()).toBe(4);
+
+        const corner = await page.evaluate(() => {
+            const joints = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-joint"));
+            const boxes = joints.map((n) => n.getBoundingClientRect());
+            const best = boxes.sort((a, b) => a.left + a.top - (b.left + b.top))[0];
+            return best ? { x: best.left + best.width / 2, y: best.top + best.height / 2 } : null;
+        });
+        expect(corner, "no joint handles").not.toBeNull();
+
+        await page.mouse.click(corner!.x, corner!.y, { button: "right" });
+        await page.waitForSelector("text=Remove this point", { timeout: 10000 });
+        await page.locator(".floorplan-context-menu >> text=Remove this point").click();
+        await settle();
+
+        expect(await wallCount()).toBe(3);
+        // The menu is gone once it has been used, same as every other one.
+        expect(await page.locator(".floorplan-context-menu").count()).toBe(0);
+        await page.close();
+    });
+
+    test("removing a joint refuses when a door or window sits on either wall", async () => {
+        await openEditor();
+        const plan = await planExtent();
+        // Cut a door into the wall nearest the grab point, then find the
+        // joint at one of that wall's own ends.
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+
+        const corner = await page.evaluate((grab) => {
+            const joints = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-joint"));
+            const boxes = joints.map((n) => ({ el: n, box: n.getBoundingClientRect() }));
+            const nearest = boxes.sort((a, b) => {
+                const da = Math.hypot(a.box.left - grab.x, a.box.top - grab.y);
+                const db = Math.hypot(b.box.left - grab.x, b.box.top - grab.y);
+                return da - db;
+            })[0];
+            return nearest ? { x: nearest.box.left + nearest.box.width / 2, y: nearest.box.top + nearest.box.height / 2 } : null;
+        }, plan.grab);
+        expect(corner, "no joint handles").not.toBeNull();
+
+        const wallCount = () => page.locator(".floorplan-wall").count();
+        const before = await wallCount();
+        await page.mouse.click(corner!.x, corner!.y, { button: "right" });
+        await page.waitForSelector("text=Remove this point", { timeout: 10000 });
+        await page.locator(".floorplan-context-menu >> text=Remove this point").click();
+        await settle();
+
+        // Refused, not silently ignored: the wall count is untouched.
+        expect(await wallCount()).toBe(before);
+        await page.close();
+    });
+
+    test("every control on the canvas can be named", async () => {
+        // An icon-only button with no accessible name is a button a screen
+        // reader announces as "button", and this editor is almost entirely
+        // icon-only buttons. Checked with a selection and a tool armed, so the
+        // controls that only exist in those states are included.
+        //
+        // Only what the editor *builds* is in scope here. The toolbar and the
+        // undo row are static template markup, and the fixture's copies of them
+        // are deliberately bare - checking those through here would be checking
+        // the fixture's attributes, not the site's. harness-parity.test.ts
+        // reads the template itself for those.
+        await openEditor();
+        await page.locator('[data-tool="marker"]').click();
+        const frame = await planExtent();
+        await page.mouse.click(frame.grab.x, frame.grab.y);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+
+        const unnamed = await page.evaluate(() => {
+            const named = (node: Element): boolean => {
+                const label = (node.getAttribute("aria-label") ?? node.getAttribute("title") ?? node.textContent ?? "").trim();
+                if (label) return true;
+                // A control can borrow its name from a <label> wrapping it, or
+                // from the element aria-labelledby points at.
+                const labelled = node.getAttribute("aria-labelledby");
+                if (labelled && document.getElementById(labelled)?.textContent?.trim()) return true;
+                return Boolean(node.closest("label")?.textContent?.trim());
+            };
+            const scopes = [".floorplan-canvas-floors", ".floorplan-tool-options", "#floorplan-form", "#floorplan-marker-appearance"];
+            const found: string[] = [];
+            for (const scope of scopes) {
+                const host = document.querySelector(scope);
+                if (!host) continue;
+                for (const node of Array.from(host.querySelectorAll("button, a[href], input, select, textarea"))) {
+                    if ((node as HTMLElement).hidden) continue;
+                    // A hidden field is not announced and has nothing to name.
+                    if (node instanceof HTMLInputElement && node.type === "hidden") continue;
+                    if (!named(node)) found.push(`${scope} ${node.tagName}.${String(node.className).split(" ")[0]}`);
+                }
+            }
+            return found;
+        });
+
+        expect(unnamed).toEqual([]);
+        await page.close();
+    });
+
+    test("a photo can be attached to a wall, and to more than one thing", async () => {
+        // The plan keeps one pool row per photo however many items cite it, so
+        // attaching the same picture to a wall and to a door does not duplicate
+        // it. Attaching cites an image; it does not write to one, which is why
+        // this is not waiting on the question about photo coordinates.
+        await openEditor();
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+
+        const details = page.locator("#floorplan-form details.floorplan-details").first();
+        await details.locator("summary").click();
+        const photos = details.locator(".floorplan-photo");
+        expect(await photos.count()).toBe(2);
+        expect(await photos.first().getAttribute("aria-pressed")).toBe("false");
+
+        await photos.first().click();
+        await settle();
+        const reopened = page.locator("#floorplan-form details.floorplan-details").first();
+        expect(await reopened.locator(".floorplan-photo").first().getAttribute("aria-pressed")).toBe("true");
+        expect(await reopened.locator(".floorplan-photo").nth(1).getAttribute("aria-pressed")).toBe("false");
+
+        // Off again, and the plan is back where it started - including the
+        // pool, which the last citation takes with it. The server deletes by
+        // omission, so a row left in the payload lives forever, and every
+        // attach-then-detach would leave one behind.
+        await reopened.locator(".floorplan-photo").first().click();
+        await settle();
+        expect(await page.locator("#floorplan-form .floorplan-photo").first().getAttribute("aria-pressed")).toBe("false");
+
+        // Read from what the editor actually sent. The route records it.
+        for (let waited = 0; waited < 60 && saves.lastPool !== 0; waited++) await page.waitForTimeout(250);
+        expect(saves.lastPool, "a pool row outlived its last citation").toBe(0);
+        await page.close();
+    });
+
+    test("deleting the thing a photo was attached to clears the pool too", async () => {
+        // Detaching by hand is not the only way a citation disappears. Deleting
+        // the wall it was on drops it just as surely, and a pool row nothing
+        // cites is a row the server keeps forever.
+        saves.lastPool = -1;
+        await openEditor();
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+
+        const details = page.locator("#floorplan-form details.floorplan-details").first();
+        await details.locator("summary").click();
+        await details.locator(".floorplan-photo").first().click();
+        await settle();
+        for (let waited = 0; waited < 60 && saves.lastPool !== 1; waited++) await page.waitForTimeout(250);
+        expect(saves.lastPool, "the photo never reached the pool").toBe(1);
+
+        // Delete the wall it is on, from the canvas control.
+        await page.locator("#floorplan-delete").click();
+        await settle();
+        for (let waited = 0; waited < 60 && saves.lastPool !== 0; waited++) await page.waitForTimeout(250);
+        expect(saves.lastPool, "a pool row outlived the wall citing it").toBe(0);
+        await page.close();
+    });
+
+    test("a saved photo keeps the id the server gave it", async () => {
+        // The whole cycle, through the editor rather than through the matcher:
+        // attach a photo, let it save, edit again, and look at what the second
+        // save carries. A client-side id sent twice makes the server create a
+        // second row and delete the first as stale, on every autosave.
+        saves.lastPool = -1;
+        saves.lastPoolUuid = "";
+        await openEditor();
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        const details = page.locator("#floorplan-form details.floorplan-details").first();
+        await details.locator("summary").click();
+        await details.locator(".floorplan-photo").first().click();
+
+        for (let waited = 0; waited < 60 && saves.lastPool !== 1; waited++) await page.waitForTimeout(250);
+        expect(saves.lastPool).toBe(1);
+        // The first save is the one that mints it, so a client-side id here is
+        // correct - there is nothing else it could be.
+        expect(saves.lastPoolUuid.startsWith("local-"), "the first save should mint a local id").toBe(true);
+
+        // Any further edit, made through the sidebar rather than the keyboard:
+        // the nudge shortcut needs the canvas focused, and focus is in the
+        // photo strip. What matters is the id the next save carries.
+        await page.locator("#floorplan-form select").first().selectOption("fence");
+        for (let waited = 0; waited < 60 && saves.lastPoolUuid.startsWith("local-"); waited++) await page.waitForTimeout(250);
+        expect(saves.lastPoolUuid, "the pool row was still carrying a client-side id").not.toContain("local-");
+        expect(saves.lastPool, "the pool lost its row").toBe(1);
+        await page.close();
+    });
+
+    test("an opening's panel reads as the thing, then what is attached to it", async () => {
+        // Type and swing describe the door; the sill describes the hole; the
+        // locks are things hung on it. They arrived in the order they were
+        // built rather than that order, which put the swing question below the
+        // list of locks.
+        await openEditor();
+        const plan = await planExtent();
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+        await page.locator("#floorplan-form .floorplan-locks button").first().click();
+        await settle();
+
+        const order = await page.evaluate(() =>
+            Array.from(document.querySelectorAll("#floorplan-form > *"))
+                .map((node) => (node.querySelector("span")?.textContent ?? "").trim())
+                .filter(Boolean),
+        );
+        expect(order.slice(0, 4)).toEqual(["Type", "Swing", "Sill height", "Locks"]);
+        await page.close();
+    });
+
+    test("a marker's pickers sit with its label, and survive being deselected", async () => {
+        // The icon and colour pickers are static template markup, because the
+        // icon set lives in Python - and they sat wherever the template put
+        // them, which was after the details block. Moving them into the form
+        // means the form's own replaceChildren() detaches them, so the editor
+        // has to hold the node rather than look it up.
+        await openEditor();
+        await page.locator('[data-tool="marker"]').click();
+        const frame = await planExtent();
+        await page.mouse.click(frame.grab.x, frame.grab.y - 40);
+        await settle();
+
+        expect(await page.evaluate(() => Boolean(document.querySelector("#floorplan-form #floorplan-marker-appearance")))).toBe(true);
+        const order = await page.evaluate(() =>
+            Array.from(document.querySelectorAll("#floorplan-form > *")).map((node) =>
+                node.id === "floorplan-marker-appearance" ? "appearance" : (node.querySelector("span")?.textContent ?? node.textContent ?? node.tagName).trim(),
+            ),
+        );
+        expect(order.slice(0, 4)).toEqual(["Marker", "Label", "Type", "appearance"]);
+
+        // Deselect, then select again: the node has to come back, which it
+        // cannot if the only handle on it was getElementById.
+        await page.locator('[data-tool="select"]').click();
+        await page.keyboard.press("Escape");
+        await settle();
+        await page.mouse.click(frame.grab.x, frame.grab.y - 40);
+        await settle();
+        expect(await page.evaluate(() => Boolean(document.getElementById("floorplan-marker-appearance")))).toBe(true);
+        await page.close();
+    });
+
+    test("shift locks a corner drag to one axis, as it does everywhere else", async () => {
+        // Item 12 of the list: the modifiers have to mean the same thing on
+        // every drag. Shift constrained a wall body and a room and did nothing
+        // to a corner, which is worse than a modifier that works nowhere -
+        // it works until the one time you need it.
+        await openEditor();
+        const corner = await page.evaluate(() => {
+            const joints = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-joint"));
+            const best = joints.map((n) => n.getBoundingClientRect()).sort((a, b) => a.left + a.top - (b.left + b.top))[0];
+            return best ? { x: best.left + best.width / 2, y: best.top + best.height / 2 } : null;
+        });
+        expect(corner).not.toBeNull();
+        const before = await planExtent();
+
+        // Diagonally away, with shift held: only one axis should follow.
+        await page.keyboard.down("Shift");
+        await page.mouse.move(corner!.x, corner!.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(corner!.x - step * 6, corner!.y - step * 6);
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+        await settle();
+
+        const after = await planExtent();
+        const movedLeft = before.left - after.left;
+        const movedUp = before.top - after.top;
+        // One of them went; the other did not. Without the constraint both do.
+        expect(Math.max(movedLeft, movedUp)).toBeGreaterThan(20);
+        expect(Math.min(movedLeft, movedUp)).toBeLessThan(3);
+        await page.close();
+    });
+
+    test("shift keeps a wall drag square too, not only a corner", async () => {
+        // The modifier was unreachable here. Shift at the press started a box
+        // select even over a wall, so the wall drag declined outright - and
+        // modifiers are latched at the press, so pressing shift afterwards was
+        // never read either. The branch honouring it could not run.
+        await openEditor();
+        const before = await planExtent();
+
+        await page.keyboard.down("Shift");
+        await page.mouse.move(before.grab.x, before.grab.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(before.grab.x + step * 6, before.grab.y - step * 6);
+        await page.mouse.up();
+        await page.keyboard.up("Shift");
+        await settle();
+
+        const after = await planExtent();
+        // Dragging the *top* wall never moves the plan's left edge, whatever
+        // the modifier does - the axes it can move are the top and the right,
+        // and unconstrained this gesture moves both by the same amount.
+        const vertical = Math.abs(after.top - before.top);
+        const sideways = Math.abs(after.left + after.width - (before.left + before.width));
+        expect(Math.max(sideways, vertical), "the drag did not happen at all").toBeGreaterThan(20);
+        expect(Math.min(sideways, vertical), "both axes moved, so nothing was constrained").toBeLessThan(3);
+        await page.close();
+    });
+
+    test("every tool is armed by the letter its own tooltip names", async () => {
+        // The letters are advertised one place and handled another, and drifted
+        // once already: digits 1, 2 and 3 armed select, wall and marker, from
+        // when those were the only tools, and by seven tools they picked the
+        // wrong ones in an order the toolbar no longer had.
+        await openEditor();
+        const advertised = await page.evaluate(() =>
+            Array.from(document.querySelectorAll("#floorplan-tools [data-tool]")).map((node) => ({
+                tool: node.getAttribute("data-tool") ?? "",
+                key: (node.getAttribute("data-tooltip") ?? "").match(/\(([A-Z])\)/)?.[1]?.toLowerCase() ?? "",
+            })),
+        );
+        expect(advertised.length).toBe(7);
+        expect(advertised.every((entry) => entry.key), "a tool's tooltip names no key").toBe(true);
+        expect(new Set(advertised.map((entry) => entry.key)).size, "two tools claim one letter").toBe(7);
+
+        for (const { tool, key } of advertised) {
+            await page.locator("#floorplan-map").click({ position: { x: 5, y: 5 } });
+            await page.keyboard.press(key);
+            await settle();
+            const armed = await page.evaluate(() => document.querySelector("#floorplan-tools [data-tool].is-active")?.getAttribute("data-tool") ?? "");
+            expect(armed, `${key} should arm ${tool}`).toBe(tool);
+        }
+        await page.close();
+    });
+
+    test("a marker kind's shortcut works and says so", async () => {
+        // The keys that arm a kind directly were handled and advertised
+        // nowhere, which helps whoever already knows them and nobody else. They
+        // come from one table now, read by the handler and shown by the panel,
+        // so the two cannot disagree.
+        await openEditor();
+        await page.locator('[data-tool="marker"]').click();
+        await settle();
+
+        const options = page.locator("#floorplan-tool-options button");
+        // data-tooltip rather than title: the site's own delegated tooltip,
+        // which is what every other control in this editor uses.
+        const titles = await options.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-tooltip") ?? ""));
+        expect(titles).toContain("Hazard (H)");
+        expect(titles).toContain("Stair (S)");
+        expect(titles).toContain("Elevator (E)");
+
+        // The snap toggle names its own accelerator too - the backtick is a
+        // momentary suspend rather than a second toggle, and the setting is
+        // where anyone would go looking for it.
+        const snapTip = await page.evaluate(
+            () =>
+                Array.from(document.querySelectorAll("#floorplan-tool-options button"))
+                    .map((node) => node.getAttribute("data-tooltip") ?? "")
+                    .find((tip) => tip.startsWith("Snap")) ?? "",
+        );
+        expect(snapTip).toContain("hold `");
+
+        // And the key it advertises does what it says.
+        await page.locator("#floorplan-map").click({ position: { x: 5, y: 5 } });
+        await page.keyboard.press("s");
+        await settle();
+        const armed = await page.evaluate(() => {
+            const pressed = Array.from(document.querySelectorAll('#floorplan-tool-options button[aria-pressed="true"]'));
+            return pressed.map((node) => node.textContent?.trim());
+        });
+        expect(armed).toContain("Stair");
+        await page.close();
+    });
+
+    test("tabbing reaches an opening, which the canvas label promises it does", async () => {
+        // A promise in an aria-label is the only documentation a screen reader
+        // gets, and this one listed walls, rooms and markers while the walk
+        // itself included openings - so the label was both wrong and short.
+        await openEditor();
+        const plan = await planExtent();
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await page.keyboard.press("Escape");
+        await page.locator("#floorplan-map").focus();
+
+        let sawOpening = false;
+        for (let press = 0; press < 12 && !sawOpening; press++) {
+            await page.keyboard.press("Tab");
+            sawOpening = ((await page.locator("#floorplan-form h3").first().textContent()) ?? "").includes("Opening");
+        }
+        expect(sawOpening, "tabbing never reached an opening").toBe(true);
+
+        // And the label says so, in the words a screen reader will read out.
+        const label = await page.evaluate(() => document.getElementById("floorplan-map")?.getAttribute("aria-label") ?? "");
+        expect(label).toContain("openings");
+
+        // Each step announces something different. Four sides of a square are
+        // four identical sentences - "Exterior wall, 10.00 metres" each time -
+        // so the announcement carries a position, and without it tabbing round
+        // a plan would tell a screen reader nothing had happened.
+        const announced: string[] = [];
+        for (let press = 0; press < 4; press++) {
+            await page.keyboard.press("Tab");
+            await settle();
+            announced.push((await page.locator("#floorplan-live").textContent()) ?? "");
+        }
+        expect(new Set(announced).size, `four steps announced ${new Set(announced).size} distinct things`).toBe(4);
+        await page.close();
+    });
+
+    test("an arrow key slides a door the way the arrow points", async () => {
+        // The slide is along the wall, which is right - but which way along it
+        // was decided by adding dx and dy and ignoring the wall's own
+        // direction. The square plan's top wall is drawn right-to-left, so on
+        // that wall the right arrow moved the door left.
+        await openEditor();
+        const plan = await planExtent();
+        await page.locator('[data-tool="opening"]').click();
+        await page.mouse.click(plan.left + plan.width / 2, plan.top);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+
+        // Where the door sits *along the plan*, not on the screen: the map can
+        // pan between presses, and an absolute position would report that.
+        const doorX = async (): Promise<number> => {
+            const box = await page.locator("#floorplan-map path.floorplan-opening").first().boundingBox();
+            if (!box) throw new Error("no opening");
+            const extent = await planExtent();
+            return (box.x + box.width / 2 - extent.left) / extent.width;
+        };
+        const before = await doorX();
+        console.log("DOOR before", before, "walls", JSON.stringify(await page.evaluate(() => Array.from(document.querySelectorAll("#floorplan-map path.floorplan-wall")).map((n) => n.getAttribute("d")?.slice(0, 24)))));
+        await page.locator("#floorplan-map").focus();
+        // Four presses, not more: the door reaching the wall's end changes
+        // which segments the wall renders as, which moves the plan's own bounds
+        // and so the fraction this is measured against. A reading taken across
+        // that jump reports the jump.
+        for (let press = 0; press < 4; press++) await page.keyboard.press("ArrowRight");
+        await settle();
+
+        expect(await doorX(), "the right arrow moved the door left").toBeGreaterThan(before + 0.02);
+        await page.close();
+    });
+
+    test("nudging something does not also pan the map out from under it", async () => {
+        // Leaflet pans with the arrow keys from a listener on the map
+        // container; this editor nudges with them from one on the document,
+        // which bubbles and so runs second. Both fired: a tenth of a metre of
+        // nudge, and 80px of map sliding away per press.
+        await openEditor({ width: 1200, height: 800 }, false, "island");
+        await page.locator('[data-tool="marker"]').click();
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x + 40, plan.grab.y + 60);
+        await settle();
+        await page.locator('[data-tool="select"]').click();
+        await settle();
+
+        // A marker moving does not move any wall, so the plan's own bounds are
+        // a fixed reference: if they shift, the map panned.
+        const before = await planExtent();
+        await page.locator("#floorplan-map").focus();
+        for (let press = 0; press < 4; press++) await page.keyboard.press("ArrowRight");
+        await settle();
+        const after = await planExtent();
+
+        expect(Math.abs(after.left - before.left), "the map panned as well as nudging").toBeLessThan(3);
+        expect(Math.abs(after.top - before.top), "the map panned as well as nudging").toBeLessThan(3);
+
+        // And with nothing selected the arrows are Leaflet's again, which is
+        // what they should be when there is nothing to nudge.
+        await page.keyboard.press("Escape");
+        await settle();
+        const parked = await planExtent();
+        await page.keyboard.press("ArrowRight");
+        await settle();
+        expect(Math.abs((await planExtent()).left - parked.left), "the arrows stopped panning entirely").toBeGreaterThan(10);
+        await page.close();
+    });
+
+    test("a long editing session does not silt the page up", async () => {
+        // render() tears down and rebuilds every layer, and a rebuild that
+        // leaves anything behind leaves it behind on every edit. An editor is
+        // used for an hour at a time; a leak of one node per render is a leak
+        // of thousands.
+        await openEditor({ width: 1200, height: 800 }, false, "closet");
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        await page.locator("#floorplan-map").focus();
+
+        const nodes = () => page.evaluate(() => document.getElementsByTagName("*").length);
+        // Warm up first: the first few renders legitimately add things - the
+        // sidebar form, the handles that appear with a selection.
+        for (let press = 0; press < 5; press++) await page.keyboard.press("ArrowRight");
+        await settle();
+        const before = await nodes();
+
+        for (let press = 0; press < 40; press++) await page.keyboard.press(press % 2 ? "ArrowLeft" : "ArrowRight");
+        await settle();
+        // Leaflet fades a removed tooltip out over 200ms rather than removing
+        // it at once, so forty renders in a burst leave dozens of them mid-fade
+        // - counting before they land measures the burst, not a leak. Read at
+        // 1, 66 and 36 across three runs before this wait was added.
+        await page.waitForTimeout(600);
+        const after = await nodes();
+
+        expect(after - before, `${after - before} nodes survived 40 renders`).toBeLessThan(10);
+        await page.close();
+    });
+
+    test("switching version forgets the undo history of the one left behind", async () => {
+        // The stacks describe a document that is no longer loaded. Undoing into
+        // them applies one version's snapshot to another, which is not an edit
+        // anybody made.
+        await openEditor();
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        await page.locator("#floorplan-map").focus();
+        await page.keyboard.press("ArrowRight");
+        await settle();
+        expect(await page.evaluate(() => (document.getElementById("floorplan-undo") as HTMLButtonElement).disabled), "nothing to undo before switching").toBe(false);
+        const wallsBefore = await page.locator(".floorplan-wall").count();
+
+        // The version list lives behind "Add more details".
+        await page.locator(".floorplan-details-accordion summary").click();
+        await page.locator("#floorplan-versions button").filter({ hasText: "after the fire" }).click();
+        await page.waitForFunction((was) => document.querySelectorAll(".floorplan-wall").length !== was, wallsBefore, { timeout: 15000 });
+        await settle();
+
+        expect(await page.evaluate(() => (document.getElementById("floorplan-undo") as HTMLButtonElement).disabled), "undo still points at the version that was left").toBe(true);
+        await page.close();
+    });
+
+    test("editing someone else's plan forks rather than overwriting it", async () => {
+        // A plan that arrived from the community wiki or from REData is not
+        // this user's to change. Saving has to leave the uuid off so the server
+        // creates their own version, and the banner has to say so before they
+        // have typed anything - an autosave a second after the page opens is
+        // nobody's decision to edit someone else's work in place.
+        saves.lastHadUuid = true;
+        await openEditor({ width: 1200, height: 800 }, false, "community");
+
+        const banner = await page.evaluate(() => {
+            const node = document.getElementById("floorplan-origin-banner") as HTMLElement;
+            return { hidden: node.hidden, text: node.textContent ?? "" };
+        });
+        expect(banner.hidden, "nothing warned that this plan is not theirs").toBe(false);
+        expect(banner.text).toContain("Saving creates your own version");
+
+        const plan = await planExtent();
+        await page.mouse.click(plan.grab.x, plan.grab.y);
+        await settle();
+        await page.locator("#floorplan-map").focus();
+        await page.keyboard.press("ArrowRight");
+        for (let waited = 0; waited < 60 && saves.lastHadUuid; waited++) await page.waitForTimeout(250);
+
+        expect(saves.lastHadUuid, "the save carried the other plan's uuid, so it overwrote it").toBe(false);
+
+        // And it forks once, not on every autosave: the response says the saved
+        // row is the viewer's own now, so the next save updates that fork
+        // rather than making a second one. Ten minutes of editing would
+        // otherwise leave a version per edit.
+        await page.keyboard.press("ArrowRight");
+        for (let waited = 0; waited < 60 && !saves.lastHadUuid; waited++) await page.waitForTimeout(250);
+        expect(saves.lastHadUuid, "every save forked again instead of updating the fork").toBe(true);
+
+        // ...and the banner goes, because the plan being edited is theirs now.
+        expect(await page.evaluate(() => (document.getElementById("floorplan-origin-banner") as HTMLElement).hidden)).toBe(true);
+        await page.close();
+    });
+
+    test("the room tool builds a room the size of the ones already drawn", async () => {
+        // One click generates a whole rectangular room rather than four walls
+        // drawn by hand, and it takes its size from the rooms already on the
+        // plan - the alternative being a fixed default that is wrong in every
+        // building. The island fixture's room is 3m square against a 4 by 3.5
+        // default, so a learned size and a default one are told apart.
+        await openEditor({ width: 1200, height: 800 }, false, "island");
+        const boxes = () =>
+            page.evaluate(() =>
+                Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"))
+                    .map((node) => node.getBoundingClientRect())
+                    .map((rect) => ({ w: Math.round(rect.width), h: Math.round(rect.height) })),
+            );
+        const before = await boxes();
+        expect(before.length).toBe(2);
+        const island = before.reduce((small, box) => (box.w * box.h < small.w * small.h ? box : small));
+
+        // Somewhere in the big room, well clear of the island in the middle.
+        const plan = await planExtent();
+        await page.locator('[data-tool="room"]').click();
+        await page.mouse.click(plan.left + plan.width * 0.18, plan.top + plan.height * 0.82);
+        await settle();
+
+        const after = await boxes();
+        expect(after.length, "no room was generated").toBeGreaterThan(before.length);
+
+        // Which box is new, by removing one match per box that was there
+        // before. Identifying it by "not the same size as the island" would be
+        // exactly wrong here: a room learned from a 3m room *is* 3m, so the
+        // right answer would disqualify itself and the test would pass only on
+        // the rounding between them.
+        const remaining = [...after];
+        for (const was of before) {
+            const at = remaining.findIndex((box) => Math.abs(box.w - was.w) <= 2 && Math.abs(box.h - was.h) <= 2);
+            if (at >= 0) remaining.splice(at, 1);
+        }
+        expect(remaining.length, "could not tell which room was generated").toBeGreaterThan(0);
+        const made = remaining[0] as { w: number; h: number };
+        // Within a quarter of the island's area: the learned size is 3m square,
+        // the default 4 by 3.5, and those are 9 and 14 square metres.
+        expect(Math.abs(made.w * made.h - island.w * island.h), `generated ${made.w}x${made.h} against ${island.w}x${island.h}`).toBeLessThan(island.w * island.h * 0.25);
+        await page.close();
+    });
+
+    test("save as a new version forks, and is offered only once there is one to fork", async () => {
+        // The one deliberate save in an editor that otherwise saves itself. It
+        // has to leave the uuid off - a fork that overwrote the version it
+        // forked from would be a rename - and it makes no sense on a plan that
+        // has never been saved, where it would mean the same thing as Save.
+        saves.lastHadUuid = true;
+        await openEditor();
+
+        // A saved plan: the action is live.
+        expect(await page.evaluate(() => (document.getElementById("floorplan-save-version") as HTMLButtonElement).disabled)).toBe(false);
+
+        await page.locator("#floorplan-more-toggle").click();
+        await page.locator("#floorplan-save-version").click();
+        for (let waited = 0; waited < 60 && saves.lastHadUuid; waited++) await page.waitForTimeout(250);
+        expect(saves.lastHadUuid, "the fork carried the uuid of the version it forked from").toBe(false);
+        await page.close();
+
+        // A plan with nothing saved yet has nothing to fork or publish.
+        await openEditor({ width: 1200, height: 800 }, false, "empty-unsaved");
+        const moreDisabled = () =>
+            page.evaluate(() => ["floorplan-save-version", "floorplan-publish"].map((id) => (document.getElementById(id) as HTMLButtonElement).disabled));
+        expect(await moreDisabled(), "offered a fork or a publish of a plan that does not exist yet").toEqual([true, true]);
+
+        // The disabled state means "not yet", not "not on this plan": the first
+        // autosave gives the plan an identity, and both actions come alive.
+        await page.locator("#floorplan-start-rectangle").click();
+        await settle();
+        for (let waited = 0; waited < 60 && (await moreDisabled())[0]; waited++) await page.waitForTimeout(250);
+        expect(await moreDisabled(), "left disabled on a plan that has since been saved").toEqual([false, false]);
+        await page.close();
+    });
+
+    test("the tool options panel shows the armed tool's choices", async () => {
+        await openEditor();
+        await page.locator('[data-tool="opening"]').click();
+
+        const panel = page.locator("#floorplan-tool-options");
+        expect(await panel.getAttribute("hidden")).toBeNull();
+        expect(await panel.textContent()).toContain("Window");
+        await page.close();
+    });
+});

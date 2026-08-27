@@ -16,7 +16,12 @@ const TAB_FILTER_NS: Record<string, OrgNamespace> = { categories: "cat", tags: "
 class OrganizeHeader {
     private tabs = new Map<string, OrgTabConfig>();
     private activeTab: string;
+    // The persisted preference - only ever changed by an explicit view-button
+    // click (setSharedView). Rendering never reads this directly; it always
+    // goes through effectiveView(), which is what keeps a transient narrow
+    // window from being confused with the user actually asking for "list".
     private sharedView: string;
+    private lastEffectiveView: string | null = null;
     private actionsEl: HTMLElement | null = null;
     private headerActionsEl: HTMLElement | null = null;
     private filterBtn: HTMLElement | null = null;
@@ -48,13 +53,36 @@ class OrganizeHeader {
         return TAB_FILTER_NS[this.activeTab] ?? null;
     }
 
+    /** Gallery doesn't fit a narrow viewport, so a "gallery" preference
+     * displays as "list" below the breakpoint - a display-time fallback,
+     * not a substitute for the stored preference itself (see sharedView). */
+    private effectiveView(): string {
+        const isNarrow = window.matchMedia("(max-width: 767px)").matches;
+        return isNarrow && this.sharedView === "gallery" ? "list" : this.sharedView;
+    }
+
     getSharedView(): string {
-        return this.sharedView;
+        return this.effectiveView();
     }
 
     setSharedView(view: string): void {
         this.sharedView = view;
-        localStorage.setItem("organize_view", view);
+        // Best-effort: remembering the preference must never stop the view from
+        // actually changing. setItem throws on a full quota - which this app can
+        // genuinely reach, since the map caches every pin under `ul_pins_v5_*` -
+        // and an uncaught throw here skips syncViewButtons/applyView/filters
+        // below, so the click appears to do nothing at all.
+        try {
+            localStorage.setItem("organize_view", view);
+        } catch {
+            /* quota or blocked storage - the view still switches, it just won't persist */
+        }
+        this.renderEffectiveView();
+    }
+
+    private renderEffectiveView(): void {
+        const view = this.effectiveView();
+        this.lastEffectiveView = view;
         this.syncViewButtons(view);
         this.tabs.forEach((cfg) => cfg.applyView());
         applyAllOrgFilters();
@@ -86,7 +114,7 @@ class OrganizeHeader {
         if (this.viewToggle) this.viewToggle.setAttribute("aria-label", cfg.viewAriaLabel);
         if (this.filterBtn) this.filterBtn.title = cfg.filterTitle;
         this.syncCreateButton(cfg);
-        this.syncViewButtons(this.sharedView);
+        this.syncViewButtons(this.effectiveView());
         cfg.updateSelAllBtn();
     }
 
@@ -110,9 +138,16 @@ class OrganizeHeader {
         this.createBtn?.addEventListener("click", () => this.tabs.get(this.activeTab)?.onCreate());
     }
 
+    /**
+     * Re-render for the current viewport, without ever touching the stored
+     * preference - a resize firing continuously through a drag, or a user
+     * genuinely on a narrow device, must not overwrite a "gallery" choice
+     * made on desktop. Widening back past the breakpoint restores it with
+     * no extra bookkeeping, since sharedView itself was never changed.
+     */
     private enforceMobileGalleryFallback(): void {
-        if (!window.matchMedia("(max-width: 767px)").matches) return;
-        if (this.sharedView === "gallery") this.setSharedView("list");
+        if (this.effectiveView() === this.lastEffectiveView) return;
+        this.renderEffectiveView();
     }
 
     init(): void {
@@ -150,6 +185,8 @@ export function installOrgBulkToolbar(): void {
     window._orgBulk = resetOrgBulk();
     window._orgSelectionClearers = window._orgSelectionClearers ?? [];
     window._orgBulkEditByIds = window._orgBulkEditByIds ?? {};
+    window._orgBulkMergeByIds = window._orgBulkMergeByIds ?? {};
+    window._orgBulkDeleteByIds = window._orgBulkDeleteByIds ?? {};
 
     window._orgRegisterSelectionClearer = (fn) => {
         window._orgSelectionClearers.push(fn);
@@ -214,7 +251,11 @@ export function installOrgTabSwitching(): void {
             const panel = document.getElementById(`panel-${target}`);
             if (panel) panel.hidden = false;
             orgHeader.setTab(target);
-            localStorage.setItem("organize_tab", target);
+            try {
+                localStorage.setItem("organize_tab", target);
+            } catch {
+                /* see setSharedView: a failed write must not skip the tab wiring below */
+            }
             const url = new URL(window.location.href);
             url.searchParams.set("tab", target);
             window.history.replaceState({}, "", url.toString());
@@ -310,6 +351,8 @@ declare global {
         _orgBulkSync: (n: number, opts: { hasEdit: boolean; hasMerge: boolean; hasDel: boolean }) => void;
         _orgOpenSingleEdit: (dataAttr: string, id: string) => boolean;
         _orgBulkEditByIds: Record<string, (ids: string[]) => void>;
+        _orgBulkMergeByIds: Record<string, (ids: string[]) => void>;
+        _orgBulkDeleteByIds: Record<string, (ids: string[]) => void>;
         _initPrioritySortable?: () => void;
     }
 }

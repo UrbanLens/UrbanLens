@@ -373,13 +373,19 @@ class DirectMessageSearchTests(TestCase):
         response = GlobalSearchEngine().search(self.bob, f"messages from {self.alice.username}")
         results = self._message_results(response)
         self.assertEqual(len(results), 1)
-        self.assertIn(self.alice.username, results[0].title)
+        # Identified by the conversation the result links to, not by the title:
+        # the title now goes through the same masking the messages page applies,
+        # so it names alice only when bob may see who she is.
+        self.assertIn(self.alice.ensure_slug(), results[0].url)
 
     def test_messages_from_person_excludes_other_conversations(self):
         baker.make("dashboard.DirectMessage", sender=self.eve, recipient=self.bob, body="Unrelated chat")
         response = GlobalSearchEngine().search(self.bob, f"messages from {self.alice.username}")
         results = self._message_results(response)
-        self.assertTrue(all(self.alice.username in result.title for result in results))
+        self.assertTrue(results)
+        # Every result is alice's conversation - asserted on the link rather than
+        # the title, for the same reason as above.
+        self.assertTrue(all(self.alice.ensure_slug() in result.url for result in results))
 
     def test_messages_from_person_matches_first_name(self):
         self.alice.user.first_name = "Alicia"

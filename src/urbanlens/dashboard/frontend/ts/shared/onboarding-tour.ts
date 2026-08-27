@@ -84,11 +84,26 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
         document.querySelectorAll(".onboarding-focus").forEach((el) => el.classList.remove("onboarding-focus"));
         activeCard = null;
     }
+    // Which elements already have their auto-dismiss listener, across
+    // however many times registerAutoDismiss() re-runs - an HTMX swap can
+    // replace a card's watchSelector target with a fresh element at any
+    // time, so binding once at init only worked until the first such swap:
+    // the user could perform the watched action on the new element forever
+    // and dismiss() would never fire, leaving the card to keep reappearing
+    // as "not yet dismissed". Re-running on every htmx:afterSettle (below)
+    // picks up new elements; this set is what keeps that from stacking a
+    // second listener onto one that survived the swap unchanged.
+    const autoDismissBound = new WeakSet<Element>();
     function registerAutoDismiss(card: OnboardingCard): void {
         if (dismissed(card.id) || !card.watchSelector) return;
         document.querySelectorAll(card.watchSelector).forEach((el) => {
+            if (autoDismissBound.has(el)) return;
+            autoDismissBound.add(el);
             el.addEventListener(card.watchEvent ?? "click", () => dismiss(card.id), { once: true });
         });
+    }
+    function registerAllAutoDismiss(): void {
+        config.cards.forEach(registerAutoDismiss);
     }
     function show(card: OnboardingCard): void {
         const host = document.querySelector(config.hostSelector);
@@ -135,11 +150,20 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
         if (card) show(card);
     }
 
-    config.cards.forEach(registerAutoDismiss);
+    function onRetrigger(): void {
+        registerAllAutoDismiss();
+        setTimeout(tryShow, 250);
+    }
+
+    registerAllAutoDismiss();
     setTimeout(tryShow, config.initialDelayMs ?? 900);
+    // retryEvent is documented as firing *in addition to* htmx:afterSettle,
+    // not instead of it - Organize's own retryEvent (tab switching) is a
+    // plain custom event, not an HTMX one, so an if/else here meant any
+    // HTMX-driven update on that page (editing a label, a list refresh)
+    // never re-checked or re-bound anything at all.
+    document.body.addEventListener("htmx:afterSettle", onRetrigger);
     if (config.retryEvent) {
-        document.addEventListener(config.retryEvent, () => setTimeout(tryShow, 250));
-    } else {
-        document.body.addEventListener("htmx:afterSettle", () => setTimeout(tryShow, 250));
+        document.addEventListener(config.retryEvent, onRetrigger);
     }
 }

@@ -1,145 +1,225 @@
 {% extends 'dashboard/themes/base.html' %}
-{% load static %}
+{% load vendor_assets %}
+{% load static map_components %}
 
-{% block title %}Consensus{% endblock %}
+{% block page_title %}Consensus &middot; UrbanLens{% endblock %}
 
+{% comment %}
+Leaflet must be loaded here and nowhere else - L.map("cs-round-map") depends on
+it, and base.html warns that a second copy clobbers window.L for every other
+page's plugins.
+{% endcomment %}
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
 {% endblock %}
 
 {% block hero %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="fact_check" title="Consensus" subtitle="Fill in missing wiki data for places you've visited." modifier="top" %}
+{% include "dashboard/partials/games/_game_hero.html" with game_icon="fact_check" game_title="Consensus" game_subtitle="Fill in missing wiki data for places you've visited." %}
+{% endblock %}
+
+{% block subnav %}
+{% include "dashboard/partials/games/_games_subnav.html" with active="consensus" %}
 {% endblock %}
 
 {% block content %}
-<div class="consensus-page page-content" data-my-profile-id="{{ my_profile_id }}" data-initial-session-id="{{ initial_session_id|default:'' }}">
-    <div class="consensus-header card">
-        <div class="consensus-header-title">
-            <i class="material-symbols-outlined">fact_check</i>
-            <span>Consensus</span>
-        </div>
-        <div class="consensus-points-chip">
-            <span class="consensus-points-label">Level {{ consensus_profile.level }}</span>
-            <span class="consensus-points-value">{{ consensus_profile.total_points }} pts</span>
-            <span class="consensus-points-next">{{ consensus_profile.points_for_next_level }} pts to next level</span>
+<div class="ul-game consensus-page"
+     data-game="consensus"
+     data-my-profile-id="{{ my_profile_id }}"
+     data-initial-session-id="{{ initial_session_id|default:'' }}">
+
+    <div class="ul-game-shell" id="cs-shell" data-game-shell>
+
+        <header class="ul-game-hud" data-game-hud>
+            <div class="ul-game-hud__group ul-game-hud__group--lead">
+                <span class="ul-game-hud__identity">
+                    <i class="material-symbols-outlined">fact_check</i>
+                    <span class="ul-game-hud__name">Consensus</span>
+                </span>
+                <span id="cs-round-status" class="ul-game-hud__round"></span>
+            </div>
+            <div class="ul-game-hud__group ul-game-hud__group--center">
+                <span id="cs-round-live-indicator" class="consensus-round-live-indicator" hidden></span>
+            </div>
+            <div class="ul-game-hud__group ul-game-hud__group--trail">
+                {% comment %}
+                Lifetime progression, not session score. data-points seeds the
+                client so the level badge and meter can be recomputed as points
+                are earned instead of going stale for the rest of the session.
+                {% endcomment %}
+                <div class="consensus-progression" id="cs-progression" data-points="{{ consensus_profile.total_points }}">
+                    <span class="consensus-level-badge" id="cs-level-value" title="Consensus level">{{ consensus_profile.level }}</span>
+                    <span class="consensus-progression-figures">
+                        <span class="consensus-progression-points">
+                            <span id="cs-points-value" class="ul-game-hud__score">{{ consensus_profile.total_points }}</span>
+                            <span class="consensus-progression-unit">pts</span>
+                        </span>
+                        <span class="consensus-progression-next" id="cs-level-note"></span>
+                    </span>
+                    <span class="consensus-level-meter" aria-hidden="true">
+                        <span class="consensus-level-meter-fill" id="cs-level-meter-fill"></span>
+                    </span>
+                </div>
+                <button type="button" id="cs-end-game-btn" class="btn btn--secondary btn--sm" hidden>End game</button>
+                {% include "dashboard/partials/games/_game_hud_controls.html" %}
+            </div>
+            <span class="ul-game-hud__progress" aria-hidden="true"><span class="ul-game-hud__progress-fill"></span></span>
+        </header>
+
+        <div class="ul-game-body" data-game-body>
+
+            <section id="cs-settings-panel" class="ul-game-panel ul-game-panel--launcher">
+                <div class="consensus-launcher">
+                    <h2 class="ul-game-panel__title">Play Consensus</h2>
+                    <p class="consensus-panel-hint">
+                        Each round shows one missing or unconfirmed piece of data about a wiki you've visited -
+                        answer, skip, or race friends to agree. Only wikis you've discovered are eligible.
+                    </p>
+                    <form id="cs-start-form">
+                        <label class="consensus-field">
+                            <span>Rounds</span>
+                            <input type="number" id="cs-rounds" min="{{ min_rounds }}" max="{{ max_rounds }}" value="{{ default_rounds }}">
+                        </label>
+                        <div class="consensus-invite-wrap">
+                            <p class="consensus-panel-hint">Pick 0 or more friends to play together - leave everyone unchecked to play solo.</p>
+                            <div id="cs-friend-list-loading" class="consensus-panel-hint">Loading friends&hellip;</div>
+                            <div id="cs-friend-list-error" class="consensus-panel-hint" hidden>
+                                Couldn't load your friends list.
+                                <button type="button" id="cs-friend-list-retry" class="btn btn--secondary btn--sm">Retry</button>
+                            </div>
+                            <div id="cs-friend-list" class="consensus-friend-list" hidden></div>
+                        </div>
+                        <button type="submit" class="btn btn--primary btn--lg ul-game-cta">Start</button>
+                    </form>
+                </div>
+            </section>
+
+            <section id="cs-empty-state-panel" class="ul-game-panel ul-game-panel--sheet" hidden>
+                <i class="material-symbols-outlined consensus-empty-state-icon">travel_explore</i>
+                <h2 class="ul-game-panel__title">Nothing to confirm yet</h2>
+                <p class="consensus-panel-hint">None of your visited pins have a wiki with missing data right now. Visit and pin a few more places, then try again.</p>
+                <button type="button" id="cs-empty-state-settings-btn" class="btn btn--primary ul-game-cta">Back to settings</button>
+            </section>
+
+            <section id="cs-lobby-panel" class="ul-game-panel ul-game-panel--sheet" hidden>
+                <h2 class="ul-game-panel__title">Waiting room</h2>
+                <p class="consensus-panel-hint">Everyone needs to accept before the host can start.</p>
+                <ul id="cs-lobby-participants" class="consensus-lobby-list"></ul>
+                <div class="consensus-lobby-actions ul-game-panel__footer">
+                    <button type="button" id="cs-invite-more-btn" class="btn btn--secondary" hidden>Invite another friend</button>
+                    <button type="button" id="cs-join-lobby-btn" class="btn btn--primary" hidden>Accept invite</button>
+                    <button type="button" id="cs-begin-btn" class="btn btn--primary btn--lg ul-game-cta" hidden>Start the game</button>
+                </div>
+            </section>
+
+            <section id="cs-game-panel" class="ul-game-panel ul-game-panel--play" hidden>
+
+                <div class="ul-game-stage" data-game-stage>
+                    <div class="ul-game-stage__media" id="cs-stage-media" hidden>
+                        <figure class="ul-game-media">
+                            <img id="cs-round-photo" class="ul-game-media__img consensus-round-photo" alt="Photo to place on the map" hidden>
+                        </figure>
+                    </div>
+
+                    <div class="ul-game-stage__play">
+                        <div class="ul-game-mapwrap" id="cs-round-mapwrap" hidden>
+                            <div id="cs-round-map" class="ul-game-map"></div>
+                            <div class="ul-game-map-toolbar">
+                                {% map_layers_panel "street,satellite,terrain" variant="panel" panel_id="cs-round-map-layers" %}
+                                <span id="cs-round-map-attribution" class="ul-game-map-attribution"></span>
+                            </div>
+                        </div>
+
+                        <div class="ul-game-dock consensus-dock">
+                            <p id="cs-round-field-label" class="ul-game-eyebrow consensus-round-field-label"></p>
+                            <h3 id="cs-round-wiki-name" class="ul-game-clue consensus-round-wiki-name"></h3>
+
+                            <div class="consensus-answer-area">
+                                <div id="cs-answer-text-wrap" class="consensus-answer-group" data-field-only hidden>
+                                    <input type="text" id="cs-answer-text-input" autocomplete="off" placeholder="Your answer">
+                                </div>
+                                <div id="cs-answer-textarea-wrap" class="consensus-answer-group" data-field-only hidden>
+                                    <textarea id="cs-answer-textarea-input" rows="3" placeholder="Your answer"></textarea>
+                                </div>
+                                <div id="cs-answer-select-wrap" class="consensus-answer-group" data-field-only hidden>
+                                    <select id="cs-answer-select-input" aria-label="Answer"></select>
+                                </div>
+                                <div id="cs-answer-map-hint-wrap" class="consensus-answer-group" data-field-only hidden>
+                                    <p class="consensus-panel-hint">Click the map where you think this photo was taken.</p>
+                                </div>
+                            </div>
+
+                            <div class="consensus-round-actions">
+                                <button type="button" id="cs-skip-btn" class="btn btn--secondary">I don't know - skip</button>
+                                <button type="button" id="cs-submit-answer-btn" class="btn btn--primary btn--lg ul-game-cta" disabled>Submit answer</button>
+                            </div>
+                            <p id="cs-round-waiting-hint" class="consensus-panel-hint" hidden>Answer submitted - waiting for other players&hellip;</p>
+
+                            <div class="consensus-photo-upload">
+                                <p class="consensus-panel-hint">Have a photo of this spot? Help out the wiki:</p>
+                                <label class="consensus-dropzone">
+                                    <i class="material-symbols-outlined">add_a_photo</i>
+                                    <span id="cs-photo-upload-name">Choose a photo&hellip;</span>
+                                    <input type="file" id="cs-photo-upload-input" accept="image/*">
+                                </label>
+                                <button type="button" id="cs-photo-upload-btn" class="btn btn--secondary btn--sm">Upload photo</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {% comment %}
+                Neutral by design: revealTitle() renders identical copy for an
+                agreed round and for either trust-check outcome, so nothing here
+                may carry a per-resolution colour, icon or state class.
+                {% endcomment %}
+                <div id="cs-reveal-panel" class="ul-game-reveal consensus-reveal-panel" hidden>
+                    <div class="ul-game-reveal__sheet">
+                        <h3 id="cs-reveal-title" class="ul-game-panel__title"></h3>
+                        <ul id="cs-reveal-results" class="consensus-reveal-results"></ul>
+                        <div id="cs-vote-panel" class="consensus-vote-panel" hidden>
+                            <p class="consensus-panel-hint">Everyone disagreed - vote for the answer you think is correct:</p>
+                            <div id="cs-vote-options" class="consensus-vote-options"></div>
+                            <p id="cs-vote-waiting" class="consensus-panel-hint" hidden>Thanks - waiting for other votes&hellip;</p>
+                        </div>
+                    </div>
+                </div>
+
+                <aside class="ul-game-rail" data-game-rail>
+                    <div class="ul-game-rail__section">
+                        <h4 class="ul-game-rail__title">Players</h4>
+                        <ul id="cs-scoreboard" class="consensus-scoreboard" hidden></ul>
+                    </div>
+                    <div id="cs-chat-panel" class="ul-game-rail__section ul-game-rail__section--chat consensus-chat-panel" hidden>
+                        <h4 class="ul-game-rail__title">Chat</h4>
+                        <div id="cs-chat-log" class="consensus-chat-log"></div>
+                        <form id="cs-chat-form" class="consensus-chat-form">
+                            <input type="text" id="cs-chat-input" placeholder="Say something&hellip;" maxlength="1000" autocomplete="off">
+                            <button type="submit" class="btn btn--secondary">Send</button>
+                        </form>
+                    </div>
+                </aside>
+                <button type="button" class="ul-game-rail-scrim" data-game-rail-scrim aria-label="Close players panel" hidden></button>
+            </section>
+
+            <section id="cs-summary-panel" class="ul-game-panel ul-game-panel--summary consensus-summary-panel" hidden>
+                <i class="material-symbols-outlined consensus-summary-icon">emoji_events</i>
+                <h2 id="cs-summary-heading" class="ul-game-panel__title">Game over!</h2>
+                <p id="cs-summary-subheading" class="consensus-panel-hint"></p>
+                <ul id="cs-summary-scores" class="consensus-scoreboard"></ul>
+                <button type="button" id="cs-play-again-btn" class="btn btn--primary btn--lg ul-game-cta">Play again</button>
+            </section>
+
         </div>
     </div>
-
-    <section id="cs-settings-panel" class="consensus-panel-wrap">
-        <h2>Play Consensus</h2>
-        <p class="consensus-panel-hint">
-            Each round shows one missing or unconfirmed piece of data about a wiki you've visited -
-            answer, skip, or race friends to agree. Only wikis you've discovered are eligible.
-        </p>
-        <form id="cs-start-form">
-            <label class="consensus-field">
-                <span>Rounds</span>
-                <input type="number" id="cs-rounds" min="{{ min_rounds }}" max="{{ max_rounds }}" value="{{ default_rounds }}">
-            </label>
-            <div class="consensus-invite-wrap">
-                <p class="consensus-panel-hint">Pick 0 or more friends to play together - leave everyone unchecked to play solo.</p>
-                <div id="cs-friend-list-loading" class="consensus-panel-hint">Loading friends&hellip;</div>
-                <div id="cs-friend-list-error" class="consensus-panel-hint" hidden>
-                    Couldn't load your friends list.
-                    <button type="button" id="cs-friend-list-retry" class="btn btn--secondary btn--sm">Retry</button>
-                </div>
-                <div id="cs-friend-list" class="consensus-friend-list" hidden></div>
-            </div>
-            <button type="submit" class="btn btn--primary" id="cs-start-btn">Start</button>
-        </form>
-    </section>
-
-    <section id="cs-empty-state-panel" class="consensus-panel card" hidden>
-        <i class="material-symbols-outlined consensus-empty-state-icon">travel_explore</i>
-        <p>None of your visited pins have a wiki with missing data right now. Visit and pin a few more places, then try again.</p>
-        <button type="button" id="cs-empty-state-settings-btn" class="btn btn--primary">Back to settings</button>
-    </section>
-
-    <section id="cs-lobby-panel" class="consensus-panel card" hidden>
-        <h2>Waiting room</h2>
-        <p class="consensus-panel-hint">Everyone needs to accept before the host can start.</p>
-        <ul id="cs-lobby-participants" class="consensus-lobby-list"></ul>
-        <div class="consensus-lobby-actions">
-            <button type="button" id="cs-invite-more-btn" class="btn btn--secondary" hidden>Invite another friend</button>
-            <button type="button" id="cs-join-lobby-btn" class="btn btn--primary" hidden>Accept invite</button>
-            <button type="button" id="cs-begin-btn" class="btn btn--primary btn--lg" hidden>Start the game</button>
-        </div>
-    </section>
-
-    <section id="cs-game-panel" class="consensus-panel card" hidden>
-        <div class="consensus-game-status">
-            <span id="cs-round-status"></span>
-            <span id="cs-round-live-indicator" class="consensus-round-live-indicator" hidden></span>
-            <button type="button" id="cs-end-game-btn" class="btn btn--secondary btn--sm" hidden>End game</button>
-        </div>
-        <ul id="cs-scoreboard" class="consensus-scoreboard" hidden></ul>
-
-        <div id="cs-round-content">
-            <p id="cs-round-field-label" class="consensus-round-field-label"></p>
-            <h3 id="cs-round-wiki-name" class="consensus-round-wiki-name"></h3>
-
-            <img id="cs-round-photo" class="consensus-round-photo" alt="Photo to place on the map" hidden>
-            <div id="cs-round-map" class="consensus-round-map"></div>
-
-            <div class="consensus-answer-area">
-                <div id="cs-answer-text-wrap" class="consensus-answer-group" data-field-only hidden>
-                    <input type="text" id="cs-answer-text-input" autocomplete="off" placeholder="Your answer">
-                </div>
-                <div id="cs-answer-textarea-wrap" class="consensus-answer-group" data-field-only hidden>
-                    <textarea id="cs-answer-textarea-input" rows="3" placeholder="Your answer"></textarea>
-                </div>
-                <div id="cs-answer-select-wrap" class="consensus-answer-group" data-field-only hidden>
-                    <select id="cs-answer-select-input"></select>
-                </div>
-                <div id="cs-answer-map-hint-wrap" class="consensus-answer-group" data-field-only hidden>
-                    <p class="consensus-panel-hint">Click the map where you think this photo was taken.</p>
-                </div>
-            </div>
-
-            <div class="consensus-round-actions">
-                <button type="button" id="cs-submit-answer-btn" class="btn btn--primary" disabled>Submit answer</button>
-                <button type="button" id="cs-skip-btn" class="btn btn--secondary">I don't know - skip</button>
-            </div>
-            <p id="cs-round-waiting-hint" class="consensus-panel-hint" hidden>Answer submitted - waiting for other players&hellip;</p>
-
-            <div class="consensus-photo-upload">
-                <p class="consensus-panel-hint">Have a photo of this spot? Help out the wiki:</p>
-                <input type="file" id="cs-photo-upload-input" accept="image/*">
-                <button type="button" id="cs-photo-upload-btn" class="btn btn--secondary btn--sm">Upload photo</button>
-            </div>
-        </div>
-
-        <div id="cs-reveal-panel" class="consensus-reveal-panel" hidden>
-            <h3 id="cs-reveal-title"></h3>
-            <ul id="cs-reveal-results" class="consensus-reveal-results"></ul>
-            <div id="cs-vote-panel" class="consensus-vote-panel" hidden>
-                <p class="consensus-panel-hint">Everyone disagreed - vote for the answer you think is correct:</p>
-                <div id="cs-vote-options" class="consensus-vote-options"></div>
-                <p id="cs-vote-waiting" class="consensus-panel-hint" hidden>Thanks - waiting for other votes&hellip;</p>
-            </div>
-        </div>
-
-        <div id="cs-chat-panel" class="consensus-chat-panel" hidden>
-            <div id="cs-chat-log" class="consensus-chat-log"></div>
-            <form id="cs-chat-form" class="consensus-chat-form">
-                <input type="text" id="cs-chat-input" placeholder="Say something&hellip;" maxlength="1000" autocomplete="off">
-                <button type="submit" class="btn btn--secondary">Send</button>
-            </form>
-        </div>
-    </section>
-
-    <section id="cs-summary-panel" class="consensus-panel consensus-summary-panel card" hidden>
-        <i class="material-symbols-outlined consensus-summary-icon">emoji_events</i>
-        <h2 id="cs-summary-heading">Game over!</h2>
-        <p id="cs-summary-subheading" class="consensus-panel-hint"></p>
-        <ul id="cs-summary-scores" class="consensus-scoreboard"></ul>
-        <button type="button" id="cs-play-again-btn" class="btn btn--primary btn--lg">Play again</button>
-    </section>
 </div>
 
-{{ field_kinds|json_script:"cs-field-kinds" }}
+{% comment %}
+Django cannot reverse a URL with a placeholder id, so every route carrying one
+is reversed with a sentinel the client substitutes at call time. This block must
+stay above the module script - consensus.ts reads window.CONSENSUS_URLS at
+module top level.
+{% endcomment %}
 <script>
     window.CONSENSUS_URLS = {
         friends: "{% url 'consensus.friends' %}",
@@ -159,7 +239,6 @@
         session_id_sentinel: "999999999",
         round_id_sentinel: "888888888"
     };
-    window.CONSENSUS_FIELD_KINDS = JSON.parse(document.getElementById('cs-field-kinds').textContent);
 </script>
 <script type="module" src="{% static 'dashboard/js/consensus.js' %}"></script>
 {% endblock %}

@@ -39,6 +39,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, ClassVar
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import BasePermission, IsAuthenticated
@@ -51,7 +53,7 @@ from urbanlens.dashboard.external_api.errors import ErrorEnvelopeMixin
 from urbanlens.dashboard.external_api.permissions import HasApiKeyScope
 from urbanlens.dashboard.external_api.throttling import ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.services.comments import CommentValidationError
+from urbanlens.dashboard.services.comments.comments import CommentValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -251,7 +253,7 @@ class _ReactionMixin:
     reaction_response_key: ClassVar[str] = "reactions"
 
     #: Error body for an emoji rejected by :attr:`reaction_allowed_emojis`.
-    #: Matches ``services.comments.toggle_reaction``'s wording so a client sees
+    #: Matches ``services.comments.comments.toggle_reaction``'s wording so a client sees
     #: one message whether the check fired here or in the service.
     reaction_invalid_emoji_message: ClassVar[str] = "That is not a supported reaction."
 
@@ -282,6 +284,7 @@ class _ReactionMixin:
         """
         raise NotImplementedError("A _ReactionMixin subclass must implement resolve_reaction_target().")
 
+    @extend_schema(request=None, responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: None})
     def put(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Ensure the caller's reaction is present, idempotently.
 
@@ -296,6 +299,7 @@ class _ReactionMixin:
         """
         return self._react(request, want_present=True, **kwargs)
 
+    @extend_schema(request=None, responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: None})
     def delete(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Ensure the caller's reaction is absent, idempotently.
 

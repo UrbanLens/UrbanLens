@@ -1,15 +1,17 @@
 """Tests for seeding a wiki's article from a confidently-matched Wikipedia article.
 
 Covers:
-- The pure HTML-extract-to-Markdown conversion (services.wiki_seed).
+- The pure HTML-extract-to-Markdown conversion (services.wiki.wiki_seed).
 - seed_wiki_article_from_wikipedia's guards: no wiki, no cache, empty cache,
   existing article (never overwritten).
 - The two trigger points: models.cache.signals firing on a "wikipedia"
-  LocationCache write, and WikiCreationService.create_for_pin seeding
+  LocationCache write, and WikiShareService.share_from_pin seeding
   immediately when a match is already cached at wiki-creation time.
 """
 
 from __future__ import annotations
+
+from unittest import mock
 
 from django.contrib.auth.models import User
 from model_bakery import baker
@@ -20,7 +22,7 @@ from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.wiki_seed import _attribution_line, _extract_html_to_markdown, _infobox_markdown, seed_pin_article_from_wikipedia, seed_wiki_article_from_wikipedia
+from urbanlens.dashboard.services.wiki.wiki_seed import _attribution_line, _extract_html_to_markdown, _infobox_markdown, seed_pin_article_from_wikipedia, seed_wiki_article_from_wikipedia
 
 _ARTICLE_DATA = {
     "title": "Eighteenth District School",
@@ -119,14 +121,14 @@ def test_infobox_markdown_malformed_pairs_are_ignored() -> None:
 
 
 def test_lead_image_markdown_renders_an_image() -> None:
-    from urbanlens.dashboard.services.wiki_seed import _lead_image_markdown
+    from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
 
     md = _lead_image_markdown({"title": "Eighteenth District School", "thumbnail": "https://upload.wikimedia.org/thumb.jpg"})
     assert md == "![Eighteenth District School](https://upload.wikimedia.org/thumb.jpg)"  # nosec B101
 
 
 def test_lead_image_markdown_no_thumbnail_returns_empty_string() -> None:
-    from urbanlens.dashboard.services.wiki_seed import _lead_image_markdown
+    from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
 
     assert _lead_image_markdown({"title": "Some Article", "thumbnail": ""}) == ""  # nosec B101
     assert _lead_image_markdown({"title": "Some Article"}) == ""  # nosec B101
@@ -134,7 +136,7 @@ def test_lead_image_markdown_no_thumbnail_returns_empty_string() -> None:
 
 def test_lead_image_markdown_sanitizes_brackets_in_title() -> None:
     """A literal `]` in the title must not be able to close the Markdown image's alt text early."""
-    from urbanlens.dashboard.services.wiki_seed import _lead_image_markdown
+    from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
 
     md = _lead_image_markdown({"title": "Foo [bar]", "thumbnail": "https://example.test/x.jpg"})
     assert md == "![Foo (bar)](https://example.test/x.jpg)"  # nosec B101
@@ -452,36 +454,45 @@ class WikipediaCacheSignalTriggersSeedingTests(TestCase):
 
 
 class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):
-    """services.locations.creation.WikiCreationService: seed immediately on wiki creation
-    when a Wikipedia match was already cached for the location beforehand."""
+    """``tasks.ensure_wiki_for_location``: seed the article on wiki creation when a
+    Wikipedia match was already cached for the location beforehand.
+
+    This used to hang off the "Create wiki" click, because that was the moment
+    the page appeared. Pages appear on the first pin now, so the seeding moved
+    with the creation rather than being lost with the button.
+    """
 
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
 
-    def test_create_for_pin_seeds_the_article_when_already_cached(self) -> None:
-        from urbanlens.dashboard.services.locations.creation import WikiCreationService
+    def _create_wiki(self, location) -> Wiki:
+        """Run the creation task directly.
 
+        Not via ``baker.make(Pin, ...)``: that fires the pin post_save chain,
+        which under eager Celery runs the real enrichment task inline and
+        reaches for external services. What is under test here is what wiki
+        creation itself seeds.
+        """
+        from urbanlens.dashboard.tasks import ensure_wiki_for_location
+
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
+            ensure_wiki_for_location(location.pk)
+        return Wiki.objects.get(location=location)
+
+    def test_creation_seeds_the_article_when_already_cached(self) -> None:
         location = _location()
         LocationCache.objects.create(location=location, source="wikipedia", data=_ARTICLE_DATA)
-        pin = baker.make(Pin, profile=self.profile, location=location)
 
-        with self.captureOnCommitCallbacks(execute=True):
-            wiki, created = WikiCreationService().create_for_pin(pin)
+        wiki = self._create_wiki(location)
 
-        self.assertTrue(created)
         article = Article.objects.filter(wiki=wiki).first()
         self.assertIsNotNone(article)
         self.assertIn("Eighteenth District School", article.content)
 
-    def test_create_for_pin_without_a_cached_match_creates_no_article(self) -> None:
-        from urbanlens.dashboard.services.locations.creation import WikiCreationService
-
+    def test_creation_without_a_cached_match_creates_no_article(self) -> None:
         location = _location()
-        pin = baker.make(Pin, profile=self.profile, location=location)
 
-        with self.captureOnCommitCallbacks(execute=True):
-            wiki, created = WikiCreationService().create_for_pin(pin)
+        wiki = self._create_wiki(location)
 
-        self.assertTrue(created)
         self.assertFalse(Article.objects.filter(wiki=wiki).exists())

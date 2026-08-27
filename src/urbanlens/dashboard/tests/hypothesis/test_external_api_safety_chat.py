@@ -42,8 +42,8 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyCheckinPartner,
     SafetyCheckinPartnerStatus,
 )
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.safety import MAX_CHAT_MESSAGE_LENGTH, create_checkin
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.visits.safety import MAX_CHAT_MESSAGE_LENGTH, create_checkin
 
 
 def _bearer(raw_key: str) -> dict:
@@ -121,7 +121,7 @@ class SafetyChatBodyValidationProperties(SimpleTestCase):
     few hundred examples take minutes for no extra coverage.
 
     The property that matters is the *agreement* between this serializer and
-    ``services.safety.create_chat_message``. The service strips and then rejects
+    ``services.visits.safety.create_chat_message``. The service strips and then rejects
     an empty result; if the serializer disagreed for any input, that input would
     pass validation and then fail deeper in with a differently-shaped error body
     for the same user mistake - so the two must accept and reject exactly the
@@ -366,7 +366,7 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
         so the sender's own view looks entirely correct. That silence is why
         this asserts on the broadcast rather than on the row.
         """
-        with mock.patch("urbanlens.dashboard.services.safety.broadcast_chat_message") as broadcast:
+        with mock.patch("urbanlens.dashboard.services.visits.safety.broadcast_chat_message") as broadcast:
             response = self._post(self.owner_key, "still going")
 
         self.assertEqual(response.status_code, 201)

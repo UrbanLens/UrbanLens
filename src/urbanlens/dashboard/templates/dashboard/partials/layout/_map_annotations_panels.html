@@ -18,7 +18,7 @@ a sibling #map-annotations-config element, not from this partial).
 <div id="detail-pin-list-panel" class="detail-pin-list-panel">
     <div class="detail-pin-list-header">
         <i class="material-symbols-outlined">layers</i>
-        <span id="detail-pin-count-label">0 Layers</span>
+        <span id="detail-pin-count-label">0 Items</span>
     </div>
     <div class="map-panel-tabs">
         <button type="button" class="map-panel-tab is-active" data-tab="details">
@@ -35,6 +35,7 @@ a sibling #map-annotations-config element, not from this partial).
         <ul id="photo-panel-list" class="photo-panel-list"></ul>
     </div>
 </div>
+
 {# Always-visible edge handle (hidden by JS via refreshPanelHeader() until there's #}
 {# at least one detail pin, markup item, or photo to show).                        #}
 <button type="button" id="detail-pin-list-handle" class="detail-pin-list-handle" style="display:none"
@@ -44,6 +45,11 @@ a sibling #map-annotations-config element, not from this partial).
 </button>
 
 <div id="map"></div>
+{{ custom_layers_json|json_script:"custom-layers-data" }}
+{# Georeferenced image overlays (Sanborn sheets, site plans) - same #}
+{# json_script pattern as the custom layers above. See                #}
+{# shared/map-image-overlays.ts and controllers/map_overlays.py.      #}
+{{ map_overlays_json|default:""|json_script:"map-overlays-data" }}
 {# -- Map toolbar (tools only; shared component - same as the main map). The  #}
 {# markup drawing tools (formerly a separate "Add Detail" dropdown docked in  #}
 {# .map-bottom-controls) live here as plain icon buttons like every other     #}
@@ -56,7 +62,7 @@ a sibling #map-annotations-config element, not from this partial).
     {# Shared layers panel - same component and engine as the main map. The  #}
     {# details/photos buttons are page-registered toggles (see the `custom`  #}
     {# option in ts/entries/map-annotations.ts).                             #}
-    {% map_layers_panel layers|default:"street,terrain,satellite,weather,borders,details,photos" panel_id="detail-map-layers" extra_class="map-layers-panel--inline" %}
+    {% map_layers_panel layers|default:"street,terrain,satellite,weather,borders,details,photos" panel_id="detail-map-layers" extra_class="map-layers-panel--inline" custom_layers=custom_layers manage_layers_url=manage_layers_url manage_overlays_url=manage_overlays_url %}
     <div id="boundary-save-controls" class="map-overlay-btn-group" style="display:none">
         <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearBoundary()">
             <i class="material-symbols-outlined">delete_outline</i> Clear
@@ -74,6 +80,38 @@ a sibling #map-annotations-config element, not from this partial).
 {# .map-bottom-controls, not nested inside it, so it positions relative to #}
 {# .map-wrapper instead of that small absolute-positioned button cluster. #}
 {% include "dashboard/partials/layout/_markup_panel_dialog.html" %}
+
+{# -- Manage Layers dialog: create/rename/recolor/reorder/delete custom  --- #}
+{# layers for this pin/wiki. Body is HTMX-loaded by the layers panel's     --- #}
+{# "Manage Layers" button (see _layers_panel.html / map_layers_panel()).   --- #}
+<dialog id="custom-layers-dialog" class="custom-layers-dialog ul-dialog" aria-labelledby="dialog-title-manage-layers">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Manage Layers" %}
+    <div id="custom-layers-dialog-body" class="custom-layers-dialog-body ul-dialog-body"></div>
+</dialog>
+
+{# -- Manage Image Overlays dialog: add/remove georeferenced images and set -- #}
+{# their opacity/lock state. Aligning happens on the map itself, not here.  -- #}
+{% if manage_overlays_url %}
+<dialog id="map-overlays-dialog" class="custom-layers-dialog ul-dialog" aria-labelledby="dialog-title-image-overlays">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Image Overlays" %}
+    <div id="map-overlays-dialog-body" class="custom-layers-dialog-body ul-dialog-body"
+         hx-get="{{ manage_overlays_url }}" hx-trigger="load" hx-swap="innerHTML"></div>
+    {# Fetches when the dialog opens (see the "Overlays" button's onclick in #}
+    {# _layers_panel.html) rather than on page load, and is a sibling load #}
+    {# target independent of the row-list body above - lining up an #}
+    {# overlay's opacity slider re-renders that body without re-querying #}
+    {# REData's historical-maps API too. #}
+    {% if manage_overlays_historical_url %}
+    <div class="map-overlay-historical ul-dialog-body">
+        <h4 class="map-overlay-historical-heading">Historical maps covering this location</h4>
+        <div id="map-overlay-historical-results"
+             hx-get="{{ manage_overlays_historical_url }}" hx-trigger="mapOverlaysOpen from:body" hx-swap="innerHTML">
+            <p class="map-overlay-manage-empty">Looking for georeferenced maps covering this spot...</p>
+        </div>
+    </div>
+    {% endif %}
+</dialog>
+{% endif %}
 
 {# -- Unified detail-pin panel: same shell/fields for adding AND editing, no --- #}
 {# embedded picker map - placing/moving the pin happens on the main map. Must --- #}
@@ -126,7 +164,7 @@ a sibling #map-annotations-config element, not from this partial).
             <div class="dp-color-picker dp-circle-swatches" id="dp-bg-swatches"></div>
             <div class="dp-opacity-row">
                 <span class="dp-opacity-label">Opacity</span>
-                <input type="range" id="dp-bg-opacity" min="0" max="100" value="80">
+                <input type="range" id="dp-bg-opacity" min="0" max="100" value="80" aria-label="Background opacity">
                 <span id="dp-bg-opacity-val" class="dp-opacity-val">80</span><span class="cop-pct">%</span>
             </div>
             <input type="hidden" id="dp-bg-color" value="">
@@ -136,7 +174,7 @@ a sibling #map-annotations-config element, not from this partial).
             <div class="dp-color-picker dp-circle-swatches" id="dp-border-swatches"></div>
             <div class="dp-opacity-row">
                 <span class="dp-opacity-label">Opacity</span>
-                <input type="range" id="dp-border-opacity" min="0" max="100" value="100">
+                <input type="range" id="dp-border-opacity" min="0" max="100" value="100" aria-label="Border opacity">
                 <span id="dp-border-opacity-val" class="dp-opacity-val">100</span><span class="cop-pct">%</span>
             </div>
             <input type="hidden" id="dp-border-color" value="">

@@ -32,7 +32,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.group_chats.queryset import GroupChatManager, GroupChatMembershipManager, GroupMessageManager
-from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -237,7 +237,7 @@ class GroupMessage(abstract.DashboardModel):
         group_id: int
         sender_id: int
         # Set request-scoped by controllers.group_chats._group_thread_context /
-        # GroupOlderMessagesView, via services.identity_visibility - not a real field.
+        # GroupOlderMessagesView, via services.profile.identity_visibility - not a real field.
         sender_identity: dict[str, Any] | None
 
     objects = GroupMessageManager()

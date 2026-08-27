@@ -11,10 +11,10 @@ from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.google_place.model import GooglePlace
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
-from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:

@@ -30,9 +30,9 @@ from django.views import View
 from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.articles import ArticleConflictError, diff_revisions, get_article, render_article, restore_revision, save_article_checked
-from urbanlens.dashboard.services.text_limits import MAX_ARTICLE_LENGTH, text_length_error
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.core.text_limits import MAX_ARTICLE_LENGTH, text_length_error
+from urbanlens.dashboard.services.wiki.articles import ArticleConflictError, diff_revisions, get_article, render_article, restore_revision, save_article_checked
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -93,6 +93,90 @@ def _pin_urls(pin_slug: str) -> dict[str, str]:
     }
 
 
+def _resolved_article(scope: ArticleScope) -> Article | None:
+    """Re-read the scope's article the way ``ArticleViewBase.resolve`` would.
+
+    Used after a write, so the fragment sent back reflects what was just saved
+    while staying concealed for the viewer who saved it. A private pin article
+    has no concealment to apply and takes the plain path.
+
+    Args:
+        scope: The resolved scope, after a write.
+
+    Returns:
+        The article to render, or None.
+    """
+    article = get_article(pin=scope.pin, wiki=scope.wiki)
+    if scope.wiki is None:
+        return article
+
+    from urbanlens.dashboard.services.wiki.concealment import conceal_article
+
+    return conceal_article(article, scope.wiki, scope.profile)
+
+
+def _writable_article(scope: ArticleScope) -> Article:
+    """The scope's article as a row that may be written.
+
+    ``scope.article`` may be a concealed projection carrying an older
+    revision's text; restoring through it would publish that text as the
+    current article. See ``concealment.writable_wiki`` for the same argument
+    about wikis.
+
+    Args:
+        scope: The resolved scope.
+
+    Returns:
+        The live article row.
+
+    Raises:
+        Http404: The article vanished between resolve and write.
+    """
+    from urbanlens.dashboard.services.wiki.concealment import is_concealed
+
+    article = scope.article
+    if article is None:
+        raise Http404
+    if not is_concealed(article):
+        return article
+
+    live = get_article(pin=scope.pin, wiki=scope.wiki)
+    if live is None:
+        raise Http404
+    return live
+
+
+def _visible_revision_queryset(scope: ArticleScope):
+    """The scope's article revisions, narrowed to what its viewer may see.
+
+    One definition rather than the same filter at each of the four places that
+    list or look up a revision - the shape of defect this whole layer keeps
+    producing is a rule spelled out per call site and forgotten at one of them.
+
+    Args:
+        scope: The resolved scope.
+
+    Returns:
+        An ``ArticleRevision`` queryset, empty when there is no article.
+    """
+    if scope.article is None:
+        return ArticleRevision.objects.none()
+
+    revisions = ArticleRevision.objects.filter(article_id=scope.article.pk).select_related("editor__user", "restored_from")
+    if scope.wiki is None:
+        # A pin article is private to its owner; there is nobody to conceal from.
+        return revisions
+
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
+
+    return conceal_rows(revisions, scope.profile) if concealment_active(scope.wiki, scope.profile) else revisions
+
+
+def _visible_revisions(scope: ArticleScope) -> list[ArticleRevision]:
+    """The scope's visible revisions, newest first, ready for the history list."""
+    return list(_visible_revision_queryset(scope).order_by("-created"))
+
+
 class ArticleViewBase(LoginRequiredMixin, View):
     """Shared host resolution for every article endpoint."""
 
@@ -111,10 +195,15 @@ class ArticleViewBase(LoginRequiredMixin, View):
             Http404: Host not found or not accessible to the requester.
         """
         if "location_slug" in kwargs:
+            from urbanlens.dashboard.services.wiki.concealment import conceal_article
+
             location, wiki, profile = resolve_visible_wiki(request, kwargs["location_slug"])
             return ArticleScope(
                 profile=profile,
-                article=get_article(wiki=wiki),
+                # An article is entirely user-contributed prose, so a concealed
+                # viewer sees the newest revision they are entitled to - or
+                # None, which is what a place nobody has written up looks like.
+                article=conceal_article(get_article(wiki=wiki), wiki, profile),
                 pin=None,
                 wiki=wiki,
                 location=location,
@@ -170,7 +259,12 @@ class ArticleViewBase(LoginRequiredMixin, View):
         separate read-only view - see frontend/ts/entries/article-wysiwyg.ts) for the
         resolved scope.
         """
-        latest_revision = scope.article.revisions.order_by("-created").first() if scope.article else None
+        # The visible revisions, not all of them: this id goes out to the
+        # client as the conflict-check baseline and comes back on save, so
+        # taking it from the live row would hand a concealed viewer the id of a
+        # revision they were not shown - and make the conflict check compare
+        # against text they never saw.
+        latest_revision = _visible_revision_queryset(scope).order_by("-created").first()
         return render(
             request,
             "dashboard/partials/articles/_article_panel.html",
@@ -218,7 +312,7 @@ class ArticleSaveView(ArticleViewBase):
 
         # Conflict check: someone else saved while this editor was open. The
         # client keeps the user's text so nothing is lost. Shared with the
-        # external API via services.articles.save_article_checked.
+        # external API via services.wiki.articles.save_article_checked.
         base_revision_id = int(base_revision_raw) if base_revision_raw.isdigit() else None
         try:
             _article, revision = save_article_checked(
@@ -228,6 +322,7 @@ class ArticleSaveView(ArticleViewBase):
                 base_revision_id=base_revision_id,
                 pin=scope.pin,
                 wiki=scope.wiki,
+                viewer=scope.profile,
             )
         except ArticleConflictError:
             response = HttpResponse(status=409)
@@ -237,7 +332,7 @@ class ArticleSaveView(ArticleViewBase):
                 "error",
                 "This article changed while you were editing. Open History to review the other edit, then copy your text and try again.",
             )
-        scope.article = get_article(pin=scope.pin, wiki=scope.wiki)
+        scope.article = _resolved_article(scope)
         message = "Article saved." if revision else "No changes to save."
         response = self.render_panel(request, scope)
         return self.toast(response, "success", message, "articleSaved")
@@ -281,8 +376,8 @@ class ArticleImageUploadView(ArticleViewBase):
             return JsonResponse({"error": "No image provided."}, status=400)
 
         from urbanlens.dashboard.models.images.model import Image, MediaKind
-        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
-        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
         upload_error = image_upload_error(image_file, MediaKind.PHOTO)
         if upload_error:
@@ -306,7 +401,7 @@ class ArticleImageUploadView(ArticleViewBase):
                 file_size=image_file.size,
             )
 
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, img.pk)
@@ -338,7 +433,7 @@ class ArticleHistoryView(ArticleViewBase):
 
     def get(self, request: HttpRequest, **kwargs) -> HttpResponse:
         scope = self.resolve(request, **kwargs)
-        revisions = list(scope.article.revisions.select_related("editor__user", "restored_from").order_by("-created")) if scope.article else []
+        revisions = _visible_revisions(scope)
         return render(
             request,
             "dashboard/partials/articles/_article_history.html",
@@ -360,9 +455,14 @@ class ArticleRevisionView(ArticleViewBase):
         scope = self.resolve(request, **kwargs)
         if scope.article is None:
             raise Http404
-        revision = get_object_or_404(ArticleRevision, id=kwargs["revision_id"], article=scope.article)
-        previous = scope.article.revisions.filter(created__lt=revision.created).order_by("-created").first()
-        is_current = not scope.article.revisions.filter(created__gt=revision.created).exists()
+        # Scoped to what this viewer may see, not merely to the article: an
+        # unfiltered by-id lookup is an oracle, answering "does revision N
+        # exist here" - and then handing over its whole diff - for revisions
+        # concealment has already decided this account cannot read.
+        visible = _visible_revision_queryset(scope)
+        revision = get_object_or_404(visible, id=kwargs["revision_id"])
+        previous = visible.filter(created__lt=revision.created).order_by("-created").first()
+        is_current = not visible.filter(created__gt=revision.created).exists()
         return render(
             request,
             "dashboard/partials/articles/_article_diff.html",
@@ -387,10 +487,12 @@ class ArticleRestoreView(ArticleViewBase):
         scope = self.resolve(request, **kwargs)
         if scope.article is None:
             raise Http404
-        revision = get_object_or_404(ArticleRevision, id=kwargs["revision_id"], article=scope.article)
-        _article, new_revision = restore_revision(scope_article=scope.article, revision=revision, editor=scope.profile)
-        scope.article = get_article(pin=scope.pin, wiki=scope.wiki)
-        revisions = list(scope.article.revisions.select_related("editor__user", "restored_from").order_by("-created")) if scope.article else []
+        # Same scoping as the diff view: restoring a revision you were never
+        # shown would publish its text and say so in the history.
+        revision = get_object_or_404(_visible_revision_queryset(scope), id=kwargs["revision_id"])
+        _article, new_revision = restore_revision(scope_article=_writable_article(scope), revision=revision, editor=scope.profile)
+        scope.article = _resolved_article(scope)
+        revisions = _visible_revisions(scope)
         response = render(
             request,
             "dashboard/partials/articles/_article_history.html",

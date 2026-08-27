@@ -12,7 +12,7 @@
 // `position: relative` from the shared .ul-page-hero rule, so these can dock
 // to its corners rather than the whole page.
 #wiki-hero {
-    // Badge/title/address render via the shared _page_hero.html component -
+    // Label/title/address render via the shared _page_hero.html component -
     // these rules only add what its generic hero classes don't already
     // provide. (Previously nested under `.wiki-page`, which never actually
     // matched here - the hero renders in base.html's `{% block hero %}`,

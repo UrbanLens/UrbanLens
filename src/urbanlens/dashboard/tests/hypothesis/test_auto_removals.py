@@ -9,13 +9,16 @@ must not silently recreate it.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 from django.db import IntegrityError
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY
@@ -25,6 +28,12 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.property_owner.model import PinOwner
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+
+
+def _bearer(raw_key: str) -> dict:
+    """Build the Authorization header kwargs for a raw API key."""
+    return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
 class AliasCaseInsensitiveUniquenessTests(TestCase):
@@ -165,6 +174,81 @@ class LinkDeletionTombstoneTests(TestCase):
         self.assertFalse(self.wiki.links.filter(url="https://echo.epa.gov/detailed-facility-report?fid=123").exists())
 
 
+class ExternalApiWikiTombstoneTests(TestCase):
+    """The mobile/API-key surface must record the same tombstones as the web UI.
+
+    Found by the round-4 FEATURES.md-vs-code audit: WikiAliasDetailView.delete
+    and WikiLinkDetailView.delete (external_api/views_wiki.py) called
+    ``.delete()`` directly with no WikiAutoRemoval.objects.record() call,
+    unlike their web-UI counterparts (LocationAliasDeleteView/
+    LocationLinkDeleteView) - so a mobile-app deletion of a wiki alias or link
+    was silently undone the next time an external-source sync or a link plugin
+    ran.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
+        self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Curated Mill")
+        api_key, self.raw_key = generate_api_key(self.user, "Test Key")
+        api_key.scopes = [ApiKeyScope.WIKI_WRITE.value]
+        api_key.save(update_fields=["scopes"])
+
+    def _candidates(self, name: str):
+        from urbanlens.dashboard.services.locations.name_resolution import NameCandidate
+
+        return [NameCandidate(name=name, source="nominatim")]
+
+    def test_deleting_a_wiki_alias_via_the_api_records_a_tombstone(self) -> None:
+        alias = WikiAlias.objects.create(wiki=self.wiki, name="External Name")
+        response = self.client.delete(
+            reverse("external_api:wikis.aliases.detail", kwargs={"location_slug": self.location.slug, "alias_id": alias.id}),
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 204)
+        self.assertTrue(WikiAutoRemoval.objects.was_removed(wiki=self.wiki, kind=AutoRemovalKind.ALIAS, value="External Name"))
+
+    def test_a_wiki_alias_deleted_via_the_api_is_not_recreated_by_backfill(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import persist_official_aliases_for_location
+
+        alias = WikiAlias.objects.create(wiki=self.wiki, name="External Name")
+        self.client.delete(
+            reverse("external_api:wikis.aliases.detail", kwargs={"location_slug": self.location.slug, "alias_id": alias.id}),
+            **_bearer(self.raw_key),
+        )
+
+        with patch("urbanlens.dashboard.services.locations.naming.external_name_candidates_for_location", return_value=self._candidates("EXTERNAL NAME")):
+            persist_official_aliases_for_location(self.location)
+
+        self.assertFalse(self.wiki.aliases.filter(name__iexact="External Name").exists())
+
+    def test_deleting_a_wiki_link_via_the_api_records_a_tombstone(self) -> None:
+        link = WikiLink.objects.create(wiki=self.wiki, name="EPA Compliance Report", url="https://echo.epa.gov/detailed-facility-report?fid=123")
+        response = self.client.delete(
+            reverse("external_api:wikis.links.detail", kwargs={"location_slug": self.location.slug, "link_id": link.id}),
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 204)
+        self.assertTrue(WikiAutoRemoval.objects.was_removed(wiki=self.wiki, kind=AutoRemovalKind.LINK, value="https://echo.epa.gov/detailed-facility-report?fid=123"))
+
+    def test_a_wiki_link_deleted_via_the_api_prevents_epa_auto_readd(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.epa_echo import EpaEchoDetailPanelSource
+
+        link = WikiLink.objects.create(wiki=self.wiki, name="EPA Compliance Report", url="https://echo.epa.gov/detailed-facility-report?fid=123")
+        response = self.client.delete(
+            reverse("external_api:wikis.links.detail", kwargs={"location_slug": self.location.slug, "link_id": link.id}),
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 204)
+
+        EpaEchoDetailPanelSource._add_echo_report_link(self.pin, self.location, "123")
+
+        self.assertFalse(self.wiki.links.filter(url="https://echo.epa.gov/detailed-facility-report?fid=123").exists())
+
+
 class OwnerDeletionTombstoneTests(TestCase):
     """Deleting a PinOwner must record a tombstone and prevent AI-extraction auto-recreation."""
 
@@ -204,7 +288,7 @@ class LabelDeletionTombstoneTests(TestCase):
         self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
         self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Old Factory")
         self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Old Factory")
-        self.label = baker.make(Label, kind=KIND_CATEGORY, name="Factory", profile=None)
+        self.label = ensure_label( kind=KIND_CATEGORY, name="Factory", profile=None)
         self.client.force_login(self.user)
 
     def test_removing_pin_label_records_tombstone(self) -> None:
@@ -218,7 +302,7 @@ class LabelDeletionTombstoneTests(TestCase):
         self.assertTrue(PinAutoRemoval.objects.was_removed(pin=self.pin, kind=AutoRemovalKind.LABEL, value=str(self.label.pk)))
 
     def test_auto_tag_does_not_reattach_a_removed_label(self) -> None:
-        from urbanlens.dashboard.services.auto_tag import AutoTagService
+        from urbanlens.dashboard.services.labels.auto_tag import AutoTagService
 
         self.pin.labels.add(self.label)
         self.client.post(
@@ -232,7 +316,7 @@ class LabelDeletionTombstoneTests(TestCase):
         self.assertFalse(self.pin.labels.filter(pk=self.label.pk).exists())
 
     def test_removing_wiki_label_records_tombstone_and_blocks_reattach(self) -> None:
-        from urbanlens.dashboard.services.auto_tag import AutoTagService
+        from urbanlens.dashboard.services.labels.auto_tag import AutoTagService
 
         self.wiki.labels.add(self.label)
         response = self.client.post(
@@ -246,6 +330,118 @@ class LabelDeletionTombstoneTests(TestCase):
             AutoTagService(kinds=["category"]).suggest_for_wiki(self.wiki, apply=True)
 
         self.assertFalse(self.wiki.labels.filter(pk=self.label.pk).exists())
+
+
+class BulkEditLabelRemovalTombstoneTests(TestCase):
+    """Removing a label via the map's multi-select bulk-edit action must tombstone it too.
+
+    A prior audit found this path (controllers.pin_bulk.PinBulkEditView's
+    remove_label_ids action) removed labels without recording a
+    PinAutoRemoval, unlike the dedicated LabelPinMembershipView - so
+    keyword/AI auto-tagging could silently reattach a label a user had just
+    bulk-removed.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.location = baker.make(Location, latitude="41.410000", longitude="-73.410000")
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Old Factory")
+        self.label = ensure_label(kind=KIND_CATEGORY, name="Factory", profile=None)
+        self.pin.labels.add(self.label)
+        self.client.force_login(self.user)
+
+    def test_bulk_remove_records_a_tombstone(self) -> None:
+        response = self.client.post(
+            reverse("pin.bulk_edit"),
+            data=json.dumps({"uuids": [str(self.pin.uuid)], "remove_label_ids": [self.label.id]}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.pin.labels.filter(pk=self.label.pk).exists())
+        self.assertTrue(PinAutoRemoval.objects.was_removed(pin=self.pin, kind=AutoRemovalKind.LABEL, value=str(self.label.pk)))
+
+    def test_bulk_remove_does_not_tombstone_a_pin_that_never_had_the_label(self) -> None:
+        other_location = baker.make(Location, latitude="41.420000", longitude="-73.420000")
+        other_pin = baker.make(Pin, profile=self.profile, location=other_location, name="Second Site")
+        response = self.client.post(
+            reverse("pin.bulk_edit"),
+            data=json.dumps({"uuids": [str(self.pin.uuid), str(other_pin.uuid)], "remove_label_ids": [self.label.id]}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            PinAutoRemoval.objects.was_removed(pin=other_pin, kind=AutoRemovalKind.LABEL, value=str(self.label.pk)),
+        )
+
+    def test_auto_tag_does_not_reattach_a_label_removed_in_bulk(self) -> None:
+        from urbanlens.dashboard.services.labels.auto_tag import AutoTagService
+
+        self.client.post(
+            reverse("pin.bulk_edit"),
+            data=json.dumps({"uuids": [str(self.pin.uuid)], "remove_label_ids": [self.label.id]}),
+            content_type="application/json",
+        )
+        with patch.object(AutoTagService, "_match", return_value=[self.label]):
+            AutoTagService(kinds=["category"]).suggest_for_pin(self.pin, apply=True)
+        self.assertFalse(self.pin.labels.filter(pk=self.label.pk).exists())
+
+
+class QuickEditLabelRemovalTombstoneTests(TestCase):
+    """Removing a label via the map pin's quick-edit dialog must tombstone it too.
+
+    A prior audit found this path (controllers.maps.MapController.patch_pin's
+    label_ids handling) removed labels via .set()/.clear() without recording
+    a PinAutoRemoval.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.location = baker.make(Location, latitude="41.430000", longitude="-73.430000")
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Old Factory")
+        self.label = ensure_label(kind=KIND_CATEGORY, name="Factory", profile=None)
+        self.other_label = ensure_label(kind=KIND_CATEGORY, name="Mill", profile=None)
+        self.pin.labels.add(self.label, self.other_label)
+        self.client.force_login(self.user)
+
+    def test_dropping_a_label_from_the_set_records_a_tombstone(self) -> None:
+        response = self.client.post(
+            reverse("pin.quick_edit", kwargs={"pin_slug": self.pin.slug}),
+            data={"label_ids": [str(self.other_label.id)]},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(self.pin.labels.filter(pk=self.label.pk).exists())
+        self.assertTrue(self.pin.labels.filter(pk=self.other_label.pk).exists())
+        self.assertTrue(PinAutoRemoval.objects.was_removed(pin=self.pin, kind=AutoRemovalKind.LABEL, value=str(self.label.pk)))
+        self.assertFalse(
+            PinAutoRemoval.objects.was_removed(pin=self.pin, kind=AutoRemovalKind.LABEL, value=str(self.other_label.pk)),
+        )
+
+    def test_clearing_all_labels_tombstones_each_one(self) -> None:
+        response = self.client.post(
+            reverse("pin.quick_edit", kwargs={"pin_slug": self.pin.slug}),
+            data={"label_ids": ""},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.pin.labels.count(), 0)
+        self.assertTrue(PinAutoRemoval.objects.was_removed(pin=self.pin, kind=AutoRemovalKind.LABEL, value=str(self.label.pk)))
+        self.assertTrue(
+            PinAutoRemoval.objects.was_removed(pin=self.pin, kind=AutoRemovalKind.LABEL, value=str(self.other_label.pk)),
+        )
+
+    def test_auto_tag_does_not_reattach_a_label_dropped_via_quick_edit(self) -> None:
+        from urbanlens.dashboard.services.labels.auto_tag import AutoTagService
+
+        self.client.post(
+            reverse("pin.quick_edit", kwargs={"pin_slug": self.pin.slug}),
+            data={"label_ids": [str(self.other_label.id)]},
+        )
+        with patch.object(AutoTagService, "_match", return_value=[self.label]):
+            AutoTagService(kinds=["category"]).suggest_for_pin(self.pin, apply=True)
+        self.assertFalse(self.pin.labels.filter(pk=self.label.pk).exists())
 
 
 class ExternalLinksHelperTests(TestCase):

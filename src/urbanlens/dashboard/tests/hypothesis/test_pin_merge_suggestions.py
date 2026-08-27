@@ -48,8 +48,8 @@ from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import repair_legacy_pin_coordinates
-from urbanlens.dashboard.services.pin_merge import UnresolvedMergeConflictError, merge_pins, plan_merge_conflicts
-from urbanlens.dashboard.services.pin_merge_suggestions import accept_pin_merge_suggestion, reject_pin_merge_suggestion
+from urbanlens.dashboard.services.pins.pin_merge import UnresolvedMergeConflictError, merge_pins, plan_merge_conflicts
+from urbanlens.dashboard.services.pins.pin_merge_suggestions import accept_pin_merge_suggestion, reject_pin_merge_suggestion
 
 
 class MergeSuggestionUpsertTests(TestCase):
@@ -453,7 +453,7 @@ class MergePinsTests(TestCase):
 
     def test_atomicity_nothing_persists_when_a_merge_step_fails(self) -> None:
         PinAlias.objects.create(pin=self.loser, name="Should not move")
-        with mock.patch("urbanlens.dashboard.services.pin_merge._merge_lineage", side_effect=RuntimeError("boom")), self.assertRaises(RuntimeError):
+        with mock.patch("urbanlens.dashboard.services.pins.pin_merge._merge_lineage", side_effect=RuntimeError("boom")), self.assertRaises(RuntimeError):
             merge_pins(self.survivor, self.loser, self.profile)
 
         # The alias reassignment that ran before the forced failure must have

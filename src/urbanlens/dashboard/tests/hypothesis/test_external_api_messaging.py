@@ -31,8 +31,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
-from oauth2_provider.models import get_access_token_model, get_application_model
+from oauth2_provider.models import get_access_token_model
 
+from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
@@ -44,9 +45,8 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.exposure import LocationExposure
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.direct_messages import create_direct_message
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message
 
 #: A real 1x1 PNG - ImageField stores whatever bytes it's given, but the
 #: upload pipeline sniffs content, so a valid file avoids testing the wrong
@@ -54,7 +54,6 @@ from urbanlens.dashboard.services.direct_messages import create_direct_message
 _PNG_BYTES = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
 
 AccessToken = get_access_token_model()
-Application = get_application_model()
 
 READ_WRITE = f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}"
 
@@ -70,7 +69,7 @@ def _profile() -> Profile:
 def _token_for(user: User, scope: str = READ_WRITE) -> str:
     token = AccessToken.objects.create(
         user=user,
-        application=Application.objects.get(client_id=FIRST_PARTY_CLIENT_ID),
+        application=first_party_application(),
         token=f"tok-{os.urandom(8).hex()}",
         expires=timezone.now() + timedelta(hours=1),
         scope=scope,
@@ -117,6 +116,45 @@ class MessagingBaseTestCase(TestCase):
 
     def _post_json(self, url: str, payload: dict, **extra):
         return self.client.post(url, data=json.dumps(payload), content_type="application/json", **{**self.auth, **extra})
+
+
+class ReactionEmojiLengthTests(MessagingBaseTestCase):
+    """A long emoji must be refused, not 500.
+
+    ``is_safe_reaction_emoji``'s docstring states the contract: the value is
+    "already length-capped by the caller". The internal HTML path honours it with
+    ``[:10]``, exactly ``Reaction.emoji``'s column width. ``ReactionSerializer``
+    declares ``max_length=32``, so this path accepted three times the column and
+    reached the insert.
+
+    Not adversarial input: a family sequence with skin-tone modifiers is eleven
+    code points, and any emoji picker offering those can send one.
+    """
+
+    def _react_url(self, message_id: int) -> str:
+        return reverse("external_api:messages.react", kwargs={"peer_slug": self.partner.ensure_slug(), "message_id": message_id})
+
+    def _message(self):
+        from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message
+
+        return create_direct_message(self.sender, self.partner, "hello")
+
+    def test_an_over_long_emoji_is_refused(self) -> None:
+        message = self._message()
+        # 11 code points: four people, four skin tones, three joiners.
+        long_emoji = "\U0001F468\U0001F3FB\u200D\U0001F469\U0001F3FB\u200D\U0001F467\U0001F3FB\u200D\U0001F466\U0001F3FB"
+        self.assertGreater(len(long_emoji), 10, "precondition: longer than the column")
+
+        response = self._post_json(self._react_url(message.pk), {"emoji": long_emoji})
+
+        self.assertEqual(response.status_code, 400, "an emoji longer than the column reached the insert")
+
+    def test_an_ordinary_emoji_still_works(self) -> None:
+        message = self._message()
+
+        response = self._post_json(self._react_url(message.pk), {"emoji": "\U0001F44D"})
+
+        self.assertIn(response.status_code, (200, 201))
 
 
 class SendMessageTests(MessagingBaseTestCase):
@@ -320,7 +358,7 @@ class TombstoneTests(MessagingBaseTestCase):
 
     def test_deleted_for_everyone_is_tombstoned_for_the_recipient(self) -> None:
         message = create_direct_message(self.partner, self.sender, "regrettable message")
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
         delete_message_for_everyone(message, self.partner)
 
@@ -423,7 +461,7 @@ class GroupMembershipTests(MessagingBaseTestCase):
         self.third = _profile()
         _open_dms(self.sender, self.partner, self.third)
 
-        from urbanlens.dashboard.services.group_chats import create_group_chat
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 
         self.group = create_group_chat(self.sender, "Crew", [self.partner])
         self.members_url = reverse("external_api:messages.groups.members", kwargs={"group_uuid": self.group.uuid})
@@ -478,7 +516,7 @@ class GroupMessageTests(MessagingBaseTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        from urbanlens.dashboard.services.group_chats import create_group_chat
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 
         self.group = create_group_chat(self.sender, "Crew", [self.partner])
         self.url = reverse("external_api:messages.groups.messages", kwargs={"group_uuid": self.group.uuid})

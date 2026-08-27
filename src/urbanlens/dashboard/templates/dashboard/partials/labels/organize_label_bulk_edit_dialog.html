@@ -1,5 +1,5 @@
 {% load dashboard_tags %}
-<dialog id="{{ ns }}-bulk-edit-dialog" class="tag-edit-dialog ul-dialog">
+<dialog id="{{ ns }}-bulk-edit-dialog" class="tag-edit-dialog ul-dialog" aria-label="Edit selected labels">
     {% include "dashboard/partials/ui/_dialog_header.html" with title=title title_id=ns|add:"-bulk-edit-title" %}
     <div class="tag-edit-dialog-body organize-label-edit-form">
         {% if ns != 'people' %}

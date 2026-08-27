@@ -10,7 +10,7 @@ Optional:
               (e.g. "#friend_list"); otherwise it's a plain form post that
               redirects back to the profile page (see friend.request view).
 {% endcomment %}
-<dialog id="{{ dialog_id|default:'add-friend-dialog' }}" class="invite-dialog ul-dialog">
+<dialog id="{{ dialog_id|default:'add-friend-dialog' }}" class="invite-dialog ul-dialog" aria-label="Add a friend">
     <div class="dialog-header">
         <span><i class="material-symbols-outlined">person_add</i> Add Friend</span>
         <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close dialog">

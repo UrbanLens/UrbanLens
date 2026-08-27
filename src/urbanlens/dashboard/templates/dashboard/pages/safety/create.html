@@ -1,10 +1,9 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% load vendor_assets %}
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
 {% endblock %}
 
 {% block hero %}
@@ -76,6 +75,16 @@
             <label for="contact_message">Message to emergency contacts</label>
             <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand">{{ preference.default_message }}</textarea>
         </div>
+{% if blocked_default_contacts %}
+<div class="safety-blocked-contact-warning" role="status">
+    <i class="material-symbols-outlined">report</i>
+    <div>
+        <strong>{% if blocked_default_contacts|length == 1 %}One of your saved emergency contacts is someone you have blocked.{% else %}Some of your saved emergency contacts are people you have blocked.{% endif %}</strong>
+        <p>{% for contact in blocked_default_contacts %}{{ contact.display_name|default:contact.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% if blocked_default_contacts|length == 1 %}will still be contacted{% else %}will still be contacted{% endif %} if you do not check in. Kept on purpose - blocking someone socially is not the same as not wanting them called if you go missing - but you can remove them in Safety settings.</p>
+    </div>
+</div>
+{% endif %}
         {% include "dashboard/partials/safety/_contact_picker.html" with contacts=default_contacts %}
         <div class="form-actions">
             <button type="submit" class="btn btn--primary btn--lg">Create check-in</button>

@@ -24,14 +24,19 @@
                  {% if slide.longitude is not None %}data-lng="{{ slide.longitude|floatformat:5 }}"{% endif %}>
                 {% if forloop.first and google_maps_api_key and slide.source == "Google Street View" %}
                 {# First slide, confirmed fetched from Google server-side: try an #}
-                {# interactive embed so the user can pan/look around. This uses the #}
-                {# Maps Embed API (a separate client-side key/referrer restriction #}
-                {# from the Static Street View API used to fetch slide.img_src #}
-                {# server-side, so it can still fail - e.g. an unauthorized-referrer #}
-                {# rejection page rendered by Google itself, inside the iframe, #}
-                {# which we have no way to detect from our own JS since it's a #}
-                {# same-origin-policy-protected cross-origin frame). The always- #}
-                {# available static image (already fetched successfully, or it #}
+                {# interactive embed so the user can pan/look around. slide.latitude/ #}
+                {# longitude are the pano's own resolved coordinates (from the Static #}
+                {# Street View metadata lookup, which may have searched a widened #}
+                {# radius from the pin) - falling back to the raw pin coordinates only #}
+                {# for a slide type that never sets them. This uses the Maps Embed API #}
+                {# (a separate client-side key/referrer restriction from the Static #}
+                {# Street View API used to fetch slide.img_src server-side), so it can #}
+                {# still fail - e.g. an unauthorized-referrer rejection page rendered #}
+                {# by Google itself, inside the iframe, which we have no way to detect #}
+                {# from our own JS since it's a same-origin-policy-protected #}
+                {# cross-origin frame - there's no success signal either, so this can #}
+                {# only ever be a manual swap, never an automatic one on a timer. The #}
+                {# always-available static image (already fetched successfully, or it #}
                 {# wouldn't be here) is one click away via .sv-embed-fallback-btn #}
                 {# below rather than us silently trusting the embed to work. #}
                 {% with sv_lat=slide.latitude|default:pin.effective_latitude sv_lng=slide.longitude|default:pin.effective_longitude %}

@@ -13,7 +13,7 @@ from urbanlens.dashboard.models.notifications.meta import Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
-from urbanlens.dashboard.services.visits import accept_visit_suggestion, merge_visit_suggestion, reject_visit_suggestion
+from urbanlens.dashboard.services.visits.visits import accept_visit_suggestion, merge_visit_suggestion, reject_visit_suggestion
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -58,28 +58,31 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
         if suggestion.notification_id:
             NotificationLog.objects.filter(pk=suggestion.notification_id).update(status=Status.READ)
 
-        from urbanlens.dashboard.controllers.notifications import _trigger_label_refresh
+        # Built once and applied to whichever response is returned: the pin-context
+        # branch below used to return before the `blocked` toast was attached, so a
+        # response the user had explicitly asked for silently did nothing when visit
+        # logging was off.
+        def _with_triggers(response: HttpResponse) -> HttpResponse:
+            triggers: dict[str, object] = {"notifCountRefresh": {"target": "body"}}
+            if blocked:
+                triggers["showToast"] = {
+                    "message": "Visit logging is turned off - enable it in Settings to add this to your visit history.",
+                    "level": "info",
+                }
+            response["HX-Trigger"] = json.dumps(triggers)
+            return response
 
         if request.POST.get("context") == "pin" and request.POST.get("pin_slug"):
             from urbanlens.dashboard.controllers.visits import _render_visit_history
             from urbanlens.dashboard.models.pin.model import Pin
 
             pin = get_object_or_404(Pin, slug=request.POST["pin_slug"], profile__user=request.user)
-            response = _render_visit_history(request, pin)
-            return _trigger_label_refresh(response)
+            return _with_triggers(_render_visit_history(request, pin))
 
-        notifications = NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20]
+        notifications = NotificationLog.objects.for_profile(profile).for_display().order_by("-created")[:20]
         response = render(
             request,
             "dashboard/partials/notifications/notification_dropdown.html",
             {"notifications": notifications, "unread_count": NotificationLog.objects.for_profile(profile).unread().count()},
         )
-        response = _trigger_label_refresh(response)
-        if blocked:
-            response["HX-Trigger"] = json.dumps(
-                {
-                    "notifCountRefresh": {"target": "body"},
-                    "showToast": {"message": "Visit logging is turned off - enable it in Settings to add this to your visit history.", "level": "info"},
-                }
-            )
-        return response
+        return _with_triggers(response)

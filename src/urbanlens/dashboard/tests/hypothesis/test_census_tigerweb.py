@@ -1,5 +1,5 @@
 """Tests for CensusTigerwebGateway.get_state_boundary - the state-polygon attribute query
-backing services.geo_boundary.state_boundary.
+backing services.geo.geo_boundary.state_boundary.
 """
 
 from __future__ import annotations

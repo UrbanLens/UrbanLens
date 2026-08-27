@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load static %}
 {% load map_components %}
 {% load memories_components %}
@@ -6,9 +7,8 @@
 {% block title %}Locations{% endblock %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
 {% endblock %}
 
 {% block hero %}
@@ -31,10 +31,7 @@
         <div class="pin-select-map-wrap">
             <div id="pin-suggestions-map" class="pin-select-map" data-map-data-url="{% url 'memories.locations.map_data' %}"></div>
             {% map_layers_panel "street,terrain,satellite,dark" panel_id="pin-suggestions-map-layers" %}
-            <button type="button" class="pin-select-toggle" id="pin-suggestions-select-toggle" title="Drag-select multiple pins">
-                <i class="material-symbols-outlined">select_all</i>
-                <span>Select multiple</span>
-            </button>
+            {% map_toolbar "select_pin_suggestions" panel_id="pin-suggestions-map-buttons" %}
         </div>
 
         <div class="pin-suggestions-actions">
@@ -63,6 +60,15 @@
              hx-trigger="refreshQueue from:body"
              hx-swap="innerHTML">
             {% include "dashboard/partials/memories/_pin_merge_suggestions_queue.html" %}
+        </div>
+        {% endif %}
+
+        {% if pin_import_failures_count %}
+        <div id="pin-import-failures-wrap"
+             hx-get="{% url 'memories.locations.import_failures.queue' %}"
+             hx-trigger="refreshQueue from:body"
+             hx-swap="innerHTML">
+            {% include "dashboard/partials/memories/_pin_import_failures_queue.html" %}
         </div>
         {% endif %}
 
@@ -144,8 +150,19 @@
         .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
         .then(function (data) {
             var n = data.processed || 0;
+            var requested = data.requested != null ? data.requested : n;
             var verb = action === 'accept' ? 'Accepted' : 'Dismissed';
-            if (window.toastr) toastr.success(verb + ' ' + n + ' suggestion' + (n === 1 ? '' : 's') + '.');
+            var noun = ' suggestion' + (n === 1 ? '' : 's') + '.';
+            if (!window.toastr) return;
+            // The server skips ids it can't act on and logs any that fail, reporting
+            // both counts. Reporting only `processed` as a success meant a partial
+            // batch looked identical to a whole one - the user is told 3 were accepted
+            // and has no way to know they asked for 5.
+            if (requested > n) {
+                toastr.warning(verb + ' ' + n + ' of ' + requested + noun + ' The rest could not be processed - they may have already been handled.');
+            } else {
+                toastr.success(verb + ' ' + n + noun);
+            }
         });
     }
 

@@ -9,11 +9,31 @@ class DashboardConfig(AppConfig):
     name = "urbanlens.dashboard"
 
     def ready(self):
+        # Teach Pillow to open HEIC/HEIF before anything reads an upload.
+        # Registered here rather than at each call site because every path that
+        # opens an image needs it - thumbnails, EXIF extraction, the GPS strip -
+        # and a path that missed it would fail the way HEIC used to: silently,
+        # keeping a file whose coordinates the uploader asked to have removed.
+        from pillow_heif import register_heif_opener
+
+        register_heif_opener()
+
+        # drf-spectacular resolves each extension's target_class lazily by
+        # mutating a shared class attribute with no lock - unsafe under this
+        # app's gevent concurrency. See schema.patch_extension_thread_safety.
+        from urbanlens.dashboard.external_api.schema import patch_extension_thread_safety
+
+        patch_extension_thread_safety()
+
+        from django.core.signals import request_finished, request_started
         from django.db.models.signals import post_save
 
+        from urbanlens.dashboard.models.achievements.signals import connect as connect_achievement_signals
         import urbanlens.dashboard.models.aliases.signals
         import urbanlens.dashboard.models.cache.signals
         import urbanlens.dashboard.models.comments.signals
+        import urbanlens.dashboard.models.floorplans.signals
+        import urbanlens.dashboard.models.images.signals
         from urbanlens.dashboard.models.labels.signals import create_default_tags
         import urbanlens.dashboard.models.links.signals
         import urbanlens.dashboard.models.location.signals
@@ -29,6 +49,32 @@ class DashboardConfig(AppConfig):
         from urbanlens.dashboard.plugins import plugin_registry
 
         post_save.connect(create_default_tags, sender=Profile, dispatch_uid="label_create_default_tags")
+
+        # Memoise the SiteSettings singleton for the length of a request only - see that
+        # module's docstring for why this is scoped to requests instead of cached globally.
+        from urbanlens.dashboard.models.site_settings import request_cache as site_settings_cache
+        from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
+        request_started.connect(site_settings_cache.begin_scope, dispatch_uid="site_settings_cache_begin")
+        request_finished.connect(site_settings_cache.end_scope, dispatch_uid="site_settings_cache_end")
+        post_save.connect(site_settings_cache.invalidate, sender=SiteSettings, dispatch_uid="site_settings_cache_invalidate")
+
+        # Achievements subscribe to a dozen unrelated models, so their receivers
+        # are registered from a table rather than one import per sender.
+        connect_achievement_signals()
+
+        # The reputation ledger's rule_key choices are supplied by this
+        # registry, so it has to be populated before any form or admin page
+        # renders that field. Registration only builds dataclasses.
+        from urbanlens.dashboard.services.reputation.builtin_rules import register_builtin_rules
+
+        register_builtin_rules()
+
+        # Same table-driven shape as achievements, but the ledger write is
+        # synchronous - see that module's docstring.
+        from urbanlens.dashboard.models.reputation.signals import connect as connect_reputation_signals
+
+        connect_reputation_signals()
 
         # Plugin discovery only imports modules and instantiates plugin
         # classes - it must never touch the database this early.

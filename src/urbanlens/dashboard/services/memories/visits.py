@@ -55,7 +55,7 @@ def _suggest_for_pinned_photo(image: Image) -> VisitSuggestion | None:
     """Create a visit suggestion for a photo uploaded directly to one of the user's pins."""
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
-    from urbanlens.dashboard.services.visits import create_visit_suggestion
+    from urbanlens.dashboard.services.visits.visits import create_visit_suggestion
 
     # We can't create date-required suggestions if the image has no capture time.
     if not image.taken_at:
@@ -116,7 +116,7 @@ def _suggest_for_unfiled_photo(image: Image) -> VisitSuggestion | None:
     """
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
     from urbanlens.dashboard.services.memories.photos import find_matching_pin
-    from urbanlens.dashboard.services.visits import create_visit_suggestion
+    from urbanlens.dashboard.services.visits.visits import create_visit_suggestion
 
     if not image.latitude or not image.longitude or not image.profile or not image.taken_at:
         return None

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db.models import BooleanField, CharField, IntegerField, TextField
+from django.db.models import BooleanField, CharField, DateTimeField, FloatField, IntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.api_rate_limit.queryset import ApiRateLimitManager
@@ -47,6 +47,24 @@ class ApiRateLimit(abstract.DashboardModel):
         blank=True,
         help_text="Maximum calls allowed per rolling 30-day window. Leave blank for no 30-day limit.",
         validators=[MinValueValidator(1), MaxValueValidator(100_000_000)],
+    )
+    min_interval_seconds = FloatField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Minimum seconds required between consecutive calls, enforced independently of the "
+            "per-minute/day/30-day budgets above - for providers whose ToS is a hard spacing "
+            "requirement (e.g. Nominatim's 1 req/second) rather than just a rolling total, which "
+            "a rolling-window count alone can't guarantee since it still allows a burst to land "
+            "well within budget. Leave blank for no minimum spacing."
+        ),
+        validators=[MinValueValidator(0.0)],
+    )
+    last_call_at = DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="Internal bookkeeping: when this service's last reserved call was made. Used to enforce min_interval_seconds.",
     )
     usa_only = BooleanField(
         default=False,

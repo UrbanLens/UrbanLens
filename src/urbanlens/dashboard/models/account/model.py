@@ -79,6 +79,12 @@ class WebAuthnCredential(DashboardModel):
     name = models.CharField(max_length=100, blank=True)
     credential_id = models.BinaryField(unique=True, editable=False)
     public_key = models.BinaryField(editable=False)
+    # False for passkeys enrolled only to unlock E2EE data (see E2EEPasskeyWrap):
+    # those must never flip the account into mandatory 2FA, or "add a passkey so
+    # your messages unlock anywhere" would conscript the user into a login
+    # prompt on every signin. Every 2FA gate filters on this - the single
+    # source of truth is ``services.auth.webauthn.has_passkeys``.
+    is_login_factor = models.BooleanField(default=True)
     sign_count = models.PositiveBigIntegerField(default=0)
     aaguid = models.CharField(max_length=64, blank=True, editable=False)
     device_type = models.CharField(max_length=16, blank=True, editable=False)
@@ -107,10 +113,13 @@ class TOTPDevice(DashboardModel):
 
     One per account, created only once the user has confirmed a code from
     their app - an unconfirmed setup lives only in the session (see
-    ``TOTPSetupStartView``/``TOTPSetupConfirmView``) and never reaches the
-    database. ``secret`` is encrypted at rest via ``EncryptedTextField``, the
-    same mechanism already used for OAuth tokens (Flickr/Immich/Google
-    Photos) elsewhere in this app.
+    ``TOTPSetupStartView``/``TOTPSetupConfirmView``) rather than this table.
+    The session backend is ``cached_db``, which writes through to the
+    database, so the pending secret does reach a DB row, just not this one -
+    it holds no query/index/search surface the way a confirmed row does.
+    ``secret`` is encrypted at rest via ``EncryptedTextField``, the same
+    mechanism already used for OAuth tokens (Flickr/Immich/Google Photos)
+    elsewhere in this app.
 
     ``last_used_step`` blocks replay of an intercepted code: a verified
     login records the 30-second time-step it matched, and any later
@@ -137,7 +146,7 @@ class TOTPDevice(DashboardModel):
 class BackupCode(DashboardModel):
     """A single-use recovery code for accounts with a passkey and/or TOTP device.
 
-    Generated ten at a time (``services.two_factor.generate_backup_codes``),
+    Generated ten at a time (``services.auth.two_factor.generate_backup_codes``),
     shown to the user exactly once in plaintext, and stored here only as a
     salted hash (``django.contrib.auth.hashers``) - like a password, the
     plaintext can never be recovered from the database. Codes are scoped to
@@ -267,7 +276,7 @@ class ApiKey(DashboardModel):
     Grants only what's listed in ``scopes`` - currently always both members of
     :class:`ApiKeyScope`, since there's no scope picker yet (every key can
     read the owner's uuid and create pins as them, and nothing else). Verified
-    by ``services.api_keys.authenticate_api_key`` via
+    by ``services.auth.api_keys.authenticate_api_key`` via
     ``external_api.authentication.ApiKeyAuthentication``, which is wired into
     the external API's viewsets only - it is never added to
     ``DEFAULT_AUTHENTICATION_CLASSES``, so it has no bearing on the internal,
@@ -315,12 +324,12 @@ class ApiKeyUsageLog(DashboardModel):
     """A recent-activity trail for one ``ApiKey`` - what it's actually been used for.
 
     Written once per successfully authenticated external-API request (see
-    ``services.api_keys.record_api_key_usage``, called from
+    ``services.auth.api_keys.record_api_key_usage``, called from
     ``external_api.authentication.ApiKeyAuthentication``) - never for a
     failed/unauthenticated attempt, so this can't be used to fingerprint
     guessing attacks. Deliberately bounded rather than an unbounded audit
     log: each write trims the same key's rows back down to
-    ``services.api_keys.USAGE_LOG_LIMIT``, since this exists for a user to
+    ``services.auth.api_keys.USAGE_LOG_LIMIT``, since this exists for a user to
     sanity-check "what has this app been doing" in the settings UI, not as a
     compliance-grade record.
     """

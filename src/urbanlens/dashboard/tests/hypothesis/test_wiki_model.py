@@ -59,6 +59,58 @@ class WikiLocationRelationTests(TestCase):
         self.assertEqual(wiki.name, "Unnamed Location")
 
 
+class WikiLookupTests(TestCase):
+    """``get_for_location`` and ``get_or_create_for_location``.
+
+    These used to cover a draft/official split: a wiki was born invisible and a
+    user's "Create wiki" click promoted it. Wikis are published on creation now,
+    so what is left is the ordinary get-or-create contract - which is still
+    worth pinning, because ``get_or_create_for_location`` is the only path that
+    may create one and every other caller must not.
+    """
+
+    def _location(self, **kwargs) -> Location:
+        defaults = {"official_name": "", "latitude": "40.0", "longitude": "-74.0"}
+        return baker.make(Location, **{**defaults, **kwargs})
+
+    def test_get_for_location_returns_the_wiki(self) -> None:
+        loc = self._location()
+        wiki = Wiki.objects.create(location=loc, name="Old Mill")
+        self.assertEqual(Wiki.objects.get_for_location(loc), wiki)
+
+    def test_get_for_location_returns_none_when_there_is_none(self) -> None:
+        self.assertIsNone(Wiki.objects.get_for_location(self._location()))
+
+    def test_get_for_location_never_creates(self) -> None:
+        """It is called on read paths; a wiki appearing from a page view is a bug."""
+        loc = self._location()
+
+        Wiki.objects.get_for_location(loc)
+
+        self.assertFalse(Wiki.objects.filter(location=loc).exists())
+
+    def test_get_or_create_names_from_the_location(self) -> None:
+        loc = self._location(official_name="Old Mill")
+        wiki, created = Wiki.objects.get_or_create_for_location(loc)
+        self.assertTrue(created)
+        self.assertEqual(wiki.name, "Old Mill")
+
+    def test_get_or_create_is_idempotent(self) -> None:
+        loc = self._location()
+        first, created_first = Wiki.objects.get_or_create_for_location(loc)
+        second, created_second = Wiki.objects.get_or_create_for_location(loc)
+        self.assertTrue(created_first)
+        self.assertFalse(created_second)
+        self.assertEqual(first.pk, second.pk)
+
+    def test_get_or_create_leaves_an_existing_wiki_alone(self) -> None:
+        loc = self._location()
+        existing = Wiki.objects.create(location=loc, name="Already here")
+        wiki, created = Wiki.objects.get_or_create_for_location(loc)
+        self.assertFalse(created)
+        self.assertEqual(wiki.pk, existing.pk)
+        self.assertEqual(wiki.name, "Already here")
+
 class EnrichWikiLocationNameTests(TestCase):
     """tasks.enrich_wiki_location's placeholder-name replacement.
 

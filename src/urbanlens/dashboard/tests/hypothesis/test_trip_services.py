@@ -28,11 +28,11 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.trip_access import can_perform, get_trip_for_viewer, has_joined, is_organizer
-from urbanlens.dashboard.services.trip_activities import compute_activity_index_map
-from urbanlens.dashboard.services.trip_errors import TripNotFoundError
-from urbanlens.dashboard.services.trip_map import build_trip_map_points
-from urbanlens.dashboard.services.trip_membership import resolve_trip_member
+from urbanlens.dashboard.services.trips.trip_access import can_perform, get_trip_for_viewer, has_joined, is_organizer
+from urbanlens.dashboard.services.trips.trip_activities import compute_activity_index_map
+from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError
+from urbanlens.dashboard.services.trips.trip_map import build_trip_map_points
+from urbanlens.dashboard.services.trips.trip_membership import resolve_trip_member
 
 #: Every permission level a trip's allow_* fields can hold.
 _LEVELS = [Trip.PERM_NONE, Trip.PERM_ORGANIZERS, Trip.PERM_EVERYONE]
@@ -261,9 +261,8 @@ class ResolveTripMemberTests(TestCase):
     def test_a_real_profile_off_the_trip_is_not_found(self) -> None:
         """Regression guard for the global profile-enumeration defect."""
         for kwargs in ({"slug": self.outsider.slug}, {"profile_id": self.outsider.pk}, {"slug": str(self.outsider.uuid)}):
-            with self.subTest(**kwargs):
-                with self.assertRaises(TripNotFoundError):
-                    resolve_trip_member(self.trip, **kwargs)
+            with self.subTest(**kwargs), self.assertRaises(TripNotFoundError):
+                resolve_trip_member(self.trip, **kwargs)
 
     def test_a_nonexistent_handle_is_not_found(self) -> None:
         """A missing profile and an off-trip one are indistinguishable."""

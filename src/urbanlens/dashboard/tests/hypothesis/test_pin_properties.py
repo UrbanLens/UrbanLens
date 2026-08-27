@@ -134,7 +134,7 @@ class PinEffectiveCoordinateTests(SimpleTestCase):
     @settings(max_examples=200)
     def test_effective_latitude_is_always_a_float(self, lat: Decimal) -> None:
         """Return type must be float, never Decimal."""
-        loc = _make_location("Place", lat=lat, lon=Decimal("0"))
+        loc = _make_location("Place", lat=lat, lon=Decimal(0))
         pin = _make_pin(location=loc)
         result = pin.effective_latitude
         self.assertIsInstance(result, float)
@@ -142,7 +142,7 @@ class PinEffectiveCoordinateTests(SimpleTestCase):
     @given(longitude)
     @settings(max_examples=200)
     def test_effective_longitude_is_always_a_float(self, lon: Decimal) -> None:
-        loc = _make_location("Place", lat=Decimal("0"), lon=lon)
+        loc = _make_location("Place", lat=Decimal(0), lon=lon)
         pin = _make_pin(location=loc)
         result = pin.effective_longitude
         self.assertIsInstance(result, float)

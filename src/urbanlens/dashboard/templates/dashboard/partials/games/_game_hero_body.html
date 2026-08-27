@@ -1,0 +1,23 @@
+{% comment %}
+Hero body for a game page - rendered through _page_hero.html's body_template
+hook, so the shared hero markup itself needs no change.
+
+Reads: game_icon, game_title, game_subtitle (from the including template) and
+game_stats (from the game's controller): a list of dicts with `label`, `value`,
+optional `note`, and `is_self` for the viewer's own chip.
+{% endcomment %}
+<h1 class="ul-page-hero__title">
+    {% if game_icon %}<i class="material-symbols-outlined">{{ game_icon }}</i>{% endif %}{{ game_title }}
+</h1>
+{% if game_subtitle %}<p class="ul-page-hero__subtitle">{{ game_subtitle }}</p>{% endif %}
+{% if game_stats %}
+<div class="ul-game-statrail">
+    {% for stat in game_stats %}
+    <div class="ul-game-stat{% if stat.is_self %} ul-game-stat--self{% endif %}">
+        <span class="ul-game-stat__label">{{ stat.label }}</span>
+        <span class="ul-game-stat__value">{{ stat.value }}</span>
+        {% if stat.note %}<span class="ul-game-stat__note">{{ stat.note }}</span>{% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

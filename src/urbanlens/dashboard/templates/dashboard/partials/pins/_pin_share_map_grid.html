@@ -13,7 +13,7 @@ Context:
     {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="psm-"|add:uuid_str map_data=candidate.to_snapshot title=candidate.title|default:"Map" map_obj=candidate %}
     <div class="pin-share-map-tile-footer">
         <span class="pin-share-map-title">{{ candidate.title|default:"Untitled map" }}</span>
-        <button type="button" class="pin-share-map-select-btn" onclick="_pinSharePickMap(this.closest('.pin-share-map-tile'))">
+        <button type="button" class="pin-share-map-select-btn" onclick="_pinSharePickMap(this.closest('.pin-share-map-tile'))" aria-label="Select this map">
             <i class="material-symbols-outlined">check_circle</i>
         </button>
     </div>

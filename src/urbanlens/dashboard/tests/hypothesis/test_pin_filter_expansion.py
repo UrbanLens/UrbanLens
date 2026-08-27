@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
-from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
+from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
 
 _coord_counter = 0
 

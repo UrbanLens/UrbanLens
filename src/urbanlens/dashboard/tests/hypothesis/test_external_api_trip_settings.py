@@ -3,7 +3,7 @@
 A trip's four permission levels decide who on a shared trip may add members,
 add or edit activities, and comment. Until now the only editor was the site's
 own ``POST /trips/<slug>/settings/`` form, which always submits all four radio
-groups at once - so ``services.trip_crud.set_trip_permissions`` was written to
+groups at once - so ``services.trips.trip_crud.set_trip_permissions`` was written to
 read all four unconditionally and, for any it did not find, fall back to a
 *hardcoded default*.
 
@@ -31,9 +31,9 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.trip_crud import TRIP_PERMISSION_FIELDS, set_trip_permissions
-from urbanlens.dashboard.services.trip_errors import TripPermissionError, TripValidationError
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.trips.trip_crud import TRIP_PERMISSION_FIELDS, set_trip_permissions
+from urbanlens.dashboard.services.trips.trip_errors import TripPermissionError, TripValidationError
 
 _TRIP_SCOPES = [ApiKeyScope.TRIPS_READ.value, ApiKeyScope.TRIPS_WRITE.value]
 

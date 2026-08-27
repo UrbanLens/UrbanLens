@@ -38,9 +38,12 @@ from model_bakery import baker
 
 from urbanlens.dashboard.external_api.serializers import JournalEntrySerializer
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, ImageSource
+from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.memories.journal import JournalEntry
 
 if TYPE_CHECKING:
@@ -187,6 +190,94 @@ class PhotoDeleteTests(_PhotoApiTestCase):
         """A 204 and the row is gone."""
         url = reverse("external_api:photos.detail", kwargs={"image_uuid": self.image.uuid})
         response = self.client.delete(url, **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
+        self.assertFalse(Image.objects.filter(pk=self.image.pk).exists())
+
+
+class PhotoDeleteDualOwnershipTests(_PhotoApiTestCase):
+    """A photo that's also linked to a wiki (``wiki_creation._seed_photos`` and
+    ``PinGalleryBulkView``'s "send to wiki" repoint the row rather than copying
+    it) must not be destroyed just because the mobile client deleted it from
+    the caller's own photo library - the web `PinImageView`/`WikiImageView`
+    guard the same case (see test_pin_wiki_image_dual_ownership.py); this API
+    is a second, independent surface hitting the identical unconditional
+    `image.delete()` bug."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = Location.objects.create(latitude=41.0, longitude=-71.0)
+        self.pin = Pin.objects.create(profile=self.profile, location=self.location, name="Mobile dual-owned spot")
+        self.wiki = Wiki.objects.create(location=self.location)
+
+    def test_deleting_a_dual_owned_photo_unlinks_the_pin_and_keeps_the_wiki_copy(self) -> None:
+        image = _make_image(self.profile, pin=self.pin, wiki=self.wiki, location=self.location)
+        url = reverse("external_api:photos.detail", kwargs={"image_uuid": image.uuid})
+
+        response = self.client.delete(url, **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
+        self.assertTrue(Image.objects.filter(pk=image.pk, wiki=self.wiki, pin__isnull=True).exists())
+
+    def test_asking_withdraws_a_dual_owned_photo_entirely(self) -> None:
+        """?from_wiki=true must win even when a pin is still attached - the
+        pin-preserving unlink the default case does above must not silently
+        swallow an explicit request to withdraw from the wiki too."""
+        image = _make_image(self.profile, pin=self.pin, wiki=self.wiki, location=self.location, source=ImageSource.UPLOAD)
+        url = reverse("external_api:photos.detail", kwargs={"image_uuid": image.uuid})
+
+        response = self.client.delete(f"{url}?from_wiki=true", **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
+        self.assertFalse(Image.objects.filter(pk=image.pk).exists())
+
+
+class PhotoDeleteAndTheWikiTests(_PhotoApiTestCase):
+    """Deleting over the API withdraws a wiki contribution only if asked.
+
+    The same rule the pin gallery follows: contributing a photo to a community
+    wiki is a deliberate act, so undoing it is another one, and a caller that
+    says nothing gets the answer that needs no action. A client has what it needs
+    to ask first - ``wiki_slug`` and ``source`` are both on the photo payload.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        self.wiki = baker.make(Wiki, location=self.image.location or baker.make("dashboard.Location", latitude=41.7, longitude=-73.9))
+        Image.objects.filter(pk=self.image.pk).update(wiki=self.wiki, source=ImageSource.UPLOAD)
+        self.image.refresh_from_db()
+
+    def _url(self) -> str:
+        return reverse("external_api:photos.detail", kwargs={"image_uuid": self.image.uuid})
+
+    def test_a_silent_delete_leaves_it_on_the_wiki(self) -> None:
+        response = self.client.delete(self._url(), **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
+        self.assertTrue(Image.objects.filter(pk=self.image.pk, wiki=self.wiki).exists(), "the API withdrew a wiki contribution nobody asked to withdraw")
+
+    def test_asking_withdraws_it(self) -> None:
+        response = self.client.delete(f"{self._url()}?from_wiki=true", **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
+        self.assertFalse(Image.objects.filter(pk=self.image.pk).exists())
+
+    def test_an_external_photo_stays_even_when_asked(self) -> None:
+        """A fetched photo was public online before we saw it - nothing to withdraw."""
+        Image.objects.filter(pk=self.image.pk).update(source=ImageSource.LINKED_URL)
+
+        response = self.client.delete(f"{self._url()}?from_wiki=true", **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
+        self.assertTrue(Image.objects.filter(pk=self.image.pk, wiki=self.wiki).exists(), "an external photo was pulled off the wiki by an API delete")
+
+    def test_a_photo_on_no_wiki_still_deletes_outright(self) -> None:
+        """The ordinary case, unchanged."""
+        Image.objects.filter(pk=self.image.pk).update(wiki=None)
+
+        response = self.client.delete(self._url(), **_bearer(self.raw_key))
+
         self.assertEqual(response.status_code, HTTPStatus.NO_CONTENT)
         self.assertFalse(Image.objects.filter(pk=self.image.pk).exists())
 
@@ -365,7 +456,7 @@ class PhotoUploadApiTests(TestCase):
         self.profile = Profile.objects.get(user=self.user)
         self.raw_key = _key_with_scopes(self.user, [ApiKeyScope.PHOTOS_READ, ApiKeyScope.PHOTOS_WRITE])
 
-    @patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_upload_creates_a_photo(self, mock_enqueue) -> None:
         """A multipart upload lands as an Image owned by the key's user."""
         upload = SimpleUploadedFile("new.png", _PNG_BYTES, content_type="image/png")
@@ -382,7 +473,7 @@ class PhotoUploadApiTests(TestCase):
         self.assertEqual(image.profile_id, self.profile.pk)
         mock_enqueue.assert_called_once()
 
-    @patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_duplicate_upload_is_refused(self, _mock_enqueue) -> None:
         """The same bytes twice is a 409, matching the web uploader."""
         for _ in range(2):

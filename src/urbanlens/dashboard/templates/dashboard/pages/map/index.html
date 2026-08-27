@@ -1,12 +1,12 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load dashboard_tags map_components static %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="" />
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
+{% vendor_asset "leaflet_markercluster_css" %}
+{% vendor_asset "leaflet_markercluster_js" %}
 {% endblock %}
 
 {% block title %}Map{% endblock %}
@@ -14,15 +14,15 @@
 {% block content %}
 <div id="map" data-map-style="{% if map_dark_mode == 'dark' %}dark{% else %}light{% endif %}" hx-boost="true">
     {# -- Map toolbar (tools only; shared component - see map_components.py) -- #}
-    {% map_toolbar "add_pin,import,search,select,screenshot" %}
+    {% map_toolbar "add_pin,import,search,pin_list,select,screenshot" %}
 
     {# -- Layers panel (bottom-left, Google-Maps style; shared component) ------ #}
     {# Rendered by the shared {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} tag and driven by      #}
     {# window.MapLayers - the same code every other map on the site uses.       #}
     {% if show_places_layer %}
-    {% map_layers_panel "street,terrain,satellite,weather,pins,childpins,dark,borders,places" %}
+    {% map_layers_panel "street,terrain,satellite,weather,pins,childpins,dark,borders,infrastructure,places" %}
     {% else %}
-    {% map_layers_panel "street,terrain,satellite,weather,pins,childpins,dark,borders" %}
+    {% map_layers_panel "street,terrain,satellite,weather,pins,childpins,dark,borders,infrastructure" %}
     {% endif %}
 
     {# -- Saved-filters toggle toolbar (bottom-right; toggle saved filters on/off) -- #}
@@ -124,11 +124,11 @@
                     <div class="fp-date-block" id="fp-visits-dates" style="display:none">
                         <div class="fp-date-row">
                             <span class="fp-date-label">After</span>
-                            <input type="date" name="visited_after" id="fp-visited-after" class="fp-date-input">
+                            <input type="date" name="visited_after" id="fp-visited-after" class="fp-date-input" aria-label="Visited on or after">
                         </div>
                         <div class="fp-date-row">
                             <span class="fp-date-label">Before</span>
-                            <input type="date" name="visited_before" id="fp-visited-before" class="fp-date-input">
+                            <input type="date" name="visited_before" id="fp-visited-before" class="fp-date-input" aria-label="Visited on or before">
                         </div>
                         <button type="button" class="fp-date-reset" id="fp-visited-dates-reset" style="display:none"
                                 title="Clear date filters" onclick="_resetVisitDates()">
@@ -150,11 +150,11 @@
                         <div class="fp-date-block">
                             <div class="fp-date-row">
                                 <span class="fp-date-label">After</span>
-                                <input type="date" name="created_after" id="fp-created-after" class="fp-date-input">
+                                <input type="date" name="created_after" id="fp-created-after" class="fp-date-input" aria-label="Pinned on or after">
                             </div>
                             <div class="fp-date-row">
                                 <span class="fp-date-label">Before</span>
-                                <input type="date" name="created_before" id="fp-created-before" class="fp-date-input">
+                                <input type="date" name="created_before" id="fp-created-before" class="fp-date-input" aria-label="Pinned on or before">
                             </div>
                             <button type="button" class="fp-date-reset" id="fp-created-dates-reset" style="display:none"
                                     title="Clear date filters" onclick="_resetCreatedDates()">
@@ -167,11 +167,11 @@
                         <div class="fp-date-block">
                             <div class="fp-date-row">
                                 <span class="fp-date-label">After</span>
-                                <input type="date" name="date_built_after" id="fp-date-built-after" class="fp-date-input">
+                                <input type="date" name="date_built_after" id="fp-date-built-after" class="fp-date-input" aria-label="Built on or after">
                             </div>
                             <div class="fp-date-row">
                                 <span class="fp-date-label">Before</span>
-                                <input type="date" name="date_built_before" id="fp-date-built-before" class="fp-date-input">
+                                <input type="date" name="date_built_before" id="fp-date-built-before" class="fp-date-input" aria-label="Built on or before">
                             </div>
                             <button type="button" class="fp-date-reset" id="fp-date-built-dates-reset" style="display:none"
                                     title="Clear date filters" onclick="_dateBuiltRange.reset()">
@@ -184,11 +184,11 @@
                         <div class="fp-date-block">
                             <div class="fp-date-row">
                                 <span class="fp-date-label">After</span>
-                                <input type="date" name="date_abandoned_after" id="fp-date-abandoned-after" class="fp-date-input">
+                                <input type="date" name="date_abandoned_after" id="fp-date-abandoned-after" class="fp-date-input" aria-label="Abandoned on or after">
                             </div>
                             <div class="fp-date-row">
                                 <span class="fp-date-label">Before</span>
-                                <input type="date" name="date_abandoned_before" id="fp-date-abandoned-before" class="fp-date-input">
+                                <input type="date" name="date_abandoned_before" id="fp-date-abandoned-before" class="fp-date-input" aria-label="Abandoned on or before">
                             </div>
                             <button type="button" class="fp-date-reset" id="fp-date-abandoned-dates-reset" style="display:none"
                                     title="Clear date filters" onclick="_dateAbandonedRange.reset()">
@@ -201,11 +201,11 @@
                         <div class="fp-date-block">
                             <div class="fp-date-row">
                                 <span class="fp-date-label">After</span>
-                                <input type="date" name="last_viewed_after" id="fp-last-viewed-after" class="fp-date-input">
+                                <input type="date" name="last_viewed_after" id="fp-last-viewed-after" class="fp-date-input" aria-label="Last viewed on or after">
                             </div>
                             <div class="fp-date-row">
                                 <span class="fp-date-label">Before</span>
-                                <input type="date" name="last_viewed_before" id="fp-last-viewed-before" class="fp-date-input">
+                                <input type="date" name="last_viewed_before" id="fp-last-viewed-before" class="fp-date-input" aria-label="Last viewed on or before">
                             </div>
                             <button type="button" class="fp-date-reset" id="fp-last-viewed-dates-reset" style="display:none"
                                     title="Clear date filters" onclick="_lastViewedRange.reset()">
@@ -248,7 +248,7 @@
                 <div class="fp-accordion-body">
                     <div class="fp-score-group">
                         <div class="fp-score-label">Has links</div>
-                        <select name="has_links" id="fp-has-links" class="fp-select">
+                        <select name="has_links" id="fp-has-links" class="fp-select" aria-label="Has links">
                             <option value="">Any</option>
                             <option value="yes">Has links</option>
                             <option value="no">No links</option>
@@ -303,6 +303,16 @@
                         <div class="fp-formula-display-text" id="fp-formula-display-text"></div>
                     </div>
 
+                    {# Kind tabs filtering the availability list below - shared with every #}
+                    {# label picker (search still narrows within the active tab, via the  #}
+                    {# formula bar below - see ts/shared/label-picker.ts). #}
+                    <div class="tad-tabs" id="fp-label-kind-tabs" role="tablist">
+                        <button type="button" class="tad-tab tad-tab--active" data-tab="" role="tab">All</button>
+                        <button type="button" class="tad-tab" data-tab="tag" role="tab">Tags</button>
+                        <button type="button" class="tad-tab" data-tab="category" role="tab">Categories</button>
+                        <button type="button" class="tad-tab" data-tab="status" role="tab">Statuses</button>
+                    </div>
+
                     {# Formula bar - replaces old search input. Supports plain search + formula operators. #}
                     <div class="fp-formula-wrap" id="fp-formula-wrap">
                         <input type="text" class="fp-formula-bar" id="fp-label-formula"
@@ -324,6 +334,7 @@
                                 data-label-text="{{ label.name|escapejs }}"
                                 data-label-color="{{ label.color|default:'' }}"
                                 data-label-icon="{{ label.icon|default:'' }}"
+                                data-label-kind="{{ label.kind }}"
                                 {% if label.color %}style="border-color:{{ label.color }}55;background:{{ label.color }}18;color:{{ label.color }}cc"{% endif %}>
                             {% if label.icon %}<span style="font-size:.9em">{{ label.icon }}</span>{% endif %}
                             {{ label.name }}
@@ -379,17 +390,14 @@
     </button>
 
     {# -- Save Filter dialog ------------------------------------------------ #}
-    <dialog id="save-filter-dialog" class="ul-dialog">
+    <dialog id="save-filter-dialog" class="ul-dialog" aria-labelledby="dialog-title-save-filter">
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Save Filter" %}
         <div class="ul-dialog-body">
             <form hx-post="{% url 'saved_filters.create' %}" hx-include="#filter-form"
                 hx-target="#fp-saved-filters-mount" hx-swap="outerHTML"
                 hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();}">
                 {% csrf_token %}
-                <div class="form-row">
-                    <label for="saved-filter-name">Name <span class="required">*</span></label>
-                    <input type="text" name="filter_name" id="saved-filter-name" required maxlength="100" placeholder="e.g. Must-visit demolitions" autocomplete="off">
-                </div>
+                {% include "dashboard/partials/pin_lists/_saved_filter_appearance_fields.html" %}
                 <div class="form-actions">
                     <button type="submit" class="btn btn--primary">Save Filter</button>
                     <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
@@ -400,6 +408,13 @@
 
     {# -- Pin list panel (left-docked) ------------------------------------ #}
     <div id="pin-list-panel">
+        {# Reuses the filter panel's header chrome - on mobile this panel is a #}
+        {# bottom sheet, where the edge handle is unavailable and a visible #}
+        {# close control is the only dismiss affordance besides the toolbar toggle. #}
+        <div class="fp-header">
+            <span class="fp-title">Pins</span>
+            <button type="button" class="fp-close" onclick="_togglePinListPanel()" aria-label="Close">✕</button>
+        </div>
         <div class="pl-body" id="pin-list-body"></div>
     </div>
 
@@ -436,7 +451,7 @@
     <div id="map-body"></div>
 
 </div>
-<dialog id="add-pin-dialog" class="add-pin-dialog ul-dialog" data-closefn="closeAddPinDialog">
+<dialog id="add-pin-dialog" class="add-pin-dialog ul-dialog" data-closefn="closeAddPinDialog" aria-label="Add pin">
     <div class="apdlg-header">
         <h2><i class="material-icons" style="font-size:1.1rem;vertical-align:-.15em;margin-right:.35rem;">add_location</i>Add Pin</h2>
         <button class="btn-close" onclick="closeAddPinDialog()" aria-label="Close">x</button>
@@ -478,6 +493,12 @@
             <label class="form-label">Labels</label>
             <div class="apdlg-label-field" id="apdlg-label-field">
                 <div class="apdlg-label-chips" id="apdlg-label-chips"></div>
+                <div class="tad-tabs" id="apdlg-label-kind-tabs" role="tablist">
+                    <button type="button" class="tad-tab tad-tab--active" data-tab="" role="tab">All</button>
+                    <button type="button" class="tad-tab" data-tab="tag" role="tab">Tags</button>
+                    <button type="button" class="tad-tab" data-tab="category" role="tab">Categories</button>
+                    <button type="button" class="tad-tab" data-tab="status" role="tab">Statuses</button>
+                </div>
                 <div class="apdlg-label-input-wrap form-input-wrap">
                     <input type="text" id="apdlg-label-search" class="form-input apdlg-label-input"
                            placeholder="Search or add labels..." autocomplete="off" autocorrect="off">
@@ -543,7 +564,7 @@
 </dialog>
 
 {# Mini dialog: "Create a label" from the add-pin label selector #}
-<dialog id="apdlg-create-label-dialog" class="ul-dialog tag-create-card">
+<dialog id="apdlg-create-label-dialog" class="ul-dialog tag-create-card" aria-labelledby="dialog-title-create-a-label">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a label" %}
     <div class="ul-dialog-body">
         <div class="form-field">
@@ -589,7 +610,7 @@
 </script>
 
 {# -- New-user pin-suggestions intro dialog ------------------------------- #}
-<dialog id="pin-suggestions-intro-dialog" class="ul-dialog">
+<dialog id="pin-suggestions-intro-dialog" class="ul-dialog" aria-labelledby="dialog-title-suggested-pins-near-you">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Suggested pins near you" %}
     <div class="ul-dialog-body">
         <p>We've found public locations other explorers have shared that you haven't pinned yet.</p>
@@ -625,6 +646,26 @@
 {% block scripts %}
 <script>
     // -- Constants -------------------------------------------------------------
+
+    // -- HTML-building safety ---------------------------------------------------
+    // This script builds markup by interpolation in a lot of places. The two
+    // contexts need different escaping and are easy to mix up: a quote ends an
+    // attribute but is inert in text, so a text escaper used on an attribute value
+    // looks like protection and is not. (There is a second, partial pair of these
+    // further down, local to the location-conflict dialog - these are the ones the
+    // rest of the script can see.)
+    function _ulEscText(value) {
+        return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function _ulEscAttr(value) {
+        return _ulEscText(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    // Anything reaching href=/src= also needs its *scheme* checked - escaping quotes
+    // does nothing about `javascript:`. Relative paths and http(s) only.
+    function _ulSafeUrl(value) {
+        const url = String(value == null ? '' : value).trim();
+        return /^(?:https?:\/\/|\/(?!\/))/i.test(url) ? url : '';
+    }
     const _PROFILE_UUID = '{{ profile_uuid|default:"" }}';
     const _APP_UUID     = '{{ app_uuid|default:"" }}';   // server instance UUID - changes on DB wipe
     const _SHOW_FILTERED_PIN_COUNT = {{ show_filtered_pin_count|yesno:'true,false' }};
@@ -652,6 +693,7 @@
     let   _totalPins         = {{ pin_count|default:0 }};
     let   _isOffline         = false;   // true when the meta poll returns an error/network failure
     let   _searchMarker      = null;    // temporary Leaflet marker placed on search-result jump
+    let   _userLocationMarker = null;   // persistent "you are here" dot from the most recent GPS fix
     let   _contextMenuMarker = null;    // temporary marker while the map right-click menu is open
     let   _contextMenuDismiss = null;   // document click handler for the active context menu
 
@@ -817,6 +859,37 @@
     window.map = map;
     window.pin = null;
 
+    // Show the "you are here" dot immediately from a cached fix (if any) rather
+    // than waiting up to 8s for the live read below to resolve; that live read
+    // then relocates this same marker once it comes back.
+    //
+    // Deliberately independent of _MAP_CENTER_MODE: knowing where you are is
+    // useful on every map, not only one that centres on you. Gating this on
+    // GPS mode meant a user who centres on their last position - or a custom
+    // point - had shared their location and still had no idea where they were
+    // standing relative to their pins.
+    if (_cachedUserLoc) {
+        _showUserLocationMarker(_cachedUserLoc.lat, _cachedUserLoc.lng);
+    }
+
+    // With permission already granted, keep that dot current without prompting
+    // and without moving the map. Permission is checked first precisely so this
+    // never turns into a prompt for somebody who hasn't opted in; GPS mode does
+    // its own (map-moving) read below, so it is excluded here.
+    if (_MAP_CENTER_MODE !== 'gps' && navigator.geolocation && navigator.permissions?.query) {
+        navigator.permissions.query({ name: 'geolocation' }).then(function (status) {
+            if (status.state !== 'granted') return;
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
+                    _showUserLocationMarker(pos.coords.latitude, pos.coords.longitude);
+                },
+                function () { /* a refused or failed passive read is not worth surfacing */ },
+                { maximumAge: 300000, timeout: 8000 },
+            );
+        }).catch(function () { /* Permissions API unavailable - stay with the cached dot */ });
+    }
+
     // GPS mode: refine the initial centre with a live geolocation read.
     // If we already used a cached position, the map won't visibly jump; we just
     // silently refresh the cache so the next load is accurate. If we had no cached
@@ -849,6 +922,7 @@
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
+                _showUserLocationMarker(pos.coords.latitude, pos.coords.longitude);
                 if (_GEOLOCATION_TRACKING_ALLOWED) {
                     _recordGeolocationVisit(pos.coords.latitude, pos.coords.longitude);
                 }
@@ -1034,24 +1108,56 @@
             return c;
         } catch { return null; }
     }
+    // Delegates to shared/pin-cache.ts (installed on window by core.js, which
+    // base.html loads synchronously in <head>). Falls back to a no-op rather than
+    // throwing if that bundle ever fails to load - reclaiming space is an
+    // optimization, never a correctness requirement.
+    function _purgeOrphanCaches() {
+        try {
+            const removed = window.ulPurgeForeignPinCaches ? window.ulPurgeForeignPinCaches(_CACHE_KEY) : 0;
+            if (removed) console.log('[UL] Reclaimed %d orphaned pin cache blob(s)', removed);
+            return removed;
+        } catch { return 0; }
+    }
+    function _isQuotaError(err) {
+        // Firefox uses its own legacy name; some engines only set the numeric code.
+        return !!err && (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED' || err.code === 22);
+    }
     function _writeCache() {
         if (!_USE_CACHE) return;
         if (!_pinStore.size) return;   // nothing to cache yet
         const ts = Date.now();
+        const payload = JSON.stringify({
+            v: 8, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
+            lastUpdated: _lastKnownUpdated,
+            tiles: [..._fetchedTiles],
+            pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
+        });
         try {
-            const payload = JSON.stringify({
-                v: 8, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
-                lastUpdated: _lastKnownUpdated,
-                tiles: [..._fetchedTiles],
-                pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
-            });
             localStorage.setItem(_CACHE_KEY, payload);
-            _updateCacheStatus(ts);
-            console.log('[UL] Cache written - %d pins, %dKB', _pinStore.size, Math.round(payload.length / 1024));
         } catch (err) {
-            console.warn('[UL] Cache write failed (%s) - pins will reload next visit', err && err.name || err);
+            if (!_isQuotaError(err)) {
+                console.warn('[UL] Cache write failed (%s) - pins will reload next visit', err && err.name || err);
+                try { localStorage.removeItem(_CACHE_KEY); } catch {}
+                return;
+            }
+            // Out of quota: drop this profile's previous blob and any orphans, then
+            // try exactly once more. Without the retry the session ends uncached even
+            // though the removals just freed the space the write needed.
             try { localStorage.removeItem(_CACHE_KEY); } catch {}
+            _purgeOrphanCaches();
+            try {
+                localStorage.setItem(_CACHE_KEY, payload);
+            } catch (retryErr) {
+                console.warn('[UL] Cache too large for localStorage (%s) - pins will reload next visit', retryErr && retryErr.name || retryErr);
+                try { localStorage.removeItem(_CACHE_KEY); } catch {}
+                const el = document.getElementById('cache-status');
+                if (el) el.textContent = 'cache: too large';
+                return;
+            }
         }
+        _updateCacheStatus(ts);
+        console.log('[UL] Cache written - %d pins, %dKB', _pinStore.size, Math.round(payload.length / 1024));
     }
     function _scheduleCache() {
         if (!_USE_CACHE) return;
@@ -1060,8 +1166,12 @@
     }
     // Flush the cache when the user navigates away so it's always saved
     window.addEventListener('beforeunload', _writeCache);
-    // Purge stale keys from old cache versions
-    if (_PROFILE_UUID) try { localStorage.removeItem(`ul_pins_v4_${_PROFILE_UUID}`); } catch {}
+    // Reclaim every pin-cache blob that is not this profile's current one: retired
+    // versions, pre-v5 PK-shaped keys, and other accounts' blobs on a shared
+    // browser. Nothing else ever reads those, so _readCache's expiry can't free
+    // them, and a stale multi-MB orphan is what pushes a write over the ~5 MB
+    // origin quota (see UL-355 - clearing site data by hand "fixed" that report).
+    _purgeOrphanCaches();
     // Call after any pin mutation (add/delete) to force a fresh fetch next time.
     // Always clears any existing localStorage entry regardless of _USE_CACHE,
     // so disabling and re-enabling caching starts fresh.
@@ -1245,6 +1355,29 @@
         });
     }
 
+    // -- "You are here" marker --------------------------------------------------
+    // Unlike _searchMarker (a temp place-pin cleared on the next search), this
+    // persists across pans/searches once a GPS fix has been shown - it's
+    // updated in place rather than recreated, so repeated fixes (initial load,
+    // background refresh, "jump to my location") just relocate the same dot.
+    function _showUserLocationMarker(lat, lng) {
+        if (_userLocationMarker) {
+            _userLocationMarker.setLatLng([lat, lng]);
+            return;
+        }
+        _userLocationMarker = L.marker([lat, lng], {
+            icon: L.divIcon({
+                className: 'user-location-marker-wrap',
+                html: '<span class="user-location-marker-halo"></span><span class="user-location-marker-dot"></span>',
+                iconSize: [22, 22],
+                iconAnchor: [11, 11],
+            }),
+            zIndexOffset: 3000,
+            title: 'Your location',
+        }).bindPopup('Your approximate location');
+        _userLocationMarker.addTo(map);
+    }
+
     function _clearContextMenuMarker() {
         if (!_contextMenuMarker) return;
         map.removeLayer(_contextMenuMarker);
@@ -1268,6 +1401,43 @@
         if (!keepMarker) _clearContextMenuMarker();
     }
 
+    // Context menus are position:fixed, so they take viewport coordinates and
+    // have to be kept inside it - a long-press near the right or bottom edge
+    // opens the menu where nothing can scroll it back into view otherwise.
+    function _placeFloatingMenu(menu, clientX, clientY) {
+        const margin = 8;
+        menu.style.maxWidth = `${window.innerWidth - margin * 2}px`;
+        menu.style.maxHeight = `${window.innerHeight - margin * 2}px`;
+        menu.style.overflowY = 'auto';
+        // Measure from the origin - shrink-to-fit width depends on where the menu
+        // sits, so measuring it in place reports a squeezed, taller box.
+        menu.style.left = '0px';
+        menu.style.top = '0px';
+        if (!menu.isConnected) document.body.appendChild(menu);
+        const { width, height } = menu.getBoundingClientRect();
+        // Flip to the other side of the press point when the menu does not fit
+        // below/right of it; the clamp then covers menus that fit neither way.
+        const left = clientX + width + margin > window.innerWidth ? clientX - width : clientX;
+        const top = clientY + height + margin > window.innerHeight ? clientY - height : clientY;
+        const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+        const maxTop = Math.max(margin, window.innerHeight - height - margin);
+        menu.style.left = `${Math.min(Math.max(left, margin), maxLeft)}px`;
+        menu.style.top = `${Math.min(Math.max(top, margin), maxTop)}px`;
+    }
+
+    // Marker menus open at the point that was clicked, in viewport coordinates;
+    // a marker reached by keyboard reports none, so fall back to where the
+    // marker itself sits on screen.
+    function _markerMenuAnchor(e, lat, lng) {
+        const src = e && e.originalEvent;
+        if (src && Number.isFinite(src.clientX) && Number.isFinite(src.clientY)) {
+            return { x: src.clientX, y: src.clientY };
+        }
+        const rect = map.getContainer().getBoundingClientRect();
+        const pt = map.latLngToContainerPoint([lat, lng]);
+        return { x: rect.left + pt.x, y: rect.top + pt.y };
+    }
+
     function _clearSearchMarker() {
         if (!_searchMarker) return;
         map.removeLayer(_searchMarker);
@@ -1278,15 +1448,13 @@
         _clearSearchMarker();
         _clearContextMenuMarker();
         _searchMarker = _createTempPlaceMarker(lat, lng, title || '', true /* isSearch */);
-        _searchMarker.on('click', function() {
+        _searchMarker.on('click', function(e) {
             map.closePopup();
             document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
             const latFmt = lat.toFixed(6), lngFmt = lng.toFixed(6);
+            const anchor = _markerMenuAnchor(e, lat, lng);
             const menu = document.createElement('div');
             menu.className = 'map-context-menu';
-            const pt = map.latLngToContainerPoint([lat, lng]);
-            menu.style.top = `${pt.y}px`;
-            menu.style.left = `${pt.x}px`;
 
             const coordItem = document.createElement('button');
             coordItem.className = 'map-context-menu__item map-context-menu__coords';
@@ -1315,7 +1483,7 @@
             dismissItem.addEventListener('click', () => { menu.remove(); _clearSearchMarker(); });
             menu.appendChild(dismissItem);
 
-            document.body.appendChild(menu);
+            _placeFloatingMenu(menu, anchor.x, anchor.y);
             const dismiss = (ev) => {
                 if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); }
             };
@@ -1394,7 +1562,7 @@
                 const iconColorStyle = hasColor ? '' : ` style="color:${color};"`;
                 iconHtml = `<i class="material-icons map-pin-icon"${iconColorStyle}>${pin.icon}</i>`;
             } else if (/^(https?:\/\/|\/)/.test(pin.icon)) {
-                iconHtml = `<img src="${pin.icon}" class="map-pin-custom-img" alt="">`;
+                iconHtml = `<img src="${_ulEscAttr(pin.icon)}" class="map-pin-custom-img" alt="">`;
             } else {
                 iconHtml = `<span class="map-pin-emoji">${pin.icon}</span>`;
             }
@@ -1444,7 +1612,7 @@
 
         const popupContent = `
             <div class="pin-popup" data-uuid="${pin.uuid}" data-id="${pin.id || ''}">
-                <div class="popup-title">${_escHtml(pin.name || '')}</div>
+                <a class="popup-title" href="${_escHtml(pin.viewLocationUrl)}" title="Open this pin's details">${_escHtml(pin.name || '')}</a>
                 ${pin.address ? `<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ${_escHtml(pin.address)}</div>` : ''}
                 ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ''}
                 ${pin.last_visited && pin.last_visited !== 'Never' ? `
@@ -1458,10 +1626,17 @@
                 ${tagChips ? `<div class="popup-tags">${tagChips}</div>` : ''}
                 <div class="popup-actions">
                     <a href="${_escHtml(pin.viewLocationUrl)}" class="view-full-pin">View Details</a>
-                    ${pin.id ? `<button class="add-to-list-button" onclick="event.stopPropagation(); openAddToListDialog(${pin.id})" title="Add to list"><i class="material-symbols-outlined">playlist_add</i></button>` : ''}
-                    ${pin.child_count > 0 ? `<button class="btn btn--icon promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all child pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ''}
-                    <button class="edit-pin-button" onclick="openEditPinDialog('${pin.uuid}')" title="Edit pin"><i class="material-symbols-outlined">edit</i></button>
-                    <button class="delete-button" onclick="deletePin(this)" title="Delete pin"><i class="material-symbols-outlined">delete</i></button>
+                    <div class="popup-menu">
+                        <button type="button" class="popup-menu-toggle" aria-haspopup="true" aria-expanded="false"
+                                title="More actions" aria-label="More actions for this pin"
+                                onclick="togglePinPopupMenu(this)"><i class="material-symbols-outlined">more_vert</i></button>
+                        <div class="popup-menu-items" role="menu" hidden>
+                            ${pin.id ? `<button type="button" role="menuitem" class="add-to-list-button" onclick="event.stopPropagation(); closePinPopupMenus(); openAddToListDialog(${pin.id})"><i class="material-symbols-outlined">playlist_add</i> Add to list</button>` : ''}
+                            ${pin.child_count > 0 ? `<button type="button" role="menuitem" class="promote-children-button" onclick="event.stopPropagation(); closePinPopupMenus(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})"><i class="material-symbols-outlined">move_up</i> Promote child pins</button>` : ''}
+                            <button type="button" role="menuitem" class="edit-pin-button" onclick="closePinPopupMenus(); openEditPinDialog('${pin.uuid}')"><i class="material-symbols-outlined">edit</i> Edit pin</button>
+                            <button type="button" role="menuitem" class="delete-button" onclick="deletePin(this)"><i class="material-symbols-outlined">delete</i> Delete pin</button>
+                        </div>
+                    </div>
                 </div>
             </div>`;
         marker.bindPopup(popupContent);
@@ -1698,17 +1873,11 @@
     }
 
     // -- Fetch tiles from server -----------------------------------------------
-    async function _fetchJson(url, options, timeoutMs) {
-        const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), timeoutMs || 120000);
-        try {
-            const opts = Object.assign({}, options || {}, { signal: controller.signal });
-            const resp = await fetch(url, opts);
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            return await resp.json();
-        } finally {
-            clearTimeout(tid);
-        }
+    // Thin shim over the shared helper (frontend/ts/shared/fetch-json.ts), which
+    // this page's own version was promoted into. Kept so the timeout stays a
+    // positional argument at the call sites below.
+    function _fetchJson(url, options, timeoutMs) {
+        return window.ulFetchJson(url, Object.assign({}, options || {}, { timeoutMs: timeoutMs || 120000 }));
     }
 
     async function _fetchAllPinPages(message) {
@@ -2088,6 +2257,151 @@
     let _placesLayerActive = false;
     const _PLACES_MIN_ZOOM = 10;  // only fetch when zoom >= this level
 
+    // Waterways + railways, including OSM lifecycle-tagged historic routes.
+    // Geometry is fetched only for the visible viewport from UrbanLens'
+    // server-side Overpass proxy; this keeps browser requests small and avoids
+    // exposing or depending directly on a public community endpoint.
+    const _infrastructureLayerGroup = L.layerGroup();
+    const _infrastructureRenderer = L.canvas({ padding: 0.5 });
+    const _INFRASTRUCTURE_MIN_ZOOM = 11;
+    let _infrastructureLayerActive = false;
+    let _infrastructureAbortController = null;
+    let _infrastructureRequestSerial = 0;
+    let _infrastructureLastBbox = '';
+    let _infrastructureFetchTimer = null;
+    let _infrastructureZoomNoticeShown = false;
+
+    function _infrastructureStyle(feature) {
+        const props = feature?.properties || {};
+        if (props.kind === 'rail') {
+            return {
+                color: props.historic ? '#d97706' : '#8b1e3f',
+                weight: props.historic ? 3 : 3.5,
+                opacity: 0.9,
+                dashArray: props.historic ? '8 7' : null,
+                lineCap: 'round',
+                lineJoin: 'round',
+            };
+        }
+        return {
+            color: props.historic ? '#0f766e' : '#1479b8',
+            weight: props.historic ? 2.75 : 3,
+            opacity: 0.9,
+            dashArray: props.historic ? '4 7' : null,
+            lineCap: 'round',
+            lineJoin: 'round',
+        };
+    }
+
+    function _bindInfrastructureFeature(feature, layer) {
+        const props = feature?.properties || {};
+        const name = _escHtml(props.name || (props.kind === 'rail' ? 'Railway' : 'Waterway'));
+        const type = _escHtml(props.type || '');
+        const status = _escHtml(props.status || '');
+        const osmUrl = typeof props.osm_url === 'string' && props.osm_url.startsWith('https://www.openstreetmap.org/')
+            ? props.osm_url
+            : '';
+        const swatch = props.kind === 'rail' ? (props.historic ? '#d97706' : '#8b1e3f') : (props.historic ? '#0f766e' : '#1479b8');
+        layer.bindTooltip(name, { sticky: true, direction: 'top' });
+        layer.bindPopup(`
+            <div class="pin-popup">
+                <div class="popup-title"><span style="color:${swatch};margin-right:.3rem;">━</span>${name}</div>
+                <div class="popup-address">${type}${type && status ? ' · ' : ''}${status}</div>
+                ${osmUrl ? `<a href="${osmUrl}" target="_blank" rel="noopener noreferrer" class="view-full-pin">View source on OpenStreetMap</a>` : ''}
+            </div>
+        `);
+    }
+
+    function _setInfrastructureLoading(loading) {
+        const button = document.querySelector('[data-map-layer="infrastructure"]');
+        if (button) {
+            button.classList.toggle('is-loading', loading);
+            button.setAttribute('aria-busy', loading ? 'true' : 'false');
+        }
+    }
+
+    function _loadInfrastructure() {
+        if (!_infrastructureLayerActive) return;
+        if (map.getZoom() < _INFRASTRUCTURE_MIN_ZOOM) {
+            if (_infrastructureAbortController) _infrastructureAbortController.abort();
+            _infrastructureLayerGroup.clearLayers();
+            _infrastructureLastBbox = '';
+            _setInfrastructureLoading(false);
+            if (!_infrastructureZoomNoticeShown) {
+                toastr.info('Zoom in to level 11 or closer to load waterways and railways.');
+                _infrastructureZoomNoticeShown = true;
+            }
+            return;
+        }
+
+        _infrastructureZoomNoticeShown = false;
+        const bbox = map.getBounds().toBBoxString();
+        if (bbox === _infrastructureLastBbox && _infrastructureLayerGroup.getLayers().length) return;
+        if (_infrastructureAbortController) _infrastructureAbortController.abort();
+        _infrastructureAbortController = new AbortController();
+        const requestSerial = ++_infrastructureRequestSerial;
+        _setInfrastructureLoading(true);
+
+        fetch(`{% url "map.infrastructure" %}?bbox=${encodeURIComponent(bbox)}`, {
+            signal: _infrastructureAbortController.signal,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(async response => {
+            if (response.ok) return response.json();
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || 'Could not load infrastructure data.');
+        })
+        .then(data => {
+            if (!_infrastructureLayerActive || requestSerial !== _infrastructureRequestSerial) return;
+            _infrastructureLayerGroup.clearLayers();
+            L.geoJSON(data, {
+                renderer: _infrastructureRenderer,
+                style: _infrastructureStyle,
+                onEachFeature: _bindInfrastructureFeature,
+            }).addTo(_infrastructureLayerGroup);
+            _infrastructureLastBbox = bbox;
+            if (data.truncated) toastr.warning('This area has many waterways and railways. Zoom in to see the complete set.');
+        })
+        .catch(error => {
+            if (error.name !== 'AbortError' && _infrastructureLayerActive) {
+                toastr.warning(error.message || 'Could not load waterways and railways.');
+            }
+        })
+        .finally(() => {
+            if (requestSerial === _infrastructureRequestSerial) _setInfrastructureLoading(false);
+        });
+    }
+
+    function _scheduleInfrastructureFetch() {
+        if (!_infrastructureLayerActive) return;
+        clearTimeout(_infrastructureFetchTimer);
+        _infrastructureFetchTimer = setTimeout(_loadInfrastructure, 250);
+    }
+
+    function toggleInfrastructureLayer() {
+        _infrastructureLayerActive = !_infrastructureLayerActive;
+        if (_infrastructureLayerActive) {
+            _infrastructureLayerGroup.addTo(map);
+            _loadInfrastructure();
+        } else {
+            clearTimeout(_infrastructureFetchTimer);
+            if (_infrastructureAbortController) _infrastructureAbortController.abort();
+            _setInfrastructureLoading(false);
+            map.removeLayer(_infrastructureLayerGroup);
+        }
+        _renderMapAttribution();
+    }
+
+    map.on('moveend', _scheduleInfrastructureFetch);
+
+    let _mapBaseAttributionText = '';
+    function _renderMapAttribution() {
+        const el = document.getElementById('page-footer-attribution-text');
+        if (!el) return;
+        el.textContent = _mapBaseAttributionText
+            + (_infrastructureLayerActive ? ' · Infrastructure © OpenStreetMap contributors' : '');
+    }
+
     // -- Layers: shared engine (ts/shared/map-layers.ts) ------------------------
     // Tile layers, the layers flyout panel, dark map mode, "remember"
     // persistence, tile-loading feedback, and footer attribution all live in
@@ -2103,8 +2417,8 @@
         // Footer attribution replaces Leaflet's on-map control (see the shared
         // partials/layout/footer.html, rendered via show_map_footer=True).
         onAttribution: function (text) {
-            const el = document.getElementById('page-footer-attribution-text');
-            if (el) el.textContent = text;
+            _mapBaseAttributionText = text;
+            _renderMapAttribution();
         },
         // Persist dark mode to the server so the preference survives page refresh.
         onDarkModeChange: function (mode) {
@@ -2120,6 +2434,7 @@
             // The pins button highlights when pins are HIDDEN (activeWhenOff).
             pins:      { isActive: () => pinsVisible, toggle: togglePins, activeWhenOff: true },
             childpins: { isActive: () => _childPinsActive, toggle: toggleChildPins },
+            infrastructure: { isActive: () => _infrastructureLayerActive, toggle: toggleInfrastructureLayer },
             places:    { isActive: () => _placesLayerActive, toggle: togglePlacesLayer },
         },
     });
@@ -2157,12 +2472,9 @@
                     // Update visual immediately
                     stars.forEach(s => s.classList.toggle('popup-star--on', parseInt(s.dataset.val) <= val));
 
-                    fetch(`/dashboard/rest/reviews/create_or_update/${pinId}/`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-                        body: JSON.stringify({ rating: val }),
-                    })
-                    .then(r => r.json())
+                    // ulSendJson throws on a non-2xx; a bare fetch().then(json)
+                    // reported "Rating saved" for ratings the server refused.
+                    window.ulSendJson(`/dashboard/rest/reviews/create_or_update/${pinId}/`, 'PATCH', { rating: val })
                     .then(() => {
                         if (uuid && _pinStore.has(uuid)) {
                             _pinStore.get(uuid).rating = val;
@@ -2327,17 +2639,10 @@
                             const pinUuid = this.closest('.pin-popup').dataset.uuid;
                             const data = {};
                             data[this.name] = value;
-                            fetch(`/dashboard/rest/pins/${pinUuid}/`, {
-                                method: 'PATCH',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-CSRFToken': '{{ csrf_token }}',
-                                },
-                                body: JSON.stringify(data),
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                console.log(`${this.name} updated successfully`);
+                            // ulSendJson throws on a non-2xx; a bare fetch().then(json)
+                            // announced "updated successfully" for refused edits.
+                            window.ulSendJson(`/dashboard/rest/pins/${pinUuid}/`, 'PATCH', data)
+                            .then(() => {
                                 toastr.success(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} updated successfully`);
                                 const button = document.createElement('button');
                                 button.classList.add('add-tag-button');
@@ -2389,8 +2694,8 @@
 
         const menu = document.createElement('div');
         menu.className = 'map-context-menu';
-        menu.style.top = `${e.originalEvent.clientY}px`;
-        menu.style.left = `${e.originalEvent.clientX}px`;
+        const anchorX = e.originalEvent.clientX;
+        const anchorY = e.originalEvent.clientY;
 
         // -- Coordinates row -------------------------------------------------
         const latFmt = lat.toFixed(6);
@@ -2426,7 +2731,12 @@
 
         fetch(`{% url 'map.streetview_check' %}?lat=${lat}&lng=${lng}`)
             .then(r => r.json())
-            .then(data => { if (data.available) svItem.style.display = ''; })
+            .then(data => {
+                if (!data.available || !menu.isConnected) return;
+                svItem.style.display = '';
+                // The extra row can push the menu past the bottom of the screen.
+                _placeFloatingMenu(menu, anchorX, anchorY);
+            })
             .catch(() => {});
 
         // -- Directions -------------------------------------------------------
@@ -2456,7 +2766,7 @@
         });
         menu.appendChild(addPinItem);
 
-        document.body.appendChild(menu);
+        _placeFloatingMenu(menu, anchorX, anchorY);
 
         _contextMenuDismiss = (ev) => {
             if (!menu.contains(ev.target)) _closeMapContextMenu(menu);
@@ -2581,15 +2891,13 @@
             zIndexOffset: 1000,
             title: place.name,
         });
-        marker.on('click', function () {
+        marker.on('click', function (e) {
             map.closePopup();
             document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
             const latFmt = lat.toFixed(6), lngFmt = lng.toFixed(6);
+            const anchor = _markerMenuAnchor(e, lat, lng);
             const menu = document.createElement('div');
             menu.className = 'map-context-menu';
-            const pt = map.latLngToContainerPoint([lat, lng]);
-            menu.style.top = `${pt.y}px`;
-            menu.style.left = `${pt.x}px`;
 
             // Header: place name
             const nameRow = document.createElement('div');
@@ -2611,6 +2919,7 @@
                     .then(data => {
                         if (data?.place && document.body.contains(detailsWrap)) {
                             detailsWrap.innerHTML = _buildPlaceDetailRows(place, data.place);
+                            _placeFloatingMenu(menu, anchor.x, anchor.y);
                         }
                     })
                     .catch(() => {});
@@ -2629,6 +2938,7 @@
                             description: short,
                             vicinity: data.description || place.vicinity || '',
                         });
+                        _placeFloatingMenu(menu, anchor.x, anchor.y);
                     }
                 })
                 .catch(() => {});
@@ -2668,7 +2978,7 @@
             });
             menu.appendChild(infoItem);
 
-            document.body.appendChild(menu);
+            _placeFloatingMenu(menu, anchor.x, anchor.y);
             const dismiss = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); } };
             setTimeout(() => document.addEventListener('click', dismiss), 0);
         });
@@ -2716,9 +3026,9 @@
         // NPS and Wikipedia carry all detail data inline - no extra fetch needed.
         if (place.source === 'nps' || place.source === 'wikipedia') {
             const parts = [];
-            if (place.vicinity) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${place.vicinity}</div>`);
-            if (place.description) parts.push(`<div class="place-info-summary">${place.description}</div>`);
-            if (place.url) parts.push(`<div class="place-info-link"><a href="${place.url}" target="_blank" rel="noopener noreferrer">More information</a></div>`);
+            if (place.vicinity) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${_ulEscText(place.vicinity)}</div>`);
+            if (place.description) parts.push(`<div class="place-info-summary">${_ulEscText(place.description)}</div>`);
+            if (place.url) parts.push(`<div class="place-info-link"><a href="${_ulEscAttr(_ulSafeUrl(place.url))}" target="_blank" rel="noopener noreferrer">More information</a></div>`);
             if (bodyEl) bodyEl.innerHTML = parts.join('') || '<em>No details available.</em>';
             return;
         }
@@ -2731,10 +3041,10 @@
             const data = await resp.json();
             const d = data.place || {};
             const parts = [];
-            if (d.formatted_address) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${d.formatted_address}</div>`);
-            if (d.rating) parts.push(`<div class="place-info-rating">Rating: ${d.rating} ★</div>`);
-            if (d.editorial_summary?.overview) parts.push(`<div class="place-info-summary">${d.editorial_summary.overview}</div>`);
-            if (d.website) parts.push(`<div class="place-info-link"><a href="${d.website}" target="_blank" rel="noopener noreferrer">Website</a></div>`);
+            if (d.formatted_address) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${_ulEscText(d.formatted_address)}</div>`);
+            if (d.rating) parts.push(`<div class="place-info-rating">Rating: ${_ulEscText(d.rating)} ★</div>`);
+            if (d.editorial_summary?.overview) parts.push(`<div class="place-info-summary">${_ulEscText(d.editorial_summary.overview)}</div>`);
+            if (d.website) parts.push(`<div class="place-info-link"><a href="${_ulEscAttr(_ulSafeUrl(d.website))}" target="_blank" rel="noopener noreferrer">Website</a></div>`);
             if (bodyEl) bodyEl.innerHTML = parts.join('') || '<em>No details available.</em>';
         } catch (_) {
             if (bodyEl) bodyEl.innerHTML = '<em>Could not load details.</em>';
@@ -2762,8 +3072,8 @@
 
     // Update the Leaflet icon URLs
     var newIcon = L.icon({
-        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+        iconUrl: '{% vendor_asset_source "leaflet_marker_icon" %}',
+        shadowUrl: '{% vendor_asset_source "leaflet_marker_shadow" %}',
         iconSize: [25, 41],
         shadowSize: [41, 41],
         iconAnchor: [12, 41],
@@ -2796,6 +3106,38 @@
         _refreshPinList();
         return true;
     }
+
+    // -- Pin popup overflow menu -----------------------------------------
+    // The popup's destructive and secondary actions (add to list, promote,
+    // edit, delete) live behind one button so the popup reads as information
+    // with a way in, rather than a row of icons to decode. Leaflet rebuilds
+    // popup DOM on every open, so these are delegated by class rather than
+    // wired per marker.
+    function closePinPopupMenus() {
+        document.querySelectorAll('.popup-menu-items:not([hidden])').forEach(function (menu) {
+            menu.hidden = true;
+            const toggle = menu.parentElement?.querySelector('.popup-menu-toggle');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    function togglePinPopupMenu(button) {
+        const menu = button.parentElement?.querySelector('.popup-menu-items');
+        if (!menu) return;
+        const wasOpen = !menu.hidden;
+        closePinPopupMenus();
+        menu.hidden = wasOpen;
+        button.setAttribute('aria-expanded', String(!wasOpen));
+    }
+
+    // A click anywhere else, or Escape, closes it - including a click on the
+    // map itself, which Leaflet does not route through the popup.
+    document.addEventListener('click', function (event) {
+        if (!event.target.closest('.popup-menu')) closePinPopupMenus();
+    });
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') closePinPopupMenus();
+    });
 
     async function deletePin(button) {
         const popup = button.closest('.pin-popup');
@@ -2840,7 +3182,6 @@
         _selectMode = true;
         document.getElementById('select-pins-button')?.classList.add('active');
         document.getElementById('map')?.classList.add('select-mode');
-        map.dragging.disable();
         _addPinClickMode = false;
         _markerMap.forEach(function (m) { if (m.dragging) m.dragging.disable(); });
         document.getElementById('bulk-select-toolbar').hidden = false;
@@ -2852,6 +3193,8 @@
         _selectMode = false;
         document.getElementById('select-pins-button')?.classList.remove('active');
         document.getElementById('map')?.classList.remove('select-mode');
+        // Dragging is only ever off for the length of a rubber-band gesture
+        // (see _initSelectDragRectangle); this covers one that never finished.
         map.dragging.enable();
         _markerMap.forEach(function (m) { if (m.dragging) m.dragging.enable(); });
         _clearSelection();
@@ -2945,28 +3288,57 @@
         return (pin && (pin.name || pin.address)) || 'Untitled pin';
     }
 
-    // -- Rectangle drag-select: mousedown-move-up on the map container while
-    // select mode is active. A 6px move threshold keeps a plain click on empty
-    // map space from being treated as a (zero-size) drag-select. -------------
+    // -- Rectangle drag-select: pointerdown-move-up on the map container while
+    // select mode is active, so mouse, touch and pen all run the same path. A
+    // move threshold keeps a plain click/tap on empty map space from being
+    // treated as a (zero-size) drag-select. ---------------------------------
     (function _initSelectDragRectangle() {
-        map.getContainer().addEventListener('mousedown', function (e) {
-            if (!_selectMode || e.button !== 0) return;
+        const container = map.getContainer();
+        container.addEventListener('pointerdown', function (e) {
+            // A second finger belongs to a pinch, not to a second rectangle.
+            if (!_selectMode || !e.isPrimary || e.button !== 0) return;
             const startLL = map.mouseEventToLatLng(e);
             const startX = e.clientX;
             const startY = e.clientY;
+            // A finger wanders further than a mouse does while pressing, so a
+            // coarse pointer has to travel further before this reads as a drag.
+            const threshold = e.pointerType === 'mouse' ? 6 : 12;
             let dragging = false;
 
+            // Select mode leaves map dragging on so touch users can still move
+            // the map; it is off only for the length of this gesture. Pointerdown
+            // runs ahead of Leaflet's own mousedown/touchstart, so the map cannot
+            // pan even for the first pixel of a rubber band.
+            map.dragging.disable();
+
+            function cleanup() {
+                container.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onUp);
+                window.removeEventListener('pointercancel', onCancel);
+                if (_dragSelectRect) { map.removeLayer(_dragSelectRect); _dragSelectRect = null; }
+                map.dragging.enable();
+            }
             function onMove(ev) {
-                if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
-                dragging = true;
+                if (ev.pointerId !== e.pointerId) return;
+                if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < threshold) return;
+                if (!dragging) {
+                    dragging = true;
+                    // Captured only once the gesture is definitely a drag: capturing
+                    // on pointerdown would retarget the click to the container and
+                    // tapping a pin would stop toggling its selection.
+                    container.setPointerCapture(e.pointerId);
+                }
+                // The rectangle owns the gesture now - the browser must not take
+                // it for a scroll.
+                if (ev.pointerType !== 'mouse') ev.preventDefault();
                 if (_dragSelectRect) map.removeLayer(_dragSelectRect);
                 _dragSelectRect = L.rectangle(L.latLngBounds(startLL, map.mouseEventToLatLng(ev)), {
                     color: '#1E88E5', weight: 2, fillOpacity: 0.08, dashArray: '4 4', interactive: false,
                 }).addTo(map);
             }
             function onUp(ev) {
-                document.removeEventListener('mousemove', onMove);
-                if (_dragSelectRect) { map.removeLayer(_dragSelectRect); _dragSelectRect = null; }
+                if (ev.pointerId !== e.pointerId) return;
+                cleanup();
                 if (!dragging) return;
                 const bounds = L.latLngBounds(startLL, map.mouseEventToLatLng(ev));
                 function selectInBounds(marker, uuid) {
@@ -2975,8 +3347,16 @@
                 _markerMap.forEach(selectInBounds);
                 if (_childPinsActive) _childMarkerMap.forEach(selectInBounds);
             }
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp, { once: true });
+            function onCancel(ev) {
+                if (ev.pointerId === e.pointerId) cleanup();
+            }
+
+            container.addEventListener('pointermove', onMove);
+            // The end of the gesture is watched on the window: until the capture
+            // above is taken, a release outside the map would never reach the
+            // container and would strand map dragging in its disabled state.
+            window.addEventListener('pointerup', onUp);
+            window.addEventListener('pointercancel', onCancel);
         });
     }());
 
@@ -3004,12 +3384,11 @@
     function _submitBulkDelete(uuids) {
         const confirmBtn = document.getElementById('bulk-delete-confirm-btn');
         confirmBtn.disabled = true;
-        fetch('{% url "pin.bulk_delete" %}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-            body: JSON.stringify({ uuids: uuids }),
-        })
-        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        // ulSendJson carries the server's own refusal text into the catch below;
+        // the bare fetch this replaces threw an empty Error, so a refusal the
+        // server had explained (too many pins selected, say) reached the user as
+        // an unexplained "Failed to delete pins."
+        window.ulSendJson('{% url "pin.bulk_delete" %}', 'POST', { uuids: uuids })
         .then(function (data) {
             document.getElementById('bulk-delete-dialog').close();
             uuids.forEach(function (uuid) {
@@ -3022,7 +3401,7 @@
             exitSelectMode();
             _showUndoDeleteToast(data.count, data.descendant_count, data.undo_token);
         })
-        .catch(function () { toastr.error('Failed to delete pins.'); confirmBtn.disabled = false; });
+        .catch(function (err) { toastr.error((err && err.message) || 'Failed to delete pins.'); confirmBtn.disabled = false; });
     }
 
     function _showUndoDeleteToast(count, descendantCount, token) {
@@ -3212,12 +3591,7 @@
         const saved = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging...';
-        fetch('{% url "pin.bulk_merge" %}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-            body: JSON.stringify({ target_uuid: _bulkMergeTargetUuid, source_uuids: sources }),
-        })
-        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        window.ulSendJson('{% url "pin.bulk_merge" %}', 'POST', { target_uuid: _bulkMergeTargetUuid, source_uuids: sources })
         .then(function () {
             document.getElementById('bulk-merge-dialog').close();
             exitSelectMode();
@@ -3234,23 +3608,24 @@
                 toastr.success('Pins merged. They\'re now shown as child pins on the map (Layers → Child Pins).');
             }
         })
-        .catch(function () { toastr.error('Merge failed.'); btn.disabled = false; btn.innerHTML = saved; });
+        .catch(function (err) { toastr.error((err && err.message) || 'Merge failed.'); btn.disabled = false; btn.innerHTML = saved; });
     });
 
     // -- Bulk edit: description replace + label add/remove --------------------
     // Thin id-based wrapper over the shared chip picker (ts/shared/label-picker.ts,
     // installed globally by core.js) - the same component the saved-filter pages
     // used to duplicate.
-    function _makeLabelChipPicker(chipsElId, searchElId, suggElId) {
+    function _makeLabelChipPicker(chipsElId, searchElId, suggElId, tabsElId) {
         return window.UrbanLensLabelPicker.createChipPicker({
             chipsEl: document.getElementById(chipsElId),
             searchEl: document.getElementById(searchElId),
             suggEl: document.getElementById(suggElId),
+            tabsEl: tabsElId ? document.getElementById(tabsElId) : undefined,
         });
     }
 
-    const _bulkEditAddPicker = _makeLabelChipPicker('bulk-edit-add-label-chips', 'bulk-edit-add-label-search', 'bulk-edit-add-label-suggestions');
-    const _bulkEditRemovePicker = _makeLabelChipPicker('bulk-edit-remove-label-chips', 'bulk-edit-remove-label-search', 'bulk-edit-remove-label-suggestions');
+    const _bulkEditAddPicker = _makeLabelChipPicker('bulk-edit-add-label-chips', 'bulk-edit-add-label-search', 'bulk-edit-add-label-suggestions', 'bulk-edit-add-label-tabs');
+    const _bulkEditRemovePicker = _makeLabelChipPicker('bulk-edit-remove-label-chips', 'bulk-edit-remove-label-search', 'bulk-edit-remove-label-suggestions', 'bulk-edit-remove-label-tabs');
 
     // -- Bulk edit: set parent pin (single-pick search, not a label chip set) --
     const _bulkEditParentPicker = (function () {
@@ -3354,12 +3729,7 @@
         payload.remove_label_ids = _bulkEditRemovePicker.getSelectedIds();
         const parentUuid = _bulkEditParentPicker.getSelectedUuid();
         if (parentUuid) payload.parent_uuid = parentUuid;
-        fetch('{% url "pin.bulk_edit" %}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-            body: JSON.stringify(payload),
-        })
-        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        window.ulSendJson('{% url "pin.bulk_edit" %}', 'POST', payload)
         .then(function (data) {
             document.getElementById('bulk-edit-dialog').close();
             toastr.success('Pins updated.');
@@ -3373,7 +3743,7 @@
                 else _mapLayers.toggleCustom('childpins');
             }
         })
-        .catch(function () { toastr.error('Update failed.'); })
+        .catch(function (err) { toastr.error((err && err.message) || 'Update failed.'); })
         .finally(function () { btn.disabled = false; btn.innerHTML = saved; });
     });
 
@@ -3681,13 +4051,20 @@
         const nameInput = document.getElementById('add-to-list-new-name');
         const name = (nameInput.value || '').trim();
         if (!name) { nameInput.focus(); return; }
-        fetch("{% url 'lists.create' %}", {
-            method: 'POST',
-            headers: { 'X-CSRFToken': _csrfToken(), 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ name }),
-        }).then((r) => r.json()).then((data) => {
-            if (data.ok) { nameInput.value = ''; addPinsToList(data.uuid); }
-        });
+        // ulSendJson throws on a non-2xx carrying the server's own text, which is
+        // what this endpoint sends: a duplicate list name answers 409 with
+        // "You already have a list with that name." The previous version called
+        // r.json() unconditionally, so that plain-text body threw inside an
+        // unhandled promise - the most likely failure of this feature did
+        // nothing at all, with no message and no closed dialog.
+        window.ulSendJson("{% url 'lists.create' %}", 'POST', { name }, { headers: { Accept: 'application/json' } })
+            .then((data) => {
+                nameInput.value = '';
+                addPinsToList(data.uuid);
+            })
+            .catch((err) => {
+                if (typeof toastr !== 'undefined') toastr.error((err && err.message) || 'Could not create that list.');
+            });
     }
 
     document.getElementById('filter-form').addEventListener('change', () => { _refreshPinList(); sfToolbarRefreshCounts(); });
@@ -4246,6 +4623,11 @@
     document.getElementById('filter-panel').addEventListener('touchstart', function (e) {
         e.stopPropagation();
     });
+    // Both panels are children of #map, so a press inside them reaches the
+    // container-level rubber-band listener unless stopped here.
+    document.getElementById('filter-panel').addEventListener('pointerdown', function (e) {
+        e.stopPropagation();
+    });
     document.getElementById('filter-panel').addEventListener('contextmenu', function (e) {
         e.stopPropagation();
     });
@@ -4258,6 +4640,9 @@
         e.stopPropagation();
     });
     document.getElementById('pin-list-panel').addEventListener('touchstart', function (e) {
+        e.stopPropagation();
+    });
+    document.getElementById('pin-list-panel').addEventListener('pointerdown', function (e) {
         e.stopPropagation();
     });
     document.getElementById('pin-list-panel').addEventListener('contextmenu', function (e) {
@@ -4395,14 +4780,12 @@
             latLngs.push([r.lat, r.lng]);
             const marker = _createTempPlaceMarker(r.lat, r.lng, r.title || searchTerm, true);
             marker.on('click', (function (mlat, mlng, mname) {
-                return function () {
+                return function (e) {
                     map.closePopup();
                     document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
+                    const anchor = _markerMenuAnchor(e, mlat, mlng);
                     const menu = document.createElement('div');
                     menu.className = 'map-context-menu';
-                    const pt = map.latLngToContainerPoint([mlat, mlng]);
-                    menu.style.top = `${pt.y}px`;
-                    menu.style.left = `${pt.x}px`;
                     const coordItem = document.createElement('button');
                     coordItem.className = 'map-context-menu__item map-context-menu__coords';
                     coordItem.title = 'Click to copy coordinates';
@@ -4424,7 +4807,7 @@
                     dismissItem.innerHTML = '<i class="material-symbols-outlined">close</i>Dismiss marker';
                     dismissItem.addEventListener('click', () => { menu.remove(); marker.remove(); });
                     menu.appendChild(dismissItem);
-                    document.body.appendChild(menu);
+                    _placeFloatingMenu(menu, anchor.x, anchor.y);
                     const dismiss = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); } };
                     setTimeout(() => document.addEventListener('click', dismiss), 0);
                 };
@@ -4444,7 +4827,10 @@
     function _onLocationSelect(result) {
         _programmaticMove = true;
         map.setView([result.lat, result.lng], result.zoom || _defaultZoom);
-        if (result.type === 'mylocation') return;
+        if (result.type === 'mylocation') {
+            _showUserLocationMarker(result.lat, result.lng);
+            return;
+        }
         if (result.type === 'pin' && result.pinSlug) {
             let found = false;
             for (const [uuid, pin] of _pinStore) {
@@ -4497,7 +4883,7 @@
         enableMyLocation: true,
         getUserLocationCache: _getCachedUserLocation,
         setUserLocationCache: _cacheUserLocation,
-        onGeolocationVisit: _recordGeolocationVisit,
+        onGeolocationVisit: _GEOLOCATION_TRACKING_ALLOWED ? _recordGeolocationVisit : null,
         defaultZoom: _defaultZoom,
         onSelect: _onLocationSelect,
         onMultiResult: _onLocationMultiResult,
@@ -4560,6 +4946,7 @@
                 formulaDisplayText: document.getElementById('fp-formula-display-text'),
                 formulaDisplayClear: document.getElementById('fp-formula-display-clear'),
                 accordion: document.getElementById('fp-acc-labels'),
+                kindTabs: document.getElementById('fp-label-kind-tabs'),
             },
             onChange: function () { htmx.trigger(document.getElementById('filter-form'), 'change'); },
         });
@@ -4735,6 +5122,8 @@
         if (labelSearch) labelSearch.value = '';
         const labelSugg = document.getElementById('apdlg-label-suggestions');
         if (labelSugg) labelSugg.hidden = true;
+        _apdlgActiveKind = '';
+        document.querySelectorAll('#apdlg-label-kind-tabs .tad-tab').forEach((t, i) => t.classList.toggle('tad-tab--active', i === 0));
 
         const customize = document.getElementById('apdlg-customize');
         if (customize) customize.open = false;
@@ -5025,12 +5414,30 @@
     // -- Label selector ----------------------------------------------------
     let _apdlgSelectedLabels = [];
     let _apdlgAllLabels = [];
+    let _apdlgActiveKind = ''; // '' = All - only filters which candidates are offered, see _apdlgKindOk
     (function() {
         const dataEl = document.getElementById('apdlg-label-data');
         if (dataEl) {
             try { _apdlgAllLabels = JSON.parse(dataEl.textContent); } catch(e) {}
         }
     })();
+
+    // Shared by every candidate lookup below (suggestions + Tab/comma/space/Enter
+    // top-match) so the active kind tab narrows all of them consistently.
+    function _apdlgKindOk(label) {
+        return !_apdlgActiveKind || label.kind === _apdlgActiveKind;
+    }
+
+    document.querySelectorAll('#apdlg-label-kind-tabs .tad-tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('#apdlg-label-kind-tabs .tad-tab').forEach((t) => t.classList.remove('tad-tab--active'));
+            tab.classList.add('tad-tab--active');
+            _apdlgActiveKind = tab.dataset.tab || '';
+            const searchEl = document.getElementById('apdlg-label-search');
+            searchEl.focus();
+            _apdlgShowSuggestions(searchEl.value);
+        });
+    });
 
     function _apdlgRenderSelectedChips() {
         const chips = document.getElementById('apdlg-label-chips');
@@ -5055,7 +5462,7 @@
         if (!box) return;
         const q = query.toLowerCase().trim();
         const selectedIds = new Set(_apdlgSelectedLabels.map(b => b.id));
-        let matches = _apdlgAllLabels.filter(b => !selectedIds.has(b.id) && (!q || b.name.toLowerCase().includes(q)));
+        let matches = _apdlgAllLabels.filter(b => !selectedIds.has(b.id) && _apdlgKindOk(b) && (!q || b.name.toLowerCase().includes(q)));
         matches = matches.slice(0, 12);
         box.innerHTML = '';
         matches.forEach(b => {
@@ -5120,7 +5527,7 @@
                 e.preventDefault();
                 const q = this.value.trim();
                 const topMatch = _apdlgAllLabels.find(b =>
-                    !_apdlgSelectedLabels.find(s => s.id === b.id) && b.name.toLowerCase().includes(q.toLowerCase())
+                    !_apdlgSelectedLabels.find(s => s.id === b.id) && _apdlgKindOk(b) && b.name.toLowerCase().includes(q.toLowerCase())
                 );
                 if (topMatch) _apdlgSelectLabel(topMatch);
                 return;
@@ -5131,13 +5538,14 @@
                 // Find if continuing to type would still match: any label that starts with q but isn't q
                 const wouldContinue = _apdlgAllLabels.some(b =>
                     !_apdlgSelectedLabels.find(s => s.id === b.id) &&
+                    _apdlgKindOk(b) &&
                     b.name.toLowerCase().startsWith(q) &&
                     b.name.toLowerCase() !== q
                 );
                 if (!wouldContinue && items.length === 1) {
                     e.preventDefault();
                     const topMatch = _apdlgAllLabels.find(b =>
-                        !_apdlgSelectedLabels.find(s => s.id === b.id) && b.name.toLowerCase().includes(q)
+                        !_apdlgSelectedLabels.find(s => s.id === b.id) && _apdlgKindOk(b) && b.name.toLowerCase().includes(q)
                     );
                     if (topMatch) { _apdlgSelectLabel(topMatch); return; }
                 }
@@ -5160,7 +5568,7 @@
                     e.preventDefault();
                     const q = this.value.trim();
                     const topMatch = _apdlgAllLabels.find(b =>
-                        !_apdlgSelectedLabels.find(s => s.id === b.id) && b.name.toLowerCase().includes(q.toLowerCase())
+                        !_apdlgSelectedLabels.find(s => s.id === b.id) && _apdlgKindOk(b) && b.name.toLowerCase().includes(q.toLowerCase())
                     );
                     if (topMatch) _apdlgSelectLabel(topMatch);
                 }
@@ -5183,6 +5591,7 @@
         btn.dataset.labelText = label.name || '';
         btn.dataset.labelColor = label.color || '';
         btn.dataset.labelIcon = label.icon || '';
+        btn.dataset.labelKind = label.kind || '';
         if (label.color) {
             btn.style.borderColor = label.color + '55';
             btn.style.background = label.color + '18';
@@ -5480,11 +5889,11 @@
 {% include "dashboard/partials/ui/_dual_range_slider_script.html" %}
 
 {# -- Location conflict picker dialog ------------------------------------------ #}
-<dialog id="loc-conflict-dialog" class="loc-conflict-dialog ul-dialog">
+<dialog id="loc-conflict-dialog" class="loc-conflict-dialog ul-dialog" aria-label="Multiple locations match">
     <div class="dialog-header">
         <i class="material-icons" style="font-size:1.1rem;color:#f59e0b">warning_amber</i>
         <span>Multiple locations match this area</span>
-        <button type="button" class="dialog-close" onclick="document.getElementById('loc-conflict-dialog').close()">
+        <button type="button" class="dialog-close" onclick="document.getElementById('loc-conflict-dialog').close()" aria-label="Close">
             <i class="material-symbols-outlined">close</i>
         </button>
     </div>

@@ -13,8 +13,8 @@ import lxml.html as lxml_html  # nosec B410
 import nh3
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
-from urbanlens.dashboard.services.gateway import Gateway
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -233,7 +233,7 @@ class WikipediaGateway(Gateway):
         ``WikimediaGateway``), this reads the article's own curated media list,
         so it also picks up images that are only reachable through an in-body
         gallery and aren't independently discoverable by name (a known gap:
-        see docs/PROBLEMS.md/completed.md for the original report). Should
+        see docs/PROBLEMS.md for the original report). Should
         only be called once an article has already been confidently matched
         to a location (e.g. via ``get_article_for_location``) - this takes the
         article title directly, not a search query.
@@ -391,7 +391,15 @@ class WikipediaGateway(Gateway):
         mid-sentence) so the result is always well-formed and never ends on a
         dangling heading.
         """
-        safe_html = nh3.clean(raw_html, tags=_ALLOWED_TAGS, clean_content_tags=_CLEAN_CONTENT_TAGS, attributes={})
+        # attribute_filter is required alongside attributes={} - nh3/ammonia keeps a hardcoded
+        # "generic" attribute set (title, lang, ...) on every tag regardless of the allowlist.
+        safe_html = nh3.clean(
+            raw_html,
+            tags=_ALLOWED_TAGS,
+            clean_content_tags=_CLEAN_CONTENT_TAGS,
+            attributes={},
+            attribute_filter=lambda tag, attr, value: None,  # noqa: ARG005
+        )
         root = lxml_html.fromstring(f"<div>{safe_html}</div>")
 
         kept: list[lxml_html.HtmlElement] = []

@@ -1,7 +1,7 @@
 """ImageKeyword - searchable keywords attached to an uploaded photo.
 
 Keywords are produced by photo-keyword plugins (see
-``dashboard.services.photo_keywords``). Each plugin stores its own rows,
+``dashboard.services.photos.photo_keywords``). Each plugin stores its own rows,
 attributed via ``source`` (the plugin slug), so multiple keywording
 strategies - embedded XMP/IPTC tags, AI vision descriptions, content
 classifiers - can coexist and be regenerated independently.

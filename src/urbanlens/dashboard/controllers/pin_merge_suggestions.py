@@ -14,6 +14,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Count
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -21,9 +22,9 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.pin_merge import MergeFieldConflict, UnresolvedMergeConflictError, plan_merge_conflicts
-from urbanlens.dashboard.services.pin_merge_suggestions import accept_pin_merge_suggestion, reject_pin_merge_suggestion
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.pins.pin_merge import MergeFieldConflict, PinMergeCollisionError, UnresolvedMergeConflictError, plan_merge_conflicts
+from urbanlens.dashboard.services.pins.pin_merge_suggestions import accept_pin_merge_suggestion, reject_pin_merge_suggestion
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -46,9 +47,26 @@ def pending_merge_suggestions(profile: Profile) -> QuerySet[PinMergeSuggestion]:
 
     Returns:
         Newest-first queryset of pending rows, with both pins (and their
-        locations) selected in one query.
+        locations) selected in one query, and each pin's visit/photo counts
+        annotated.
+
+    The counts are annotated because the card shows four of them and the
+    template resolved each `{{ ... .count }}` independently - eight queries per
+    card, twelve cards to a page. `distinct=True` on each: the four joins
+    multiply each other's rows, so plain counts would report visits x photos.
     """
-    return PinMergeSuggestion.objects.for_profile(profile).pending().select_related("pin_a", "pin_a__location", "pin_b", "pin_b__location", "suggested_survivor").order_by("-created")
+    return (
+        PinMergeSuggestion.objects.for_profile(profile)
+        .pending()
+        .select_related("pin_a", "pin_a__location", "pin_b", "pin_b__location", "suggested_survivor")
+        .annotate(
+            pin_a_visit_count=Count("pin_a__visit_history", distinct=True),
+            pin_a_photo_count=Count("pin_a__images", distinct=True),
+            pin_b_visit_count=Count("pin_b__visit_history", distinct=True),
+            pin_b_photo_count=Count("pin_b__images", distinct=True),
+        )
+        .order_by("-created")
+    )
 
 
 def merge_suggestion_cards(suggestions: Iterable[PinMergeSuggestion]) -> list[dict[str, Any]]:
@@ -122,7 +140,7 @@ class PinMergeSuggestionActionView(LoginRequiredMixin, View):
 
     Accept body: ``survivor_pk`` (optional - defaults to
     ``suggestion.suggested_survivor``), plus one ``resolution__<key>`` field
-    per conflict rendered on the card (see ``services.pin_merge.plan_merge_conflicts``).
+    per conflict rendered on the card (see ``services.pins.pin_merge.plan_merge_conflicts``).
     Missing resolutions re-render the card with the conflict form intact and
     an error toast, rather than failing with a 500.
     """
@@ -167,6 +185,12 @@ class PinMergeSuggestionActionView(LoginRequiredMixin, View):
                 {"suggestion": suggestion, "conflicts": conflicts},
             )
             response["HX-Trigger"] = json.dumps({"showToast": {"message": "Please resolve every highlighted difference before merging.", "level": "error"}})
+            return response
+        except PinMergeCollisionError as exc:
+            # Refused rather than "went wrong": the user can act on this one by
+            # moving the blocking top-level pin first.
+            response = render(request, _CARD_PARTIAL, {"suggestion": suggestion, "conflicts": conflicts})
+            response["HX-Trigger"] = json.dumps({"showToast": {"message": exc.safe_message, "level": "error"}})
             return response
         except ValueError:
             response = render(request, _CARD_PARTIAL, {"suggestion": suggestion, "conflicts": conflicts})

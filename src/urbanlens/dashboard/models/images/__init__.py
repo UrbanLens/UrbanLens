@@ -1,3 +1,4 @@
+from urbanlens.dashboard.models.images.attachment import ImageAttachment, ImageAttachmentManager, ImageAttachmentQuerySet
 from urbanlens.dashboard.models.images.keyword import ImageKeyword
 from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
 from urbanlens.dashboard.models.images.queryset import ImageManager, ImageQuerySet

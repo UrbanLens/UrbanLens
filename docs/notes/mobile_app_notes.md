@@ -77,7 +77,7 @@ way.
 ### §11 [P1] "Settings sync — no such endpoint; the existing `/settings/` is a different resource"
 
 False, and this one is worth being precise about because the doc asks "which one is meant".
-There is one settings resource, and `AccountSettingsView` + `services.profile_settings.SETTINGS_FIELDS`
+There is one settings resource, and `AccountSettingsView` + `services.profile.profile_settings.SETTINGS_FIELDS`
 already covers **every writable field on the website's own settings page** — privacy, style, map,
 markup, AI, community and wiki-sync toggles included. `email` is excluded deliberately (changing
 it is an identity operation with a verification flow, not a preference write).
@@ -748,7 +748,7 @@ never reached rather than needing a permission check.
 existing `image_ids` (integer pks) on `POST /messages/{peer_slug}/` — additive, not a breaking
 change: `image_ids` keeps working unchanged, a request may combine both, and `image_uuids` is
 documented as the preferred field for new clients. Resolved through a new
-`services.direct_messages.resolve_attachment_ids` helper that merges/dedupes both fields into the
+`services.messaging.direct_messages.resolve_attachment_ids` helper that merges/dedupes both fields into the
 one pk list `create_direct_message` already accepted; ownership and not-yet-attached eligibility
 are still enforced there exactly as before, regardless of which field an id came from. Group sends
 refuse `image_uuids` with 400, same as `image_ids` already did (attachments aren't supported on

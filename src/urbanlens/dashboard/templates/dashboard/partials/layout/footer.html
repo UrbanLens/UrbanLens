@@ -23,7 +23,7 @@ Two ways to opt in:
         </p>
         <p class="page-footer__attribution" aria-live="polite">
             <span class="page-footer__attribution-text" id="page-footer-attribution-text">{{ map_attribution }}
-            <a href="{% url 'thanks' %}" class="page-footer__attribution-more">More info</a></span>
+            <a href="{% url 'thanks' %}" class="page-footer__attribution-more">More info</a>{% if public_costs_page_enabled %} &middot; <a href="{% url 'costs' %}" class="page-footer__attribution-more">Costs</a>{% endif %} &middot; <a href="{% url 'terms' %}" class="page-footer__attribution-more">Terms</a> &middot; <a href="{% url 'privacy' %}" class="page-footer__attribution-more">Privacy</a></span>
         </p>
     </div>
 </footer>

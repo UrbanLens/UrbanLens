@@ -15,7 +15,7 @@ from rest_framework.response import Response
 
 from urbanlens.dashboard.external_api.permissions import credential_grants, filter_sources_by_grants
 from urbanlens.dashboard.external_api.serializers import ErrorSerializer
-from urbanlens.dashboard.external_api.serializers_undo import UndoEntrySerializer
+from urbanlens.dashboard.external_api.serializers_undo import UndoEntrySerializer, UndoHistorySerializer
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.undo.model import UndoAction
@@ -30,12 +30,21 @@ if TYPE_CHECKING:
 #: beyond ``undo:read``/``undo:write`` themselves. A credential scoped only
 #: for pins should not see - or restore - a safety-checkin deletion it was
 #: never granted visibility into.
+#: Must name every ``services.undo.handlers`` model label. A label missing here
+#: is omitted from the listing (harmless) *and* falls through the restore view's
+#: ``.get()`` to no domain scope at all (not harmless) - see
+#: ``UndoRestoreView.post``. ``markup_map`` maps onto the pin scopes because a
+#: markup map is an annotation layer on a pin's own map and the API has no
+#: separate markup scope.
 _DOMAIN_READ_SCOPES_BY_MODEL_LABEL: dict[str, ApiKeyScope] = {
     "pin": ApiKeyScope.PINS_READ,
     "wiki": ApiKeyScope.WIKI_READ,
     "trip": ApiKeyScope.TRIPS_READ,
     "saved_filter": ApiKeyScope.LISTS_READ,
     "safety_checkin": ApiKeyScope.SAFETY_READ,
+    "pin_list": ApiKeyScope.LISTS_READ,
+    "label": ApiKeyScope.LABELS_READ,
+    "markup_map": ApiKeyScope.PINS_READ,
 }
 
 _DOMAIN_WRITE_SCOPES_BY_MODEL_LABEL: dict[str, ApiKeyScope] = {
@@ -44,6 +53,9 @@ _DOMAIN_WRITE_SCOPES_BY_MODEL_LABEL: dict[str, ApiKeyScope] = {
     "trip": ApiKeyScope.TRIPS_WRITE,
     "saved_filter": ApiKeyScope.LISTS_WRITE,
     "safety_checkin": ApiKeyScope.SAFETY_WRITE,
+    "pin_list": ApiKeyScope.LISTS_WRITE,
+    "label": ApiKeyScope.LABELS_WRITE,
+    "markup_map": ApiKeyScope.PINS_WRITE,
 }
 
 
@@ -62,7 +74,7 @@ class UndoListView(ExternalApiView):
         "GET": frozenset({ApiKeyScope.UNDO_READ}),
     }
 
-    @extend_schema(responses={200: UndoEntrySerializer(many=True)})
+    @extend_schema(responses={200: UndoHistorySerializer})
     def get(self, request: Request) -> Response:
         """Return the caller's active (non-expired) undo entries, newest first."""
         entries = list(get_undo_history(request.user.profile))

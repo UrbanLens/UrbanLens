@@ -18,6 +18,7 @@
     <span class="comment-author">{{ comment.profile.display_name }}</span>
     {% else %}
     <a href="{{ comment.profile.display_profile_url }}" class="comment-author comment-author--link">{{ comment.profile.display_name }}</a>
+    {% include "dashboard/partials/ui/_supporter_badge.html" with profile=comment.profile %}
     {% endif %}
     <span class="comment-date">{{ comment.created|human_timesince }}</span>
     {% if include_children and context_type == "pin" and comment.pin_id != pin.id %}

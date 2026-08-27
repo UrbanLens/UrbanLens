@@ -5,21 +5,19 @@ DB-backed tests (viewer_pinned_uuids, filter_visible_comments) use django.test.T
 """
 from __future__ import annotations
 
-import uuid
 from unittest.mock import MagicMock, patch
+import uuid
+
+from hypothesis import given, settings, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from hypothesis import given, settings
-from hypothesis import strategies as st
-
-from urbanlens.dashboard.services.mentions import (
+from urbanlens.dashboard.services.notifications.mentions import (
     extract_location_uuids,
     filter_visible_comments,
     is_visible_to,
     render_comment_text,
     viewer_pinned_uuids,
 )
-
 
 # -- Strategies -----------------------------------------------------------------
 

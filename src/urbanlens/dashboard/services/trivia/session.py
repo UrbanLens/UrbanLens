@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.trivia.model import (
     TriviaSessionParticipantStatus,
     TriviaSessionStatus,
 )
-from urbanlens.dashboard.services.connections import are_connections
+from urbanlens.dashboard.services.social.connections import are_connections
 from urbanlens.dashboard.services.trivia import eligibility, realtime, selection, serializers, voting
 from urbanlens.dashboard.services.trivia.answer_check import is_answer_equivalent
 from urbanlens.dashboard.services.trivia.ratings import apply_round_ratings
@@ -80,10 +80,23 @@ class TriviaConfig:
 
     @property
     def geo_bounds(self) -> GEOSGeometry | None:
-        """The configured geographic restriction as a GEOS geometry, or None."""
+        """The configured geographic restriction as a GEOS geometry, or None.
+
+        Split at the antimeridian here rather than at each query: the callers all
+        run planar ``__within`` lookups (``ST_Within`` has no geography
+        implementation), and an area a player drew across the date line arrives
+        with unwrapped coordinates that match nothing on its far side. Splitting
+        at the source means every consumer - eligibility counts, round selection,
+        the external API - inherits the fix.
+
+        Returns:
+            The restriction geometry, or None when unrestricted.
+        """
         if not self.geo_bounds_geojson:
             return None
-        return GEOSGeometry(json.dumps(self.geo_bounds_geojson))
+        from urbanlens.dashboard.services.geo.longitude import split_at_antimeridian
+
+        return split_at_antimeridian(GEOSGeometry(json.dumps(self.geo_bounds_geojson)))
 
 
 def _config_from_session(session: TriviaSession) -> TriviaConfig:
@@ -174,10 +187,10 @@ def _notify_invite(host: Profile, invitee: Profile, session: TriviaSession) -> N
 
     from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     host_name = resolve_visible_identity(invitee, host)["display_name"]
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=invitee,
         source_profile=host,
         status=Status.UNREAD,
@@ -268,7 +281,13 @@ def get_or_create_round(session: TriviaSession) -> TriviaRound | None:
     existing_rounds = list(TriviaRound.objects.for_session(session).select_related("question"))
     if existing_rounds:
         last_round = existing_rounds[-1]
-        if TriviaAnswer.objects.for_round(last_round).count() < participant_count:
+        # A revealed round is finished no matter how many people answered it.
+        # Testing only the answer count treated a *force*-revealed round (the
+        # stall sweep's whole purpose - see force_reveal_round) as still in
+        # progress, so it was handed back here forever: the session could
+        # neither advance to the next round nor complete, because
+        # _advance_or_complete only completes when this returns None.
+        if last_round.revealed_at is None and TriviaAnswer.objects.for_round(last_round).count() < participant_count:
             return last_round
 
     if len(existing_rounds) >= session.total_rounds:

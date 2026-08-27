@@ -2,7 +2,7 @@
 @use 'variables' as *;
 
 body.page-map-view {
-    > div.container {
+    >div.container {
         max-width: 100%;
         min-height: calc(100vh - 4rem - 4rem);
     }
@@ -35,7 +35,9 @@ body.page-map-view {
         font-size: 1rem;
     }
 
-    &[hidden] { display: none; }
+    &[hidden] {
+        display: none;
+    }
 }
 
 // -- Temporary place marker (search jump + right-click context menu) --------
@@ -113,15 +115,81 @@ body.page-map-view {
 }
 
 @keyframes ul-temp-marker-pulse {
-    0% { box-shadow: 0 0 0 0 rgba(30, 136, 229, .55); }
-    70% { box-shadow: 0 0 0 20px rgba(30, 136, 229, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(30, 136, 229, 0); }
+    0% {
+        box-shadow: 0 0 0 0 rgba(30, 136, 229, .55);
+    }
+
+    70% {
+        box-shadow: 0 0 0 20px rgba(30, 136, 229, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(30, 136, 229, 0);
+    }
 }
 
 @keyframes ul-temp-marker-pulse-amber {
-    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, .6); }
-    70% { box-shadow: 0 0 0 20px rgba(245, 158, 11, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+    0% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, .6);
+    }
+
+    70% {
+        box-shadow: 0 0 0 20px rgba(245, 158, 11, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+    }
+}
+
+// -- "You are here" marker --------------------------------------------------
+// Unlike the temp place marker above (a bottom-anchored pin glyph for a
+// specific result), this represents an exact point, so it's a centred dot -
+// plus a slow ambient halo (vs. the one-shot drop pulse) since it sits on the
+// map indefinitely rather than announcing a single fresh jump.
+.user-location-marker-wrap {
+    background: none !important;
+    border: none !important;
+    position: relative;
+}
+
+.user-location-marker-dot {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border-radius: 50%;
+    background: $color-blue-500;
+    border: 3px solid #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+    cursor: pointer;
+}
+
+.user-location-marker-halo {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border-radius: 50%;
+    background: rgba($color-blue-500, .45);
+    animation: ul-user-location-pulse 2.4s ease-out infinite;
+    pointer-events: none;
+}
+
+@keyframes ul-user-location-pulse {
+    0% {
+        transform: scale(1);
+        opacity: .8;
+    }
+
+    100% {
+        transform: scale(3);
+        opacity: 0;
+    }
 }
 
 // Map pin icon (Material Icons rendered via Leaflet divIcon)
@@ -266,6 +334,7 @@ img.leaflet-marker-icon.is-selected {
 }
 
 .map-pin-with-circle:has(.map-pin-color-circle--ffffff) {
+
     .map-pin-icon,
     .map-pin-emoji {
         color: #000000;
@@ -304,6 +373,64 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
+// -- Beta time slider (OpenHistoricalMap overlay) --------------------------
+// Sits below .map-wrapper in normal document flow (a sibling, not part of
+// .map-bottom-controls, which is absolutely positioned over the tiles) - see
+// _temporal_imagery_slider.html and shared/temporal-imagery.ts. Server-side
+// gated to beta users with dated OHM coverage nearby, so this never renders
+// for anyone else.
+.temporal-imagery-slider {
+    // Rung 2: one step raised above the rung-1 .location-map card it sits
+    // in, so the pill reads as its own control rather than blending into
+    // the card background (see _surfaces.scss's elevation-ladder docs).
+    @include surface($radius: $radius-full, $rung: 2);
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    margin-top: .6rem;
+    padding: .55rem 1rem;
+    min-height: 40px;
+    box-sizing: border-box;
+    box-shadow: var(--ul-shadow-sm);
+
+    &__icon {
+        flex-shrink: 0;
+        font-size: 1.2rem;
+        color: var(--ul-grey-6);
+        transition: color .15s;
+    }
+
+    &__input {
+        flex: 1;
+        min-width: 0;
+        margin: 0 !important; // override the bare input[type=range] 15px 0 default above
+    }
+
+    &__label {
+        flex-shrink: 0;
+        min-width: 3.4rem;
+        text-align: right;
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--ul-grey-7);
+        font-variant-numeric: tabular-nums;
+    }
+
+    // A fetch is in flight - dims the input and spins the icon (reusing
+    // _layout.scss's shared @keyframes spin) rather than resizing or
+    // reflowing anything, so scrubbing never causes a layout jump.
+    &--loading {
+        .temporal-imagery-slider__icon {
+            color: var(--ul-accent-amber);
+            animation: spin 1.2s linear infinite;
+        }
+
+        .temporal-imagery-slider__input {
+            opacity: .6;
+        }
+    }
+}
+
 // - Map Dialogs
 .map-dialog {
     @include surface($radius: 8px, $rung: null);
@@ -316,7 +443,7 @@ img.leaflet-marker-icon.is-selected {
     position: absolute;
     top: 0;
     right: 0;
-    
+
     &--markup {
         right: 10px;
         bottom: 50px;
@@ -794,13 +921,27 @@ img.leaflet-marker-icon.is-selected {
 // the pill itself - only its close button is clickable) so it can't get in the
 // way of the click-to-place-points gesture it's explaining.
 @keyframes markup-tip-in {
-    from { opacity: 0; transform: translate(-50%, -14px) scale(.94); }
-    to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    from {
+        opacity: 0;
+        transform: translate(-50%, -14px) scale(.94);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+    }
 }
 
 @keyframes markup-tip-glow {
-    0%, 100% { box-shadow: 0 6px 20px rgba(0, 0, 0, .28), 0 0 0 0 rgba(99, 102, 241, .55); }
-    50%      { box-shadow: 0 6px 20px rgba(0, 0, 0, .28), 0 0 0 8px rgba(99, 102, 241, 0); }
+
+    0%,
+    100% {
+        box-shadow: 0 6px 20px rgba(0, 0, 0, .28), 0 0 0 0 rgba(99, 102, 241, .55);
+    }
+
+    50% {
+        box-shadow: 0 6px 20px rgba(0, 0, 0, .28), 0 0 0 8px rgba(99, 102, 241, 0);
+    }
 }
 
 .markup-line-finish-tip {
@@ -850,12 +991,14 @@ img.leaflet-marker-icon.is-selected {
         color: #fff;
         cursor: pointer;
         transition: background .12s;
+
         .material-symbols-outlined,
         .material-icons {
             font-size: 15px;
         }
 
-        &:hover, &:focus {
+        &:hover,
+        &:focus {
             background: rgba(255, 255, 255, .32);
             outline: none;
         }
@@ -915,8 +1058,10 @@ img.leaflet-marker-icon.is-selected {
 
 .add-pin-dialog {
     @include dialog-base(46em);
+    @include tad-tabs;
     // Full-viewport-aware height: keeps the dialog clear of mobile browser chrome
     max-height: calc(100dvh - 4rem);
+
     // Lighter backdrop - the map behind it should remain partially visible
     &::backdrop {
         background: rgba(0, 0, 0, .4);
@@ -1027,7 +1172,9 @@ img.leaflet-marker-icon.is-selected {
     font-size: .88rem;
     color: var(--ul-grey-9);
 
-    &[hidden] { display: none !important; }
+    &[hidden] {
+        display: none !important;
+    }
 
     &__content {
         display: flex;
@@ -1044,8 +1191,14 @@ img.leaflet-marker-icon.is-selected {
         font-size: inherit;
 
         &:hover {
-            i { color: #{$primary-color} }
-            span { text-decoration: underline; text-decoration-color: var(--ul-grey-1a); }
+            i {
+                color: #{$primary-color}
+            }
+
+            span {
+                text-decoration: underline;
+                text-decoration-color: var(--ul-grey-1a);
+            }
         }
 
         i {
@@ -1149,7 +1302,9 @@ img.leaflet-marker-icon.is-selected {
         margin-left: .1rem;
         transition: color .1s;
 
-        &:hover { color: $color-red-500; }
+        &:hover {
+            color: $color-red-500;
+        }
     }
 }
 
@@ -1164,7 +1319,9 @@ img.leaflet-marker-icon.is-selected {
     background: transparent;
     box-shadow: none !important;
 
-    &:focus { outline: none; }
+    &:focus {
+        outline: none;
+    }
 }
 
 .apdlg-label-suggestions {
@@ -1179,7 +1336,9 @@ img.leaflet-marker-icon.is-selected {
     overflow-y: auto;
     color: var(--ul-grey-9);
 
-    &[hidden] { display: none; }
+    &[hidden] {
+        display: none;
+    }
 
     button {
         color: var(--ul-grey-9);
@@ -1226,9 +1385,20 @@ img.leaflet-marker-icon.is-selected {
         letter-spacing: .03em;
         flex-shrink: 0;
 
-        &--tag      { background: $color-blue-50;                                     color: var(--primary-color); }
-        &--category { background: color-mix(in srgb, $color-green-500 12%, white); color: $color-green-700; }
-        &--status   { background: color-mix(in srgb, $color-amber-500 12%, white); color: $color-amber-700; }
+        &--tag {
+            background: $color-blue-50;
+            color: var(--primary-color);
+        }
+
+        &--category {
+            background: color-mix(in srgb, $color-green-500 12%, white);
+            color: $color-green-700;
+        }
+
+        &--status {
+            background: color-mix(in srgb, $color-amber-500 12%, white);
+            color: $color-amber-700;
+        }
     }
 
     &.apdlg-label-sugg-create {
@@ -1236,13 +1406,16 @@ img.leaflet-marker-icon.is-selected {
         color: var(--ul-grey-6);
         font-style: italic;
         font-size: .82rem;
+
         .material-symbols-outlined,
         .material-icons {
             font-size: 1rem !important;
             color: var(--primary-color);
         }
 
-        &:hover { color: var(--primary-color); }
+        &:hover {
+            color: var(--primary-color);
+        }
     }
 }
 
@@ -1352,6 +1525,16 @@ img.leaflet-marker-icon.is-selected {
     padding: .85rem 1.25rem;
     border-top: 1px solid var(--ul-surface-border);
     flex-shrink: 0;
+    // In edit mode this row holds four nowrap buttons (Delete, View details,
+    // Cancel, Save) that outgrow a phone-width dialog. Without wrapping, the
+    // overflow runs past the *start* edge - and the dialog clips it with no
+    // scroll, so Delete became unreachable rather than merely cramped.
+    flex-wrap: wrap;
+    row-gap: .5rem;
+
+    @include down($breakpoint-sm) {
+        justify-content: space-between;
+    }
 }
 
 // -- Map context menu (right-click) -----------------------------------------
@@ -1379,20 +1562,15 @@ img.leaflet-marker-icon.is-selected {
         color: var(--ul-grey-6);
         text-align: left;
         transition: background .1s;
+
         .material-symbols-outlined,
         .material-icons {
             font-size: 1rem;
-            color: $color-indigo-500;
+            color: $color-indigo-700;
         }
 
         &:hover {
-            background: var(--ul-hover-bg);
-            color: $color-indigo-700;
-
-            .material-symbols-outlined,
-            .material-icons {
-                color: $color-indigo-700;
-            }
+            background: rgba(0, 0, 0, 0.2);
         }
 
         &--link {
@@ -1573,7 +1751,9 @@ img.leaflet-marker-icon.is-selected {
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
 
-    .material-symbols-outlined { font-size: 1.05rem; }
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+    }
 }
 
 .pin-list-add-to-list-btn:hover {
@@ -1591,7 +1771,7 @@ img.leaflet-marker-icon.is-selected {
     position: relative;
     display: flex;
     align-items: stretch;
-    border-bottom: 1px solid rgba(255,255,255,.06);
+    border-bottom: 1px solid rgba(255, 255, 255, .06);
 
     &__entry {
         display: flex;
@@ -1607,12 +1787,13 @@ img.leaflet-marker-icon.is-selected {
         cursor: pointer;
         transition: background .12s;
 
-        &:hover, &:focus-visible {
+        &:hover,
+        &:focus-visible {
             background: rgba(255, 255, 255, 0.06);
             outline: none;
         }
     }
-    
+
     @include up($breakpoint-sm) {
         &__edit {
             align-self: center;
@@ -1744,12 +1925,19 @@ img.leaflet-marker-icon.is-selected {
         color: var(--ul-grey-9);
     }
 
+    // Desktop-only: these handles dock to the map's left/right edge and slide
+    // by the panel's side width when open, which only makes sense while the
+    // panels are side-docked. Below $breakpoint-sm both panels become
+    // full-width bottom sheets, so the toolbar's own #pin-list-button /
+    // #search-pins-button are the entry points there (see map_components.py's
+    // MAP_TOOL_REGISTRY) - the handle is a desktop convenience, not the only
+    // way in.
     @include up($breakpoint-sm) {
         display: flex;
     }
 }
 
-/* Always-visible shortcut handle (desktop only - the layers-menu entry covers mobile) */
+/* Edge shortcut handle, mirrored by .filter-panel-handle below. Desktop-only - see .panel-handle. */
 .pin-list-handle {
     left: 0;
     transform: translateY(-50%);
@@ -1760,12 +1948,12 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
-/* Always-visible shortcut handle for #filter-panel - right-docked mirror of .pin-list-handle,
-   same mechanic/look (desktop only - the layers-menu entry covers mobile). */
+/* Right-docked mirror of .pin-list-handle, same mechanic/look. Desktop-only - see .panel-handle. */
 .filter-panel-handle {
     right: 0;
     transform: translateY(-50%);
     transition: right 0.22s cubic-bezier(.4, 0, .2, 1), background .12s, color .12s;
+
     &.open {
         right: 272px;
     }
@@ -1803,6 +1991,9 @@ img.leaflet-marker-icon.is-selected {
     font-size: 1rem;
     line-height: 1;
     transition: color 0.15s, background 0.15s;
+    // On mobile these panels are bottom sheets and this is their dismiss
+    // control, but it renders at roughly 28x22px.
+    @include touch-target;
 }
 
 .fp-close:hover {
@@ -1900,6 +2091,14 @@ img.leaflet-marker-icon.is-selected {
     transition: background 0.15s, border-color 0.15s, color 0.15s;
     user-select: none;
     white-space: nowrap;
+
+    // Real padding rather than the touch-target mixin: chips sit 5px apart in a
+    // wrapping list, so overlaying expanded hit areas would let neighbours
+    // steal each other's taps.
+    @media (pointer: coarse) {
+        padding: 9px 14px;
+    }
+
     font-size: 0.76rem;
 }
 
@@ -1950,11 +2149,13 @@ img.leaflet-marker-icon.is-selected {
 }
 
 .fp-reset {
+
     .material-symbols-outlined,
     .material-icons {
         font-size: .9rem;
     }
 }
+
 /* Active-filter badge on the search button */
 #search-pins-button {
     position: relative;
@@ -2018,7 +2219,7 @@ img.leaflet-marker-icon.is-selected {
 }
 
 /* Active accordion: label tinted to show a filter is set in this section */
-.fp-accordion-item.fp-acc-active > .fp-accordion-summary {
+.fp-accordion-item.fp-acc-active>.fp-accordion-summary {
     color: color.adjust(#5082ff, $lightness: 20%);
 }
 
@@ -2255,7 +2456,9 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 .fp-date-group {
     margin-bottom: 10px;
 
-    &:last-child { margin-bottom: 0; }
+    &:last-child {
+        margin-bottom: 0;
+    }
 }
 
 .fp-date-group-label {
@@ -2300,6 +2503,32 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 }
 
 /* -- Tag filter list ------------------------------------------------ */
+#fp-acc-labels {
+    @include tad-tabs;
+
+    // This filter sidebar is a fixed dark glass panel regardless of site theme
+    // (see the hardcoded rgba(255,255,255,x) tones throughout this section),
+    // so the tab bar gets the same treatment instead of the theme-aware
+    // dialog default `tad-tabs` otherwise reads.
+    .tad-tabs {
+        background: rgba(255, 255, 255, .04);
+        border-bottom-color: rgba(255, 255, 255, .11);
+    }
+
+    .tad-tab {
+        color: var(--ul-grey-4);
+
+        &:hover {
+            color: $ui-fp-active;
+        }
+
+        &--active {
+            color: $ui-fp-active;
+            border-bottom-color: $ui-fp-active;
+        }
+    }
+}
+
 .fp-tag-search {
     width: 100%;
     background: rgba(255, 255, 255, 0.06);
@@ -2326,6 +2555,16 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+    overscroll-behavior: contain;
+
+    // On mobile this sits inside #filter-form's scroller, inside the filter
+    // bottom sheet - three nested scroll contexts, so a drag starting on a chip
+    // chained unpredictably between them. Let the list flow in the sheet's own
+    // scroller instead of owning a fourth 140px viewport.
+    @include down($breakpoint-sm) {
+        max-height: none;
+        overflow-y: visible;
+    }
 }
 
 /* -- Floating address search bar (mobile-first) --------------------- */
@@ -2399,8 +2638,12 @@ div.container .addr-search-bar {
         border: none;
         outline: none;
         color: var(--ul-grey-8);
-        font-size: 0.78rem;
-        padding: 6px 0;
+        // 16px is iOS Safari's focus-zoom threshold: anything smaller makes
+        // focusing this field zoom the whole map page, and the viewport meta
+        // sets no maximum-scale to prevent it. The desktop step-down below is
+        // safe because a pointer device never triggers that zoom.
+        font-size: 16px;
+        padding: 10px 0;
 
         &::placeholder {
             color: var(--ul-grey-6);
@@ -2426,6 +2669,16 @@ div.container .addr-search-bar {
     align-items: center;
     justify-content: center;
     transition: color .15s, background .15s;
+    // ~19px rendered, sitting 4px apart inside the search bar.
+    @include touch-target;
+
+    // Hover is the only feedback these carry, and touch has none - give a tap
+    // something visible to confirm it landed.
+    &:active {
+        color: var(--ul-grey-9);
+        background: rgba(255, 255, 255, 0.12);
+    }
+
     flex-shrink: 0;
 
     &:hover {
@@ -2440,7 +2693,7 @@ div.container .addr-search-bar {
 }
 
 .addr-search-history {
-    display: none;  // hidden by default; shown via .addr-search-history--visible
+    display: none; // hidden by default; shown via .addr-search-history--visible
     padding: 2px;
 
     .material-symbols-outlined,
@@ -2475,8 +2728,15 @@ div.container .addr-search-bar {
     overflow: hidden;
     max-height: 320px;
     overflow-y: auto;
+    // Leaflet sets `touch-action: none` on its container to own touch drags,
+    // which also suppresses native scrolling of nested overflow regions like
+    // this one. Re-enable vertical panning for the list itself.
+    touch-action: pan-y;
+    overscroll-behavior: contain;
 
-    &[hidden] { display: none; }
+    &[hidden] {
+        display: none;
+    }
 }
 
 .addr-suggestion-group-hdr {
@@ -2493,14 +2753,37 @@ div.container .addr-search-bar {
     gap: 4px;
 
     // Subtle per-section tints that adapt automatically to light/dark mode
-    &[data-section="pins"]        { background: color-mix(in srgb, var(--ul-primary-color) 5%, var(--ul-surface-raised)); }
-    &[data-section="places"]      { background: color-mix(in srgb, #22c55e 4%, var(--ul-surface-raised)); }
-    &[data-section="coordinates"] { background: color-mix(in srgb, #a855f7 4%, var(--ul-surface-raised)); }
-    &[data-section="suggestions"] { background: color-mix(in srgb, var(--ul-grey-6) 5%, var(--ul-surface-raised)); }
-    &[data-section="navigation"]  { background: color-mix(in srgb, #3b82f6 4%, var(--ul-surface-raised)); }
-    &[data-section="history"]     { background: color-mix(in srgb, var(--ul-grey-5) 4%, var(--ul-surface-raised)); }
-    &[data-section="recent"]      { background: color-mix(in srgb, var(--ul-grey-5) 3%, var(--ul-surface-raised)); }
-    &[data-section="cities"]      { background: color-mix(in srgb, #f59e0b 4%, var(--ul-surface-raised)); }
+    &[data-section="pins"] {
+        background: color-mix(in srgb, var(--ul-primary-color) 5%, var(--ul-surface-raised));
+    }
+
+    &[data-section="places"] {
+        background: color-mix(in srgb, #22c55e 4%, var(--ul-surface-raised));
+    }
+
+    &[data-section="coordinates"] {
+        background: color-mix(in srgb, #a855f7 4%, var(--ul-surface-raised));
+    }
+
+    &[data-section="suggestions"] {
+        background: color-mix(in srgb, var(--ul-grey-6) 5%, var(--ul-surface-raised));
+    }
+
+    &[data-section="navigation"] {
+        background: color-mix(in srgb, #3b82f6 4%, var(--ul-surface-raised));
+    }
+
+    &[data-section="history"] {
+        background: color-mix(in srgb, var(--ul-grey-5) 4%, var(--ul-surface-raised));
+    }
+
+    &[data-section="recent"] {
+        background: color-mix(in srgb, var(--ul-grey-5) 3%, var(--ul-surface-raised));
+    }
+
+    &[data-section="cities"] {
+        background: color-mix(in srgb, #f59e0b 4%, var(--ul-surface-raised));
+    }
 
     // Collapsible sections show pointer and a chevron
     &[data-collapsible] {
@@ -2515,13 +2798,17 @@ div.container .addr-search-bar {
             transition: transform .15s;
         }
 
-        &[data-collapsed]::after { transform: rotate(-90deg); }
+        &[data-collapsed]::after {
+            transform: rotate(-90deg);
+        }
     }
 }
 
 // Collapsed slot: hide suggestions, show count hint
 .addr-source-slot.is-collapsed {
-    .addr-suggestion { display: none; }
+    .addr-suggestion {
+        display: none;
+    }
 }
 
 .addr-section-collapsed-hint {
@@ -2568,16 +2855,45 @@ div.container .addr-search-bar {
         margin-top: 1px;
     }
 
-    &--pin .addr-suggestion-icon        { color: $color-blue-500; }
-    &--location .addr-suggestion-icon   { color: $color-green-500; }
-    &--coordinates .addr-suggestion-icon { color: $color-purple-500; }
-    &--place .addr-suggestion-icon      { color: var(--ul-primary-color); }
-    &--city .addr-suggestion-icon       { color: var(--ul-grey-7); }
-    &--home .addr-suggestion-icon       { color: var(--ul-primary-color); }
-    &--mylocation .addr-suggestion-icon { color: $color-blue-500; }
-    &--derived .addr-suggestion-icon    { color: var(--ul-grey-5); }
-    &--external .addr-suggestion-icon   { color: var(--ul-grey-5); }
-    &--history .addr-suggestion-icon    { color: var(--ul-grey-5); }
+    &--pin .addr-suggestion-icon {
+        color: $color-blue-500;
+    }
+
+    &--location .addr-suggestion-icon {
+        color: $color-green-500;
+    }
+
+    &--coordinates .addr-suggestion-icon {
+        color: $color-purple-500;
+    }
+
+    &--place .addr-suggestion-icon {
+        color: var(--ul-primary-color);
+    }
+
+    &--city .addr-suggestion-icon {
+        color: var(--ul-grey-7);
+    }
+
+    &--home .addr-suggestion-icon {
+        color: var(--ul-primary-color);
+    }
+
+    &--mylocation .addr-suggestion-icon {
+        color: $color-blue-500;
+    }
+
+    &--derived .addr-suggestion-icon {
+        color: var(--ul-grey-5);
+    }
+
+    &--external .addr-suggestion-icon {
+        color: var(--ul-grey-5);
+    }
+
+    &--history .addr-suggestion-icon {
+        color: var(--ul-grey-5);
+    }
 }
 
 // Two-line suggestion layout: bold title + muted subtitle
@@ -2631,7 +2947,9 @@ div.container .addr-search-bar {
 }
 
 @keyframes addr-spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 // "No results" row inside the dropdown
@@ -2656,15 +2974,22 @@ div.container .addr-search-bar {
     animation: addr-overlay-fade-in .2s ease;
 
     @keyframes addr-overlay-fade-in {
-        from { opacity: 0; transform: translate(-50%, -44%); }
-        to   { opacity: 1; transform: translate(-50%, -50%); }
+        from {
+            opacity: 0;
+            transform: translate(-50%, -44%);
+        }
+
+        to {
+            opacity: 1;
+            transform: translate(-50%, -50%);
+        }
     }
 }
 
 .addr-no-results-card {
     pointer-events: auto;
     @include surface($radius: 12px, $rung: null);
-    box-shadow: 0 8px 32px rgba(0,0,0,.22);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .22);
     padding: 18px 24px 16px;
     max-width: min(340px, 90vw);
     text-align: center;
@@ -2700,7 +3025,10 @@ div.container .addr-search-bar {
         padding: 2px 6px;
         border-radius: 4px;
 
-        &:hover { color: var(--ul-grey-8); background: var(--ul-hover-bg); }
+        &:hover {
+            color: var(--ul-grey-8);
+            background: var(--ul-hover-bg);
+        }
     }
 
     position: relative;
@@ -2958,7 +3286,10 @@ div.container .addr-search-bar {
     margin-bottom: 5px;
 
     .material-symbols-outlined,
-    .material-icons { font-size: .85rem; flex-shrink: 0; }
+    .material-icons {
+        font-size: .85rem;
+        flex-shrink: 0;
+    }
 }
 
 /* -- Places layer --------------------------------------------------- */
@@ -2998,7 +3329,9 @@ div.container .addr-search-bar {
     border-radius: 4px;
 
     .material-symbols-outlined,
-    .material-icons { font-size: 1.1rem; }
+    .material-icons {
+        font-size: 1.1rem;
+    }
 }
 
 #place-info-panel {
@@ -3014,7 +3347,9 @@ div.container .addr-search-bar {
     z-index: 1200;
     overflow: hidden;
 
-    &[hidden] { display: none; }
+    &[hidden] {
+        display: none;
+    }
 }
 
 // Multi-select tool: floating bottom-center action bar.
@@ -3036,7 +3371,9 @@ div.container .addr-search-bar {
     box-shadow: 0 6px 28px rgba(0, 0, 0, .55);
     max-width: min(560px, 92vw);
 
-    &[hidden] { display: none; }
+    &[hidden] {
+        display: none;
+    }
 
     .bulk-select-count {
         color: rgba(255, 255, 255, .7);
@@ -3349,6 +3686,7 @@ div.container .addr-search-bar {
     &:hover {
         background: rgba(255, 255, 255, .08);
         color: #fff;
+
         .material-symbols-outlined,
         .material-icons {
             color: #fff;
@@ -3361,6 +3699,7 @@ div.container .addr-search-bar {
 
     &--danger {
         color: rgba(255, 100, 100, .75);
+
         .material-symbols-outlined,
         .material-icons {
             color: rgba(255, 100, 100, .6);
@@ -3423,19 +3762,29 @@ div.container .addr-search-bar {
 
 #map.pin-list-open {
     @include up($breakpoint-sm) {
-        .map-layers-panel { left: calc(300px + 10px); }
-        #cache-status { left: calc(300px + 8px); }
+        .map-layers-panel {
+            left: calc(300px + 10px);
+        }
+
+        #cache-status {
+            left: calc(300px + 8px);
+        }
+
         #addr-search-bar {
             left: calc(300px + 54px);
             width: min(360px, calc(100% - 300px - 230px - 54px));
         }
-        .leaflet-top.leaflet-left { left: 300px; }
+
+        .leaflet-top.leaflet-left {
+            left: 300px;
+        }
     }
 }
 
 // -- Mobile-responsive map overrides ------------------------------------------
 
 @include down($breakpoint-sm) {
+
     // Filter panel: full-width bottom sheet on phones instead of 272px side panel
     #filter-panel {
         width: 100%;
@@ -3468,6 +3817,53 @@ div.container .addr-search-bar {
         &.open {
             transform: translateY(0);
         }
+    }
+
+    // The markup/detail-pin draw panel is a 300px full-height side dock, which
+    // covers most of a phone screen - and it is force-shown the moment a
+    // drawing tool is armed, so it hides the map you have to draw on. Same
+    // bottom-sheet treatment as the two panels above, but short enough to
+    // leave the map workable while a tool is active.
+    .map-dialog--side {
+        top: auto;
+        right: 0;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: none;
+        height: auto;
+        max-height: 45dvh;
+        border-radius: 16px 16px 0 0;
+    }
+
+    // Desktop shifts every bottom-docked control sideways when a panel opens
+    // (see the #map.filter-open / #map.pin-list-open rules above, all of which
+    // are up($breakpoint-sm)-only). Here the panels are 70-80dvh sheets that
+    // cover the whole dock band instead, so the dock drops away entirely
+    // rather than trying to dodge - one rule replacing five per-element shifts.
+    #map.filter-open,
+    #map.pin-list-open {
+
+        .map-buttons,
+        .map-layers-panel {
+            transform: translateY(120%);
+            pointer-events: none;
+        }
+    }
+
+    // Select mode raises its own full-width action bar at the bottom, which
+    // outranks the dock (z-index 1200) and would otherwise sit on top of it.
+    #map.select-mode .map-buttons {
+        transform: translateY(120%);
+        pointer-events: none;
+    }
+
+    .bulk-select-toolbar {
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        transform: none;
+        max-width: none;
     }
 }
 
@@ -3608,6 +4004,7 @@ div.container .addr-search-bar {
         box-shadow: 0 0 10px rgba(0, 0, 0, .4);
     }
 }
+
 // -- Gentle map onboarding ------------------------------------------------
 .map-onboarding {
     position: absolute;
@@ -3652,7 +4049,7 @@ div.container .addr-search-bar {
 
 .map-onboarding-card__eyebrow {
     margin-bottom: 4px;
-    color: #2563eb;
+    color: $color-blue-300;
     font-size: .68rem;
     font-weight: 800;
     letter-spacing: .12em;
@@ -3728,20 +4125,40 @@ div.container .addr-search-bar {
 }
 
 @keyframes onboarding-throb {
-    0%, 100% { transform: scale(1); box-shadow: 0 0 0 4px rgba(37, 99, 235, .18), 0 14px 34px rgba(37, 99, 235, .38); }
-    50% { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(37, 99, 235, .08), 0 18px 42px rgba(37, 99, 235, .46); }
+
+    0%,
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, .18), 0 14px 34px rgba(37, 99, 235, .38);
+    }
+
+    50% {
+        transform: scale(1.08);
+        box-shadow: 0 0 0 10px rgba(37, 99, 235, .08), 0 18px 42px rgba(37, 99, 235, .46);
+    }
 }
 
 @keyframes map-onboarding-in {
-    from { opacity: 0; transform: translateY(-8px) scale(.98); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
-@media (max-width: 640px) {
+// Switches on the same token as every other map override. A raw 640px here
+// left a 641-767px band where this card kept its desktop top-right anchoring
+// while the control it points at had already moved to the opposite corner.
+@include down($breakpoint-sm) {
     .map-onboarding {
         top: auto;
         right: 12px;
-        bottom: 78px;
+        // Clears the bottom dock (tools row + saved-filters strip) it highlights.
+        bottom: calc(28px + var(--map-dock-row-h, 54px) + 20px);
         left: 12px;
         width: auto;
     }
@@ -3898,11 +4315,19 @@ div.container .addr-search-bar {
 }
 
 @keyframes page-onboarding-focus {
-    0%, 100% { outline-color: rgba(124, 58, 237, .34); }
-    50% { outline-color: rgba(6, 182, 212, .55); }
+
+    0%,
+    100% {
+        outline-color: rgba(124, 58, 237, .34);
+    }
+
+    50% {
+        outline-color: rgba(6, 182, 212, .55);
+    }
 }
 
-@media (max-width: 720px) {
+// Same token normalization as .map-onboarding above.
+@include down($breakpoint-sm) {
     .page-onboarding {
         top: auto;
         right: 12px;
@@ -3963,15 +4388,23 @@ div.container .addr-search-bar {
     padding: 0;
 
     .material-symbols-outlined,
-    .material-icons { font-size: 1.1rem; }
+    .material-icons {
+        font-size: 1.1rem;
+    }
 
-    &:hover { opacity: 1; background: rgba(0, 0, 0, .06); }
+    &:hover {
+        opacity: 1;
+        background: rgba(0, 0, 0, .06);
+    }
 }
 
 .map-buttons.collapsed {
+
     .material-symbols-outlined,
     .map-toolbar-collapse {
-        .material-icons { content: 'chevron_left'; }
+        .material-icons {
+            content: 'chevron_left';
+        }
     }
 }
 
@@ -4035,6 +4468,14 @@ div.container .addr-search-bar {
     transition: opacity .2s ease, box-shadow .2s ease, color .2s ease, border-color .2s ease;
     white-space: nowrap;
 
+    // Below $breakpoint-xs this is a horizontal icon+label row, and the shared
+    // cap above resolves to ~79px on a 360px screen against ~89px of content -
+    // clipping "Layers" mid-word. The row form is bounded by its own content,
+    // so let it size naturally there.
+    @include down($breakpoint-xs) {
+        max-width: none;
+    }
+
     .map-layers-toggle-thumb {
         display: none;
     }
@@ -4085,10 +4526,22 @@ div.container .addr-search-bar {
         max-height: clamp(130px, 28cqmin, 156px);
     }
 
-    &:hover, &.active, &:focus, &:active { opacity: 1; box-shadow: 0 3px 10px rgba(0, 0, 0, .18); }
+    &:hover,
+    &.active,
+    &:focus,
+    &:active {
+        opacity: 1;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, .18);
+    }
+
     &.active {
-        .map-layers-toggle-icon { color: $color-blue-500; }
-        .map-layer-thumb img { opacity: 1; }
+        .map-layers-toggle-icon {
+            color: $color-blue-500;
+        }
+
+        .map-layer-thumb img {
+            opacity: 1;
+        }
     }
 }
 
@@ -4131,7 +4584,9 @@ div.container .addr-search-bar {
         transform: translateX(-10px) scale(0.96);
     }
 
-    &[hidden] { display: none; }
+    &[hidden] {
+        display: none;
+    }
 
     .map-layers-panel.is-open & {
         opacity: 1;
@@ -4203,7 +4658,12 @@ div.container .addr-search-bar {
         max-height: clamp(136px, 24cqmin, 160px);
     }
 
-    &:hover, &:focus-visible { background: var(--ul-hover-bg); color: var(--ul-grey-9); opacity: .85; }
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-hover-bg);
+        color: var(--ul-grey-9);
+        opacity: .85;
+    }
 
     &.active {
         background: rgba($color-blue-500, .1);
@@ -4211,7 +4671,9 @@ div.container .addr-search-bar {
         color: $color-blue-700;
         opacity: 1;
 
-        .map-layer-thumb--icon .material-icons { color: $color-blue-700; }
+        .map-layer-thumb--icon .material-icons {
+            color: $color-blue-700;
+        }
     }
 }
 
@@ -4265,6 +4727,7 @@ div.container .addr-search-bar {
         display: flex;
         align-items: center;
         justify-content: center;
+
         .material-symbols-outlined,
         .material-icons {
             font-size: clamp(.75rem, 7cqmin, 1rem);
@@ -4286,6 +4749,7 @@ div.container .addr-search-bar {
             z-index: 1;
             pointer-events: none;
         }
+
         .material-symbols-outlined,
         .material-icons {
             position: absolute;
@@ -4309,7 +4773,87 @@ div.container .addr-search-bar {
     }
 }
 
-.map-layer-btn.active .map-layer-thumb img { opacity: 1; }
+.map-layer-btn.active .map-layer-thumb img {
+    opacity: 1;
+}
+
+// -- Manage Layers dialog ----------------------------------------------------
+// Body content for #custom-layers-dialog (see _custom_layers_list.html);
+// .ul-dialog-body on the wrapping div supplies the dialog's own padding.
+
+.custom-layer-manage-list {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    margin: 0 0 1rem;
+    padding: 0;
+    list-style: none;
+}
+
+.custom-layer-manage-row {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .4rem .5rem;
+    border-radius: 8px;
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
+
+    >.material-symbols-outlined {
+        flex-shrink: 0;
+        font-size: 18px;
+        color: var(--ul-grey-6);
+    }
+}
+
+.custom-layer-manage-swatch {
+    flex-shrink: 0;
+    // Square, not the round dp-color-swatch look - this is a static
+    // indicator, not one of the clickable picker options it borrows CSS from.
+    border-radius: 5px;
+    cursor: default;
+
+    &:hover {
+        transform: none;
+    }
+}
+
+.custom-layer-manage-name {
+    flex: 1;
+    min-width: 0;
+    @include ul-input;
+    padding: .35rem .55rem;
+}
+
+.custom-layer-manage-empty {
+    padding: .75rem .5rem;
+    color: var(--ul-grey-5);
+    font-size: .85rem;
+    font-style: italic;
+}
+
+.custom-layer-manage-form {
+    display: flex;
+    flex-direction: column;
+    gap: .8rem;
+    padding-top: .75rem;
+    border-top: 1px solid var(--ul-surface-border);
+
+    .form-row {
+        @include form-row;
+    }
+
+    .form-actions {
+        display: flex;
+        justify-content: flex-end;
+    }
+}
+
+.custom-layer-manage-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: .75rem;
+}
 
 // -- Combined label filter section ---------------------------------------------
 
@@ -4347,10 +4891,17 @@ div.container .addr-search-bar {
     margin-bottom: 5px;
 
     .material-symbols-outlined,
-    .material-icons { font-size: .85rem; }
+    .material-icons {
+        font-size: .85rem;
+    }
 
-    .fp-label-col--incl & { color: rgba(134, 239, 172, .85); }
-    .fp-label-col--excl & { color: rgba(252, 165, 165, .85); }
+    .fp-label-col--incl & {
+        color: rgba(134, 239, 172, .85);
+    }
+
+    .fp-label-col--excl & {
+        color: rgba(252, 165, 165, .85);
+    }
 }
 
 // -- Complex formula display (replaces 2-column when mixed AND/OR active) ------
@@ -4365,7 +4916,9 @@ div.container .addr-search-bar {
     border: 1px solid rgba(100, 160, 255, .2);
     border-radius: 7px;
 
-    &[hidden] { display: none; }
+    &[hidden] {
+        display: none;
+    }
 }
 
 .fp-formula-display-header {
@@ -4433,7 +4986,9 @@ div.container .addr-search-bar {
     transition: background .12s, color .12s;
 
     .material-symbols-outlined,
-    .material-icons { font-size: .7rem; }
+    .material-icons {
+        font-size: .7rem;
+    }
 
     &:hover {
         background: rgba(255, 70, 70, .18);
@@ -4462,7 +5017,9 @@ div.container .addr-search-bar {
     transition: background .12s, border-color .12s;
 
     .material-symbols-outlined,
-    .material-icons { font-size: .9rem; }
+    .material-icons {
+        font-size: .9rem;
+    }
 
     &.fp-drag-over {
         background: rgba(239, 68, 68, .1);
@@ -4567,7 +5124,10 @@ div.container .addr-search-bar {
     font-family: ui-monospace, 'Cascadia Code', monospace;
     transition: border-color .15s, background .15s;
 
-    &::placeholder { color: rgba(255, 255, 255, .22); }
+    &::placeholder {
+        color: rgba(255, 255, 255, .22);
+    }
+
     &:focus {
         border-color: rgba(100, 160, 255, .4);
         background: rgba(255, 255, 255, .09);
@@ -4588,7 +5148,9 @@ div.container .addr-search-bar {
     box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
     overflow: hidden;
 
-    &[hidden] { display: none; }
+    &[hidden] {
+        display: none;
+    }
 }
 
 .fp-formula-sugg {
@@ -4601,7 +5163,11 @@ div.container .addr-search-bar {
     cursor: pointer;
     transition: background .1s;
 
-    &:hover, &.active { background: rgba(100, 160, 255, .12); color: #fff; }
+    &:hover,
+    &.active {
+        background: rgba(100, 160, 255, .12);
+        color: #fff;
+    }
 }
 
 .fp-formula-errors {
@@ -4610,7 +5176,9 @@ div.container .addr-search-bar {
     color: $color-red-300;
     padding: 2px 4px;
 
-    &[hidden] { display: none; }
+    &[hidden] {
+        display: none;
+    }
 }
 
 // -- Visits row: chips + reset button side by side -----------------------------
@@ -4641,10 +5209,13 @@ div.container .addr-search-bar {
     border-radius: 50%;
     color: rgba(255, 255, 255, .35);
     cursor: pointer;
+    @include touch-target;
     transition: background .15s, color .15s, border-color .15s;
 
     .material-symbols-outlined,
-    .material-icons { font-size: .75rem; }
+    .material-icons {
+        font-size: .75rem;
+    }
 
     &:hover {
         background: rgba(255, 70, 70, .15);
@@ -4677,8 +5248,9 @@ div.container .addr-search-bar {
         }
     }
 
-    &:hover, &:focus-within { 
-        opacity: 1; 
+    &:hover,
+    &:focus-within {
+        opacity: 1;
     }
 
     // Move the bar to align with the zoom controls on desktop
@@ -4687,12 +5259,23 @@ div.container .addr-search-bar {
     }
 }
 
-// Pinch-to-zoom on phones; show +/- controls from tablet/desktop up
+// Pinch-to-zoom exists on phones, but there is no discrete zoom-*out* gesture
+// (double-tap only zooms in), so one-handed use had no way back out. Keep the
+// +/- controls at every width; on mobile they just need to clear the
+// full-width search bar that owns the top edge there.
 #map .leaflet-control-zoom {
-    display: none;
+    display: block;
+}
 
-    @include up($breakpoint-sm) {
-        display: block;
+@include down($breakpoint-sm) {
+    #map .leaflet-top.leaflet-left {
+        top: 52px;
+    }
+
+    #map .leaflet-control-zoom a {
+        width: 44px;
+        height: 44px;
+        line-height: 44px;
     }
 }
 
@@ -4757,13 +5340,14 @@ div.container .addr-search-bar {
 [data-theme="dark"] {
     .leaflet-container {
         .leaflet-control-attribution {
-            background-color: rgba(0,0,0, 0.5);
+            background-color: rgba(0, 0, 0, 0.5);
         }
     }
 }
 
 // - Map Dark Mode
 [data-map-style="dark"] {
+
     // Places-layer markers only. Temporary search/context markers
     // (.search-result-marker-wrap--temp) keep their own blue/amber colours -
     // this used to recolour them near-white on dark tiles, which made the
@@ -4774,6 +5358,7 @@ div.container .addr-search-bar {
         &--places-nps {
             color: $color-green-500;
         }
+
         &--places-wiki {
             color: $color-blue-700;
         }
@@ -4793,10 +5378,95 @@ div.container .addr-search-bar {
 
     .map-context-menu {
         &__item {
-            &:hover {
-                background: rgba(0,0,0,0.2);
-                color: #fff;
+
+            .material-symbols-outlined,
+            .material-icons {
+                color: $color-indigo-300;
             }
         }
+    }
+}
+// -- Pin popup: clickable title and overflow menu -----------------------------
+// The popup's secondary actions sit behind one button (see
+// togglePinPopupMenu in pages/map/index.html) so the popup reads as
+// information rather than a row of icons.
+a.popup-title {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+
+    &:hover,
+    &:focus-visible {
+        text-decoration: underline;
+    }
+}
+
+.popup-menu {
+    position: relative;
+    display: inline-flex;
+}
+
+.popup-menu-toggle {
+    border: 0;
+    background: none;
+    cursor: pointer;
+    padding: 0.15rem;
+    line-height: 1;
+    color: inherit;
+    border-radius: 4px;
+
+    &:hover,
+    &:focus-visible {
+        background: rgb(0 0 0 / 8%);
+    }
+}
+
+.popup-menu-items {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.25rem);
+    z-index: 1200;
+    display: flex;
+    flex-direction: column;
+
+    // A class selector beats the UA stylesheet's `[hidden] { display: none }`,
+    // so the attribute Leaflet's togglePinPopupMenu() toggles did nothing on
+    // its own - the menu rendered open, permanently, overlapping the rest of
+    // the popup.
+    &[hidden] {
+        display: none;
+    }
+    min-width: 11rem;
+    padding: 0.25rem;
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 6px;
+    background: var(--card-bg, #fff);
+    box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+
+    button {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.35rem 0.5rem;
+        border: 0;
+        background: none;
+        cursor: pointer;
+        text-align: left;
+        white-space: nowrap;
+        color: inherit;
+        border-radius: 4px;
+
+        &:hover,
+        &:focus-visible {
+            background: rgb(0 0 0 / 7%);
+        }
+
+        &.delete-button {
+            color: #c62828;
+        }
+    }
+
+    .material-symbols-outlined {
+        font-size: 1.05rem;
     }
 }

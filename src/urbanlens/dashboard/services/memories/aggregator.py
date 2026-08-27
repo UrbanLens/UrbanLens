@@ -1,18 +1,20 @@
 """Extensible aggregation of a profile's "memories" - routes, trips, visits, photos.
 
-Adding a future memory type is one new ``_x_for_range`` function appended to
-``_EVENT_SOURCES`` below - nothing else needs to change. Each source function
-does its own date/bbox filtering on its own model's already-indexed fields.
+Adding a future memory type is one new ``_x_for_range`` function listed in
+``_event_sources`` below - nothing else needs to change. Each source function
+does its own date/bbox filtering on its own model's already-indexed fields, and
+contributes independently: one source failing omits its own events, never the feed.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
+import logging
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from django.db.models import DateField, Max, Min
-from django.db.models.functions import Cast, Coalesce
+from django.db.models import DateField, Max, Min, Prefetch
+from django.db.models.functions import Cast, Coalesce, Greatest
 from django.urls import reverse
 from django.utils import timezone
 
@@ -21,6 +23,9 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import Trip
+
+
+logger = logging.getLogger(__name__)
 
 
 class BBox(NamedTuple):
@@ -74,7 +79,7 @@ def _date_to_datetime(value: date) -> datetime:
 def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each Route that started within the given range."""
     from urbanlens.dashboard.models.routes.model import Route
-    from urbanlens.dashboard.services.units import format_distance
+    from urbanlens.dashboard.services.core.units import format_distance
 
     units = profile.effective_distance_units
     routes = Route.objects.for_profile(profile).in_date_range(start, end)
@@ -112,8 +117,9 @@ def _trip_representative_point(trip: Trip) -> tuple[float, float] | None:
     Mirrors the override priority used for trip map markers elsewhere
     (lat_override/lng_override -> pin's effective coords -> location coords).
     """
-    activities = trip.activities.select_related("pin", "location").order_by("scheduled_at", "order")
-    for activity in activities:
+    # trip.activities.all() rather than a fresh .select_related().order_by() chain, so the
+    # caller's Prefetch is actually used - re-filtering the manager would re-query per trip.
+    for activity in trip.activities.all():
         if activity.lat_override is not None and activity.lng_override is not None:
             return (activity.lat_override, activity.lng_override)
         if activity.pin and activity.pin.effective_latitude is not None and activity.pin.effective_longitude is not None:
@@ -125,29 +131,44 @@ def _trip_representative_point(trip: Trip) -> tuple[float, float] | None:
 
 def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each Trip whose effective date range overlaps the given range."""
-    from urbanlens.dashboard.models.trips.model import Trip
+    from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 
     # Mirrors Trip.effective_start_date/effective_end_date: explicit start_date/end_date
     # win, else fall back to the earliest/latest scheduled activity. A trip with no
     # end_date and no later activity is treated as ending on its effective start date,
-    # same as Trip.duration_days/timeline_status do.
+    # same as Trip.duration_days/timeline_status do. The last-activity date takes
+    # scheduled_end into account as well as scheduled_at, because the property does -
+    # without it a trip whose final activity runs past the last start time is filtered
+    # against one definition of "ends" and then displayed with another. Postgres's
+    # GREATEST ignores NULLs, so an activity with no scheduled_end doesn't erase the max.
     trips = (
         Trip.objects.filter(profiles=profile)
         .annotate(
             _first_activity_date=Cast(Min("activities__scheduled_at"), output_field=DateField()),
-            _last_activity_date=Cast(Max("activities__scheduled_at"), output_field=DateField()),
+            _last_activity_date=Cast(
+                Greatest(Max("activities__scheduled_at"), Max("activities__scheduled_end")),
+                output_field=DateField(),
+            ),
         )
         .annotate(_eff_start=Coalesce("start_date", "_first_activity_date"))
         .annotate(_eff_end=Coalesce("end_date", "_last_activity_date", "_eff_start"))
         .filter(_eff_start__isnull=False, _eff_start__lte=end, _eff_end__gte=start)
+        .prefetch_related(
+            Prefetch(
+                "activities",
+                queryset=TripActivity.objects.select_related("pin", "location").order_by("scheduled_at", "order"),
+            )
+        )
         .distinct()
     )
 
     for trip in trips:
-        occurred_at = trip.effective_start_date
+        # The annotations, not the equivalent model properties: those re-derive the same
+        # two dates with a query apiece, which on this page is per trip in the feed.
+        occurred_at = trip._eff_start  # noqa: SLF001
         if occurred_at is None:
             continue
-        ended_at = trip.effective_end_date
+        ended_at = trip._eff_end  # noqa: SLF001
         point = _trip_representative_point(trip)
         if bbox is not None and (point is None or not (bbox.min_lat <= point[0] <= bbox.max_lat and bbox.min_lng <= point[1] <= bbox.max_lng)):
             continue
@@ -235,16 +256,31 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
         )
 
 
-_EVENT_SOURCES: tuple[Callable[[Profile, date, date, BBox | None], Iterator[MemoryEvent]], ...] = (
-    _routes_for_range,
-    _trips_for_range,
-    _visits_for_range,
-    _photos_for_range,
-)
+def _event_sources() -> tuple[Callable[[Profile, date, date, BBox | None], Iterator[MemoryEvent]], ...]:
+    """The registered memory sources, resolved fresh on each call.
+
+    A module-level tuple would capture these at import time, which both hides
+    monkeypatching from tests and quietly defeats any later attempt to swap a source.
+    """
+    return (
+        _routes_for_range,
+        _trips_for_range,
+        _visits_for_range,
+        _photos_for_range,
+    )
 
 
 def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | None = None) -> list[MemoryEvent]:
     """Merge every registered event source over [start, end], sorted newest-first.
+
+    Each source contributes independently. This is the page's extensibility seam -
+    adding a memory type is one new function in ``_event_sources`` - so an unguarded
+    fan-out means any single source raising (a corrupt row, a missing relation, a bug
+    in a newly added source) discards the other three and 500s the whole feed. A
+    Memories page missing one kind of memory is worth far more than no page at all.
+
+    Sources are generators, so they are drained one at a time: whatever a source
+    yielded before failing is kept rather than thrown away with it.
 
     Args:
         profile: The profile whose memories to fetch.
@@ -253,10 +289,15 @@ def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | 
         bbox: Optional map-viewport bounding box to further narrow results.
 
     Returns:
-        List of MemoryEvent across all sources, newest first.
+        List of MemoryEvent across every source that succeeded, newest first.
     """
     events: list[MemoryEvent] = []
-    for source in _EVENT_SOURCES:
-        events.extend(source(profile, start, end, bbox))
+    for source in _event_sources():
+        try:
+            # extend() consumes the generator incrementally, so a source that raises
+            # partway keeps whatever it already yielded rather than losing it too.
+            events.extend(source(profile, start, end, bbox))
+        except Exception:
+            logger.exception("Memory source %s failed; omitting it from the feed", getattr(source, "__name__", source))
     events.sort(key=lambda e: e.occurred_at, reverse=True)
     return events

@@ -19,8 +19,12 @@ class ArticleQuerySet(DashboardQuerySet):
         """Articles the given profile is allowed to read.
 
         Pin articles are strictly private to the pin's owner. Wiki articles
-        follow the standard wiki visibility rule: the profile must have a pin
-        at the wiki's location (or have created the wiki).
+        follow whatever ``services.wiki.wiki_access`` says, asked rather than
+        restated: this used to check for a pin on the wiki's exact location or
+        the ``created_by`` column, which is one of that rule's four clauses plus
+        one it does not have. Both halves were visible to users - a pin sharing
+        the place's domain opens the wiki page but not its article, and a
+        creator with no pin could read an article on a page that answers 404.
 
         Args:
             profile: The requesting profile.
@@ -28,8 +32,10 @@ class ArticleQuerySet(DashboardQuerySet):
         Returns:
             Queryset filtered to readable articles.
         """
+        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
+
         return self.filter(
-            Q(pin__profile=profile) | Q(wiki__location__pins__profile=profile) | Q(wiki__created_by=profile),
+            Q(pin__profile=profile) | Q(wiki__location_id__in=visible_wiki_location_ids_cached(profile)),
         ).distinct()
 
     def with_content(self) -> ArticleQuerySet:

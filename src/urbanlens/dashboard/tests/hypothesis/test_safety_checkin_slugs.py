@@ -15,7 +15,7 @@ import pytest
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.safety import SafetyCheckinCreateView, _get_checkin_by_slug
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinMessage
-from urbanlens.dashboard.services.safety import cancel_checkin, create_checkin, mark_found_safe
+from urbanlens.dashboard.services.visits.safety import cancel_checkin, create_checkin, mark_found_safe
 
 
 def _future(hours: float = 2) -> datetime.datetime:

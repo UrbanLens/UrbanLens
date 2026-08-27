@@ -63,8 +63,8 @@ class GooglePlaceServiceTests(TestCase):
 
     def test_resolve_name_swallows_rate_limit_error_instead_of_raising(self) -> None:
         """A rate-limited geocoding fallback must degrade to no-name, not surface a 500 to the caller."""
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
         from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
-        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 
         # Empty chain so `_resolve_name` falls through to its own geocoding fallback below.
         service = GooglePlaceService(name_resolver=PlaceNameResolverChain(resolvers=()))

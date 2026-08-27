@@ -31,13 +31,15 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.location.queryset import quantize_coordinate
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.pin_edit import PinMoveError, move_pin_to_coordinates
+from urbanlens.dashboard.services.pins.pin_edit import PinMoveError, move_pin_to_coordinates
 
 _db_settings = settings(
     max_examples=15,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
 )
+
+from .place_helpers import official_geometry
 
 
 class GetExactOrCreateTests(TestCase):
@@ -120,7 +122,7 @@ class ChildWikiCoordinateCollisionTests(TestCase):
         self.client.force_login(self.user)
 
         self.location = Location.objects.create(latitude=40.0, longitude=-74.0)
-        Boundary.objects.create(location=self.location, generated_polygon=_square(-74.0, 40.0, 0.01))
+        official_geometry(self.location, _square(-74.0, 40.0, 0.01))
         self.wiki = baker.make(Wiki, location=self.location, name="Old Asylum")
         baker.make(Pin, profile=self.profile, location=self.location)
 

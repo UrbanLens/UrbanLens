@@ -263,7 +263,7 @@ Verification: all confirmed 0-ref by scanner and direct grep.
       any management command or periodic Celery beat task.
 
   dashboard/models/badges/model.py
-    - Badge.is_customized - UNINCORPORATED
+    - Label.is_customized - UNINCORPORATED
 
   dashboard/models/campus/model.py
     - Campus.is_default - UNINCORPORATED

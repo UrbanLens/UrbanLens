@@ -19,7 +19,7 @@ from urbanlens.dashboard.models.calendar_sync.model import TripCalendarLink
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 
 
-def _queue_calendar_push(trip_id: int | None) -> None:
+def queue_calendar_push(trip_id: int | None) -> None:
     """Enqueue a calendar push for a trip, if it has an auto-sync link.
 
     The existence check avoids scheduling a Celery task (and its DB lookups)
@@ -35,7 +35,7 @@ def _queue_calendar_push(trip_id: int | None) -> None:
         return
 
     def _enqueue() -> None:
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import push_trip_to_calendar
 
         safely_enqueue_task(push_trip_to_calendar, trip_id)
@@ -52,7 +52,7 @@ def sync_trip_on_save(sender: type[Trip], instance: Trip, **kwargs: Any) -> None
         instance: The trip that was saved.
         **kwargs: Remaining signal arguments (unused).
     """
-    _queue_calendar_push(instance.pk)
+    queue_calendar_push(instance.pk)
 
 
 @receiver(post_save, sender=TripActivity, dispatch_uid="trip_calendar_auto_sync_on_activity_save")
@@ -64,4 +64,4 @@ def sync_trip_on_activity_save(sender: type[TripActivity], instance: TripActivit
         instance: The activity that was saved.
         **kwargs: Remaining signal arguments (unused).
     """
-    _queue_calendar_push(instance.trip_id)
+    queue_calendar_push(instance.trip_id)

@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -66,11 +66,6 @@ def azure_maps_request(
 @dataclass(slots=True, kw_only=True)
 class AzureMapsGateway(Gateway):
     """Base gateway for the Azure Maps Search and Geocoding REST APIs.
-
-    ``AzureMapsRenderGateway`` (satellite/static imagery) can't subclass this
-    directly since it must also inherit ``SatelliteViewProvider``; it holds
-    its own copy of ``subscription_key`` and calls :func:`azure_maps_request`
-    the same way instead.
 
     Requires: ``UL_AZURE_MAPS_SUBSCRIPTION_KEY`` - a subscription key from an
     Azure Maps account (Azure Portal -> your Azure Maps account ->

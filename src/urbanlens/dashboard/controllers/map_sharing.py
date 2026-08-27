@@ -1,7 +1,7 @@
 """Controllers for sharing a standalone MarkupMap with one friend.
 
 Modeled directly on ``controllers.pin_sharing`` - the standalone-dialog half
-of that module, not the simpler ``services.pin_sharing`` core - since this is
+of that module, not the simpler ``services.sharing.pin_sharing`` core - since this is
 likewise reached as its own action (from Memories > Maps) rather than folded
 into another flow. Unlike PinShare there is no accept/reject step: the
 recipient's only action is viewing the map and optionally cloning it via
@@ -23,10 +23,10 @@ from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.connections import are_connections, get_connections
-from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
-from urbanlens.dashboard.services.map_sharing import share_markup_map_with_profile
-from urbanlens.dashboard.services.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
+from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+from urbanlens.dashboard.services.sharing.map_sharing import share_markup_map_with_profile
+from urbanlens.dashboard.services.social.connections import are_connections, get_connections
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -80,7 +80,7 @@ class MarkupMapShareCreateView(LoginRequiredMixin, View):
 
         share = MarkupMapShare.objects.create(markup_map=markup_map, from_profile=sender, to_profile=recipient, message=message)
         sender_name = resolve_visible_identity(recipient, sender)["display_name"]
-        notification = NotificationLog.objects.create(
+        notification = NotificationLog.objects.notify(
             profile=recipient,
             source_profile=sender,
             status=Status.UNREAD,

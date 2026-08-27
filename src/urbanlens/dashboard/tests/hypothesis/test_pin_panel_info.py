@@ -17,14 +17,15 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
-from urbanlens.dashboard.services.external_data import InfoPanelSource, panel_sources
+from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_sources
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
 
-class PanelInfoDispatchTests(TestCase):
+class PanelInfoDispatchTests(RedataConfiguredMixin, TestCase):
     """PinController.panel_info() - generic routing shared by every InfoPanelSource."""
 
     def setUp(self) -> None:
@@ -70,7 +71,10 @@ class PanelInfoDispatchTests(TestCase):
         with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
             response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "photon"]))
         self.assertEqual(response.status_code, 200)
-        fetch_task.apply_async.assert_called_once_with(args=("photon", self.pin.pk), kwargs={}, queue="panel_fetch")
+        # The third arg is the single-flight token (random per call): the fetch
+        # releases the marker only while it is still its own, so the exact value
+        # is deliberately not asserted.
+        fetch_task.apply_async.assert_called_once_with(args=("photon", self.pin.pk, mock.ANY), kwargs={}, queue="panel_fetch")
         self.assertContains(response, "Photon (OpenStreetMap)")
 
     def test_render_context_returning_none_yields_204(self) -> None:
@@ -83,19 +87,19 @@ class PanelInfoDispatchTests(TestCase):
         LocationCache.set(
             self.pin.location,
             "photon",
-            {"name": "Test Building", "osm_value": "historic_building", "city": "Poughkeepsie"},
+            {"locality": "Poughkeepsie", "region": "New York"},
             query_key="",
         )
         response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "photon"]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Test Building")
         self.assertContains(response, "Poughkeepsie")
+        self.assertContains(response, "New York")
 
     def test_list_shaped_panel_renders_its_items(self) -> None:
         LocationCache.set(
             self.pin.location,
             "usgs_earthquakes",
-            {"events": [{"magnitude": 4.2, "place": "10km N of Nowhere", "occurred_at": "2026-01-01T00:00:00Z", "url": "https://example.com"}]},
+            {"events": [{"magnitude": 4.2, "title": "10km N of Nowhere", "occurred_at": "2026-01-01T00:00:00Z", "url": "https://example.com"}]},
             query_key="",
         )
         response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "usgs_earthquakes"]))
@@ -103,7 +107,7 @@ class PanelInfoDispatchTests(TestCase):
         self.assertContains(response, "10km N of Nowhere")
 
 
-class PanelAiExtractButtonTests(TestCase):
+class PanelAiExtractButtonTests(RedataConfiguredMixin, TestCase):
     """AI extract buttons inside generic panels: opt-in per link, gated on the AI feature."""
 
     def setUp(self) -> None:
@@ -119,7 +123,7 @@ class PanelAiExtractButtonTests(TestCase):
         LocationCache.set(
             self.pin.location,
             "gdelt",
-            {"articles": [{"date": "2024-01-01", "title": "Mill fire investigated", "url": "https://news.example.com/mill-fire"}]},
+            {"articles": [{"date": "20240101T120000Z", "title": "Mill fire investigated", "link": "https://news.example.com/mill-fire"}]},
             query_key="",
         )
 
@@ -143,12 +147,12 @@ class PanelAiExtractButtonTests(TestCase):
         self.assertContains(response, "https://news.example.com/mill-fire")
 
     def test_unflagged_links_never_get_the_button(self) -> None:
-        """photon's footer_link doesn't opt in, so no button renders even with the feature."""
+        """photon never sets a footer_link, so no button renders even with the feature."""
         self._grant_ai()
         LocationCache.set(
             self.pin.location,
             "photon",
-            {"name": "Test Building", "osm_url": "https://www.openstreetmap.org/node/1"},
+            {"locality": "Test Building"},
             query_key="",
         )
         response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "photon"]))

@@ -3,7 +3,10 @@
 Promoted out of ``controllers.spotguessr`` (Phase 1 kept these private to the
 view) because UL-392's real-time broadcasts need the exact same shapes the
 HTTP endpoints return - one source of truth, not two copies to keep in sync.
-A round's answer is never included until it's actually revealed.
+A round's answer is never included until it's actually revealed - except
+Street View mode's panorama coordinates, a deliberate, scoped exception (see
+``services.spotguessr.street_view.StreetViewPanorama``'s docstring and
+docs/designs/drafts/spotguessr.md's "Interactive panorama" note).
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ def _geo_bounds_bbox(session: GameSession) -> list[list[float]] | None:
     """The session's configured ``geo_bounds``, as a Leaflet-ready ``[[south, west], [north, east]]`` bbox.
 
     Lets the frontend zoom the guess map to the configured area (see
-    ``docs/designs/spotguessr.md``'s eligibility rule 3) instead of always
+    ``docs/designs/drafts/spotguessr.md``'s eligibility rule 3) instead of always
     opening on a fixed default view. None when no area was configured.
     """
     geo_bounds_geojson = (session.config or {}).get("geo_bounds_geojson")
@@ -44,12 +47,16 @@ def _geo_bounds_bbox(session: GameSession) -> list[list[float]] | None:
 
 
 def serialize_round(round_: GameRound) -> dict[str, Any]:
-    """Round data safe to send before it's guessed - never the answer.
+    """Round data safe to send before it's guessed - never the answer, except Street View mode.
 
     Mode-dependent payload (``ModeStrategy.serialize_round`` per
     ``services.spotguessr.modes``): Photos includes ``image_url``; Named
     Place includes the snapshotted ``display_text``; Street View re-fetches
-    its (cache-backed) imagery from the location's coordinates each call.
+    its (cache-backed) imagery from the location's coordinates each call,
+    including the panorama's own ``street_view_lat``/``street_view_lng`` - a
+    deliberate exception to "never the answer" (see
+    ``services.spotguessr.street_view.StreetViewPanorama``'s docstring for why
+    a real interactive panorama can't be built any other way).
     ``shows_imagery`` tells the frontend whether this round has real visual
     content worth reacting to (see ``services.spotguessr.relevance``) - one
     server-computed field instead of the frontend hardcoding its own copy of

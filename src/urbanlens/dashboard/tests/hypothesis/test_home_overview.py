@@ -4,7 +4,7 @@ The profile page's private-activity section moved to a new homepage
 (``/dashboard/home/``, the authenticated landing page) and was rebuilt as a
 customizable widget dashboard: no more "only visible to you" framing, an
 empty subnav matching other pages, and per-user widget selection/ordering
-persisted via ``Profile.home_widget_layout`` (see services.home_widgets).
+persisted via ``Profile.home_widget_layout`` (see services.home.home_widgets).
 """
 
 from __future__ import annotations
@@ -13,11 +13,14 @@ import json
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.home_widgets import HOME_WIDGETS, effective_widget_layout
+from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.home.home_widgets import HOME_WIDGETS, effective_widget_layout, home_dashboard_context
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -80,7 +83,7 @@ class HomeOverviewPageTests(TestCase):
 
 
 class EffectiveWidgetLayoutTests(TestCase):
-    """services.home_widgets.effective_widget_layout()."""
+    """services.home.home_widgets.effective_widget_layout()."""
 
     def setUp(self) -> None:
         self.profile = baker.make(User).profile
@@ -167,3 +170,63 @@ class HomeWidgetLayoutSaveViewTests(TestCase):
         self._post(["stats"])
         other.refresh_from_db()
         self.assertEqual(other.home_widget_layout, [])
+
+
+class DisabledWidgetsCostNothingTests(TestCase):
+    """Most homepage entries are lazy querysets, so a disabled widget is free.
+
+    Two were not. The ten counts behind `home_stats` execute as the context dict
+    is built, and `home_recent_comments` is forced by the `sorted()` that merges
+    pin and trip comments. A user who turned both widgets off still paid for a
+    dozen queries on every homepage load.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make("auth.User")  # absorbs the bootstrap site-admin promotion
+        self.profile = baker.make("auth.User").profile
+
+    def _layout(self, *keys: str) -> None:
+        Profile.objects.filter(pk=self.profile.pk).update(home_widget_layout=list(keys))
+        self.profile.refresh_from_db()
+
+    def _queries(self) -> list[dict]:
+        with CaptureQueriesContext(connection) as captured:
+            home_dashboard_context(self.profile)
+        return list(captured.captured_queries)
+
+    def test_stats_are_built_when_the_widget_is_on(self) -> None:
+        self._layout("stats")
+
+        context = home_dashboard_context(self.profile)
+
+        self.assertEqual(len(context["home_stats"]), 8)
+
+    def test_stats_are_not_built_when_the_widget_is_off(self) -> None:
+        self._layout("recent_photos")
+
+        context = home_dashboard_context(self.profile)
+
+        self.assertEqual(context["home_stats"], [])
+
+    def test_turning_the_two_eager_widgets_off_costs_fewer_queries(self) -> None:
+        self._layout("stats", "recent_comments")
+        with_both = len(self._queries())
+
+        self._layout("recent_photos")
+        without = len(self._queries())
+
+        self.assertLess(without, with_both - 8, f"{with_both} queries with both widgets, {without} without - the counts are still running")
+
+    def test_recent_comments_are_built_when_the_widget_is_on(self) -> None:
+        self._layout("recent_comments")
+
+        self.assertIn("home_recent_comments", home_dashboard_context(self.profile))
+
+    def test_an_uncustomised_layout_still_builds_everything(self) -> None:
+        """No saved layout means every widget is on - the default homepage."""
+        self._layout()
+
+        context = home_dashboard_context(self.profile)
+
+        self.assertEqual(len(context["home_stats"]), 8)

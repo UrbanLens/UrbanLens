@@ -12,6 +12,7 @@ from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS, KIND_TAG
@@ -204,6 +205,7 @@ class SearchLocalChildPinTests(TestCase):
         results = search_local("Morgue", self.profile)
         match = next((r for r in results if r.title == "Morgue Wing"), None)
         self.assertIsNotNone(match)
+        assert match is not None  # nosec B101
         self.assertTrue(match.is_child)
         self.assertIn("Asylum Grounds", match.subtitle)
 
@@ -211,6 +213,7 @@ class SearchLocalChildPinTests(TestCase):
         results = search_local("Asylum", self.profile)
         match = next((r for r in results if r.title == "Asylum Grounds"), None)
         self.assertIsNotNone(match)
+        assert match is not None  # nosec B101
         self.assertFalse(match.is_child)
 
 
@@ -637,7 +640,7 @@ class PinShareBundleTests(TestCase):
         self.grandchild = _make_pin(self.sender, name="Control Room", parent_pin=self.child)
 
     def _share(self, include_children: bool):
-        data = {"profile_id": self.recipient.pk}
+        data: dict[str, int | str] = {"profile_id": self.recipient.pk}
         if include_children:
             data["include_children"] = "1"
         return self.client.post(reverse("pin.share.send", kwargs={"pin_slug": self.root.slug}), data)
@@ -664,13 +667,20 @@ class PinShareBundleTests(TestCase):
         self.client.force_login(self.recipient_user)
         self.client.post(reverse("pin.share.respond", kwargs={"share_id": root_share.pk}), {"action": "accept"})
 
-        new_root = Pin.objects.get(profile=self.recipient, name="Steel Works")
-        new_child = Pin.objects.get(profile=self.recipient, name="Blast Furnace")
-        new_grandchild = Pin.objects.get(profile=self.recipient, name="Control Room")
+        # Identified by location, not by name: the sender's name for a pin no
+        # longer travels (see test_share_pin_copy_fidelity's NOT_COPIED), and the
+        # place is what the recipient actually received. Each fixture pin has its
+        # own coordinates, so this is unambiguous.
+        new_root = Pin.objects.get(profile=self.recipient, location=self.root.location)
+        new_child = Pin.objects.get(profile=self.recipient, location=self.child.location)
+        new_grandchild = Pin.objects.get(profile=self.recipient, location=self.grandchild.location)
         self.assertIsNone(new_root.parent_pin_id)
         self.assertEqual(new_child.parent_pin_id, new_root.pk)
         self.assertEqual(new_grandchild.parent_pin_id, new_child.pk)
-        self.assertEqual(new_child.icon, "factory")
+        # The shape of the bundle travels; the sender's icon does not. This used
+        # to assert the icon came too - see test_share_pin_copy_fidelity's
+        # NOT_COPIED for what stays with its owner and why.
+        self.assertNotEqual(new_child.icon, "factory")
 
     def test_reject_rejects_the_whole_bundle(self) -> None:
         self._share(include_children=True)
@@ -747,8 +757,10 @@ class PinShareSelectedChildrenTests(TestCase):
         self.client.force_login(self.recipient_user)
         self.client.post(reverse("pin.share.respond", kwargs={"share_id": root_share.pk}), {"action": "accept"})
 
-        self.assertTrue(Pin.objects.filter(profile=self.recipient, name="Blast Furnace").exists())
-        self.assertFalse(Pin.objects.filter(profile=self.recipient, name="Rolling Mill").exists())
+        # By location rather than name - the sender's name for a pin does not
+        # travel, so the place is what identifies what the recipient received.
+        self.assertTrue(Pin.objects.filter(profile=self.recipient, location=self.child_a.location).exists())
+        self.assertFalse(Pin.objects.filter(profile=self.recipient, location=self.child_b.location).exists())
 
 
 class VisitedLabelPropagationTests(TestCase):
@@ -757,7 +769,7 @@ class VisitedLabelPropagationTests(TestCase):
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
-        self.visited = baker.make(Label, kind=KIND_STATUS, name="Visited", profile=self.profile)
+        self.visited = ensure_label( kind=KIND_STATUS, name="Visited", profile=self.profile)
         self.root = _make_pin(self.profile)
         self.child = _make_pin(self.profile, parent_pin=self.root)
         self.grandchild = _make_pin(self.profile, parent_pin=self.child)
@@ -772,6 +784,6 @@ class VisitedLabelPropagationTests(TestCase):
         self.assertNotIn(self.visited, self.child.labels.all())
 
     def test_other_status_labels_do_not_cascade(self) -> None:
-        other = baker.make(Label, kind=KIND_STATUS, name="Demolished", profile=self.profile)
+        other = ensure_label( kind=KIND_STATUS, name="Demolished", profile=self.profile)
         self.grandchild.labels.add(other)
         self.assertNotIn(other, self.root.labels.all())

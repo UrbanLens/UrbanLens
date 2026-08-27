@@ -21,7 +21,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
+from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
 
 
 def _befriend(a, b) -> None:
@@ -143,6 +143,88 @@ class MemoriesSharingPageTests(_ShareChainTestCase):
         response = self.client.get(reverse("memories.sharing"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["share_groups"], [])
+
+
+class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
+    """The received side of the Sharing page must not read the sharer's live pin for a
+    DETECTED-status share (auto-recorded from a shared map, a DM, or a trip activity - see
+    PinShareStatus.DETECTED's docstring: "never actionable"). Unlike an EXPLICIT share
+    awaiting accept/reject, the recipient never consented to see anything about these, so
+    unconditionally reading share.pin/share.place_label - which the goal's own litmus test
+    flags as a live reference - was a real leak. See docs/GOALS_CODE_AUDIT.md
+    ("Trip activities sourcing")."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin_a.name = "Sender's Private Cabin"
+        self.pin_a.save(update_fields=["name"])
+
+    def _detected_share(self, *, origin: str) -> PinShare:
+        return PinShare.objects.create(
+            pin=self.pin_a,
+            from_profile=self.profiles["a"],
+            to_profile=self.profiles["b"],
+            origin=origin,
+            status=PinShareStatus.DETECTED,
+        )
+
+    def test_a_trip_activity_detected_share_does_not_expose_the_pin(self):
+        self._detected_share(origin=PinShareOrigin.TRIP_ACTIVITY)
+        self.client.force_login(self.users["b"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        groups = response.context["incoming_share_groups"]
+        self.assertEqual(len(groups), 1)
+        self.assertIsNone(groups[0]["pin"])
+        self.assertNotIn("Sender's Private Cabin", response.content.decode())
+
+    def test_a_map_detected_share_does_not_expose_the_pin(self):
+        self._detected_share(origin=PinShareOrigin.MAP_DETECTED)
+        self.client.force_login(self.users["b"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        groups = response.context["incoming_share_groups"]
+        self.assertIsNone(groups[0]["pin"])
+        self.assertNotIn("Sender's Private Cabin", response.content.decode())
+
+    def test_the_location_derived_label_is_shown_instead(self):
+        self._detected_share(origin=PinShareOrigin.TRIP_ACTIVITY)
+        self.client.force_login(self.users["b"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        groups = response.context["incoming_share_groups"]
+        self.assertEqual(groups[0]["place_label"], "Old Mill")
+
+    def test_an_explicit_pending_share_still_shows_the_pin(self):
+        """The fix must not hide a share the recipient actually needs to decide on."""
+        share = PinShare.objects.create(pin=self.pin_a, from_profile=self.profiles["a"], to_profile=self.profiles["b"], status=PinShareStatus.PENDING)
+        self.client.force_login(self.users["b"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        groups = response.context["incoming_share_groups"]
+        self.assertEqual(groups[0]["pin"], self.pin_a)
+        self.assertIn(share, groups[0]["shares"])
+        # Autoescaped output turns the apostrophe into &#x27; - assert on the
+        # rendered form, not the raw name.
+        self.assertIn("Sender&#x27;s Private Cabin", response.content.decode())
+
+    def test_a_mixed_group_with_one_actionable_share_still_shows_the_pin(self):
+        """A DETECTED share for a pin the recipient ALSO has a real (pending/accepted) share
+        for must not lose the pin - there's a legitimate share justifying the reveal."""
+        PinShare.objects.create(pin=self.pin_a, from_profile=self.profiles["a"], to_profile=self.profiles["b"], status=PinShareStatus.PENDING)
+        self._detected_share(origin=PinShareOrigin.MAP_DETECTED)
+        self.client.force_login(self.users["b"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        groups = response.context["incoming_share_groups"]
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]["pin"], self.pin_a)
+        self.assertEqual(len(groups[0]["shares"]), 2)
 
 
 class MemoriesSharingMapsPageTests(_ShareChainTestCase):

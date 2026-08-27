@@ -29,6 +29,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
+from urbanlens.dashboard.controllers.media_auth import mark_private_media
 from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
@@ -41,9 +42,9 @@ from urbanlens.dashboard.services.apis.photos.google import (
     media_item_web_url,
     session_items_cache_key,
 )
-from urbanlens.dashboard.services.celery import get_task_progress, safely_enqueue_task
-from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.google_oauth import extract_email_from_id_token, revoke_token
+from urbanlens.dashboard.services.auth.google_oauth import extract_email_from_id_token, revoke_token
+from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -268,7 +269,7 @@ class PinGooglePhotosThumbnailView(LoginRequiredMixin, View):
         cached = cache.get(cache_key)
         if cached is not None:
             content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
+            return mark_private_media(HttpResponse(content, content_type=content_type))
 
         items = cache.get(session_items_cache_key(session_id)) or {}
         item = items.get(item_id)
@@ -284,7 +285,7 @@ class PinGooglePhotosThumbnailView(LoginRequiredMixin, View):
             return HttpResponse(status=502)
         content_type = item.get("mime_type", "image/jpeg")
         cache.set(cache_key, (content, content_type), _SESSION_ITEMS_CACHE_TTL)
-        return HttpResponse(content, content_type=content_type)
+        return mark_private_media(HttpResponse(content, content_type=content_type))
 
 
 class PinGooglePhotosImportView(LoginRequiredMixin, View):

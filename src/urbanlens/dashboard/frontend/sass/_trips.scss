@@ -2579,6 +2579,31 @@ a.trip-activity-name {
     padding: .75rem 1rem 1rem;
 }
 
+// The recorded half of the panel: what the weather actually was, for activities
+// the forecast can no longer speak to. Separated by a rule rather than a second
+// card, because it is the same question about the same trip - only answered by a
+// reanalysis record instead of a forecast.
+.trip-weather-body--recorded {
+    border-top: 1px solid var(--ul-border-color);
+    padding-top: .75rem;
+}
+
+.trip-weather-recorded-header {
+    align-items: center;
+    color: var(--ul-grey-6);
+    display: flex;
+    font-size: .8125rem;
+    font-weight: 600;
+    gap: .35rem;
+    letter-spacing: .02em;
+    margin-bottom: .5rem;
+    text-transform: uppercase;
+
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+    }
+}
+
 // -- Per-day sections ----------------------------------------------------------
 
 .trip-weather-days {
@@ -2667,9 +2692,9 @@ a.trip-activity-name {
 }
 
 .trip-weather-slot-icon {
-    width: 46px;
-    height: 46px;
-    object-fit: contain;
+    font-size: 2.5rem;
+    line-height: 1;
+    color: var(--ul-primary-color);
     flex-shrink: 0;
 }
 

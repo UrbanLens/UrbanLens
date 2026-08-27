@@ -38,7 +38,7 @@ class WikiCategorySignalTests(SimpleTestCase):
         callbacks = []
         with (
             mock.patch("urbanlens.dashboard.models.wiki.signals.transaction.on_commit", side_effect=callbacks.append),
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue,
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             suggest_and_add_categories(sender=object, instance=_Wiki(), created=True)
             callbacks[0]()

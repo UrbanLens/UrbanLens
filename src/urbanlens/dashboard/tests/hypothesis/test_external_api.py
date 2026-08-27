@@ -6,7 +6,7 @@ by something other than the site's own frontend, so these tests focus on:
 a session alone must never work here, a revoked/malformed key must never
 work, each endpoint must only honor the scope it declares, and pin creation
 must validate its input before anything reaches the shared
-services.pin_creation.create_pin_for_profile call.
+services.pins.pin_creation.create_pin_for_profile call.
 """
 
 from __future__ import annotations
@@ -25,8 +25,8 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope, ApiKey
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_tombstone import PinTombstone
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 
 def _bearer(raw_key: str) -> dict:
@@ -169,7 +169,7 @@ class PinCreateViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_address_only_geocodes_through_the_shared_service(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.pin_creation.get_pin_by_address", return_value=(42.6, -73.6)):
+        with mock.patch("urbanlens.dashboard.services.pins.pin_creation.get_pin_by_address", return_value=(42.6, -73.6)):
             response = self._post({"name": "Geocoded Spot", "address": "1 Main St"})
         self.assertEqual(response.status_code, 201, response.content)
         pin = Pin.objects.get(uuid=response.json()["uuid"])
@@ -466,7 +466,7 @@ class PinTombstoneTests(TestCase):
     def test_deleted_since_older_than_retention_gets_410_full_resync(self) -> None:
         """Pruning makes deletions that old unrecoverable - the feed must say so
         loudly (410 + full_resync_required) instead of silently omitting them."""
-        from urbanlens.dashboard.services.pin_sync import TOMBSTONE_RETENTION
+        from urbanlens.dashboard.services.pins.pin_sync import TOMBSTONE_RETENTION
 
         stale = timezone.now() - TOMBSTONE_RETENTION - timedelta(days=1)
         response = self._get(deleted_since=stale.isoformat())
@@ -476,14 +476,14 @@ class PinTombstoneTests(TestCase):
         self.assertIn("resync", body["error"])
 
     def test_deleted_since_inside_retention_is_served_normally(self) -> None:
-        from urbanlens.dashboard.services.pin_sync import TOMBSTONE_RETENTION
+        from urbanlens.dashboard.services.pins.pin_sync import TOMBSTONE_RETENTION
 
         recent = timezone.now() - TOMBSTONE_RETENTION + timedelta(days=1)
         response = self._get(deleted_since=recent.isoformat())
         self.assertEqual(response.status_code, 200)
 
     def test_prune_task_removes_only_expired_tombstones(self) -> None:
-        from urbanlens.dashboard.services.pin_sync import TOMBSTONE_RETENTION
+        from urbanlens.dashboard.services.pins.pin_sync import TOMBSTONE_RETENTION
         from urbanlens.dashboard.tasks import prune_pin_tombstones
 
         old_pin = self._make_pin("Ancient", 42.5, -73.5)

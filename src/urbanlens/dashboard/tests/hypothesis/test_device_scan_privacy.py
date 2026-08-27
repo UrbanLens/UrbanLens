@@ -50,9 +50,11 @@ from urbanlens.dashboard.models.device_scan.model import DeviceScanEntry, Device
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.device_scan.pipeline import process_scan_upload
 from urbanlens.dashboard.urls import router as internal_rest_router
+
+from .place_helpers import official_geometry
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -175,7 +177,7 @@ class AggregateOnlyEndToEndTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.location = Location.objects.create(latitude=0.0, longitude=0.0)
-        Boundary.objects.create(location=self.location, generated_polygon=_square(0.0, 0.0, 0.01))
+        official_geometry(self.location, _square(0.0, 0.0, 0.01))
         self.wiki = baker.make(Wiki, location=self.location)
 
         self.uploader_one = baker.make(User, username="contributor-one")

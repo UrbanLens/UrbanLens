@@ -10,14 +10,14 @@ Two conventions worth knowing before adding to this module:
 
 - **Write serializers validate; they do not decide.** The annotation bounds
   restated here (nickname length, trust range) mirror
-  ``services.profile_annotations``' own constants by importing them, so the two
+  ``services.profile.profile_annotations``' own constants by importing them, so the two
   cannot drift into disagreeing about what is acceptable. The service still
   re-checks, because the HTMX surface reaches it without passing through here.
 - **Nothing in this module is a read model for someone else's data.** The
   annotation payload describes what the *caller* recorded about a subject. If a
   field is ever added here that the subject could also see, it belongs in
   ``ProfileDetailSerializer`` instead - see the privacy note on
-  ``services.profile_annotations``.
+  ``services.profile.profile_annotations``.
 """
 
 from __future__ import annotations
@@ -28,15 +28,15 @@ from urllib.parse import urlparse
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.colors import MaterialColor
-from urbanlens.dashboard.services.avatar import AvatarService
-from urbanlens.dashboard.services.profile_annotations import (
+from urbanlens.dashboard.services.profile.avatar import AvatarService
+from urbanlens.dashboard.services.profile.profile_annotations import (
     MAX_PROFILE_NICKNAME_LENGTH,
     MAX_TRUST_RATING,
     MIN_TRUST_RATING,
 )
-from urbanlens.dashboard.services.social_links import KNOWN_PLATFORMS, validate_handle
+from urbanlens.dashboard.services.profile.social_links import KNOWN_PLATFORMS, validate_handle
 
-#: Mirrors ``forms.profile_form._DISCORD_HANDLE_RE`` / ``services.profile_settings._DISCORD_USERNAME_RE`` -
+#: Mirrors ``forms.profile_form._DISCORD_HANDLE_RE`` / ``services.profile.profile_settings._DISCORD_USERNAME_RE`` -
 #: this is the public-social-link Discord entry (``SocialLink(platform="discord")``), a distinct
 #: row from the private ``Profile.discord_username`` contact field, but the same charset rule.
 _DISCORD_HANDLE_RE = re.compile(r"^[a-zA-Z0-9._#-]{2,100}$")
@@ -128,7 +128,7 @@ class ProfileTrustWriteSerializer(serializers.Serializer):
 class SocialLinkSerializer(serializers.Serializer):
     """One entry in a profile's public social-links list, as rendered for display.
 
-    Shape matches ``services.social_links.get_profile_links`` field for field -
+    Shape matches ``services.profile.social_links.get_profile_links`` field for field -
     ``url`` is null only for Discord, which has no public profile URL.
     """
 
@@ -150,7 +150,7 @@ class SocialLinkWriteSerializer(serializers.Serializer):
 
     ``handle`` means different things per platform: a username for the eight
     handle-based platforms - validated by the same
-    ``services.social_links.validate_handle`` rules a pasted URL is checked
+    ``services.profile.social_links.validate_handle`` rules a pasted URL is checked
     against internally, so a directly-submitted handle can never be looser
     than one the web UI would have extracted - Discord's own free-form
     username (it has no public profile URL to parse one from), or the

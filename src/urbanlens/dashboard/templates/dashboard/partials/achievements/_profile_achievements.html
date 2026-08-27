@@ -1,0 +1,51 @@
+{% comment %}
+Achievements section of a profile page, loaded over HTMX.
+
+Only earned awards are shown here - the locked catalogue lives on the "See all"
+page, so a profile does not turn into a list of everything someone has not done.
+Renders nothing at all once there's nothing earned yet, rather than a section
+that only ever says "No achievements yet" - the owner already gets an
+Achievements tab in the profile subnav to reach the (empty) catalogue.
+
+Context: subject, is_owner, earned, earned_total, remaining, streaks
+{% endcomment %}
+{% if earned %}
+<div id="profile_achievements" class="profile-section ul-section">
+    <div class="profile-section-header">
+        <h3 class="profile-section-title">
+            Achievements
+            {% if earned_total %}<span class="achievement-count">{{ earned_total }}</span>{% endif %}
+        </h3>
+        {% if not is_owner %}
+        <a href="{% url 'achievement.list' profile_slug=subject.slug %}" class="btn btn--ghost btn--sm">
+            See all
+        </a>
+        {% endif %}
+    </div>
+
+    {% if streaks %}
+    <ul class="achievement-streaks">
+        {% for streak in streaks %}
+        <li class="achievement-streak{% if streak.current %} achievement-streak--live{% endif %}">
+            <i class="material-symbols-outlined">local_fire_department</i>
+            <span class="achievement-streak__label">{{ streak.label }}</span>
+            <span class="achievement-streak__value">
+                {% if streak.current %}{{ streak.current }} day{{ streak.current|pluralize }}{% else %}Best {{ streak.longest }}{% endif %}
+            </span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="achievement-grid">
+        {% for award in earned %}
+            {% include "dashboard/partials/achievements/_achievement_badge.html" with achievement=award.achievement earned=True earned_at=award.earned_at value=award.value_at_award percent=100 show_progress=False %}
+        {% endfor %}
+    </div>
+    {% if remaining %}
+    <p class="achievement-more">
+        <a href="{% url 'achievement.list' profile_slug=subject.slug %}">+{{ remaining }} more</a>
+    </p>
+    {% endif %}
+</div>
+{% endif %}

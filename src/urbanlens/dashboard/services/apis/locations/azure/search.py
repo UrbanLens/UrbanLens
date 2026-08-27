@@ -9,7 +9,7 @@ from typing import Any
 import requests
 
 from urbanlens.dashboard.services.apis.locations.azure.gateway import AzureMapsGateway
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
 

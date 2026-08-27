@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 
 def _bearer(raw_key: str) -> dict:
@@ -175,7 +175,7 @@ class FriendshipTransitionMatrixTests(TestCase):
         It used to write ``status="Muted"``, which un-friended the pair for
         every gate that reads ``Profile.are_friends`` - so an API client that
         muted a friend silently revoked their own access. The endpoint now
-        moves ``Friendship.muted`` and leaves the relationship intact.
+        moves the caller's own mute column and leaves the relationship intact.
         """
         friendship = self._pending_request()
         friendship.status = FriendshipStatus.ACCEPTED
@@ -186,7 +186,7 @@ class FriendshipTransitionMatrixTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         friendship.refresh_from_db()
-        self.assertTrue(friendship.muted)
+        self.assertTrue(friendship.is_muted_by(self.profile))
         self.assertEqual(friendship.status, "Accepted")
         self.assertEqual(response.json()["status"], "Accepted")
 
@@ -235,7 +235,7 @@ class FriendRequestGateTests(TestCase):
         self.raw_key = _key_with_scopes(self.user, ApiKeyScope.SOCIAL_READ, ApiKeyScope.SOCIAL_WRITE)
         self.url = reverse("external_api:friends")
 
-    def _post(self, target: Profile) -> object:
+    def _post(self, target: Profile):
         """Send a friend request to ``target``."""
         return self.client.post(
             self.url,

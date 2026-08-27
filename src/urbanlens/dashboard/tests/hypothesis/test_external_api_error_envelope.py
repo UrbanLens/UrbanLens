@@ -38,8 +38,7 @@ from django.core.cache import cache
 from django.http import Http404
 from django.test import override_settings
 from django.urls import path, reverse
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from model_bakery import baker
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
@@ -51,7 +50,7 @@ from urbanlens.dashboard.external_api.throttling import ExternalApiBurstThrottle
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 if TYPE_CHECKING:
     from rest_framework.request import Request

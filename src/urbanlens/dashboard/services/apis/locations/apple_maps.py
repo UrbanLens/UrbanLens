@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 _BASE_URL = "https://maps-api.apple.com/v1"

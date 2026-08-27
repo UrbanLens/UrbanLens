@@ -22,7 +22,7 @@ from PIL import Image as PILImage
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.services.images import extract_author, extract_caption_from_metadata, extract_copyright_notice, is_camera_generated_filename
+from urbanlens.dashboard.services.media.images import extract_author, extract_caption_from_metadata, extract_copyright_notice, is_camera_generated_filename
 from urbanlens.dashboard.tasks import process_image_upload
 
 _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")

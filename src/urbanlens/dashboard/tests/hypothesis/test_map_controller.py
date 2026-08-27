@@ -229,7 +229,7 @@ class ShowPinCountTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         from urbanlens.dashboard.models.site_settings import EnvironmentOverrideChoice, SiteSettings
-        from urbanlens.dashboard.services.site_admin import add_user_to_site_admin_group
+        from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
 
         self._SiteSettings = SiteSettings
         self._dev = EnvironmentOverrideChoice.DEVELOPMENT

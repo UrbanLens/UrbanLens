@@ -32,8 +32,8 @@ from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinA
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services.pin_edit import ORGANIZE_LABEL_KINDS, PinReparentError, reparent_pin
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.pins.pin_edit import ORGANIZE_LABEL_KINDS, PinReparentError, reparent_pin
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -236,7 +236,12 @@ class PinBulkEditView(ExternalApiView):
 
             if to_remove:
                 for pin in pins:
-                    present = [label for label in to_remove if pin.labels.filter(pk=label.pk).exists()]
+                    # One query per pin (none when labels are prefetched), instead of one
+                    # per label per pin: .filter().exists() inside the comprehension made
+                    # this len(pins) x len(to_remove) - 250 queries to strip 5 labels from
+                    # 50 pins. .all() reads a prefetch cache; .filter()/.exists() never do.
+                    attached_ids = {label.pk for label in pin.labels.all()}
+                    present = [label for label in to_remove if label.pk in attached_ids]
                     if not present:
                         continue
                     for label in present:

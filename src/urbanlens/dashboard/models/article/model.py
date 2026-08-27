@@ -9,7 +9,7 @@ An :class:`Article` is the full free-form article body for exactly one host:
   owner can ever read or edit it.
 
 Content is authored in Markdown (with footnote references) and rendered to
-sanitized HTML by :mod:`urbanlens.dashboard.services.articles`. The rendered
+sanitized HTML by :mod:`urbanlens.dashboard.services.wiki.articles`. The rendered
 HTML is cached on the row (``content_html``) so page views never re-render.
 """
 
@@ -23,12 +23,12 @@ from django.db.models import CASCADE, SET_NULL, CharField, CheckConstraint, Fore
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.article.queryset import ArticleManager, ArticleRevisionManager
-from urbanlens.dashboard.services.text_limits import MAX_ARTICLE_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_ARTICLE_LENGTH
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
-#: edit_summary used by services.wiki_seed's system-initiated saves (editor
+#: edit_summary used by services.wiki.wiki_seed's system-initiated saves (editor
 #: left None deliberately, not because an account was deleted) - the single
 #: source of truth for both the writer (wiki_seed.py imports this rather than
 #: redefining its own copy) and the reader (ArticleRevision.editor_display_name
@@ -47,10 +47,18 @@ class Article(abstract.DashboardModel):
     edit trail lives in :class:`ArticleRevision`.
     """
 
+    #: True only on a concealed projection built by
+    #: ``services.wiki.concealment.conceal_article`` - a copy of this row
+    #: carrying the newest revision one viewer is entitled to see, rather than
+    #: the live one. Declared here so the distinction is visible from the model
+    #: and reading it is a plain attribute access. A row loaded from the
+    #: database is never concealed.
+    _ul_concealed: bool = False
+
     # Markdown source of the current article text.
     content = TextField(blank=True, default="", max_length=MAX_ARTICLE_LENGTH, validators=[MaxLengthValidator(MAX_ARTICLE_LENGTH)])
     # Cached sanitized HTML rendering of ``content`` - regenerated on every
-    # save through services.articles; never trusted from user input.
+    # save through services.wiki.articles; never trusted from user input.
     content_html = TextField(blank=True, default="")
     # Cached table of contents: [{"level": 2, "title": ..., "anchor": ...}].
     toc = JSONField(default=list, blank=True)
@@ -186,7 +194,7 @@ class ArticleRevision(abstract.DashboardModel):
         ``editor`` is null both when the account that made it has since been
         deleted (``Profile``'s own ``on_delete=SET_NULL``) and when the
         revision was a system-initiated save that never had one to begin with
-        (``services.wiki_seed`` passes ``editor=None`` deliberately when
+        (``services.wiki.wiki_seed`` passes ``editor=None`` deliberately when
         seeding a starting article from Wikipedia) - those need different
         labels, so this checks the edit summary against the known
         system-generated ones instead of assuming every null editor means a

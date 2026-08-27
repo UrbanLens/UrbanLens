@@ -19,7 +19,7 @@ from django.contrib.gis.geos import MultiPolygon, Point, Polygon
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.base import esri_rings_to_polygon, geojson_polygon_to_geos
-from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
+from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider, suggested_boundary
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_SOURCE_ERROR, PropertyRecordsUnavailableError
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -289,3 +289,143 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
             gw_cls.return_value.lookup_buildings.side_effect = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
             result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
         self.assertIsNone(result["property"])
+
+
+class SuggestedBoundaryTests(SimpleTestCase):
+    """REData ranks its own candidates; picking one ourselves picks wrong.
+
+    It routinely finds a county parcel line too small, a CRIS consultation
+    polygon too small and a CRIS archaeological buffer absurdly too large for
+    one parcel at once. Exactly one record carries ``is_suggested``, and the
+    array is not sorted - so taking the first element is a coin toss, and it is
+    what left the reported pin with a ~1,040-acre boundary.
+    """
+
+    @staticmethod
+    def _square(size: float, *, west: float = -73.0, south: float = 42.0) -> dict:
+        ring = [[west, south], [west + size, south], [west + size, south + size], [west, south + size], [west, south]]
+        return {"type": "Polygon", "coordinates": [ring]}
+
+    def _candidate(self, size: float, **kwargs) -> dict:
+        return {"geometry": self._square(size), **kwargs}
+
+    def test_the_suggested_candidate_wins(self) -> None:
+        candidates = [
+            self._candidate(1.0, kind="area", confidence=0.9, is_suggested=False),
+            self._candidate(0.01, kind="area", confidence=0.4, is_suggested=True),
+        ]
+
+        polygon = suggested_boundary(candidates)
+
+        self.assertAlmostEqual(polygon.area, 0.0001, places=8, msg="the flagged candidate lost to a higher raw confidence")
+
+    def test_position_in_the_array_does_not_decide(self) -> None:
+        """The array is explicitly not sorted by confidence."""
+        candidates = [self._candidate(1.0, is_suggested=False), self._candidate(0.01, is_suggested=True)]
+
+        self.assertAlmostEqual(suggested_boundary(candidates).area, 0.0001, places=8)
+
+    def test_the_parcels_own_line_beats_a_related_area(self) -> None:
+        """Unscored fallback: `kind` distinguishes the parcel from a zoning overlay."""
+        candidates = [
+            self._candidate(0.5, kind="area", confidence=0.9),
+            self._candidate(1.0, kind="parcel", confidence=0.1),
+        ]
+
+        self.assertAlmostEqual(suggested_boundary(candidates).area, 1.0, places=6)
+
+    def test_confidence_orders_candidates_of_the_same_kind(self) -> None:
+        candidates = [self._candidate(1.0, kind="area", confidence=0.2), self._candidate(0.5, kind="area", confidence=0.8)]
+
+        self.assertAlmostEqual(suggested_boundary(candidates).area, 0.25, places=6)
+
+    def test_ties_break_to_the_smallest_area(self) -> None:
+        """REData's own rule, and the safer direction: too large is what broke this pin."""
+        candidates = [self._candidate(1.0, kind="area", confidence=0.5), self._candidate(0.5, kind="area", confidence=0.5)]
+
+        self.assertAlmostEqual(suggested_boundary(candidates).area, 0.25, places=6)
+
+    def test_an_unparseable_geometry_is_skipped_not_fatal(self) -> None:
+        candidates = [{"geometry": None, "is_suggested": True}, self._candidate(0.5, kind="parcel")]
+
+        self.assertAlmostEqual(suggested_boundary(candidates).area, 0.25, places=6)
+
+    def test_no_candidates_returns_none(self) -> None:
+        self.assertIsNone(suggested_boundary([]))
+
+
+class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
+    """The provider must ask for the ranking before falling back to a hull."""
+
+    _GATEWAY_CLASS_PATH = "urbanlens.dashboard.services.apis.locations.boundaries.redata.RedataGateway"
+
+    def setUp(self) -> None:
+        super().setUp()
+        for attribute, value in (("redata_api_url", "https://redata.example.test"), ("redata_api_key", "test-key")):
+            patcher = mock.patch.object(settings, attribute, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_a_scored_boundary_is_preferred_over_the_hull(self) -> None:
+        """parcel_geometry is null for every NY parcel, so this is the live path."""
+        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+            gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
+            gw_cls.return_value.lookup_boundaries.return_value = [
+                {"geometry": {"type": "Polygon", "coordinates": [_GEOJSON_SQUARE]}, "is_suggested": True},
+            ]
+
+            result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
+
+        self.assertIsInstance(result["property"], Polygon)
+        gw_cls.return_value.lookup_buildings.assert_not_called()
+
+    def test_the_ranking_is_requested_unfiltered(self) -> None:
+        """Any ?source= makes REData skip scoring, leaving is_suggested false everywhere."""
+        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+            gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
+            gw_cls.return_value.lookup_boundaries.return_value = []
+
+            RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
+
+        gw_cls.return_value.lookup_boundaries.assert_called_once_with("parcel-uuid")
+
+    def test_no_candidates_still_falls_back_to_the_hull(self) -> None:
+        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+            gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
+            gw_cls.return_value.lookup_boundaries.return_value = []
+            gw_cls.return_value.lookup_buildings.return_value = [
+                {"latitude": 42.0, "longitude": -73.0},
+                {"latitude": 42.0, "longitude": -73.01},
+                {"latitude": 42.01, "longitude": -73.005},
+            ]
+
+            result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
+
+        self.assertIsInstance(result["property"], Polygon)
+
+    def test_an_unavailable_ranking_is_not_fatal(self) -> None:
+        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+            gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
+            gw_cls.return_value.lookup_boundaries.side_effect = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
+            gw_cls.return_value.lookup_buildings.return_value = []
+
+            result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
+
+        self.assertIsNone(result["property"])
+
+    def test_off_property_buildings_never_reach_the_hull(self) -> None:
+        """The one-line change that alone would have prevented the reported boundary."""
+        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+            gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
+            gw_cls.return_value.lookup_boundaries.return_value = []
+            gw_cls.return_value.lookup_buildings.return_value = [
+                {"latitude": 42.0, "longitude": -73.0, "is_on_property": True},
+                {"latitude": 42.0, "longitude": -73.01, "is_on_property": True},
+                {"latitude": 42.01, "longitude": -73.005, "is_on_property": True},
+                # A CRIS building known only via a county-scale sensitivity zone.
+                {"latitude": 43.0, "longitude": -74.0, "is_on_property": False},
+            ]
+
+            result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
+
+        self.assertLess(result["property"].area, 0.001, "an off-property building stretched the hull across the county")

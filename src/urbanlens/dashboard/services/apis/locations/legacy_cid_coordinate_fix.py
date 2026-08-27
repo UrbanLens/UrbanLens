@@ -2,7 +2,7 @@
 
 Until 2026-07-25 the pin importer derived a Google-Maps-CID pin's coordinates by
 decoding the S2 cell embedded in its Maps URL, which is wrong roughly a third of
-the time (see ``docs/redata-cid-resolution.md``). Imports since then resolve the
+the time (see ``docs/designs/redata-cid-resolution.md``). Imports since then resolve the
 CID properly via :mod:`services.apis.locations.cid_resolution`, but every ``Pin``
 - and every ``Location`` - created by an earlier import is still sitting wherever
 the S2 guess put it.
@@ -39,9 +39,21 @@ When the corrected coordinates land on a Location the profile already has a
 *different* pin for (moving the legacy pin there would collide with
 ``db_pin_unique_location_per_profile``), this raises a
 :class:`~urbanlens.dashboard.models.pin_merge_suggestions.model.PinMergeSuggestion`
-instead of moving anything - see :mod:`services.pin_merge_suggestions` -
+instead of moving anything - see :mod:`services.pins.pin_merge_suggestions` -
 proposing the user merge the legacy pin into the one that's already correctly
 placed, with that correct pin always preselected as the survivor.
+
+The import preview also calls :func:`preview_needs_legacy_repair` so it doesn't
+pre-deselect a matching record as "already on your map" - its proximity check
+would otherwise compare against the very legacy pin this repair exists to move,
+which sits at the same wrong, S2-derived coordinates the preview itself shows.
+
+A separate, broader TEMPORARY flag lives entirely in ``google.maps``
+(``_csv_row_iter``'s ``s2_guess`` key, consumed by ``_preview_pins``): any
+previewed record whose own cid came out of the imprecise S2-cell URL pattern is
+force-selected on its own merits, even when this module finds no specific
+legacy pin to match - not every affected row still has one to find. It doesn't
+call into this module, but shares the same removal criterion below.
 
 **Remove this module together with its call sites in
 ``services.apis.locations.google.maps`` (each marked with a matching TEMPORARY
@@ -61,8 +73,8 @@ from django.db.models import Q
 
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
-from urbanlens.dashboard.services.dm_location_detection import parse_coordinates
 from urbanlens.dashboard.services.locations.naming import sanitize_name
+from urbanlens.dashboard.services.messaging.dm_location_detection import parse_coordinates
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -79,8 +91,8 @@ LEGACY_COORDINATE_CUTOFF = datetime(2026, 7, 25, tzinfo=UTC)
 
 #: How far apart two parsed coordinate pairs may be and still be considered the
 #: same place, in degrees (~11 m). Wide enough to absorb the rounding loss of
-#: DMS/DDM -> decimal conversion, far tighter than the 50 m radius that
-#: ``Location.objects.get_nearby_or_create`` already treats as one place.
+#: DMS/DDM -> decimal conversion, and narrow enough that two genuinely
+#: different pins never collapse into one.
 _COORDINATE_MATCH_TOLERANCE = 1e-4
 
 #: Ceiling on how many of a profile's coordinate-named legacy pins are parsed
@@ -205,7 +217,7 @@ def repair_legacy_pin_coordinates(
     # db_pin_unique_location_per_profile. Leave the legacy pin where it is and
     # suggest merging it into the pin that's already correctly placed instead -
     # merging the two is a user decision, not something an import should do
-    # silently. See services.pin_merge_suggestions/services.pin_merge.
+    # silently. See services.pins.pin_merge_suggestions/services.pins.pin_merge.
     existing_pin = Pin.objects.filter(profile=profile, location=correct_location).exclude(pk=candidate.pk).first()
     if existing_pin is not None:
         from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion, PinMergeSuggestionOrigin
@@ -237,6 +249,28 @@ def repair_legacy_pin_coordinates(
 
     logger.info("Legacy coordinate repair moved pin %s to location %s.", candidate.pk, correct_location.pk)
     return candidate
+
+
+def preview_needs_legacy_repair(profile: Profile, *, cid: int | None, name: str) -> bool:
+    """Whether a previewed import record would repair one of the profile's own legacy pins.
+
+    Runs the same matching :func:`repair_legacy_pin_coordinates` uses (CID,
+    then coordinate-shaped name) without needing the corrected coordinates -
+    the import preview only needs to know a legacy pin is sitting there, not
+    yet where it belongs. Used to stop the preview's "already on your map"
+    proximity check from matching against that legacy pin's still-possibly-
+    S2-mis-placed coordinates and pre-deselecting the very record that would
+    fix it in the confirm step.
+
+    Args:
+        profile: The importing profile - only its own pins are considered.
+        cid: CID carried by the previewed record, if any.
+        name: Name carried by the previewed record.
+
+    Returns:
+        True if a matching pre-cutoff pin exists for this profile.
+    """
+    return _match_by_cid(profile, cid) is not None or _match_by_coordinate_name(profile, name) is not None
 
 
 def _in_range(latitude: float, longitude: float) -> bool:

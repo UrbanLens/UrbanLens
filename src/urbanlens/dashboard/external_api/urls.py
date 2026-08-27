@@ -258,7 +258,7 @@ _CORE_URLPATTERNS: list[URLPattern] = [
     path("labels/<uuid:label_uuid>/merge/", views.LabelMergeView.as_view(), name="labels.merge"),
     path("labels/<uuid:label_uuid>/", views.LabelDetailView.as_view(), name="labels.detail"),
     # Community wikis. Every one of these resolves through
-    # services.wiki_access.resolve_visible_wiki - see views_wiki's module
+    # services.wiki.wiki_access.resolve_visible_wiki - see views_wiki's module
     # docstring for the anti-enumeration guarantee that depends on it.
     path("wikis/<str:location_slug>/", views_wiki.WikiDetailApiView.as_view(), name="wikis.detail"),
     path("wikis/<str:location_slug>/history/", views_wiki.WikiHistoryView.as_view(), name="wikis.history"),

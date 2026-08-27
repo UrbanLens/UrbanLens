@@ -1,4 +1,4 @@
-{% load static %}
+{% load static dashboard_tags %}
 {% comment %}
 Shared map layers component - rendered by {% map_layers_panel %} (see
 dashboard/templatetags/map_components.py; do not include this file directly).
@@ -25,7 +25,7 @@ variant="strip": compact icon row for dialogs (comment map composer/viewer).
             aria-label="Toggle map layers"
             aria-expanded="false">
         <span class="map-layer-thumb map-layers-toggle-thumb">
-            <img src="{% static 'dashboard/images/map_layers.jpg' %}" alt="" loading="lazy">
+            <img src="{% static 'dashboard/images/map_layers.webp' %}" alt="" loading="lazy">
         </span>
         <i class="material-icons map-layers-toggle-icon">layers</i>
         <span class="map-layers-label">Layers</span>
@@ -36,7 +36,7 @@ variant="strip": compact icon row for dialogs (comment map composer/viewer).
         <button type="button" id="{{ b.button_id }}" class="map-layer-btn"
                 data-map-layer="{{ b.key }}" data-layer-kind="{{ b.kind }}"
                 aria-label="{{ b.aria_label }}" data-tooltip="{{ b.tooltip }}" data-tooltip-float="true" data-tooltip-pos="top">
-            <span class="map-layer-thumb{% if not b.thumb %} map-layer-thumb--icon{% endif %}">
+            <span class="map-layer-thumb{% if not b.thumb %} map-layer-thumb--icon{% endif %}"{% if b.color %} style="background:{{ b.color|hex_to_rgba:18 }}"{% endif %}>
                 {% if b.thumb %}
                 <img src="{% static b.thumb %}" alt="{{ b.thumb_alt }}" loading="lazy">
                 {% else %}
@@ -46,6 +46,36 @@ variant="strip": compact icon row for dialogs (comment map composer/viewer).
             <span>{{ b.label }}</span>
         </button>
         {% endfor %}
+        {% if manage_layers_url %}
+        <button type="button" class="map-layer-btn map-layers-manage-btn"
+                hx-get="{{ manage_layers_url }}" hx-target="#custom-layers-dialog-body" hx-swap="innerHTML"
+                onclick="document.getElementById('custom-layers-dialog').showModal()">
+            <span class="map-layer-thumb map-layer-thumb--icon">
+                <i class="material-symbols-outlined">tune</i>
+            </span>
+            <span>Manage Layers</span>
+        </button>
+        {% endif %}
+        {% comment %}
+        Image overlays sit beside Manage Layers rather than inside it: a
+        georeferenced sheet is a different kind of thing from a markup grouping,
+        and each overlay gets its own toggle button injected above by
+        map-annotations.ts (unless it was assigned to a custom layer).
+        {% endcomment %}
+        {% if manage_overlays_url %}
+        <button type="button" class="map-layer-btn map-layers-manage-btn"
+                hx-get="{{ manage_overlays_url }}" hx-target="#map-overlays-dialog-body" hx-swap="innerHTML"
+                onclick="document.getElementById('map-overlays-dialog').showModal(); document.body.dispatchEvent(new Event('mapOverlaysOpen'));">
+            <span class="map-layer-thumb map-layer-thumb--icon">
+                <i class="material-symbols-outlined">add_photo_alternate</i>
+            </span>
+            {# Not "Image Overlays" - too long for this tile's width at this #}
+            {# font size, so it wrapped and threw off row alignment with the #}
+            {# other (single-line) layer buttons. The icon plus the dialog's #}
+            {# own "Image Overlays" title still make the meaning clear. #}
+            <span>Overlays</span>
+        </button>
+        {% endif %}
     </div>
 </div>
 {% endif %}

@@ -19,7 +19,7 @@ class SocialLink(abstract.DashboardModel):
 
     The ``platform`` field is a free-form string key (e.g. ``"instagram"``,
     ``"bluesky"``).  Validation and URL construction are handled by
-    :mod:`urbanlens.dashboard.services.social_links`, not by this model.
+    :mod:`urbanlens.dashboard.services.profile.social_links`, not by this model.
     """
 
     platform = CharField(max_length=30)
@@ -44,6 +44,4 @@ class SocialLink(abstract.DashboardModel):
         constraints = [
             UniqueConstraint(fields=["profile", "platform"], name="social_link_unique_profile_platform"),
         ]
-        indexes = [
-            Index(fields=["profile"], name="idxdb_soc_link_pfile"),
-        ]
+        indexes = []

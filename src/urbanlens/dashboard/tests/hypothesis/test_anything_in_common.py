@@ -18,6 +18,8 @@ Covers:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.urls import reverse
 from model_bakery import baker
 
@@ -28,7 +30,10 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.trip_visibility import apply_trip_visibility_filter as _apply_trip_visibility_filter
+from urbanlens.dashboard.services.trips.trip_visibility import apply_trip_visibility_filter as _apply_trip_visibility_filter
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import User
 
 # Every option a friend must pass (everything except NO_ONE; ANYONE is trivial).
 _FRIEND_QUALIFYING_CHOICES = (
@@ -198,7 +203,20 @@ class ImageVisibilityFriendTests(TestCase):
         # The viewer's own filter must not interfere with these tests.
         self.viewer.viewer_photo_filter = VisibilityChoice.ANYONE
         self.viewer.save(update_fields=["viewer_photo_filter"])
-        self.image = baker.make("dashboard.Image", profile=self.uploader, pin=None, wiki=None)
+        # Shared, because that is the first gate and this file is about the
+        # second. A photo nobody shared is invisible to everyone but its owner
+        # whatever relationship they have, so testing the relationship rules on an
+        # unshared photo would only ever re-assert the first gate.
+        wiki = baker.make("dashboard.Wiki")
+        self.image: Image = baker.make("dashboard.Image", profile=self.uploader, pin=None, wiki=wiki)
+        # visible_to()'s container gate asks whether the VIEWER can reach this
+        # specific wiki (earned only by a pin at its place - see
+        # models/wiki/CLAUDE.md), not merely whether the photo sits on *some*
+        # wiki. Giving the viewer their own pin there opens that gate without
+        # giving the uploader one, so no common-pin relationship is created as
+        # a side effect - keeping these tests isolated to the relationship
+        # gate the class is named for.
+        Pin.objects.create(profile=self.viewer, location=wiki.location)
 
     def _set_upload_visibility(self, visibility: str) -> None:
         self.uploader.photo_upload_visibility = visibility
@@ -276,8 +294,8 @@ class FriendRequestVisibilityTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.requester_user = baker.make("auth.User")
-        self.requester = self.requester_user.profile
+        self.requester_user: User = baker.make("auth.User")
+        self.requester: Profile = self.requester_user.profile
         self.target = _make_profile()
         self.client.force_login(self.requester_user)
 

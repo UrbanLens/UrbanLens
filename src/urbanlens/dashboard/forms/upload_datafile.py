@@ -1,7 +1,7 @@
 from django import forms
 
 from urbanlens.dashboard.services.ai.document_import import SUPPORTED_DOCUMENT_EXTENSIONS
-from urbanlens.dashboard.services.archive_extractor import _ARCHIVE_ALLOWED_EXTENSIONS
+from urbanlens.dashboard.services.import_export.archive_extractor import _ARCHIVE_ALLOWED_EXTENSIONS
 
 # Mirrors the 500 MB cap already enforced downstream for the analogous export/import
 # ZIP upload (see controllers.tools._MAX_IMPORT_SIZE_BYTES) - rejecting an oversized

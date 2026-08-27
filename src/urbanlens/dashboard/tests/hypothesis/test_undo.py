@@ -391,3 +391,59 @@ class UndoClearViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(UndoAction.objects.filter(profile=self.profile).exists())
+
+
+class UndoDescriptionFitsItsColumnTests(TestCase):
+    """A legally-named object must still be deletable.
+
+    `stash_for_undo` writes `handler.describe(instances)` into
+    `UndoAction.object_repr`, a `CharField(255)`. Several of the names that
+    description embeds are themselves 255 characters - `Label.name`, `Pin.name` -
+    and `describe()` wraps them in fixed text. So a name the app fully permits
+    produced a `DataError` on **delete**: the user could create the object and
+    then never remove it, and the failure surfaced as a 500 rather than anything
+    naming the cause.
+
+    Found by the write-route smoke sweep, which hit `label.delete` with a
+    baker-generated long name (PROBLEMS.md, 2026-08-16).
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.profile = baker.make(User).profile
+
+    def test_deleting_a_maximum_length_label_does_not_raise(self) -> None:
+        from urbanlens.dashboard.models.labels.meta import KIND_TAG
+        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
+
+        longest = "x" * Label._meta.get_field("name").max_length
+        label = baker.make(Label, profile=self.profile, kind=KIND_TAG, name=longest)
+
+        action = stash_for_undo(LABEL_MODEL_LABEL, [label], self.profile)
+
+        self.assertLessEqual(len(action.object_repr), UndoAction._meta.get_field("object_repr").max_length)
+
+    def test_the_name_really_is_long_enough_to_have_overflowed(self) -> None:
+        """Anti-vacuity: the fixture must actually exceed the column on its own."""
+        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.services.undo.handlers.label import LabelUndoHandler
+
+        longest = "x" * Label._meta.get_field("name").max_length
+        described = LabelUndoHandler.describe([baker.prepare(Label, name=longest, profile=self.profile)])
+
+        self.assertGreater(len(described), UndoAction._meta.get_field("object_repr").max_length)
+
+    def test_a_bulk_delete_of_long_names_also_fits(self) -> None:
+        """The bulk path describes several names at once, so it overflows sooner."""
+        from urbanlens.dashboard.models.labels.meta import KIND_TAG
+        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
+
+        limit = Label._meta.get_field("name").max_length
+        labels = [baker.make(Label, profile=self.profile, kind=KIND_TAG, name=f"{index}" + "y" * (limit - 1)) for index in range(3)]
+
+        action = stash_for_undo(LABEL_MODEL_LABEL, labels, self.profile)
+
+        self.assertLessEqual(len(action.object_repr), UndoAction._meta.get_field("object_repr").max_length)

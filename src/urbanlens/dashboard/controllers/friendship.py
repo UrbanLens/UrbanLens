@@ -16,8 +16,9 @@ from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.connections import get_connections
-from urbanlens.dashboard.services.friendship import (
+from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
+from urbanlens.dashboard.services.social.connections import get_connections
+from urbanlens.dashboard.services.social.friendship import (
     FriendshipActionError,
     FriendshipNotFoundError,
     InviteRateLimitedError,
@@ -35,7 +36,6 @@ from urbanlens.dashboard.services.friendship import (
     unblock_profile,
     unmute_profile,
 )
-from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Re-exported for callers that imported these from this module before the
-# transitions moved to ``services.friendship`` (the notification signal handlers
+# transitions moved to ``services.social.friendship`` (the notification signal handlers
 # and several tests do). New code should import from the service directly.
 __all__ = [
     "FriendController",
@@ -282,7 +282,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         htmx_response: Callable[[HttpRequest], HttpResponse],
         missing_message: str = "Friend request not found.",
     ) -> HttpResponse:
-        """Run one ``services.friendship`` transition and render this controller's reply.
+        """Run one ``services.social.friendship`` transition and render this controller's reply.
 
         The transitions themselves (and their error taxonomy) live in the
         service so the external API shares them; this only maps those errors
@@ -363,7 +363,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
 
         Sets the ``muted`` flag only - the relationship itself (and so every
         visibility gate that reads ``Profile.are_friends``) is untouched. See
-        ``services.friendship.mute_profile``.
+        ``services.social.friendship.mute_profile``.
         """
         return self._friend_action(
             request,
@@ -497,7 +497,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             friendship.accept()
             from_profile = Profile.objects.filter(pk=from_profile_id).first()
             if from_profile:
-                NotificationLog.objects.create(
+                NotificationLog.objects.notify(
                     profile=from_profile,
                     status=Status.UNREAD,
                     importance=Importance.MEDIUM,
@@ -518,7 +518,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         ).update(status=Status.READ)
 
         # Return refreshed notification dropdown
-        notifications = NotificationLog.objects.for_profile(viewer_profile).select_related("source_profile").order_by("-created")[:20]
+        notifications = NotificationLog.objects.for_profile(viewer_profile).for_display().order_by("-created")[:20]
         unread_count = NotificationLog.objects.for_profile(viewer_profile).unread().count()
         response = render(
             request,
@@ -556,7 +556,6 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if subscription_role_slug and request.user.has_perm("dashboard.view_site_admin"):
             from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 
-            SubscriptionRole.ensure_defaults()
             subscription_role = SubscriptionRole.objects.get_by_slug(subscription_role_slug)
 
         try:

@@ -18,6 +18,7 @@ from django.utils import timezone
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
@@ -25,7 +26,7 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinPartner, SafetyCheckinPartnerStatus
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
-from urbanlens.dashboard.services.safety import accept_checkin_partner_invite, invite_checkin_partner, is_owner_or_accepted_partner, remove_checkin_partner
+from urbanlens.dashboard.services.visits.safety import accept_checkin_partner_invite, invite_checkin_partner, is_owner_or_accepted_partner, remove_checkin_partner
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -332,9 +333,11 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
         connected, _ = await partner_comm.connect()
         self.assertTrue(connected)
 
-        await database_sync_to_async(remove_checkin_partner)(partner)
-
-        close_message = await partner_comm.receive_output()
+        # Revocation is driven by a group_send the service enqueues rather than
+        # performs (see core.tests.celery_inline), so without this nothing closes.
+        with broadcasts_delivered_inline():
+            await database_sync_to_async(remove_checkin_partner)(partner)
+            close_message = await partner_comm.receive_output()
         self.assertEqual(close_message["type"], "websocket.close")
         self.assertEqual(close_message.get("code"), 4404)
 
@@ -367,10 +370,10 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
         self.assertTrue(connected_one)
         self.assertTrue(connected_two)
 
-        await database_sync_to_async(remove_checkin_partner)(partner)
-
-        close_one = await tab_one.receive_output()
-        close_two = await tab_two.receive_output()
+        with broadcasts_delivered_inline():
+            await database_sync_to_async(remove_checkin_partner)(partner)
+            close_one = await tab_one.receive_output()
+            close_two = await tab_two.receive_output()
         self.assertEqual(close_one["type"], "websocket.close")
         self.assertEqual(close_one.get("code"), 4404)
         self.assertEqual(close_two["type"], "websocket.close")

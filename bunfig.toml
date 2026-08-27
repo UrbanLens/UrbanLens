@@ -1,0 +1,3 @@
+[test]
+# Gives every test a DOM (see frontend/ts/testing/dom-setup.ts for why).
+preload = ["./src/urbanlens/dashboard/frontend/ts/testing/dom-setup.ts"]

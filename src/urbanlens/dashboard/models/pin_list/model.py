@@ -4,7 +4,7 @@ A PinList can be plain (pins added/removed only by explicit user action) or
 "smart" (``is_smart=True``), in which case it auto-includes pins matching a
 saved filter (``smart_filter``, same JSON shape as ``SavedFilter.criteria``)
 and/or falling inside a drawn boundary polygon (``smart_boundary``). See
-``dashboard.services.pin_list_membership`` for the matching/sync logic and
+``dashboard.services.pins.pin_list_membership`` for the matching/sync logic and
 ``dashboard.models.pin_list.signals`` for the Pin-save hook that keeps
 smart-list membership current.
 """
@@ -20,7 +20,7 @@ from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin_list.queryset import PinListItemManager, PinListManager
-from urbanlens.dashboard.services.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
@@ -42,7 +42,7 @@ class PinList(abstract.PublicDashboardModel):
     description = TextField(blank=True, default="", max_length=MAX_PIN_LIST_DESCRIPTION_LENGTH)
 
     is_smart = BooleanField(default=False)
-    # Same JSON shape as SavedFilter.criteria - see dashboard.services.filter_criteria.
+    # Same JSON shape as SavedFilter.criteria - see dashboard.services.search.filter_criteria.
     smart_filter = JSONField(null=True, blank=True)
     smart_boundary = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
     # Tracks which SavedFilter smart_filter was last copied from, so editing
@@ -105,7 +105,6 @@ class PinList(abstract.PublicDashboardModel):
             UniqueConstraint(fields=["profile", "name"], name="uq_pin_list_profile_name"),
             UniqueConstraint(fields=["profile", "slug"], name="uq_pin_list_profile_slug"),
         ]
-        indexes = [Index(fields=["profile"], name="idxdb_pinlist_profile")]
 
 
 class PinListItem(abstract.DashboardModel):
@@ -138,7 +137,4 @@ class PinListItem(abstract.DashboardModel):
         db_table = "dashboard_pin_list_items"
         ordering = ["order", "created"]
         constraints = [UniqueConstraint(fields=["pin_list", "pin"], name="uq_pin_list_item")]
-        indexes = [
-            Index(fields=["pin_list"], name="idxdb_pli_list"),
-            Index(fields=["pin"], name="idxdb_pli_pin"),
-        ]
+        indexes = []

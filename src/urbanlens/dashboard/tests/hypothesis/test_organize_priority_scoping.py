@@ -22,6 +22,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import KIND_TAG, Label
 from urbanlens.dashboard.models.profile.model import Profile
@@ -41,9 +42,9 @@ class OrganizePriorityScopingTests(TestCase):
 
         # profile=None is what makes a label global/shared - see
         # LabelQuerySet.visible_to, which unions it with the caller's own.
-        self.global_label = Label.objects.create(name="Abandoned", kind=KIND_TAG, profile=None, order=500)
-        self.own_label = Label.objects.create(name="Mine", kind=KIND_TAG, profile=self.profile, order=1)
-        self.other_label = Label.objects.create(name="Theirs", kind=KIND_TAG, profile=self.other_profile, order=2)
+        self.global_label = ensure_label(name="Abandoned", kind=KIND_TAG, profile=None, order=500)
+        self.own_label = ensure_label(name="Mine", kind=KIND_TAG, profile=self.profile, order=1)
+        self.other_label = ensure_label(name="Theirs", kind=KIND_TAG, profile=self.other_profile, order=2)
 
         self.client.force_login(self.user)
 

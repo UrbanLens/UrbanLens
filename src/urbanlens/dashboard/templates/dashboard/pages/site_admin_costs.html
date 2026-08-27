@@ -1,0 +1,90 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% load vendor_assets %}
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with modifier="top" icon="payments" title="Cost Tracking" subtitle="Define hardware/infrastructure components and recurring operating costs to see what UrbanLens actually costs to run." %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/admin/_site_admin_tabs.html" with active="costs" %}
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="site-admin-page page-content">
+    {% include "dashboard/partials/admin/_cost_admin_body.html" %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% vendor_asset "chartjs_js" %}
+<script>
+(function () {
+    function chartTheme() {
+        var isDark = document.getElementById('html-root').getAttribute('data-theme') === 'dark';
+        return {
+            gridColor: isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)',
+            labelColor: isDark ? '#94a3b8' : '#64748b',
+            tooltipBg: isDark ? '#1e293b' : '#fff',
+            tooltipFg: isDark ? '#f1f5f9' : '#0f172a',
+        };
+    }
+
+    function initCostChart() {
+        var canvas = document.getElementById('chart-cost-monthly');
+        var dataEl = document.getElementById('cost-chart-data');
+        if (!canvas || !dataEl) return;
+
+        var existing = Chart.getChart(canvas);
+        if (existing) existing.destroy();
+
+        var data;
+        try {
+            data = JSON.parse(dataEl.textContent);
+        } catch (e) {
+            return;
+        }
+
+        var theme = chartTheme();
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: data.labels,
+                datasets: [
+                    { label: 'Hardware', data: data.hardware, backgroundColor: '#0891b299', borderColor: '#0891b2', borderWidth: 1.5 },
+                    { label: 'Operating', data: data.operating, backgroundColor: '#d9770699', borderColor: '#d97706', borderWidth: 1.5 },
+                    { label: 'External APIs', data: data.api, backgroundColor: '#7c3aed99', borderColor: '#7c3aed', borderWidth: 1.5 },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, labels: { color: theme.labelColor } },
+                    tooltip: {
+                        backgroundColor: theme.tooltipBg,
+                        titleColor: theme.tooltipFg,
+                        bodyColor: theme.tooltipFg,
+                        borderColor: theme.gridColor,
+                        borderWidth: 1,
+                    },
+                },
+                scales: {
+                    x: { stacked: true, ticks: { color: theme.labelColor, maxRotation: 45 }, grid: { color: theme.gridColor } },
+                    y: { stacked: true, beginAtZero: true, ticks: { color: theme.labelColor }, grid: { color: theme.gridColor } },
+                },
+            },
+        });
+    }
+
+    initCostChart();
+
+    document.body.addEventListener('htmx:afterSwap', function (event) {
+        if (event.detail.target && event.detail.target.id === 'cost_admin_body') initCostChart();
+    });
+}());
+</script>
+{% endblock %}

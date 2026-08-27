@@ -88,6 +88,70 @@
         font-size: .85rem;
         color: var(--ul-grey-6);
     }
+
+    &__item--add {
+        background: var(--ul-surface-raised);
+        border: 1px dashed var(--ul-surface-raised-border);
+        box-shadow: none;
+    }
+}
+
+.role-meta-form,
+.role-create-form {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .5rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.role-meta-form__name {
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed var(--ul-grey-6);
+    font: inherit;
+    font-weight: 700;
+    color: inherit;
+    padding: 0 .1rem;
+    min-width: 5ch;
+    max-width: 18ch;
+
+    &:focus {
+        outline: none;
+        border-bottom-color: $color-blue-500;
+    }
+}
+
+.role-meta-form__description {
+    flex: 1 1 160px;
+    min-width: 120px;
+    padding: .4rem .6rem;
+    border: 1.5px solid var(--ul-surface-raised-border);
+    border-radius: 8px;
+    font-size: .82rem;
+    background: var(--ul-surface-raised);
+    color: var(--ul-grey-8);
+    outline: none;
+    transition: border-color .15s;
+
+    &:focus {
+        border-color: $color-blue-500;
+    }
+}
+
+.role-create-form label {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-weight: 600;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+    white-space: nowrap;
+}
+
+.role-delete-form {
+    margin-left: auto;
 }
 
 $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px, .75fr) minmax(220px, 1.35fr);
@@ -851,6 +915,49 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     margin-bottom: 1.5rem;
 }
 
+// -- External API spend report (site-admin costs page) -----------------------
+
+.cost-api-spend-summary {
+    margin-bottom: .85rem;
+}
+
+.cost-api-spend-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-sm;
+    overflow: hidden;
+}
+
+.cost-api-spend-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .65rem 1rem;
+    border-bottom: 1px solid var(--ul-border);
+    font-size: .88rem;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &:nth-child(even) {
+        background: var(--ul-grey-0);
+    }
+}
+
+.cost-api-spend-name {
+    font-weight: 600;
+    color: var(--ul-grey-8);
+}
+
+.cost-api-spend-value {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--ul-grey-7);
+}
+
 .stats-chart-card {
     margin-bottom: 0 !important;
 }
@@ -1604,4 +1711,88 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         box-shadow: 0 0 0 1px rgba($color-blue-500, .15);
     }
 
+}
+// -- Suggestion model report (site-admin/models/) ---------------------------
+// Its own block rather than reused admin-table/admin-list names: those do not
+// exist, and inventing class names that no stylesheet defines is how a page
+// ships looking broken while every test passes.
+.model-report {
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+
+  h2 {
+    margin-top: 0;
+  }
+
+  h3 {
+    margin: 1rem 0 .35rem;
+    font-size: .95rem;
+  }
+}
+
+.model-report__empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--ul-grey-5);
+}
+
+.model-report__table {
+  border-collapse: collapse;
+  width: 100%;
+
+  th,
+  td {
+    padding: .4rem .6rem;
+    border-bottom: 1px solid var(--border-color, rgb(128 128 128 / 25%));
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--ul-grey-5);
+  }
+}
+
+.model-report__list {
+  margin: 0;
+  padding-left: 1.1rem;
+
+  li {
+    margin-bottom: .3rem;
+    font-size: .9rem;
+  }
+}
+
+.api-limits-capabilities {
+  margin-top: 1.5rem;
+
+  .table-scroll {
+    overflow-x: auto;
+  }
+
+  .api-limits-capabilities-note {
+    color: var(--ul-grey-5);
+    font-size: .85rem;
+  }
+
+  .api-limits-capabilities-table {
+    border-collapse: collapse;
+    width: 100%;
+
+    th,
+    td {
+      border-bottom: 1px solid var(--ul-grey-2);
+      font-size: .85rem;
+      padding: .35rem .6rem;
+      text-align: left;
+      vertical-align: top;
+    }
+  }
+
+  .api-limits-capability-provider {
+    white-space: nowrap;
+  }
 }

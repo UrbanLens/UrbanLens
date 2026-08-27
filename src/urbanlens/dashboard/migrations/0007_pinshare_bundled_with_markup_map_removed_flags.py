@@ -27,11 +27,47 @@ def _encrypt_column(cursor, table: str, column: str) -> None:
         cursor.execute(f"UPDATE {table} SET {column} = %s WHERE id = %s", [ciphertext, pk])  # noqa: S608 # nosec B608 - table/column are hardcoded constants below, not user input
 
 
+#: Every (table, column) the token-encryption pass covers - shared with the
+#: reverse so the two can never drift. Same shape as migration 0039's.
+_ENCRYPTED_TOKEN_COLUMNS = (
+    ("dashboard_google_calendar_accounts", "access_token"),
+    ("dashboard_google_calendar_accounts", "refresh_token"),
+    ("dashboard_site_settings", "notify_gotify_token"),
+)
+
+
 def encrypt_existing_tokens(apps, schema_editor) -> None:
     with schema_editor.connection.cursor() as cursor:
-        _encrypt_column(cursor, "dashboard_google_calendar_accounts", "access_token")
-        _encrypt_column(cursor, "dashboard_google_calendar_accounts", "refresh_token")
-        _encrypt_column(cursor, "dashboard_site_settings", "notify_gotify_token")
+        for table, column in _ENCRYPTED_TOKEN_COLUMNS:
+            _encrypt_column(cursor, table, column)
+
+
+def _decrypt_column(cursor, table: str, column: str) -> None:
+    """Decrypt every Fernet-encrypted value in ``table.column`` in place.
+
+    A value not shaped like a Fernet token (they always begin ``gAAAA`` - a
+    version byte of 0x80, base64'd) is left untouched: it was written before
+    the forward pass ran, and re-processing it would corrupt real plaintext.
+    A token-shaped value no configured key can decrypt raises, aborting (and
+    rolling back) the reverse rather than writing garbage where the pre-0007
+    code expects plaintext credentials. Mirrors migration 0039's reverse.
+    """
+    cursor.execute(f"SELECT id, {column} FROM {table} WHERE {column} LIKE 'gAAAA%%'")  # noqa: S608 # nosec B608 - table/column are hardcoded constants above, not user input
+    rows = cursor.fetchall()
+    for pk, ciphertext in rows:
+        plaintext = _field.from_db_value(ciphertext, None, None)
+        cursor.execute(f"UPDATE {table} SET {column} = %s WHERE id = %s", [plaintext, pk])  # noqa: S608 # nosec B608 - table/column are hardcoded constants above, not user input
+
+
+def decrypt_existing_tokens(apps, schema_editor) -> None:
+    """Real reverse for the in-place token encryption above.
+
+    ``RunPython.noop`` here let a rollback below 0007 *succeed* while leaving
+    ciphertext in credential columns the older code reads as plaintext.
+    """
+    with schema_editor.connection.cursor() as cursor:
+        for table, column in _ENCRYPTED_TOKEN_COLUMNS:
+            _decrypt_column(cursor, table, column)
 
 
 
@@ -726,7 +762,7 @@ class Migration(migrations.Migration):
         ),
         migrations.RunPython(
             code=encrypt_existing_tokens,
-            reverse_code=django.db.migrations.operations.special.RunPython.noop,
+            reverse_code=decrypt_existing_tokens,
         ),
         migrations.CreateModel(
             name='FlickrAccount',

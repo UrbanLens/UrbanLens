@@ -1,6 +1,6 @@
 """Characterization and regression tests for the shared check-in edit service.
 
-``services.safety.apply_checkin_edit`` was extracted from
+``services.visits.safety.apply_checkin_edit`` was extracted from
 ``controllers.safety.SafetyCheckinDetailView.post`` so the web autosave and the
 external API's PATCH cannot drift apart. The first class here pins down the
 *existing* locking semantics that extraction had to preserve exactly; the two
@@ -26,7 +26,7 @@ import pytest
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinStatus
-from urbanlens.dashboard.services.safety import (
+from urbanlens.dashboard.services.visits.safety import (
     CheckinArchivedError,
     apply_checkin_edit,
     create_checkin,
@@ -149,19 +149,19 @@ class CheckinEditNotifiesContactsTests(_CheckinTestCase):
         commit here.
         """
         self._escalate()
-        with mock.patch("urbanlens.dashboard.services.safety.notify_contacts_of_update") as notify, self.captureOnCommitCallbacks(execute=True):
+        with mock.patch("urbanlens.dashboard.services.visits.safety.notify_contacts_of_update") as notify, self.captureOnCommitCallbacks(execute=True):
             apply_checkin_edit(self.checkin, editor=self.profile, plan_details="Detour taken")
         notify.assert_called_once()
 
     def test_plan_change_before_escalation_does_not_notify(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.safety.notify_contacts_of_update") as notify, self.captureOnCommitCallbacks(execute=True):
+        with mock.patch("urbanlens.dashboard.services.visits.safety.notify_contacts_of_update") as notify, self.captureOnCommitCallbacks(execute=True):
             apply_checkin_edit(self.checkin, editor=self.profile, plan_details="Detour taken")
         notify.assert_not_called()
 
     def test_unchanged_plan_does_not_notify(self) -> None:
         """Re-submitting identical text is an autosave no-op, not an alert."""
         self._escalate()
-        with mock.patch("urbanlens.dashboard.services.safety.notify_contacts_of_update") as notify, self.captureOnCommitCallbacks(execute=True):
+        with mock.patch("urbanlens.dashboard.services.visits.safety.notify_contacts_of_update") as notify, self.captureOnCommitCallbacks(execute=True):
             apply_checkin_edit(self.checkin, editor=self.profile, plan_details="Original plan")
         notify.assert_not_called()
 
@@ -173,7 +173,7 @@ class CheckinEditNotifiesContactsTests(_CheckinTestCase):
         side effect is still inline with the write.
         """
         self._escalate()
-        with mock.patch("urbanlens.dashboard.services.safety.notify_contacts_of_update") as notify, self.captureOnCommitCallbacks(execute=False):
+        with mock.patch("urbanlens.dashboard.services.visits.safety.notify_contacts_of_update") as notify, self.captureOnCommitCallbacks(execute=False):
             apply_checkin_edit(self.checkin, editor=self.profile, plan_details="Deferred detour")
             notify.assert_not_called()
 
@@ -272,14 +272,14 @@ class ResolveContactInputsTests(TestCase):
 
     def test_non_connection_username_is_rejected(self) -> None:
         """Otherwise an API key could nominate arbitrary accounts as emergency contacts."""
-        with mock.patch("urbanlens.dashboard.services.connections.get_connections", return_value=[]):
+        with mock.patch("urbanlens.dashboard.services.social.connections.get_connections", return_value=[]):
             inputs, rejected = resolve_contact_inputs(self.profile, [{"username": "stranger"}])
 
         self.assertEqual(inputs, [])
         self.assertTrue(any("isn't one of your connections" in message for message in rejected))
 
     def test_connection_username_is_accepted(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.connections.get_connections", return_value=[self.stranger]):
+        with mock.patch("urbanlens.dashboard.services.social.connections.get_connections", return_value=[self.stranger]):
             inputs, rejected = resolve_contact_inputs(self.profile, [{"username": "stranger"}])
 
         self.assertEqual(rejected, [])

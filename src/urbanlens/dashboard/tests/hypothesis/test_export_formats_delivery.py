@@ -1,7 +1,7 @@
 """Tests for full-account single-file pin downloads (UL-382) and emailed exports (UL-373).
 
 Covers the ``tools.export.format`` endpoint (auth, per-format responses,
-ownership scoping, unknown-format 404) and ``services.export.send_export_email``
+ownership scoping, unknown-format 404) and ``services.import_export.export.send_export_email``
 (attach-vs-link decision around ``EMAIL_ATTACHMENT_MAX_BYTES``, and the
 no-email-address skip), plus the ExportStartView -> Celery threading of the
 ``email_export`` form flag.
@@ -24,8 +24,8 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.export import send_export_email
-from urbanlens.dashboard.services.export_formats import EXPORT_FORMATS
+from urbanlens.dashboard.services.import_export.export import send_export_email
+from urbanlens.dashboard.services.import_export.export_formats import EXPORT_FORMATS
 
 
 class ExportFormatDownloadViewTests(TestCase):
@@ -138,7 +138,7 @@ class SendExportEmailTests(TestCase):
         export_dir_path = self._make_export_dir(b"x" * 64)
         download_path = reverse("tools.export.download", kwargs={"job_id": self.job_id})
 
-        with patch("urbanlens.dashboard.services.export.EMAIL_ATTACHMENT_MAX_BYTES", 10):
+        with patch("urbanlens.dashboard.services.import_export.export.EMAIL_ATTACHMENT_MAX_BYTES", 10):
             note = send_export_email(self.user, export_dir_path, "https://example.com/", job_id=self.job_id)
 
         self.assertEqual(note, "A download link was emailed to you (the archive was too large to attach).")
@@ -174,13 +174,13 @@ class ExportStartViewEmailFlagTests(TestCase):
         response = self.client.post(reverse("tools.export.start"), data)
         self.assertEqual(response.status_code, 200)
 
-    @patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_checkbox_checked_enqueues_with_email_flag(self, mock_enqueue: MagicMock) -> None:
         self._start_export(mock_enqueue, email_export=True)
         args = mock_enqueue.call_args.args
         self.assertTrue(args[-1], "email_to_user should be True when the checkbox is submitted")
 
-    @patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_checkbox_unchecked_enqueues_without_email_flag(self, mock_enqueue: MagicMock) -> None:
         self._start_export(mock_enqueue, email_export=False)
         args = mock_enqueue.call_args.args

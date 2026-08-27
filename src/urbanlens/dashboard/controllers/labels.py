@@ -20,9 +20,11 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.utils.html import escape
 from django.views import View
+from PIL.Image import DecompressionBombError as PILDecompressionBombError
 
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.labels.meta import DEFAULT_LABEL_COLOR
 from urbanlens.dashboard.models.labels.model import (
     COLOR_CHOICES,
     ICON_CATEGORIES,
@@ -36,12 +38,20 @@ from urbanlens.dashboard.models.labels.model import (
 )
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_label_ids
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
+from urbanlens.dashboard.services.core.numbers import safe_int
+from urbanlens.dashboard.services.core.text_limits import column_length_error, column_max_length
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label, label_conflict_message
+from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
+from urbanlens.dashboard.services.undo.service import stash_for_undo
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -271,7 +281,7 @@ def _resize_custom_icon(uploaded_file: UploadedFile) -> UploadedFile:
         if not name.lower().endswith(ext):
             name = name.rsplit(".", 1)[0] + ext
         return InMemoryUploadedFile(out, "ImageField", name, f"image/{fmt.lower()}", out.getbuffer().nbytes, None)
-    except (OSError, ValueError):
+    except (OSError, ValueError, PILDecompressionBombError):
         with contextlib.suppress(OSError):
             uploaded_file.seek(0)
         return uploaded_file
@@ -291,6 +301,36 @@ def _queryset_for_kind(kind: str, profile: Profile) -> QuerySet[Label]:
         return Label.objects.media().visible_to(profile).ordered().with_pin_counts()
     msg = f"Unsupported label kind: {kind}"
     raise ValueError(msg)
+
+
+def _auto_tag_available(user, profile: Profile, label_kind: str) -> bool:
+    """Whether *profile* may auto-tag labels of this kind at all.
+
+    One helper for both halves of the same decision: the edit form asks this to decide
+    whether to show the per-label opt-out, and the save handler asks it to decide
+    whether to honour the submitted value. Written out separately (as they were), the two
+    can drift into rendering a control the server silently ignores, or ignoring one the
+    server would have accepted.
+
+    Auto-tagging is granted, not opted into: a user who has the capability and
+    has not switched it off gets it for every tag and category label, minus
+    whichever labels they excluded individually.
+
+    Args:
+        user: The requesting user, for the site-level AI feature check.
+        profile: The owning profile, holding the per-kind preference flags.
+        label_kind: The label's kind - only tags, categories and statuses are
+            auto-taggable; anything else has no path and returns False.
+
+    Returns:
+        True when at least one auto-tagging path is available.
+    """
+    # Only tags and categories: REData's suggestion service models "which of my
+    # labels describes this place", which statuses (visited, demolished) and
+    # people/media labels are not.
+    if label_kind not in {KIND_CATEGORY, KIND_TAG}:
+        return False
+    return bool(user_has_feature(user, SiteFeature.AUTO_TAGGING) and not profile.disable_auto_tagging)
 
 
 def _parent_candidates(profile: Profile, kind: str, exclude_id: int | None = None) -> QuerySet[Label]:
@@ -330,7 +370,11 @@ def _would_create_cycle(label: Label, proposed_parent_id: int) -> bool:
 def _rows_ctx(kind: str, profile: Profile, can_edit_global: bool = False, extra: dict | None = None) -> dict:
     """Build template context for organize_label_rows.html and standalone index pages."""
     cfg = _config(kind)
-    label_list = _queryset_for_kind(kind, profile)
+    # Materialised before priming, and the same list is handed to the template:
+    # priming seeds a memo on each instance, so a queryset re-evaluated during
+    # rendering would discard it and quietly restore the per-label BFS.
+    label_list = list(_queryset_for_kind(kind, profile))
+    Label.prime_total_pin_counts(label_list)
     ctx: dict = {
         **_BASE_CTX,
         "labels": label_list,
@@ -424,12 +468,16 @@ def _parse_bulk_payload(data: dict) -> dict:
         "has_color": "color" in data,
         "has_description": "description" in data,
         "has_order": "order" in data,
-        "icon": data.get("icon") or None,
-        "color": data.get("color") or None,
+        # Through clean_icon like the create and edit paths: truncating alone
+        # fixed the over-long-value 500 but still stored free text as an icon.
+        "icon": clean_icon(data.get("icon"), max_length=column_max_length(Label, "icon")),
+        "color": clean_color(data.get("color")),
         "description": data.get("description", ""),
         "order": _safe_int(data.get("order"), 0),
-        "add_parent_ids": [int(x) for x in data.get("add_parent_ids", [])],
-        "add_child_ids": [int(x) for x in data.get("add_child_ids", [])],
+        # int() over a client-supplied list raises ValueError on any non-numeric entry;
+        # unparseable ids are dropped rather than failing the whole request.
+        "add_parent_ids": [i for i in (_safe_int(x, -1) for x in data.get("add_parent_ids", [])) if i >= 0],
+        "add_child_ids": [i for i in (_safe_int(x, -1) for x in data.get("add_child_ids", [])) if i >= 0],
     }
 
 
@@ -466,26 +514,60 @@ def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
     return None
 
 
-def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> str | None:
+def _validated_custom_icon(request: HttpRequest) -> tuple[Any, str | None]:
+    """The submitted icon, checked and resized, or the reason it was refused.
+
+    **Every path that stores a label icon must go through this.** The edit view
+    validated its upload and the create view did not, so the same file that was
+    refused with a 400 on one URL was written to disk from the other - a
+    scripted SVG among them, since ``_resize_custom_icon`` deliberately returns
+    the file untouched when PIL cannot open it, and ``label_icons/`` is served
+    to any authenticated user with a Content-Type nginx derives from the
+    extension.
+
+    Args:
+        request: The submitted request.
+
+    Returns:
+        ``(icon, None)`` when there is a usable icon (or ``(None, None)`` when
+        none was submitted), or ``(None, message)`` when the upload failed a
+        size/content-type/malware check.
+    """
+    custom_icon = _uploaded_custom_icon(request)
+    if not custom_icon:
+        return None, None
+
+    from urbanlens.dashboard.models.images.model import MediaKind
+    from urbanlens.dashboard.services.media.images import image_upload_error
+
+    upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
+    if upload_error:
+        return None, upload_error[0]
+    return _resize_custom_icon(custom_icon), None
+
+
+def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> tuple[bool, str | None]:
     """Update label custom_icon from POST (upload or clear).
 
     Returns:
-        A user-facing error message if the uploaded icon failed a
-        size/content-type/malware check (the icon is left unchanged), or
-        None on success.
+        A tuple of (whether custom_icon was actually touched, a user-facing
+        error message if the uploaded icon failed a size/content-type/malware
+        check - the icon is left unchanged in that case).
     """
-    custom_icon = _uploaded_custom_icon(request)
+    custom_icon, error = _validated_custom_icon(request)
+    if error:
+        return False, error
     if custom_icon:
-        from urbanlens.dashboard.models.images.model import MediaKind
-        from urbanlens.dashboard.services.images import image_upload_error
-
-        upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
-        if upload_error:
-            return upload_error[0]
-        label.custom_icon = _resize_custom_icon(custom_icon)
-    elif request.POST.get("clear_custom_icon"):
+        label.custom_icon = custom_icon
+        return True, None
+    if request.POST.get("clear_custom_icon"):
+        # See achievements' equivalent: clearing the field does not remove the
+        # stored file, so an explicitly-removed icon stayed fetchable.
+        if label.custom_icon:
+            label.custom_icon.delete(save=False)
         label.custom_icon = None
-    return None
+        return True, None
+    return False, None
 
 
 def _apply_kind_conversion(label: Label, new_kind: str, profile: Profile) -> bool:
@@ -565,24 +647,36 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
         name = request.POST.get("name", "").strip()
         if not name:
             return HttpResponse("Name is required.", status=400)
+        name_error = column_length_error(Label, "name", name, cfg.singular_title)
+        if name_error:
+            return HttpResponse(name_error, status=400)
 
         parent_ids = request.POST.getlist("parent_ids")
-        order = int(request.POST.get("order", 0))
+        order = safe_int(request.POST.get("order"))
         parent_order = Label.initial_order_for_parents(profile, parent_ids)
         if parent_order is not None:
             order = parent_order
 
-        custom_icon = _uploaded_custom_icon(request)
-        if custom_icon:
-            custom_icon = _resize_custom_icon(custom_icon)
+        # Checked before the insert so a collision is a 400 the form can show,
+        # not the IntegrityError the database would raise (a 500 to the user).
+        conflict = find_conflicting_label(profile=profile, name=name, kind=self.kind)
+        if conflict is not None:
+            # conflict.name is user-supplied (the colliding label's own name); this response is raw
+            # text/html, not a Template, so it isn't auto-escaped - escape() matches the pattern used
+            # for label.name elsewhere in this file (see LabelDeleteView, LabelBulkConvertView).
+            return HttpResponse(escape(label_conflict_message(conflict, singular_title=cfg.singular_title)), status=400)
+
+        custom_icon, icon_error = _validated_custom_icon(request)
+        if icon_error:
+            return HttpResponse(icon_error, status=400)
 
         label = Label.objects.create(
             kind=self.kind,
             profile=profile,
             name=name,
             description=request.POST.get("description", "").strip() or None,
-            icon=request.POST.get("icon") or None,
-            color=request.POST.get("color") or None,
+            icon=clean_icon(request.POST.get("icon"), max_length=column_max_length(Label, "icon")) or None,
+            color=clean_color(request.POST.get("color"), default=DEFAULT_LABEL_COLOR),
             custom_icon=custom_icon,
             order=order,
         )
@@ -628,18 +722,8 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         selected_ids = {b.id for b in selected_parents} | {b.id for b in selected_children}
         available_parents = _parent_candidates(profile, self.kind, label_id)
 
-        ai_kind_enabled = {
-            KIND_CATEGORY: profile.ai_label_categories,
-            KIND_TAG: profile.ai_label_tags,
-            KIND_STATUS: profile.ai_label_statuses,
-        }.get(label.kind, False)
         can_use_ai_features = user_has_feature(request.user, SiteFeature.AI)
-
-        keyword_kind_enabled = {
-            KIND_CATEGORY: profile.keyword_label_categories,
-            KIND_TAG: profile.keyword_label_tags,
-            KIND_STATUS: profile.keyword_label_statuses,
-        }.get(label.kind, False)
+        show_auto_tag_toggle = _auto_tag_available(request.user, profile, label.kind)
 
         return render(
             request,
@@ -663,7 +747,7 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
                 # per-kind settings (keyword matching needs no site feature/subscription).
                 # Otherwise the option is offering a behavior the user has explicitly
                 # turned off, or that isn't available to them at all.
-                "show_auto_tag_toggle": (can_use_ai_features and profile.ai_enabled and ai_kind_enabled) or (profile.keyword_tagging_enabled and keyword_kind_enabled),
+                "show_auto_tag_toggle": show_auto_tag_toggle,
             },
         )
 
@@ -685,42 +769,59 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         if new_kind != label.kind and label.is_protected:
             return HttpResponse("Protected statuses cannot be converted to another type.", status=403)
 
+        # Scoped to only the fields this form actually edits, so a bare save()
+        # never reverts a field changed concurrently by another request (e.g.
+        # the external API's LabelDetailView.patch, which can touch fields -
+        # keywords - this form has no control for at all).
+        changed_fields = ["description", "icon", "color", "order"]
+
         if not label.is_protected:
             name = request.POST.get("name", "").strip()
             if not name:
                 return HttpResponse("Name is required.", status=400)
+            # exclude_pk so renaming a label to its own name (or just changing its
+            # case) is not reported as colliding with itself.
+            conflict = find_conflicting_label(profile=profile, name=name, kind=new_kind, exclude_pk=label.pk)
+            if conflict is not None:
+                # See LabelCreateView.post above: raw text/html HttpResponse, so
+                # conflict.name (user-supplied) needs explicit escaping here.
+                return HttpResponse(escape(label_conflict_message(conflict, singular_title=self._cfg().singular_title)), status=400)
+            name_error = column_length_error(Label, "name", name, self._cfg().singular_title)
+            if name_error:
+                return HttpResponse(name_error, status=400)
             label.name = name
+            changed_fields.append("name")
 
         label.description = request.POST.get("description", "").strip() or None
-        label.icon = request.POST.get("icon") or None
-        label.color = request.POST.get("color") or None
-        label.order = int(request.POST.get("order", label.order))
+        # Through clean_icon, like the create path: truncating to the column width
+        # fixed the over-long-icon 500 but still let arbitrary free text be stored
+        # as an icon here while create rejected it.
+        label.icon = clean_icon(request.POST.get("icon"), max_length=column_max_length(Label, "icon")) or None
+        label.color = clean_color(request.POST.get("color"))
+        label.order = safe_int(request.POST.get("order"), label.order)
 
         # allow_auto_tag can only be changed when the user actually has some auto-tagging
         # path available for this label's kind (AI or keyword-based); and never on the
         # protected "Visited" label.
         if not label.is_protected:
-            ai_kind_enabled = {
-                KIND_CATEGORY: profile.ai_label_categories,
-                KIND_TAG: profile.ai_label_tags,
-                KIND_STATUS: profile.ai_label_statuses,
-            }.get(label.kind, False)
-            keyword_kind_enabled = {
-                KIND_CATEGORY: profile.keyword_label_categories,
-                KIND_TAG: profile.keyword_label_tags,
-                KIND_STATUS: profile.keyword_label_statuses,
-            }.get(label.kind, False)
-            can_toggle_auto_tag = (user_has_feature(request.user, SiteFeature.AI) and profile.ai_enabled and ai_kind_enabled) or (profile.keyword_tagging_enabled and keyword_kind_enabled)
+            can_toggle_auto_tag = _auto_tag_available(request.user, profile, label.kind)
             if can_toggle_auto_tag:
-                label.allow_auto_tag = "allow_auto_tag" in request.POST
-            label.keywords = request.POST.get("keywords", "").strip() or None
+                # The form asks the question the other way round now: the
+                # control is "exclude this label", so its absence means the
+                # label participates.
+                label.allow_auto_tag = "disable_auto_tag" not in request.POST
+                changed_fields.append("allow_auto_tag")
 
-        icon_error = _apply_custom_icon_from_post(label, request)
+        icon_changed, icon_error = _apply_custom_icon_from_post(label, request)
         if icon_error:
             return HttpResponse(icon_error, status=400)
+        if icon_changed:
+            changed_fields.append("custom_icon")
 
         kind_changed = _apply_kind_conversion(label, new_kind, profile)
-        label.save()
+        if kind_changed:
+            changed_fields.extend(["kind", "profile"])
+        label.save(update_fields=changed_fields)
 
         # A label's icon/color/name feed into every pin's cached map marker
         # (Pin.effective_icon, Pin.effective_color, the "statuses" list in
@@ -759,6 +860,7 @@ class LabelDeleteView(_LabelKindMixin, LoginRequiredMixin, View):
         if label.is_protected:
             return HttpResponse(f"'{escape(label.name)}' is a protected status and cannot be deleted.", status=403)
 
+        stash_for_undo(LABEL_MODEL_LABEL, [label], _request_profile(request))
         label.delete()
         return _render_rows(request, self.kind, _request_profile(request))
 
@@ -789,8 +891,23 @@ class LabelReorderView(_LabelKindMixin, LoginRequiredMixin, View):
 
         profile = _request_profile(request)
         total = len(label_ids)
-        for i, label_id in enumerate(label_ids):
-            Label.objects.filter(id=label_id, profile=profile, kind=self.kind).update(order=total - i)
+        # Later duplicates win, matching the per-row loop this replaces.
+        desired = {label_id: total - i for i, label_id in enumerate(label_ids)}
+
+        # Filtering on profile/kind here is what keeps ids the caller does not own out
+        # of the write - the per-row form got that from re-filtering inside the loop.
+        # Only rows whose order actually moves are written or invalidated - the cache
+        # refresh below costs work per *pin* carrying the label, so re-sending an
+        # unchanged order would rebuild the whole map for nothing.
+        labels = [label for label in Label.objects.filter(id__in=desired, profile=profile, kind=self.kind) if label.order != desired[label.pk]]
+        for label in labels:
+            label.order = desired[label.pk]
+        if labels:
+            Label.objects.bulk_update(labels, ["order"])
+            # order decides which label supplies a pin's map icon/colour
+            # (_winning_display_label sorts by -order), and bulk_update fires no
+            # post_save, so the usual label -> cache receiver never sees this write.
+            refresh_map_pin_cache_for_label_ids([label.pk for label in labels])
         return JsonResponse({"ok": True})
 
 
@@ -880,7 +997,11 @@ class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
                 is_protected=False,
             ).exclude(id=target_id)
 
-        source_list = list(sources)
+        # Merging *deletes* the source, so every guard that keeps a label from
+        # being deleted has to hold here too. The single-merge view refuses a
+        # protected source for every kind; this path only did for statuses,
+        # which let a protected tag/category/person/media label be merged away.
+        source_list = [label for label in sources if not label.is_protected]
         if not source_list:
             return HttpResponse(f"No valid source {self.kind}s.", status=400)
 
@@ -901,9 +1022,12 @@ class LabelBulkDeleteView(_LabelKindMixin, LoginRequiredMixin, View):
             return err
 
         profile = _request_profile(request)
-        qs = Label.objects.filter(id__in=ids, profile=profile, kind=self.kind)
-        if self.kind == KIND_STATUS:
-            qs = qs.filter(is_protected=False)
+        # Protection is a property of the label, not of its kind - the single
+        # delete view checks it for every kind, so this one must too.
+        qs = Label.objects.filter(id__in=ids, profile=profile, kind=self.kind, is_protected=False)
+        doomed = list(qs)
+        if doomed:
+            stash_for_undo(LABEL_MODEL_LABEL, doomed, profile)
         qs.delete()
         return _render_rows(request, self.kind, profile)
 
@@ -1003,6 +1127,19 @@ class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
         # Scoped via _parent_candidates() (not a raw Label.objects.visible_to()
         # query) so this bulk path enforces the same KIND_USER/KIND_MEDIA
         # isolation as single create/edit.
+        # Label is unique on (lower(name), profile, kind), so a name that already exists in
+        # the destination kind makes the save below a constraint violation - a 500 rather
+        # than the readable refusal the single-edit path gives for the same collision.
+        # Checked for the whole batch first: converting some and failing on others would
+        # leave the user to work out which half applied.
+        conflicts = [label for label in labels if find_conflicting_label(profile=profile, name=label.name, kind=new_kind, exclude_pk=label.pk) is not None]
+        if conflicts:
+            names = ", ".join(sorted(f'"{escape(label.name)}"' for label in conflicts))
+            return HttpResponse(
+                f"Cannot convert {names} - a {_config(new_kind).singular_title.lower()} with that name already exists. Rename or merge first.",
+                status=400,
+            )
+
         valid_parents = list(_parent_candidates(profile, self.kind).filter(id__in=payload["add_parent_ids"])) if payload["add_parent_ids"] else []
         for label in labels:
             _apply_bulk_fields(label, payload)
@@ -1084,7 +1221,7 @@ class LabelCustomizeView(_LabelKindMixin, LoginRequiredMixin, View):
                 label,
                 name=request.POST.get("name", ""),
                 icon=request.POST.get("icon"),
-                color=request.POST.get("color"),
+                color=clean_color(request.POST.get("color")),
             )
 
         return _render_rows(request, self.kind, profile)
@@ -1173,6 +1310,8 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
 
     @staticmethod
     def _ctx(profile: Profile, pin: Pin, pin_slug: str) -> dict:
+        from urbanlens.dashboard.services.labels.redata_suggestions import redata_labels_configured
+
         ctx = _membership_panel_ctx(
             profile,
             _pin_member_ids(pin),
@@ -1188,6 +1327,9 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
         # tabs (see _label_dialog.html), so this panel also needs the profile's lists.
         ctx["dialog_title"] = "Add to Pin"
         ctx["pin_lists"] = list(PinList.objects.for_profile(profile).order_by("name"))
+        # Lazily loaded (see label.pin_suggestions) rather than fetched here -
+        # a live REData call has no business blocking this panel's own render.
+        ctx["redata_labels_enabled"] = redata_labels_configured()
         return ctx
 
     def get(self, request: HttpRequest, pin_slug: str, *args, **kwargs) -> HttpResponse:
@@ -1216,6 +1358,28 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
             request,
             _MEMBERSHIP_PANEL,
             self._ctx(profile, pin, pin_slug),
+        )
+
+
+class LabelPinSuggestionsView(LoginRequiredMixin, View):
+    """REData-suggested tag/category labels for a pin (HTMX, lazily loaded inside the Add Labels dialog)."""
+
+    def get(self, request: HttpRequest, pin_slug: str, *args, **kwargs) -> HttpResponse:
+        from urbanlens.dashboard.services.labels.redata_suggestions import get_suggestions
+
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        suggestions = get_suggestions(pin) or []
+        member_ids = _pin_member_ids(pin)
+        rows = [(label, round(confidence * 100)) for label, confidence in suggestions if label.id not in member_ids]
+        return render(
+            request,
+            "dashboard/partials/labels/_label_suggestions.html",
+            {
+                "pin_slug": pin_slug,
+                "suggestions": rows,
+                "label_url_kind": _MEMBERSHIP_URL_KIND,
+                "panel_id": "category-panel",
+            },
         )
 
 

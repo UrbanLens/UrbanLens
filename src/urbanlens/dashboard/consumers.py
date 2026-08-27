@@ -56,7 +56,7 @@ def _credential_is_still_valid(credential: Any) -> bool:
     reproduced - a socket must not outlive the authority that opened it:
 
     - a PAT-style ``ApiKey`` is revoked in place, by stamping ``revoked_at``
-      (``services.api_keys.revoke_api_key``), so a stamped row is dead;
+      (``services.auth.api_keys.revoke_api_key``), so a stamped row is dead;
     - a django-oauth-toolkit ``AccessToken`` is revoked by *deleting* the row,
       and separately stops working when it expires, so a missing row or an
       expired one is dead.
@@ -247,6 +247,10 @@ class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     async def receive(self, text_data=None, bytes_data=None):
         """Ignore client frames - this socket is server → client only.
 
+        That already covers the client's ``{"type": "ping"}`` keep-alive (see
+        ``_notification_push.html``), which needs no reply: the frame exists only
+        to be traffic, so the Cloudflare tunnel doesn't time an idle connection out.
+
         Channels' base consumer calls ``receive(bytes_data=...)`` for a binary WS frame;
         accepting both keyword arguments (rather than only ``text_data``) keeps a stray binary
         frame from raising an uncaught ``TypeError`` that would otherwise kill the connection.
@@ -289,7 +293,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     route enforces.
 
     Each connection joins the
-    per-profile group from ``services.direct_messages.direct_message_group_name``;
+    per-profile group from ``services.messaging.direct_messages.direct_message_group_name``;
     ``create_direct_message`` broadcasts every new message to both the sender's
     and the recipient's groups, so all of either party's open tabs update at once.
 
@@ -324,7 +328,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         try:
             self.profile_id = await self._get_profile_id()
-            from urbanlens.dashboard.services.direct_messages import direct_message_group_name, mark_profile_online
+            from urbanlens.dashboard.services.messaging.direct_messages import direct_message_group_name, mark_profile_online
 
             self.group_name = direct_message_group_name(self.profile_id)
             await self.channel_layer.group_add(self.group_name, self.channel_name)
@@ -352,7 +356,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             except Exception:
                 logger.exception("Direct message socket failed to leave group %s cleanly", self.group_name)
         if hasattr(self, "profile_id"):
-            from urbanlens.dashboard.services.direct_messages import mark_profile_offline
+            from urbanlens.dashboard.services.messaging.direct_messages import mark_profile_offline
 
             try:
                 await database_sync_to_async(mark_profile_offline)(self.profile_id)
@@ -395,7 +399,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         if data.get("type") == "typing":
             recipient_slug = str(data.get("recipient") or "").strip()
             if recipient_slug:
-                from urbanlens.dashboard.services.direct_messages import broadcast_typing_indicator
+                from urbanlens.dashboard.services.messaging.direct_messages import broadcast_typing_indicator
 
                 await database_sync_to_async(broadcast_typing_indicator)(self.profile_id, recipient_slug)
             return
@@ -418,7 +422,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         group_uuid = str(data.get("group") or "").strip()
         if group_uuid:
             # A group-chat frame: same validation/broadcast pipeline, but the
-            # message fans out to every active member (see services.group_chats).
+            # message fans out to every active member (see services.messaging.group_chats).
             if not (body or ciphertext):
                 return
             try:
@@ -471,7 +475,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             group_uuid: UUID string of the group chat being viewed.
         """
         from urbanlens.dashboard.models.group_chats.model import GroupChat
-        from urbanlens.dashboard.services.group_chats import mark_group_thread_open
+        from urbanlens.dashboard.services.messaging.group_chats import mark_group_thread_open
 
         group = GroupChat.objects.filter(uuid=group_uuid).first()
         if group is None:
@@ -495,7 +499,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """
         from urbanlens.dashboard.models.group_chats.model import GroupChat
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.group_chats import create_group_message
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_message
 
         sender = Profile.objects.select_related("user").get(pk=self.profile_id)
         group = GroupChat.objects.filter(uuid=group_uuid).first()
@@ -511,7 +515,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             recipient_slug: URL slug of the conversation partner being viewed.
         """
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.direct_messages import mark_thread_open
+        from urbanlens.dashboard.services.messaging.direct_messages import mark_thread_open
 
         try:
             partner = Profile.objects.get(slug=recipient_slug)
@@ -550,7 +554,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             PermissionError: The recipient's privacy settings reject the sender.
         """
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.direct_messages import create_direct_message
+        from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message
 
         sender = Profile.objects.select_related("user").get(pk=self.profile_id)
         try:
@@ -578,7 +582,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     - ``ws/safety/checkin/<uuid:checkin_uuid>/chat/`` - session route, requires
       an authenticated session belonging to the check-in's owner or an accepted
       ``SafetyCheckinPartner`` (populated by Channels' ``AuthMiddlewareStack``
-      from the session cookie; see ``services.safety.is_owner_or_accepted_partner``),
+      from the session cookie; see ``services.visits.safety.is_owner_or_accepted_partner``),
       or the same identity established by a ``?key=`` credential through
       ``ApiKeyAuthMiddleware``. A credential additionally needs ``safety:read``
       to join and ``safety:write`` to send - being the check-in's owner is not
@@ -597,7 +601,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     partners, and all of its contacts - joins the same channel group, so a
     message from any one of them is broadcast to all the others immediately.
     The session route additionally joins a second, narrower group carrying
-    live-location updates (``services.safety._broadcast_live_location``) -
+    live-location updates (``services.visits.safety._broadcast_live_location``) -
     contacts never join it, matching the model-level rule that live location
     is visible to partners only, never to emergency contacts.
 
@@ -613,6 +617,14 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     ``{"type": "error", "detail": "..."}`` rather than silently dropped or
     left to crash the socket, so a sender always learns their message didn't
     go through - important for a feature people may rely on in an emergency.
+
+    Access is resolved once, at ``connect()``. Both routes therefore need a
+    revocation path for an already-open socket, and both have the same pair:
+    an immediate ``*_access_revoked`` broadcast when the row is removed, plus a
+    periodic re-check as a backstop for a dropped broadcast. On the contact
+    route "revoked" means the ``SafetyCheckinContact`` row is gone -
+    ``services.visits.safety.set_checkin_contacts`` deletes every row missing
+    from a resubmitted contact list.
     """
 
     async def connect(self):
@@ -644,7 +656,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             await self.close(code=4404)
             return
 
-        from urbanlens.dashboard.services.safety import safety_checkin_group_name, safety_checkin_location_group_name
+        from urbanlens.dashboard.services.visits.safety import safety_checkin_group_name, safety_checkin_location_group_name
 
         self.group_name = safety_checkin_group_name(self.checkin.pk)
         # Live location is never shared with token-route contacts (see the model's
@@ -673,25 +685,28 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             await self.close(code=4500)
             return
         logger.info("Safety chat connected: checkin=%s contact=%s", self.checkin.pk, getattr(self.contact, "pk", None))
-        if self.contact is None:
-            # Defense-in-depth against a dropped partner_access_revoked broadcast: that
-            # group_send is best-effort, same as every other broadcast in this module, but
-            # unlike the others it's the *only* mechanism that revokes an already-open
-            # connection's access (permission is otherwise checked once, at connect() time).
-            # A channel-layer hiccup at the exact moment a partner is removed would
-            # otherwise leave their live-location stream open indefinitely with no
-            # self-healing path. The token/contact route never joins the location group and
-            # its access can't be revoked mid-connection (a magic link is either valid or
-            # it isn't), so it doesn't need this.
-            #
-            # This same loop also carries the credential re-check for a ?key=
-            # connection (_is_still_authorized consults _credential_is_still_valid),
-            # which is why this consumer never calls
-            # CredentialScopeMixin.start_credential_revalidation - doing both would
-            # run two timers against the same connection for the same purpose. Only
-            # the session route can carry a credential that matters here anyway: the
-            # contact route is authorized by its token, not by a credential.
-            self._revalidation_task = asyncio.create_task(self._revalidate_access_periodically())
+        # Defense-in-depth against a dropped *_access_revoked broadcast: those
+        # group_sends are best-effort, same as every other broadcast in this module,
+        # but they are the only mechanism that revokes an already-open connection's
+        # access (permission is otherwise checked once, at connect() time). A
+        # channel-layer hiccup at the exact moment someone is removed would otherwise
+        # leave their chat - and, for a partner, their live-location stream - open
+        # indefinitely with no self-healing path.
+        #
+        # This runs on the contact route too. A magic-link token cannot be *edited*
+        # into invalidity, which is what once made this look unnecessary there, but
+        # it can be deleted: set_checkin_contacts() drops every row missing from a
+        # resubmitted contact list, and a removed contact whose portal is still open
+        # would otherwise keep receiving the check-in's chat.
+        #
+        # This same loop also carries the credential re-check for a ?key=
+        # connection (_is_still_authorized consults _credential_is_still_valid),
+        # which is why this consumer never calls
+        # CredentialScopeMixin.start_credential_revalidation - doing both would
+        # run two timers against the same connection for the same purpose. Only
+        # the session route can carry a credential that matters here anyway: the
+        # contact route is authorized by its token, not by a credential.
+        self._revalidation_task = asyncio.create_task(self._revalidate_access_periodically())
 
     async def disconnect(self, close_code):
         """Leave the check-in's group(s), if we ever joined any, and stop re-validating."""
@@ -713,7 +728,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """Periodically re-check that this session-route connection is still authorized.
 
         Closes the connection with code 4404 the moment it isn't - a backstop for when
-        ``partner_access_revoked`` (services.safety._broadcast_partner_access_revoked)
+        ``partner_access_revoked`` (services.visits.safety._broadcast_partner_access_revoked)
         never arrives.
         """
         try:
@@ -743,14 +758,19 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             location - indefinitely.
         """
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.models.safety.model import SafetyCheckin
-        from urbanlens.dashboard.services.safety import is_owner_or_accepted_partner
+        from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
+        from urbanlens.dashboard.services.visits.safety import is_owner_or_accepted_partner
 
         if not _credential_is_still_valid(self.credential):
             return False
         checkin = SafetyCheckin.objects.filter(pk=self.checkin.pk).first()
         if checkin is None:
             return False
+        if self.contact is not None:
+            # The contact route's authority is its token, and revoking that token
+            # means deleting the row - so "still authorized" is "the row is still
+            # there, still on this check-in".
+            return SafetyCheckinContact.objects.filter(pk=self.contact.pk, checkin_id=checkin.pk).exists()
         profile = Profile.objects.filter(pk=self.profile_id).first()
         if profile is None:
             return False
@@ -760,8 +780,9 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """Persist an incoming chat message and broadcast it to the check-in's group.
 
         Args:
-            text_data: JSON string with a ``body`` field. Unparseable or
-                blank frames are silently ignored - there's no message to
+            text_data: JSON string with a ``body`` field, or a
+                ``{"type": "ping"}`` keep-alive. Unparseable, blank and
+                keep-alive frames are silently ignored - there's no message to
                 report failure for. A frame that fails validation or fails
                 to save gets an explicit ``{"type": "error", ...}`` reply
                 instead.
@@ -773,6 +794,27 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         if text_data is None:
             return
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Safety chat received an unparseable frame on checkin %s", self.checkin.pk)
+            return
+        if not isinstance(data, dict):
+            # Valid JSON, but not a frame: ``"5"`` and ``[]`` parse fine and would
+            # raise AttributeError on ``.get`` below, killing the connection.
+            return
+
+        # The client's keep-alive - see ``ts/shared/live-socket.ts`` and the copy
+        # of it inlined in ``_chat_panel.html``, which exist because Cloudflare
+        # closes an idle tunnelled socket at around 100 seconds. Handled ahead of
+        # the scope gate below because a ping writes nothing, and answering a
+        # keep-alive with "this credential isn't allowed to send here" every 45
+        # seconds would be nonsense. Deliberately unanswered: the frame's only job
+        # is to be traffic, and the client never waits for a reply, so a pong would
+        # only double the frames on every idle connection.
+        if data.get("type") == "ping":
+            return
+
         # safety:read is a listen-only grant on the session route. The contact
         # route is exempt for the same reason connect() exempts it: its authority
         # is the magic-link token, not a credential, and an emergency contact
@@ -781,11 +823,6 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         # below still applies every content and archival rule to whatever they send.
         if self.contact is None and not self.credential_allows(ApiKeyScope.SAFETY_WRITE):
             await self.send(text_data=json.dumps({"type": "error", "detail": _INSUFFICIENT_SCOPE_DETAIL}))
-            return
-        try:
-            data = json.loads(text_data)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning("Safety chat received an unparseable frame on checkin %s", self.checkin.pk)
             return
         body = str(data.get("body") or "").strip()
         if not body:
@@ -823,7 +860,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         Args:
             event: The group-send event, with a ``payload`` dict (see
-                ``services.safety._broadcast_status_update``).
+                ``services.visits.safety._broadcast_status_update``).
         """
         await self.send(text_data=json.dumps(event["payload"]))
 
@@ -835,7 +872,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         Args:
             event: The group-send event, with a ``payload`` dict (see
-                ``services.safety._broadcast_live_location``).
+                ``services.visits.safety._broadcast_live_location``).
         """
         await self.send(text_data=json.dumps(event["payload"]))
 
@@ -848,7 +885,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         Args:
             event: The group-send event, with a ``payload`` dict (see
-                ``services.safety._broadcast_archive_scheduled``).
+                ``services.visits.safety._broadcast_archive_scheduled``).
         """
         await self.send(text_data=json.dumps(event["payload"]))
 
@@ -857,7 +894,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         Args:
             event: The group-send event, with a ``payload`` dict (see
-                ``services.safety._broadcast_checkin_archived``).
+                ``services.visits.safety._broadcast_checkin_archived``).
         """
         await self.send(text_data=json.dumps(event["payload"]))
 
@@ -872,7 +909,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         Args:
             event: The group-send event, with a ``payload`` dict containing the
                 removed partner's ``profile_id`` (see
-                ``services.safety._broadcast_partner_access_revoked``).
+                ``services.visits.safety._broadcast_partner_access_revoked``).
         """
         if self.contact is not None or getattr(self, "profile_id", None) != event["payload"]["profile_id"]:
             return
@@ -880,6 +917,22 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         # this and would otherwise fall through to appendMessage(). Closing with 4404
         # alone already makes the client show "You don't have access to this chat."
         # (see _chat_panel.html's onclose handler), same as a revoked contact token.
+        await self.close(code=4404)
+
+    async def contact_access_revoked(self, event):
+        """Force-close this connection if it belongs to the just-removed contact.
+
+        The contact-route mirror of :meth:`partner_access_revoked`. Delivered to
+        every connection on the check-in's group; only the one whose bound
+        contact matches acts on it.
+
+        Args:
+            event: The group-send event, with a ``payload`` dict containing the
+                removed contact's ``contact_id`` (see
+                ``services.visits.safety._broadcast_contact_access_revoked``).
+        """
+        if self.contact is None or self.contact.pk != event["payload"]["contact_id"]:
+            return
         await self.close(code=4404)
 
     @database_sync_to_async
@@ -901,7 +954,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """
         from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
-        from urbanlens.dashboard.services.safety import is_owner_or_accepted_partner
+        from urbanlens.dashboard.services.visits.safety import is_owner_or_accepted_partner
 
         if token is not None:
             self.profile_id = None
@@ -941,7 +994,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         from django.contrib.auth.models import AnonymousUser
 
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.safety import create_chat_message, is_owner_or_accepted_partner
+        from urbanlens.dashboard.services.visits.safety import create_chat_message, is_owner_or_accepted_partner
 
         user = self.scope.get("user") or AnonymousUser()
         if self.contact is None:
@@ -1013,13 +1066,45 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """Save and broadcast one chat message from this connection's profile."""
         raise NotImplementedError
 
+    @database_sync_to_async
+    def _connection_profile_id(self, user) -> int:
+        """This connection's profile pk, resolved once at connect.
+
+        Held so ``participant_left`` can tell whether a removal is about *this*
+        socket without a query per broadcast.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        profile, _ = Profile.objects.get_or_create(user=user)
+        return profile.pk
+
+    @staticmethod
+    @database_sync_to_async
+    def _has_alpha_features(user) -> bool:
+        """Whether ``user`` holds the entitlement the games are gated behind."""
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+
+        return user_has_feature(user, SiteFeature.ALPHA_FEATURES)
+
     async def connect(self):
-        """Verify the connecting profile is a scoped participant (any status) of this session, then join its group."""
+        """Verify the connecting profile is an entitled, scoped participant (any status) of this session, then join its group."""
         from urbanlens.dashboard.models.account.model import ApiKeyScope
 
         session_id = self.scope["url_route"]["kwargs"].get("session_id")
         user = self.scope.get("user")
         if user is None or not user.is_authenticated:
+            await self.close(code=4404)
+            return
+
+        # The same ALPHA_FEATURES entitlement every game HTTP route enforces
+        # (controllers.games.AlphaFeatureRequiredMixin). Gating only the HTTP
+        # side left this socket as the way around it: someone already invited
+        # to a session could still connect, watch live rounds and scoreboards,
+        # and post chat, while every HTTP route answered 403. Credential scopes
+        # do not cover it either - session-authenticated connections are exempt
+        # from those by design.
+        if not await self._has_alpha_features(user):
+            logger.info("%s socket rejected: user %s lacks ALPHA_FEATURES", self.game_label, getattr(user, "pk", None))
             await self.close(code=4404)
             return
 
@@ -1045,6 +1130,7 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         self.session_id = session_id
         self.group_name = self._group_name(session_id)
+        self.profile_id = await self._connection_profile_id(user)
         try:
             await self.channel_layer.group_add(self.group_name, self.channel_name)
             await self.accept()
@@ -1070,11 +1156,12 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
                 logger.exception("%s socket failed to leave group %s cleanly", self.game_label, self.group_name)
 
     async def receive(self, text_data=None, bytes_data=None):
-        """Persist an incoming chat message and broadcast it - the only client-to-server frame this socket accepts.
+        """Persist an incoming chat message and broadcast it - the only client-to-server frame this socket acts on.
 
         Args:
-            text_data: JSON string with a ``body`` field. Unparseable or
-                blank frames are silently ignored - there's no message to
+            text_data: JSON string with a ``body`` field, or a
+                ``{"type": "ping"}`` keep-alive. Unparseable, blank and
+                keep-alive frames are silently ignored - there's no message to
                 report failure for.
             bytes_data: Unused - this socket is JSON-text-only. Accepting (and
                 ignoring) it keeps a stray binary frame from raising an uncaught
@@ -1084,18 +1171,34 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         if text_data is None:
             return
-        # Every frame this socket accepts writes something on the sender's
-        # behalf, so games:write gates the whole method: a games:read credential
-        # is a listen-only grant. Reported as an error frame rather than a close,
-        # matching DirectMessageConsumer - closing would put the client into a
-        # reconnect loop over a condition retrying cannot fix.
-        if not self.credential_allows(ApiKeyScope.GAMES_WRITE):
-            await self.send(text_data=json.dumps({"type": "error", "detail": _INSUFFICIENT_SCOPE_DETAIL}))
-            return
         try:
             data = json.loads(text_data)
         except (json.JSONDecodeError, TypeError):
             logger.warning("%s socket received an unparseable frame on session %s", self.game_label, self.session_id)
+            return
+        if not isinstance(data, dict):
+            # Valid JSON, but not a frame: ``"5"`` and ``[]`` parse fine and would
+            # raise AttributeError on ``.get`` below, killing the connection.
+            return
+
+        # The client's keep-alive - see ``ts/shared/live-socket.ts``, which every
+        # game client now opens its socket through, because Cloudflare closes an
+        # idle tunnelled socket at around 100 seconds and a lobby waiting on the
+        # host is idle by definition. Handled ahead of the scope gate below
+        # because a ping writes nothing, and answering a keep-alive with "this
+        # credential isn't allowed to send here" every 45 seconds would be
+        # nonsense. Deliberately unanswered: the frame's only job is to be
+        # traffic, and the client never waits for a reply.
+        if data.get("type") == "ping":
+            return
+
+        # Every other frame this socket accepts writes something on the sender's
+        # behalf, so games:write gates the rest of the method: a games:read
+        # credential is a listen-only grant. Reported as an error frame rather
+        # than a close, matching DirectMessageConsumer - closing would put the
+        # client into a reconnect loop over a condition retrying cannot fix.
+        if not self.credential_allows(ApiKeyScope.GAMES_WRITE):
+            await self.send(text_data=json.dumps({"type": "error", "detail": _INSUFFICIENT_SCOPE_DETAIL}))
             return
         body = str(data.get("body") or "").strip()
         if not body:
@@ -1121,6 +1224,16 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     #: game-specific.
     async def participant_left(self, event):
         await self._relay(event)
+        # Participation is checked in connect() and never again, so without this
+        # a removed player's socket stays in the session's channel group and keeps
+        # receiving every later broadcast - other players' answers, the chat - and
+        # keeps being allowed to send, since receive() re-checks only the API
+        # credential's scope. Relaying first means they still learn why.
+        #
+        # Same hazard, same remedy as safety check-ins, where
+        # ``_broadcast_partner_access_revoked`` exists for exactly this reason.
+        if event.get("profile_id") == getattr(self, "profile_id", None):
+            await self.close(code=4404)
 
     async def session_started(self, event):
         await self._relay(event)
@@ -1162,7 +1275,7 @@ class GameSessionConsumer(_ParticipantSessionConsumer):
     """Real-time sync for one SpotGuessr session, shared by every participant (UL-392).
 
     Mounted at ``ws/spotguessr/session/<int:session_id>/``. See
-    "Real-time sync: GameSessionConsumer" in ``docs/designs/spotguessr.md``
+    "Real-time sync: GameSessionConsumer" in ``docs/designs/drafts/spotguessr.md``
     for the full event catalogue; ``_ParticipantSessionConsumer`` documents
     everything about this socket that isn't SpotGuessr-specific.
     """

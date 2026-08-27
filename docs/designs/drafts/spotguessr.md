@@ -46,6 +46,16 @@ A Location is eligible for a round in session S iff:
 6. **Joined, not just invited** (multiplayer only) — "every participant" means every profile
    with `GameSessionParticipant.status = JOINED`. An invited-but-not-yet-accepted profile is
    not yet a player and does not gate eligibility on their pins — see "Multiplayer sessions."
+7. **Restricted to a label** (optional, `config.label_id`) — at least one participant's own
+   pin at that location carries this `Label` or one of its descendants
+   (`Label.get_label_and_descendants`), scoped to `pins__profile__in=<session participants>`
+   so the check can only match a pin one of them actually owns. This is a pure narrowing of
+   rule 1's pool, never an alternative to it — a label can never make an unpinned location
+   eligible, so it cannot leak the existence of a location to a participant who hasn't
+   pinned it themselves. `label_id` must resolve to a label visible to whichever profile
+   configured the session (global, or owned by them) — enforced at the settings-validation
+   layer (`controllers.spotguessr._validate_label_id` / the external API's
+   `SpotGuessrSessionCreateSerializer.validate_label_id`), not here.
 
 ## Scoring: point vs. boundary distance
 
@@ -76,7 +86,7 @@ would be strictly worse than using the best data available now.
 Distance is computed geodesically in the database (PostGIS `Distance()` over a `geography`
 cast), matching the existing convention in `models/pin/queryset.py` and
 `services/memories/photos.py` — never the codebase's other, approximate
-"degrees × 111,320" shortcut (`services/map_sharing.py`), because scoring fairness depends on
+"degrees × 111,320" shortcut (`services/sharing/map_sharing.py`), because scoring fairness depends on
 it being right at small (sub-km) scales, not just roughly right at trip-planning scale.
 
 ## Points
@@ -172,6 +182,16 @@ ignored entirely in favor of the earned rating. Documentation-richness is never 
 *harder* than neutral for lack of data — only ever easier as the signal strengthens, mirroring
 the kernel's own "never excluded for lack of data" contract.
 
+**Performance (fixed 2026-07-31)**: `_proxy_difficulty_rating()` originally called
+`location.pins.count()`/`location.images.count()` per candidate, inside
+`selection.pick_next_location`, which `get_or_create_round`'s retry loop calls fresh on every
+attempt (up to `_MAX_LOCATION_ATTEMPTS`). For a profile with a large pin pool and few
+photo-eligible locations (Photos mode's `wiki__isnull=False` gate means most pins usually
+don't qualify), this was O(attempts × pool size) individual queries — the dominant cause of
+`/spotguessr/start/` sometimes taking long enough to hit nginx's upstream read timeout.
+`pick_next_location` now bulk-fetches both counts for the whole candidate pool in two
+queries, regardless of pool size (see `services.spotguessr.selection`).
+
 ## "Feels random" selection (anti-clustering)
 
 Uniform-random selection over a small, geographically clustered pin set reliably produces
@@ -207,7 +227,7 @@ The game's secondary goal (besides being fun) is generating data that improves t
 notion of which wiki photos are actually good - see "External media caching + relevance"
 below for the full design. Briefly: `GamePhotoFeedback` records one event per (round, guessing
 profile) - `thumbs_up`, `thumbs_down`, `reported`, or a server-backfilled `no_reaction` for
-anyone who never explicitly reacted (`services.spotguessr.relevance`). `services.media_relevance
+anyone who never explicitly reacted (`services.spotguessr.relevance`). `services.media.media_relevance
 .effective_relevance()` blends this with the wiki's own organic `MediaRelevance` votes:
 
 | Signal | Weight | Why |
@@ -250,7 +270,7 @@ structurally, not just by convention, there is no way to trace a row back
 to who made it.
 
 Once a photo *without its own coordinates* has 5+ correct guesses,
-`services.photo_coordinates.recompute_estimated_coordinates()` averages
+`services.photos.photo_coordinates.recompute_estimated_coordinates()` averages
 them into `Image.estimated_latitude`/`estimated_longitude`, recomputed
 fresh from the photo's full correct-guess set after every new correct guess
 (not incrementally) - per-photo guess volume is small enough that this
@@ -277,8 +297,8 @@ someone manually places it first.
 
 Not SpotGuessr-specific, but implemented alongside it since the game's relevance feedback
 needed a reliable way to join a materialized photo back to its wiki votes. Two independent
-fixes/additions to the existing pin-detail/wiki Media gallery (`services.media_materialize`,
-`services.media_relevance`):
+fixes/additions to the existing pin-detail/wiki Media gallery (`services.media.media_materialize`,
+`services.media.media_relevance`):
 
 - **Identity fix.** `Image.media_source_key`/`Image.media_item_key` now store the *raw*
   provider panel key and the sha1 hash of the item's raw full-resolution url - exactly the
@@ -295,7 +315,7 @@ fixes/additions to the existing pin-detail/wiki Media gallery (`services.media_m
   downloaded and materialized it into a durable `Image` row (existed before this pass, on the
   pin-detail page only). What was missing: the gallery never *served* that local copy back -
   every subsequent page load, by anyone, still hot-linked the live provider url straight from
-  `LocationCache`. `services.media_relevance.local_images_for_gallery_items()` bulk-looks-up
+  `LocationCache`. `services.media.media_relevance.local_images_for_gallery_items()` bulk-looks-up
   already-materialized rows for a panel's live results; both the pin-detail and wiki Media
   views now prefer that local url for the displayed thumbnail/image, falling back to the
   remote url when no local copy exists yet. The remote page (`item.page_url|default:item.url`)
@@ -348,7 +368,7 @@ separate `GameSessionInvite` model. The host's own row is created as `JOINED` im
 (`start_multiplayer_session`); every invitee's row is created as `INVITED`.
 
 - **Inviting**: friends-only, matching the trip-invite precedent (`controllers/trip.py`) —
-  `services.connections.get_connections(host)` gates who can be picked. Inviting a non-friend
+  `services.social.connections.get_connections(host)` gates who can be picked. Inviting a non-friend
   is rejected server-side, not just hidden in the picker UI. One `GameSessionParticipant`
   per invitee, plus one `NotificationLog` (`NotificationType.SPOTGUESSR_INVITE`) that reaches
   the invitee live via the existing `notification_new` Channels push — no new notification
@@ -475,9 +495,9 @@ completion marker regardless of which of the above set it.
 ### Named Place mode
 
 **Selection** (`services.spotguessr.named_place.candidate_name_for_location`): the location
-needs a *meaningful* name to show. Reuses `services.public_pins.is_meaningful_name()`
+needs a *meaningful* name to show. Reuses `services.pins.public_pins.is_meaningful_name()`
 verbatim (already filters blank/placeholder/coordinate-shaped strings — see
-`docs/designs/public-pins-by-vote.md`) rather than inventing a second heuristic:
+`docs/designs/drafts/public-pins-by-vote.md`) rather than inventing a second heuristic:
 
 1. If `config.use_aliases` (default **True** — per spec, aliases are on by default with a
    setting to turn them off) and the wiki has at least one meaningful `WikiAlias`, pick one
@@ -503,13 +523,33 @@ search box entirely when `round.mode == "named_place"`.
 **Selection** (`services.spotguessr.street_view.candidate_street_view_for_location`): calls
 the existing `GoogleMapsGateway.get_street_view_single()` (`services/apis/locations/google/
 maps.py`) — the same server-side fetch already used for the pin-detail Street View carousel,
-including its coverage-metadata check and radius-expansion search. Returns a base64
-`data:image/jpeg;base64,...` URI (never a client-exposed API key, never a raw Google Maps
-embed) or `None` if there's no coverage nearby, in which case the location is excluded from
-this session's Street View rounds the same way an image-less location is excluded from
-Photos mode. Wrapped in a broad `except Exception` at the call site — this is a paid,
-rate-limited external API on the critical path of picking a round, and a transient failure
-must degrade to "try another location," never crash round generation.
+including its coverage-metadata check and radius-expansion search. Returns a
+`StreetViewPanorama` (the pano's own resolved coordinates, plus a base64
+`data:image/jpeg;base64,...` fallback image) or `None` if there's no coverage nearby, in which
+case the location is excluded from this session's Street View rounds the same way an
+image-less location is excluded from Photos mode. Wrapped in a broad `except Exception` at the
+call site — this is a paid, rate-limited external API on the critical path of picking a round,
+and a transient failure must degrade to "try another location," never crash round generation.
+
+**Interactive panorama (added 2026-08-04)** — the round payload's `street_view_lat`/
+`street_view_lng` (`modes._serialize_street_view`) are the panorama's own coordinates, sent to
+the client so it can render a real pan/zoom/walk-around `google.maps.StreetViewPanorama`
+(`frontend/ts/entries/spotguessr.ts`'s `initStreetViewPanorama`), loaded lazily against the
+`google_public_api_key`-restricted client key so a player who never touches this mode never
+pays for the script. This **supersedes** the "never a client-exposed API key, never a raw
+Google Maps embed" rule the mode originally shipped with above: a real pannable panorama has
+to talk to Google directly from the browser, which is only possible if the browser knows
+where to look — there is no way to proxy that server-side the way a single static image can
+be. This is a deliberate, scoped exception to "the pre-guess round payload never reveals the
+answer" (see `services.spotguessr.serializers.serialize_round`'s docstring and
+`tests/hypothesis/test_spotguessr_round_payload.py`): a determined player could read the
+panorama's coordinates from the network tab instead of guessing. Accepted trade-off — this is
+also just how real GeoGuessr itself works, and the alternative (fixed-heading static image
+swaps only) was rejected as a materially worse experience for what a casual, low-stakes beta
+game buys in return. `street_view_image` (the static fallback) is kept alongside the
+coordinates for `initStreetViewPanorama`'s own failure path (script load error, or
+`StreetViewService.getPanorama` resolving no pano id) and for external API clients that don't
+want to embed the Maps JS SDK at all — see `external_api.serializers_games.ROUND_PAYLOAD_FIELDS`.
 
 **Scoring**: point-based (`target_is_point = True`), using the *location's own* `point` as
 the target coordinate (there is no `Image` row to carry a more specific point — Street View
@@ -531,7 +571,37 @@ same location within the cache window don't re-bill — no additional caching ad
 `named_place.candidate_name_for_location`, Street View calls
 `street_view.candidate_street_view_for_location`. All three return "nothing usable" as
 `None`/falsy and are handled identically — try the next candidate location, give up after
-`_MAX_LOCATION_ATTEMPTS`. `start_solo_session`'s Phase 1 restriction to `SpotGuessrMode.PHOTOS`
+`_MAX_LOCATION_ATTEMPTS`.
+
+### Round content prewarming (added 2026-07-31)
+
+Selection/build-round work — which, even after the difficulty-weighting fix above, still costs
+something (Street View mode's live Google Maps lookup most of all) — used to run entirely on
+the request that first needed it, normally the exact moment a player finishes the prior round.
+`services.spotguessr.prewarm` lets a background Celery task run that same selection ahead of
+time and cache the `(location, content)` result under a key `get_or_create_round` checks
+*before* generating live:
+
+- **Rounds 2+**: right after `get_or_create_round` creates round *N*, it enqueues
+  `tasks.prewarm_spotguessr_round(session_id, N + 1)` (skipped for the session's last round —
+  there's nothing to prewarm). By the time round *N* is guessed and revealed, round *N+1*'s
+  content is normally already cached, so `_advance_or_complete`'s call to
+  `get_or_create_round` is a cache hit instead of live generation.
+- **Round 1 (solo only)**: `controllers.spotguessr.SpotGuessrHomeView.get` enqueues
+  `tasks.prewarm_spotguessr_solo_start(profile_id, mode, config)` on every visit to the
+  overview page, guessing the mode/config from `most_recent_rating`/`last_config` — the same
+  values the settings form pre-fills. Keyed by a fingerprint of the full config, so a guess
+  that turns out wrong (different settings, or multiplayer instead) is simply never redeemed,
+  not wrongly redeemed. Skipped when the page load is actually resuming a specific session via
+  `?session=`.
+
+A cache miss (task hasn't finished, lost a race, evicted, or the guessed config didn't match)
+always falls back to live generation — correctness never depends on a prewarm having run; it's
+purely a latency optimization. `generate_round_content` (factored out of `get_or_create_round`)
+is the one selection routine both the live path and the prewarm tasks call, so a prewarmed
+round is chosen by identical rules to a live one.
+
+`start_solo_session`'s Phase 1 restriction to `SpotGuessrMode.PHOTOS`
 is lifted; all three modes are now startable, solo or multiplayer.
 
 **Mode registry (added post-launch).** That per-mode branch originally lived as an if/elif
@@ -569,8 +639,8 @@ instead of keeping its own hardcoded `["photos", "street_view"]` list.
 | Glicko-2: rating / RD / volatility / scale / τ | 1500 / 350 / 0.06 / 173.7178 / 0.5 | Glickman's published defaults |
 | `use_aliases` | True | Named Place mode; per-session config, not a site-wide constant |
 | `allow_arbitrary_external_photos` | False | Photos mode; skips the relevance filter entirely when true - see "Photo relevance feedback" |
-| `GAME_THUMBS_UP_WEIGHT` / `GAME_REPORT_WEIGHT` / `GAME_NO_REACTION_WEIGHT` / `GAME_THUMBS_DOWN_WEIGHT` | 0.5 / 1.0 / 0.01 / 0.001 | `services.media_relevance` - thumbs down is a token weight, not a real "not relevant" vote |
-| `MIN_GUESSES_FOR_ESTIMATE` / `MIN_GUESSES_FOR_OUTLIER_TRIM` / `OUTLIER_TRIM_FRACTION` | 5 / 10 / 0.15 | `services.photo_coordinates` - crowd-sourced unplaced-photo coordinates |
+| `GAME_THUMBS_UP_WEIGHT` / `GAME_REPORT_WEIGHT` / `GAME_NO_REACTION_WEIGHT` / `GAME_THUMBS_DOWN_WEIGHT` | 0.5 / 1.0 / 0.01 / 0.001 | `services.media.media_relevance` - thumbs down is a token weight, not a real "not relevant" vote |
+| `MIN_GUESSES_FOR_ESTIMATE` / `MIN_GUESSES_FOR_OUTLIER_TRIM` / `OUTLIER_TRIM_FRACTION` | 5 / 10 / 0.15 | `services.photos.photo_coordinates` - crowd-sourced unplaced-photo coordinates |
 | `CHAT_HISTORY_LIMIT` | 50 | messages returned by the chat-history GET on reconnect |
 
 ## Social: ratings visibility
@@ -611,7 +681,7 @@ instead of keeping its own hardcoded `["photos", "street_view"]` list.
   profile's game session with no sharing action behind it. `candidate_image_for_location` now
   unconditionally requires `wiki__isnull=False` — see "Photo selection" above. Also built the
   in-game thumbs-up/thumbs-down/report feedback buttons and their weighted contribution to
-  `services.media_relevance.effective_relevance` (`GamePhotoFeedback`,
+  `services.media.media_relevance.effective_relevance` (`GamePhotoFeedback`,
   `services.spotguessr.relevance`), the `allow_arbitrary_external_photos` setting, and — not
   SpotGuessr-specific, but needed to make relevance joinable at all — the `Image.media_source_key`/
   `media_item_key` identity fields and local-copy-preferred serving in the pin-detail/wiki

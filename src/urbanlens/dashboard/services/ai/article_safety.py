@@ -17,7 +17,7 @@ import time
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
-from urbanlens.dashboard.services.rate_limiter import log_api_call
+from urbanlens.dashboard.services.core.rate_limiter import log_api_call
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile

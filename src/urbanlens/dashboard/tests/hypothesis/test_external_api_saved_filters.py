@@ -19,13 +19,14 @@ from uuid import uuid4
 from django.contrib.auth.models import User
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 _BASE = "/dashboard/api/external/v1/saved-filters/"
 
@@ -72,7 +73,10 @@ class SavedFilterCollectionTests(SavedFilterApiTestCase):
         SavedFilter.objects.create(profile=Profile.objects.get(user=other), name="Theirs", criteria={})
         self._make_filter("Mine")
         body = self.client.get(_BASE, **_bearer(self.raw_key)).json()
-        self.assertEqual([row["name"] for row in body["results"]], ["Mine"])
+
+        names = [row["name"] for row in body["results"]]
+        self.assertIn("Mine", names)
+        self.assertNotIn("Theirs", names, "one profile's filters must never appear in another's listing")
 
     def test_create(self) -> None:
         response = self.client.post(
@@ -103,7 +107,7 @@ class SavedFilterCriteriaOwnershipTests(SavedFilterApiTestCase):
     """Criteria may only reference labels/custom fields the caller may use."""
 
     def test_own_label_is_accepted(self) -> None:
-        mine = Label.objects.create(profile=self.profile, name="Mine", kind="tag")
+        mine = ensure_label(profile=self.profile, name="Mine", kind="tag")
         response = self.client.post(
             _BASE,
             {"name": "Ok", "criteria": {"tags": [mine.pk]}},
@@ -113,7 +117,7 @@ class SavedFilterCriteriaOwnershipTests(SavedFilterApiTestCase):
         self.assertEqual(response.status_code, 201)
 
     def test_global_label_is_accepted(self) -> None:
-        shared = Label.objects.create(profile=None, name="Shared", kind="category")
+        shared = ensure_label(profile=None, name="Shared", kind="category")
         response = self.client.post(
             _BASE,
             {"name": "Ok", "criteria": {"tags": [shared.pk]}},
@@ -124,7 +128,7 @@ class SavedFilterCriteriaOwnershipTests(SavedFilterApiTestCase):
 
     def test_another_users_label_is_refused(self) -> None:
         other = baker.make(User)
-        foreign = Label.objects.create(profile=Profile.objects.get(user=other), name="Secret", kind="tag")
+        foreign = ensure_label(profile=Profile.objects.get(user=other), name="Secret", kind="tag")
         response = self.client.post(
             _BASE,
             {"name": "Probe", "criteria": {"tags": [foreign.pk]}},
@@ -137,7 +141,7 @@ class SavedFilterCriteriaOwnershipTests(SavedFilterApiTestCase):
     def test_foreign_label_inside_label_groups_is_refused(self) -> None:
         """label_groups is a second place label pks hide - it must be checked too."""
         other = baker.make(User)
-        foreign = Label.objects.create(profile=Profile.objects.get(user=other), name="Secret", kind="tag")
+        foreign = ensure_label(profile=Profile.objects.get(user=other), name="Secret", kind="tag")
         response = self.client.post(
             _BASE,
             {"name": "Probe", "criteria": {"label_groups": [{"op": "and", "ids": [foreign.pk]}]}},
@@ -239,7 +243,7 @@ class SavedFilterDetailTests(SavedFilterApiTestCase):
 
     def test_patch_refuses_foreign_label_criteria(self) -> None:
         other = baker.make(User)
-        foreign = Label.objects.create(profile=Profile.objects.get(user=other), name="Secret", kind="tag")
+        foreign = ensure_label(profile=Profile.objects.get(user=other), name="Secret", kind="tag")
         response = self.client.patch(
             self._url(),
             {"criteria": {"tags": [foreign.pk]}},
@@ -263,3 +267,50 @@ class SavedFilterDetailTests(SavedFilterApiTestCase):
         derived.refresh_from_db()
         self.assertIsNone(derived.source_saved_filter)
         self.assertEqual(derived.smart_filter, {"min_rating": 3})
+
+
+class SavedFilterColorOpacityApiTests(SavedFilterApiTestCase):
+    """color/opacity round-trip through create and PATCH."""
+
+    def test_create_persists_color_and_opacity(self) -> None:
+        response = self.client.post(
+            _BASE,
+            {"name": "Rated", "criteria": {"min_rating": 4}, "color": "#F44336", "opacity": 60},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["color"], "#F44336")
+        self.assertEqual(body["opacity"], 60)
+
+    def test_create_rejects_an_unrecognized_color(self) -> None:
+        response = self.client.post(
+            _BASE,
+            {"name": "Rated", "criteria": {"min_rating": 4}, "color": "javascript:alert(1)"},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_rejects_out_of_range_opacity(self) -> None:
+        response = self.client.post(
+            _BASE,
+            {"name": "Rated", "criteria": {"min_rating": 4}, "opacity": 500},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_patch_updates_color_and_opacity(self) -> None:
+        saved_filter = self._make_filter()
+        response = self.client.patch(
+            f"{_BASE}{saved_filter.uuid}/",
+            {"color": "#4CAF50", "opacity": 25},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 200)
+        saved_filter.refresh_from_db()
+        self.assertEqual(saved_filter.color, "#4CAF50")
+        self.assertEqual(saved_filter.opacity, 25)

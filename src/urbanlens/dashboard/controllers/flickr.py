@@ -34,14 +34,15 @@ from django.views import View
 from urbanlens.dashboard.models.flickr.model import FlickrAccount
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import Profile, _haversine_km
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.flickr.gateway import FlickrGateway, FlickrPhoto
 from urbanlens.dashboard.services.apis.flickr.oauth import FlickrNotConfiguredError, finish_authorization, is_configured as flickr_is_configured, start_authorization
 from urbanlens.dashboard.services.apis.flickr.public import MAX_ALBUM_PHOTOS, FlickrPublicGateway
-from urbanlens.dashboard.services.celery import get_task_progress, safely_enqueue_task
-from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.photo_import import PhotoImportMode, visit_dates_for_pin
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.geo.distance import haversine_meters
+from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -96,7 +97,7 @@ def _within_radius(pin_point: tuple[float, float], photo: FlickrPhoto, radius_m:
     """
     if photo.lat is None or photo.lon is None:
         return True
-    return _haversine_km(pin_point, (photo.lat, photo.lon)) * 1000 <= radius_m
+    return haversine_meters(pin_point[0], pin_point[1], photo.lat, photo.lon) <= radius_m
 
 
 # -- Settings: connect / disconnect -------------------------------------------

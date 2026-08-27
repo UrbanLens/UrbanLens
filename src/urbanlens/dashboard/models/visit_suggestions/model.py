@@ -93,28 +93,33 @@ class VisitSuggestion(abstract.DashboardModel):
     )
     origin_visit = models.ForeignKey(
         "dashboard.PinVisit",
-        on_delete=models.SET_NULL,
+        # CASCADE, not SET_NULL: the exactly-one-origin constraint below means
+        # nulling this out without also nulling every other origin would leave
+        # the row satisfying zero of the five branches and fail the check
+        # constraint. A suggestion with no surviving origin has nothing left to
+        # confirm, so it should be deleted along with its origin.
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="suggestions_sent",
     )
     trip_activity = models.ForeignKey(
         "dashboard.TripActivity",
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="visit_suggestions",
     )
     safety_checkin = models.ForeignKey(
         "dashboard.SafetyCheckin",
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="visit_suggestions",
     )
     origin_image = models.ForeignKey(
         "dashboard.Image",
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="visit_suggestions",

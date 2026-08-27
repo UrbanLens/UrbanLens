@@ -9,7 +9,7 @@ querysets (``models/property_owner/``) but no controller anywhere, and the
 cover photo lives on a plain HTMX endpoint rather than a REST one
 (``controllers.image_gallery.WikiCoverPhotoView``).
 
-Every route here still goes through ``services.wiki_access.resolve_visible_wiki``
+Every route here still goes through ``services.wiki.wiki_access.resolve_visible_wiki``
 via ``WikiApiView.resolve`` - see ``views_wiki``'s module docstring for why a
 wiki the caller has not earned access to must be a 404, never a 403.
 

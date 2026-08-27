@@ -132,6 +132,30 @@
                                 </label>
                                 <label class="export-checkbox-item">
                                     <span class="ul-checkbox-wrap">
+                                        <input type="checkbox" name="export_types" value="safety" class="export-type-cb" checked>
+                                        <span class="ul-checkbox"></span>
+                                    </span>
+                                    <i class="material-symbols-outlined">health_and_safety</i>
+                                    <span>Safety Check-ins</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <span class="ul-checkbox-wrap">
+                                        <input type="checkbox" name="export_types" value="map_annotations" class="export-type-cb" checked>
+                                        <span class="ul-checkbox"></span>
+                                    </span>
+                                    <i class="material-symbols-outlined">draw</i>
+                                    <span>Map Annotations</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <span class="ul-checkbox-wrap">
+                                        <input type="checkbox" name="export_types" value="saved_searches" class="export-type-cb" checked>
+                                        <span class="ul-checkbox"></span>
+                                    </span>
+                                    <i class="material-symbols-outlined">route</i>
+                                    <span>Saved Searches &amp; Routes</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <span class="ul-checkbox-wrap">
                                         <input type="checkbox" name="export_types" value="connections" class="export-type-cb" checked>
                                         <span class="ul-checkbox"></span>
                                     </span>
@@ -194,6 +218,16 @@
                                     <i class="material-symbols-outlined">tune</i>
                                     <span>Custom fields</span>
                                 </label>
+                                {% for export_type in registered_export_types %}
+                                <label class="export-checkbox-item" title="{{ export_type.description }}">
+                                    <span class="ul-checkbox-wrap">
+                                        <input type="checkbox" name="export_types" value="{{ export_type.key }}" class="export-type-cb" checked>
+                                        <span class="ul-checkbox"></span>
+                                    </span>
+                                    <i class="material-symbols-outlined">inventory_2</i>
+                                    <span>{{ export_type.label }}</span>
+                                </label>
+                                {% endfor %}
                             </div>
 
                             {# -- Format options -- #}
@@ -1189,25 +1223,14 @@
         return xhr.responseText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
-    window.addEventListener('beforeunload', function (e) {
-        if (!isExportInProgress()) return;
-        e.preventDefault();
-        e.returnValue = '';
+    // beforeunload + link interception are shared with the auto-save guard and the
+    // safety check-in page; only the condition and wording differ.
+    // See frontend/ts/shared/leave-confirmation.ts.
+    if (window.ulInstallLeaveConfirmation) window.ulInstallLeaveConfirmation({
+        isBlocked: isExportInProgress,
+        message: EXPORT_LEAVE_MSG,
+        confirmLabel: 'Leave anyway',
     });
-
-    document.addEventListener('click', function (e) {
-        if (!isExportInProgress()) return;
-        const a = e.target.closest('a[href]');
-        if (!a) return;
-        const href = a.getAttribute('href');
-        const scheme = href ? href.trim().toLowerCase() : '';
-        if (!href || href.charAt(0) === '#' || scheme.indexOf('javascript:') === 0 || scheme.indexOf('data:') === 0 || scheme.indexOf('vbscript:') === 0 || a.target === '_blank') return;
-        e.preventDefault();
-        const proceed = window.confirmDialog
-            ? window.confirmDialog({ title: 'Leave page?', message: EXPORT_LEAVE_MSG, confirmLabel: 'Leave anyway', danger: true })
-            : Promise.resolve(window.confirm(EXPORT_LEAVE_MSG));
-        proceed.then(function (ok) { if (ok) window.location.href = a.href; });
-    }, true);
 
     document.body.addEventListener('htmx:afterSwap', function (evt) {
         const targetId = evt.detail.target.id;

@@ -17,7 +17,6 @@ from urbanlens.dashboard.models.site_settings.meta import (
     DEFAULT_OPENAI_MODEL,
     AiProviderChoice,
     EnvironmentOverrideChoice,
-    SearchProviderChoice,
 )
 from urbanlens.dashboard.models.site_settings.queryset import SiteSettingsManager
 from urbanlens.UrbanLens.environments.factory import select_environment
@@ -224,6 +223,12 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Default storage quota (GB)",
         validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
     )
+    community_photo_quota_bonus_votes = IntegerField(
+        default=5,
+        help_text=("How many other users must mark one of a user's wiki-shared photos as relevant before that photo stops counting against their storage quota. The uploader's own vote never counts. Set to 0 to turn the reward off."),
+        verbose_name="Relevant votes earning a quota bonus",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
     image_downscale_enabled = BooleanField(
         default=True,
         help_text="Downscale uploaded photos that exceed the maximum dimension below, to save storage space. The original EXIF metadata is always preserved on the image record.",
@@ -272,16 +277,6 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Downscale subscriber videos",
     )
 
-    # --- Search provider ---
-
-    search_provider = CharField(
-        max_length=20,
-        choices=SearchProviderChoice.choices,
-        default=SearchProviderChoice.BRAVE,
-        help_text="Preferred web search provider for pin news/search results, tried first. If it's unconfigured, rate-limited, or fails, the remaining providers (SearXNG, Google, Brave, DuckDuckGo, Mojeek, Marginalia) are tried automatically in that order.",
-        verbose_name="Search provider",
-    )
-
     external_data_cache_days = IntegerField(
         default=7,
         help_text=(
@@ -307,7 +302,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
     # Hourly Celery task (tasks.run_scheduled_enrichment) that proactively
     # backfills high-value external data (official names, aliases, addresses,
     # boundaries) for every pinned/wiki'd Location, spending only the API
-    # budget left over after organic traffic. See services.enrichment.
+    # budget left over after organic traffic. See services.locations.enrichment.
 
     enrichment_enabled = BooleanField(
         default=True,
@@ -367,6 +362,13 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(0), MaxValueValidator(100)],
     )
 
+    login_ip_max_attempts = IntegerField(
+        default=30,
+        help_text=("Maximum number of failed login attempts from a single IP address (across any accounts) before further attempts from that address are temporarily blocked. Set to 0 to disable the per-IP throttle."),
+        verbose_name="Max failed login attempts per IP",
+        validators=[MinValueValidator(0), MaxValueValidator(1000)],
+    )
+
     login_lockout_minutes = IntegerField(
         default=15,
         help_text="How many minutes a locked account must wait before login attempts are accepted again.",
@@ -390,9 +392,19 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Base URL of a Gotify server (e.g. https://gotify.example.com) used to push critical site notifications. Defaults to the UL_GOTIFY_URL environment variable.",
         verbose_name="Gotify server URL",
     )
+    # fail_soft despite being a credential: the usual "fail loud so the caller
+    # drops the row and the user reconnects" rule needs a caller that can do
+    # that, and there isn't one - SiteSettings is a singleton three context
+    # processors load on every render, for anonymous visitors too. Raising here
+    # 500s every page *and* the styled 500 page, which runs the same context
+    # processors. The token is unusable either way once it can't be decrypted,
+    # so Gotify pushes stop regardless; the only choice is whether the site
+    # stays up while an admin re-enters it. The read is still logged loudly with
+    # the field name and the setting to check (see EncryptedTextField).
     notify_gotify_token = EncryptedTextField(
         blank=True,
         default=os.getenv("UL_GOTIFY_TOKEN", ""),
+        fail_soft=True,
         help_text="Gotify application token used to authenticate pushes to the server above. Defaults to the UL_GOTIFY_TOKEN environment variable.",
         verbose_name="Gotify app token",
     )
@@ -411,6 +423,16 @@ class SiteSettings(abstract.FrontendDashboardModel):
         default=False,
         help_text="Send a Gotify push notification when a pin import fails to process an uploaded file.",
         verbose_name="Pin import errors (Gotify)",
+    )
+    notify_safety_checkin_archival_failed_email = BooleanField(
+        default=True,
+        help_text="Email the admin notification address when a safety check-in gives up on archival after repeated failures.",
+        verbose_name="Safety check-in archival failures (email)",
+    )
+    notify_safety_checkin_archival_failed_gotify = BooleanField(
+        default=False,
+        help_text="Send a Gotify push notification when a safety check-in gives up on archival after repeated failures.",
+        verbose_name="Safety check-in archival failures (Gotify)",
     )
 
     # --- Google Places layer ---
@@ -459,7 +481,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
     # --- Outbound email limits ---
     # Caps on user-triggered emails to third parties (friend/visit invites).
     # Subscription roles can raise these per-tier; the largest applicable
-    # limit wins and 0 means unlimited (see services.email_safety).
+    # limit wins and 0 means unlimited (see services.security.email_safety).
 
     email_limit_per_hour = IntegerField(
         default=5,
@@ -498,6 +520,14 @@ class SiteSettings(abstract.FrontendDashboardModel):
         default=False,
         help_text=("When enabled, new accounts cannot be created via the public sign-up page. Only users invited by an existing member can join."),
         verbose_name="Restrict sign-ups (invite-only)",
+    )
+
+    # --- Cost tracking ---
+
+    public_costs_page_enabled = BooleanField(
+        default=False,
+        help_text="Show the public /costs/ page with the site's estimated running costs and cost-per-user. Off by default.",
+        verbose_name="Public costs page",
     )
 
     # --- Bootstrap admin ---
@@ -632,6 +662,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(max_trip_members__gte=1), name="max_trip_members_gte_1"),
             CheckConstraint(condition=Q(max_trip_members__lte=100), name="max_trip_members_lte_100"),
             CheckConstraint(condition=Q(login_max_attempts__gte=0), name="login_max_attempts_gte_0"),
+            CheckConstraint(condition=Q(login_ip_max_attempts__gte=0), name="login_ip_max_attempts_gte_0"),
             CheckConstraint(condition=Q(login_lockout_minutes__gte=1), name="login_lockout_minutes_gte_1"),
             CheckConstraint(condition=Q(backup_frequency_hours__gte=1), name="backup_frequency_hours_gte_1"),
             CheckConstraint(condition=Q(backup_retention__gte=1), name="backup_retention_gte_1"),

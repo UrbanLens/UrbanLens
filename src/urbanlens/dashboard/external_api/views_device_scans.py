@@ -25,9 +25,9 @@ from urbanlens.dashboard.external_api.serializers_device_scans import (
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.device_scan.model import WikiDeviceMarker
-from urbanlens.dashboard.services.celery import safely_enqueue_task
+from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.device_scan.ingestion import ingest_scan_upload
-from urbanlens.dashboard.services.wiki_access import visible_wiki_location_ids
+from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -85,7 +85,7 @@ class NearbyDeviceMarkersView(ExternalApiView):
     matching MAC address. Scoped to wikis the caller can actually see - a
     device marker is wiki-scoped content, and this API's whole security model
     is that an undiscovered wiki is invisible, enforced identically here via
-    ``services.wiki_access.visible_wiki_location_ids``.
+    ``services.wiki.wiki_access.visible_wiki_location_ids``.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {

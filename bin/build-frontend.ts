@@ -32,7 +32,9 @@ const minify = process.argv.includes("--minify");
 function tsFiles(dir: string): string[] {
     try {
         return readdirSync(dir)
-            .filter((name) => name.endsWith(".ts"))
+            // Tests live beside the entry they exercise, and are not pages.
+            // A browser test importing bun:test fails the build outright.
+            .filter((name) => name.endsWith(".ts") && !name.includes(".test."))
             .map((name) => join(dir, name));
     } catch {
         return [];
@@ -42,7 +44,11 @@ function tsFiles(dir: string): string[] {
 /** Runs `bun build` over `files` with `extraArgs`, or does nothing if `files` is empty. */
 async function buildGroup(files: string[], extraArgs: string[]): Promise<void> {
     if (!files.length) return;
-    const proc = Bun.spawn([process.execPath, "build", ...files, "--outdir", OUT_DIR, ...extraArgs], {
+    // Bun's default --entry-naming ("[dir]/[name].[ext]") mirrors each entry's
+    // source directory under --outdir on some Bun versions, instead of the flat
+    // `dashboard/js/<name>.js` layout every page's <script src> expects - pin it
+    // explicitly so the output layout doesn't depend on the Bun version building it.
+    const proc = Bun.spawn([process.execPath, "build", ...files, "--outdir", OUT_DIR, "--entry-naming=[name].[ext]", ...extraArgs], {
         stdout: "inherit",
         stderr: "inherit",
     });

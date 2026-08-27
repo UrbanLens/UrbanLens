@@ -15,12 +15,13 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.external_api.serializers import PushDeviceResponseSerializer
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.push import (
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.notifications.push import (
     MAX_CONSECUTIVE_FAILURES,
     PushRegistrationError,
     register_device,
@@ -36,7 +37,7 @@ def _bearer(raw_key: str) -> dict:
 
 def _fake_resolution(host_ip: str):
     """Patch endpoint DNS resolution to return the given address."""
-    return mock.patch("urbanlens.dashboard.services.push.socket.getaddrinfo", return_value=[(2, 1, 6, "", (host_ip, 443))])
+    return mock.patch("urbanlens.dashboard.services.notifications.push.socket.getaddrinfo", return_value=[(2, 1, 6, "", (host_ip, 443))])
 
 
 class PushDeviceRegistrationServiceTests(TestCase):
@@ -109,7 +110,7 @@ class PushDispatchTests(TestCase):
 
     def test_successful_delivery_posts_payload_and_resets_failures(self) -> None:
         PushDevice.objects.filter(pk=self.device.pk).update(failure_count=3)
-        with mock.patch("urbanlens.dashboard.services.push.requests.post", return_value=self._respond(200)) as post:
+        with mock.patch("urbanlens.dashboard.services.notifications.push.requests.post", return_value=self._respond(200)) as post:
             delivered = send_push_to_profile(self.profile.pk, {"title": "Hi"})
         self.assertEqual(delivered, 1)
         post.assert_called_once()
@@ -120,7 +121,7 @@ class PushDispatchTests(TestCase):
         self.assertIsNotNone(self.device.last_success_at)
 
     def test_failed_delivery_increments_failure_count(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.push.requests.post", return_value=self._respond(500)):
+        with mock.patch("urbanlens.dashboard.services.notifications.push.requests.post", return_value=self._respond(500)):
             delivered = send_push_to_profile(self.profile.pk, {"title": "Hi"})
         self.assertEqual(delivered, 0)
         self.device.refresh_from_db()
@@ -129,28 +130,28 @@ class PushDispatchTests(TestCase):
 
     def test_device_is_auto_revoked_after_consecutive_failures(self) -> None:
         PushDevice.objects.filter(pk=self.device.pk).update(failure_count=MAX_CONSECUTIVE_FAILURES - 1)
-        with mock.patch("urbanlens.dashboard.services.push.requests.post", return_value=self._respond(500)):
+        with mock.patch("urbanlens.dashboard.services.notifications.push.requests.post", return_value=self._respond(500)):
             send_push_to_profile(self.profile.pk, {"title": "Hi"})
         self.device.refresh_from_db()
         self.assertIsNotNone(self.device.revoked_at)
 
     def test_revoked_devices_are_never_dispatched_to(self) -> None:
         unregister_device(self.profile, self.device.uuid)
-        with mock.patch("urbanlens.dashboard.services.push.requests.post") as post:
+        with mock.patch("urbanlens.dashboard.services.notifications.push.requests.post") as post:
             delivered = send_push_to_profile(self.profile.pk, {"title": "Hi"})
         self.assertEqual(delivered, 0)
         post.assert_not_called()
 
     def test_fcm_devices_are_skipped_for_now(self) -> None:
         register_device(self.profile, transport=PushTransport.FCM, address="fcm-token")
-        with mock.patch("urbanlens.dashboard.services.push.requests.post", return_value=self._respond(200)) as post:
+        with mock.patch("urbanlens.dashboard.services.notifications.push.requests.post", return_value=self._respond(200)) as post:
             delivered = send_push_to_profile(self.profile.pk, {"title": "Hi"})
         self.assertEqual(delivered, 1)  # the UnifiedPush device only
         post.assert_called_once()
 
     def test_dispatch_task_serializes_the_notification(self) -> None:
         notification = NotificationLog.objects.create(profile=self.profile, title="New comment", message="Someone replied")
-        with mock.patch("urbanlens.dashboard.services.push.requests.post", return_value=self._respond(200)) as post:
+        with mock.patch("urbanlens.dashboard.services.notifications.push.requests.post", return_value=self._respond(200)) as post:
             delivered = dispatch_native_push(notification.pk)
         self.assertEqual(delivered, 1)
         payload = post.call_args.kwargs["json"]
@@ -165,10 +166,34 @@ class NotificationSignalTests(TestCase):
         baker.make(User)  # first user auto-promoted to bootstrap site admin
         user = baker.make(User)
         profile = Profile.objects.get(user=user)
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             notification = NotificationLog.objects.create(profile=profile, title="Hello", message="World")
         enqueued_ids = [call.args[1] for call in enqueue.call_args_list if getattr(call.args[0], "name", "").endswith("dispatch_native_push")]
         self.assertIn(notification.pk, enqueued_ids)
+
+
+class PushDeviceSerializerTests(TestCase):
+    """PushDeviceResponseSerializer is honest about per-transport dispatch status.
+
+    There is no push-device list endpoint today (only register and delete), so
+    the many=True serialization here stands in for any future read surface.
+    """
+
+    def test_serialized_devices_report_dispatch_enabled_per_transport(self) -> None:
+        baker.make(User)  # first user auto-promoted to bootstrap site admin
+        profile = Profile.objects.get(user=baker.make(User))
+        with _fake_resolution("8.8.8.8"):
+            register_device(profile, transport=PushTransport.UNIFIEDPUSH, address="https://ntfy.example.com/upABC")
+        register_device(profile, transport=PushTransport.FCM, address="fcm-token-abc123")
+
+        data = PushDeviceResponseSerializer(PushDevice.objects.for_profile(profile), many=True).data
+        by_transport = {row["transport"]: row["dispatch_enabled"] for row in data}
+        self.assertIs(by_transport[PushTransport.UNIFIEDPUSH.value], True)
+        self.assertIs(by_transport[PushTransport.FCM.value], False)
+
+    def test_dispatch_enabled_property_tracks_transport(self) -> None:
+        self.assertTrue(PushDevice(transport=PushTransport.UNIFIEDPUSH).dispatch_enabled)
+        self.assertFalse(PushDevice(transport=PushTransport.FCM).dispatch_enabled)
 
 
 class PushDeviceEndpointTests(TestCase):
@@ -192,6 +217,18 @@ class PushDeviceEndpointTests(TestCase):
         self.assertNotIn("address", body)
         device = PushDevice.objects.get(uuid=body["uuid"])
         self.assertEqual(device.profile_id, self.profile.pk)
+
+    def test_register_reports_unifiedpush_dispatch_enabled(self) -> None:
+        with _fake_resolution("8.8.8.8"):
+            response = self._post({"address": "https://ntfy.example.com/upABC"})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertIs(response.json()["dispatch_enabled"], True)
+
+    def test_register_reports_fcm_dispatch_disabled(self) -> None:
+        """FCM registrations are accepted but the response must not imply delivery works."""
+        response = self._post({"transport": PushTransport.FCM.value, "address": "fcm-token-abc123"})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertIs(response.json()["dispatch_enabled"], False)
 
     def test_invalid_endpoint_is_a_clean_400(self) -> None:
         response = self._post({"address": "ftp://nope.example.com/up"})

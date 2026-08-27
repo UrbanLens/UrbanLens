@@ -30,10 +30,11 @@ class EmailType(abstract.TextChoices):
 
     JOIN_INVITE = "join_invite", "Friend invitation"
     VISIT_INVITE = "visit_invite", "Visit participant invitation"
+    EMAIL_VERIFICATION = "email_verification", "Secondary-email verification"
 
 
 # Email types that invite the recipient to join the site. A given user sends
-# at most one of these to a given address, ever (see services.email_safety).
+# at most one of these to a given address, ever (see services.security.email_safety).
 JOIN_EMAIL_TYPES: tuple[str, ...] = (EmailType.JOIN_INVITE, EmailType.VISIT_INVITE)
 
 
@@ -43,7 +44,7 @@ class EmailSendLog(abstract.DashboardModel):
     Attributes:
         sender: The profile whose action caused the email to be sent.
         recipient_hash: SHA-256 hash of the normalized recipient address
-            (see :func:`urbanlens.dashboard.services.email_safety.hash_email`).
+            (see :func:`urbanlens.dashboard.services.security.email_safety.hash_email`).
             The raw address is never stored.
         email_type: What kind of email was sent.
     """

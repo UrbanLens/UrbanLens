@@ -44,7 +44,7 @@ class DirectMessageImageUploadPipelineTests(TestCase):
         self.client.force_login(self.me.user)
 
     def test_upload_enqueues_process_image_upload(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             response = self.client.post(reverse("messages.upload_image"), {"image": _jpeg_file()})
 
         self.assertEqual(response.status_code, 201)
@@ -56,7 +56,7 @@ class DirectMessageImageUploadPipelineTests(TestCase):
         enqueue.assert_called_once_with(process_image_upload, image.pk)
 
     def test_uploaded_dm_photo_lands_in_memories_gallery_and_queue(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             response = self.client.post(reverse("messages.upload_image"), {"image": _jpeg_file()})
 
         image = Image.objects.get(pk=response.json()["id"])

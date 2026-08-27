@@ -29,7 +29,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.services.apis.flickr.public import FlickrAlbumPhoto, FlickrPublicGateway, parse_album_url, photo_web_url
-from urbanlens.dashboard.services.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 
 def _mock_response(*, ok: bool = True, status_code: int = 200, json_data=None, content: bytes = b"", headers: dict | None = None):
@@ -278,7 +278,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
             mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
@@ -294,7 +294,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
             mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("wiki", self.wiki.pk, self.profile.pk, self.album_url, ["1"])
@@ -307,7 +307,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
             mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch("urbanlens.dashboard.services.memories.photos.log_visit_on_pin") as mock_log_visit,
         ):
@@ -338,7 +338,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
             mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
-            mock.patch("urbanlens.dashboard.services.storage.quota_error_for_upload", return_value="Storage full."),
+            mock.patch("urbanlens.dashboard.services.media.storage.quota_error_for_upload", return_value="Storage full."),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
@@ -348,6 +348,20 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             counts = tasks.import_flickr_album_photos("pin", 0, self.profile.pk, self.album_url, ["1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
+
+    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no
+        locking at all, unlike every interactive upload path (see
+        per_profile_upload_lock's docstring)."""
+        with (
+            mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
+            mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+            mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire,
+        ):
+            tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
+        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
 
     def test_unresolvable_photo_ids_are_silently_dropped(self) -> None:
         with mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()), mock.patch("urbanlens.dashboard.tasks.update_task_progress"):

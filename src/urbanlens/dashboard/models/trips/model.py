@@ -23,7 +23,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.trips.queryset import TripCommentManager, TripManager, TripMembershipManager
-from urbanlens.dashboard.services.text_limits import (
+from urbanlens.dashboard.services.core.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
     MAX_TRIP_ACTIVITY_NOTES_LENGTH,
     MAX_TRIP_DESCRIPTION_LENGTH,
@@ -36,6 +36,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+
+#: Distinguishes "not yet computed" from a genuine ``None`` result, so a trip with no
+#: dates at all is not re-queried on every read.
 
 
 class Trip(abstract.PublicDashboardModel):
@@ -53,6 +57,13 @@ class Trip(abstract.PublicDashboardModel):
 
     # Global uniqueness (unlike Pin's per-profile slug) since a trip has no
     # natural per-user namespace - it's shared among all its members.
+    #: Memoized/annotated effective dates. Declared (not assigned) so they stay
+    #: off the model's field list while still giving the properties below a real
+    #: type to return; populated either by ``TripQuerySet.for_list_page``'s
+    #: annotation or by the first read.
+    _eff_start: date | None
+    _eff_end: date | None
+
     slug = SlugField(max_length=255, null=True, blank=True, unique=True)
 
     name = CharField(max_length=255)
@@ -132,27 +143,58 @@ class Trip(abstract.PublicDashboardModel):
 
     @property
     def effective_start_date(self) -> date | None:
-        """``start_date`` if set, else the earliest scheduled activity's date."""
+        """``start_date`` if set, else the earliest scheduled activity's date.
+
+        Resolved from a ``_eff_start`` annotation when the queryset supplied one (see
+        ``TripQuerySet.for_list_page``), and otherwise computed once and remembered on
+        the instance. Both matter because this is not a cheap attribute: it falls back
+        to querying the trip's activities, and ``timeline_status`` and ``duration_days``
+        each read it *and* ``effective_end_date``, so one serialized trip used to cost
+        about five activity queries. The annotation makes a list of trips flat; the memo
+        makes a single trip cost one query however many times it is read.
+        """
+        # try/except rather than a sentinel: None is a legitimate cached value
+        # here, so "absent" cannot be expressed as a default. The declared
+        # ``_eff_start`` attribute is what lets this return a real ``date | None``
+        # instead of the ``object`` a ``getattr(..., sentinel)`` widens to.
+        try:
+            return self._eff_start
+        except AttributeError:
+            pass
+
+        value: date | None
         if self.start_date:
-            return self.start_date
-        first = self.activities.filter(scheduled_at__isnull=False).order_by("scheduled_at").first()
-        if first is None or first.scheduled_at is None:
-            return None
-        return first.scheduled_at.date()
+            value = self.start_date
+        else:
+            first = self.activities.filter(scheduled_at__isnull=False).order_by("scheduled_at").first()
+            value = first.scheduled_at.date() if first is not None and first.scheduled_at is not None else None
+        self._eff_start = value
+        return value
 
     @property
     def effective_end_date(self) -> date | None:
-        """``end_date`` if set, else the latest scheduled activity's end (or start) date."""
+        """``end_date`` if set, else the latest scheduled activity's end (or start) date.
+
+        Annotation-aware and memoized for the same reason as
+        :attr:`effective_start_date`.
+        """
+        try:
+            return self._eff_end
+        except AttributeError:
+            pass
+
+        value: date | None
         if self.end_date:
-            return self.end_date
-        latest = self.activities.filter(scheduled_at__isnull=False).aggregate(
-            last_start=Max("scheduled_at"),
-            last_end=Max("scheduled_end"),
-        )
-        candidates = [dt for dt in (latest["last_start"], latest["last_end"]) if dt is not None]
-        if not candidates:
-            return None
-        return max(candidates).date()
+            value = self.end_date
+        else:
+            latest = self.activities.filter(scheduled_at__isnull=False).aggregate(
+                last_start=Max("scheduled_at"),
+                last_end=Max("scheduled_end"),
+            )
+            candidates = [dt for dt in (latest["last_start"], latest["last_end"]) if dt is not None]
+            value = max(candidates).date() if candidates else None
+        self._eff_end = value
+        return value
 
     @property
     def timeline_status(self) -> str:
@@ -199,7 +241,6 @@ class Trip(abstract.PublicDashboardModel):
         db_table = "dashboard_trips"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["uuid"], name="idxdb_trip_uuid"),
             Index(fields=["start_date"], name="idxdb_trip_start_date"),
             Index(fields=["end_date"], name="idxdb_trip_end_date"),
         ]
@@ -307,7 +348,6 @@ class TripActivity(abstract.DashboardModel):
         db_table = "dashboard_trip_activities"
         ordering = ["scheduled_at", "order", "created"]
         indexes = [
-            Index(fields=["trip"], name="idxdb_ta_trip"),
             Index(fields=["trip", "scheduled_at"], name="idxdb_ta_trip_dt"),
         ]
 
@@ -372,9 +412,7 @@ class TripMembership(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_memberships"
         unique_together = [("trip", "profile")]
-        indexes = [
-            Index(fields=["trip"], name="idxdb_tm_trip"),
-        ]
+        indexes = []
         permissions = [
             ("remove_trip_members", "Can remove members from trips"),
         ]
@@ -431,9 +469,7 @@ class TripActivityRSVP(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_activity_rsvps"
         unique_together = [("activity", "membership")]
-        indexes = [
-            Index(fields=["activity"], name="idxdb_taar_activity"),
-        ]
+        indexes = []
 
 
 class TripComment(abstract.DashboardModel):
@@ -505,9 +541,7 @@ class TripComment(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_comments"
         ordering = ["created"]
-        indexes = [
-            Index(fields=["trip"], name="idxdb_tc_trip"),
-        ]
+        indexes = []
 
 
 class TripActivityVote(abstract.DashboardModel):
@@ -547,6 +581,4 @@ class TripActivityVote(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trip_activity_votes"
         unique_together = [("activity", "profile")]
-        indexes = [
-            Index(fields=["activity"], name="idxdb_tav_activity"),
-        ]
+        indexes = []

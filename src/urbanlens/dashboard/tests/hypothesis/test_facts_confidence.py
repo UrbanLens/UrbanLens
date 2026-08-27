@@ -15,9 +15,9 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.facts.model import FactStatus
 from urbanlens.dashboard.services.facts.confidence import (
     CONFIRM_THRESHOLD,
-    _WeightedEvidence,
     _cluster_categorical,
     _decay,
+    _WeightedEvidence,
     resolve_categorical,
 )
 

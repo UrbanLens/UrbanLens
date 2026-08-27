@@ -22,7 +22,7 @@ class MapPinCacheCeleryTests(SimpleTestCase):
         client.set.return_value = True
         cache = MapPinCache(_Profile(), client=client)
 
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task", return_value=mock.Mock(id="task")) as enqueue:
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=mock.Mock(id="task")) as enqueue:
             cache.enqueue_rebuild()
 
         client.set.assert_called_once_with(cache.rebuild_queued_key, "1", nx=True, ex=cache.LOCK_SECONDS)
@@ -35,7 +35,7 @@ class MapPinCacheCeleryTests(SimpleTestCase):
         client.set.return_value = None
         cache = MapPinCache(_Profile(), client=client)
 
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             cache.enqueue_rebuild()
 
         enqueue.assert_not_called()
@@ -45,7 +45,7 @@ class MapPinCacheCeleryTests(SimpleTestCase):
         client.set.return_value = True
         cache = MapPinCache(_Profile(), client=client)
 
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task", return_value=None):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=None):
             cache.enqueue_rebuild()
 
         client.delete.assert_called_once_with(cache.rebuild_queued_key)
@@ -55,7 +55,7 @@ class MapPinCacheCeleryTests(SimpleTestCase):
         client.set.side_effect = redis.exceptions.RedisError("down")
         cache = MapPinCache(_Profile(), client=client)
 
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             cache.enqueue_rebuild()
 
         enqueue.assert_not_called()

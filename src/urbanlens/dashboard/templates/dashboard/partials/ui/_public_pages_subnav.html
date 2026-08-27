@@ -1,0 +1,34 @@
+{% comment %}
+About | Values | Thanks & Credits | FAQ tab strip for the public-facing informational
+pages. Included below a page hero via {% block subnav %} - see _site_admin_tabs.html for
+the equivalent site-admin pattern this mirrors.
+
+Context:
+  active - "about", "values", "thanks", or "faq" (which tab is current); omit if none apply
+{% endcomment %}
+<nav class="ul-subnav-tabs" aria-label="UrbanLens info pages">
+    <a href="{% url 'about' %}"
+       class="ul-subnav-tab {% if active == 'about' %}is-active{% endif %}"
+       {% if active == 'about' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">info</i>
+        <span>About</span>
+    </a>
+    <a href="{% url 'values' %}"
+       class="ul-subnav-tab {% if active == 'values' %}is-active{% endif %}"
+       {% if active == 'values' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">diversity_3</i>
+        <span>Values</span>
+    </a>
+    <a href="{% url 'thanks' %}"
+       class="ul-subnav-tab {% if active == 'thanks' %}is-active{% endif %}"
+       {% if active == 'thanks' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">volunteer_activism</i>
+        <span>Thanks &amp; Credits</span>
+    </a>
+    <a href="{% url 'faq' %}"
+       class="ul-subnav-tab {% if active == 'faq' %}is-active{% endif %}"
+       {% if active == 'faq' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">help</i>
+        <span>FAQ</span>
+    </a>
+</nav>

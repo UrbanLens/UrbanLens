@@ -3,7 +3,7 @@
 The one place ``controllers.spotguessr``/``consumers.GameSessionConsumer`` call
 into - the only layer that knows how eligibility, mode-specific selection,
 scoring, ratings, and real-time broadcast compose together. See
-``docs/designs/spotguessr.md`` for the full rules.
+``docs/designs/drafts/spotguessr.md`` for the full rules.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.spotguessr.model import (
     GameRound,
     GameSession,
@@ -25,9 +26,10 @@ from urbanlens.dashboard.models.spotguessr.model import (
     GameSessionParticipantStatus,
     GameSessionStatus,
     Guess,
+    SpotGuessrMode,
 )
-from urbanlens.dashboard.services.connections import are_connections
-from urbanlens.dashboard.services.spotguessr import eligibility, geo_bonus, modes, photo_coordinates, realtime, relevance, scoring, selection, serializers
+from urbanlens.dashboard.services.social.connections import are_connections
+from urbanlens.dashboard.services.spotguessr import eligibility, geo_bonus, modes, photo_coordinates, prewarm, realtime, relevance, scoring, selection, serializers
 from urbanlens.dashboard.services.spotguessr.ratings import RatingChange, apply_round_ratings
 
 if TYPE_CHECKING:
@@ -37,6 +39,7 @@ if TYPE_CHECKING:
     from django.contrib.gis.geos import Point
 
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.spotguessr.modes import RoundContent
 
 DEFAULT_ROUNDS_PER_SESSION = 5
 MIN_ROUNDS_PER_SESSION = 3
@@ -79,7 +82,7 @@ class GameConfig:
     """A validated, session-ready snapshot of SpotGuessr settings.
 
     Mirrors what's stored on ``GameSession.config`` - see
-    ``docs/designs/spotguessr.md``'s config table for defaults.
+    ``docs/designs/drafts/spotguessr.md``'s config table for defaults.
     """
 
     difficulty: float = 0.5
@@ -93,6 +96,12 @@ class GameConfig:
     #: settings dialog only offers those), but not validated against that
     #: list here - any positive int is honored.
     round_time_limit_seconds: int | None = None
+    #: Restrict candidate locations to those tagged (by any participant's own pin)
+    #: with this Label or one of its descendants - see
+    #: ``services.spotguessr.eligibility.eligible_locations``'s ``label_id`` for the
+    #: exact semantics and why it can never surface a location nobody in the
+    #: session has pinned.
+    label_id: int | None = None
 
     def to_dict(self) -> dict:
         """JSON-serializable form for ``GameSession.config``."""
@@ -100,13 +109,26 @@ class GameConfig:
 
     @property
     def geo_bounds(self) -> GEOSGeometry | None:
-        """The configured geographic restriction as a GEOS geometry, or None."""
+        """The configured geographic restriction as a GEOS geometry, or None.
+
+        Split at the antimeridian here rather than at each query: the callers all
+        run planar ``__within`` lookups (``ST_Within`` has no geography
+        implementation), and an area a player drew across the date line arrives
+        with unwrapped coordinates that match nothing on its far side. Splitting
+        at the source means every consumer - eligibility counts, round selection,
+        the external API - inherits the fix.
+
+        Returns:
+            The restriction geometry, or None when unrestricted.
+        """
         if not self.geo_bounds_geojson:
             return None
-        return GEOSGeometry(json.dumps(self.geo_bounds_geojson))
+        from urbanlens.dashboard.services.geo.longitude import split_at_antimeridian
+
+        return split_at_antimeridian(GEOSGeometry(json.dumps(self.geo_bounds_geojson)))
 
 
-def _config_from_session(session: GameSession) -> GameConfig:
+def config_from_session(session: GameSession) -> GameConfig:
     """Reconstruct a GameConfig from a session's stored config snapshot, ignoring unknown keys."""
     known_fields = {f.name for f in dataclasses.fields(GameConfig)}
     return GameConfig(**{key: value for key, value in (session.config or {}).items() if key in known_fields})
@@ -197,7 +219,12 @@ def start_solo_playthrough(profile: Profile, mode: str, config: GameConfig, *, t
         SpotGuessrError: If the mode has no round-generation strategy
             registered (a programming error, not a player-facing condition).
     """
-    if not eligibility.has_eligible_locations([profile], require_visited_by_all=config.require_visited_all, geo_bounds=config.geo_bounds):
+    if not eligibility.has_eligible_locations(
+        [profile],
+        require_visited_by_all=config.require_visited_all,
+        geo_bounds=config.geo_bounds,
+        label_id=config.label_id,
+    ):
         return SoloStartResult(session=None, round=None, no_eligible_locations=True)
 
     session = start_solo_session(profile, mode, config, total_rounds=total_rounds)
@@ -228,7 +255,7 @@ def start_multiplayer_session(
     The host's own participant row is created JOINED immediately - no
     invite step for yourself. Each invitee gets an INVITED row plus a
     notification (see ``_notify_invite``). See "Multiplayer sessions" in
-    ``docs/designs/spotguessr.md`` for the full lobby lifecycle.
+    ``docs/designs/drafts/spotguessr.md`` for the full lobby lifecycle.
     """
     session = GameSession.objects.create(
         host_profile=host,
@@ -276,10 +303,10 @@ def _notify_invite(host: Profile, invitee: Profile, session: GameSession) -> Non
 
     from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     host_name = resolve_visible_identity(invitee, host)["display_name"]
-    NotificationLog.objects.create(
+    NotificationLog.objects.notify(
         profile=invitee,
         source_profile=host,
         status=Status.UNREAD,
@@ -358,7 +385,7 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
         playable locations - either way, the caller should treat None as
         "call ``complete_session``."
     """
-    config = _config_from_session(session)
+    config = config_from_session(session)
     joined_participants = list(session.participants.joined().select_related("profile"))
     participant_count = len(joined_participants)
     if participant_count == 0:
@@ -394,40 +421,162 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
             participants,
             require_visited_by_all=config.require_visited_all,
             geo_bounds=config.geo_bounds,
+            label_id=config.label_id,
         )
         scope = geo_bonus.bonus_scope_for(initial_candidates)
         session.config = {**(session.config or {}), "bonus_scope": scope.to_dict()}
         session.save(update_fields=["config", "updated"])
 
-    strategy = modes.get_strategy(session.mode)
-    if strategy is None:
+    if modes.get_strategy(session.mode) is None:
         raise SpotGuessrError(f"Mode {session.mode!r} has no round-generation logic.")
 
-    for _attempt in range(_MAX_LOCATION_ATTEMPTS):
-        candidates = eligibility.eligible_locations(
+    next_sequence_index = len(existing_rounds)
+    picked = _consume_prewarmed_pick(session, config, participants, next_sequence_index, excluded_ids)
+    if picked is None:
+        picked = generate_round_content(session.mode, config, participants, excluded_ids, previous_location)
+    if picked is None:
+        return None
+    location, content = picked
+
+    new_round = GameRound.objects.create(
+        session=session,
+        sequence_index=next_sequence_index,
+        location=location,
+        image=content.image,
+        display_text=content.display_text,
+        target_is_point=content.target.is_point,
+        target_point=content.target.geometry if content.target.is_point else None,
+    )
+
+    # Kick off the *next* round's selection in the background now, while this
+    # one is being played, rather than paying for it live the moment this
+    # round is guessed - see services.spotguessr.prewarm's module docstring.
+    # Best-effort: a broker hiccup here just means the next round falls back
+    # to live generation, exactly as if this had never run.
+    if next_sequence_index + 1 < session.total_rounds:
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import prewarm_spotguessr_round
+
+        safely_enqueue_task(prewarm_spotguessr_round, session.pk, next_sequence_index + 1)
+
+    return new_round
+
+
+def _consume_prewarmed_pick(
+    session: GameSession,
+    config: GameConfig,
+    participants: list[Profile],
+    sequence_index: int,
+    excluded_ids: list[int],
+) -> tuple[Location, RoundContent] | None:
+    """Redeem a background-prewarmed round for this exact round, if one is cached and still valid.
+
+    Tries the session-scoped prewarm first (queued by the *previous* round's
+    own creation - see ``get_or_create_round``), then, only for a solo
+    session's very first round, the speculative one queued from the
+    SpotGuessr overview page (``controllers.spotguessr.SpotGuessrHomeView``)
+    before a session even existed to key it by. Either can be stale (the
+    picked location got excluded some other way since it was prewarmed, or
+    its row was since deleted) - that's simply treated as a miss, not an
+    error; the caller falls back to live generation either way.
+    """
+    cached = prewarm.consume_for_session(session.pk, sequence_index)
+    if cached is None and sequence_index == 0 and len(participants) == 1 and participants[0].pk == session.host_profile_id:
+        cached = prewarm.consume_for_solo_start(session.host_profile_id, session.mode, config)
+    if cached is None:
+        return None
+
+    location_id, content = cached
+    if location_id in excluded_ids:
+        return None
+    try:
+        location = Location.objects.get(pk=location_id)
+    except Location.DoesNotExist:
+        return None
+    return location, content
+
+
+def generate_round_content(
+    mode: str,
+    config: GameConfig,
+    participants: list[Profile],
+    excluded_location_ids: list[int],
+    previous_location: Location | None,
+) -> tuple[Location, RoundContent] | None:
+    """Pick a location and build this mode's round content for it, retrying past unusable candidates.
+
+    The live-selection half of what a round needs, factored out of
+    ``get_or_create_round`` so the background prewarm task
+    (``tasks.prewarm_spotguessr_round``/``tasks.prewarm_spotguessr_solo_start``)
+    can run the exact same selection ahead of time - a prewarmed round must
+    be chosen by identical rules to one generated on the request path, or
+    "prewarmed" would just mean "different." Read-only: creating the actual
+    ``GameRound`` row is the caller's job, since only it knows whether this
+    result is being used immediately or cached for later.
+
+    Args:
+        mode: The ``SpotGuessrMode`` to generate a round for.
+        config: The session's settings.
+        participants: Every profile whose eligibility must agree.
+        excluded_location_ids: Locations to rule out (already used this
+            session, or already tried and found to have nothing usable).
+        previous_location: The prior round's location, for anti-clustering -
+            see ``selection.pick_next_location``.
+
+    Returns:
+        ``(location, content)``, or None if every eligible location (up to
+        ``_MAX_LOCATION_ATTEMPTS`` of them) turned out to have nothing usable
+        for this mode, or none were eligible at all.
+
+    Raises:
+        SpotGuessrError: If ``mode`` has no round-generation strategy
+            registered (a programming error, not a player-facing condition).
+    """
+    strategy = modes.get_strategy(mode)
+    if strategy is None:
+        raise SpotGuessrError(f"Mode {mode!r} has no round-generation logic.")
+
+    excluded_ids = list(excluded_location_ids)
+    # Resolved once, not once per attempt. Eligibility is a multi-join across every
+    # participant's pins (and optionally visits, labels and a geo bound), and nothing it
+    # depends on changes between attempts - only our own exclusion list grows. Re-running
+    # it inside the loop meant generating a single round could cost up to
+    # _MAX_LOCATION_ATTEMPTS (25) of the most expensive query on the game path. The
+    # per-attempt queryset below is a plain primary-key filter, which keeps
+    # pick_next_location's PostGIS proximity filter working on a real queryset.
+    eligible_ids = list(
+        eligibility.eligible_locations(
             participants,
             require_visited_by_all=config.require_visited_all,
             geo_bounds=config.geo_bounds,
             exclude_location_ids=excluded_ids,
-        )
-        location = selection.pick_next_location(candidates, mode=session.mode, difficulty=config.difficulty, previous_location=previous_location)
+            label_id=config.label_id,
+        ).values_list("pk", flat=True),
+    )
+
+    if mode == SpotGuessrMode.PHOTOS:
+        # Same "resolved once" reasoning as eligible_ids above, aimed at a
+        # different cost: without this, a profile with no wiki/own-pin photos
+        # anywhere makes the loop below try every eligible location one at a
+        # time, each attempt paying its own Image query in _build_photos - see
+        # photos.locations_with_eligible_photo.
+        from urbanlens.dashboard.services.spotguessr import photos
+
+        solo_profile = participants[0] if len(participants) == 1 else None
+        eligible_ids = photos.locations_with_eligible_photo(eligible_ids, solo_profile=solo_profile)
+
+    for _attempt in range(_MAX_LOCATION_ATTEMPTS):
+        candidates = Location.objects.filter(pk__in=eligible_ids).exclude(pk__in=excluded_ids)
+        location = selection.pick_next_location(candidates, mode=mode, difficulty=config.difficulty, previous_location=previous_location)
         if location is None:
             return None  # nothing eligible left at all
 
-        content = strategy.build_round(location, config)
+        content = strategy.build_round(location, config, participants)
         if content is None:
             excluded_ids.append(location.pk)
             continue  # this location has nothing usable for this mode yet - try another
 
-        return GameRound.objects.create(
-            session=session,
-            sequence_index=len(existing_rounds),
-            location=location,
-            image=content.image,
-            display_text=content.display_text,
-            target_is_point=content.target.is_point,
-            target_point=content.target.geometry if content.target.is_point else None,
-        )
+        return location, content
 
     return None
 
@@ -475,7 +624,7 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     photo_coordinates.record_guess(round_, guess_point, distance)
 
     session = round_.session
-    config = _config_from_session(session)
+    config = config_from_session(session)
     date_points = 0
     if config.date_guessing_enabled and guessed_date is not None and round_.image is not None and round_.image.taken_at is not None:
         date_points = scoring.points_for_date_guess(guessed_date, round_.image.taken_at.date())

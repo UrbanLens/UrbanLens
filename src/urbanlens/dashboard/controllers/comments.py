@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -16,27 +16,32 @@ from django.views import View
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.services.comment_notifications import notify_reply
-from urbanlens.dashboard.services.comments import ALLOWED_EMOJIS, CommentValidationError, toggle_reaction, top_level_comment_queryset, visible_comment_tree
-from urbanlens.dashboard.services.map_snapshot import (
+from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, CommentValidationError, toggle_reaction, top_level_comment_queryset, visible_comment_tree
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
+from urbanlens.dashboard.services.map.map_snapshot import (
     _sanitize_markup_color,
     _sanitize_markup_shapes,
     _sanitize_number,
     materialize_markup_map,
     parse_map_data as _parse_map_data,
 )
-from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
-from urbanlens.dashboard.services.trip_comments import ALLOWED_COMMENT_EMOJIS
-from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
+from urbanlens.dashboard.services.notifications.comment_notifications import notify_reply
+from urbanlens.dashboard.services.notifications.mentions import render_comment_text, viewer_pinned_uuids
+from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS
+from urbanlens.dashboard.services.undo.handlers.markup_map import MODEL_LABEL as MARKUP_MAP_MODEL_LABEL
+from urbanlens.dashboard.services.undo.service import stash_for_undo
+from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, resolve_visible_wiki
 
 # Re-exported so existing imports (e.g. tests) keep resolving from this module.
 __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes", "_sanitize_number"]
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
 logger = logging.getLogger(__name__)
 
-# Canonical definition now lives in services.comments, shared with the external
+# Canonical definition now lives in services.comments.comments, shared with the external
 # API. Aliased here so existing importers (controllers.trip) keep resolving it.
 _ALLOWED_EMOJIS = ALLOWED_EMOJIS
 _COMMENTS_PAGE_SIZE = 8
@@ -51,7 +56,7 @@ def comment_image_error(image_file) -> str | None:
     """Validate an image attached to a comment (pin, wiki, or trip) before accepting it.
 
     Shared by all three comment POST handlers - comments don't go through
-    the ``Image`` model, so they can't reuse ``services.images.image_upload_error``
+    the ``Image`` model, so they can't reuse ``services.media.images.image_upload_error``
     directly, but every upload still gets the same size/content-type checks
     before it's ever saved. The antivirus scan itself is deliberately
     skipped here - it's slow and occasionally unavailable (a clamd hiccup
@@ -67,7 +72,7 @@ def comment_image_error(image_file) -> str | None:
         A user-facing error message if the file should be rejected, or None.
     """
     from urbanlens.dashboard.models.images.model import MediaKind
-    from urbanlens.dashboard.services.images import image_upload_error
+    from urbanlens.dashboard.services.media.images import image_upload_error
 
     upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
     return upload_error[0] if upload_error else None
@@ -89,13 +94,39 @@ def start_comment_image_scan(comment) -> None:
             carrying its new image.
     """
     from urbanlens.dashboard.models.trips.model import TripComment
-    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import scan_comment_image, scan_trip_comment_image
 
     comment.pending_scan = True
     comment.save(update_fields=["pending_scan"])
     task = scan_trip_comment_image if isinstance(comment, TripComment) else scan_comment_image
     safely_enqueue_task(task, comment.pk)
+
+
+def _discard_comment_image(comment) -> None:
+    """Remove a deleted comment's stored photo from disk.
+
+    Django stopped deleting ``FileField`` files on row deletion in 1.3, so a
+    deleted comment used to leave its photo under ``comment_images/`` forever -
+    where the media gate's orphan branch serves it to any authenticated user
+    who knows the name (see "Authenticated media gate - residual per-family
+    risk" in docs/PROBLEMS.md). Each comment owns its file outright:
+    :func:`attach_existing_comment_image` *copies* rather than sharing storage,
+    precisely so one deletion cannot strand another row's image.
+
+    Best-effort - the row is already gone, and a storage hiccup must not turn a
+    successful delete into a 500.
+
+    Args:
+        comment: The comment whose file should be discarded. Safe to call when
+            it has no image.
+    """
+    if not comment.image:
+        return
+    try:
+        comment.image.delete(save=False)
+    except OSError:
+        logger.warning("Could not delete stored image for deleted comment %s", comment.pk, exc_info=True)
 
 
 def attach_existing_comment_image(comment: Comment, existing_image_id: str, profile: Profile) -> None:
@@ -166,8 +197,8 @@ def _render_comments(request, context: dict) -> HttpResponse:
     return render(request, "dashboard/partials/comments/comment_panel.html", context)
 
 
-def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra) -> dict:
-    top_level_qs = top_level_comment_queryset(comments_qs)
+def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_qs=None, conceal: bool = False, **extra) -> dict:
+    top_level_qs = top_level_comment_queryset(comments_qs, replies_qs=replies_qs)
     # Default to the last page so the most recent activity (comments are
     # ordered oldest-to-newest) is what a viewer sees without paging back.
     page_obj = get_page(request, top_level_qs, _COMMENTS_PAGE_SIZE, default_last=True)
@@ -190,12 +221,12 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
         {
             "comment": item.comment,
             "rendered_text": item.rendered_text,
-            "reactions": _aggregate_reactions(item.comment.reactions.all()),
+            "reactions": _aggregate_reactions(item.comment.reactions.all(), profile, conceal=conceal),
             "replies": [
                 {
                     "comment": reply.comment,
                     "rendered_text": reply.rendered_text,
-                    "reactions": _aggregate_reactions(reply.comment.reactions.all()),
+                    "reactions": _aggregate_reactions(reply.comment.reactions.all(), profile, conceal=conceal),
                 }
                 for reply in item.replies
             ],
@@ -320,7 +351,12 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map
         comment.delete()
+        _discard_comment_image(comment)
         if markup_map is not None:
+            # The comment itself is not restorable, but the map attached to it is
+            # hand-drawn work - stash it so deleting the comment can't silently
+            # destroy the drawing.
+            stash_for_undo(MARKUP_MAP_MODEL_LABEL, [markup_map], markup_map.profile)
             markup_map.delete()
         # Replies to a deleted comment survive (parent FK is SET_NULL), becoming
         # orphaned top-level comments. Re-render the whole panel rather than just
@@ -333,15 +369,71 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 # -- Wiki comments -------------------------------------------------------------
 
 
+def _visible_wiki_comments(wiki: Wiki, profile: Profile) -> QuerySet[Comment]:
+    """The wiki's comments as *profile* is entitled to see them.
+
+    One function rather than the same two lines at each of the three call sites:
+    the GET had them and the POST and DELETE re-renders did not, so posting a
+    comment handed a concealed viewer the whole thread that the page they were
+    looking at had just filtered.
+
+    Args:
+        wiki: The wiki whose comments are being listed.
+        profile: The viewer.
+
+    Returns:
+        A comment queryset, filtered when this viewer is concealed.
+    """
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
+
+    rows = wiki.comments.all()
+    return conceal_rows(rows, profile) if concealment_active(wiki, profile) else rows
+
+
+def _visible_wiki_reply_prefetch(wiki: Wiki, profile: Profile) -> QuerySet[Comment] | None:
+    """The queryset a concealed viewer's replies must be prefetched from.
+
+    Narrowing the top level is not enough. ``comment.replies`` is keyed on the
+    parent's primary key, so a stranger's reply to a comment the viewer *can*
+    see - their own, or a friend's - arrives in full however the top-level
+    queryset was filtered.
+
+    Args:
+        wiki: The wiki whose comments are being listed.
+        profile: The viewer.
+
+    Returns:
+        A narrowed reply queryset, or None to leave the default prefetch alone.
+    """
+    from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
+
+    if not concealment_active(wiki, profile):
+        return None
+    return conceal_rows(Comment.objects.filter(wiki=wiki), profile)
+
+
 class WikiCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a wiki."""
 
     def get(self, request, location_slug):
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        ctx = _build_context(
+            _visible_wiki_comments(wiki, profile),
+            profile,
+            request,
+            replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
+            conceal=concealment_active(wiki, profile),
+            wiki=wiki,
+            location=wiki.location,
+            context_type="wiki",
+        )
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
@@ -357,7 +449,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
-            parent = get_object_or_404(Comment, id=parent_id, wiki=wiki)
+            parent = get_object_or_404(_visible_wiki_comments(wiki, profile), id=parent_id)
         comment = Comment.objects.create(
             wiki=wiki,
             profile=profile,
@@ -373,7 +465,16 @@ class WikiCommentsView(LoginRequiredMixin, View):
             attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
             notify_reply(profile, parent, reply=comment)
-        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        ctx = _build_context(
+            _visible_wiki_comments(wiki, profile),
+            profile,
+            request,
+            replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
+            conceal=concealment_active(wiki, profile),
+            wiki=wiki,
+            location=wiki.location,
+            context_type="wiki",
+        )
         return _render_comments(request, ctx)
 
 
@@ -381,19 +482,35 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
     """DELETE /location/<slug>/wiki/comments/<int>/delete/"""
 
     def delete(self, request, location_slug, comment_id):
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        comment = get_object_or_404(Comment, id=comment_id, wiki=wiki)
+        comment = get_object_or_404(_visible_wiki_comments(wiki, profile), id=comment_id)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map
         comment.delete()
+        _discard_comment_image(comment)
         if markup_map is not None:
+            # The comment itself is not restorable, but the map attached to it is
+            # hand-drawn work - stash it so deleting the comment can't silently
+            # destroy the drawing.
+            stash_for_undo(MARKUP_MAP_MODEL_LABEL, [markup_map], markup_map.profile)
             markup_map.delete()
         # Replies to a deleted comment survive (parent FK is SET_NULL), becoming
         # orphaned top-level comments. Re-render the whole panel rather than just
         # removing the deleted <li>, so those replies stay visible in place
         # instead of disappearing until the next reload.
-        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        ctx = _build_context(
+            _visible_wiki_comments(wiki, profile),
+            profile,
+            request,
+            replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
+            conceal=concealment_active(wiki, profile),
+            wiki=wiki,
+            location=wiki.location,
+            context_type="wiki",
+        )
         return _render_comments(request, ctx)
 
 
@@ -437,9 +554,9 @@ class TripCommentReactionView(LoginRequiredMixin, View):
     """POST /trips/<slug>/comments/<int>/react/  - toggle reaction on a TripComment."""
 
     def post(self, request, trip_slug, comment_id):
-        from urbanlens.dashboard.services.trip_access import get_trip_for_viewer
-        from urbanlens.dashboard.services.trip_comments import get_comment, set_comment_reaction
-        from urbanlens.dashboard.services.trip_errors import TripError, TripNotFoundError, TripPermissionError
+        from urbanlens.dashboard.services.trips.trip_access import get_trip_for_viewer
+        from urbanlens.dashboard.services.trips.trip_comments import get_comment, set_comment_reaction
+        from urbanlens.dashboard.services.trips.trip_errors import TripError, TripNotFoundError, TripPermissionError
 
         profile = _profile(request)
         try:
@@ -458,7 +575,12 @@ class TripCommentReactionView(LoginRequiredMixin, View):
 
 
 def _render_reaction_row(request, comment: Comment, profile: Profile) -> HttpResponse:
-    reactions = _aggregate_reactions(comment.reactions.all())
+    conceal = False
+    if comment.wiki is not None:
+        from urbanlens.dashboard.services.wiki.concealment import concealment_active
+
+        conceal = concealment_active(comment.wiki, profile)
+    reactions = _aggregate_reactions(comment.reactions.all(), profile, conceal=conceal)
     return render(
         request,
         "dashboard/partials/comments/comment_reactions.html",
@@ -493,8 +615,21 @@ class _ReactionData(TypedDict):
     reacted_by: list[int]
 
 
-def _aggregate_reactions(reactions_qs) -> dict[str, _ReactionData]:
-    """Group reactions by emoji → {count, reacted_by: list of profile_ids}."""
+def _aggregate_reactions(reactions_qs, profile: Profile | None = None, *, conceal: bool = False) -> dict[str, _ReactionData]:
+    """Group reactions by emoji → {count, reacted_by: list of profile_ids}.
+
+    Args:
+        reactions_qs: The comment's reactions.
+        profile: The viewer, required when ``conceal`` is True.
+        conceal: Whether this viewer sees the concealed form of the wiki the
+            comment belongs to - a reaction is a contribution like any other,
+            so a concealed viewer's own (visible) comment must not report an
+            audience of strangers it cannot otherwise see.
+    """
+    if conceal:
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        reactions_qs = conceal_rows(reactions_qs, profile)
     result: dict[str, _ReactionData] = {}
     for r in reactions_qs.select_related("profile"):
         if r.emoji not in result:

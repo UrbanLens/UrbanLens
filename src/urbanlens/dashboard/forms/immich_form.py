@@ -5,7 +5,7 @@ from __future__ import annotations
 from django import forms
 
 from urbanlens.dashboard.models.immich.model import ImmichAccount
-from urbanlens.dashboard.services.url_safety import UnsafeUrlError, ensure_public_http_url
+from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
 
 
 class ImmichAccountForm(forms.ModelForm):

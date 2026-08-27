@@ -9,12 +9,12 @@ from django.dispatch import receiver
 @receiver(post_save, sender=User, dispatch_uid="profile_create_user_profile")
 def create_user_profile(sender: type[User], instance: User, created: bool, **kwargs) -> None:
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.email_normalization import normalize_email
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 
     normalized = normalize_email(instance.email) if instance.email else ""
 
     if created:
-        from urbanlens.dashboard.services.site_admin import promote_first_user_if_needed
+        from urbanlens.dashboard.services.admin.site_admin import promote_first_user_if_needed
 
         Profile.objects.get_or_create(
             user=instance,
@@ -33,7 +33,7 @@ def warm_saved_filter_cache_on_login(sender: type[User], request, user: User, **
     so most logins don't touch Celery at all.
     """
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import warm_saved_filter_cache
 
     profile = Profile.objects.filter(user=user).first()

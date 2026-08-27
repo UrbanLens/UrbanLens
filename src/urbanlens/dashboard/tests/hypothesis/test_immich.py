@@ -270,7 +270,7 @@ class ImmichSettingsViewTests(TestCase):
         # "photos.example.com" is RFC 2606 non-resolving (unlike bare
         # example.com, arbitrary subdomains don't resolve), and
         # ImmichAccountForm.clean_server_url now runs it through the SSRF
-        # guard in services.url_safety, which resolves the hostname for
+        # guard in services.security.url_safety, which resolves the hostname for
         # real. Mock DNS to a fixed public IP, matching the convention used
         # elsewhere for this same guard (see test_pin_suggestions.py).
         self._dns_patch = mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))])
@@ -538,12 +538,20 @@ class ImportImmichPhotosTaskTests(TestCase):
 
     def test_over_quota_asset_is_skipped_without_failing_the_batch(self) -> None:
         # First call (asset "ok") is admitted; second ("too_big") exceeds quota.
-        with mock.patch("urbanlens.dashboard.services.storage.quota_error_for_upload", side_effect=[None, "Storage quota exceeded."]):
+        with mock.patch("urbanlens.dashboard.services.media.storage.quota_error_for_upload", side_effect=[None, "Storage quota exceeded."]):
             counts = self._run(
                 ["ok", "too_big"],
                 {"ok": (b"small", "a.jpg", "image/jpeg"), "too_big": (b"huge", "b.jpg", "image/jpeg")},
             )
         self.assertEqual(counts, {"imported": 1, "failed": 1, "skipped": 0})
+
+    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no
+        locking at all, unlike every interactive upload path (see
+        per_profile_upload_lock's docstring)."""
+        with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+            self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
+        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
 
     def test_visit_id_by_asset_attaches_to_that_visit_without_creating_another(self) -> None:
         """Regression test for accept_pin_suggestion's photo-import wiring (services/pin_suggestions.py)."""

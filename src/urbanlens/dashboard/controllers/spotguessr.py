@@ -1,6 +1,6 @@
 """SpotGuessr controller - gameplay, multiplayer lobby, and chat (UL-391..UL-393).
 
-See ``docs/designs/spotguessr.md`` for the full rules. Session/round/guess/
+See ``docs/designs/drafts/spotguessr.md`` for the full rules. Session/round/guess/
 lobby orchestration lives in ``services.spotguessr`` - this module only
 handles HTTP: request parsing, participant/ownership checks, and JSON
 serialization (a round's answer is never serialized until a guess reveals
@@ -27,6 +27,8 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, rating_stats
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import (
@@ -36,7 +38,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     Guess,
     SpotGuessrMode,
 )
-from urbanlens.dashboard.services.connections import get_connections
+from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.spotguessr import (
     chat as spotguessr_chat,
     overview as spotguessr_overview,
@@ -45,6 +47,7 @@ from urbanlens.dashboard.services.spotguessr import (
     session as spotguessr_session,
 )
 from urbanlens.dashboard.services.spotguessr.social import visible_friend_ratings
+from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
@@ -105,13 +108,41 @@ def _parse_geo_bounds(geo_bounds_raw: str | None) -> tuple[dict | None, JsonResp
     return geo_bounds_geojson, None
 
 
-def _config_from_request(request: HttpRequest) -> tuple[spotguessr_session.GameConfig | None, JsonResponse | None]:
+def _validate_label_id(raw_label_id: str | None, profile: Profile) -> tuple[int | None, JsonResponse | None]:
+    """Parse+validate an optional ``label_id`` - must name a label ``profile`` can actually use.
+
+    Mirrors ``_parse_geo_bounds``'s shape. Scoped to ``Label.objects.location_labels().visible_to(profile)``
+    (the same visibility rule the map's label filter uses) so a profile can't probe for the
+    existence of another profile's private label via the game-start endpoint - an id that
+    doesn't resolve is reported identically whether it's malformed, someone else's personal
+    label, or simply doesn't exist.
+
+    Returns:
+        ``(label_id, None)`` on success (``label_id`` is None when omitted), or
+        ``(None, error_response)``.
+    """
+    if not raw_label_id:
+        return None, None
+    try:
+        label_id = int(raw_label_id)
+    except (TypeError, ValueError):
+        return None, JsonResponse({"error": "label_id must be an integer."}, status=400)
+    if not Label.objects.location_labels().visible_to(profile).filter(pk=label_id).exists():
+        return None, JsonResponse({"error": "Unknown label."}, status=400)
+    return label_id, None
+
+
+def _config_from_request(request: HttpRequest, profile: Profile) -> tuple[spotguessr_session.GameConfig | None, JsonResponse | None]:
     """Build+validate a GameConfig from POST fields, shared by solo and multiplayer start.
 
     Returns:
         ``(config, None)`` on success, or ``(None, error_response)``.
     """
     geo_bounds_geojson, error = _parse_geo_bounds(request.POST.get("geo_bounds"))
+    if error is not None:
+        return None, error
+
+    label_id, error = _validate_label_id(request.POST.get("label_id"), profile)
     if error is not None:
         return None, error
 
@@ -138,6 +169,7 @@ def _config_from_request(request: HttpRequest) -> tuple[spotguessr_session.GameC
         use_aliases=request.POST.get("use_aliases", "on") == "on",
         geo_bounds_geojson=geo_bounds_geojson,
         round_time_limit_seconds=round_time_limit_seconds,
+        label_id=label_id,
     )
     return config, None
 
@@ -198,7 +230,15 @@ def _mode_cards() -> list[dict[str, str]]:
     return [{"value": value, "label": label, **_MODE_CARD_META[value]} for value, label in SpotGuessrMode.choices]
 
 
-class SpotGuessrHomeView(LoginRequiredMixin, View):
+def _prewarm_solo_start(profile_id: int, mode: str, last_config: dict) -> None:
+    """Queue ``tasks.prewarm_spotguessr_solo_start`` - see ``SpotGuessrHomeView.get``'s call site."""
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import prewarm_spotguessr_solo_start
+
+    safely_enqueue_task(prewarm_spotguessr_solo_start, profile_id, mode, last_config)
+
+
+class SpotGuessrHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The SpotGuessr overview page: own rating, friends' ratings, start-game form.
 
     GET /spotguessr/
@@ -210,7 +250,8 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
         # Whichever mode the player most recently played, not hardcoded to
         # Photos - a rating for a Named Place/Street View-only player was
         # updating correctly all along, the homepage chip just never looked
-        # at the right row (see docs/PROBLEMS.md/git history for the report).
+        # at the right row (see git history for the report - it predates the
+        # convention of filing these in docs/PROBLEMS.md and has no entry there).
         # Shared with the external API's overview endpoint via
         # ``services.spotguessr.overview`` so the two can't answer differently.
         own_rating = spotguessr_overview.most_recent_rating(profile)
@@ -224,29 +265,49 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
         if raw_session_id and GameSessionParticipant.objects.filter(session_id=raw_session_id, profile=profile).exists():
             initial_session_id = raw_session_id
 
+        # Best-effort speculative prewarm of the round a solo player is most
+        # likely to start next (see services.spotguessr.prewarm) - skipped
+        # when this load is actually resuming a specific session, since
+        # they're not about to start a fresh one. Guessing wrong (a
+        # different mode/config, or multiplayer instead) just means the
+        # prewarm sits unused until it expires - never a correctness issue,
+        # only a missed optimization.
+        if initial_session_id is None:
+            guessed_mode = own_rating.mode if own_rating is not None else SpotGuessrMode.PHOTOS
+            _prewarm_solo_start(profile.pk, guessed_mode, preference.last_config)
+
+        friend_ratings = visible_friend_ratings(profile)
+
         return render(
             request,
             "dashboard/pages/spotguessr/index.html",
             {
                 "page_name": "spotguessr",
+                # The shared games subnav and hero (partials/games/) read these.
+                "games": GAMES,
+                "game_stats": rating_stats(own_rating, friend_ratings),
                 "own_rating": own_rating,
-                "friend_ratings": visible_friend_ratings(profile),
+                "friend_ratings": friend_ratings,
                 "show_ratings_to_friends": preference.show_ratings_to_friends,
                 "last_config": preference.last_config,
                 "min_rounds": spotguessr_session.MIN_ROUNDS_PER_SESSION,
                 "max_rounds": spotguessr_session.MAX_ROUNDS_PER_SESSION,
                 "default_rounds": spotguessr_session.DEFAULT_ROUNDS_PER_SESSION,
                 "round_time_limit_choices": spotguessr_session.ROUND_TIME_LIMIT_CHOICES,
-                "modes": SpotGuessrMode.choices,
                 "mode_cards": _mode_cards(),
+                "labels": Label.objects.location_labels().visible_to(profile).ordered(),
                 "urls": _url_templates(),
                 "my_profile_id": profile.pk,
                 "initial_session_id": initial_session_id,
+                # Client-side key for the Street View mode's interactive panorama
+                # (google.maps.StreetViewPanorama) - the public/browser-restricted
+                # key, not the unrestricted server-side one used to fetch imagery.
+                "google_maps_api_key": settings.google_public_api_key,
             },
         )
 
 
-class SpotGuessrSettingsView(LoginRequiredMixin, View):
+class SpotGuessrSettingsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Update SpotGuessr preferences.
 
     POST /spotguessr/settings/   body: ``show_ratings_to_friends`` ("on"/"off")
@@ -260,7 +321,7 @@ class SpotGuessrSettingsView(LoginRequiredMixin, View):
         return JsonResponse({"show_ratings_to_friends": preference.show_ratings_to_friends})
 
 
-class SpotGuessrFriendsView(LoginRequiredMixin, View):
+class SpotGuessrFriendsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The profile's friends, for the multiplayer invite picker.
 
     GET /spotguessr/friends/
@@ -272,7 +333,7 @@ class SpotGuessrFriendsView(LoginRequiredMixin, View):
         return JsonResponse({"friends": [{"profile_id": friend.pk, "username": friend.username} for friend in friends]})
 
 
-class SpotGuessrStartView(LoginRequiredMixin, View):
+class SpotGuessrStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Start a new session - solo (immediately active) or multiplayer (a lobby to invite friends into).
 
     POST /spotguessr/start/   body: ``mode``, ``total_rounds``, difficulty/toggle fields,
@@ -294,7 +355,7 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
         if mode not in SpotGuessrMode.values:
             return JsonResponse({"error": f"Unknown mode {mode!r}."}, status=400)
 
-        config, error = _config_from_request(request)
+        config, error = _config_from_request(request, profile)
         if config is None:
             # _config_from_request always pairs a None config with a non-None
             # error response - the fallback below never actually fires.
@@ -332,7 +393,7 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
         return JsonResponse({"session_id": result.session.pk, "finished": False, "round": serializers.serialize_round(result.round)})
 
 
-class SpotGuessrLobbyView(LoginRequiredMixin, View):
+class SpotGuessrLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The lobby's current state: mode, status, and every participant (invited or joined).
 
     GET /spotguessr/session/<session_id>/lobby/
@@ -344,7 +405,7 @@ class SpotGuessrLobbyView(LoginRequiredMixin, View):
         return JsonResponse(serializers.serialize_session(game_session))
 
 
-class SpotGuessrInviteView(LoginRequiredMixin, View):
+class SpotGuessrInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Invite one more friend to a still-open lobby. Host-only.
 
     POST /spotguessr/session/<session_id>/invite/   body: ``profile_id``
@@ -366,7 +427,7 @@ class SpotGuessrInviteView(LoginRequiredMixin, View):
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
-class SpotGuessrJoinView(LoginRequiredMixin, View):
+class SpotGuessrJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Accept an invitation to a lobby.
 
     POST /spotguessr/session/<session_id>/join/
@@ -383,7 +444,7 @@ class SpotGuessrJoinView(LoginRequiredMixin, View):
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
-class SpotGuessrBeginView(LoginRequiredMixin, View):
+class SpotGuessrBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Host starts the game: locks the roster and creates round 1.
 
     POST /spotguessr/session/<session_id>/begin/
@@ -413,7 +474,7 @@ class SpotGuessrBeginView(LoginRequiredMixin, View):
         return JsonResponse({"finished": False, "round": serializers.serialize_round(round_)})
 
 
-class SpotGuessrEndSessionView(LoginRequiredMixin, View):
+class SpotGuessrEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Host ends the game immediately - the manual escape hatch for a stalled or AFK multiplayer session.
 
     POST /spotguessr/session/<session_id>/end/
@@ -436,7 +497,7 @@ class SpotGuessrEndSessionView(LoginRequiredMixin, View):
         return JsonResponse({"finished": True, "summary": spotguessr_session.session_summary(game_session)})
 
 
-class SpotGuessrRoundView(LoginRequiredMixin, View):
+class SpotGuessrRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The session's current round (for reloads/reconnects).
 
     GET /spotguessr/session/<session_id>/round/
@@ -460,7 +521,7 @@ class SpotGuessrRoundView(LoginRequiredMixin, View):
         return JsonResponse({"finished": False, "round": serializers.serialize_round(round_)})
 
 
-class SpotGuessrGuessView(LoginRequiredMixin, View):
+class SpotGuessrGuessView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Submit a guess for the session's current round.
 
     POST /spotguessr/session/<session_id>/round/<round_id>/guess/   body: ``latitude``, ``longitude``, optional ``guessed_date`` (YYYY-MM-DD)
@@ -498,7 +559,7 @@ class SpotGuessrGuessView(LoginRequiredMixin, View):
         return JsonResponse(serializers.serialize_reveal(round_, guess, bonus_tiers, rating_change))
 
 
-class SpotGuessrRoundTimeoutView(LoginRequiredMixin, View):
+class SpotGuessrRoundTimeoutView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Force-reveal the current round because its configured round timer expired.
 
     POST /spotguessr/session/<session_id>/round/<round_id>/timeout/
@@ -529,12 +590,12 @@ class SpotGuessrRoundTimeoutView(LoginRequiredMixin, View):
         return JsonResponse({"revealed": round_.revealed_at is not None})
 
 
-class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, View):
+class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Thumbs up/down, or report, the photo a Photos-mode round just showed.
 
     POST /spotguessr/session/<session_id>/round/<round_id>/feedback/   body: ``kind`` (thumbs_up/thumbs_down/reported)
 
-    Feeds ``services.media_relevance.effective_relevance`` at a reduced
+    Feeds ``services.media.media_relevance.effective_relevance`` at a reduced
     weight (or, for a report, full weight against "not relevant") - see
     ``services.spotguessr.relevance`` for exactly how. A no-op for a round
     with no photo (Named Place/Street View) or one this profile never
@@ -562,7 +623,7 @@ class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, View):
         return JsonResponse({"kind": feedback.kind})
 
 
-class SpotGuessrChatHistoryView(LoginRequiredMixin, View):
+class SpotGuessrChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Recent chat messages, for reconnects/late page-opens - live messages arrive over the WebSocket.
 
     GET /spotguessr/session/<session_id>/chat/
@@ -575,7 +636,7 @@ class SpotGuessrChatHistoryView(LoginRequiredMixin, View):
         return JsonResponse({"messages": [serializers.serialize_chat_message(message) for message in messages]})
 
 
-class SpotGuessrPinsView(LoginRequiredMixin, View):
+class SpotGuessrPinsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The profile's own pins, for the "search my pins to guess" input.
 
     GET /spotguessr/pins/
@@ -589,7 +650,9 @@ class SpotGuessrPinsView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest) -> HttpResponse:
         profile = _current_profile(request)
-        pins = Pin.objects.filter(profile=profile).select_related("location")
+        # location__wiki as well: the label falls through to Location.display_name,
+        # which reads the reverse OneToOne `wiki` - one query per pin without it.
+        pins = Pin.objects.filter(profile=profile).select_related("location", "location__wiki")
         return JsonResponse(
             {
                 "pins": [
@@ -605,7 +668,7 @@ class SpotGuessrPinsView(LoginRequiredMixin, View):
         )
 
 
-class SpotGuessrAreaPinCountView(LoginRequiredMixin, View):
+class SpotGuessrAreaPinCountView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """How many of the profile's own pins fall inside a candidate ``geo_bounds`` selection.
 
     GET /spotguessr/area_pin_count/?geo_bounds=<geojson>
@@ -628,7 +691,7 @@ class SpotGuessrAreaPinCountView(LoginRequiredMixin, View):
         return JsonResponse({"count": count})
 
 
-class SpotGuessrSummaryView(LoginRequiredMixin, View):
+class SpotGuessrSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The session's final scoreboard.
 
     GET /spotguessr/session/<session_id>/summary/

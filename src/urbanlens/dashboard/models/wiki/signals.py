@@ -23,7 +23,7 @@ def suggest_and_add_categories(sender: type[Wiki], instance: Wiki, created: bool
         return
 
     def _enqueue() -> None:
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import suggest_wiki_category
 
         safely_enqueue_task(suggest_wiki_category, instance.pk)

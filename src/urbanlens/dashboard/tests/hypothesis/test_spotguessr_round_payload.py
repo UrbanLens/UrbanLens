@@ -23,8 +23,8 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.spotguessr.model import GameRound, SpotGuessrMode
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.spotguessr.model import GameRound, SpotGuessrMode
 from urbanlens.dashboard.services.spotguessr import serializers
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_solo_session
 

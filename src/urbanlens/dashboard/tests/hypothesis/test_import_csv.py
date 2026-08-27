@@ -34,10 +34,35 @@ class CsvRowIterLatLonTests(SimpleTestCase):
         self.assertAlmostEqual(pins[0]["latitude"], 42.9013318)
         self.assertAlmostEqual(pins[0]["longitude"], -73.3513978)
         self.assertIsNone(pins[0]["cid"])
+        self.assertNotIn("maps_url", pins[0])
         self.assertIs(pins[0]["profile"], self.profile)
 
     def test_lat_lng_column_aliases(self):
         csv_text = "Name,Lat,Lng\nMy Place,1.5,2.5"
+
+        pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
+
+        self.assertEqual(len(pins), 1)
+        self.assertAlmostEqual(pins[0]["latitude"], 1.5)
+        self.assertAlmostEqual(pins[0]["longitude"], 2.5)
+
+    def test_latitude_longitude_only_columns(self):
+        """Coordinates alone are enough - name/description fall back to Unnamed/empty."""
+        csv_text = "latitude,longitude\n42.9013318,-73.3513978"
+
+        pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
+
+        self.assertEqual(len(pins), 1)
+        self.assertEqual(pins[0]["name"], "Unnamed")
+        self.assertEqual(pins[0]["description"], "")
+        self.assertAlmostEqual(pins[0]["latitude"], 42.9013318)
+        self.assertAlmostEqual(pins[0]["longitude"], -73.3513978)
+        self.assertIsNone(pins[0]["cid"])
+
+    def test_utf8_bom_on_latitude_column_still_parses(self):
+        """DictReader keeps a leading BOM on the first header; strip it so the
+        latitude key still matches after Excel-style UTF-8 CSV export."""
+        csv_text = "\ufefflatitude,longitude\n1.5,2.5"
 
         pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
 
@@ -123,3 +148,44 @@ class CsvRowIterLatLonTests(SimpleTestCase):
         self.assertEqual(pins[0]["name"], name)
         self.assertAlmostEqual(pins[0]["latitude"], lat, places=6)
         self.assertAlmostEqual(pins[0]["longitude"], lon, places=6)
+
+
+class CsvRowIterS2GuessFlagTests(SimpleTestCase):
+    """TEMPORARY: _csv_row_iter() flags rows whose cid came from the imprecise
+    S2-cell URL pattern, so the import preview can force-select them by default -
+    see the matching TEMPORARY block in GoogleMapsGateway._preview_pins. Remove
+    together with that block once every user's previously-imported data has been
+    repaired.
+    """
+
+    def setUp(self):
+        self.profile = object()
+        self.gateway = GoogleMapsGateway()
+
+    def test_place_url_with_s2_data_segment_is_flagged(self):
+        csv_text = 'Title,URL\nBlack Point Ruins,"https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79"'
+
+        pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
+
+        self.assertEqual(len(pins), 1)
+        self.assertTrue(pins[0]["s2_guess"])
+        self.assertEqual(pins[0]["cid"], 0x59AC8820518A7E79)
+        # Carried through to a deferred REData lookup (cid_resolution.resolve_cids) -
+        # resolving via the place's own URL is faster/more reliable than cid alone.
+        self.assertEqual(pins[0]["maps_url"], "https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79")
+
+    def test_search_url_without_a_data_segment_is_not_flagged(self):
+        csv_text = 'Title,URL\nSome Place,"https://maps.google.com/maps/search/1.0,2.0"'
+
+        pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
+
+        self.assertEqual(len(pins), 1)
+        self.assertFalse(pins[0]["s2_guess"])
+
+    def test_generic_latlon_columns_are_not_flagged(self):
+        csv_text = "name,latitude,longitude\nOld Mill,42.9013318,-73.3513978"
+
+        pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
+
+        self.assertEqual(len(pins), 1)
+        self.assertNotIn("s2_guess", pins[0])

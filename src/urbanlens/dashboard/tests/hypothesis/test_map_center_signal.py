@@ -10,11 +10,10 @@ from __future__ import annotations
 import decimal
 
 from django.contrib.auth.models import User
-from urbanlens.core.tests.testcase import TestCase
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 

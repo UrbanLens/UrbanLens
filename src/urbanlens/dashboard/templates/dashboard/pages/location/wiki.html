@@ -1,18 +1,17 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load static %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"
-    integrity="sha384-JP5UPxIO2Tm2o79Fb0tGYMa44jkWar53aBoCbd8ah0+LcCDoohTIYr+zIXyfGIJN" crossorigin="anonymous"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
+{% vendor_asset "leaflet_draw_css" %}
+{% vendor_asset "leaflet_draw_js" %}
 <script src="{% static 'js/cover-hero.js' %}"></script>
 <script src="{% static 'js/page-tabs.js' %}" defer></script>
 <script src="{% static 'js/article-editor.js' %}" defer></script>
 <script type="module" src="{% static 'dashboard/js/article-wysiwyg.js' %}"></script>
+<script type="module" src="{% static 'dashboard/js/albums.js' %}"></script>
 {% endblock %}
 
 {% block hero %}
@@ -26,6 +25,9 @@
         <nav class="ul-subnav-tabs" data-page-tabs aria-label="Wiki sections">
             <button type="button" class="ul-subnav-tab is-active" data-tab="overview">
                 <i class="material-symbols-outlined">dashboard</i><span>Overview</span>
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="photos">
+                <i class="material-symbols-outlined">photo_library</i><span>Photos</span>
             </button>
             <button type="button" class="ul-subnav-tab" data-tab="article">
                 <i class="material-symbols-outlined">article</i><span>Article</span>
@@ -73,20 +75,18 @@
         <i class="material-icons wiki-lcn-icon">info</i>
         <div class="wiki-lcn-body">
             <strong>
-                {{ other_locations|length }} other location{{ other_locations|length|pluralize }}
-                {% if other_locations|length == 1 %}covers{% else %}cover{% endif %}
-                the same area as your pin.
+                Your pin also falls inside {{ other_locations|length }} other
+                propert{{ other_locations|length|pluralize:"y,ies" }}.
             </strong>
-            Your pin is currently linked here. You may want to switch to one of these instead:
+            Their recorded boundaries overlap here, so it isn't clear which one you meant.
+            Your pin is currently linked to this one:
             <div class="wiki-lcn-list">
                 {% for other in other_locations %}
                 <span class="wiki-lcn-item">
-                    {# Not a link to other's own wiki page - the viewer hasn't pinned #}
-                    {# `other` yet, and a wiki page 404s for anyone without a pin at   #}
-                    {# its location (see resolve_visible_wiki) by design, so this can  #}
-                    {# never resolve until after the Switch button below relinks the  #}
-                    {# pin there first. #}
-                    <span class="wiki-lcn-link">{{ other.display_name }}</span>
+                    {# Every candidate here is one the viewer can already open - #}
+                    {# services.places.ambiguity filters to their accessible domains, #}
+                    {# so naming one can never disclose a place they haven't found. #}
+                    <a class="wiki-lcn-link" href="{% url 'location.wiki' location_slug=other.slug %}">{{ other.display_name }}</a>
                     {% if user_pin %}
                     <button type="button" class="wiki-lcn-switch-btn"
                             hx-post="{% url 'pin.link.to' user_pin.slug other.slug %}"
@@ -135,9 +135,11 @@
                 </div>
                 {% if first_pinned %}
                 <div class="wiki-stat">
-                    {# Already truncated to the 1st of the month, and suppressed
-                       entirely while the pin count is too low to display - see
-                       services.community_counts.wiki_community_summary. #}
+                    {% comment %}
+                    Already truncated to the 1st of the month, and suppressed
+                    entirely while the pin count is too low to display - see
+                    services.community_counts.wiki_community_summary.
+                    {% endcomment %}
                     <span class="wiki-stat-value">{{ first_pinned|date:"M Y" }}</span>
                     <span class="wiki-stat-label">First pinned</span>
                 </div>
@@ -176,6 +178,7 @@
             <div class="map-wrapper">
                 {% include "dashboard/partials/layout/_map_annotations_panels.html" %}
             </div>
+            {% include "dashboard/partials/layout/_temporal_imagery_slider.html" %}
         </div>
 
         {# Labels/categories hidden: global categories no longer exist #}
@@ -298,6 +301,9 @@
             <div class="media-provider-loader" id="wiki-media-loader-internet_archive"
                 hx-get="{% url 'location.wiki.media' location.slug 'internet_archive' %}"
                 hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-digital_commonwealth"
+                hx-get="{% url 'location.wiki.media' location.slug 'digital_commonwealth' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
             <div class="media-provider-loader" id="wiki-media-loader-yelp"
                 hx-get="{% url 'location.wiki.media' location.slug 'yelp' %}"
                 hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
@@ -337,6 +343,22 @@
     </section>
 
     {# -- Comments tab -------------------------------------------------------- #}
+    {# -- Photos tab: community albums first, then wiki photos not in one ---- #}
+    <section class="page-tab-panel" data-tab-panel="photos" hidden>
+        {# ?album= is carried through so a deep link (or a Back navigation) loads that album directly. #}
+        <div id="albums-panel"
+             hx-get="{% url 'location.wiki.albums' location.slug %}{% if request.GET.album %}?album={{ request.GET.album|urlencode }}{% endif %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             class="albums-panel card wiki-card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">photo_library</i>
+                <h2>Photos</h2>
+            </div>
+            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+    </section>
+
     <section class="page-tab-panel" data-tab-panel="comments" hidden>
         <div id="comment-panel"
              hx-get="{% url 'location.wiki.comments' location.slug %}"
@@ -387,7 +409,7 @@
     </section>
 
     {# -- Suggest-edits dialog ----------------------------------------------- #}
-    <dialog id="wiki-edit-dialog" class="wiki-edit-dialog ul-dialog">
+    <dialog id="wiki-edit-dialog" class="wiki-edit-dialog ul-dialog" aria-labelledby="dialog-title-suggest-edits">
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Suggest Edits" %}
         <p class="wiki-edit-notice">
             <i class="material-symbols-outlined">public</i>
@@ -437,6 +459,11 @@
         </form>
     </dialog>
 
+    {# -- Add link dialog (About card's links row) --------------------------- #}
+    <dialog id="wiki-link-add-dialog" class="pin-link-add-dialog ul-dialog" aria-label="Add a link">
+        {% include "dashboard/partials/pins/_pin_link_add_dialog.html" with add_url="location.wiki.links" owner_slug=wiki.location.slug row_id="wiki-links-row" %}
+    </dialog>
+
     {# -- Boundary-vote dialog (renders nothing without 2+ candidates) ------- #}
     {% include "dashboard/partials/wiki/_boundary_vote_dialog.html" with location=location boundary_vote=boundary_vote %}
 
@@ -463,11 +490,14 @@
      data-detail-pins-json-url="{{ detail_pins_json_url }}"
      data-detail-pin-create-url="{{ detail_pin_create_url }}"
      data-detail-pin-edit-url-template="{{ detail_pin_edit_url_template }}"
+     data-overlay-corners-url-template="{{ overlay_corners_url_template }}"
      data-boundary-url="{{ boundary_url }}"
      data-photo-gallery-json-url="{{ photo_gallery_json_url }}"
      data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
      data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
-     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
+     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"
+     data-temporal-years="{{ temporal_slider_years|join:',' }}"
+     data-temporal-imagery-url-template="{{ temporal_imagery_url_template }}"></div>
 <script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script>
     // -- External-data panels: handle 204 (no data) --------------------------
@@ -504,6 +534,14 @@
     // -- Suggest-edits form --------------------------------------------------
     document.getElementById('wiki-edit-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        // Sends every field, not the ones that changed. The server diffs the
+        // payload against what this viewer was shown, so nothing is clobbered
+        // today - but that is a server-side repair of a client-side problem,
+        // and it stops working once edits are queued offline and merged: an
+        // unchanged carried-along value is indistinguishable from a deliberate
+        // re-assertion of the same value, so every save becomes a conflict on
+        // every field. See "forms submit and save every field" in
+        // docs/PROBLEMS.md - this form is one of 28.
         const data = {};
         new FormData(this).forEach((v, k) => { if (k !== 'csrfmiddlewaretoken') data[k] = v; });
         fetch("{% url 'location.wiki.edit' location.slug %}", {
@@ -560,7 +598,7 @@
             photos: 'Photos', smithsonian: 'Smithsonian', wikimedia: 'Wikimedia', wikipedia_media: 'Wikipedia',
             loc: 'Library of Congress', yelp: 'Yelp', google_images: 'Google Images', google_maps: 'Google Maps',
             searxng_images: 'Web Images',
-            internet_archive: 'Internet Archive', loopnet: 'LoopNet', cris_building: 'NY Historic Preservation (CRIS)',
+            internet_archive: 'Internet Archive', digital_commonwealth: 'Digital Commonwealth', loopnet: 'LoopNet', cris_building: 'NY Historic Preservation (CRIS)',
         };
         var VOTE_URL = "{% url 'location.wiki.media.vote' location.slug %}";
         var activeTab = 'all';
@@ -685,14 +723,22 @@
             // Clicking your active thumb clears the vote back to neutral.
             var next = isUp ? (wasUp ? null : true) : (wasDown ? null : false);
             applyVoteState(itemEl, next);
-            fetch(VOTE_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-                body: JSON.stringify({
-                    source: itemEl.dataset.mediaSource, item_key: itemEl.dataset.mediaKey,
-                    url: itemEl.dataset.mediaUrl, is_relevant: next,
-                }),
-            }).then(function (r) { return r.json(); }).then(function (data) {
+            // The thumb is set optimistically above, so a refused vote has to say so.
+            window.ulSendJson(VOTE_URL, 'POST', {
+                source: itemEl.dataset.mediaSource, item_key: itemEl.dataset.mediaKey,
+                url: itemEl.dataset.mediaUrl, is_relevant: next,
+                page_url: itemEl.dataset.mediaPageUrl || '', caption: itemEl.dataset.mediaCaption || '',
+                image_id: itemEl.dataset.imageId || null,
+            }).then(function (data) {
+                data = data || {};
+                if (data.materialize_error && window.toastr) toastr.warning("Vote saved, but couldn't save a local copy: " + data.materialize_error);
+                if (data.image_id) itemEl.dataset.imageId = data.image_id;
+                if (data.image_url) {
+                    itemEl.dataset.mediaUrl = data.image_url;
+                    itemEl.dataset.mediaThumb = data.image_url;
+                    var thumbImg = itemEl.querySelector('.media-item-thumb');
+                    if (thumbImg && thumbImg.tagName === 'IMG') thumbImg.src = data.image_url;
+                }
                 if (data && typeof data.vote_score === 'number') {
                     itemEl.dataset.voteScore = String(data.vote_score);
                     var b = itemEl.querySelector('.media-item-votes');

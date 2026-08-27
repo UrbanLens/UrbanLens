@@ -2,11 +2,11 @@
 
 Two things are covered here, and the first is not an API concern at all:
 
-**The export privacy gate.** ``services.calendar_sync`` used to honour only an
+**The export privacy gate.** ``services.trips.calendar_sync`` used to honour only an
 activity's own ``location_hidden`` flag when writing event locations, ignoring
 the adder's ``trip_pin_location_visibility`` setting that every other trip
 surface applies (the activities panel, the map, AI suggestions - all via
-``services.trip_visibility.viewer_hidden_activity_ids``). Exporting a shared
+``services.trips.trip_visibility.viewer_hidden_activity_ids``). Exporting a shared
 trip therefore copied trip-mates' coordinates - ones the trip screen
 deliberately hides from the exporter - into a third party's calendar, where no
 UrbanLens setting can ever claw them back. The first class below is the
@@ -40,11 +40,11 @@ from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.api_keys import generate_api_key
 from urbanlens.dashboard.services.apis.calendar.google import CalendarNotConfiguredError
-from urbanlens.dashboard.services.calendar_sync import export_trip_to_calendar
-from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.google_oauth import GoogleAuthExpiredError
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.trips.calendar_sync import export_trip_to_calendar
 
 _TRIP_SCOPES = [ApiKeyScope.TRIPS_READ.value, ApiKeyScope.TRIPS_WRITE.value]
 
@@ -96,17 +96,35 @@ class _CalendarTestCase(TestCase):
     def _patch_gateway(self) -> mock.MagicMock:
         """Replace the gateway the sync service instantiates.
 
+        A fresh id per created event, the way Google actually answers: one
+        export of a trip that has activities writes a trip-level link and an
+        activity-level one, and the partial unique on (profile,
+        google_event_id) rejects them if the fixture hands back the same id
+        twice.
+
         Returns:
             The mock standing in for the gateway *instance*, with
-            ``create_event`` already returning a plausible event id.
+            ``create_event`` already returning plausible event ids.
         """
-        patcher = mock.patch("urbanlens.dashboard.services.calendar_sync.GoogleCalendarGateway")
+        patcher = mock.patch("urbanlens.dashboard.services.trips.calendar_sync.GoogleCalendarGateway")
         gateway_cls = patcher.start()
         self.addCleanup(patcher.stop)
         gateway = gateway_cls.return_value
-        gateway.create_event.return_value = {"id": "evt-new"}
+        gateway.create_event.side_effect = self._new_event
         gateway.update_event.return_value = {"id": "evt-new"}
         return gateway
+
+    def _new_event(self, _body: dict) -> dict[str, str]:
+        """Return a distinct created-event payload for each gateway call.
+
+        Args:
+            _body: The event body the service built (unused).
+
+        Returns:
+            An event dict with an id unique within this test.
+        """
+        self._created_events = getattr(self, "_created_events", 0) + 1
+        return {"id": f"evt-new-{self._created_events}"}
 
     def _shared_trip(self) -> Trip:
         """A dated trip the key owner and the trip-mate both belong to.
@@ -303,10 +321,10 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
         baseline = len(connection.savepoint_ids)
         depths: list[int] = []
 
-        def _record(_body):
+        def _record(body):
             """Record the savepoint depth in force when the gateway is called."""
             depths.append(len(connection.savepoint_ids))
-            return {"id": "evt-new"}
+            return self._new_event(body)
 
         gateway.create_event.side_effect = _record
 

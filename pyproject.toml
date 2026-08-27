@@ -1,6 +1,6 @@
 [project]
 name = "UrbanLens"
-version = "0.5.0b0"
+version = "0.7.0b0"
 description = "Mapping for Urban Explorers"
 readme = "README.md"
 authors = [{ name = "Jess Mann", email = "jess@urbanlens.com" }]
@@ -15,8 +15,8 @@ dependencies = [
     "django~=6.0.6",
     "django-auto-prefetch~=1.14.0",
     "django-cors-headers~=4.9.0",
+    "django-csp~=4.0",
     "django-dirtyfields~=1.9.9",
-    "django-extensions~=4.1",
     "django-filter~=25.2",
     "django-pandas~=0.6.7",
     "django-picklefield~=3.4.0",
@@ -42,6 +42,12 @@ dependencies = [
     "pandas~=3.0.3",
     "pdf2image~=1.17.0",
     "pillow>=12.2,<12.4",
+    # HEIC/HEIF decoding for Pillow. Not optional: heic/heif are accepted
+    # uploads (the iPhone default), and without this Pillow cannot open them at
+    # all - so a GPS strip a user asked for failed silently and the file was
+    # stored with its coordinates intact. See dashboard.apps for where the
+    # opener is registered.
+    "pillow-heif>=0.18",
     "psycogreen~=1.0.2",
     "psycopg2-binary~=2.9.12",
     "pydantic~=2.13.4",
@@ -49,7 +55,6 @@ dependencies = [
     "pypdf~=6.2.0",
     "pytesseract~=0.3.13",
     "python-dateutil~=2.9.0",
-    "python-decouple~=3.8",
     "python-docx~=1.2.0",
     "python-dotenv~=1.2.2",
     "pyotp~=2.10.0",
@@ -64,12 +69,11 @@ dependencies = [
     "simplejson~=4.1.1",
     "social-auth-app-django>=5.9,<6.1",
     "sqlalchemy~=2.0.51",
-    "statsmodels~=0.14.6",
+    "stripe~=15.3.0",
     "tiktoken~=0.13.0",
     "typing-extensions>=4.15,<4.17",
     "webauthn~=3.0.0",
     "whitenoise~=6.12.0",
-    "esprima~=4.0.1",
     "overturemaps>=1.0.1",
     "filetype~=1.2.0",
     "clamd~=1.0.2",
@@ -719,6 +723,10 @@ extend-exclude = [
     "__pycache__",
     "tests",
     "__init__.py",
+    # One-off benchmark and analysis scripts kept beside the reports they
+    # produced. They are records, not importable code, so the package rules
+    # (INP001 in particular) do not apply to them.
+    "docs/reports",
 ]
 #max-complexity = 10
 output-format = 'concise'
@@ -849,7 +857,17 @@ convention = "google"
 dev = [
     "bandit~=1.8.6",
     "coverage>=7.14.1,<7.16.0",
+    # Coverage of the lines a branch actually changed, rather than a whole-tree
+    # percentage that moves too slowly to mean anything on any one commit.
+    "diff-cover~=10.5.1",
     "django-debug-toolbar~=7.0.0",
+    # Records each covered view's query *fingerprint* to a checked-in .perf.yml,
+    # so an N+1 arrives as a reviewable diff. Chosen over a runtime detector
+    # (`nplusone`) because that one has not shipped since 2019, and because
+    # `django-auto-prefetch` already suppresses the access pattern such a
+    # detector watches for - which would make it quiet precisely where this
+    # codebase's N+1s actually came from. See core/tests/query_scaling.py.
+    "django-perf-rec~=4.31.0",
     "django-stubs~=6.0.5",
     "django-stubs-ext~=6.0.5",
     "faker>=40.23,<40.29",
@@ -858,6 +876,7 @@ dev = [
     "kombu~=5.6.2",
     "libcst~=1.8.6",
     "model-bakery>=1.23.5,<1.25.0",
+    "mutmut~=3.7.0",
     "mypy~=2.1.0",
     "pre-commit~=4.6.0",
     "prospector>=1.18,<1.20",
@@ -867,7 +886,19 @@ dev = [
     "pynacl~=1.6.2",
     "pytest>=9.1.1",
     "pytest-django~=4.12.0",
+    # Installed but disabled in `addopts`; `bin/run_tests.sh --shuffle` enables it.
+    "pytest-randomly~=4.1.0",
+    # Parallel test workers. Off by default: each worker takes its own database,
+    # so the multiplier applies to database *setup* as well, and the local
+    # Postgres has been observed to fall over under exactly this load. Use it in
+    # the container, via `bin/run_tests.sh --parallel`.
+    "pytest-xdist~=3.8.0",
     "ruff~=0.15.20",
+    # Property-based conformance testing against the published OpenAPI document.
+    # The schema is a deployed artefact with generated clients depending on it,
+    # and nothing else checks that a response matches what it advertises.
+    # Drives tests/contract/; see docs/CONTRACT_TESTS.md.
+    "schemathesis~=4.25.1",
     "setuptools>=82.0.1,<83.1.0",
     "sphinx~=9.1.0",
     "sphinx-rtd-theme~=3.1.0",
@@ -914,9 +945,25 @@ ignore_missing_model_attributes = true
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "urbanlens.UrbanLens.settings.test"
-pythonpath = ["src"]
+# tests/contract is on the path so that suite's conftest and test modules can
+# share `schema_source` by plain import. It holds no `test_*` modules of its own
+# and is not in `testpaths`, so this affects imports only, never collection.
+pythonpath = ["src", "tests/contract"]
+# `tests/` is deliberately outside this. The Playwright suite under
+# tests/integration/ is not Python, and tests/contract/ needs either a running
+# deployment or an explicit opt-in to fuzzing, so neither belongs in the run
+# that a pre-commit hook or a plain `pytest` performs.
 testpaths = ["src/urbanlens"]
-addopts = "--import-mode=importlib"
+# -p no:randomly: pytest-randomly is installed but off unless asked for.
+# Shuffling was probed across three seeds on a subset and found no order
+# dependence, which is not the same as knowing all ~11,000 tests are
+# order-independent - and a plugin that reorders every run by default turns
+# that unknown into intermittent failures for everyone. `bin/run_tests.sh
+# --shuffle` turns it on deliberately.
+addopts = "--import-mode=importlib -p no:randomly"
+markers = [
+    "contract: OpenAPI conformance checks (tests/contract). Needs --contract-* options; not collected by default.",
+]
 
 [tool.coverage.run]
 source = ["."]
@@ -955,3 +1002,47 @@ directory = "htmlcov"
 
 [tool.bandit]
 exclude_dirs = ["*/tests/*", "*/test_*.py"]
+
+# Mutation testing. Deliberately scoped rather than whole-tree: a mutant costs a
+# test run, so this is aimed at the modules where a silent test would be most
+# expensive - money, privacy, and the community-editable wiki.
+#
+# `pytest_add_cli_args` carries --reuse-db because building a test database costs
+# about three minutes against 3.5 seconds of actual tests; without it a few dozen
+# mutants would take hours. Run bin/run_mutation_tests.sh, which sets that up.
+[tool.mutmut]
+source_paths = ["src/urbanlens"]
+only_mutate = [
+    "src/urbanlens/dashboard/services/billing/banking.py",
+    "src/urbanlens/dashboard/services/profile/identity_visibility.py",
+    "src/urbanlens/dashboard/services/wiki/wiki_edits.py",
+]
+do_not_mutate = ["*/tests/*", "*/migrations/*"]
+# mutmut runs the suite in a copy of the tree at `mutants/`, which does not
+# contain the collected static files - and any test that renders a full page
+# fails on a missing staticfiles manifest entry without them.
+also_copy = ["src/urbanlens/frontend/static"]
+pytest_add_cli_args = ["--reuse-db", "-q"]
+# Scope both phases to the tests that actually cover the mutated modules.
+# Without this, mutmut's stats-collection phase runs all 11,000 tests, which
+# takes over an hour before the first mutant is even tried.
+pytest_add_cli_args_test_selection = [
+    "src/urbanlens/dashboard/tests/hypothesis/test_billing_banking.py",
+    "src/urbanlens/dashboard/tests/hypothesis/test_billing_ledger_concurrency.py",
+    # test_identity_visibility_batch.py does NOT cover this module - it tests
+    # Profile.visible_profile_pks/Friendship batching and never imports
+    # services.profile.identity_visibility. Its presence here (instead of the
+    # files that actually do) is why every one of this module's ~105 mutants
+    # reported "no tests" rather than a real killed/survived verdict - fixed
+    # 2026-08-22, see docs/PROBLEMS.md.
+    "src/urbanlens/dashboard/tests/hypothesis/test_identity_visibility.py",
+    "src/urbanlens/dashboard/tests/hypothesis/test_dm_share_live_updates.py",
+    "src/urbanlens/dashboard/tests/hypothesis/test_map_pin_share_detection_integration.py",
+    "src/urbanlens/dashboard/tests/hypothesis/test_query_scaling_group_members.py",
+    "src/urbanlens/dashboard/tests/hypothesis/test_wiki_edit_field_scope.py",
+    "src/urbanlens/dashboard/tests/hypothesis/test_wiki_revert_of_revert.py",
+    "src/urbanlens/dashboard/tests/hypothesis/test_wiki_boundary_revert.py",
+]
+# test_wiki_edits_service.py is excluded on purpose: its Hypothesis property
+# tests trip HealthCheck.differing_executors under mutmut's runner, which is an
+# artefact of the harness rather than a finding about the code.

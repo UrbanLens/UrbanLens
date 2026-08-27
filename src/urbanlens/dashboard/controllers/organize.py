@@ -14,6 +14,7 @@ from django.shortcuts import render
 from django.views import View
 
 from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_MEDIA, KIND_USER, Label
+from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_label_ids
 
 # Kinds that never affect map icon priority, and so are excluded from the
 # Display Order tab (tag/category/status only).
@@ -53,12 +54,20 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
     if not isinstance(request.user, AuthUser):
         raise TypeError("Expected an authenticated user")
     profile: Profile = request.user.profile
-    tags = Label.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_pin_counts()
-    categories = Label.objects.categories().for_profile(profile).ordered().with_customizations_for(profile).with_pin_counts()
-    statuses = Label.objects.statuses().for_profile(profile).ordered().with_customizations_for(profile).with_pin_counts()
-    user_labels = Label.objects.user_labels().visible_to(profile).ordered().with_customizations_for(profile)
-    media_labels = Label.objects.media().visible_to(profile).ordered()
-    priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).ordered().with_pin_counts()
+    # `.with_hierarchy()`, not `.with_pin_counts()` - the pin/location/total-pins
+    # stats are the slow part of this page (a correlated subquery per label plus,
+    # for any label with children, a full descendant BFS in `tag_total_pins`).
+    # Render the cards without them so the page paints immediately; each tab's
+    # rows re-fetch themselves with real counts via HTMX once shown (see
+    # organize_label_panel.html's `hx-trigger="revealed"`).
+    tags = Label.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_hierarchy()
+    categories = Label.objects.categories().for_profile(profile).ordered().with_customizations_for(profile).with_hierarchy()
+    statuses = Label.objects.statuses().for_profile(profile).ordered().with_customizations_for(profile).with_hierarchy()
+    user_labels = Label.objects.user_labels().visible_to(profile).ordered().with_customizations_for(profile).with_hierarchy()
+    media_labels = Label.objects.media().visible_to(profile).ordered().with_hierarchy()
+    # The Display Order tab never renders pin counts at all, so it just skips
+    # the expensive annotation outright rather than deferring it via HTMX.
+    priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).ordered()
 
     active_section = active_tab if active_tab in _SECTION_TABS else "labels"
     label_tab = active_tab if active_tab in _LABEL_TABS else "tags"
@@ -75,6 +84,7 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
         "active_section": active_section,
         "can_edit_global": request.user.has_perm(_PERM),
         "standalone_mode": False,
+        "stats_pending": True,
     }
 
 
@@ -119,7 +129,8 @@ class OrganizePriorityListView(LoginRequiredMixin, View):
         if not isinstance(request.user, AuthUser):
             raise TypeError("Expected an authenticated user")
         profile: Profile = request.user.profile
-        priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).ordered().with_pin_counts()
+        # _priority_list.html never renders pin counts - no need for with_pin_counts() here.
+        priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).ordered()
         return render(request, "dashboard/partials/labels/_priority_list.html", {"priority_items": priority_items})
 
 
@@ -181,5 +192,8 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
             # that was never what they dragged.
             with transaction.atomic():
                 Label.objects.bulk_update(reordered, ["order"])
+            # bulk_update fires no post_save, so the cache-invalidating receiver
+            # never runs - and order decides which label supplies a pin's icon.
+            refresh_map_pin_cache_for_label_ids([label.pk for label in reordered])
 
         return JsonResponse({"ok": True, "reordered": len(reordered), "skipped_global_ids": skipped_global_ids})

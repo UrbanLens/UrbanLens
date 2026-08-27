@@ -14,7 +14,7 @@ import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations import places_resolution
-from urbanlens.dashboard.services.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
 

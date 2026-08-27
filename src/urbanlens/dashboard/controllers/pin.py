@@ -20,16 +20,21 @@ from rest_framework.exceptions import ParseError
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.core.cache_keys import make_cache_key
+from urbanlens.dashboard.controllers.map_overlays import OVERLAY_UUID_PLACEHOLDER, overlay_payload
+from urbanlens.dashboard.controllers.temporal_imagery import TEMPORAL_YEAR_PLACEHOLDER
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
+from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
-from urbanlens.dashboard.services.redact import redact_coordinate
-from urbanlens.dashboard.services.search import format_search_date, search_web
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
+from urbanlens.dashboard.services.search.search import format_search_date, search_web
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -37,7 +42,7 @@ if TYPE_CHECKING:
 
     from rest_framework.request import Request
 
-    from urbanlens.dashboard.services.external_data import LocationCachePanelSource, PanelSource, ProviderFetchResult
+    from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelSource, ProviderFetchResult
 
 logger = logging.getLogger(__name__)
 
@@ -87,23 +92,33 @@ _CONDENSED_PLUGIN_TABS = {
 # _viewer_may_see_panel), NOT by membership here - a panel's gate has to be one
 # fact in one place, or the tab strip and the endpoint that serves the tab's
 # content end up disagreeing about who may see it. That disagreement is not
-# hypothetical: this dict used to BE the gate, and pin.panel served every one
-# of these panels to anyone who typed the URL.
+# hypothetical: this dict must never be read as the access gate - if
+# pin.panel served from it directly instead of each source's own
+# required_feature, every panel here would be visible to anyone who typed
+# the URL.
 _NEARBY_RESEARCH_TABS = {
     "epa_echo": "EPA",
 }
 
 # InfoPanelSource keys condensed into the "Location Data" tab strip alongside
 # the (bespoke, non-InfoPanelSource) Nominatim/OpenStreetMap panel - see
-# _pin_location_data_tabs.html. These used to be separate standalone cards
-# with no explanation of how they differ from one another or from OpenStreetMap;
-# grouping them as tabs of one card makes clear they're independent geocoding/
-# data providers rather than duplicated data.
+# _pin_location_data_tabs.html. Grouped as tabs of one card so it's clear
+# they're independent geocoding/data providers rather than duplicated data.
 _LOCATION_DATA_PLUGIN_TABS = {
     "photon": "Photon",
     "overture_building_attributes": "Building Characteristics",
     "open_elevation": "Elevation",
 }
+
+
+#: Every panel key rendered inside a tab strip rather than as its own card.
+#: A panel's chrome is decided here, not by the panel: only this module knows
+#: whether a given key ends up inside a strip (which supplies the card) or
+#: standalone (which does not). A panel declaring its own ``nested`` status in
+#: ``render_context`` cannot be trusted here - a wrong self-declaration
+#: renders with no card at all, exactly the shape of "Water & Hydrology is
+#: not styled like the other cards."
+_TABBED_PANEL_KEYS = _CONDENSED_PLUGIN_TABS.keys() | _NEARBY_RESEARCH_TABS.keys() | _LOCATION_DATA_PLUGIN_TABS.keys()
 
 # Mirrors plugins.builtin.open_elevation's own module-level constant - kept as
 # a separate copy since importing a private constant across module boundaries
@@ -125,7 +140,7 @@ def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
     that anyone logged in can type, so a gate applied only during tab assembly
     withholds nothing at all.
 
-    Delegates to ``services.external_data.panel_visible_to``, which is also
+    Delegates to ``services.pins.external_data.panel_visible_to``, which is also
     what the external API's panel endpoints call - a feature-gated panel must
     never be visible on one surface and hidden on the other.
 
@@ -137,7 +152,7 @@ def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
         True when the source is unrestricted (the overwhelming majority) or the
         viewer holds the feature it requires.
     """
-    from urbanlens.dashboard.services.external_data import panel_visible_to
+    from urbanlens.dashboard.services.pins.external_data import panel_visible_to
 
     return panel_visible_to(request.user, source)
 
@@ -179,7 +194,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        today = date.today()
+        today = timezone.localdate()
         min_date = date(today.year - 100, today.month, today.day)
 
         detail_pin_icon_choices = [
@@ -199,8 +214,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             ("emergency", "Emergency"),
         ]
 
-        from urbanlens.dashboard.services.debug_overlay import can_view_debug_overlay
+        from urbanlens.dashboard.services.admin.debug_overlay import can_view_debug_overlay
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+        from urbanlens.dashboard.services.places.scope import scope_badge
 
         # Whether this pin covers a whole parcel/site rather than one building,
         # in which case the building-level cards suppress themselves and the
@@ -222,7 +238,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if pin.cover_photo_id:
             pin_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in pin.images.exclude(pk=pin.cover_photo_id).order_by("-created")[:20] if img.image]
 
-        from urbanlens.dashboard.services.external_data import InfoPanelSource, panel_readiness, panel_sources
+        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_readiness, panel_sources
 
         # Subscription-gated sources are filtered out once, here, rather than at
         # each of the four surfaces built from this dict below (three tab strips
@@ -233,8 +249,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         condensed_panel_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _CONDENSED_PLUGIN_TABS.items() if key in all_info_panels]
         nearby_research_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _NEARBY_RESEARCH_TABS.items() if key in all_info_panels]
         location_data_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _LOCATION_DATA_PLUGIN_TABS.items() if key in all_info_panels]
-        _tabbed_panel_keys = _CONDENSED_PLUGIN_TABS.keys() | _NEARBY_RESEARCH_TABS.keys() | _LOCATION_DATA_PLUGIN_TABS.keys()
-        simple_info_panels = [source for key, source in all_info_panels.items() if key not in _tabbed_panel_keys]
+        simple_info_panels = [source for key, source in all_info_panels.items() if key not in _TABBED_PANEL_KEYS]
 
         # Regional Data and Nearby Research used to be two separate cards, each
         # with their own tab strip - merged into one "Regional Data" section.
@@ -260,15 +275,29 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # familiar, rather than re-introducing it on every new pin.
         has_ever_used_aliases = PinAlias.objects.filter(pin__profile=profile).exists()
 
+        from django.urls import reverse
+
+        custom_layers = list(CustomLayer.objects.for_pin(pin).order_by("order", "created"))
+
         return render(
             request,
             "dashboard/pages/location/index.html",
             {
                 "pin": pin,
+                "custom_layers": custom_layers,
+                "custom_layers_json": [layer.to_json() for layer in custom_layers],
+                "manage_layers_url": reverse("pin.layers", args=[pin.slug]),
+                "map_overlays_json": overlay_payload(MapImageOverlay.objects.for_pin(pin)),
+                "manage_overlays_url": reverse("pin.overlays", args=[pin.slug]),
+                "manage_overlays_historical_url": reverse("pin.overlays.historical", args=[pin.slug]),
+                "overlay_corners_url_template": reverse("pin.overlays.corners", args=[pin.slug, OVERLAY_UUID_PLACEHOLDER]),
+                "temporal_slider_years": temporal_slider_years(pin.location, request.user) if pin.location_id else [],
+                "temporal_imagery_url_template": reverse("pin.temporal_imagery", args=[pin.slug, TEMPORAL_YEAR_PLACEHOLDER]),
                 "profile": profile,
                 "parent_pin": pin.parent_pin,
                 "has_child_pins": pin.detail_pins.exists(),
                 "is_site_scope": site_scope,
+                **scope_badge(pin),
                 "include_children": include_children,
                 "can_view_debug_overlay": can_view_debug_overlay(request.user),
                 "google_maps_api_key": settings.google_unrestricted_api_key,
@@ -301,6 +330,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     {"action": "wiki", "icon": "public", "label": "Send to wiki"},
                 ],
                 "detail_pin_bulk_actions": [
+                    {"action": "edit", "icon": "edit", "label": "Edit"},
                     {"action": "promote", "icon": "move_up", "label": "Promote to top level"},
                     {"action": "wiki", "icon": "public", "label": "Send to wiki"},
                     {"action": "share", "icon": "ios_share", "label": "Share with a friend"},
@@ -333,7 +363,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Returns:
             A `DebugEntry`, or None if the requesting user can't view debug info.
         """
-        from urbanlens.dashboard.services.debug_overlay import DebugEntry, can_view_debug_overlay
+        from urbanlens.dashboard.services.admin.debug_overlay import DebugEntry, can_view_debug_overlay
 
         if not can_view_debug_overlay(request.user):
             return None
@@ -372,7 +402,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             suppressed or the poll budget is exhausted (the page's existing
             htmx 204 handler removes the section quietly).
         """
-        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, get_panel_source, schedule_panel_fetch
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, get_panel_source, schedule_panel_fetch
 
         attempt = self._poll_attempt(request)
         if attempt >= MAX_POLL_ATTEMPTS or not schedule_panel_fetch(source_key, pin):
@@ -452,7 +482,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             suppressed or the poll budget is exhausted (the gallery JS counts
             a 204 as "this provider is done, with nothing").
         """
-        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, schedule_panel_fetch
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, schedule_panel_fetch
 
         attempt = self._poll_attempt(request)
         if attempt >= MAX_POLL_ATTEMPTS or not schedule_panel_fetch(source_key, pin):
@@ -493,7 +523,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
-        from urbanlens.dashboard.services.external_data import GalleryMediaSource, get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source
 
         panel = get_panel_source(source)
         if not isinstance(panel, GalleryMediaSource):
@@ -512,11 +542,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(status=204)
 
         cached = LocationCache.get_fresh(location, panel.cache_source)
-        if cached is None:
+        # A row whose media half was never filled in is not an answer for this
+        # gallery, even though it is one for the info panel sharing the row.
+        if cached is None or not panel.media_is_ready(cached.data or {}):
             return self._pending_media(request, pin, source)
         items = panel.media_items(cached.data or {})
 
-        from urbanlens.dashboard.services.media_relevance import local_images_for_gallery_items
+        from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
+        from urbanlens.dashboard.services.media.previews import gallery_thumb_url
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         relevance = dict(
@@ -525,7 +558,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # Prefer an already-materialized local copy over hot-linking the
         # provider, if anyone (this profile or another) has previously voted
         # this exact item relevant - see media_relevance.py and
-        # services.media_materialize's docstring. The remote page_url stays
+        # services.media.media_materialize's docstring. The remote page_url stays
         # the "Open source" link regardless, so the original is never lost.
         local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
         rendered_items = [
@@ -534,6 +567,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "key": media_item_key(item.url),
                 "is_relevant": relevance.get(media_item_key(item.url)),
                 "local_url": local_images[item.url].image.url if item.url in local_images else None,
+                # TIFFs, scanned PDFs and HEICs reach the gallery routinely and
+                # none of them render in an <img> - see services.media.previews.
+                "thumb_url": gallery_thumb_url(item.url, item.thumb_url, item.content_type),
             }
             for item in items
         ]
@@ -571,6 +607,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             The rendered ``pin_media_items.html`` fragment, or 204 when the
             pin has no photos of its own yet.
         """
+        from django.db.models import F, Q
+
         from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
@@ -580,7 +618,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(status=404)
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        images = Image.objects.filter(pin=pin, profile=profile).exclude(image="").order_by("-created")[:_MEDIA_PHOTOS_PREVIEW_LIMIT]
+        # Most-likely-relevant first (REData's cached confidence - see
+        # services.photos.redata_relevance), falling back to upload order for
+        # a photo REData hasn't scored yet (no location at submission time,
+        # REData not configured, or the score just hasn't landed).
+        # Excludes anything materialized from an external provider
+        # (media_source_key set - see services.media.media_materialize): that
+        # item already has its own live tile in the provider's panel, which
+        # renders its cached local copy via
+        # services.media.media_relevance.local_images_for_gallery_items -
+        # including it here too would show the same photo twice.
+        images = Image.objects.filter(pin=pin, profile=profile).filter(Q(media_source_key="") | Q(media_source_key__isnull=True)).exclude(image="").order_by(F("redata_confidence").desc(nulls_last=True), "-created")[:_MEDIA_PHOTOS_PREVIEW_LIMIT]
 
         rendered_items = [
             {
@@ -609,7 +657,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         Marking an item relevant also materializes it (downloads and saves it
         as a real ``Image`` row on this pin, exactly as if the user had
-        uploaded it themselves - see ``services.media_materialize``) so the
+        uploaded it themselves - see ``services.media.media_materialize``) so the
         gallery never depends on the external provider's URL staying alive.
         A failed download still records the relevance mark (the user's
         opinion that this item matters is worth keeping even if today's
@@ -623,8 +671,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         materialized photo never has a moment with no coordinates.
         """
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
-        from urbanlens.dashboard.services.images import coerce_coordinates
-        from urbanlens.dashboard.services.media_materialize import MaterializeError, materialize_media_item
+        from urbanlens.dashboard.services.media.images import coerce_coordinates
+        from urbanlens.dashboard.services.media.media_materialize import find_materialized_image
+        from urbanlens.dashboard.services.media.media_relevance import record_relevant_and_cache
+        from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -664,25 +714,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             MediaRelevance.objects.for_gallery(profile, pin.location, source).filter(item_key=item_key).delete()
             return JsonResponse({"is_relevant": None})
 
-        MediaRelevance.objects.update_or_create(
-            profile=profile,
-            location=pin.location,
-            source=source,
-            item_key=item_key,
-            defaults={"is_relevant": bool(is_relevant)},
-        )
-
         response: dict = {"is_relevant": bool(is_relevant)}
         if is_relevant:
-            try:
-                image = materialize_media_item(location=pin.location, profile=profile, source=source, url=url, page_url=page_url, caption=caption, pin=pin)
-            except MaterializeError as exc:
-                # MaterializeError can embed raw requests/OSError text (e.g. a
-                # failed download), which isn't safe to return verbatim - log
-                # it server-side and surface a generic message instead.
-                logger.warning("media_relevance: failed to materialize %s: %s", url, exc)
-                response["materialize_error"] = "Could not save this photo."
-            else:
+            # An explicit click overrides any prior vote for this profile.
+            result = record_relevant_and_cache(
+                location=pin.location,
+                profile=profile,
+                source=source,
+                url=url,
+                page_url=page_url,
+                caption=caption,
+                pin=pin,
+                item_key=item_key,
+            )
+            if result.error:
+                response["materialize_error"] = result.error
+            elif result.image is not None:
+                image = result.image
                 response["image_id"] = image.pk
                 response["image_url"] = image.image.url
                 if coordinates is not None:
@@ -690,13 +738,32 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     image.save(update_fields=["latitude", "longitude"])
                     response["latitude"] = float(image.latitude)
                     response["longitude"] = float(image.longitude)
+        else:
+            MediaRelevance.objects.update_or_create(
+                profile=profile,
+                location=pin.location,
+                source=source,
+                item_key=item_key,
+                defaults={"is_relevant": False},
+            )
+            # Marking "not relevant" never materializes a new copy - but if
+            # this item was already saved (e.g. an earlier "relevant" vote,
+            # or a wiki send), REData should hear about the reversal too.
+            existing_image = find_materialized_image(pin.location, source, url, page_url=page_url, pin=pin, profile=profile)
+            if existing_image is not None:
+                queue_relevance_vote(existing_image, profile, is_relevant=False)
         return JsonResponse(response)
 
     @action(detail=True, methods=["post"])
     def media_send_to_wiki(self, request: Request, pin_slug: str):
-        """Materialize selected Media gallery items and attach them to this location's wiki."""
+        """Queue selected Media gallery items for attachment to this location's wiki.
+
+        The download itself runs in ``tasks.cache_media_item_into_wiki`` - see there
+        for why a selection of up to 20 is not fetched inside the request.
+        """
         from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.services.media_materialize import MaterializeError, materialize_media_item
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import cache_media_item_into_wiki
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -716,28 +783,27 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        created = 0
+        # Enqueued rather than downloaded here: a full selection is up to 20 remote
+        # fetches, which inside the request is a multi-second hang with no progress
+        # indicator, and a request that times out partway attaches some photos and
+        # drops the rest with nothing said. Validation stays synchronous so a
+        # malformed entry is still reported immediately.
+        queued = 0
         errors: list[str] = []
         for entry in items[:20]:
             try:
-                materialize_media_item(
-                    location=pin.location,
-                    profile=profile,
-                    source=str(entry.get("source", ""))[:30],
-                    url=str(entry["url"]),
-                    page_url=str(entry.get("page_url") or ""),
-                    caption=str(entry.get("caption") or ""),
-                    wiki=wiki,
-                )
-                created += 1
-            except MaterializeError as exc:
-                # Same rationale as media_relevance above: don't echo exc.
-                logger.warning("media_send_to_wiki: failed to materialize %s: %s", entry.get("url"), exc)
-                errors.append("Could not save this photo.")
+                url = str(entry["url"])
+                source = str(entry.get("source", ""))[:30]
+                page_url = str(entry.get("page_url") or "")
+                caption = str(entry.get("caption") or "")
             except (KeyError, TypeError, ValueError):
                 logger.warning("media_send_to_wiki: malformed item entry: %r", entry)
+                errors.append("Could not save this photo.")
+                continue
+            safely_enqueue_task(cache_media_item_into_wiki, wiki.pk, profile.pk, source, url, page_url, caption)
+            queued += 1
 
-        return JsonResponse({"created": created, "errors": errors})
+        return JsonResponse({"queued": queued, "errors": errors})
 
     @action(detail=True, methods=["get"])
     def nearby_pins_json(self, request: Request, pin_slug: str):
@@ -874,7 +940,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 },
             )
 
-        from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+        from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
 
         try:
             # Deadline-bounded: this is the one external fetch still made on
@@ -963,8 +1029,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             The rendered carousel fragment, a pending-panel placeholder, or a
             404 if the pin doesn't belong to the requesting user.
         """
-        from urbanlens.dashboard.services.external_data import panel_sources
-        from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+        from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+        from urbanlens.dashboard.services.pins.external_data import panel_sources
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -1033,7 +1099,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         - Bing Maps Aerial (current, high-res) - fetched server-side
         - OpenAerialMap community imagery - browser-loaded thumbnails
         """
-        from urbanlens.dashboard.services.external_data import collect_satellite_slides
+        from urbanlens.dashboard.services.pins.external_data import collect_satellite_slides
 
         return self._render_media_carousel(
             request,
@@ -1052,7 +1118,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         - Mapillary crowdsourced imagery (browser-loaded URLs, cached 24 h)
         - KartaView open imagery (browser-loaded URLs, cached 24 h)
         """
-        from urbanlens.dashboard.services.external_data import collect_street_view_slides
+        from urbanlens.dashboard.services.pins.external_data import collect_street_view_slides
 
         return self._render_media_carousel(
             request,
@@ -1098,82 +1164,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    @action(detail=True, methods=["post"])
-    def upload_takeout(self, request: HttpRequest):
-        """
-        Upload one or more Google Takeout files and stream import progress as SSE.
-
-        Accepts individual KML, JSON, and CSV files as well as ZIP and TGZ archives.
-        Archives are extracted securely before parsing; malformed or unsupported
-        entries are skipped without aborting the whole import.
-        """
-        from urbanlens.dashboard.services.archive_extractor import extract_archive, is_archive
-
-        form = UploadDataFile(request.POST, request.FILES)
-        if not form.is_valid():
-            return JsonResponse({"error": "Invalid form"}, status=400)
-
-        if not isinstance(request.user, User):
-            return JsonResponse({"error": "Authentication required."}, status=401)
-
-        uploaded_files = form.cleaned_data["upload_files"]
-
-        # Expand every uploaded file into a flat list of (name, raw_bytes) pairs,
-        # recursing one level to handle KMZ (ZIP-inside-ZIP) found in an archive.
-        all_files: list[tuple[str, bytes]] = []
-        for uploaded_file in uploaded_files:
-            try:
-                data = uploaded_file.read()
-            except OSError as e:
-                logger.exception("Failed to read uploaded file %s -> %s", uploaded_file.name, e)
-                return JsonResponse(
-                    {"error": f"Failed to read {uploaded_file.name}."},
-                    status=400,
-                )
-
-            if is_archive(data):
-                try:
-                    extracted = extract_archive(data)
-                except ValueError as exc:
-                    logger.warning("Could not extract archive: %s", exc)
-                    return JsonResponse({"error": "Invalid archive."}, status=400)
-
-                for entry in extracted:
-                    # Handle KMZ files (nested ZIPs) found inside an outer archive.
-                    if is_archive(entry.data):
-                        try:
-                            inner = extract_archive(entry.data)
-                            all_files.extend((x.name, x.data) for x in inner)
-                        except ValueError:
-                            logger.warning("Could not extract nested archive: %s", entry.name)
-                    else:
-                        all_files.append((entry.name, entry.data))
-            else:
-                all_files.append((uploaded_file.name, data))
-
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-
-        from urbanlens.dashboard.models.labels.model import Label
-
-        tag_ids = request.POST.getlist("tag_ids")
-        import_tags = list(Label.objects.visible_to(profile).filter(id__in=tag_ids)) if tag_ids else []
-        tag_by_filename = request.POST.get("tag_by_filename") == "1"
-
-        google_maps_gateway = GoogleMapsGateway()
-
-        response = StreamingHttpResponse(
-            google_maps_gateway.import_pins_streaming(
-                all_files,
-                profile,
-                tags=import_tags,
-                tag_by_filename=tag_by_filename,
-            ),
-            content_type="text/event-stream",
-        )
-        response["Cache-Control"] = "no-cache"
-        response["X-Accel-Buffering"] = "no"
-        return response
-
     @action(detail=False, methods=["post"])
     def parse_for_preview(self, request: HttpRequest):
         """Parse uploaded files and return pin preview data as JSON without importing."""
@@ -1181,7 +1171,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
-        from urbanlens.dashboard.services.archive_extractor import extract_archive, is_archive
+        from urbanlens.dashboard.services.import_export.archive_extractor import ExtractionBudget, extract_archive, is_archive
 
         if not isinstance(request.user, User):
             return JsonResponse({"error": "Authentication required."}, status=401)
@@ -1200,6 +1190,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         all_files: list[tuple[str, bytes]] = []
         document_files: list[tuple[str, bytes]] = []
+        # One allowance for the whole upload. The extractor's limits are
+        # per-archive, and this loop calls it again for every nested archive it
+        # finds - so without sharing a budget an outer ZIP holding N nested
+        # bombs bought N x the cap, entirely inside one request.
+        extraction_budget = ExtractionBudget()
         for uploaded_file in uploaded_files:
             try:
                 data = uploaded_file.read()
@@ -1214,7 +1209,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 document_files.append((uploaded_file.name, data))
             elif is_archive(data):
                 try:
-                    extracted = extract_archive(data)
+                    extracted = extract_archive(data, extraction_budget)
                 except ValueError as exc:
                     logger.warning("Could not extract archive: %s", exc)
                     return JsonResponse({"error": "Invalid archive."}, status=400)
@@ -1236,7 +1231,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     for entry in extracted:
                         if is_archive(entry.data):
                             try:
-                                inner = extract_archive(entry.data)
+                                inner = extract_archive(entry.data, extraction_budget)
                                 all_files.extend((x.name, x.data) for x in inner)
                             except ValueError:
                                 logger.warning("Could not extract nested archive during preview")
@@ -1270,10 +1265,20 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         labels = Label.objects.visible_to(profile).location_labels().ordered()
 
+        previewed = sum(len(lst["pins"]) for lst in lists)
+        if previewed >= gateway.MAX_PREVIEW_PINS:
+            # Said out loud rather than silently shown: a preview that stops at
+            # the cap looks exactly like a file that only had that many pins.
+            # An upload landing on the boundary exactly gets this message
+            # without having been truncated, which is a harmless over-warning
+            # and the reason it says "at the limit" rather than "some were
+            # dropped".
+            document_warnings.append(f"This upload is at the preview limit of {gateway.MAX_PREVIEW_PINS:,} pins - anything beyond that is not shown.")
+
         return JsonResponse(
             {
                 "lists": lists,
-                "total": sum(len(lst["pins"]) for lst in lists),
+                "total": previewed,
                 "labels": [
                     {
                         "id": b.id,
@@ -1426,14 +1431,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         HTMX partial: National Park Service information for the pin's location.
 
-        Shows the NPS unit whose boundary *contains* the pin's coordinates, if
-        any -- the panel is about the pinned place being inside a national park,
-        not merely near one. Requires an NPS API key.
+        Shows the nearest NPS unit to the pin's coordinates within REData's
+        local-catalog search radius (a proximity search, not strict boundary
+        containment - see ``plugins.builtin.nps``). Requires REData to be
+        configured.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
-        if not settings.nps_api_key:
-            logger.debug("nps_info: NPS API key not configured, skipping pin %s", pin_slug)
+        if not redata_configured():
+            logger.debug("nps_info: REData not configured, skipping pin %s", pin_slug)
             return HttpResponse(status=204)
 
         try:
@@ -1461,7 +1468,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("nps_info: pin %s is not within any NPS unit", pin_slug)
             return HttpResponse(status=204)
 
-        context = {"park": data, "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1)}
+        from urbanlens.dashboard.plugins.builtin.nps import park_facts
+
+        # The same rows the API serves, from the same helper - the two rendered
+        # different subsets of this payload by hand before, and the hours the
+        # template did have it declined to read ("Standard hours vary - check
+        # NPS.gov", printed over the cached hours).
+        context = {"park": data, "facts": park_facts(data), "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1)}
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
 
     def _location_data_overview_fields(self, source_key: str, data: dict) -> dict | None:
@@ -1505,20 +1518,21 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             }
 
         if source_key == "photon":
-            if not data.get("name"):
+            heading_key = next((key for key in ("locality", "region", "country") if data.get(key)), None)
+            if heading_key is None:
                 return None
             fields = []
-            street_parts = [data[key] for key in ("housenumber", "street") if data.get(key)]
+            street_parts = [data[key] for key in ("house_number", "street") if data.get(key)]
             if street_parts:
                 fields.append({"label": "Street", "value": " ".join(street_parts)})
-            for key, label in (("locality", "Locality"), ("district", "District"), ("city", "City"), ("county", "County"), ("state", "State"), ("country", "Country"), ("postcode", "Postal Code")):
-                if data.get(key):
+            for key, label in (("locality", "Locality"), ("region", "Region"), ("country", "Country"), ("postal_code", "Postal Code")):
+                if key != heading_key and data.get(key):
                     fields.append({"label": label, "value": data[key]})
             return {
-                "heading_name": data.get("name"),
-                "chips": [data["osm_value"].replace("_", " ").title()] if data.get("osm_value") else [],
+                "heading_name": data[heading_key],
+                "chips": [],
                 "fields": fields,
-                "footer_link": {"url": data["osm_url"], "label": "View raw OSM entry"} if data.get("osm_url") else None,
+                "footer_link": None,
             }
 
         if source_key == "overture_building_attributes":
@@ -1576,7 +1590,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         hides it rather than leaving it clickable only to land on "No data
         available." every time.
         """
-        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, LocationCachePanelSource, get_panel_source, schedule_panel_fetch
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, LocationCachePanelSource, get_panel_source, schedule_panel_fetch
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -1600,9 +1614,19 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             source = get_panel_source(key)
             if not isinstance(source, LocationCachePanelSource):
                 continue
-            if source.is_ready(pin):
-                cached = LocationCache.get_fresh(location, source.cache_source)
-                piece = self._location_data_overview_fields(key, cached.data if cached else {})
+            # A fresh row, not `is_ready`. The two answer different questions:
+            # `is_ready` means "is there a tab worth showing", and since
+            # `ed8b3b28` a panel may opt into inspecting its payload to answer
+            # it - which `photon` and `open_elevation` both do. Asking it here
+            # meant a *fetched* source whose answer was legitimately empty
+            # looked unfetched, got rescheduled on every render, and was never
+            # added to `empty_keys`. That is the exact signal the client uses to
+            # hide the dead tab, so the fix that introduced `inspects_content`
+            # stopped the two panels it was written for from ever being hidden.
+            # What this loop needs is "has it been asked yet".
+            cached = LocationCache.get_fresh(location, source.cache_source)
+            if cached is not None:
+                piece = self._location_data_overview_fields(key, cached.data)
                 if piece is None:
                     empty_keys.append(key)
                     continue
@@ -1789,8 +1813,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_rows
-        from urbanlens.dashboard.services.external_data import get_panel_source
         from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
+        from urbanlens.dashboard.services.pins.external_data import get_panel_source
+        from urbanlens.dashboard.services.pins.pin_restructure import missing_buildings, property_polygon
 
         try:
             pin = Pin.objects.select_related("location", "profile").get(slug=pin_slug, profile__user=request.user)
@@ -1810,7 +1835,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(status=204)
 
         children = list(pin.detail_pins.select_related("location"))
-        rows = building_rows(buildings, children, url_for=lambda child: reverse("pin.details", kwargs={"pin_slug": child.slug or child.uuid}))
+        rows = building_rows(
+            buildings,
+            children,
+            url_for=lambda child: reverse("pin.details", kwargs={"pin_slug": child.slug or child.uuid}),
+            boundary_polygon=property_polygon(pin),
+        )
         return render(
             request,
             "dashboard/partials/pins/_parcel_buildings_panel.html",
@@ -1820,7 +1850,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "title": panel.title,
                 "pin": pin,
                 "rows": rows,
-                "unpinned_count": sum(1 for row in rows if not row["child_name"]),
+                # From the import's own view of the parcel, not from the rows:
+                # the button must promise exactly what pressing it will do.
+                # Counting rows with no child pin answered a different question
+                # - a building carrying the owner's *top-level* pin has no
+                # child and counted here, but `missing_buildings` (which the
+                # dialog uses) excludes it, so the button offered a count the
+                # dialog then 204'd on, doing nothing at all.
+                "unpinned_count": len(missing_buildings(pin)),
                 "debug": self._debug_entry(request, PARCEL_BUILDINGS_CACHE_SOURCE, cached.query_key, from_cache=True, count=len(rows)),
             },
         )
@@ -1841,7 +1878,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         omitted from the page's tab strip - see :func:`_viewer_may_see_panel`.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.external_data import InfoPanelSource, get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, get_panel_source
 
         panel = get_panel_source(panel_key)
         if not isinstance(panel, InfoPanelSource):
@@ -1881,6 +1918,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context["section_id"] = panel.section_id
         context["icon"] = panel.icon
         context["title"] = panel.title
+        # Decided here rather than taken from render_context: a panel cannot know
+        # whether it was rendered into a tab strip (which supplies the card chrome)
+        # or standalone (which does not - the placeholder it replaces via
+        # hx-swap="outerHTML" takes its card with it).
+        context["nested"] = panel_key in _TABBED_PANEL_KEYS
         context["debug"] = self._debug_entry(request, panel_key, cached.query_key, from_cache=True, count=panel.debug_count(data))
         # Links a panel marks with ai_extract=True get the AI extraction button.
         context["pin"] = pin
@@ -1947,7 +1989,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         release-list cache, which is shared across all pins/users.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.debug_overlay import can_view_debug_overlay
+        from urbanlens.dashboard.services.admin.debug_overlay import can_view_debug_overlay
 
         if not can_view_debug_overlay(request.user):
             return HttpResponse(status=403)
@@ -2008,12 +2050,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         Returns the weather forecast for a pin.
 
-        Tries OpenWeatherMap first when a key is configured; falls back to the
-        free, keyless Open-Meteo gateway when it isn't configured or its call
-        fails, so the widget still works out of the box. Both providers
-        render through the same normalized ``ForecastSlot`` shape.
+        Tries REData first when configured (one call covers every registered
+        provider); otherwise falls back to OpenWeatherMap when a key is
+        configured, then the free, keyless Open-Meteo gateway - see
+        ``services.apis.locations.weather_resolution``. Every path renders
+        through the same normalized ``ForecastSlot`` shape.
         """
-        from urbanlens.dashboard.services.apis.weather.forecast import owm_item_to_slot
+        from urbanlens.dashboard.services.apis.locations.weather_resolution import get_forecast_slots, get_sun_times
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if not profile.external_apis_enabled:
@@ -2028,29 +2071,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not pin.location or not pin.location.latitude or not pin.location.longitude:
             return HttpResponse("Pin does not have valid coordinates", status=400)
 
-        forecast = None
-        if settings.openweathermap_api_key:
-            from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
-
-            try:
-                raw_forecast = OpenWeatherMapGateway().get_weather_forecast(pin.location.latitude, pin.location.longitude)
-            except Exception:
-                logger.warning("OpenWeatherMap forecast failed for pin %s, falling back to Open-Meteo", pin_slug, exc_info=True)
-                raw_forecast = None
-            if raw_forecast:
-                forecast = [slot for item in raw_forecast if (slot := owm_item_to_slot(item)) is not None]
-
-        from urbanlens.dashboard.services.apis.weather.open_meteo import OpenMeteoGateway
-
-        if not forecast:
-            forecast = OpenMeteoGateway().get_weather_forecast(float(pin.location.latitude), float(pin.location.longitude))
-
+        latitude, longitude = float(pin.location.latitude), float(pin.location.longitude)
+        forecast = get_forecast_slots(latitude, longitude)
         logger.debug("forecast_data: %s", forecast)
-
-        # Always via Open-Meteo (UL-345), independent of which provider
-        # served the temperature/condition forecast above - OpenWeatherMap's
-        # 5-day/3-hour endpoint doesn't carry sunrise/sunset.
-        sun_times = OpenMeteoGateway().get_sun_times(float(pin.location.latitude), float(pin.location.longitude))
+        sun_times = get_sun_times(latitude, longitude)
 
         return render(request, "dashboard/pages/location/weather.html", {"forecast": forecast, "sun_times": sun_times})
 
@@ -2058,7 +2082,76 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 _REDATA_MEDIA_CACHE_TTL = 3600
 
 
-class PinLoopnetPhotoView(View):
+class RedataMediaProxyMixin:
+    """Shared caching + preview handling for the REData-backed media proxies.
+
+    Each of these views fetches one file's bytes from REData (whose API key
+    must never reach the browser) and serves them. They also accept
+    ``?preview=1``, meaning "give me something an ``<img>`` can render":
+    already-displayable files are passed through untouched, and anything else
+    is rasterized (a PDF's first page, a TIFF re-encoded). CRIS attachments in
+    particular are routinely scanned PDFs and TIFFs, which no browser displays.
+
+    Deciding here rather than at the call site is what makes this reliable:
+    REData leaves an attachment's ``content_type`` blank until the file has
+    been downloaded at least once, so a caller building a gallery URL usually
+    cannot know the format yet - but this view, holding the bytes, always can.
+    The conversion also belongs here rather than behind the generic
+    ``media_preview`` endpoint, which would only re-download what this view
+    already has.
+    """
+
+    def serve_media(self, request: HttpRequest, cache_key: str, download) -> HttpResponse:
+        """Serve one REData file, converting it to a preview image when asked.
+
+        Args:
+            request: The current request; ``?preview=1`` asks for a
+                browser-displayable rendering rather than the original bytes.
+            cache_key: Django cache key for the *original* bytes. The preview
+                is cached under a suffix of it, so both forms of the same file
+                are cached independently and neither invalidates the other.
+            download: Zero-argument callable returning ``(content, content_type)``,
+                raising ``PropertyRecordsUnavailableError``/``ValueError`` when
+                the file isn't available.
+
+        Returns:
+            The file (or its preview), or a 404 when REData couldn't supply it
+            or the preview couldn't be rendered.
+        """
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
+        from urbanlens.dashboard.services.media.previews import is_web_safe, render_preview
+
+        wants_preview = request.GET.get("preview") == "1"
+        serve_key = f"{cache_key}_preview" if wants_preview else cache_key
+        cached = cache.get(serve_key)
+        if cached is not None:
+            content, content_type = cached
+            return HttpResponse(content, content_type=content_type)
+
+        original = cache.get(cache_key)
+        if original is None:
+            try:
+                original = download()
+            except (PropertyRecordsUnavailableError, ValueError):
+                return HttpResponse(status=404)
+            cache.set(cache_key, original, _REDATA_MEDIA_CACHE_TTL)
+
+        content, content_type = original
+        # A JPEG needs no conversion, and re-encoding it would only cost
+        # quality - "preview" asks for something displayable, not necessarily
+        # something different.
+        if not wants_preview or is_web_safe(request.path, content_type):
+            return HttpResponse(content, content_type=content_type)
+
+        preview = render_preview(content, content_type)
+        if preview is None:
+            return HttpResponse(status=404)
+        cache.set(serve_key, preview, _REDATA_MEDIA_CACHE_TTL)
+        content, content_type = preview
+        return HttpResponse(content, content_type=content_type)
+
+
+class PinLoopnetPhotoView(RedataMediaProxyMixin, View):
     """GET pin/loopnet/photo/<listing_uuid>/<photo_id>/ - proxies one LoopNet listing photo.
 
     REData's API key must never reach the browser, so photo bytes are
@@ -2066,29 +2159,22 @@ class PinLoopnetPhotoView(View):
     cached briefly to avoid re-hitting REData on every gallery view. No
     login required, unlike the Immich proxy: LoopNet listing photos are
     public marketing material (not a specific user's private library), and
-    ``services.media_materialize.materialize_media_item`` downloads this same
+    ``services.media.media_materialize.materialize_media_item`` downloads this same
     URL server-side with no session of its own - it would 302 to the login
     page and fail if this endpoint required one.
     """
 
     def get(self, request: HttpRequest, listing_uuid: str, photo_id: int) -> HttpResponse:
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
 
-        cache_key = f"ul_loopnet_photo_{listing_uuid}_{photo_id}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
-
-        try:
-            content, content_type = RedataGateway().download_listing_photo(listing_uuid, photo_id)
-        except (PropertyRecordsUnavailableError, ValueError):
-            return HttpResponse(status=404)
-        cache.set(cache_key, (content, content_type), _REDATA_MEDIA_CACHE_TTL)
-        return HttpResponse(content, content_type=content_type)
+        return self.serve_media(
+            request,
+            f"ul_loopnet_photo_{listing_uuid}_{photo_id}",
+            lambda: RedataGateway().download_listing_photo(listing_uuid, photo_id),
+        )
 
 
-class PinCrisAttachmentView(View):
+class PinCrisAttachmentView(RedataMediaProxyMixin, View):
     """GET pin/cris/attachment/<resource_uuid>/<attachment_id>/ - proxies one CRIS attachment/photo.
 
     Same reasoning as ``PinLoopnetPhotoView`` - no login required (CRIS
@@ -2098,23 +2184,16 @@ class PinCrisAttachmentView(View):
     """
 
     def get(self, request: HttpRequest, resource_uuid: str, attachment_id: int) -> HttpResponse:
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
 
-        cache_key = f"ul_cris_attachment_{resource_uuid}_{attachment_id}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
-
-        try:
-            content, content_type = RedataGateway().download_cultural_resource_attachment(resource_uuid, attachment_id)
-        except (PropertyRecordsUnavailableError, ValueError):
-            return HttpResponse(status=404)
-        cache.set(cache_key, (content, content_type), _REDATA_MEDIA_CACHE_TTL)
-        return HttpResponse(content, content_type=content_type)
+        return self.serve_media(
+            request,
+            f"ul_cris_attachment_{resource_uuid}_{attachment_id}",
+            lambda: RedataGateway().download_cultural_resource_attachment(resource_uuid, attachment_id),
+        )
 
 
-class PinCrisExtractedImageView(View):
+class PinCrisExtractedImageView(RedataMediaProxyMixin, View):
     """GET pin/cris/attachment/<resource_uuid>/<attachment_id>/extracted/<image_id>/ - proxies
     one photo OCR/AI-extracted from a CRIS document attachment.
 
@@ -2122,17 +2201,10 @@ class PinCrisExtractedImageView(View):
     """
 
     def get(self, request: HttpRequest, resource_uuid: str, attachment_id: int, image_id: int) -> HttpResponse:
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
 
-        cache_key = f"ul_cris_extracted_image_{resource_uuid}_{attachment_id}_{image_id}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
-
-        try:
-            content, content_type = RedataGateway().download_extracted_image(resource_uuid, attachment_id, image_id)
-        except (PropertyRecordsUnavailableError, ValueError):
-            return HttpResponse(status=404)
-        cache.set(cache_key, (content, content_type), _REDATA_MEDIA_CACHE_TTL)
-        return HttpResponse(content, content_type=content_type)
+        return self.serve_media(
+            request,
+            f"ul_cris_extracted_image_{resource_uuid}_{attachment_id}_{image_id}",
+            lambda: RedataGateway().download_extracted_image(resource_uuid, attachment_id, image_id),
+        )

@@ -11,7 +11,7 @@ from django.db.models import Index, ManyToManyField, Q, UniqueConstraint
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin_share.meta import PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.models.pin_share.queryset import PinShareManager
-from urbanlens.dashboard.services.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -39,7 +39,7 @@ class PinShare(abstract.DashboardModel):
     status = models.CharField(max_length=20, choices=PinShareStatus.choices, default=PinShareStatus.PENDING)
     # How this share came to exist - an explicit share-a-pin action, or
     # auto-detected because a MarkupMap sent to `to_profile` revealed this
-    # pin (see services.map_pin_share_detection.detect_shared_pins).
+    # pin (see services.sharing.map_pin_share_detection.detect_shared_pins).
     origin = models.CharField(max_length=20, choices=PinShareOrigin.choices, default=PinShareOrigin.EXPLICIT)
     # The MarkupMap whose detection produced this share, when origin is
     # MAP_DETECTED. Distinct from `markup_map` below.
@@ -203,7 +203,12 @@ class PinShare(abstract.DashboardModel):
         """
         if self.status != PinShareStatus.ACCEPTED:
             return None
-        created = self.pins_created.first()
+        # ``.all()`` rather than ``.first()``: a share card is rendered per message,
+        # and .first() appends ORDER BY + LIMIT so it always queries, even when the
+        # caller prefetched. .all() reads the prefetch cache when there is one and
+        # costs the same single query when there isn't - same reasoning as
+        # ``PinList.pin_count`` and ``Pin.rating``.
+        created = next(iter(self.pins_created.all()), None)
         if created is not None:
             return created
         location_id = self.shared_location_id
@@ -252,7 +257,7 @@ class PinShare(abstract.DashboardModel):
                 name="db_pinshare_one_pending_per_pin_user",
             ),
             # Race-safety backstop for the application-level dedup check in
-            # services.map_sharing._record_detected_share - at most one
+            # services.sharing.map_sharing._record_detected_share - at most one
             # MAP_DETECTED share per (pin, recipient) pair.
             UniqueConstraint(
                 fields=["pin", "to_profile"],

@@ -33,15 +33,16 @@ from rest_framework import serializers
 
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH
-from urbanlens.dashboard.services.direct_messages import reaction_summary, serialize_direct_message
-from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+from urbanlens.dashboard.models.reactions.model import Reaction
+from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH, column_max_length
+from urbanlens.dashboard.services.messaging.direct_messages import reaction_summary, serialize_direct_message
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
     from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupMessage
     from urbanlens.dashboard.models.profile.model import Profile
 
-#: Upper bound on a submitted nonce, matching ``services.e2ee.MAX_NONCE_LENGTH``.
+#: Upper bound on a submitted nonce, matching ``services.security.e2ee.MAX_NONCE_LENGTH``.
 MAX_NONCE_FIELD_LENGTH = 64
 
 #: Upper bound on how many images one send may attach. Generous next to any
@@ -318,12 +319,17 @@ class GroupMembersSerializer(serializers.Serializer):
 class ReactionSerializer(serializers.Serializer):
     """Validates a reaction toggle.
 
-    Length-capped here; ``services.direct_messages.is_safe_reaction_emoji``
+    Length-capped here; ``services.messaging.direct_messages.is_safe_reaction_emoji``
     remains the authority on whether the glyph is render-safe, since reactions
     are relayed verbatim into other participants' clients.
     """
 
-    emoji = serializers.CharField(max_length=32)
+    #: Read from the column, not a literal. ``is_safe_reaction_emoji`` documents
+    #: that its input is "already length-capped by the caller", and the internal
+    #: HTML path caps at exactly this width - this one declared 32 against a
+    #: 10-wide column, so an ordinary long ZWJ sequence (a family with skin-tone
+    #: modifiers is eleven code points) validated and then failed at the insert.
+    emoji = serializers.CharField(max_length=column_max_length(Reaction, "emoji"))
 
 
 class ReactionResultSerializer(serializers.Serializer):
@@ -403,7 +409,7 @@ def _share_payload(message: DirectMessage) -> dict[str, Any] | None:
 def build_direct_message_payload(message: DirectMessage, viewer: Profile) -> dict[str, Any]:
     """Render one direct message for one viewer.
 
-    Starts from ``services.direct_messages.serialize_direct_message`` rather
+    Starts from ``services.messaging.direct_messages.serialize_direct_message`` rather
     than reading the model directly, so the identity masking that function
     applies (the sender's name resolved through *this viewer's* visibility)
     cannot be skipped here. The API-specific fields are layered on top.
@@ -478,7 +484,7 @@ def build_group_message_payload(message: GroupMessage, viewer: Profile) -> dict[
       its ``group_message`` foreign key, and the summary is the identical
       shape a direct message reports, from the identical function.
     - ``pin_share_id`` - a pin shared into a group creates one ``PinShare`` per
-      recipient (see ``services.group_chats.share_pin_in_group_message``), so
+      recipient (see ``services.messaging.group_chats.share_pin_in_group_message``), so
       unlike a direct message there is no single share object to nest under
       ``share``; the viewer's *own* row is resolved here. Without it a group
       recipient can see the share card but has no id to POST to
@@ -497,7 +503,7 @@ def build_group_message_payload(message: GroupMessage, viewer: Profile) -> dict[
     Returns:
         A ``DirectMessageSerializer``-shaped dict.
     """
-    from urbanlens.dashboard.services.group_chats import serialize_group_message
+    from urbanlens.dashboard.services.messaging.group_chats import serialize_group_message
 
     base = serialize_group_message(message, viewer=viewer)
     tombstone = message.tombstone_text_for(viewer.pk)
@@ -542,9 +548,9 @@ def build_conversation_payload(conversation: dict[str, Any], viewer: Profile) ->
     """Normalize one ``all_conversations_for`` row into the unified inbox shape.
 
     Args:
-        conversation: A row from ``services.direct_messages.conversations_for``
+        conversation: A row from ``services.messaging.direct_messages.conversations_for``
             (``kind="dm"``) or
-            ``services.group_chats.group_conversations_for`` (``kind="group"``).
+            ``services.messaging.group_chats.group_conversations_for`` (``kind="group"``).
             Their shapes differ; this is where that difference stops.
         viewer: The profile whose inbox this is.
 

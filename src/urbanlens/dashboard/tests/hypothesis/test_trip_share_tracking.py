@@ -1,4 +1,4 @@
-"""Tests for trip-activity share tracking (services.trip_share_tracking).
+"""Tests for trip-activity share tracking (services.trips.trip_share_tracking).
 
 Putting a place on a trip's itinerary reveals it to every joined member, and
 that must count in the sharer's reshare chain like any other pin share -
@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import LocationExposure, PinShare, PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.trip_share_tracking import record_trip_activity_shares, record_trip_shares_for_member
+from urbanlens.dashboard.services.trips.trip_share_tracking import record_trip_activity_shares, record_trip_shares_for_member
 
 
 class _TripShareTestCase(TestCase):

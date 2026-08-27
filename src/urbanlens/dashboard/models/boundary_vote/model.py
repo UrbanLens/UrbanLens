@@ -4,7 +4,7 @@ When more than one external provider has geometry for a place (REData's
 county parcel vs. Overpass's OpenStreetMap perimeter), the community picks
 which one should be the location's *official* property boundary - the one
 used for matching pins to wikis. Votes are recency-weighted (see
-``services.boundary_voting``), so a newer vote outweighs an equally-split
+``services.geo.boundary_voting``), so a newer vote outweighs an equally-split
 older one and the consensus can drift as the underlying data improves.
 
 Only externally-sourced candidate ``Boundary`` rows are votable - a
@@ -30,17 +30,18 @@ class BoundaryVote(abstract.DashboardModel):
     """A single profile's vote for one candidate official boundary of a location.
 
     Attributes:
-        location: The place whose official boundary is under vote. Candidate
-            boundaries are location-scoped (see ``Boundary``'s source-candidate
-            rows), so the vote is too - a wiki reaches it through its location.
-        boundary: The chosen candidate row. Must be one of the location's own
+        place: The real-world thing whose official boundary is under vote.
+            Keyed to the place rather than to a location so everyone who
+            pinned one property is voting on the same outline, instead of each
+            quietly correcting their own copy of it.
+        boundary: The chosen candidate row. Must be one of the place's own
             source-candidate boundaries - enforced at the endpoint, since a
             CHECK constraint can't join across tables.
         profile: Who cast it.
     """
 
-    location = ForeignKey(
-        "dashboard.Location",
+    place = ForeignKey(
+        "dashboard.Place",
         on_delete=CASCADE,
         related_name="boundary_votes",
     )
@@ -56,20 +57,18 @@ class BoundaryVote(abstract.DashboardModel):
     )
 
     if TYPE_CHECKING:
-        location_id: int
+        place_id: int
         boundary_id: int
         profile_id: int
 
     objects = BoundaryVoteManager()
 
     def __str__(self) -> str:
-        return f"Boundary vote for boundary {self.boundary_id} on location {self.location_id} by profile {self.profile_id}"
+        return f"Boundary vote for boundary {self.boundary_id} on place {self.place_id} by profile {self.profile_id}"
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_boundary_votes"
-        indexes = [
-            Index(fields=["location"], name="idxdb_bv_location"),
-        ]
+        indexes = []
         constraints = [
-            UniqueConstraint(fields=["location", "profile"], name="db_boundary_vote_unique"),
+            UniqueConstraint(fields=["place", "profile"], name="db_boundary_vote_unique"),
         ]

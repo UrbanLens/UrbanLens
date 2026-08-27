@@ -1,6 +1,6 @@
 """Scheduled background enrichment: budget math, run window, prioritization, and the cycle.
 
-Covers services.enrichment end to end with the network fully mocked:
+Covers services.locations.enrichment end to end with the network fully mocked:
 compute_service_budget must honor the admin buffer and pace multi-day limits
 evenly (the "300 calls per 30 days, 6 used today -> enrich 3 more" contract),
 enrichment_window_open must respect the admin's UTC window including midnight
@@ -28,7 +28,9 @@ from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.enrichment import (
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+from urbanlens.dashboard.services.geo.geo_boundary import USA
+from urbanlens.dashboard.services.locations.enrichment import (
     EnrichmentSource,
     compute_service_budget,
     enrichment_sources,
@@ -37,8 +39,6 @@ from urbanlens.dashboard.services.enrichment import (
     run_enrichment_cycle,
     stagger_seconds,
 )
-from urbanlens.dashboard.services.geo_boundary import USA
-from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 
@@ -283,7 +283,7 @@ class RunEnrichmentCycleTests(TestCase):
         # testing budget/window/cap logic, not the environment gate itself,
         # so pin the effective environment to PRODUCTION here.
         with (
-            patch("urbanlens.dashboard.services.enrichment.enrichment_sources", return_value=[source]),
+            patch("urbanlens.dashboard.services.locations.enrichment.enrichment_sources", return_value=[source]),
             patch.object(SiteSettings, "get_effective_environment_type", return_value=EnvironmentTypes.PRODUCTION),
         ):
             return run_enrichment_cycle(sleep=lambda _seconds: None, **kwargs)
@@ -337,7 +337,7 @@ class RunEnrichmentCycleTests(TestCase):
         self.site_settings.enrichment_end_hour = 3
         self.site_settings.save(update_fields=["enrichment_start_hour", "enrichment_end_hour"])
         source = _RecordingSource()
-        with patch("urbanlens.dashboard.services.enrichment.enrichment_window_open", return_value=False):
+        with patch("urbanlens.dashboard.services.locations.enrichment.enrichment_window_open", return_value=False):
             summary = self._run(source)
         self.assertEqual(summary.get("skipped"), "outside_window")
 
@@ -366,7 +366,7 @@ class RunEnrichmentCycleTests(TestCase):
             refreshes_names = True
 
         source = NameSource()
-        with patch("urbanlens.dashboard.services.enrichment.refresh_official_names", return_value=1) as mock_refresh:
+        with patch("urbanlens.dashboard.services.locations.enrichment.refresh_official_names", return_value=1) as mock_refresh:
             summary = self._run(source)
         mock_refresh.assert_called_once_with({location.pk})
         self.assertEqual(summary["names_refreshed"], 1)
@@ -381,7 +381,7 @@ class EnrichmentCycleProductionGateTests(TestCase):
 
     def _run_with_environment(self, env_type: EnvironmentTypes, source: EnrichmentSource, **kwargs):
         with (
-            patch("urbanlens.dashboard.services.enrichment.enrichment_sources", return_value=[source]),
+            patch("urbanlens.dashboard.services.locations.enrichment.enrichment_sources", return_value=[source]),
             patch.object(SiteSettings, "get_effective_environment_type", return_value=env_type),
         ):
             return run_enrichment_cycle(sleep=lambda _seconds: None, **kwargs)
@@ -465,13 +465,13 @@ class ScheduledEnrichmentTaskTests(TestCase):
     def test_runs_cycle_and_releases_lock(self) -> None:
         from django.core.cache import cache
 
-        from urbanlens.dashboard.services.enrichment import RUN_LOCK_CACHE_KEY
+        from urbanlens.dashboard.services.locations.enrichment import RUN_LOCK_CACHE_KEY
         from urbanlens.dashboard.tasks import run_scheduled_enrichment
 
         cache.delete(RUN_LOCK_CACHE_KEY)
         with (
             patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.enrichment.run_enrichment_cycle", return_value={"sources": {}}) as mock_cycle,
+            patch("urbanlens.dashboard.services.locations.enrichment.run_enrichment_cycle", return_value={"sources": {}}) as mock_cycle,
         ):
             result = run_scheduled_enrichment.apply().result
         mock_cycle.assert_called_once()
@@ -481,14 +481,14 @@ class ScheduledEnrichmentTaskTests(TestCase):
     def test_single_flight_lock_skips_concurrent_run(self) -> None:
         from django.core.cache import cache
 
-        from urbanlens.dashboard.services.enrichment import RUN_LOCK_CACHE_KEY
+        from urbanlens.dashboard.services.locations.enrichment import RUN_LOCK_CACHE_KEY
         from urbanlens.dashboard.tasks import run_scheduled_enrichment
 
         cache.add(RUN_LOCK_CACHE_KEY, 1, 60)
         try:
             with (
                 patch("urbanlens.dashboard.tasks.update_task_progress"),
-                patch("urbanlens.dashboard.services.enrichment.run_enrichment_cycle") as mock_cycle,
+                patch("urbanlens.dashboard.services.locations.enrichment.run_enrichment_cycle") as mock_cycle,
             ):
                 result = run_scheduled_enrichment.apply().result
             mock_cycle.assert_not_called()

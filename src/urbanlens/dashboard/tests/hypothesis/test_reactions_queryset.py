@@ -120,9 +120,8 @@ class ReactionExistingForGroupMessageTests(TestCase):
 
     def test_duplicate_reaction_is_refused_by_the_partial_unique_constraint(self) -> None:
         Reaction.objects.create(profile=self.profile, emoji="🔥", group_message=self.message)
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                Reaction.objects.create(profile=self.profile, emoji="🔥", group_message=self.message)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Reaction.objects.create(profile=self.profile, emoji="🔥", group_message=self.message)
 
     def test_different_emoji_on_the_same_message_is_allowed(self) -> None:
         Reaction.objects.create(profile=self.profile, emoji="🔥", group_message=self.message)

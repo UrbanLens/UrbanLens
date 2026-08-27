@@ -10,7 +10,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.direct_messages.meta import RETENTION_DELTAS, MessageRetentionChoice
 from urbanlens.dashboard.models.direct_messages.queryset import DirectMessageManager
-from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -27,7 +27,7 @@ class DirectMessage(abstract.DashboardModel):
 
     Whether a profile may message another is governed by the recipient's
     ``Profile.direct_message_visibility`` privacy setting, evaluated in
-    ``services.direct_messages.can_direct_message`` - never bypass that check
+    ``services.messaging.direct_messages.can_direct_message`` - never bypass that check
     when creating rows outside of ``create_direct_message``.
     """
 
@@ -96,7 +96,7 @@ class DirectMessage(abstract.DashboardModel):
     map_removed = BooleanField(default=False)
 
     # Caller-generated idempotency key, mirroring the pin-create flow's
-    # client_uuid (see services.pin_creation.create_pin_for_profile). A mobile
+    # client_uuid (see services.pins.pin_creation.create_pin_for_profile). A mobile
     # client stamps a message at compose time and retries the same send until
     # it is acknowledged; without this, a reply sent over a flaky connection
     # gets delivered two or three times, which is far worse in a conversation

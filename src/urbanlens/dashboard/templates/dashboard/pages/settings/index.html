@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load static %}
 
 {% block hero %}
@@ -216,6 +217,18 @@
                     </label>
                     {% if community_form.auto_create_pin_article_from_wikipedia.errors %}
                     <p class="settings-error">{{ community_form.auto_create_pin_article_from_wikipedia.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ community_form.show_supporter_badge }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ community_form.show_supporter_badge.label }}</strong>
+                            <span class="settings-help">{{ community_form.show_supporter_badge.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if community_form.show_supporter_badge.errors %}
+                    <p class="settings-error">{{ community_form.show_supporter_badge.errors|join:", " }}</p>
                     {% endif %}
                 </div>
                 {% if not community_form.instance.community_enabled %}
@@ -751,6 +764,7 @@
                 <p class="settings-e2ee-status" id="e2ee-status">Checking status…</p>
 
                 <div class="settings-e2ee-actions">
+                    <button type="button" class="btn btn--secondary settings-secondary-btn" id="e2ee-add-passkey" hidden>Add a passkey unlock</button>
                     <button type="button" class="btn btn--secondary settings-secondary-btn" id="e2ee-view-recovery" hidden>View recovery key</button>
                     <button type="button" class="btn btn--secondary settings-secondary-btn" id="e2ee-unlock" hidden>Unlock this device</button>
                     <button type="button" class="btn btn--secondary settings-danger-btn" id="e2ee-reset" hidden>Reset encryption keys</button>
@@ -785,7 +799,7 @@
             <form class="settings-form" id="password-change-form"
                   data-has-password="{% if e2ee_has_password %}1{% else %}0{% endif %}"
                   data-username="{{ request.user.username }}">
-                <input type="text" name="username" value="{{ request.user.username }}" autocomplete="username" style="display:none" aria-hidden="true" tabindex="-1">
+                <input type="text" name="username" value="{{ request.user.username }}" autocomplete="username" style="display:none" aria-hidden="true" tabindex="-1" aria-label="Confirm your username">
                 {% if e2ee_has_password %}
                 <div class="settings-field">
                     <label class="settings-label" for="password-current">Current password</label>
@@ -1082,7 +1096,7 @@
                     <input type="range" id="cluster-radius-slider"
                            min="10" max="200" step="5"
                            value="{{ is_custom|default:80 }}"
-                           oninput="updateClusterRadius(this.value)">
+                           oninput="updateClusterRadius(this.value)" aria-label="Cluster radius">
                     <span class="settings-cluster-value">
                         <span id="cluster-radius-display">{{ is_custom|default:80 }}</span> px
                     </span>
@@ -1125,6 +1139,19 @@
                 </label>
                 {% if map_display_form.suggest_pin_restructure.errors %}
                 <p class="settings-error">{{ map_display_form.suggest_pin_restructure.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+<div class="settings-field settings-field--checkbox">
+                <label class="settings-checkbox-label">
+                    {{ map_display_form.auto_create_building_pins }}
+                    <span class="settings-checkbox-materialize"></span>
+                    <span>
+                        <span class="settings-label">{{ map_display_form.auto_create_building_pins.label }}</span>
+                        <p class="settings-help">{{ map_display_form.auto_create_building_pins.help_text }}</p>
+                    </span>
+                </label>
+                {% if map_display_form.auto_create_building_pins.errors %}
+                <p class="settings-error">{{ map_display_form.auto_create_building_pins.errors|join:", " }}</p>
                 {% endif %}
             </div>
 
@@ -1221,7 +1248,7 @@
                             <div class="cop-alpha-row">
                                 <input type="range" class="cop-alpha-slider" id="cop-fill-opacity"
                                        min="0" max="100" value="{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}"
-                                       oninput="copUpdate('fill')">
+                                       oninput="copUpdate('fill')" aria-label="Fill opacity">
                                 <span class="cop-alpha-val" id="cop-fill-opacity-val">{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}</span><span class="cop-pct">%</span>
                             </div>
                         </div>
@@ -1241,7 +1268,7 @@
                             <div class="cop-alpha-row">
                                 <input type="range" class="cop-alpha-slider" id="cop-border-opacity"
                                        min="0" max="100" value="{{ markup_defaults_form.markup_border_opacity.value|default:100 }}"
-                                       oninput="copUpdate('border')">
+                                       oninput="copUpdate('border')" aria-label="Border opacity">
                                 <span class="cop-alpha-val" id="cop-border-opacity-val">{{ markup_defaults_form.markup_border_opacity.value|default:100 }}</span><span class="cop-pct">%</span>
                             </div>
                         </div>
@@ -1364,6 +1391,23 @@
         </div>
     </section>
 
+    {# -- Membership (paid subscriptions) ---------------------------------------- #}
+    <section class="settings-section ul-section" id="membership-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">workspace_premium</i>
+            <div>
+                <h2 class="settings-section-title">Membership</h2>
+                <p class="settings-section-desc">Subscribe to a paid role, or pledge any amount to support the site.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <div hx-get="{% url 'settings.billing' %}" hx-trigger="load" hx-swap="outerHTML">
+                <p class="loading-text">Loading...</p>
+            </div>
+        </div>
+    </section>
+
     {# -- Storage --------------------------------------------------------------- #}
     <section class="settings-section ul-section" id="storage-settings-section">
         <div class="settings-section-header">
@@ -1386,6 +1430,12 @@
                 </p>
                 {% else %}
                 <p class="storage-usage__text"><strong>{{ storage_used_bytes|filesizeformat }}</strong> used &middot; your storage is unlimited</p>
+                {% endif %}
+                {% if storage_exempt_bytes %}
+                <p class="storage-usage__exempt settings-help">
+                    <i class="material-symbols-outlined">volunteer_activism</i>
+                    A further {{ storage_exempt_bytes|filesizeformat }} is stored free: photos the community found useful, and cached copies of other people's photos.
+                </p>
                 {% endif %}
             </div>
 
@@ -1579,8 +1629,8 @@
 {% endblock %}
 
 {% block scripts %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
 <script src="{% static 'dashboard/js/e2ee.js' %}"></script>
 <script src="{% static 'dashboard/js/webauthn.js' %}"></script>
 <script src="{% static 'dashboard/js/permissions.js' %}"></script>
@@ -1723,6 +1773,11 @@
             changePassword: "{% url 'e2ee.change_password' %}",
             login: "{% url 'login' %}",
             faqUrl: "{% url 'faq' %}#faq-e2ee",
+            passkeyWrap: "{% url 'e2ee.passkey_wrap' %}",
+            passkeyRegisterOptions: "{% url 'settings.security.passkeys.options' %}",
+            passkeyRegister: "{% url 'settings.security.passkeys.register' %}",
+            {# Same path the register POST targets: the passkey collection, which per-credential actions hang off. #}
+            passkeyBase: "{% url 'settings.security.passkeys.register' %}",
         },
     });
 
@@ -1768,6 +1823,7 @@
     var viewBtn = document.getElementById('e2ee-view-recovery');
     var unlockBtn = document.getElementById('e2ee-unlock');
     var resetBtn = document.getElementById('e2ee-reset');
+    var addPasskeyBtn = document.getElementById('e2ee-add-passkey');
     var hasPassword = card.dataset.hasPassword === '1';
 
     function setStatus(text) { status.textContent = text; }
@@ -1781,12 +1837,32 @@
             setStatus('Encryption is active and this device can read your messages.');
             viewBtn.hidden = false;
             resetBtn.hidden = false;
+            // Passkey enrollment needs the decrypted key in hand, so it is
+            // only offered while unlocked.
+            if (window.PublicKeyCredential && addPasskeyBtn) addPasskeyBtn.hidden = false;
         } else {
-            setStatus("This device can't read your encrypted messages yet. Unlock it with your password or recovery key.");
+            setStatus("This device can't read your encrypted messages yet. Unlock it with your passkey, password, or recovery key.");
             unlockBtn.hidden = false;
             resetBtn.hidden = false;
         }
     });
+
+    if (addPasskeyBtn) {
+        addPasskeyBtn.addEventListener('click', function () {
+            addPasskeyBtn.disabled = true;
+            UrbanLensE2EE.showPasskeyEnrollDialog(hasPassword).then(function (result) {
+                addPasskeyBtn.disabled = false;
+                if (result.ok) {
+                    if (window.toastr) toastr.success(result.created ? 'Passkey created. Your messages now unlock with it on any device.' : 'Your existing passkey can now unlock your messages on any device.');
+                } else if (result.error && window.toastr) {
+                    toastr.error(result.error);
+                }
+            }).catch(function () {
+                addPasskeyBtn.disabled = false;
+                if (window.toastr) toastr.error('Could not add that passkey. Please try again.');
+            });
+        });
+    }
 
     viewBtn.addEventListener('click', function () {
         UrbanLensE2EE.regenerateRecoveryKey().then(function (display) {

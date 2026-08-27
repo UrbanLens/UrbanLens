@@ -1,11 +1,10 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load humanize %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
 {% endblock %}
 
 {% block hero %}
@@ -72,7 +71,7 @@
             </div>
             <div class="card__body">
                 <div class="form-row">
-                    <input type="text" name="title" id="title" value="{{ checkin.title }}" {% if checkin.contacts_locked or viewer_is_partner %}disabled{% endif %}>
+                    <input type="text" name="title" id="title" value="{{ checkin.title }}" {% if checkin.contacts_locked or viewer_is_partner %}disabled{% endif %} aria-label="Check-in title">
                     {% if checkin.contacts_locked %}<p class="form-hint">Locked - emergency contacts have already been notified.</p>{% endif %}
                 </div>
             </div>
@@ -130,7 +129,7 @@
             </div>
             <div class="card__body">
                 <div class="form-row">
-                    <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand" {% if checkin.notifications_locked or viewer_is_partner %}disabled{% endif %}>{{ checkin.contact_message }}</textarea>
+                    <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand" {% if checkin.notifications_locked or viewer_is_partner %}disabled{% endif %} aria-label="Message to contacts">{{ checkin.contact_message }}</textarea>
                     {% if checkin.notifications_locked %}<p class="form-hint">Locked - emergency contacts have already been notified, or you've already checked in.</p>{% endif %}
                 </div>
             </div>
@@ -316,28 +315,16 @@
         return true;
     }
 
-    window.addEventListener('beforeunload', function (e) {
-        if (!nobodyWouldBeNotified()) return;
-        e.preventDefault();
-        e.returnValue = '';
+    // beforeunload + link interception are shared with the auto-save guard and the
+    // tools export page; only the condition and wording differ.
+    // See frontend/ts/shared/leave-confirmation.ts.
+    if (window.ulInstallLeaveConfirmation) window.ulInstallLeaveConfirmation({
+        isBlocked: nobodyWouldBeNotified,
+        title: 'Leave without a way to reach you?',
+        message: message,
+        confirmLabel: 'Leave anyway',
+        onConfirmed: function () { window._safetySkipLeaveWarning = true; },
     });
-
-    document.addEventListener('click', function (e) {
-        if (!nobodyWouldBeNotified()) return;
-        var a = e.target.closest ? e.target.closest('a[href]') : null;
-        if (!a) return;
-        var href = a.getAttribute('href');
-        var scheme = href ? href.trim().toLowerCase() : '';
-        if (!href || href.charAt(0) === '#' || scheme.indexOf('javascript:') === 0 || scheme.indexOf('data:') === 0 || scheme.indexOf('vbscript:') === 0 || a.target === '_blank') return;
-        e.preventDefault();
-        var proceed = window.confirmDialog ? window.confirmDialog({
-            title: 'Leave without a way to reach you?',
-            message: message,
-            confirmLabel: 'Leave anyway',
-            danger: true,
-        }) : Promise.resolve(window.confirm(message));
-        proceed.then(function (ok) { if (ok) window.location.href = a.href; });
-    }, true);
 }());
 </script>
 <script>
@@ -393,68 +380,18 @@
 <script>
 (function () {
     // -- Live location sharing toggle + throttled position reporting -----------
-    // 30s balances "a partner watching in an emergency wants a current position"
-    // against battery/bandwidth - tightening it wouldn't meaningfully help a
-    // partner (someone overdue on a hike isn't moving fast enough for sub-30s
-    // updates to matter).
-    var MIN_INTERVAL_MS = 30000;
+    // Logic lives in frontend/ts/shared/safety-live-location.ts so its failure
+    // handling is testable: fetch does not reject on an HTTP error status, and the
+    // previous inline version's .catch therefore never fired - a check-in resolved
+    // elsewhere left this page reporting a position the server was rejecting.
     var toggle = document.getElementById('safety-live-location-toggle');
-    if (!toggle) return;
-    var toggleUrl = "{% url 'safety.checkin.location.toggle' checkin.slug|default:checkin.uuid %}";
-    var updateUrl = "{% url 'safety.checkin.location.update' checkin.slug|default:checkin.uuid %}";
-    var csrfToken = document.querySelector('#safety-checkin-form [name=csrfmiddlewaretoken]').value;
-    var watchId = null;
-    var lastSentAt = 0;
-    var pendingPosition = null;
-    var sendTimer = null;
-
-    function sendPosition(position) {
-        lastSentAt = Date.now();
-        var body = new FormData();
-        body.append('latitude', position.coords.latitude);
-        body.append('longitude', position.coords.longitude);
-        if (position.coords.accuracy != null) body.append('accuracy', position.coords.accuracy);
-        fetch(updateUrl, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: body }).catch(function () {});
-    }
-
-    function onPosition(position) {
-        var elapsed = Date.now() - lastSentAt;
-        if (elapsed >= MIN_INTERVAL_MS) {
-            sendPosition(position);
-            return;
-        }
-        pendingPosition = position;
-        if (sendTimer) return;
-        sendTimer = setTimeout(function () {
-            sendTimer = null;
-            if (pendingPosition) { sendPosition(pendingPosition); pendingPosition = null; }
-        }, MIN_INTERVAL_MS - elapsed);
-    }
-
-    function startWatching() {
-        if (watchId !== null || !navigator.geolocation) return;
-        watchId = navigator.geolocation.watchPosition(onPosition, function () {
-            if (window.toastr) toastr.error('Could not get your location - live location sharing may not work.');
-        }, { enableHighAccuracy: true });
-    }
-
-    function stopWatching() {
-        if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-        window.clearTimeout(sendTimer);
-        sendTimer = null;
-        pendingPosition = null;
-    }
-
-    toggle.addEventListener('change', function () {
-        var enabled = toggle.checked;
-        var body = new FormData();
-        body.append('enabled', enabled ? '1' : '0');
-        fetch(toggleUrl, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: body })
-            .catch(function () { if (window.toastr) toastr.error('Could not update live location sharing.'); });
-        if (enabled) startWatching(); else stopWatching();
+    if (!toggle || !window.ulInstallSafetyLiveLocation) return;
+    window.ulInstallSafetyLiveLocation({
+        toggle: toggle,
+        toggleUrl: "{% url 'safety.checkin.location.toggle' checkin.slug|default:checkin.uuid %}",
+        updateUrl: "{% url 'safety.checkin.location.update' checkin.slug|default:checkin.uuid %}",
+        csrfToken: document.querySelector('#safety-checkin-form [name=csrfmiddlewaretoken]').value,
     });
-
-    if (toggle.checked) startWatching();
 }());
 </script>
 {% endif %}

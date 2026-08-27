@@ -1,15 +1,50 @@
+from collections.abc import Iterable
 import logging
 
 from django.db import transaction
-from django.db.models.signals import m2m_changed, post_delete, post_save
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 
 logger = logging.getLogger(__name__)
+
+
+@receiver(pre_save, sender=Pin, dispatch_uid="pin_remember_child_boundary_parent")
+def remember_child_boundary_parent(sender: type[Pin], instance: Pin, **kwargs) -> None:
+    """Remember hierarchy/coordinate changes for the post-save boundary hook."""
+    update_fields = kwargs.get("update_fields")
+    if update_fields is not None and not {"parent_pin", "parent_pin_id", "location", "location_id"}.intersection(update_fields):
+        instance.child_boundary_previous_parent_id = instance.parent_pin_id
+        instance.child_boundary_position_changed = False
+        return
+    previous = Pin.objects.filter(pk=instance.pk).values("parent_pin_id", "location_id").first() if instance.pk else None
+    instance.child_boundary_previous_parent_id = previous["parent_pin_id"] if previous else None
+    instance.child_boundary_position_changed = bool(previous and (previous["parent_pin_id"] != instance.parent_pin_id or previous["location_id"] != instance.location_id))
+
+
+@receiver(post_save, sender=Pin, dispatch_uid="pin_refit_child_boundaries_on_save")
+def refit_child_boundaries_on_save(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
+    """Keep child-generated property boundaries aligned after adds and moves."""
+    if not created and not getattr(instance, "child_boundary_position_changed", False):
+        return
+    from urbanlens.dashboard.services.geo.child_pin_boundaries import refit_child_pin_boundary
+
+    parent_ids = {parent_id for parent_id in (instance.parent_pin_id, instance.child_boundary_previous_parent_id) if parent_id is not None}
+    for parent_id in sorted(parent_ids):
+        refit_child_pin_boundary(parent_id)
+
+
+@receiver(post_delete, sender=Pin, dispatch_uid="pin_refit_child_boundaries_on_delete")
+def refit_child_boundaries_on_delete(sender: type[Pin], instance: Pin, **kwargs) -> None:
+    """Shrink a child-generated property boundary after a child is removed."""
+    from urbanlens.dashboard.services.geo.child_pin_boundaries import refit_child_pin_boundary
+
+    refit_child_pin_boundary(instance.parent_pin_id)
 
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_invalidate_map_center")
@@ -104,6 +139,27 @@ def refresh_map_pin_cache_for_labels(sender, instance: Pin, action: str, **kwarg
         _refresh_cached_pin(instance.pk, instance.profile_id)
 
 
+def refresh_map_pin_cache_for_label_ids(label_ids: Iterable[int]) -> None:
+    """Invalidate the cached map pins of every pin carrying any of these labels.
+
+    Call this after a bulk write to ``Label``. ``bulk_update`` issues raw SQL and
+    never fires ``post_save``, so :func:`refresh_map_pin_cache_for_label` does not
+    run and affected pins keep serving the icon and colour baked in at cache time.
+    That is not only an icon edit: ``Pin.icon_source_label`` picks the winning label
+    by ``-order``, so a reorder changes what a pin draws just as much.
+
+    Args:
+        label_ids: Primary keys of the labels that changed.
+    """
+    ids = list(label_ids)
+    if not ids:
+        return
+    # distinct(): a pin carrying two of the changed labels would otherwise be
+    # refreshed once per label.
+    for pin_id, profile_id in Pin.objects.filter(labels__in=ids).distinct().values_list("pk", "profile_id"):
+        _refresh_cached_pin(pin_id, profile_id)
+
+
 @receiver(post_save, sender=Label, dispatch_uid="label_refresh_map_pin_cache")
 def refresh_map_pin_cache_for_label(sender: type[Label], instance: Label, created: bool, **kwargs) -> None:
     """A label's icon/color can appear on any pin carrying it (Pin.effective_icon).
@@ -116,8 +172,7 @@ def refresh_map_pin_cache_for_label(sender: type[Label], instance: Label, create
     """
     if created:
         return  # not attached to any pin yet
-    for pin_id, profile_id in Pin.objects.filter(labels=instance).values_list("pk", "profile_id"):
-        _refresh_cached_pin(pin_id, profile_id)
+    refresh_map_pin_cache_for_label_ids([instance.pk])
 
 
 @receiver(post_save, sender=LabelCustomization, dispatch_uid="label_customization_refresh_map_pin_cache")
@@ -142,11 +197,44 @@ def propagate_visited_label_to_ancestors(sender, instance: Pin, action: str, pk_
         return
     from urbanlens.dashboard.models.labels.model import Label
 
-    visited_label = Label.objects.filter(pk__in=pk_set, kind="status", name="Visited").first()
+    visited_label = Label.objects.filter(pk__in=pk_set, kind=KIND_STATUS, name="Visited").first()
     if visited_label is None:
         return
     for ancestor in instance.ancestor_chain():
         ancestor.labels.add(visited_label)
+
+
+@receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_sync_redata_assignments")
+def sync_redata_assignments_for_pin_labels(sender, instance, action: str, reverse: bool, pk_set: set[int] | None, **kwargs) -> None:
+    """Forward a pin's tag/category label set to REData whenever it changes.
+
+    ``Pin.labels`` is mutated from ~20 call sites across the codebase (manual
+    tagging, keyword/AI auto-tag, imports, label-merge, undo) - this
+    m2m_changed receiver is the one choke point that sees all of them,
+    forward (``pin.labels.add(label)``) and reverse
+    (``label.pins.add(pin)``, used by ``services.labels.merge``) alike.
+
+    Unlike ``refresh_map_pin_cache_for_labels`` above, ``reverse`` matters
+    here: in the reverse direction ``instance`` is the *Label*, not a Pin,
+    and ``pk_set`` holds the affected *pin* ids rather than label ids.
+    """
+    if action not in {"post_add", "post_remove", "post_clear"}:
+        return
+    from urbanlens.dashboard.services.labels.redata_suggestions import queue_pin_assignment_sync
+
+    if reverse:
+        # instance is the Label; only a tag/category label's own (dis)association
+        # with pins is worth resyncing - see redata_suggestions' module docstring.
+        if instance.kind not in {KIND_TAG, KIND_CATEGORY}:
+            return
+        pin_ids = pk_set or set()
+    else:
+        # instance is the Pin; always resync its current tag/category set
+        # regardless of which label kind changed - see queue_pin_assignment_sync.
+        pin_ids = {instance.pk}
+
+    for pin_id in pin_ids:
+        queue_pin_assignment_sync(pin_id)
 
 
 @receiver(post_save, sender=Review, dispatch_uid="review_refresh_map_pin_cache")
@@ -243,7 +331,33 @@ def sync_pin_stats_to_wiki(sender: type[Pin], instance: Pin, **kwargs) -> None:
         _sync_pin_stat_to_wiki(instance.wiki_id, instance.profile_id, wiki_field, getattr(instance, pin_field))
 
 
-# NOTE: Pins no longer trigger any community wiki or boundary creation on save.
-# Wikis are created explicitly by the user from the pin detail page, and default
-# boundaries are generated lazily when a pin detail page is first viewed - so
-# bulk imports create zero external API work.
+@receiver(post_save, sender=Pin, dispatch_uid="pin_ensure_wiki")
+def ensure_wiki_for_pin_location(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
+    """Queue background creation of the Wiki for a newly pinned Location.
+
+    Fires for every pin-creation path (manual add, CSV/Google Maps import,
+    Flickr, Immich, GPX) since it's a model-level signal rather than a
+    per-importer call - that's what makes this "still happens for bulk
+    imports, but in the background" without slowing any of them down: the
+    enqueue itself is a cheap non-blocking broker publish (see
+    ``tasks.ensure_wiki_for_location``). The page is published from the moment
+    it exists and fills in as enrichment lands - default boundaries are still
+    generated lazily on first pin-detail-page view, unchanged.
+
+    Skipped when the triggering profile has community features disabled -
+    their own action shouldn't kick off community-wiki background work for a
+    location, though another profile's pin there will. Queued on_commit, like
+    every other Celery-enqueuing signal in this module - a pin creation that
+    ultimately rolls back should never have queued anything.
+    """
+    if not created or instance.location_id is None or not instance.profile.community_enabled:
+        return
+    location_id = instance.location_id
+
+    def _run() -> None:
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import ensure_wiki_for_location
+
+        safely_enqueue_task(ensure_wiki_for_location, location_id)
+
+    transaction.on_commit(_run)

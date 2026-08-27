@@ -9,6 +9,7 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -97,3 +98,89 @@ class HasEligibleLocationsTests(TestCase):
         far_away = Polygon.from_bbox((10.0, 10.0, 11.0, 11.0))
         far_away.srid = 4326
         self.assertFalse(has_eligible_locations([profile], geo_bounds=far_away))
+
+
+class SoloLabelFilterTests(TestCase):
+    def setUp(self) -> None:
+        self.profile = _make_profile()
+        self.label = baker.make(Label, name="Factories")
+
+    def test_no_label_id_returns_every_pinned_location(self) -> None:
+        location = _make_location()
+        baker.make(Pin, profile=self.profile, location=location)
+        self.assertIn(location, eligible_locations([self.profile]))
+
+    def test_label_id_excludes_locations_whose_pin_lacks_the_label(self) -> None:
+        labeled_location = _make_location()
+        unlabeled_location = _make_location()
+        labeled_pin = baker.make(Pin, profile=self.profile, location=labeled_location)
+        labeled_pin.labels.add(self.label)
+        baker.make(Pin, profile=self.profile, location=unlabeled_location)
+
+        results = eligible_locations([self.profile], label_id=self.label.pk)
+        self.assertIn(labeled_location, results)
+        self.assertNotIn(unlabeled_location, results)
+
+    def test_label_filter_includes_descendant_labels(self) -> None:
+        parent = baker.make(Label, name="Urbex")
+        child = baker.make(Label, name="Steel Mills")
+        child.parents.add(parent)
+        location = _make_location()
+        pin = baker.make(Pin, profile=self.profile, location=location)
+        pin.labels.add(child)
+
+        self.assertIn(location, eligible_locations([self.profile], label_id=parent.pk))
+
+    def test_unresolvable_label_id_yields_nothing_rather_than_erroring(self) -> None:
+        baker.make(Pin, profile=self.profile, location=_make_location())
+        self.assertFalse(has_eligible_locations([self.profile], label_id=999_999))
+
+
+class MultiplayerLabelFilterCannotLeakTests(TestCase):
+    """The label filter must never surface a location some participant hasn't pinned themselves -
+    it can only narrow rule 1's "pinned by every participant" pool, never substitute for it."""
+
+    def setUp(self) -> None:
+        self.host = _make_profile()
+        self.guest = _make_profile()
+        self.label = baker.make(Label, name="Factories")
+
+    def test_a_location_only_the_host_pinned_stays_ineligible_even_when_labeled(self) -> None:
+        host_only_location = _make_location()
+        host_pin = baker.make(Pin, profile=self.host, location=host_only_location)
+        host_pin.labels.add(self.label)
+        # self.guest never pins host_only_location at all.
+
+        results = eligible_locations([self.host, self.guest], label_id=self.label.pk)
+        self.assertNotIn(host_only_location, results)
+
+    def test_pinned_by_both_and_labeled_by_only_the_host_is_still_eligible(self) -> None:
+        """"At least one participant's pin has the label" - not "every" participant's."""
+        shared_location = _make_location()
+        host_pin = baker.make(Pin, profile=self.host, location=shared_location)
+        host_pin.labels.add(self.label)
+        baker.make(Pin, profile=self.guest, location=shared_location)  # guest's own pin, unlabeled
+
+        results = eligible_locations([self.host, self.guest], label_id=self.label.pk)
+        self.assertIn(shared_location, results)
+
+    def test_pinned_by_both_but_labeled_by_neither_is_excluded(self) -> None:
+        shared_location = _make_location()
+        baker.make(Pin, profile=self.host, location=shared_location)
+        baker.make(Pin, profile=self.guest, location=shared_location)
+
+        results = eligible_locations([self.host, self.guest], label_id=self.label.pk)
+        self.assertNotIn(shared_location, results)
+
+    def test_someone_elses_private_label_id_cannot_be_used_to_probe_their_pins(self) -> None:
+        """A bystander's own private label, applied to a location the session participants
+        haven't pinned, must not make that location appear eligible for this session."""
+        bystander = _make_profile()
+        bystander_label = baker.make(Label, name="Bystander's secret spots", profile=bystander)
+        bystander_location = _make_location()
+        bystander_pin = baker.make(Pin, profile=bystander, location=bystander_location)
+        bystander_pin.labels.add(bystander_label)
+
+        results = eligible_locations([self.host, self.guest], label_id=bystander_label.pk)
+        self.assertNotIn(bystander_location, results)
+        self.assertFalse(has_eligible_locations([self.host, self.guest], label_id=bystander_label.pk))

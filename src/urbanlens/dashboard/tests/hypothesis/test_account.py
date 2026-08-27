@@ -8,10 +8,10 @@ from __future__ import annotations
 from datetime import timedelta
 
 from django.contrib.auth.models import User
-from urbanlens.core.tests.testcase import TestCase
 from django.utils import timezone
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account import EmailVerification
 
 

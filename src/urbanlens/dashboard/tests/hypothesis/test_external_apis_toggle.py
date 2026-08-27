@@ -17,7 +17,7 @@ import pytest
 from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.controllers.pin import PinController
 from urbanlens.dashboard.services.ai.factory import get_gateway
-from urbanlens.dashboard.services.external_data import schedule_panel_fetch
+from urbanlens.dashboard.services.pins.external_data import schedule_panel_fetch
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -82,7 +82,7 @@ def test_schedule_panel_fetch_runs_when_external_apis_enabled() -> None:
         result = schedule_panel_fetch("boundary", pin)
 
     assert result is True
-    fetch_task.apply_async.assert_called_once_with(args=("boundary", pin.pk), kwargs={}, queue="celery")
+    fetch_task.apply_async.assert_called_once_with(args=("boundary", pin.pk, mock.ANY), kwargs={}, queue="celery")
 
 
 @pytest.mark.django_db
@@ -97,7 +97,7 @@ def test_fast_panel_dispatches_to_the_panel_fetch_queue() -> None:
     with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
         schedule_panel_fetch("photon", pin)
 
-    fetch_task.apply_async.assert_called_once_with(args=("photon", pin.pk), kwargs={}, queue="panel_fetch")
+    fetch_task.apply_async.assert_called_once_with(args=("photon", pin.pk, mock.ANY), kwargs={}, queue="panel_fetch")
 
 
 @pytest.mark.django_db
@@ -141,7 +141,7 @@ def test_cpu_heavy_panels_stay_on_the_default_queue() -> None:
     work (gunzipping/parsing GeoParquet, shapely geometry) - several of those running
     concurrently on the thread-pool queue would cause enough GIL contention to slow
     down every other panel sharing it, so they opt out via PanelSource.queue."""
-    from urbanlens.dashboard.services.external_data import BoundaryPanelSource, get_panel_source
+    from urbanlens.dashboard.services.pins.external_data import BoundaryPanelSource, get_panel_source
 
     assert BoundaryPanelSource().queue == "celery"
 
@@ -184,3 +184,22 @@ def test_streetview_check_blocked_when_external_apis_disabled() -> None:
 
     mocked_urlopen.assert_not_called()
     assert json.loads(response.content) == {"available": False, "reason": "disabled"}
+
+
+@pytest.mark.django_db
+def test_resolve_place_blocked_when_external_apis_disabled() -> None:
+    """Regression: selecting a Google Places autocomplete suggestion still hit
+    the billable Places Details API for a profile that opted out of external
+    lookups, even though the sibling autocomplete_places endpoint already
+    honors the toggle."""
+    from urbanlens.dashboard.controllers import maps as maps_module
+
+    profile = _make_profile(external_apis_enabled=False)
+    request = RequestFactory().get(reverse("map.resolve_place"), {"place_id": "abc123"})
+    request.user = profile.user
+
+    with mock.patch("urbanlens.dashboard.services.map_pins.autocomplete.resolve_google_place") as mocked_resolve:
+        response = maps_module.MapController.as_view({"get": "resolve_place"})(request)
+
+    mocked_resolve.assert_not_called()
+    assert response.status_code == 403

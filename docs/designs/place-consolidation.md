@@ -1,8 +1,12 @@
 # Place consolidation: one answer to "is this the same place?"
 
-**Status**: approved design, not yet implemented. Decisions below were made 2026-07-27 (Jess +
-research session). The app is pre-release, so the schema changes here are acceptable without
-back-compat shims beyond the data migrations described.
+**Status**: **IMPLEMENTED 2026-08-04** (migrations `0026_places`, `0027_places_backfill`,
+`0028_places_cleanup`). Original design approved 2026-07-27 (Jess + research session); built out
+in full while fixing the multi-building campus bugs, with three refinements agreed on the way —
+see "Amendments as built" at the end, which supersede the corresponding text below.
+
+The app is pre-release, so the schema changes here were made without back-compat shims beyond the
+data migrations described.
 
 ## The problem
 
@@ -11,10 +15,10 @@ same place?" four different ways in four different subsystems:
 
 | Subsystem | Predicate | Where |
 |---|---|---|
-| Pin drop/import dedup | 50m radius snap onto an existing `Location` | `services/pin_creation.py` (~L174), `models/location/queryset.py::get_nearby_or_create` |
-| Wiki visibility | point-in-official-polygon containment, 50m circle fallback | `services/wiki_access.py::location_visible_to` |
+| Pin drop/import dedup | 50m radius snap onto an existing `Location` | `services/pins/pin_creation.py` (~L174), `models/location/queryset.py::get_nearby_or_create` |
+| Wiki visibility | point-in-official-polygon containment, 50m circle fallback | `services/wiki/wiki_access.py::location_visible_to` |
 | Wiki creation dedup | exact `Location` row (`OneToOneField`) | `models/wiki/model.py`, `models/wiki/queryset.py::get_or_create_for_location` |
-| "Places in common" | exact `location_id` equality, no geometry at all | `services/common_pins.py::common_pin_location_ids` |
+| "Places in common" | exact `location_id` equality, no geometry at all | `services/pins/common_pins.py::common_pin_location_ids` |
 
 Consequences, all confirmed against the code:
 
@@ -24,7 +28,7 @@ Consequences, all confirmed against the code:
    lat/lng ≈ 0.11m, and the DB enforces coordinate immutability — the precision machinery exists,
    but the snap defeats it at the front door).
 2. **Inconsistent invariants.** Manual moves use exact-match (`threshold_meters=0` in
-   `services/pin_edit.py::move_pin_to_coordinates`), so "no two root pins within 50m" is only an
+   `services/pins/pin_edit.py::move_pin_to_coordinates`), so "no two root pins within 50m" is only an
    at-creation behavior, not an invariant.
 3. **Duplicate wikis for one real place.** Wiki dedup is exact-Location; two users pinning the
    same large property >50m apart get two Locations and can create two wikis.
@@ -194,7 +198,7 @@ boundary-mates), creation dedup, and merge suggestions.
 - **Drop/create**: store exact coordinates (existing `get_nearby_or_create` with
   `threshold_meters=0` semantics, everywhere). Then a place-membership check: if the profile
   already has a root pin resolving to the same Place, prompt — merge into it, add as child pin,
-  or cancel. The existing `get_all_for_point` choice UI (`services/pin_creation.py` ~L184) is
+  or cancel. The existing `get_all_for_point` choice UI (`services/pins/pin_creation.py` ~L184) is
   the seed of this interaction.
 - **Import**: exact coordinates + `client_uuid` idempotency. Same-place collisions can't prompt
   per-row mid-import; default: dedupe onto the existing pin (today's outcome, but
@@ -214,7 +218,7 @@ Phased; each phase lands green before the next. Splits/grants (phase 4) can trai
 splits are rare and the schema supports them from phase 1.
 
 - **Phase 0 — standalone fixes** (independent of Place): **DONE 2026-07-27.**
-  - `services.pin_creation.resolve_child_pin_location` is now the single child-pin Location
+  - `services.pins.pin_creation.resolve_child_pin_location` is now the single child-pin Location
     resolver: exact-coordinate matching (quantized to the fields' own 6dp, so it can't race the
     `(latitude, longitude)` unique constraint) plus the rule that no two of one profile's pins
     may share a point. All four child-pin paths use it - the map UI dialog
@@ -242,7 +246,7 @@ splits are rare and the schema supports them from phase 1.
   copies; `Location.place` resolution service + backfill; boundary generation re-anchors to
   Place (one provider run per place, not per Location).
 - **Phase 2 — wiki re-anchor**: `Wiki.place` migration via `location.place`; merge duplicate
-  wikis landing on the same Place (reuse `services/wiki_merge.py`); recompute `Pin.wiki` caches.
+  wikis landing on the same Place (reuse `services/wiki/wiki_merge.py`); recompute `Pin.wiki` caches.
 - **Phase 3 — predicate unification**: creation/import flip to exact-coords + place dedup;
   `location_visible_to`, `common_pins`, merge suggestions, and `reconcile_wiki_nesting` all move
   to place-id logic; remove the 50m constants (`models/location/queryset.py` L81 hardcode,
@@ -281,3 +285,82 @@ environment (`~/dev/s1..s3`) against a production-shaped dataset before merging 
 - Split-detection thresholds are tuning, not design.
 - Google Places calls involved in any of this continue to route through REData
   (`services/apis/locations/places_resolution`), per the standing integration rule.
+
+---
+
+## Amendments as built (2026-08-04)
+
+Three changes to the design above, made while implementing it against the multi-building campus
+bugs (`docs/notes/ai/todo.md`'s parcel/building prompt). Where these conflict with the text above,
+these win.
+
+### 1. `parent_relation` carries the access semantics, not `status`
+
+The predicate above keyed "how is this parent earned?" off `Place.status`, which conflated two
+different questions and could not express the rule Jess stated: *pinning a building should give you
+its parcel, but a parcel's parent must be earned*. Under status-as-semantics that only held as long
+as a `CURRENT` place never had a `CURRENT` parcel parent — true for splits, false for a campus that
+spans several current tax parcels.
+
+So the edge carries it instead:
+
+- **`PART_OF`** — the child is a component of the parent and the parent is fully implied by it
+  (building → parcel). **No access semantics at all.**
+- **`MEMBER_OF`** — the child is one of several independent peers (split child → superseded campus;
+  parcel → site). Earned only by holding every member.
+
+`status` now controls exactly one thing: whether a coordinate may resolve onto this geometry.
+
+### 2. Access is evaluated per *domain*, and it is symmetric
+
+An **access domain** is a maximal set of places connected by `PART_OF` edges, denormalised onto
+`Place.domain_root`. It is indivisible — a pin anywhere in it grants every wiki in it, in **either**
+direction:
+
+```
+access(profile, place) := domain_access(profile, place.domain_root)
+
+domain_access(profile, D):
+    grant(profile, D) exists                                    -> True
+    profile has a pin whose location.place.domain_root is D     -> True
+    profile has a pin at a Location that D owns (exact match)   -> True   # placeless fallback
+    D has MEMBER_OF children c1..cn (n >= 1)
+        and domain_access(profile, ci.domain_root) for EVERY i  -> True   # earned, recursive
+```
+
+Downward access (parcel ⇒ its buildings) was the deliberate addition. Without it, splitting a
+property into 124 buildings hides content from people who already had the property — a regression
+caused purely by a structural edit — and the parcel wiki cannot legitimately list its own buildings
+without leaking their existence. Decided 2026-08-04.
+
+`PART_OF` never appears in the recursion, so the whole hierarchy reduces to a DAG of domains joined
+by `MEMBER_OF` edges, and the common case is one indexed equality test.
+
+### 3. Grants are also written by the backfill, not only by splits
+
+Security invariant #4 said grants are written only by split processing. It now reads: **only by
+split processing and the one-time Place backfill migration** — still no API surface, so the intent
+(no user-reachable path) is unchanged. This is load-bearing given the strict parcel-to-parcel rule:
+a campus wiki that turns out to span several tax parcels becomes a `SITE` aggregate at backfill
+time, and without a grant every existing holder would lose it.
+
+### Smaller decisions worth recording
+
+- **`Wiki.location` survives** as a plain FK for coordinates, address, and URL routing;
+  `Wiki.place` is the OneToOne identity/dedup anchor. Re-anchoring the *URL* as well would have
+  churned every template, view, and test for no gain. `resolve_visible_wiki` finds the wiki via the
+  place, so everyone who pinned one property reaches it from their own slug.
+- **Official geometry is `Place.geometry`, a column** — not a location-default `Boundary` row.
+  Location-default rows are gone; `Boundary` now holds only user/community drawings and per-provider
+  voting candidates, and no access path reads that table at all.
+- **`Place.geometry` is nullable.** A building nobody has a footprint for keeps identity, lineage,
+  and its own wiki without ever being resolvable.
+- **Aggregates are excluded from point resolution entirely**, which makes strict earning
+  unbypassable rather than merely unlikely.
+- **The ambiguity notice lists only places the viewer can already reach.** In the rare overlap
+  where they cannot, it does not render at all — trading a nudge for the guarantee that it can
+  never be an oracle. The other place stays reachable the ordinary way.
+- **`pin_type` is derived from the place** and fanned out to every user's marker on it
+  (`site_scope.reclassify_markers_on_place`), rather than set on the acting user's pin.
+- **The 50 m snap is gone.** Exact coordinates are always kept; "one root pin per property" is now
+  enforced against the property itself.

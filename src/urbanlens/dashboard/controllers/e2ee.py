@@ -1,7 +1,7 @@
 """Endpoints for direct-message end-to-end encryption key storage.
 
 Every blob accepted here was encrypted client-side; these views only validate
-shape, enforce ownership, and store. See ``docs/e2ee.md`` for the scheme and
+shape, enforce ownership, and store. See ``docs/designs/e2ee.md`` for the scheme and
 ``services/e2ee.py`` for the shared helpers.
 
 These are *dual-auth* endpoints (see
@@ -39,12 +39,15 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from urbanlens.dashboard.controllers import e2ee_schema
+from urbanlens.dashboard.external_api.errors import MALFORMED_JSON_BODY_MESSAGE
 from urbanlens.dashboard.external_api.mixins import DualAuthJsonView
-from urbanlens.dashboard.models.account.model import AccountKdf, ApiKeyScope
-from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
+from urbanlens.dashboard.models.account.model import AccountKdf, ApiKeyScope, WebAuthnCredential
+from urbanlens.dashboard.models.e2ee import ConversationKey, E2EEPasskeyWrap, MessagingKeyBundle
+from urbanlens.dashboard.models.e2ee.key_bundle import DEFAULT_KDF_MEMLIMIT, DEFAULT_KDF_OPSLIMIT
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.direct_messages import can_direct_message
-from urbanlens.dashboard.services.e2ee import (
+from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message
+from urbanlens.dashboard.services.security.e2ee import (
     MAX_PUBLIC_KEY_LENGTH,
     MAX_SALT_LENGTH,
     MAX_WRAPPED_CONVERSATION_KEY_LENGTH,
@@ -201,6 +204,8 @@ class E2EEEnrollView(DualAuthJsonView):
 
     @extend_schema(
         description=("Publishes the caller's key bundle. Requires `current_password` on accounts that have one, even when authenticating with an OAuth2 token - the token alone must never be sufficient to replace an account's key material."),
+        request=e2ee_schema.E2EEEnrollRequestSerializer,
+        responses={201: e2ee_schema.E2EEOkResponseSerializer, 400: None, 403: None, 409: None},
     )
     def post(self, request: Request) -> Response:
         """Create the caller's key bundle.
@@ -222,7 +227,7 @@ class E2EEEnrollView(DualAuthJsonView):
         user = profile.user
         data = _json_body(request)
         if data is None:
-            return Response({"error": "Malformed JSON body"}, status=400)
+            return Response({"error": MALFORMED_JSON_BODY_MESSAGE}, status=400)
 
         if MessagingKeyBundle.objects.for_profile(profile).exists():
             return Response({"error": "A key bundle already exists for this account."}, status=409)
@@ -261,7 +266,16 @@ class E2EEEnrollView(DualAuthJsonView):
             kdf_memlimit = int(data.get("kdf_memlimit", 0))
         except (TypeError, ValueError):
             return Response({"error": "Invalid kdf parameters"}, status=400)
-        if kdf_opslimit <= 0 or kdf_memlimit <= 0:
+        # A floor, not just "positive". These parameters decide how expensive it is
+        # to brute-force `password_wrapped_secret` offline, and the whole point of
+        # that blob is that whoever holds it - including this server - cannot open
+        # it. Accepting any positive value let a caller enrol its own account with
+        # Argon2 parameters weak enough to make the wrapped private key
+        # recoverable from the password. Stronger-than-default is still accepted,
+        # so a future client can raise them without a server change; the real
+        # client always sends exactly these (frontend `e2ee-crypto.KDF_OPSLIMIT`
+        # / `KDF_MEMLIMIT`, pinned to match), so nothing legitimate trips this.
+        if kdf_opslimit < DEFAULT_KDF_OPSLIMIT or kdf_memlimit < DEFAULT_KDF_MEMLIMIT:
             return Response({"error": "Invalid kdf parameters"}, status=400)
 
         with transaction.atomic():
@@ -300,6 +314,7 @@ class E2EEOwnKeysView(DualAuthJsonView):
         "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
     }
 
+    @extend_schema(operation_id="e2ee_own_keys_retrieve", responses={200: e2ee_schema.E2EEOwnKeysResponseSerializer})
     def get(self, request: Request) -> Response:
         """Return the caller's bundle, or an "enrolled: false" body when not enrolled.
 
@@ -317,10 +332,30 @@ class E2EEOwnKeysView(DualAuthJsonView):
             JSON with every bundle field the client needs to unlock, or
             ``{"enrolled": false}`` when the account has no bundle yet.
         """
+        from webauthn.helpers import bytes_to_base64url
+
         profile = _get_profile(request)
         bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:
             return Response({"enrolled": False})
+        # Wraps sealed to a superseded keypair are withheld (usable_for_bundle),
+        # not surfaced-and-flagged: a client that unwrapped one would silently
+        # adopt a dead identity. passkey_credentials lists every credential so
+        # the enrollment UI can offer "use an existing passkey" vs "create one"
+        # without a second endpoint - credential ids are public handles.
+        wraps = [
+            {"credential_id": bytes_to_base64url(bytes(wrap.credential.credential_id)), "prf_input": wrap.prf_input, "wrapped_secret": wrap.wrapped_secret} for wrap in E2EEPasskeyWrap.objects.usable_for_bundle(bundle).select_related("credential")
+        ]
+        wrapped_ids = {entry["credential_id"] for entry in wraps}
+        credentials = [
+            {
+                "credential_id": bytes_to_base64url(bytes(cred.credential_id)),
+                "name": cred.name,
+                "is_login_factor": cred.is_login_factor,
+                "has_wrap": bytes_to_base64url(bytes(cred.credential_id)) in wrapped_ids,
+            }
+            for cred in WebAuthnCredential.objects.filter(user=profile.user)
+        ]
         return Response(
             {
                 "enrolled": True,
@@ -333,6 +368,8 @@ class E2EEOwnKeysView(DualAuthJsonView):
                 "kdf_memlimit": bundle.kdf_memlimit,
                 "version": bundle.version,
                 "profile_slug": profile.ensure_slug(),
+                "passkey_wraps": wraps,
+                "passkey_credentials": credentials,
             },
         )
 
@@ -344,6 +381,7 @@ class E2EEPartnerKeyView(DualAuthJsonView):
         "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
     }
 
+    @extend_schema(responses={200: e2ee_schema.E2EEPartnerKeyResponseSerializer, 404: None})
     def get(self, request: Request, profile_slug: str) -> Response:
         """Return the partner's public key when a DM relationship is permitted.
 
@@ -375,6 +413,7 @@ class E2EEConversationKeyView(DualAuthJsonView):
         "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
     }
 
+    @extend_schema(responses={200: e2ee_schema.E2EEConversationKeysResponseSerializer, 404: None})
     def get(self, request: Request, profile_slug: str) -> Response:
         """Return the caller's wrapped copy of every key version for this pair.
 
@@ -404,6 +443,7 @@ class E2EEConversationKeyView(DualAuthJsonView):
         keys = [{"version": row.version, "wrapped_key": row.wrapped_for(profile.pk)} for row in rows]
         return Response({"keys": keys, "latest": rows[-1].version if rows else 0})
 
+    @extend_schema(request=e2ee_schema.E2EEConversationKeyCreateRequestSerializer, responses={200: e2ee_schema.E2EEWrappedKeySerializer, 201: e2ee_schema.E2EEWrappedKeySerializer, 400: None, 404: None})
     def post(self, request: Request, profile_slug: str) -> Response:
         """Store the next conversation-key version for this pair.
 
@@ -429,7 +469,7 @@ class E2EEConversationKeyView(DualAuthJsonView):
             return Response({"error": "Not found."}, status=404)
         data = _json_body(request)
         if data is None:
-            return Response({"error": "Malformed JSON body"}, status=400)
+            return Response({"error": MALFORMED_JSON_BODY_MESSAGE}, status=400)
 
         wrapped_for_me = data.get("wrapped_for_me", "")
         wrapped_for_partner = data.get("wrapped_for_partner", "")
@@ -486,6 +526,7 @@ class E2EERewrapView(DualAuthJsonView):
             "endpoint for the rationale. Accounts with no usable password (OAuth-only) have no proof to give."
         ),
     )
+    @extend_schema(request=e2ee_schema.E2EERewrapRequestSerializer, responses={200: e2ee_schema.E2EEOkResponseSerializer, 400: None})
     def post(self, request: Request) -> Response:
         """Update wrapped copies on the caller's bundle.
 
@@ -503,7 +544,7 @@ class E2EERewrapView(DualAuthJsonView):
             return Response({"error": "Not enrolled."}, status=404)
         data = _json_body(request)
         if data is None:
-            return Response({"error": "Malformed JSON body"}, status=400)
+            return Response({"error": MALFORMED_JSON_BODY_MESSAGE}, status=400)
 
         password_wrapped = data.get("password_wrapped_secret", "")
         password_wrap_salt = data.get("password_wrap_salt", "")
@@ -518,6 +559,34 @@ class E2EERewrapView(DualAuthJsonView):
             return Response({"error": "password_wrapped_secret and password_wrap_salt must be provided together"}, status=400)
         if not password_wrapped and not recovery_wrapped:
             return Response({"error": "Nothing to update"}, status=400)
+
+        # The KDF cost the *new* blob was wrapped under. Enroll accepts
+        # stronger-than-default parameters on purpose, but this endpoint never
+        # updated them - so a bundle enrolled above the floor kept advertising
+        # its old cost while the re-wrap stored a blob made with the client's
+        # pinned constants. Every later password unlock then derived a key from
+        # the wrong parameters and failed: a device holding the cached key looped
+        # re-wrapping, and a device without one lost the password path entirely
+        # and had to fall back to the recovery key. Permanent, and reachable
+        # through the public API by enrolling above the floor.
+        #
+        # Absent means the defaults rather than "leave them alone": the shipped
+        # client has always wrapped with its pinned `KDF_OPSLIMIT`/`KDF_MEMLIMIT`
+        # here (see the comment at the call site in e2ee-client.ts, which
+        # explains why it must not use the server-supplied values), and those are
+        # pinned to match these constants. So an older client that sends nothing
+        # is describing exactly this.
+        rewrap_opslimit, rewrap_memlimit = DEFAULT_KDF_OPSLIMIT, DEFAULT_KDF_MEMLIMIT
+        if password_wrapped and ("kdf_opslimit" in data or "kdf_memlimit" in data):
+            try:
+                rewrap_opslimit = int(data.get("kdf_opslimit", 0))
+                rewrap_memlimit = int(data.get("kdf_memlimit", 0))
+            except (TypeError, ValueError):
+                return Response({"error": "Invalid kdf parameters"}, status=400)
+            # The same floor enroll applies, for the same reason: this decides
+            # how expensive the stored blob is to attack offline.
+            if rewrap_opslimit < DEFAULT_KDF_OPSLIMIT or rewrap_memlimit < DEFAULT_KDF_MEMLIMIT:
+                return Response({"error": "Invalid kdf parameters"}, status=400)
         # Proof is required for *either* wrapped copy, not just the password
         # one. Gating it on `password_wrapped` alone left the recovery-only
         # rewrap unauthenticated beyond the bearer token: a stolen
@@ -540,11 +609,170 @@ class E2EERewrapView(DualAuthJsonView):
             bundle.password_wrapped_secret = password_wrapped
             bundle.password_wrap_salt = password_wrap_salt
             bundle.password_wrap_stale = False
-            update_fields += ["password_wrapped_secret", "password_wrap_salt", "password_wrap_stale"]
+            # Stored with the blob, never separately: the salt, the ciphertext
+            # and the cost parameters are one description of one wrapping, and
+            # the read path uses all three together.
+            bundle.kdf_opslimit = rewrap_opslimit
+            bundle.kdf_memlimit = rewrap_memlimit
+            update_fields += ["password_wrapped_secret", "password_wrap_salt", "password_wrap_stale", "kdf_opslimit", "kdf_memlimit"]
         if recovery_wrapped:
             bundle.recovery_wrapped_secret = recovery_wrapped
             update_fields.append("recovery_wrapped_secret")
         bundle.save(update_fields=update_fields)
+        return Response({"ok": True})
+
+
+class _E2EEPasskeyWrapBase(DualAuthJsonView):
+    """Shared credential lookup for the two passkey-wrap routes.
+
+    The blob these views store was wrapped client-side under an HKDF of the
+    WebAuthn ``prf`` output for one of the caller's own passkeys; the server
+    keeps what it cannot open, exactly like the password and recovery wraps.
+
+    Both routes demand the account-password proof on password-backed accounts,
+    same rationale as ``E2EERewrapView``: adding an unlock path - or destroying
+    one, which for an account whose recovery key was never saved is a data-loss
+    lever - must cost more than a bearer token.
+
+    **Why two view classes for one resource.** They were one class on two URLs,
+    and that cost twice. The published schema gained two operations per method,
+    whose ``operationId``s collided and which drf-spectacular resolved by
+    appending ``_2`` to whichever route it walked second - so adding an
+    unrelated route could rename a method in every generated client. And the
+    collection URL's DELETE reached a handler with a required ``credential_id``
+    and raised ``TypeError`` out of the dispatcher, i.e. a 500 on an
+    authenticated endpoint. Giving each method a view that defines only that
+    method lets DRF answer 405 for the two combinations that never existed, and
+    leaves each ``operationId`` claimed once.
+    """
+
+    def _resolve_credential(self, request: Request, credential_id_b64: str) -> WebAuthnCredential | None:
+        """Resolve a base64url credential id to one of the caller's passkeys.
+
+        Args:
+            request: The authenticated request.
+            credential_id_b64: The credential's rawId, base64url-encoded.
+
+        Returns:
+            The credential, or None when malformed or not the caller's own -
+            indistinguishable on purpose, so this cannot probe which
+            credential ids exist.
+        """
+        from webauthn.helpers import base64url_to_bytes
+
+        try:
+            raw_id = base64url_to_bytes(credential_id_b64)
+        except (ValueError, TypeError):
+            return None
+        return WebAuthnCredential.objects.filter(user=request.user, credential_id=raw_id).first()
+
+
+class E2EEPasskeyWrapView(_E2EEPasskeyWrapBase):
+    """POST a passkey-wrapped copy of the caller's private key.
+
+    Upserts: re-enrolling a credential replaces its wrap. DELETE lives on
+    :class:`E2EEPasskeyWrapItemView`, which is the item route.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        description=(
+            "Stores (or replaces) a passkey-wrapped copy of the caller's E2EE private key. The wrap was "
+            "computed client-side from the WebAuthn prf extension's output; the server never sees the PRF "
+            "secret. Requires `current_password` on password-backed accounts, even for OAuth2 callers - "
+            "see the enroll endpoint for the rationale."
+        ),
+    )
+    def post(self, request: Request) -> Response:
+        """Create or replace the wrap for one of the caller's passkeys.
+
+        Args:
+            request: JSON body with ``credential_id`` (base64url), ``prf_input``
+                (base64 32-byte PRF evaluation input), ``wrapped_secret``, and
+                ``current_password`` on password-backed accounts.
+
+        Returns:
+            201 JSON ``{ok: true}`` on create, 200 on replace; 400 on malformed
+            input or an unknown credential; 403 on bad proof; 404 when not
+            enrolled.
+        """
+        profile = _get_profile(request)
+        bundle = MessagingKeyBundle.objects.for_profile(profile).first()
+        if bundle is None:
+            return Response({"error": "Not enrolled."}, status=404)
+        data = _json_body(request)
+        if data is None:
+            return Response({"error": MALFORMED_JSON_BODY_MESSAGE}, status=400)
+
+        prf_input = data.get("prf_input", "")
+        wrapped_secret = data.get("wrapped_secret", "")
+        if not valid_blob(prf_input, MAX_SALT_LENGTH):
+            return Response({"error": "Invalid prf_input"}, status=400)
+        if not valid_blob(wrapped_secret, MAX_WRAPPED_SECRET_LENGTH):
+            return Response({"error": "Invalid wrapped_secret"}, status=400)
+
+        credential_id = data.get("credential_id", "")
+        credential = self._resolve_credential(request, credential_id) if isinstance(credential_id, str) else None
+        if credential is None:
+            return Response({"error": "Unknown credential"}, status=400)
+
+        proof_error = _require_current_password_proof(profile.user, data)
+        if proof_error is not None:
+            return proof_error
+
+        _, created = E2EEPasskeyWrap.objects.update_or_create(
+            credential=credential,
+            defaults={"bundle": bundle, "prf_input": prf_input, "wrapped_secret": wrapped_secret, "bundle_version": bundle.version},
+        )
+        logger.info("E2EE passkey wrap %s for profile %s (credential %s)", "created" if created else "replaced", profile.pk, credential.pk)
+        return Response({"ok": True}, status=201 if created else 200)
+
+
+class E2EEPasskeyWrapItemView(_E2EEPasskeyWrapBase):
+    """DELETE one passkey's wrap, addressed by credential id.
+
+    The passkey itself is untouched; deleting the passkey cascades to its wrap
+    separately. POST belongs to :class:`E2EEPasskeyWrapView`, the collection
+    route, so a POST here is a 405 from DRF rather than a hand-written one.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "DELETE": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        description=(
+            "Removes the wrap for one passkey (the passkey itself is untouched). Requires `current_password` "
+            "on password-backed accounts: for an account whose recovery key was never saved, destroying an "
+            "unlock path is a data-loss lever, and a bearer token alone must not reach it."
+        ),
+    )
+    def delete(self, request: Request, credential_id: str) -> Response:
+        """Delete the wrap for one of the caller's passkeys.
+
+        Args:
+            request: The authenticated request; JSON body may carry
+                ``current_password``.
+            credential_id: The credential's rawId, base64url-encoded.
+
+        Returns:
+            JSON ``{ok: true}``; 403 on bad proof; 404 for an unknown
+            credential or one with no wrap.
+        """
+        profile = _get_profile(request)
+        credential = self._resolve_credential(request, credential_id)
+        if credential is None:
+            return Response({"error": "Not found."}, status=404)
+        data = _json_body(request) or {}
+        proof_error = _require_current_password_proof(profile.user, data)
+        if proof_error is not None:
+            return proof_error
+        deleted, _ = E2EEPasskeyWrap.objects.filter(credential=credential, bundle__profile=profile).delete()
+        if not deleted:
+            return Response({"error": "Not found."}, status=404)
         return Response({"ok": True})
 
 
@@ -598,6 +826,7 @@ class E2EEGroupKeyView(DualAuthJsonView):
             "server's recomputed token set and is rejected with 409; refetch this endpoint and retry."
         ),
     )
+    @extend_schema(responses={200: e2ee_schema.E2EEGroupKeysResponseSerializer, 404: None})
     def get(self, request: Request, group_uuid: UUID) -> Response:
         """Return the caller's envelopes and the group's rotation state.
 
@@ -609,13 +838,13 @@ class E2EEGroupKeyView(DualAuthJsonView):
             JSON ``{keys, latest, needs_rotation, members}`` - ``members`` is
             a ``[{id, public_key}]`` list when every active member is enrolled
             (so the caller can rotate), else null. ``id`` is an opaque
-            per-(group, member) token (see ``services.e2ee.group_member_token``)
+            per-(group, member) token (see ``services.security.e2ee.group_member_token``)
             - never a slug, which would hand every member the real identity of
             members whose ``profile_visibility`` masks them elsewhere. 404 for
             non-members and unknown groups.
         """
         from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, MessagingKeyBundle
-        from urbanlens.dashboard.services.e2ee import group_member_token
+        from urbanlens.dashboard.services.security.e2ee import group_member_token
 
         resolved = self._resolve(request, group_uuid)
         if resolved is None:
@@ -649,6 +878,7 @@ class E2EEGroupKeyView(DualAuthJsonView):
             "Any other key set - notably profile slugs - is rejected with 409."
         ),
     )
+    @extend_schema(request=e2ee_schema.E2EEGroupKeyCreateRequestSerializer, responses={200: e2ee_schema.E2EEWrappedKeySerializer, 201: e2ee_schema.E2EEWrappedKeySerializer, 400: None, 404: None})
     def post(self, request: Request, group_uuid: UUID) -> Response:
         """Store the next group-key version.
 
@@ -664,7 +894,7 @@ class E2EEGroupKeyView(DualAuthJsonView):
             winner's envelope when racing; 400/404/409 on invalid input.
         """
         from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, MessagingKeyBundle
-        from urbanlens.dashboard.services.e2ee import group_member_token
+        from urbanlens.dashboard.services.security.e2ee import group_member_token
 
         resolved = self._resolve(request, group_uuid)
         if resolved is None:
@@ -672,7 +902,7 @@ class E2EEGroupKeyView(DualAuthJsonView):
         profile, group, _membership = resolved
         data = _json_body(request)
         if data is None:
-            return Response({"error": "Malformed JSON body"}, status=400)
+            return Response({"error": MALFORMED_JSON_BODY_MESSAGE}, status=400)
 
         wrapped = data.get("wrapped")
         if not isinstance(wrapped, dict) or not wrapped:
@@ -824,6 +1054,7 @@ class E2EERewrapAllView(DualAuthJsonView):
         "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
     }
 
+    @extend_schema(responses={200: e2ee_schema.E2EERewrapAllResponseSerializer})
     def get(self, request: Request) -> Response:
         """List the caller's sealed conversation-key copies and group envelopes.
 
@@ -901,6 +1132,7 @@ class E2EEResetView(DualAuthJsonView):
             "be able to re-key an account and lock its owner out of their own history."
         ),
     )
+    @extend_schema(request=e2ee_schema.E2EEResetRequestSerializer, responses={200: e2ee_schema.E2EEResetResponseSerializer, 400: None, 403: None})
     def post(self, request: Request) -> Response:
         """Replace the caller's key bundle with brand-new key material.
 
@@ -929,7 +1161,7 @@ class E2EEResetView(DualAuthJsonView):
             return Response({"error": "Not enrolled."}, status=404)
         data = _json_body(request)
         if data is None:
-            return Response({"error": "Malformed JSON body"}, status=400)
+            return Response({"error": MALFORMED_JSON_BODY_MESSAGE}, status=400)
         if data.get("confirm") != RESET_CONFIRMATION:
             return Response({"error": "Missing confirmation"}, status=400)
         proof_error = _require_current_password_proof(profile.user, data)
@@ -969,6 +1201,18 @@ class E2EEResetView(DualAuthJsonView):
                 return Response({"error": "Unknown group envelope id"}, status=400)
 
         with transaction.atomic():
+            # The bundle was read before any of the rewrapping above, and the client
+            # computed every rewrap against *that* key. If a second reset landed in the
+            # meantime (a double-submitted or retried request is the realistic way),
+            # applying these rewraps now would seal some conversations to the superseded
+            # key while the bundle advertises the newer one - i.e. permanently
+            # undecryptable threads. Re-read under a row lock and refuse if it moved;
+            # the client can restart the reset against the current key.
+            locked_bundle = MessagingKeyBundle.objects.select_for_update().filter(pk=bundle.pk).first()
+            if locked_bundle is None or locked_bundle.version != bundle.version:
+                return Response({"error": "Your key bundle changed while this reset was in progress. Please try again."}, status=409)
+            bundle = locked_bundle
+
             # Only ever the caller's own side of each pair - the partner's
             # sealed copy is untouchable from this endpoint by construction.
             for row in conversation_rows:
@@ -981,6 +1225,13 @@ class E2EEResetView(DualAuthJsonView):
             for envelope in envelope_rows:
                 envelope.wrapped_key = rewrapped_envelopes[envelope.pk]
                 envelope.save(update_fields=["wrapped_key", "updated"])
+
+            # Passkey wraps encrypt the OLD private key - useless and
+            # misleading once the keypair rotates, so they die in the same
+            # transaction. The bundle_version stamp on each wrap is the
+            # backstop if one ever survives; clients re-enroll wraps from any
+            # device that unlocks under the new key.
+            E2EEPasskeyWrap.objects.filter(bundle=bundle).delete()
 
             bundle.public_key = public_key
             bundle.recovery_wrapped_secret = recovery_wrapped
@@ -1001,5 +1252,22 @@ class E2EEResetView(DualAuthJsonView):
             )
 
         rewrapped_count = len(conversation_rows) + len(envelope_rows)
-        logger.info("E2EE key reset for profile %s (now v%s, %s key copies re-wrapped)", profile.pk, bundle.version, rewrapped_count)
-        return Response({"version": bundle.version, "rewrapped": rewrapped_count})
+        # Counted after the swap, so it describes the state the caller is now in.
+        # A submitted payload only has to name rows the caller owns - it does not
+        # have to name all of them, which is correct (a user who lost their key
+        # cannot re-seal anything and resets to get a working account back). But
+        # the rows it left out are now sealed to a key that no longer exists,
+        # i.e. permanently unreadable, and the caller is the only one who can
+        # tell the user that. Reporting it is the difference between "your
+        # history is gone" and finding out months later.
+        owned_conversations = ConversationKey.objects.filter(Q(profile_low=profile) | Q(profile_high=profile)).count()
+        owned_envelopes = GroupKeyEnvelope.objects.filter(profile=profile).count()
+        not_rewrapped = (owned_conversations + owned_envelopes) - rewrapped_count
+        logger.info(
+            "E2EE key reset for profile %s (now v%s, %s key copies re-wrapped, %s left sealed to the retired key)",
+            profile.pk,
+            bundle.version,
+            rewrapped_count,
+            not_rewrapped,
+        )
+        return Response({"version": bundle.version, "rewrapped": rewrapped_count, "not_rewrapped": not_rewrapped})

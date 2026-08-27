@@ -1,0 +1,20 @@
+{% comment %}
+The pin-import-failure review queue - pins from an import whose Google Maps
+CID never resolved to a location. Re-fetched via the `refreshQueue` event
+after any resolve/dismiss action (on this section or the pin-suggestions/
+pin-merge-suggestions ones) so the section stays in sync in place.
+
+Shares the `.pin-suggestions-grid`/`.pin-suggestion-card` classes so these
+cards blend into the same visual flow as regular pin suggestions rather than
+reading as a separate section - see locations.html.
+
+Context:
+  pin_import_failures - the profile's pending PinImportFailure rows, newest first
+{% endcomment %}
+{% if pin_import_failures %}
+<div class="pin-suggestions-grid" id="pin-import-failures-grid">
+    {% for failure in pin_import_failures %}
+    {% include "dashboard/partials/memories/_pin_import_failure_card.html" %}
+    {% endfor %}
+</div>
+{% endif %}

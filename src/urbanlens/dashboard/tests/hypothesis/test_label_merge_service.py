@@ -16,12 +16,13 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 
 class LabelMergeServiceTests(TestCase):
@@ -33,7 +34,7 @@ class LabelMergeServiceTests(TestCase):
         self.profile = Profile.objects.get(user=self.user)
 
     def _label(self, name: str, kind: str = KIND_TAG, **kwargs) -> Label:
-        return Label.objects.create(profile=self.profile, name=name, kind=kind, **kwargs)
+        return ensure_label(profile=self.profile, name=name, kind=kind, **kwargs)
 
     #: Incremented per pin so each gets distinct coordinates - a profile may
     #: not have two pins on one Location (db_pin_unique_location_per_profile).
@@ -109,9 +110,8 @@ class LabelMergeServiceTests(TestCase):
         pin.labels.add(source)
 
         # Fail after the attachments have moved but before the delete commits.
-        with patch("urbanlens.dashboard.services.labels.merge._reparent_children", side_effect=RuntimeError("boom")):
-            with self.assertRaises(RuntimeError):
-                merge_labels(target=target, sources=[source], profile=self.profile)
+        with patch("urbanlens.dashboard.services.labels.merge._reparent_children", side_effect=RuntimeError("boom")), self.assertRaises(RuntimeError):
+            merge_labels(target=target, sources=[source], profile=self.profile)
 
         # Everything rolled back: the source still exists and still owns its pin.
         self.assertTrue(Label.objects.filter(pk=source.pk).exists())
@@ -137,7 +137,7 @@ class LabelMergeServiceTests(TestCase):
 
     def test_global_source_is_refused(self) -> None:
         target = self._label("Mine", kind=KIND_CATEGORY)
-        shared = Label.objects.create(profile=None, name="Shared", kind=KIND_CATEGORY)
+        shared = ensure_label(profile=None, name="Shared", kind=KIND_CATEGORY)
         with self.assertRaises(LabelMergeError):
             merge_labels(target=target, sources=[shared], profile=self.profile)
         self.assertTrue(Label.objects.filter(pk=shared.pk).exists())
@@ -145,7 +145,7 @@ class LabelMergeServiceTests(TestCase):
     def test_another_users_source_is_refused(self) -> None:
         target = self._label("Mine")
         other = baker.make(User)
-        theirs = Label.objects.create(profile=Profile.objects.get(user=other), name="Theirs", kind=KIND_TAG)
+        theirs = ensure_label(profile=Profile.objects.get(user=other), name="Theirs", kind=KIND_TAG)
         with self.assertRaises(LabelMergeError):
             merge_labels(target=target, sources=[theirs], profile=self.profile)
 
@@ -167,7 +167,7 @@ class LabelMergeServiceTests(TestCase):
 
     def test_a_global_label_may_be_the_target(self) -> None:
         """Merging your own label into a shared one is normal cleanup."""
-        shared = Label.objects.create(profile=None, name="Shared", kind=KIND_CATEGORY)
+        shared = ensure_label(profile=None, name="Shared", kind=KIND_CATEGORY)
         mine = self._label("Mine", kind=KIND_CATEGORY)
         pin = self._pin("P")
         pin.labels.add(mine)

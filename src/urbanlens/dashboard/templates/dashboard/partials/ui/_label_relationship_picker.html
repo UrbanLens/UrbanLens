@@ -13,7 +13,7 @@ Reusable Parent/Child label picker used by the create, edit, and bulk-edit label
     {% if mode == 'additive' %}
     <p class="form-hint">Selected labels are <strong>added</strong> as parents/children. Existing relationships are not removed.</p>
     {% endif %}
-    {% include 'dashboard/partials/ui/_page_explainer.html' with explainer_id=rel_explainer_id modifier='text-only' kicker='How relationships work' heading='Parent and child labels nest automatically' body='Make a label the parent of another to group related items. Searching or filtering by a parent also matches all of its children — a “Churches” tag with “Cathedral” and “Chapel” as children will match pins tagged with either. A parent’s pin count also includes all of its children’s pins.' %}
+    {% include 'dashboard/partials/ui/_page_explainer.html' with explainer_id=rel_explainer_id modifier='text-only' kicker='How relationships work' heading='Group related items' body='Searching for a parent also matches its children — a "Religious" tag with "Christian Church" and "Jewish Temple" as children will allow you to find all places of worship, or only specific religions if you want.' %}
 
     <div class="label-rel-selected-section">
         <div class="label-rel-selected-group">

@@ -18,10 +18,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+import random
 from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.consensus.model import ConsensusFieldKind
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, normalize_name_for_comparison
+from urbanlens.dashboard.services.wiki.wiki_edits import save_edited_fields
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -53,12 +55,9 @@ def haversine_distance_meters(a: Point, b: Point) -> float:
     about, so the small approximation versus a true geodesic/ellipsoidal
     calculation is immaterial here.
     """
-    lat1, lon1 = math.radians(a.y), math.radians(a.x)
-    lat2, lon2 = math.radians(b.y), math.radians(b.x)
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    haversine = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-    return 2 * _EARTH_RADIUS_METERS * math.asin(math.sqrt(haversine))
+    from urbanlens.dashboard.services.geo.distance import haversine_meters
+
+    return haversine_meters(a.y, a.x, b.y, b.x)
 
 
 #: A wiki with fewer aliases than this is still worth suggesting more for -
@@ -142,6 +141,7 @@ def _wiki_field_strategy(
     current_value: Callable[[Wiki], Any],
     confirmed_value: Callable[[Wiki], Any | None],
     set_value: Callable[[Wiki, Any], None],
+    written_fields: tuple[str, ...] = (),
     normalize: Callable[[Any], Any] = _text_normalize,
     agrees: Callable[[Any, Any], bool] = _text_agrees,
 ) -> ConsensusFieldStrategy:
@@ -151,6 +151,12 @@ def _wiki_field_strategy(
     what counts as "confirmed" - everything else (round shape, diff
     recording) is identical, so it's expressed once here rather than
     duplicated four times.
+
+    Args:
+        written_fields: Columns ``set_value`` actually assigns, when that is not
+            just ``field_name``. The pin-type strategy also sets
+            ``pin_type_is_user_provided``, and a scoped save that listed only the
+            named field would silently drop it.
     """
 
     def find_missing(pool: Iterable[Wiki]) -> list[Wiki]:
@@ -171,7 +177,11 @@ def _wiki_field_strategy(
     def apply_answer(wiki: Wiki, value: Any, profile: Profile, round_: ConsensusRound) -> dict | None:
         old_value = current_value(wiki)
         set_value(wiki, value)
-        wiki.save()
+        # Scoped, not a bare save: a Wiki is community-editable and has a dozen
+        # writers, and this instance was loaded when the round was built. Writing
+        # every column would revert whatever was committed while the round ran -
+        # the same defect fixed in services.wiki.wiki_edits.
+        save_edited_fields(wiki, written_fields or (field_name,))
         return {field_name: {"from": old_value, "to": current_value(wiki)}}
 
     return ConsensusFieldStrategy(
@@ -256,11 +266,13 @@ def _valid_pin_type_choices() -> set[str]:
 
 
 def _alias_find_missing(pool: Iterable[Wiki]) -> list[Wiki]:
-    return [wiki for wiki in pool if wiki.aliases.count() < ALIAS_SUGGEST_THRESHOLD]
+    # .all() throughout this module, never .count()/.exists()/.filter(): the pool is
+    # prefetched by eligibility.eligible_wikis(), and only .all() reads that cache.
+    return [wiki for wiki in pool if len(wiki.aliases.all()) < ALIAS_SUGGEST_THRESHOLD]
 
 
 def _alias_find_known(pool: Iterable[Wiki]) -> list[Wiki]:
-    return [wiki for wiki in pool if wiki.aliases.exists()]
+    return [wiki for wiki in pool if wiki.aliases.all()]
 
 
 def _alias_build_round(wiki: Wiki) -> RoundContent | None:
@@ -298,24 +310,29 @@ def _alias_apply_answer(wiki: Wiki, value: Any, profile: Profile, round_: Consen
 
 
 def _photo_find_missing(pool: Iterable[Wiki]) -> list[Wiki]:
-    return [wiki for wiki in pool if wiki.images.filter(latitude__isnull=True, longitude__isnull=True).exists()]
+    return [wiki for wiki in pool if any(image.latitude is None and image.longitude is None for image in wiki.images.all())]
 
 
 def _photo_find_known(pool: Iterable[Wiki]) -> list[Wiki]:
-    return [wiki for wiki in pool if wiki.images.filter(latitude__isnull=False, longitude__isnull=False).exists()]
+    return [wiki for wiki in pool if any(image.latitude is not None and image.longitude is not None for image in wiki.images.all())]
 
 
 def _photo_build_round(wiki: Wiki) -> RoundContent | None:
-    image = wiki.images.filter(latitude__isnull=True, longitude__isnull=True).order_by("?").first()
-    if image is None:
+    # .all() and a Python pick, not .filter().order_by("?"): the queryset form
+    # goes back to the database, which both defeats eligibility's prefetch and -
+    # since that prefetch is where photo visibility is applied - hands back
+    # photos the player's uploaders have not admitted them to.
+    candidates = [image for image in wiki.images.all() if image.latitude is None and image.longitude is None]
+    if not candidates:
         return None
-    return RoundContent(target_image=image)
+    return RoundContent(target_image=random.choice(candidates))  # noqa: S311 - picking a round, not a key
 
 
 def _photo_build_check_round(wiki: Wiki) -> tuple[RoundContent, Any] | None:
-    image = wiki.images.filter(latitude__isnull=False, longitude__isnull=False).order_by("?").first()
-    if image is None:
+    candidates = [image for image in wiki.images.all() if image.latitude is not None and image.longitude is not None]
+    if not candidates:
         return None
+    image = random.choice(candidates)  # noqa: S311 - picking a round, not a key
     # Guaranteed non-None by the filter() above - Image.latitude/longitude
     # are ordinary nullable fields a queryset filter can't narrow statically.
     if image.latitude is None or image.longitude is None:
@@ -373,6 +390,7 @@ _STRATEGIES: dict[str, ConsensusFieldStrategy] = {
         current_value=_current_pin_type,
         confirmed_value=_confirmed_pin_type,
         set_value=_set_pin_type,
+        written_fields=("pin_type", "pin_type_is_user_provided"),
         normalize=_choice_normalize,
         agrees=_choice_agrees,
     ),

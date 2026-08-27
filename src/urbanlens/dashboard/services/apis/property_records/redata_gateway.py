@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import logging
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,23 @@ REASON_BLOCKED = "blocked"
 #: (network errors, malformed responses, unexpected status codes) - all of
 #: those are equally transient from a caller's point of view.
 REASON_SOURCE_ERROR = "source_error"
+#: REData's own outbound pacing refused the call before it reached the county
+#: source - distinct from ``REASON_SOURCE_ERROR`` (the source itself failed),
+#: and just as transient.
+REASON_SOURCE_RATE_LIMITED = "source_rate_limited"
+#: The generic per-endpoint form of the same thing, used by REData's
+#: single-source endpoints (demographics, the places family, cultural-resource
+#: detail) rather than the tiered parcel pipeline.
+REASON_RATE_LIMITED = "rate_limited"
+
+#: Reasons that mean "we could not ask", never "there is nothing here". The
+#: existence of a ``LocationCache`` row is what marks a source as fetched, so a
+#: caller that stores a payload for one of these turns a passing outage into a
+#: blank card for the whole ``external_data_cache_days`` window. Every other
+#: reason REData publishes (``outside_coverage``, ``unresearched``,
+#: ``manual_only``, ``blocked``, ``no_data_found``) is a settled answer about
+#: the coordinate and is worth remembering.
+TRANSIENT_REASONS: frozenset[str] = frozenset({REASON_SOURCE_ERROR, REASON_SOURCE_RATE_LIMITED, REASON_RATE_LIMITED})
 
 
 class PropertyRecordsUnavailableError(GatewayRequestError):
@@ -203,6 +220,102 @@ class RedataGateway(Gateway):
         body = self._lookup_parcel_body(latitude, longitude, situs_address=situs_address, apn=apn)
         return body.get("uuid") or None
 
+    def lookup_assessments(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return annual assessor valuations near a parcel.
+
+        See REData's ``docs/api-reference.md``, "GET /parcels/{uuid}/assessments/":
+        one row per **parcel-year** (``parcel_identifier`` is the assessor's own
+        PIN, ``tax_year`` the tax year). ``total_value`` is an *assessed* value -
+        a statutory fraction of market value (``assessment_basis`` states the
+        publisher's own terms) - and ``value_stage`` says which review stage it
+        came from (``mailed``/``certified``/``board``, the last being
+        post-appeal). Rows cover parcels *near* the coordinate, so callers
+        filter by ``parcel_identifier`` for a single parcel's history.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            The raw assessment rows; empty outside covered counties.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/assessments/") or {}
+        return list(body.get("results") or [])
+
+    def lookup_liens(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return recorded liens and fines against a parcel.
+
+        See REData's ``docs/api-reference.md``, "GET /parcels/{uuid}/liens/".
+        Rows carry ``lien_type``, ``amount``, ``filed_date`` and ``status``.
+        ``status`` is free text - publishers spell it inconsistently and REData
+        does not normalise it - so treat it as a label to show, not a value to
+        branch on.
+
+        Unlike owner records, nothing here names a private individual: a lien
+        row describes the property's own encumbrance.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            The raw lien rows, newest filing first; empty outside covered counties.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/liens/") or {}
+        return list(body.get("results") or [])
+
+    def lookup_tax_payments(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return tax billing and payment history for a parcel.
+
+        See REData's ``docs/api-reference.md``, "GET /parcels/{uuid}/tax-payments/".
+        One row per **parcel-year**, carrying ``tax_year``, ``amount``, ``paid``
+        and ``delinquent``. ``delinquent`` is the publisher's own determination
+        rather than something derived from ``paid`` - a row can be unpaid but
+        not yet delinquent, since bills are unpaid before their due date.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            The raw payment rows, newest tax year first; empty outside covered
+            counties.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/tax-payments/") or {}
+        return list(body.get("results") or [])
+
+    def lookup_sale_records(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return supplementary recorded sales near a parcel.
+
+        See REData's ``docs/api-reference.md``, "GET /parcels/{uuid}/sale-records/":
+        recorded sales from providers outside the tiered property-records
+        pipeline (Connecticut OPM statewide; Cook County). Rows are
+        **near-parcel** - ``parcel`` is null and nothing links a row to a
+        specific parcel - so callers must match by address (or a raw PIN in
+        ``attributes``) before attributing a sale to a property.
+        ``attributes.arms_length`` is the field to read before quoting a
+        price: false marks bundle sales and nominal transfers whose
+        ``sale_price`` is not the parcel's market price (Cook County only;
+        Connecticut publishes no such flag).
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            The raw sale rows; empty outside covered areas.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/sale-records/") or {}
+        return list(body.get("results") or [])
+
     def lookup_listings(self, parcel_uuid: str) -> dict[str, Any]:
         """Return cached LoopNet commercial listings for a parcel.
 
@@ -261,7 +374,7 @@ class RedataGateway(Gateway):
         raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
 
     def lookup_buildings(self, parcel_uuid: str) -> list[dict[str, Any]]:
-        """Return every building REData can find for a parcel, combined across sources.
+        """Return every building REData can find for a parcel, reconciled across sources.
 
         Never fetches/caches a *new* parcel - this only reads buildings for a
         parcel REData already resolved (see :meth:`lookup_parcel_uuid`).
@@ -270,11 +383,20 @@ class RedataGateway(Gateway):
             parcel_uuid: The parcel's REData uuid.
 
         Returns:
-            A list of ``BuildingRecord`` dicts (possibly empty) - each carries
-            at least a coordinate; ``geometry`` is standard GeoJSON (a
-            ``Point`` when no boundary is available). ``building_number``/
-            ``year_built`` are only ever populated for a ``"cris"``-sourced
-            entry today - see REData's own ``docs/api-reference.md``.
+            One dict per *physical building* (possibly empty), not one per
+            source observation - REData reconciles them (its
+            ``docs/buildings-dedup-spec.md``). Each carries at least a
+            coordinate; ``geometry`` is standard GeoJSON (a ``Point`` when no
+            boundary is available).
+
+            Provenance is ``sources[]``, one entry per source referencing that
+            building, ordered richest-information first - the flat top-level
+            ``source`` string it replaced survives only on Overpass-shaped rows
+            this app produces itself, which is why callers read both through
+            ``plugins.builtin.parcel_buildings.record_sources``. Structure is
+            ``ref``/``parent_ref``/``child_refs`` (an envelope over finer
+            records, never a duplicate of them) and ``overlap_refs`` (an
+            ambiguity REData refuses to resolve rather than merging).
 
         Raises:
             PropertyRecordsUnavailableError: The request to REData failed.
@@ -282,8 +404,83 @@ class RedataGateway(Gateway):
         body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/buildings/")
         return list(body) if isinstance(body, list) else []
 
-    def lookup_cultural_resources(self, latitude: float, longitude: float, *, radius_meters: float = 200) -> list[dict[str, Any]]:
-        """Find (fetching/caching as needed) CRIS cultural/historic resources near a coordinate.
+    def lookup_boundaries(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return every boundary candidate REData can find for a parcel, scored.
+
+        Deliberately unfiltered: passing any ``?source=`` makes REData skip
+        scoring altogether, leaving ``confidence: 0.0`` and
+        ``is_suggested: false`` on every record - which would discard the only
+        reason to call this rather than picking a polygon ourselves.
+
+        Like :meth:`lookup_buildings`, this never fetches or caches a *new*
+        parcel; it reads candidates for one REData already resolved.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid.
+
+        Returns:
+            Candidate dicts (possibly empty), each with ``geometry`` as
+            standard GeoJSON plus ``kind`` (``"parcel"`` for the parcel's own
+            cadastral line, ``"area"`` for something merely related to it),
+            ``confidence``, ``is_suggested`` and ``confidence_breakdown``. The
+            array is **not** sorted by confidence - see
+            :func:`suggested_boundary` for the selection rule.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/boundaries/")
+        return list(body) if isinstance(body, list) else []
+
+    def lookup_floorplans(self, parcel_uuid: str, *, building_ref: str = "", on_date: str | None = None) -> list[dict[str, Any]]:
+        """List a parcel's floorplan version summaries, resolved by date.
+
+        Mirrors ``GET /api/v1/parcels/{uuid}/floorplans/``: without ``on_date``
+        the effective (current) version per building; with it, the versions in
+        force on that date. No floorplan provider exists in REData yet, so an
+        empty list is the expected answer for a long time - absence is quiet.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid.
+            building_ref: Restrict to one building's plans (the reconciled
+                building ``ref``).
+            on_date: ISO date to resolve as of; None for current.
+
+        Returns:
+            Summary dicts (uuid, building_ref, valid_from, counts), possibly
+            empty.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        params: dict[str, Any] = {}
+        if building_ref:
+            params["building_ref"] = building_ref
+        if on_date:
+            params["date"] = on_date
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/floorplans/", params=params or None)
+        results = body.get("results") if isinstance(body, dict) else None
+        return list(results) if isinstance(results, list) else []
+
+    def lookup_floorplan_document(self, floorplan_uuid: str) -> dict[str, Any] | None:
+        """Fetch one floorplan version's full nested document.
+
+        Mirrors ``GET /api/v1/floorplans/{uuid}/``.
+
+        Args:
+            floorplan_uuid: The plan version's uuid, from a summary row.
+
+        Returns:
+            The document dict, or None when it does not exist.
+        """
+        try:
+            body = self._get_json(f"/api/v1/floorplans/{floorplan_uuid}/")
+        except PropertyRecordsUnavailableError:
+            return None
+        return body if isinstance(body, dict) else None
+
+    def lookup_cultural_resources(self, latitude: float, longitude: float, *, radius_meters: float = 200, provider: str | None = None) -> list[dict[str, Any]]:
+        """Find (fetching/caching as needed) cultural/historic resources near a coordinate.
 
         Only the fast, unauthenticated layer-query tier runs here - a
         resource's full detail record (including its attachments) is a
@@ -293,15 +490,26 @@ class RedataGateway(Gateway):
             latitude: WGS-84 latitude.
             longitude: WGS-84 longitude.
             radius_meters: Search radius around the coordinate.
+            provider: Restrict the search to one of REData's registered
+                providers. This endpoint answers from a **registry** of state
+                and municipal inventories plus the nationwide National
+                Register, so an unrestricted call over (say) New York returns
+                CRIS *and* NRHP rows in one list. A caller that renders one
+                inventory's own fields must name it, or it will sometimes pick
+                a row from a different source that has none of them - and pay
+                for the other providers' queries besides.
 
         Returns:
-            A list of resource dicts (empty outside NY, CRIS's only current
-            coverage) - see the module docs for each resource's fields.
+            A list of resource dicts, each tagged with the ``provider`` that
+            answered - see the module docs for each resource's fields.
 
         Raises:
             PropertyRecordsUnavailableError: The request to REData failed.
         """
-        body = self._get_json("/api/v1/cultural-resources/lookup/", params={"lat": latitude, "lng": longitude, "radius_meters": radius_meters})
+        params: dict[str, Any] = {"lat": latitude, "lng": longitude, "radius_meters": radius_meters}
+        if provider:
+            params["provider"] = provider
+        body = self._get_json("/api/v1/cultural-resources/lookup/", params=params)
         if isinstance(body, list):
             return list(body)
         if isinstance(body, dict):
@@ -312,6 +520,19 @@ class RedataGateway(Gateway):
 
     def fetch_cultural_resource_detail(self, resource_uuid: str) -> dict[str, Any]:
         """Fetch (and cache onto the resource) a CRIS resource's full detail record and attachments.
+
+        REData answers with an envelope - ``{"detail_status": ..., "resource":
+        {...}}`` - because "the source was asked and genuinely publishes
+        nothing deeper" and "detail was retrieved" both leave a resource whose
+        ``detail_retrieved_at`` is set. Callers here only ever want the
+        resource, so the envelope is unwrapped rather than handed on: reading
+        ``attributes``/``attachments`` straight off the envelope silently
+        yields nothing at all, which is not distinguishable from a resource
+        that really has no attachments.
+
+        Requires an API key holding ``cultural_resources:write`` (the fetch
+        persists new data on REData's side); a read-only key gets a 403 here
+        and therefore never sees any attachment.
 
         Args:
             resource_uuid: The resource's REData uuid (from :meth:`lookup_cultural_resources`).
@@ -334,9 +555,11 @@ class RedataGateway(Gateway):
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
         if response.status_code == 200:
             try:
-                return dict(response.json())
+                body = dict(response.json())
             except ValueError as exc:
                 raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REData returned an unparseable response.") from exc
+            resource = body.get("resource")
+            return dict(resource) if isinstance(resource, dict) else body
         if response.status_code == 400:
             try:
                 body = response.json()

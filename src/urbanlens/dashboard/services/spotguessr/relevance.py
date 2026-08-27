@@ -1,9 +1,9 @@
 """Recording SpotGuessr's photo-quality signal (``GamePhotoFeedback``).
 
 Photos-mode rounds are the only source of this signal (Named Place/Street
-View rounds have no ``round.image``). See ``services.media_relevance`` for
+View rounds have no ``round.image``). See ``services.media.media_relevance`` for
 how these events are weighted into a photo's overall effective relevance,
-and ``docs/designs/spotguessr.md`` ("Photo relevance feedback") for the
+and ``docs/designs/drafts/spotguessr.md`` ("Photo relevance feedback") for the
 full design.
 """
 
@@ -34,7 +34,7 @@ def record_feedback(round_: GameRound, profile: Profile, kind: str) -> GamePhoto
     returning None, for a round with no visual content to react to (Named
     Place) - callers should treat that as "nothing to record", not an
     error. Street View feedback is recorded like Photos feedback, but has
-    no effect on ``services.media_relevance`` (that scoring path is keyed
+    no effect on ``services.media.media_relevance`` (that scoring path is keyed
     off ``Image``, and Street View rounds have none).
 
     Args:

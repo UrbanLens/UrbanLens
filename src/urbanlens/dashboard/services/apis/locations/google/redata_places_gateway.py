@@ -28,10 +28,34 @@ from dataclasses import dataclass
 import logging
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _rows(body: Any) -> list[dict[str, Any]]:
+    """Unwrap REData's ``{"count", "results"}`` collection envelope.
+
+    All three of these endpoints answer through REData's ``collection_response``
+    helper, so the rows are under ``results`` - never a bare array. This read the
+    body as a list and fell back to ``[]``, which meant every nearby search, text
+    search and autocomplete on a REData-configured install returned nothing, and
+    did so silently: an empty list is a legitimate answer for a place search.
+
+    A bare array is still accepted so a fixture or an older deployment shaped
+    that way is not a second failure mode.
+
+    Args:
+        body: The decoded response body.
+
+    Returns:
+        The row dicts, possibly empty.
+    """
+    if isinstance(body, dict):
+        body = body.get("results")
+    return [row for row in body if isinstance(row, dict)] if isinstance(body, list) else []
+
 
 _REQUEST_TIMEOUT = 30
 
@@ -141,8 +165,7 @@ class RedataPlacesGateway(Gateway):
         if response.status_code != 200:
             logger.warning("REData nearby places search failed (%s): %s", response.status_code, response.text[:500])
             raise GatewayRequestError(f"REData nearby places search failed with status {response.status_code}.")
-        body = response.json()
-        return list(body) if isinstance(body, list) else []
+        return _rows(response.json())
 
     def search_text(self, query: str, latitude: float | None = None, longitude: float | None = None, radius_meters: float = 200, max_results: int = 20) -> list[dict[str, Any]]:
         """Free-text place search via REData.
@@ -169,8 +192,7 @@ class RedataPlacesGateway(Gateway):
         if response.status_code != 200:
             logger.warning("REData text places search failed (%s): %s", response.status_code, response.text[:500])
             raise GatewayRequestError(f"REData text places search failed with status {response.status_code}.")
-        body = response.json()
-        return list(body) if isinstance(body, list) else []
+        return _rows(response.json())
 
     def autocomplete(self, query: str, latitude: float | None = None, longitude: float | None = None, radius_meters: float = 200) -> list[dict[str, Any]]:
         """Predictions-as-you-type via REData.
@@ -201,8 +223,7 @@ class RedataPlacesGateway(Gateway):
         if response.status_code != 200:
             logger.warning("REData autocomplete failed (%s): %s", response.status_code, response.text[:500])
             raise GatewayRequestError(f"REData autocomplete request failed with status {response.status_code}.")
-        body = response.json()
-        return list(body) if isinstance(body, list) else []
+        return _rows(response.json())
 
     def download_photo(self, place_id: str, photo_record_id: int) -> tuple[bytes, str] | None:
         """Download one photo's actual image bytes via REData.

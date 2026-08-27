@@ -13,7 +13,7 @@ from unittest.mock import patch
 from django.core.cache import cache
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.geo_boundary import USA, GeoBoundary, state_boundary
+from urbanlens.dashboard.services.geo.geo_boundary import _FAILED_LOAD_RETRY_SECONDS, USA, GeoBoundary, state_boundary
 
 # A simple rectangular "state" for tests: lon in [-80, -70], lat in [40, 45].
 # Esri convention is the opposite of GeoJSON's: a clockwise ring is a shell.
@@ -61,6 +61,81 @@ class FromBboxesTests(SimpleTestCase):
         boundary = GeoBoundary(_load)
         self.assertFalse(boundary.contains(42.0, -75.0))
         self.assertIsNone(boundary.geometry)
+
+    def test_a_failed_load_is_not_retried_immediately(self) -> None:
+        """Retrying on every call would hammer the provider and log per call."""
+        calls = []
+
+        def _load():
+            calls.append(1)
+            raise RuntimeError("upstream boom")
+
+        boundary = GeoBoundary(_load)
+        boundary.contains(42.0, -75.0)
+        boundary.contains(42.0, -75.0)
+        _ = boundary.geometry
+
+        self.assertEqual(len(calls), 1)
+
+    def test_a_failed_load_is_retried_once_the_cooldown_passes(self) -> None:
+        """A boundary is typically a plugin ``ClassVar``, so memoizing a *failure*
+        the way a success is memoized closes that plugin's gate for the life of
+        the worker - days for a Celery process - over one transient error."""
+        calls = []
+
+        def _load():
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("upstream boom")
+            return GeoBoundary.from_bboxes([(40.0, 45.0, -80.0, -70.0)]).geometry
+
+        boundary = GeoBoundary(_load)
+
+        with patch("urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=0.0):
+            self.assertFalse(boundary.contains(42.0, -75.0))
+
+        with patch("urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=_FAILED_LOAD_RETRY_SECONDS + 1.0):
+            self.assertTrue(boundary.contains(42.0, -75.0), "the boundary never recovered from a transient failure")
+
+        self.assertEqual(len(calls), 2)
+
+    def test_a_recovered_boundary_stops_retrying(self) -> None:
+        """Once it answers, it is memoized like any other success."""
+        calls = []
+
+        def _load():
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("upstream boom")
+            return GeoBoundary.from_bboxes([(40.0, 45.0, -80.0, -70.0)]).geometry
+
+        boundary = GeoBoundary(_load)
+
+        with patch("urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=0.0):
+            boundary.contains(42.0, -75.0)
+        with patch("urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=_FAILED_LOAD_RETRY_SECONDS + 1.0):
+            boundary.contains(42.0, -75.0)
+            boundary.contains(42.0, -75.0)
+            _ = boundary.geometry
+
+        self.assertEqual(len(calls), 2)
+
+    def test_a_loader_returning_none_is_memoized_permanently(self) -> None:
+        """Returning None is an answer - "this boundary does not resolve" - unlike
+        raising, which is the absence of one. Retrying it would re-query forever."""
+        calls = []
+
+        def _load():
+            calls.append(1)
+
+        boundary = GeoBoundary(_load)
+
+        with patch("urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=0.0):
+            boundary.contains(42.0, -75.0)
+        with patch("urbanlens.dashboard.services.geo.geo_boundary.time.monotonic", return_value=_FAILED_LOAD_RETRY_SECONDS * 10):
+            boundary.contains(42.0, -75.0)
+
+        self.assertEqual(len(calls), 1)
 
 
 class FromWktTests(SimpleTestCase):

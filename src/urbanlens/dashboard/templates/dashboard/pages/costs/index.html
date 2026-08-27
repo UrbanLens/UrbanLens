@@ -1,56 +1,141 @@
 {% extends 'dashboard/themes/base.html' %}
 
-{% block page_title %}Running Costs - {{ site_title|default:"UrbanLens" }}{% endblock %}
+{% load vendor_assets %}
+{% block page_title %}Costs - {{ site_title|default:"UrbanLens" }}{% endblock %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with eyebrow="Transparency" title="What UrbanLens costs to run" subtitle="Costs behind the map: hardware, hosting, and external APIs." modifier="wide" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/ui/_public_pages_subnav.html" %}
+    </div>
+</div>
+{% endblock %}
 
 {% block content %}
 
-{% include "dashboard/partials/ui/_page_hero.html" with eyebrow="Transparency" title="What it costs to run UrbanLens" subtitle="A rough, ongoing estimate of the external API spend behind the map, pin enrichment, search, and messaging features." modifier="wide" %}
-
 <section class="attr-section">
     <div class="attr-section-inner">
-        <div class="attr-section-label">Last 30 days</div>
-        <h2 class="attr-section-title">
-            {% if total_cost_30d %}Estimated total: ${{ total_cost_30d|floatformat:2 }}{% else %}No priced usage yet{% endif %}
-        </h2>
+        <div class="attr-section-label">Monthly costs</div>
+        <h2 class="attr-section-title">${{ breakdown.total|floatformat:2 }}/mo to keep UrbanLens running</h2>
         <p class="attr-section-lead">
-            This is an estimate, not an invoice. It only covers services we have a confirmed
-            per-call price for below - {{ unpriced_service_count }} other integration{{ unpriced_service_count|pluralize }}
-            {{ unpriced_service_count|yesno:"are,is" }} either free, priced in a way that doesn't
-            reduce to one number per call, or simply not priced here yet, and so
-            {{ unpriced_service_count|pluralize:"isn't,aren't" }} reflected in the total above.
-            Actual spend may differ from what's shown.
+            That figure blends amortized hardware, ongoing hosting &amp; operating costs, and the
+            last 30 days of metered external API calls
+            {% if cost_per_user is not None %} - split across {{ active_user_count }} active user{{ active_user_count|pluralize }}
+            (logged in within 30 days, 2+ pins), it works out to roughly ${{ cost_per_user|floatformat:2 }} per user{% endif %}{% if cost_per_supporter is not None %}, while the
+            {{ active_supporter_count }} paying supporter{{ active_supporter_count|pluralize }} currently covering it effectively
+            shoulder about ${{ cost_per_supporter|floatformat:2 }} each{% endif %}.
         </p>
 
-        {% if priced_services %}
-        <div class="attr-list">
-            {% for entry in priced_services %}
-            <div class="attr-list-item">
-                <div class="attr-list-main">
-                    <h3>{{ entry.display_name }}</h3>
+        <div class="stats-kpi-grid">
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(8,145,178,.12)">
+                    <i class="material-icons" style="color:#0891b2">memory</i>
                 </div>
-                <span class="attr-list-tag">${{ entry.cost_30d|floatformat:2 }}</span>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">${{ total_hardware_cost|floatformat:2 }}</div>
+                    <div class="stats-kpi-label">Hardware</div>
+                    <div class="stats-kpi-sub">Servers, hard drives, networking</div>
+                </div>
             </div>
-            {% endfor %}
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(57,73,171,.12)">
+                    <i class="material-icons" style="color:#3949ab">payments</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">${{ breakdown.total|floatformat:2 }}</div>
+                    <div class="stats-kpi-label">Expenses / month</div>
+                    <div class="stats-kpi-sub">APIs, utilities, etc</div>
+                </div>
+            </div>
+            {% if cost_per_user is not None %}
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(22,163,74,.12)">
+                    <i class="material-icons" style="color:#16a34a">person</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">${{ cost_per_user|floatformat:2 }}</div>
+                    <div class="stats-kpi-label">Per user</div>
+                    <div class="stats-kpi-sub">{{ active_user_count }} active user{{ active_user_count|pluralize }}</div>
+                </div>
+            </div>
+            {% endif %}
+            {% if cost_per_supporter is not None %}
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(219,39,119,.12)">
+                    <i class="material-icons" style="color:#db2777">volunteer_activism</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">${{ cost_per_supporter|floatformat:2 }}</div>
+                    <div class="stats-kpi-label">Per supporter</div>
+                    <div class="stats-kpi-sub">{{ active_supporter_count }} paying supporter{{ active_supporter_count|pluralize }}</div>
+                </div>
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
+
+        <div class="card costs-chart-card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">bar_chart</i>
+                <span>Effective monthly cost - last 12 months</span>
+            </div>
+            <div class="stats-chart-wrap">
+                <canvas id="chart-public-cost-monthly"></canvas>
+            </div>
+        </div>
+        <script type="application/json" id="cost-chart-data">
+            {"labels": {{ chart_labels|safe }}, "total": {{ chart_total|safe }}}
+        </script>
     </div>
 </section>
 
-<section class="attr-note-section">
-    <div class="attr-section-inner">
-        <div class="attr-note">
-            <i class="material-icons attr-note-icon" aria-hidden="true">info</i>
-            <div>
-                <h2 class="attr-note-title">Why this page exists</h2>
-                <p class="attr-note-body">
-                    UrbanLens leans on a lot of external services - see the
-                    <a href="{% url 'thanks' %}">Thanks &amp; Credits</a> page for the full list.
-                    Most are free or nearly free; a few are metered. We'd rather show a rough,
-                    honest number than none at all.
-                </p>
-            </div>
-        </div>
-    </div>
-</section>
+{% endblock %}
 
+{% block scripts %}
+{% vendor_asset "chartjs_js" %}
+<script>
+(function () {
+    var canvas = document.getElementById('chart-public-cost-monthly');
+    var dataEl = document.getElementById('cost-chart-data');
+    if (!canvas || !dataEl) return;
+
+    var data;
+    try {
+        data = JSON.parse(dataEl.textContent);
+    } catch (e) {
+        return;
+    }
+
+    var isDark = document.getElementById('html-root').getAttribute('data-theme') === 'dark';
+    var gridColor = isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+    var labelColor = isDark ? '#94a3b8' : '#64748b';
+    var tooltipBg = isDark ? '#1e293b' : '#fff';
+    var tooltipFg = isDark ? '#f1f5f9' : '#0f172a';
+
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: data.labels,
+            datasets: [
+                { label: 'Total cost', data: data.total, backgroundColor: '#3949ab99', borderColor: '#3949ab', borderWidth: 1.5 },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: tooltipBg, titleColor: tooltipFg, bodyColor: tooltipFg, borderColor: gridColor, borderWidth: 1 },
+            },
+            scales: {
+                x: { ticks: { color: labelColor, maxRotation: 45 }, grid: { color: gridColor } },
+                y: { beginAtZero: true, ticks: { color: labelColor }, grid: { color: gridColor } },
+            },
+        },
+    });
+}());
+</script>
 {% endblock %}

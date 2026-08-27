@@ -11,9 +11,9 @@ from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations import cid_resolution
-from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidBatchResult
-from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidBatchResult, RedataPermissionError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.settings.app import settings
 
 
@@ -73,6 +73,34 @@ class ResolveViaRedataTests(SimpleTestCase):
 
         self.assertEqual(result.pending, [1, 2])
         self.assertEqual(result.resolved, {})
+        self.assertFalse(result.auth_failed)
+        # Distinguishes "the whole batch made zero progress this attempt" from a
+        # normal response that resolved/deferred cids - see tasks.py's
+        # consecutive-failure cap, which uses this to eventually give up on a
+        # persistently unreachable REData instead of retrying forever.
+        self.assertTrue(result.request_failed)
+        google_cls.assert_not_called()
+
+    def test_permission_error_marks_auth_failed_and_does_not_fall_back_to_google(self) -> None:
+        """A rejected API key will never succeed by retrying - callers must be told to stop."""
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway",
+            ) as redata_cls,
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.GoogleGeocodingGateway",
+            ) as google_cls,
+        ):
+            redata_cls.return_value.resolve_cids.side_effect = RedataPermissionError("boom")
+            result = cid_resolution.resolve_cids([1, 2])
+
+        self.assertTrue(result.auth_failed)
+        # auth_failed is already terminal on its own (the task stops on the
+        # first occurrence) - request_failed is irrelevant here, but should
+        # still read False rather than conflating the two failure kinds.
+        self.assertFalse(result.request_failed)
+        self.assertEqual(result.pending, [1, 2])
+        self.assertEqual(result.resolved, {})
         google_cls.assert_not_called()
 
     def test_explicit_null_is_unresolvable_not_pending(self) -> None:
@@ -89,6 +117,18 @@ class ResolveViaRedataTests(SimpleTestCase):
         self.assertEqual(result.unresolvable, {2})
         self.assertEqual(result.pending, [])
 
+    def test_urls_by_cid_is_forwarded_as_cid_lookup_entries(self) -> None:
+        """A cid with a known source Google Maps URL resolves faster/more reliably at
+        REData when the URL is sent alongside it - see RedataCidGateway/CidLookupEntry."""
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway",
+        ) as gateway_cls:
+            gateway_cls.return_value.resolve_cids.return_value = RedataCidBatchResult()
+            cid_resolution.resolve_cids([1, 2], urls_by_cid={1: "https://maps.google.com/maps/place/X"})
+
+        sent_entries = gateway_cls.return_value.resolve_cids.call_args.args[0]
+        self.assertEqual(sent_entries, [CidLookupEntry(cid=1, url="https://maps.google.com/maps/place/X"), CidLookupEntry(cid=2, url=None)])
+
     def test_still_pending_on_redatas_end_is_reported_as_pending(self) -> None:
         with mock.patch(
             "urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway",
@@ -99,6 +139,10 @@ class ResolveViaRedataTests(SimpleTestCase):
         self.assertEqual(result.resolved, {})
         self.assertEqual(result.unresolvable, set())
         self.assertEqual(result.pending, [3])
+        # REData responding successfully (even with cids still pending on its
+        # own end) is real progress, unlike the request itself failing - must
+        # not count toward the consecutive-failure cap.
+        self.assertFalse(result.request_failed)
 
 
 class ResolveViaGoogleTests(SimpleTestCase):

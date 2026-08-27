@@ -17,6 +17,10 @@ and backed by ts/shared/markup-toolbar.ts's createMarkupToolbar factory
 Context:
   markup_fill_color, markup_border_color - optional initial swatch values
                        (defaults match the pre-existing hardcoded defaults).
+  custom_layers - optional list of this pin/wiki's CustomLayer rows, for the
+                       Layer picker below. Absent (e.g. the safety check-in
+                       map, which has no custom layers) simply renders no
+                       options beyond "No layer".
 {% endcomment %}
 <div id="markup-panel" class="map-dialog map-dialog--side" style="display:none">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Draw Arrow" title_id="markup-panel-title" closefn="closeMarkupPanel" %}
@@ -60,6 +64,15 @@ Context:
             </span>
             <input type="range" id="markup-panel-border-opacity" min="0" max="100" value="100"
                    oninput="document.getElementById('markup-panel-border-opacity-val').textContent=this.value;_liveApplyMarkupEdit()">
+        </label>
+        <label class="markup-form-label-row" id="markup-panel-layer-row" hidden>
+            Layer
+            <select id="markup-panel-layer" class="markup-form-select" onchange="_liveApplyMarkupEdit()">
+                <option value="">No layer (base Markup)</option>
+                {% for layer in custom_layers %}
+                <option value="{{ layer.uuid }}">{{ layer.name }}</option>
+                {% endfor %}
+            </select>
         </label>
         <label class="markup-form-label-row" id="markup-panel-security-row">
             Security Type

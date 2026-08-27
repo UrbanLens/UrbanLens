@@ -37,19 +37,18 @@ from django.urls import reverse
 from django.utils import timezone
 from hypothesis import HealthCheck, given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
-from oauth2_provider.models import get_access_token_model, get_application_model
+from oauth2_provider.models import get_access_token_model
 
+from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.external_api.serializers_search import parse_result_types
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.global_search import GlobalSearchEngine
 from urbanlens.dashboard.services.global_search.results import RESULT_TYPES
 
 AccessToken = get_access_token_model()
-Application = get_application_model()
 
 #: A grant covering every domain the search endpoint can reach *except*
 #: messages, which no PAT may ever hold (``OAUTH2_ONLY_SCOPES``).
@@ -117,7 +116,7 @@ class _SearchApiTestCase(TestCase):
         """
         token = AccessToken.objects.create(
             user=self.user,
-            application=Application.objects.get(client_id=FIRST_PARTY_CLIENT_ID),
+            application=first_party_application(),
             token=f"tok-{os.urandom(8).hex()}",
             expires=timezone.now() + timedelta(hours=1),
             scope=scope,
@@ -357,6 +356,11 @@ class GlobalSearchIdentifierTests(_SearchApiTestCase):
         """Every wiki route - web and API - keys off the location, not Wiki.slug."""
         location = self._location()
         wiki = baker.make("dashboard.Wiki", location=location, name="Anchor Mill", created_by=self.profile)
+        # A pin, because creating a wiki is not one of wiki_access's four clauses
+        # and no longer stands in for access here. This test is about how a wiki
+        # result is addressed, so it just needs one the searcher can legitimately
+        # see; without the pin the page would 404 and search rightly omits it.
+        baker.make("dashboard.Pin", profile=self.profile, location=location, parent_pin=None)
         location.refresh_from_db()
         group = self._group(self._search(q="anchor mill", types="wikis").json(), "wikis")
         assert group is not None

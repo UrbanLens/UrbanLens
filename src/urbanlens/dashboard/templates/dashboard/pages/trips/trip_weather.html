@@ -1,4 +1,4 @@
-{% if not error and not grouped %}<div id="trip-weather-panel" hidden></div>{% else %}
+{% if not error and not grouped and not recorded_days %}<div id="trip-weather-panel" hidden></div>{% else %}
 <div id="trip-weather-panel" class="trip-panel card"
      data-collapse-scope="trip" data-collapse-section="weather">
 
@@ -41,20 +41,17 @@
                             <div class="trip-weather-activity-forecast">
                                 {% with s=af.slot %}
                                 <div class="trip-weather-slot-inline">
-                                    <img class="trip-weather-slot-icon"
-                                        src="https://openweathermap.org/img/wn/{{ s.weather.0.icon }}@2x.png"
-                                        alt="{{ s.weather.0.description }}"
-                                        loading="lazy">
+                                    <i class="material-symbols-outlined trip-weather-slot-icon">{{ s.icon }}</i>
                                     <div class="trip-weather-slot-temps">
-                                        <span class="trip-weather-slot-temp">{{ s.main.temp|floatformat:0 }}°F</span>
-                                        <span class="trip-weather-slot-feels">Feels {{ s.main.feels_like|floatformat:0 }}°</span>
+                                        <span class="trip-weather-slot-temp">{{ s.temp|floatformat:0 }}°F</span>
+                                        {% if s.feels_like %}<span class="trip-weather-slot-feels">Feels {{ s.feels_like|floatformat:0 }}°</span>{% endif %}
                                     </div>
                                     <div class="trip-weather-slot-right">
-                                        <p class="trip-weather-slot-desc">{{ s.weather.0.description|capfirst }}</p>
+                                        <p class="trip-weather-slot-desc">{{ s.condition }}</p>
                                         <div class="trip-weather-slot-meta">
-                                            <span title="Humidity"><i class="material-symbols-outlined">water_drop</i> {{ s.main.humidity }}%</span>
-                                            <span title="Wind"><i class="material-symbols-outlined">air</i> {{ s.wind.speed|floatformat:0 }} mph</span>
-                                            {% if s.pop %}<span title="Precipitation probability"><i class="material-symbols-outlined">umbrella</i> {% widthratio s.pop 1 100 %}%</span>{% endif %}
+                                            {% if s.humidity %}<span title="Humidity"><i class="material-symbols-outlined">water_drop</i> {{ s.humidity }}%</span>{% endif %}
+                                            {% if s.wind_speed %}<span title="Wind"><i class="material-symbols-outlined">air</i> {{ s.wind_speed|floatformat:0 }} mph</span>{% endif %}
+                                            {% if s.precipitation_probability %}<span title="Precipitation probability"><i class="material-symbols-outlined">umbrella</i> {{ s.precipitation_probability }}%</span>{% endif %}
                                         </div>
                                     </div>
                                 </div>
@@ -72,6 +69,63 @@
     </div>
     </div>
 
+    {% endif %}
+
+    {% if recorded_days %}
+    <div class="trip-weather-body trip-weather-body--recorded">
+        <div class="trip-weather-recorded-header">
+            <i class="material-symbols-outlined">history</i>
+            <span>What the weather was</span>
+        </div>
+        <div class="trip-weather-days">
+            {% for day, entries in recorded_days %}
+            <div class="trip-weather-day">
+
+                <div class="trip-weather-day-header">
+                    <span class="trip-weather-day-dow">{{ day|date:"l" }}</span>
+                    <span class="trip-weather-day-date">{{ day|date:"M j, Y" }}</span>
+                </div>
+
+                <div class="trip-weather-activities">
+                    {% for row in entries %}
+                    <div class="trip-weather-activity">
+
+                        <div class="trip-weather-activity-info">
+                            <span class="trip-weather-activity-time">{{ row.scheduled_at|time:"g:i A" }}</span>
+                            <span class="trip-weather-activity-name">
+                                {{ row.location_name|default:row.activity.title|default:"Activity" }}
+                            </span>
+                        </div>
+
+                        <div class="trip-weather-activity-forecast">
+                            {% with r=row.recorded %}
+                            <div class="trip-weather-slot-inline">
+                                <i class="material-symbols-outlined trip-weather-slot-icon">thermostat</i>
+                                <div class="trip-weather-slot-temps">
+                                    {% if r.high_f is not None %}<span class="trip-weather-slot-temp">{{ r.high_f|floatformat:0 }}°F</span>{% endif %}
+                                    {% if r.low_f is not None %}<span class="trip-weather-slot-feels">Low {{ r.low_f|floatformat:0 }}°</span>{% endif %}
+                                </div>
+                                <div class="trip-weather-slot-right">
+                                    <p class="trip-weather-slot-desc">Recorded conditions</p>
+                                    <div class="trip-weather-slot-meta">
+                                        {% if r.precipitation_in %}<span title="Rainfall"><i class="material-symbols-outlined">water_drop</i> {{ r.precipitation_in|floatformat:2 }} in</span>{% endif %}
+                                        {% if r.snowfall_in %}<span title="Snowfall"><i class="material-symbols-outlined">weather_snowy</i> {{ r.snowfall_in|floatformat:1 }} in</span>{% endif %}
+                                        {% if r.wind_max_mph %}<span title="Peak wind"><i class="material-symbols-outlined">air</i> {{ r.wind_max_mph|floatformat:0 }} mph</span>{% endif %}
+                                        {% if r.gust_max_mph %}<span title="Peak gust"><i class="material-symbols-outlined">storm</i> {{ r.gust_max_mph|floatformat:0 }} mph</span>{% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endwith %}
+                        </div>
+
+                    </div>
+                    {% endfor %}
+                </div>
+
+            </div>
+            {% endfor %}
+        </div>
+    </div>
     {% endif %}
 
 </div>

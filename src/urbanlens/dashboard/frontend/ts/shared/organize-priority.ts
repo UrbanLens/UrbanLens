@@ -1,6 +1,7 @@
 import Sortable from "sortablejs";
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
+import { ORG_NS_BY_LABEL_KIND } from "./organize-filter-engine";
 
 /**
  * Priority tab: plain drag-handle reordering (via Sortable) plus a manual
@@ -65,7 +66,17 @@ export function initOrganizePriority(): void {
         edit.saveBtn.tabIndex = -1;
     }
 
-    async function savePriorityOrder(list: HTMLElement, flashItem: HTMLElement | null): Promise<void> {
+    /** Reorder failed - put the list back the way the server still has it,
+     * rather than leaving a drag/jump shown as if it landed when it didn't. */
+    function restorePriorityOrder(list: HTMLElement, previousOrder: HTMLElement[]): void {
+        previousOrder.forEach((el) => list.appendChild(el));
+        previousOrder.forEach((el, i) => {
+            const badge = priorityOrderBadge(el);
+            if (badge) badge.textContent = String(i + 1);
+        });
+    }
+
+    async function savePriorityOrder(list: HTMLElement, flashItem: HTMLElement | null, previousOrder: HTMLElement[]): Promise<void> {
         const items = Array.from(list.querySelectorAll<HTMLElement>(".priority-item[data-id]")).map((el, i) => {
             const badge = priorityOrderBadge(el);
             if (badge) badge.textContent = String(i + 1);
@@ -85,6 +96,7 @@ export function initOrganizePriority(): void {
             toast.success("Display order saved.");
         } catch (err) {
             toast.error(`Save failed: ${(err as Error).message}`);
+            restorePriorityOrder(list, previousOrder);
         }
     }
 
@@ -113,7 +125,7 @@ export function initOrganizePriority(): void {
         if (targetIdx >= remaining.length) list.appendChild(edit.item);
         else list.insertBefore(edit.item, remaining[targetIdx]!);
 
-        savePriorityOrder(list, edit.item);
+        savePriorityOrder(list, edit.item, items);
     }
 
     function cancelOrderEditor(): void {
@@ -210,12 +222,49 @@ export function initOrganizePriority(): void {
                 return;
             }
             const kind = Array.from(kinds)[0];
-            const opener = kind ? window._orgBulkEditByIds[kind] : undefined;
+            const opener = kind ? window._orgBulkEditByIds[ORG_NS_BY_LABEL_KIND[kind] ?? kind] : undefined;
             if (opener) opener(ids);
             else toast.error("Bulk edit is not available for this type.");
         };
+        window._orgBulk.merge = () => {
+            const picked = selectedPriorityItems();
+            if (picked.ids.length < 2) return;
+            if (picked.kinds.size > 1) {
+                toast.warning("Select only tags, only categories, or only statuses to merge them together.");
+                return;
+            }
+            const opener = picked.kind ? window._orgBulkMergeByIds[ORG_NS_BY_LABEL_KIND[picked.kind] ?? picked.kind] : undefined;
+            if (opener) opener(picked.ids);
+            else toast.error("Merge is not available for this type.");
+        };
+        window._orgBulk.del = () => {
+            const picked = selectedPriorityItems();
+            if (!picked.ids.length) return;
+            // Delete is per-kind for the same reason edit and merge are: each kind's
+            // rows live in a different panel, and the bulk-delete endpoint and the
+            // rows it re-renders are chosen by kind.
+            if (picked.kinds.size > 1) {
+                toast.warning("Select only tags, only categories, or only statuses to delete them together.");
+                return;
+            }
+            const opener = picked.kind ? window._orgBulkDeleteByIds[ORG_NS_BY_LABEL_KIND[picked.kind] ?? picked.kind] : undefined;
+            if (opener) opener(picked.ids);
+            else toast.error("Delete is not available for this type.");
+        };
         const n = document.querySelectorAll("#priority-list .priority-item--selected").length;
-        window._orgBulkSync(n, { hasEdit: true, hasMerge: false, hasDel: false });
+        window._orgBulkSync(n, { hasEdit: true, hasMerge: true, hasDel: true });
+    }
+
+    /** The current selection's ids, and the kind(s) they span. */
+    function selectedPriorityItems(): { ids: string[]; kinds: Set<string>; kind: string | undefined } {
+        const items = document.querySelectorAll<HTMLElement>("#priority-list .priority-item--selected");
+        const kinds = new Set<string>();
+        const ids: string[] = [];
+        items.forEach((item) => {
+            if (item.dataset.kind) kinds.add(item.dataset.kind);
+            if (item.dataset.id) ids.push(item.dataset.id);
+        });
+        return { ids, kinds, kind: Array.from(kinds)[0] };
     }
 
     function clearPrioritySelection(): void {
@@ -230,13 +279,21 @@ export function initOrganizePriority(): void {
         const list = document.getElementById("priority-list");
         if (!list) return;
         prioritySortable?.destroy();
+        // Captured on drag start, not derived after the fact: two rapid
+        // drags can each fire a save while the earlier one is still in
+        // flight, and restoring a snapshot taken *before this specific
+        // drag* is what makes a failed save undo only its own change.
+        let dragStartOrder: HTMLElement[] = [];
         prioritySortable = new Sortable(list, {
             animation: 150,
             handle: ".priority-drag-handle",
             ghostClass: "priority-item--ghost",
             fallbackTolerance: 3,
+            onStart: () => {
+                dragStartOrder = priorityItems();
+            },
             onEnd: () => {
-                savePriorityOrder(list, null);
+                savePriorityOrder(list, null, dragStartOrder);
             },
         });
     }
@@ -254,9 +311,10 @@ export function initOrganizePriority(): void {
             const jumpItem = jumpBtn.closest<HTMLElement>(".priority-item");
             const list = document.getElementById("priority-list");
             if (!jumpItem || !list) return;
+            const previousOrder = priorityItems();
             if (jumpBtn.dataset.priorityJump === "top") list.insertBefore(jumpItem, list.firstElementChild);
             else list.appendChild(jumpItem);
-            savePriorityOrder(list, jumpItem);
+            savePriorityOrder(list, jumpItem, previousOrder);
             return;
         }
 

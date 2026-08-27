@@ -234,7 +234,7 @@
 	@include spinner;
 }
 
-// -- Badges --------------------------------------------------------------------
+// -- Labels --------------------------------------------------------------------
 
 .ul-badge {
 	display: inline-flex;
@@ -283,6 +283,24 @@
 		color: $color-yellow-1700;
 		border-color: $color-yellow-700;
 	}
+}
+
+// Muted inline chip used as <span class="badge badge--muted"> in templates.
+// The base span.badge (_reset.scss) is a right-floated count badge; this
+// modifier resets those properties to render as an inline pill instead.
+// The doubled class keeps specificity above span.badge.
+.badge.badge--muted {
+	display: inline-block;
+	float: none;
+	min-width: 0;
+	height: auto;
+	margin-left: 0;
+	padding: .1rem .5rem;
+	border-radius: $radius-full;
+	font-size: .75rem;
+	line-height: normal;
+	background: var(--ul-surface-raised);
+	color: var(--ul-grey-6);
 }
 
 // -- Dropdown ------------------------------------------------------------------
@@ -421,6 +439,22 @@
 		background: $color-red-100;
 		color: $color-red-900;
 		border-color: $color-red-300;
+	}
+}
+
+// Full-width alert banner (e.g. admin cost dashboard error states).
+.ul-alert {
+	padding: .6rem .9rem;
+	border-radius: $radius-sm;
+	font-size: .875rem;
+	border: 1px solid var(--ul-surface-border);
+	background: var(--ul-surface-raised);
+	color: var(--ul-grey-7);
+
+	&--error {
+		background: var(--ul-color-danger-bg);
+		color: var(--ul-color-danger-text);
+		border-color: var(--ul-color-danger-border);
 	}
 }
 
@@ -645,6 +679,32 @@
 		&::-moz-focus-outer {
 			border: none !important;
 			outline: none !important;
+		}
+
+		// The overlapped-input trick means the thumbs are the ONLY hittable
+		// part of this control (track and input are both pointer-events:none so
+		// the two ranges don't block each other), and these drive every
+		// score/count filter. An 18px thumb is well under a finger, so grow it
+		// on touch - the hit area of a native range thumb tracks its rendered
+		// size, and no ::before can be attached to reach it.
+		@media (pointer: coarse) {
+			&::-webkit-slider-thumb {
+				width: 28px;
+				height: 28px;
+			}
+
+			&::-moz-range-thumb {
+				width: 28px;
+				height: 28px;
+			}
+		}
+	}
+
+	@media (pointer: coarse) {
+		// Room for the larger touch thumbs above, which would otherwise be
+		// clipped by the track area's tighter desktop height.
+		&__track-area {
+			height: 30px;
 		}
 	}
 

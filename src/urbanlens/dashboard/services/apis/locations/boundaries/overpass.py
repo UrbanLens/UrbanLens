@@ -17,13 +17,13 @@ from django.utils import timezone
 import requests
 
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, _is_reasonable_default, best_polygon_from_geometry
-from urbanlens.dashboard.services.gateway import Gateway
-from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
 logger = logging.getLogger(__name__)
 
 # The self-hosted Overpass instance: fastest and most reliable endpoint in the
-# 2026-07-22 benchmark (docs/overpass-mirror-test.md - sub-second medians, no
+# 2026-07-22 benchmark (docs/reports/overpass-mirror-test.md - sub-second medians, no
 # per-IP slot limit, verified globally complete against the public instances),
 # and the only one under our control. It is the primary; the public instances
 # below are ordered fallbacks, not equal peers (`_available_endpoints` keeps
@@ -34,7 +34,7 @@ _API_URL = "https://overpass.osm.urbanlens.org/api/interpreter"
 # works against any of them.
 # See https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances
 #
-# Pool membership rules, learned the hard way (benchmark: docs/overpass-mirror-test.md):
+# Pool membership rules, learned the hard way (benchmark: docs/reports/overpass-mirror-test.md):
 #
 # * Only GLOBALLY COMPLETE instances may be listed. A regional extract (e.g.
 #   overpass.osm.ch, Switzerland-only) answers 200 OK with an empty `elements`

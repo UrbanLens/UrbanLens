@@ -58,7 +58,7 @@ Context:
 </div>
 {% endif %}
 
-<dialog id="create-list-dialog" class="ul-dialog">
+<dialog id="create-list-dialog" class="ul-dialog" aria-labelledby="dialog-title-new-list">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="New List" %}
     <div class="ul-dialog-body">
         <form hx-post="{% url 'lists.create' %}" hx-swap="none"

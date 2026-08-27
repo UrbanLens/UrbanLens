@@ -312,6 +312,12 @@ Field *definitions* (shared across every entity type: pins, photos, profiles, ma
 
 ## Labels
 
+Every write below to a Tag or Category label (never Status, People, or Media) - including
+merges, and pin/location assignment changes made through any endpoint that touches
+`Pin.labels` - is transparently synced to REData's label-suggestion service in the background
+(`services.labels.redata_suggestions`); a REData outage or missing configuration is a silent
+no-op, never a failed request.
+
 `GET /labels/` — `LabelsView` — scopes: `labels:read` — paginated. Query: `kind`, `is_global`(bool), `q`(name icontains), `parent_uuid`, `with_counts`(opt-in) — response: `{uuid, name(own), effective_name(customized), description, kind, color/effective_color, icon/effective_icon, custom_icon_url, order, is_protected, allow_auto_tag, keywords, is_global, is_customized, is_editable, parent_uuids[], pin_count/location_count(only with with_counts), created, updated}`.
 
 `POST /labels/` — `labels:write` — request: name, description, kind(required), color, icon, order, allow_auto_tag, keywords, `parent_uuids[]`(≤50) — always created under caller's own profile (never global) — 400 if kind missing or parent uuid not visible.
@@ -338,7 +344,7 @@ Field *definitions* (shared across every entity type: pins, photos, profiles, ma
 
 `PUT /photos/{image_uuid}/labels/` — `photos:write` — full replacement. Request: `{labels:[...]}`(≤25, each ≤255 chars).
 
-`POST /photos/{image_uuid}/vote/` — `photos:write` — community relevance vote; only meaningful for a photo materialized into a Location's media gallery. Request: `{value: -1|0|1}`(0 withdraws) — response: `{score, your_vote}` — 400 if not gallery-backed.
+`POST /photos/{image_uuid}/vote/` — `photos:write` — community relevance vote; only meaningful for a photo materialized into a Location's media gallery. Request: `{value: -1|0|1}`(0 withdraws) — response: `{score, your_vote}` — 400 if not gallery-backed. A non-zero vote is also forwarded to REData's photo-relevance model as training signal (`services.photos.redata_relevance`), best-effort.
 
 `POST /photos/{image_uuid}/file/` — `photos:write` — files an unfiled photo onto an existing pin (logs a visit) or creates a new pin from coordinates. Request: `pin`(existing, optional) OR `latitude`/`longitude` + `name` — 409 if already filed; 403 if visit-history tracking off.
 
@@ -372,7 +378,7 @@ Field *definitions* (shared across every entity type: pins, photos, profiles, ma
 
 ## Community Wikis
 
-Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wiki(request, location_slug)` first (`services/wiki_access.py`), which raises a bare `Http404` for all three of: (1) an unknown `location_slug`, (2) a real Location with no Wiki, and (3) a real Wiki the caller hasn't pinned/earned access to. These three are byte-for-byte indistinguishable **on purpose** — a distinguishable response would let a caller use the slug as an oracle for which locations other users have pinned. Every sub-resource id (edit, alias, link, comment, revision) is looked up scoped to the already-resolved wiki, never by bare pk.
+Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wiki(request, location_slug)` first (`services/wiki/wiki_access.py`), which raises a bare `Http404` for all three of: (1) an unknown `location_slug`, (2) a real Location with no Wiki, and (3) a real Wiki the caller hasn't pinned/earned access to. These three are byte-for-byte indistinguishable **on purpose** — a distinguishable response would let a caller use the slug as an oracle for which locations other users have pinned. Every sub-resource id (edit, alias, link, comment, revision) is looked up scoped to the already-resolved wiki, never by bare pk.
 
 ### Wikis
 
@@ -415,7 +421,7 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 
 ### Wiki Gallery
 
-`GET /wikis/{location_slug}/gallery/` — scopes: `wiki:read` — paginated shared photo gallery, filtered through uploader visibility + viewer's own photo filter — rows: `{id, url, caption, author, source_url, copyright, created}` — **read-only**; upload deferred (needs the async malware-scan handshake the comment-image path uses).
+`GET /wikis/{location_slug}/gallery/` — scopes: `wiki:read` — paginated shared photo gallery, filtered through uploader visibility + viewer's own photo filter — rows: `{id, url, caption, author, source_url, copyright, created}` — **read-only**; upload deferred (needs the async malware-scan handshake the comment-image path uses). Ordered by REData's cached photo-relevance confidence first, upload recency as the tiebreaker/fallback (`services.photos.redata_relevance`).
 
 ### Wiki Boundary, Cover Photo & Property Records
 
@@ -626,8 +632,9 @@ discovered, via the same `wiki_access` visibility gate every other wiki-scoped r
 
 ### Push Devices
 
-- `POST /push-devices/` — register/re-activate this device — `address` never echoed back — idempotent on submitted address (safe to re-register every app launch).
+- `POST /push-devices/` — register/re-activate this device — `address` never echoed back — idempotent on submitted address (safe to re-register every app launch) — 201 response: `{uuid, transport, name, created, dispatch_enabled}`.
 - `DELETE /push-devices/{device_uuid}/` — unregister.
+- `dispatch_enabled` (read-only bool) says whether the server will actually push to the device. **`transport: "fcm"` registrations are accepted and stored but never dispatched to** — no FCM sender exists yet (it needs a Google service-account credential), so only `transport: "unifiedpush"` returns true; see `docs/PROBLEMS.md`. A 201 alone does **not** mean delivery works — a Play-flavor client should read this field rather than show a notification setting that is silently dead.
 
 ---
 
@@ -641,7 +648,7 @@ discovered, via the same `wiki_access` visibility gate every other wiki-scoped r
 
 `GET /games/spotguessr/eligible-pins/?geo_bounds={geojson}` — `SpotGuessrEligiblePinsView` — scopes: `games:read` — paginated (`{count,next,previous,results}`) feed of the caller's own pins as candidate SpotGuessr locations (`label`, `latitude`, `longitude`), optionally narrowed by the same `geo_bounds` param — a browse/read endpoint, not a play mode; solo eligibility is exactly "the player's own pinned locations".
 
-`GET/POST /games/spotguessr/sessions/` — `SpotGuessrSessionsView` — scopes: `games:read`/`games:write` — list caller's session history / start a solo session + generate its first round — POST request: `mode`(default photos), `total_rounds`, `difficulty`, `allow_arbitrary_external_photos`, `require_visited_all`, `date_guessing_enabled`, `use_aliases`(default true), `round_time_limit_seconds`, `geo_bounds`(GeoJSON) — 201 or 409 `{error_code:"no_eligible_locations"}` — **own extra throttle** `GameStartThrottle`(40/hour) stacked on the standard three (round generation runs up to 25 eligibility passes + a possible billed Street View call).
+`GET/POST /games/spotguessr/sessions/` — `SpotGuessrSessionsView` — scopes: `games:read`/`games:write` — list caller's session history / start a solo session + generate its first round — POST request: `mode`(default photos), `total_rounds`, `difficulty`, `allow_arbitrary_external_photos`, `require_visited_all`, `date_guessing_enabled`, `use_aliases`(default true), `round_time_limit_seconds`, `geo_bounds`(GeoJSON), `label_id`(restrict to spots tagged with this label or a descendant; must resolve to a label visible to the caller, else 400) — 201 or 409 `{error_code:"no_eligible_locations"}` — **own extra throttle** `GameStartThrottle`(40/hour) stacked on the standard three (round generation runs up to 25 eligibility passes + a possible billed Street View call).
 
 `GET /games/spotguessr/sessions/{session_id}/` — scopes: `games:read` — resume-state row — 404 if not participant (never 403); 409 `multiplayer_unsupported` for a LOBBY/multi-participant session (solo-only surface).
 
@@ -653,7 +660,7 @@ discovered, via the same `wiki_access` visibility gate every other wiki-scoped r
 
 `POST /games/spotguessr/sessions/{session_id}/rounds/{round_id}/expire/` — `SpotGuessrRoundExpireView` — scopes: `games:write` — client-driven fast path for "the round timer hit zero"; the authoritative check is still server-side (`round.created` + the session's `round_time_limit_seconds`, never the client's clock) — response `{"revealed": bool}` — a no-op, not an error, when the round is already revealed or the timer genuinely hasn't expired yet.
 
-`POST /games/spotguessr/sessions/{session_id}/rounds/{round_id}/feedback/` — `SpotGuessrRoundFeedbackView` — scopes: `games:write` — body: `kind` (`thumbs_up`/`thumbs_down`/`reported`) — records (or overwrites) the caller's reaction to a Photos-mode round's photo, feeding `services.media_relevance` — 403 if the caller never guessed on this round; 400 for a round with no photo (Named Place/Street View).
+`POST /games/spotguessr/sessions/{session_id}/rounds/{round_id}/feedback/` — `SpotGuessrRoundFeedbackView` — scopes: `games:write` — body: `kind` (`thumbs_up`/`thumbs_down`/`reported`) — records (or overwrites) the caller's reaction to a Photos-mode round's photo, feeding `services.media.media_relevance` — 403 if the caller never guessed on this round; 400 for a round with no photo (Named Place/Street View).
 
 `GET /games/spotguessr/sessions/{session_id}/rounds/{round_id}/image/` — `SpotGuessrRoundImageView` — scopes: **`games:read` AND `media:read`** (both required) — round photo as raw bytes with **all EXIF metadata stripped** (source photo routinely carries GPS tags pointing at the answer) — `Cache-Control: private, max-age=300` — metered against the **media** throttle bucket (`ExternalApiMediaThrottle`), not the JSON read/write budgets.
 

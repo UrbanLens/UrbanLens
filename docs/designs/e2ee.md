@@ -65,11 +65,20 @@ conversation key ──▶ encrypts ──▶ message body
   encrypted iff **every** active member has a key bundle. Clients mint a new
   version whenever the latest one no longer covers the current membership
   (the key endpoint reports `needs_rotation`), and the server refuses any
-  version whose envelopes don't cover the active membership exactly. This is
-  what makes membership boundaries cryptographic: a newly added member holds
-  envelopes only for post-join versions (and the server additionally never
-  serves them pre-join messages at all), while a removed member is excluded
-  from every later version, so post-removal messages are unreadable to them.
+  version whose envelopes don't cover the active membership exactly. A newly
+  added member holds envelopes only for post-join versions (and the server
+  additionally never serves them pre-join messages at all), while a removed
+  member is excluded from every later version.
+
+  **What is and isn't enforced.** The server does not check the `key_version` a
+  message is sent with beyond `>= 1` — it never verifies the version exists,
+  belongs to that group, or is current. A client can therefore encrypt under a
+  pre-removal version whose envelopes a removed member still holds, whether by
+  accident (a stale tab, an offline outbox replaying) or deliberately. What
+  keeps post-removal messages from that member today is the *server*: they have
+  no active membership, so `visible_window` never serves them the ciphertext.
+  Treat the removal boundary as server-enforced rather than cryptographic until
+  that is decided — see the open question in `docs/PROBLEMS.md`.
   Removed members keep their old envelopes — their own history stays readable,
   the same recoverability trade as everywhere else in this design.
 
@@ -84,6 +93,8 @@ length only. See `test_e2ee_interop.py` for executable PyNaCl equivalents.
 | `MessagingKeyBundle.password_wrapped_secret` | `nonce(24) ‖ secretbox(privkey)` under `wrapKey` |
 | `MessagingKeyBundle.password_wrap_salt` | Argon2id salt for `wrapKey` (16 bytes) |
 | `MessagingKeyBundle.recovery_wrapped_secret` | `nonce(24) ‖ secretbox(privkey)` under the recovery key |
+| `E2EEPasskeyWrap.wrapped_secret` | `nonce(24) ‖ secretbox(privkey)` under `HKDF-SHA256(prf_output, info="urbanlens-e2ee-passkey-wrap-v1")` — the WebAuthn `prf` extension's output for that passkey, never seen by the server |
+| `E2EEPasskeyWrap.prf_input` | Random 32-byte PRF evaluation input (base64) — a salt-alike, unique per wrap |
 | `AccountKdf.auth_salt` | Argon2id salt for `authKey` (16 bytes) |
 | `ConversationKey.wrapped_for_{low,high}` | `crypto_box_seal(conversation_key)` to each party's public key |
 | `GroupKeyEnvelope.wrapped_key` | `crypto_box_seal(group_key)` to one member's public key |
@@ -114,14 +125,31 @@ setup screen.
 - **OAuth (Google/Discord):** no password exists at signup, so there is
   initially no password-wrapped copy. The keypair is generated in the
   background on the first authenticated page load and the recovery-wrapped
-  copy is uploaded. After any login, an account with no usable password is
-  prompted (skippable per session) to **set a password** — the set-password
-  flow derives `authKey`/`wrapKey` in the browser exactly like a password
-  signup, and when the device holds the decrypted private key it uploads a
-  password-wrapped copy too. From then on a new device can unlock with the
-  password instead of the recovery key. Until a password is set, a **new
-  device requires the recovery key** — the irreducible floor without
-  server-side escrow.
+  copy is uploaded. After a login, an account with no usable password *and no
+  passkey* is offered a choice — **add a passkey** (primary: one tap, and its
+  PRF wrap unlocks messages on any device) or **set a password** — with "Not
+  now" snoozing the prompt for a month on the profile, not per session. The
+  set-password flow derives `authKey`/`wrapKey` in the browser exactly like a
+  password signup, and when the device holds the decrypted private key it
+  uploads a password-wrapped copy too. Until some durable wrap exists, a
+  **new device requires the recovery key** — the irreducible floor without
+  server-side escrow, and message loss on that floor is an accepted outcome
+  (see `docs/designs/e2ee-passkey-unlock.md`).
+- **Passkey unlock (`E2EEPasskeyWrap`):** any of the account's passkeys can
+  additionally hold a wrapped private-key copy under an HKDF of the WebAuthn
+  `prf` extension's output. Enrollment happens on an unlocked device
+  (Settings → Direct Messages, or the post-login prompt): one assertion lets
+  an existing passkey gain the wrap, or a new **unlock-only** key is
+  registered — unlock-only keys have `is_login_factor=False` and are excluded
+  from every 2FA gate, so enrolling one never changes how the account signs
+  in. On a cold device, unlock is one tap: a client-challenged assertion whose
+  signature is discarded (the PRF output is the point; it authenticates
+  nothing the session hasn't already). For accounts whose passkeys ARE login
+  factors, the login-2FA assertion options carry the PRF inputs, so the same
+  tap that completes 2FA also unlocks messages — zero extra prompts. Wraps
+  are stamped with the bundle version, purged on key reset, and never served
+  stale; storing or deleting one requires the account-password proof on
+  password-backed accounts, like every other re-keying path.
 
 `/e2ee/login-params/` returns a deterministic decoy salt for unknown
 identifiers so enrolled and non-existent accounts are indistinguishable.
@@ -130,9 +158,10 @@ identifiers so enrolled and non-existent accounts are indistinguishable.
 
 - **Multi-device (password):** each device derives `wrapKey` from the password
   at login and unwraps independently. No key transfer needed.
-- **Multi-device (OAuth):** the locked-device banner/dialog accepts the account
-  password (once one has been set and a password-wrapped copy exists) or the
-  recovery key, once per new device.
+- **Multi-device (OAuth):** the locked-device banner/dialog offers, in order:
+  a passkey (one tap, when a PRF wrap exists), the account password (once one
+  has been set and a password-wrapped copy exists), or the recovery key —
+  once per new device.
 - **Password change (Settings → Security):** requires typing the current
   password (verified as whatever credential the server stores — raw for
   legacy, derived for enrolled accounts) and always rotates to derived auth
@@ -176,6 +205,16 @@ encrypted on their own within a login or two. Until the partner has ever logged
 in post-deploy, messages fall back to plaintext (no padlock). Pre-E2EE messages
 stay plaintext; only encrypted messages render a padlock.
 
+"Opportunistic" covers *only* the case where there is nobody to encrypt to. It
+is not a licence to fall back whenever encryption is inconvenient: if a key
+request fails, the send is **refused** and the user is told, because a plaintext
+message in a thread that has been showing padlocks is worse than a message that
+did not go. `encryptForPartner`/`encryptForGroup` therefore return a tagged
+outcome - `encrypted`, `unencryptable` (nobody to encrypt to, or this device is
+locked), or `error` - and only `unencryptable` permits plaintext. The partner-key
+endpoint's 404 is the sole signal for "not enrolled"; any other failure status is
+an `error`, never an answer.
+
 ## Operational caveats
 
 - **JavaScript is required** for password login once an account is upgraded to
@@ -195,20 +234,41 @@ stay plaintext; only encrypted messages render a padlock.
 | Concern | Location |
 | --- | --- |
 | Key storage models | `dashboard/models/e2ee/`, `AccountKdf` in `models/account/model.py` |
-| Storage endpoints | `dashboard/controllers/e2ee.py`, `services/e2ee.py` |
+| Storage endpoints | `dashboard/controllers/e2ee.py`, `services/security/e2ee.py` |
 | Browser crypto primitives | `frontend/ts/shared/e2ee-crypto.ts` |
 | Browser flows (enroll/login/unlock/encrypt) | `frontend/ts/shared/e2ee-client.ts` |
 | Key cache | `frontend/ts/shared/e2ee-store.ts` (IndexedDB) |
 | Global bundle | `frontend/ts/entries-classic/e2ee.ts` → `window.UrbanLensE2EE` |
-| Message plaintext touchpoints | `services/direct_messages.py`, `consumers.py` |
-| Interop / format tests | `tests/hypothesis/test_e2ee_interop.py` |
+| Passkey (PRF) wraps | `models/e2ee/passkey_wrap.py`, ceremonies + prf injection in `services/auth/webauthn.py`, browser side in `frontend/ts/shared/webauthn-client.ts` |
+| Message plaintext touchpoints | `services/messaging/direct_messages.py`, `consumers.py` |
+| Interop / format tests | `tests/hypothesis/test_e2ee_interop.py`; passkey layer in `tests/hypothesis/test_e2ee_passkey_unlock.py` |
 
 ## Future work
 
 - Encrypted attachments (client-side downscale + EXIF strip, encrypted blob
   upload, encrypted thumbnails for the consent-blur handshake).
-- Device-to-device key handoff for OAuth users, to avoid the recovery-key
-  prompt on each new device.
+- Cold-device unlock and key recovery: see
+  `docs/designs/e2ee-passkey-unlock.md` (filename historical). The messaging
+  half — PRF passkey wraps, the unlock-only/`is_login_factor` split, the
+  2FA-assertion ride-along, and the monthly passkey-or-password prompt
+  replacing the per-session set-password nag — **shipped 2026-08-15** and is
+  folded into the sections above. Still design-only from that doc: the
+  "vault" key class (server-generated, handed out, then forgotten once the
+  user holds a durable wrap) for future non-message encrypted data like
+  photos; safety archives should migrate to it, since they are currently
+  sealed to this loss-acceptable messaging identity.
 - Lazy client-side re-encryption of pre-E2EE history.
 - Key-transparency / safety-number verification to mitigate a malicious server
   swapping public keys.
+
+
+## Desired e2ee data
+
+This data is desired to be fully e2ee. It can be readily lost if the user loses their ability to
+decrypt (i.e. loses their device, password, recovery keys, etc). Under no circumstances should a fully compromised server that is physically taken by an attacker be able to decrypt this data, assuming the user never again logs in after the attack.
+
+- Messages
+- PinVisits
+- Photo metadata concerning coordinates and date taken
+- MarkupMaps
+- Any other data showing where the user has been, and when.

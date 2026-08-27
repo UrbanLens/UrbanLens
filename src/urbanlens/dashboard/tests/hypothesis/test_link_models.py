@@ -70,7 +70,7 @@ class PinLinkArchiveSignalTests(SimpleTestCase):
         callbacks = []
         with (
             mock.patch("urbanlens.dashboard.models.links.signals.transaction.on_commit", side_effect=callbacks.append),
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue,
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             archive_pin_link(sender=object, instance=_FakeInstance(pk=7), created=True)
             callbacks[0]()
@@ -96,7 +96,7 @@ class WikiLinkArchiveSignalTests(SimpleTestCase):
         callbacks = []
         with (
             mock.patch("urbanlens.dashboard.models.links.signals.transaction.on_commit", side_effect=callbacks.append),
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue,
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             archive_wiki_link(sender=object, instance=_FakeInstance(pk=9), created=True)
             callbacks[0]()

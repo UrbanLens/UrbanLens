@@ -13,14 +13,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def add_site_settings(request: HttpRequest) -> dict[str, str]:
+def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
     """Inject site-wide settings into every template context.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with site_title and app_version available in all templates.
+        dict with site_title, app_version, and public_costs_page_enabled available in
+        all templates.
     """
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -29,12 +30,15 @@ def add_site_settings(request: HttpRequest) -> dict[str, str]:
 
         site = SiteSettings.get_current()
         site_title = site.app_title
+        public_costs_page_enabled = site.public_costs_page_enabled
     except (ImportError, DatabaseError):
         site_title = "UrbanLens"
+        public_costs_page_enabled = False
 
     return {
         "site_title": site_title,
         "app_version": app_settings.app_version,
+        "public_costs_page_enabled": public_costs_page_enabled,
     }
 
 
@@ -99,6 +103,36 @@ def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
         }
     except (ImportError, DatabaseError):
         return {"env_indicator_type": "", "env_indicator_label": ""}
+
+
+def add_demo_context(request: HttpRequest) -> dict[str, object]:
+    """Expose the demo flags to every template.
+
+    Two separate facts, deliberately not one:
+
+    - ``demo_url`` is set on the **real** site and is where its "Try the demo"
+      button points. Empty means no demo has been provisioned, and the button
+      does not render - it cannot advertise a destination that does not exist.
+    - ``demo_mode`` is set on the **demo instance itself** and drives the
+      persistent banner. An instance should never have both.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with ``demo_url`` and ``demo_mode``.
+    """
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    return {
+        "demo_url": app_settings.demo_url,
+        "demo_mode": app_settings.demo_mode,
+        # Where the demo's banner sends someone who wants the real thing. Empty
+        # unless the demo instance has been told the real site's address, since
+        # the demo's own /signup/ would just make another throwaway account on
+        # the instance that is about to delete it.
+        "demo_signup_url": app_settings.demo_real_site_url,
+    }
 
 
 #: URL-name prefixes that belong to a nav-bar section other than their own, e.g.
@@ -197,7 +231,7 @@ def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
         try:
             from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
             from urbanlens.dashboard.models.friendship import Friendship
-            from urbanlens.dashboard.services.direct_messages import has_used_direct_messages
+            from urbanlens.dashboard.services.messaging.direct_messages import has_used_direct_messages
 
             needs_oauth_enroll = not request.user.has_usable_password() and not MessagingKeyBundle.objects.filter(profile__user=request.user).exists()
             show_messages_icon = has_used_direct_messages(request.user.profile) or Friendship.objects.profile(request.user.profile).ever_friends().exists()
@@ -221,6 +255,7 @@ def add_feature_access(request: HttpRequest) -> dict[str, bool]:
             "can_use_web_search": user_has_feature(request.user, SiteFeature.SEARCH),
             "can_upload_videos": user_has_feature(request.user, SiteFeature.VIDEO_UPLOADS),
             "show_games_nav": user_has_feature(request.user, SiteFeature.ALPHA_FEATURES),
+            "has_beta_features": user_has_feature(request.user, SiteFeature.BETA_FEATURES),
         }
     except (ImportError, DatabaseError):
-        return {"can_use_ai_features": False, "show_places_layer": False, "can_use_web_search": False, "can_upload_videos": False, "show_games_nav": False}
+        return {"can_use_ai_features": False, "show_places_layer": False, "can_use_web_search": False, "can_upload_videos": False, "show_games_nav": False, "has_beta_features": False}

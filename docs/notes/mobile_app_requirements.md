@@ -8,8 +8,8 @@ If any of these are not achievable within those constraints, create a note of th
 
 The app makes **no modifications** to the UrbanLens repository. This document is the
 **current, outstanding** list of server-side work the app depends on, in priority order.
-It follows the server's own `docs/external_app_api_plan.md` and
-`docs/designs/mobile-app-stack-r2.md`: a dedicated `dashboard/external_api/` app mounted
+It follows the server's own `docs/designs/drafts/external_app_api_plan.md` and
+`docs/designs/drafts/mobile-app-stack-r2.md`: a dedicated `dashboard/external_api/` app mounted
 at `/dashboard/api/external/v1/`, scoped credentials (PAT `ulk_…` keys and OAuth2+PKCE
 tokens), thin serializers calling the existing service layer, per-credential throttling,
 and usage logging.
@@ -83,7 +83,7 @@ security decision, not an oversight.)*
   (`PUT/DELETE .../comments/{id}/reactions/{emoji}/`) — pins don't. Asymmetric; please
   add the equivalent for pins, or confirm it's intentionally DM/wiki-only.
 - **[P1] Pin↔wiki manual sync** (`send-to-wiki`/`pull-from-wiki` bulk actions,
-  `dashboard/services/pin_wiki_sync.py`) has no external-API mirror — still session/HTMX
+  `dashboard/services/pins/pin_wiki_sync.py`) has no external-API mirror — still session/HTMX
   only.
 - **[P1] Pin's own private article** (`Article.pin` OneToOne, real model, real internal
   save/preview/history HTMX views) has no external-API mirror.

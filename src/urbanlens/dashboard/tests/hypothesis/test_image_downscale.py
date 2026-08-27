@@ -21,7 +21,7 @@ from PIL.TiffImagePlugin import IFDRational
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.services.images import _json_safe, downscale_stored_image, extract_exif_data
+from urbanlens.dashboard.services.media.images import _json_safe, downscale_stored_image, extract_exif_data
 
 _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
 
@@ -108,7 +108,7 @@ class ExtractExifDataTests(TestCase):
 class DownscaleStoredImageTests(TestCase):
     """downscale_stored_image() resizes/converts stored files in place."""
 
-    def test_oversized_jpeg_is_resized_and_keeps_exif(self):
+    def test_oversized_jpeg_is_resized_and_drops_exif(self):
         row = _make_image_row(_jpeg_bytes(1600, 1200))
         old_size = row.image.size
         new_size = downscale_stored_image(row, max_dimension=800, convert_webp=False)
@@ -120,15 +120,26 @@ class DownscaleStoredImageTests(TestCase):
             stored.load()
             self.assertEqual(stored.format, "JPEG")
             self.assertLessEqual(max(stored.size), 800)
-            self.assertEqual(stored.getexif()[0x0110], "TestCam 3000")
+            self.assertIsNone(stored.getexif().get(0x0110), "the camera model rode along into the stored file")
 
-    def test_small_file_left_untouched(self):
-        row = _make_image_row(_jpeg_bytes(400, 300))
+    def test_small_file_without_exif_is_left_untouched(self):
+        """Nothing to shrink, nothing to convert, nothing to strip."""
+        row = _make_image_row(_jpeg_bytes(400, 300, with_exif=False))
         old_name = row.image.name
         self.assertIsNone(downscale_stored_image(row, max_dimension=800, convert_webp=False))
         self.assertEqual(row.image.name, old_name)
 
-    def test_webp_conversion_replaces_file_and_keeps_exif(self):
+    def test_small_file_with_exif_is_rewritten_to_strip_it(self):
+        """Carrying EXIF is itself a reason to re-save, size notwithstanding."""
+        row = _make_image_row(_jpeg_bytes(400, 300))
+
+        self.assertIsNotNone(downscale_stored_image(row, max_dimension=800, convert_webp=False))
+        with row.image.open("rb") as fh:
+            stored = PILImage.open(fh)
+            stored.load()
+            self.assertIsNone(stored.getexif().get(0x0110))
+
+    def test_webp_conversion_replaces_file_and_drops_exif(self):
         row = _make_image_row(_jpeg_bytes(400, 300))
         old_name = row.image.name
         new_size = downscale_stored_image(row, max_dimension=None, convert_webp=True)
@@ -139,7 +150,7 @@ class DownscaleStoredImageTests(TestCase):
             stored = PILImage.open(fh)
             stored.load()
             self.assertEqual(stored.format, "WEBP")
-            self.assertEqual(stored.getexif()[0x010F], "UrbanLens")
+            self.assertIsNone(stored.getexif().get(0x010F), "the camera make survived the WebP conversion")
         # The original file is removed from storage.
         self.assertFalse(row.image.storage.exists(old_name))
 
@@ -161,33 +172,30 @@ class DownscaleStoredImageTests(TestCase):
 
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
-class DownscaleStoredImageGpsStripTests(TestCase):
-    """strip_gps=True removes the embedded GPS IFD, keeping the rest of EXIF intact."""
+class GpsIsStrippedWithoutBeingAskedTests(TestCase):
+    """GPS removal is unconditional, not a setting the uploader has to find.
 
-    def test_gps_removed_even_when_no_resize_needed(self):
+    This class used to exercise a ``strip_gps`` flag. The flag is gone: a stored
+    file is served to everyone who can reach the container it was contributed to,
+    so the whole EXIF block comes off every time, and there is no opt-out to get
+    wrong. What survives is on the ``Image`` row, behind the app's visibility rules.
+    """
+
+    def test_gps_is_removed_even_when_no_resize_is_needed(self):
         row = _make_image_row(_jpeg_bytes(400, 300, with_gps=True))
-        old_size = row.image.size
 
-        new_size = downscale_stored_image(row, max_dimension=800, convert_webp=False, strip_gps=True)
+        new_size = downscale_stored_image(row, max_dimension=800, convert_webp=False)
 
-        self.assertIsNotNone(new_size)
+        self.assertIsNotNone(new_size, "a small GPS-tagged file was left exactly as uploaded")
         with row.image.open("rb") as fh:
             stored = PILImage.open(fh)
             stored.load()
-            exif = stored.getexif()
-            self.assertFalse(exif.get_ifd(0x8825))
-            self.assertEqual(exif[0x0110], "TestCam 3000")
-        self.assertNotEqual(new_size, old_size)  # re-saved even though not shrunk on purpose
+            self.assertFalse(stored.getexif().get_ifd(0x8825), "GPS coordinates were served inside the photo")
 
-    def test_no_gps_present_is_a_no_op(self):
-        row = _make_image_row(_jpeg_bytes(400, 300, with_gps=False))
-        old_name = row.image.name
-        self.assertIsNone(downscale_stored_image(row, max_dimension=800, convert_webp=False, strip_gps=True))
-        self.assertEqual(row.image.name, old_name)
-
-    def test_strip_gps_combines_with_resize(self):
+    def test_gps_is_removed_alongside_a_resize(self):
         row = _make_image_row(_jpeg_bytes(1600, 1200, with_gps=True))
-        new_size = downscale_stored_image(row, max_dimension=800, convert_webp=False, strip_gps=True)
+
+        new_size = downscale_stored_image(row, max_dimension=800, convert_webp=False)
 
         self.assertIsNotNone(new_size)
         with row.image.open("rb") as fh:
@@ -196,10 +204,15 @@ class DownscaleStoredImageGpsStripTests(TestCase):
             self.assertLessEqual(max(stored.size), 800)
             self.assertFalse(stored.getexif().get_ifd(0x8825))
 
-    def test_strip_gps_false_preserves_gps(self):
+    def test_the_rest_of_the_block_goes_too(self):
+        """Not just GPS: make and model identify the photographer's kit."""
         row = _make_image_row(_jpeg_bytes(400, 300, with_gps=True))
-        self.assertIsNone(downscale_stored_image(row, max_dimension=800, convert_webp=False, strip_gps=False))
+
+        downscale_stored_image(row, max_dimension=800, convert_webp=False)
+
         with row.image.open("rb") as fh:
             stored = PILImage.open(fh)
             stored.load()
-            self.assertTrue(stored.getexif().get_ifd(0x8825))
+            exif = stored.getexif()
+            self.assertIsNone(exif.get(0x010F))
+            self.assertIsNone(exif.get(0x0110))

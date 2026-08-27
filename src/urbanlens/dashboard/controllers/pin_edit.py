@@ -6,20 +6,22 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services.pin_edit import SECURITY_EDIT_FIELDS, apply_pin_edits
-from urbanlens.dashboard.services.pin_subresources import create_pin_note, delete_pin_note
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.pins.pin_edit import SECURITY_EDIT_FIELDS, apply_pin_edits
+from urbanlens.dashboard.services.pins.pin_subresources import create_pin_note, delete_pin_note
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +109,12 @@ def _overview_context(pin: Pin) -> dict:
         ("emergency", "Emergency"),
     ]
 
-    lat, lng = pin.effective_latitude, pin.effective_longitude
-    overlapping_location_count = Location.objects.get_all_for_point(float(lat), float(lng)).count() if lat is not None and lng is not None else 0
+    # Only genuinely competing properties count as a reason to offer a switch.
+    # This used to be "every Location covering this point", which on a campus
+    # meant every building on it - all the same place, none of them a choice.
+    from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
+
+    competing_location_count = len(competing_wiki_locations(pin, pin.profile))
 
     from urbanlens.dashboard.services.ai.link_extraction import ai_extract_button_context
 
@@ -120,7 +126,7 @@ def _overview_context(pin: Pin) -> dict:
         "detail_pin_icon_choices": detail_pin_icon_choices,
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,
-        "overlapping_location_count": overlapping_location_count,
+        "competing_location_count": competing_location_count,
         **ai_extract_button_context(pin.profile.user, pin.profile, pin),
         "pin_security_values": [
             ("fences", "Fences", pin.fences),
@@ -135,7 +141,7 @@ def _overview_context(pin: Pin) -> dict:
     }
 
 
-def _pin_hero_oob(request, pin: Pin, *, overlapping_location_count: int) -> str:
+def _pin_hero_oob(request, pin: Pin, *, competing_location_count: int) -> str:
     """Render the pin detail page hero as an out-of-band HTMX swap.
 
     The hero (with its Community Wiki box) lives in base.html's
@@ -145,6 +151,8 @@ def _pin_hero_oob(request, pin: Pin, *, overlapping_location_count: int) -> str:
     showing "no wiki" until a full reload, even though the location now has
     a slug and could show the create-wiki button.
     """
+    from urbanlens.dashboard.services.places.scope import scope_badge
+
     cover_image = pin.cover_photo.image if pin.cover_photo and pin.cover_photo.image else None
     return render_to_string(
         request=request,
@@ -159,7 +167,11 @@ def _pin_hero_oob(request, pin: Pin, *, overlapping_location_count: int) -> str:
             "modifier": "top",
             "hero_image_url": cover_image.url if cover_image else None,
             "hero_cover_key": "pin",
-            "overlapping_location_count": overlapping_location_count,
+            "competing_location_count": competing_location_count,
+            # The hero carries the parcel/building badge, so an out-of-band
+            # swap has to rebuild it too or organising a property would blank
+            # the badge until the next full page load.
+            **scope_badge(pin),
         },
     )
 
@@ -185,7 +197,7 @@ class PinOverviewView(LoginRequiredMixin, View):
         # geocoding call right here - the last inline external call on this
         # page's render path.)
         if pin.location and pin.profile.external_apis_enabled:
-            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
             from urbanlens.dashboard.tasks import backfill_location_address, resolve_location_place_name
 
             if not pin.location.route:
@@ -194,7 +206,7 @@ class PinOverviewView(LoginRequiredMixin, View):
                 safely_enqueue_task(resolve_location_place_name, pin.location_id)
         overview_context = _overview_context(pin)
         overview_html = render_to_string(request=request, template_name="dashboard/partials/pins/pin_overview_partial.html", context=overview_context)
-        hero_html = _pin_hero_oob(request, pin, overlapping_location_count=overview_context["overlapping_location_count"])
+        hero_html = _pin_hero_oob(request, pin, competing_location_count=overview_context["competing_location_count"])
         return HttpResponse(overview_html + hero_html)
 
 
@@ -228,7 +240,7 @@ class PinEditView(LoginRequiredMixin, View):
         # field they changed, so anything absent from the body must be left
         # alone rather than rewritten with its current value. `edits` therefore
         # collects *only* what this request actually submitted, and
-        # ``services.pin_edit.apply_pin_edits`` writes exactly that much.
+        # ``services.pins.pin_edit.apply_pin_edits`` writes exactly that much.
         edits: dict[str, object] = {}
 
         if "name" in body:
@@ -284,7 +296,7 @@ class PinEditView(LoginRequiredMixin, View):
                 except ValueError:
                     continue
             if last_visited:
-                today = date.today()
+                today = timezone.localdate()
                 min_date = date(today.year - 100, today.month, today.day)
                 lv_date = last_visited.date()
                 if lv_date > today:
@@ -337,16 +349,16 @@ class PinEditView(LoginRequiredMixin, View):
             category_raw = (body.get("categories") or "").strip()
             names = [n.strip().lower() for n in category_raw.split(",") if n.strip()]
             seen_names: set[str] = set()
-            pin.labels.remove(*pin.labels.filter(kind="category"))
+            pin.labels.remove(*pin.labels.filter(kind=KIND_CATEGORY))
             for name in names:
                 if name in seen_names:
                     continue
                 seen_names.add(name)
-                cat = Label.objects.filter(name__iexact=name, kind="category", profile=pin.profile).first()
+                cat = Label.objects.filter(name__iexact=name, kind=KIND_CATEGORY, profile=pin.profile).first()
                 if cat is None:
                     cat, _ = Label.objects.get_or_create(
                         name=name,
-                        kind="category",
+                        kind=KIND_CATEGORY,
                         profile=pin.profile,
                     )
                 pin.labels.add(cat)
@@ -512,26 +524,40 @@ class PinRelinkView(LoginRequiredMixin, View):
     POST /map/pin/<uuid>/link/<loc_uuid>/    → Relink: switches the pin to the given Location
     """
 
-    def get(self, request, pin_slug):
+    def get(self, request, pin_slug, location_slug=None):
         """Return an HTMX partial listing every Location that covers this pin's point.
+
+        This view backs two routes, and only ``pin.link`` has a meaningful GET:
+        it renders the picker. ``pin.link.to`` already names the location, so a
+        GET there has nothing to choose and is refused. The parameter was absent
+        from this signature entirely, which made that request a ``TypeError``
+        before any code ran - a guaranteed 500 on a route reachable by anyone
+        who edits the URL. Same shape as ``saved_filters.new`` (audit chunk 552):
+        one view, two routes, a signature that fits only one of them.
 
         Args:
             request: The HTTP request.
             pin_slug: UUID of the pin.
+            location_slug: Present only on ``pin.link.to``, where GET is refused.
 
         Returns:
-            Rendered HTML partial with location choices.
+            Rendered HTML partial with location choices, or 405 when a location
+            is already named.
         """
+        if location_slug is not None:
+            return HttpResponseNotAllowed(["POST"])
         result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
         pin = result
 
-        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
 
-        lat = pin.effective_latitude
-        lng = pin.effective_longitude
-        locations = Location.objects.get_all_for_point(float(lat), float(lng)) if lat is not None and lng is not None else Location.objects.none()
+        # The pin's current location plus any genuinely competing property.
+        # Every other location covering this point describes the same place -
+        # switching between them would change nothing a user can perceive.
+        locations = [pin.location] if pin.location_id else []
+        locations += [candidate for candidate in competing_wiki_locations(pin, pin.profile) if candidate.pk != pin.location_id]
         return render(
             request,
             "dashboard/partials/pins/pin_location_picker.html",
@@ -563,46 +589,78 @@ class PinRelinkView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         if location_slug:
+            from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
+
             location = get_object_or_404(Location.objects.slug_or_uuid(location_slug))
-            # A profile can only ever have one root pin per location
-            # (db_pin_unique_location_per_profile) - if one already exists at the
-            # target, reassigning `pin.location` would collide with it. Merge
-            # into the existing pin instead (same reparent-as-child mechanism as
-            # PinBulkMergeView) rather than failing with an IntegrityError.
-            existing = Pin.objects.filter(profile=pin.profile, location=location, parent_pin__isnull=True).exclude(pk=pin.pk).first()
-            if existing is not None:
-                if not pin.would_create_cycle(existing):
-                    pin.parent_pin = existing
-                    pin.save(update_fields=["parent_pin", "updated"])
-                    pin.refresh_from_db()
-                if is_xhr:
-                    from django.urls import reverse
-
-                    return JsonResponse(
-                        {
-                            "merged": True,
-                            "existing_pin_url": reverse("pin.details", kwargs={"pin_slug": existing.slug or str(existing.uuid)}),
-                            "existing_pin_name": existing.effective_name,
-                        },
-                    )
-                return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
+            # Which Location a pin points at is not a neutral preference - it is what
+            # confers access, since location_visible_to grants on an exact Location
+            # match. Unchecked, relinking is a way to *earn* a community wiki rather
+            # than discover one, and a Location's slug is its official_name, so the slug
+            # of any notable place is guessable.
+            #
+            # A target qualifies two ways, matching the two things the UI actually
+            # offers. Either the profile can already reach it (the picker and the wiki
+            # page's switch button both offer only candidates filtered to accessible
+            # domains), or it covers the pin's own coordinate - the map's
+            # location-conflict dialog offers exactly those, and a place the user's own
+            # pin sits inside is one they discovered by pinning it, so allowing it
+            # discloses nothing they could not already derive. Both are checked against
+            # the pin's own point, never against an arbitrary slug from the URL.
+            if not (location.pk == pin.location_id or location_visible_to(location, pin.profile) or Location.objects.get_all_for_point(pin.effective_latitude, pin.effective_longitude).filter(pk=location.pk).exists()):
+                raise Http404
         else:
-            # Detach: create a new bare Location at this pin's coordinates.
-            # Use the existing location's canonical name if available; otherwise
-            # fetch the Google place name.  Never fall back to pin.name -
-            # that is personal data and must not become a community place name.
-            lat = float(pin.effective_latitude or 0)
-            lng = float(pin.effective_longitude or 0)
-            if pin.location and pin.location.official_name and pin.location.official_name != "Unnamed Location":
-                location = Location.objects.create(
-                    official_name=pin.location.official_name,
-                    latitude=lat,
-                    longitude=lng,
-                )
-            else:
-                from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
+            # Detach is not expressible, and this is the honest answer rather
+            # than a workaround.
+            #
+            # It used to `Location.objects.create()` at the pin's coordinates,
+            # which is a guaranteed IntegrityError - Location is unique on
+            # (latitude, longitude) and that row necessarily already existed
+            # (docs/PROBLEMS.md, 2026-08-13: a 500 on every attempt).
+            #
+            # There is no coordinate to give a detached pin: `effective_latitude`
+            # *is* `location.latitude`, and a database trigger
+            # (`dashboard_locations_freeze_identity`) makes a Location's
+            # coordinates immutable, so a pin's point is always exactly its
+            # location's point. "Give this pin its own Location at the same
+            # place" therefore cannot be satisfied without moving the pin, and
+            # silently moving somebody's pin to satisfy a constraint is worse
+            # than saying the action does not apply.
+            #
+            # A pin that should not share a place's record wants a *different*
+            # place, which is what the relink branch above already does.
+            message = "A place is shared by everyone who pins it, and a pin sits exactly where its place does - so a pin cannot have a place of its own at the same point. Link this pin to a different place instead, or move it."
+            if is_xhr:
+                return JsonResponse({"error": message}, status=400)
+            return HttpResponse(message, status=400)
 
-                location = _create_location_with_canonical_name(lat, lng)
+        # A profile can only ever have one root pin per location
+        # (db_pin_unique_location_per_profile) - if one already exists at the
+        # location we are about to point at, reassigning `pin.location` would
+        # collide with it. Merge into the existing pin instead (same
+        # reparent-as-child mechanism as PinBulkMergeView) rather than failing
+        # with an IntegrityError.
+        #
+        # Checked after both branches, not inside the relink one: detaching can
+        # also land on an existing Location (another record already occupies the
+        # pin's own point), and that path had no guard at all - the same
+        # constraint-violation-as-500 this handler was just fixed for.
+        existing = Pin.objects.filter(profile=pin.profile, location=location, parent_pin__isnull=True).exclude(pk=pin.pk).first()
+        if existing is not None:
+            if not pin.would_create_cycle(existing):
+                pin.parent_pin = existing
+                pin.save(update_fields=["parent_pin", "updated"])
+                pin.refresh_from_db()
+            if is_xhr:
+                from django.urls import reverse
+
+                return JsonResponse(
+                    {
+                        "merged": True,
+                        "existing_pin_url": reverse("pin.details", kwargs={"pin_slug": existing.slug or str(existing.uuid)}),
+                        "existing_pin_name": existing.effective_name,
+                    },
+                )
+            return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
 
         # Wikis are user-created only: link to the location's wiki when one
         # exists, otherwise leave the pin wiki-less until someone creates one.

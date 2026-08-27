@@ -1,9 +1,9 @@
 {# Password + type-to-confirm dialog for the "Delete my account" danger-zone action. #}
-<dialog id="delete-account-dialog" class="ul-dialog delete-account-dialog">
+<dialog id="delete-account-dialog" class="ul-dialog delete-account-dialog" aria-labelledby="delete-account-dialog-title">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Delete your account" title_id="delete-account-dialog-title" %}
     <form method="post" action="{% url 'account.delete.request' %}" id="delete-account-form">
         {% csrf_token %}
-        <input type="text" name="username" value="{{ request.user.username }}" autocomplete="username" style="display:none" aria-hidden="true" tabindex="-1">
+        <input type="text" name="username" value="{{ request.user.username }}" autocomplete="username" style="display:none" aria-hidden="true" tabindex="-1" aria-label="Confirm your username">
         <div class="ul-dialog-body delete-account-dialog-body">
             <p class="delete-account-warning">
                 This will permanently delete your account and all your data (pins, photos, trips, reviews,

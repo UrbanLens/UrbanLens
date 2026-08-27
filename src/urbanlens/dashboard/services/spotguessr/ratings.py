@@ -1,6 +1,6 @@
 """Applying a completed round's results to Glicko-2 ratings.
 
-See ``docs/designs/spotguessr.md`` ("Glicko-2 ratings: player skill vs.
+See ``docs/designs/drafts/spotguessr.md`` ("Glicko-2 ratings: player skill vs.
 location difficulty") for why a round is treated as one rating period for
 both the players and the location.
 """
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.spotguessr.model import GameRound, Guess, LocationModeRating, PlayerModeRating
@@ -37,6 +38,7 @@ class RatingChange:
         return self.rating_after - self.rating_before
 
 
+@transaction.atomic
 def apply_round_ratings(round_: GameRound, guesses: list[Guess]) -> dict[int, RatingChange]:
     """Update every participant's PlayerModeRating and the round's LocationModeRating.
 
@@ -57,6 +59,11 @@ def apply_round_ratings(round_: GameRound, guesses: list[Guess]) -> dict[int, Ra
     now = timezone.now()
     mode = round_.session.mode
     location_rating = LocationModeRating.objects.get_or_create_for(round_.location, mode)
+    # Locked first, before any player row: this is the row two rounds contend for
+    # (the same location played in two sessions at once), and taking the shared row
+    # first gives every caller one lock order. Without it both rounds compute from
+    # the same location_before and the second save discards the first round entirely.
+    location_rating.refresh_from_db(from_queryset=LocationModeRating.objects.select_for_update())
     # Both sides of this round's update must see the location's rating
     # *before* any of this round's guesses touch it - captured once, up front.
     location_before = glicko2.Rating(mu=location_rating.mu, phi=location_rating.phi, sigma=location_rating.sigma)
@@ -69,6 +76,7 @@ def apply_round_ratings(round_: GameRound, guesses: list[Guess]) -> dict[int, Ra
         # (deliberately excluded - see Guess.bonus_points' docstring).
         fraction = max(0.0, min(1.0, (guess.points + guess.bonus_points) / MAX_ROUND_POINTS))
         player_rating = PlayerModeRating.objects.get_or_create_for(guess.profile, mode)
+        player_rating.refresh_from_db(from_queryset=PlayerModeRating.objects.select_for_update())
         player_before = glicko2.Rating(mu=player_rating.mu, phi=player_rating.phi, sigma=player_rating.sigma)
         rating_before_display = player_rating.rating
 

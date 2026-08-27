@@ -20,7 +20,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.external_data import ProviderFetchResult, panel_sources
+from urbanlens.dashboard.services.pins.external_data import ProviderFetchResult, panel_sources
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -61,7 +61,7 @@ class MediaCarouselSharedFlowTests(TestCase):
         cache.set(source.ready_key(self.pin), 1, 3600)
         slide = {"source": "Google Maps", "date": "2026", "detail": "", "img_src": "https://example.com/sat.jpg"}
         with mock.patch(
-            "urbanlens.dashboard.services.external_data.collect_satellite_slides",
+            "urbanlens.dashboard.services.pins.external_data.collect_satellite_slides",
             return_value=([slide], [ProviderFetchResult("google_maps", from_cache=True, count=1)]),
         ):
             response = self.client.get(reverse("pin.satellite_view", args=[self.pin.slug]))
@@ -77,7 +77,7 @@ class MediaCarouselSharedFlowTests(TestCase):
         cache.set(source.ready_key(self.pin), 1, 3600)
         slide = {"source": "Google Street View", "date": "2026", "img_src": "https://example.com/sv.jpg", "latitude": 1.0, "longitude": 2.0, "heading": None}
         with mock.patch(
-            "urbanlens.dashboard.services.external_data.collect_street_view_slides",
+            "urbanlens.dashboard.services.pins.external_data.collect_street_view_slides",
             return_value=([slide], [ProviderFetchResult("google_street_view", from_cache=True, count=1)]),
         ):
             response = self.client.get(reverse("pin.street_view", args=[self.pin.slug]))

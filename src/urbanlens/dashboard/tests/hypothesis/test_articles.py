@@ -13,15 +13,15 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.articles import diff_revisions, render_article, save_article
 from urbanlens.dashboard.services.global_search import GlobalSearchEngine
+from urbanlens.dashboard.services.wiki.articles import diff_revisions, render_article, save_article
 
 
 class EditorDisplayNameTests(SimpleTestCase):
     """ArticleRevision.editor_display_name - regression coverage for the
     "'Deleted user' shown for a Wikipedia-seeded starting article" report:
     a null ``editor`` means either a genuinely
-    deleted account or a system-initiated seed (services.wiki_seed passes
+    deleted account or a system-initiated seed (services.wiki.wiki_seed passes
     editor=None on purpose) - these must not both show "Deleted user".
     """
 

@@ -11,11 +11,19 @@
  * filtered here, since the caller always re-checks authoritatively server-side.
  */
 
-// Must match pages/map/index.html's own `_CACHE_KEY`/`v: 8` (the only writer
-// of this localStorage entry) - this constant drifted out of sync with that
-// page's cache-version bumps before (last matched v6), which silently made
-// every read here return [] since the real payload's `v` never matched.
-const CACHE_VERSION = 8;
+// Must match pages/map/index.html's own `_CACHE_KEY`/`v:` literals (that inline
+// script is the only writer of this localStorage entry). This constant drifted out
+// of sync with that page's cache-version bumps before (last matched v6), which
+// silently made every read here return [] since the real payload's `v` never
+// matched. Both are exported so pin-cache.contract.test.ts can read the template
+// and fail the build when the two sides disagree again, rather than the feature
+// just going quiet.
+export const PIN_CACHE_VERSION = 8;
+
+/** The localStorage key holding one profile's cached pin store. */
+export function pinCacheKey(profileUuid: string): string {
+    return `ul_pins_v5_${profileUuid}`;
+}
 
 export interface CachedPinLocation {
     latitude: number;
@@ -37,10 +45,10 @@ export interface CachedSearchPin {
 function readRawCachedPins(profileUuid: string): Array<Record<string, unknown>> {
     if (!profileUuid) return [];
     try {
-        const raw = localStorage.getItem(`ul_pins_v5_${profileUuid}`);
+        const raw = localStorage.getItem(pinCacheKey(profileUuid));
         if (!raw) return [];
         const cache = JSON.parse(raw);
-        if (cache?.v !== CACHE_VERSION || cache?.profileUuid !== profileUuid) return [];
+        if (cache?.v !== PIN_CACHE_VERSION || cache?.profileUuid !== profileUuid) return [];
         const pins = cache.pins;
         if (!pins || typeof pins !== "object") return [];
         return Object.values(pins) as Array<Record<string, unknown>>;
@@ -84,4 +92,67 @@ export function readCachedPinsForSearch(profileUuid: string): CachedSearchPin[] 
         });
     }
     return results;
+}
+
+/**
+ * Every generation of the pin-cache key: `ul_pins_v<N>_<profile id>`.
+ *
+ * Deliberately not the bare `ul_pins_` prefix - `ul_pins_dirty`, the flag other
+ * pages set to force the map to refetch, would match that and get swept away.
+ */
+const PIN_CACHE_KEY_PATTERN = /^ul_pins_v\d+_/;
+
+/**
+ * Delete every pin-cache blob except the one currently in use.
+ *
+ * The cache is per-profile and per-version, so a browser accumulates blobs that
+ * nothing will ever read again: keys from retired versions (v4, and pre-v5 keys
+ * built from the profile PK rather than its UUID), and other accounts' blobs
+ * from a shared browser. Only the live key is ever read, so the reader's own
+ * expiry can never reclaim them - a multi-megabyte orphan just sits in the ~5 MB
+ * origin quota until the user manually clears site data, which is why clearing
+ * the cache by hand "fixed" a QuotaExceededError that looked like a pin-count
+ * limit.
+ *
+ * Matching on the shared prefix rather than a list of known-dead keys means the
+ * next version bump needs no change here.
+ *
+ * @param currentKey The key to keep - the caller's live cache.
+ * @returns How many orphaned entries were removed.
+ */
+export function purgeForeignPinCaches(currentKey: string): number {
+    let removed = 0;
+    try {
+        const doomed: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key !== currentKey && PIN_CACHE_KEY_PATTERN.test(key)) doomed.push(key);
+        }
+        for (const key of doomed) {
+            try {
+                localStorage.removeItem(key);
+                removed++;
+            } catch {
+                // Keep going: one unremovable key must not strand the rest.
+            }
+        }
+    } catch {
+        // Storage unavailable (private mode, disabled) - nothing to reclaim.
+    }
+    return removed;
+}
+
+declare global {
+    interface Window {
+        ulPurgeForeignPinCaches?: typeof purgeForeignPinCaches;
+    }
+}
+
+/**
+ * Expose {@link purgeForeignPinCaches} to the map page's inline cache script,
+ * which is not a module and so cannot import it. Installed by core.js, which
+ * base.html loads synchronously in <head> - well before that inline script runs.
+ */
+export function installGlobalPinCachePurge(): void {
+    window.ulPurgeForeignPinCaches = purgeForeignPinCaches;
 }

@@ -12,6 +12,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID, FIRST_PARTY_REDIRECT_URIS
 
@@ -20,6 +21,9 @@ class ConsentScreenTests(TestCase):
     """The real first-party client's authorize flow renders the styled template."""
 
     def setUp(self) -> None:
+        # The client row is created by a data migration, which a TransactionTestCase
+        # elsewhere in the suite truncates - see core/tests/oauth.py.
+        first_party_application()
         self.user = baker.make(User)
         self.client.force_login(self.user)
         self.authorize_url = reverse("oauth2_provider:authorize")

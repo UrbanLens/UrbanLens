@@ -67,7 +67,6 @@
 
 .po-badge--official {
   background: var(--ul-color-accent-ring);
-  color: var(--ul-color-accent);
 }
 
 .po-owner-actions {
@@ -126,6 +125,21 @@
   color: var(--ul-grey-5);
   font-size: .8rem;
   margin: 0;
+}
+
+// Shown in place of county-sourced owner records a viewer isn't entitled to
+// see, so an empty card doesn't read as "no owner on record".
+.po-panel-locked {
+  align-items: center;
+  color: var(--ul-grey-5);
+  display: flex;
+  font-size: .8rem;
+  gap: .35rem;
+  margin: .5rem 0 0;
+
+  .material-symbols-outlined {
+    font-size: 1rem;
+  }
 }
 
 .po-sale-list {

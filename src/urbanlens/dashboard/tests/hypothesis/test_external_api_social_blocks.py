@@ -4,7 +4,7 @@ A block is a safety feature on a site whose users meet strangers at derelict
 buildings. Every test here exists because the block was, in one way or another,
 clearable by the person it was placed on:
 
-* ``services.friendship._existing_friendship`` resolves the row with
+* ``services.social.friendship._existing_friendship`` resolves the row with
   ``Friendship.objects.between(...)``, which matches **either direction**, and
   ``remove_friend`` applied ``Friendship.remove()`` to whatever came back. So
   ``DELETE /friends/{blocker_uuid}/`` with ``social:write`` let the blocked
@@ -37,7 +37,7 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 
 def _bearer(raw_key: str) -> dict:

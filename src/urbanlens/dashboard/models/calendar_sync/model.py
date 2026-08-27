@@ -57,10 +57,10 @@ class GoogleCalendarAccount(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="google_calendar_account",
     )
-    google_email = CharField(
-        max_length=255,
+    google_email = EncryptedTextField(
         null=True,
         blank=True,
+        fail_soft=True,
         help_text="Email of the connected Google account, for display only.",
     )
     access_token = EncryptedTextField()
@@ -161,6 +161,16 @@ class TripCalendarLink(abstract.DashboardModel):
             UniqueConstraint(
                 fields=("trip", "profile", "activity"),
                 name="db_trip_calendar_link_activity_unique",
+            ),
+            # One Google event maps to at most one link per profile, so a
+            # re-import of the same event cannot silently build a second trip.
+            # Partial: trip-level links for a *timed* import deliberately carry
+            # an empty google_event_id (the activity-level row owns that id), and
+            # those must still coexist.
+            UniqueConstraint(
+                fields=("profile", "google_event_id"),
+                condition=~Q(google_event_id=""),
+                name="db_tcl_profile_event_unique",
             ),
         ]
         indexes = [

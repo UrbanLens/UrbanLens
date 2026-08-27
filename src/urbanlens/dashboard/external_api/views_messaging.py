@@ -16,7 +16,7 @@ key material (see ``controllers.e2ee``), and no endpoint here should ever
 acquire any.
 
 **Nothing here constructs a share row directly.** Sends that carry a pin go
-through ``services.direct_message_shares.send_message_with_share``, which
+through ``services.messaging.direct_message_shares.send_message_with_share``, which
 routes to the same ``create_pin_share`` the web composer uses and therefore
 keeps the ``LocationExposure`` provenance chain intact. Building a ``PinShare``
 or ``DirectMessageShare`` inline would appear to work while silently recording
@@ -56,8 +56,8 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupMessage
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.direct_message_shares import ShareTargetNotFoundError, ShareTargetPermissionError, ShareValidationError, send_message_with_share
-from urbanlens.dashboard.services.direct_messages import (
+from urbanlens.dashboard.services.messaging.direct_message_shares import ShareTargetNotFoundError, ShareTargetPermissionError, ShareValidationError, send_message_with_share
+from urbanlens.dashboard.services.messaging.direct_messages import (
     THREAD_PAGE_SIZE,
     DirectMessagePermissionError,
     DirectMessageValidationError,
@@ -72,7 +72,7 @@ from urbanlens.dashboard.services.direct_messages import (
     thread_page,
     toggle_reaction,
 )
-from urbanlens.dashboard.services.group_chats import (
+from urbanlens.dashboard.services.messaging.group_chats import (
     GROUP_THREAD_PAGE_SIZE,
     GroupChatPermissionError,
     GroupChatValidationError,
@@ -286,7 +286,7 @@ class ConversationsView(ExternalApiView):
     @extend_schema(responses={200: PageSerializer})
     def get(self, request: Request) -> Response:
         """Return one page of the caller's conversations, most recent first."""
-        from urbanlens.dashboard.services.direct_messages import all_conversations_for
+        from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for
 
         profile = request.user.profile
         rows = all_conversations_for(profile)
@@ -536,7 +536,7 @@ class GroupsView(ExternalApiView):
         "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
     }
 
-    @extend_schema(responses={200: PageSerializer})
+    @extend_schema(operation_id="messages_groups_list", responses={200: PageSerializer})
     def get(self, request: Request) -> Response:
         """Return one page of the caller's group chats, most recently active first."""
         profile = request.user.profile
@@ -719,20 +719,24 @@ class GroupMembersView(ExternalApiView):
     @extend_schema(responses={200: GroupMemberSerializer(many=True), 404: ErrorSerializer})
     def get(self, request: Request, group_uuid: UUID) -> Response:
         """List this group's active members, masked per the caller's visibility."""
-        from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+        from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
         resolved = self._membership_or_none(request, group_uuid)
         if resolved is None:
             return Response({"error": "No such group."}, status=404)
         profile, group = resolved
 
+        memberships = list(group.active_memberships().select_related("profile", "profile__user"))
+        # One visibility resolution for the whole roster: resolving per member
+        # rebuilds the caller's own friend/pin/trip sets on every row.
+        visible_pks = Profile.visible_profile_pks(profile, [membership.profile for membership in memberships])
         members = []
-        for membership in group.active_memberships().select_related("profile", "profile__user"):
+        for membership in memberships:
             member = membership.profile
             if member.pk == profile.pk:
                 identity = {"display_name": member.username, "is_masked": False}
             else:
-                identity = resolve_visible_identity(profile, member)
+                identity = resolve_visible_identity(profile, member, visible_pks=visible_pks)
             members.append(
                 {
                     # Blanked when masked: handing back the real slug would let

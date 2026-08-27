@@ -221,7 +221,7 @@ class PinBulkMergeViewTests(TestCase):
 
 
 class PinBulkEditViewTests(TestCase):
-    """POST /map/pins/bulk-edit/ replaces description and adds/removes labels in bulk."""
+    """POST /map/pins/bulk-edit/ updates shared pin fields in bulk."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -300,6 +300,53 @@ class PinBulkEditViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         child.refresh_from_db()
         self.assertEqual(child.description, "child note")
+
+    def test_sets_detail_pin_visual_style_on_every_selected_pin(self) -> None:
+        response = self._edit(
+            {
+                "uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)],
+                "icon": "door_front",
+                "color": "#2196F3",
+                "bg_color": "#FFFFFF",
+                "bg_opacity": 45,
+                "border_color": "#000000",
+                "border_opacity": 70,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.pin_a.refresh_from_db()
+        self.pin_b.refresh_from_db()
+        for pin in (self.pin_a, self.pin_b):
+            self.assertEqual(pin.icon, "door_front")
+            self.assertEqual(pin.color, "#2196F3")
+            self.assertEqual(pin.detail_bg_color, "#FFFFFF")
+            self.assertEqual(pin.detail_bg_opacity, 45)
+            self.assertEqual(pin.detail_border_color, "#000000")
+            self.assertEqual(pin.detail_border_opacity, 70)
+
+    def test_visual_fields_are_partial_and_can_be_cleared(self) -> None:
+        self.pin_a.icon = "warning"
+        self.pin_a.color = "#F44336"
+        self.pin_a.detail_bg_color = "#FFFFFF"
+        self.pin_a.detail_bg_opacity = 80
+        self.pin_a.save()
+
+        response = self._edit({"uuids": [str(self.pin_a.uuid)], "icon": None, "bg_opacity": 0})
+
+        self.assertEqual(response.status_code, 200)
+        self.pin_a.refresh_from_db()
+        self.assertIsNone(self.pin_a.icon)
+        self.assertEqual(self.pin_a.color, "#F44336")
+        self.assertEqual(self.pin_a.detail_bg_color, "#FFFFFF")
+        self.assertEqual(self.pin_a.detail_bg_opacity, 0)
+
+    def test_rejects_visual_opacity_outside_percentage_range(self) -> None:
+        response = self._edit({"uuids": [str(self.pin_a.uuid)], "bg_opacity": 101})
+
+        self.assertEqual(response.status_code, 400)
+        self.pin_a.refresh_from_db()
+        self.assertEqual(self.pin_a.detail_bg_opacity, 80)
 
     def test_sets_rating_on_all_selected_pins(self) -> None:
         """rating lives on Review (one per profile/pin pair), not a plain Pin field."""
@@ -483,3 +530,67 @@ class PinBulkExportViewTests(TestCase):
         response = self._export("csv", [str(child.uuid)])
         self.assertEqual(response.status_code, 200)
         self.assertIn("Child", response.content.decode())
+
+
+@override_settings(CACHES=_LOCMEM_CACHES)
+class BulkSelectionSizeLimitTests(TestCase):
+    """The website's bulk write endpoints bound the selection, like the API's do.
+
+    Every external-API bulk endpoint already declares `max_length=500` on its
+    uuid list. The endpoints the map's select tool drives had no bound at all,
+    and these edits cannot collapse to one UPDATE: `Pin` carries eight live
+    `post_save` receivers, so each selected pin needs a real `save()` -
+    measured at ~2 queries per pin for a style edit and ~7 for a rating. An
+    unbounded selection therefore turns one click into tens of thousands of
+    queries in a single request.
+
+    Read paths are deliberately left unbounded - export's own docstring says it
+    uses a form POST specifically so the pin count is not limited, and it costs
+    one query regardless of selection size.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin = baker.make(Pin, profile=self.profile)
+
+    def _uuids(self, count: int) -> list[str]:
+        """`count` syntactically valid uuids - the limit is checked before ownership."""
+        return [f"00000000-0000-4000-8000-{index:012d}" for index in range(count)]
+
+    def _post(self, url_name: str, payload: dict):
+        return self.client.post(reverse(url_name), data=json.dumps(payload), content_type="application/json")
+
+    def test_bulk_edit_refuses_an_over_large_selection(self) -> None:
+        response = self._post("pin.bulk_edit", {"uuids": self._uuids(501), "color": "#ff0000"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"500", response.content)
+
+    def test_bulk_delete_refuses_an_over_large_selection(self) -> None:
+        response = self._post("pin.bulk_delete", {"uuids": self._uuids(501)})
+        self.assertEqual(response.status_code, 400)
+
+    def test_bulk_merge_refuses_an_over_large_selection(self) -> None:
+        response = self._post("pin.bulk_merge", {"target_uuid": str(self.pin.uuid), "source_uuids": self._uuids(501)})
+        self.assertEqual(response.status_code, 400)
+
+    def test_the_limit_itself_is_accepted(self) -> None:
+        """Anti-vacuity: 500 must still work, or the tests above prove nothing."""
+        uuids = [*self._uuids(499), str(self.pin.uuid)]
+        response = self._post("pin.bulk_edit", {"uuids": uuids, "color": "#ff0000"})
+        self.assertEqual(response.status_code, 200)
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.color, "#ff0000")
+
+    def test_the_refusal_explains_itself(self) -> None:
+        """The message is the response body, which is what the toast now shows."""
+        response = self._post("pin.bulk_edit", {"uuids": self._uuids(501)})
+        self.assertIn("Select at most 500 pins at a time.", response.content.decode())
+
+    def test_export_is_deliberately_not_limited(self) -> None:
+        response = self.client.post(
+            reverse("pin.bulk_export"),
+            data={"format": "csv", "uuids": [*self._uuids(600), str(self.pin.uuid)]},
+        )
+        self.assertEqual(response.status_code, 200)

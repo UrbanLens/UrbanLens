@@ -11,6 +11,7 @@ import datetime
 import json
 import os
 from typing import TYPE_CHECKING
+from unittest import mock
 
 from django.urls import reverse
 from django.utils import timezone
@@ -31,7 +32,8 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyContactOptOut,
     SafetyContactOptOutScope,
 )
-from urbanlens.dashboard.services.safety import _seal_archive_payload, archive_checkin, schedule_checkin_archival
+from urbanlens.dashboard.services.notifications.notifications import NotificationEvent
+from urbanlens.dashboard.services.visits.safety import MAX_ARCHIVE_ATTEMPTS, _seal_archive_payload, archive_checkin, schedule_checkin_archival
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -226,6 +228,71 @@ class ArchiveCheckinTests(TestCase):
         self.assertEqual(opt_out.checkin_id, self.checkin.pk)
 
 
+class ArchiveCheckinFailureCapTests(TestCase):
+    """archive_checkin's give-up-after-MAX_ARCHIVE_ATTEMPTS backstop for a checkin whose
+    archival keeps failing (docs/PROBLEMS.md: a corrupted MessagingKeyBundle.public_key
+    otherwise fails the same way on every 5-minute sweep forever, with no cap or alert).
+    """
+
+    def setUp(self):
+        self.owner = _profile()
+        self.checkin = _checkin(self.owner)
+        # Wrong-length key: fails nacl.public.PublicKey the same deterministic way a
+        # genuinely corrupted key would, on every attempt.
+        _enroll(self.owner, public_key=b"too-short-to-be-a-real-x25519-key")
+
+    def test_a_failed_attempt_raises_and_records_one_failure(self):
+        with self.assertRaises(Exception):
+            archive_checkin(self.checkin)
+
+        self.checkin.refresh_from_db()
+        self.assertEqual(self.checkin.archive_failure_count, 1)
+        self.assertIsNone(self.checkin.archive_failed_at)
+
+    def test_gives_up_after_max_attempts_and_is_excluded_from_future_sweeps(self):
+        self.checkin.archive_scheduled_at = timezone.now() - datetime.timedelta(minutes=1)
+        self.checkin.save(update_fields=["archive_scheduled_at"])
+
+        for _ in range(MAX_ARCHIVE_ATTEMPTS):
+            with self.assertRaises(Exception):
+                archive_checkin(self.checkin)
+
+        self.checkin.refresh_from_db()
+        self.assertEqual(self.checkin.archive_failure_count, MAX_ARCHIVE_ATTEMPTS)
+        self.assertIsNotNone(self.checkin.archive_failed_at)
+        self.assertNotIn(self.checkin.pk, list(SafetyCheckin.objects.due_for_archival().values_list("pk", flat=True)))
+
+    def test_does_not_alert_before_the_cap_is_reached(self):
+        with mock.patch("urbanlens.dashboard.services.notifications.notifications.notify") as mock_notify:
+            for _ in range(MAX_ARCHIVE_ATTEMPTS - 1):
+                with self.assertRaises(Exception):
+                    archive_checkin(self.checkin)
+
+        mock_notify.assert_not_called()
+
+    def test_alerts_the_admin_exactly_once_when_giving_up(self):
+        with mock.patch("urbanlens.dashboard.services.notifications.notifications.notify") as mock_notify:
+            for _ in range(MAX_ARCHIVE_ATTEMPTS):
+                with self.assertRaises(Exception):
+                    archive_checkin(self.checkin)
+
+        mock_notify.assert_called_once()
+        args, _kwargs = mock_notify.call_args
+        self.assertEqual(args[0], NotificationEvent.SAFETY_CHECKIN_ARCHIVAL_FAILED)
+
+    def test_further_calls_past_the_cap_do_not_keep_incrementing(self):
+        for _ in range(MAX_ARCHIVE_ATTEMPTS):
+            with self.assertRaises(Exception):
+                archive_checkin(self.checkin)
+
+        with mock.patch("urbanlens.dashboard.services.notifications.notifications.notify") as mock_notify, self.assertRaises(Exception):
+            archive_checkin(self.checkin)
+
+        self.checkin.refresh_from_db()
+        self.assertEqual(self.checkin.archive_failure_count, MAX_ARCHIVE_ATTEMPTS + 1)
+        mock_notify.assert_not_called()
+
+
 class ChatBlockedAfterArchivalTests(TestCase):
     """create_chat_message must reject new messages once a checkin is archived -
     otherwise plaintext could keep accumulating in SafetyCheckinMessage.body with no
@@ -240,7 +307,7 @@ class ChatBlockedAfterArchivalTests(TestCase):
         self.checkin.refresh_from_db()
 
     def test_owner_message_is_rejected_after_archival(self):
-        from urbanlens.dashboard.services.safety import create_chat_message
+        from urbanlens.dashboard.services.visits.safety import create_chat_message
 
         with self.assertRaisesMessage(ValueError, "concluded"):
             create_chat_message(self.checkin, user=self.owner.user, contact=None, body="One more thing")
@@ -254,7 +321,7 @@ class ChatBlockedAfterArchivalTests(TestCase):
         the ACCEPTED status flip must still happen, but no system chat message may be
         written into the already-archived (never-to-be-scrubbed-again) record.
         """
-        from urbanlens.dashboard.services.safety import accept_checkin_partner_invite
+        from urbanlens.dashboard.services.visits.safety import accept_checkin_partner_invite
 
         invitee = _profile()
         partner = SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=invitee, invited_by=self.owner)
@@ -271,7 +338,7 @@ class ChatBlockedAfterArchivalTests(TestCase):
         button) - hitting it again must be a clean no-op, not a fresh plaintext message
         into a record that already claims to have no more plaintext left.
         """
-        from urbanlens.dashboard.services.safety import mark_found_safe
+        from urbanlens.dashboard.services.visits.safety import mark_found_safe
 
         contact = SafetyCheckinContact.objects.create(checkin=self.checkin, email="watcher@example.com", name="Watcher")
 
@@ -280,7 +347,7 @@ class ChatBlockedAfterArchivalTests(TestCase):
         self.assertEqual(self.checkin.messages.count(), 0)
 
     def test_mark_found_safe_by_partner_after_archival_writes_no_plaintext_message(self):
-        from urbanlens.dashboard.services.safety import mark_found_safe_by_partner
+        from urbanlens.dashboard.services.visits.safety import mark_found_safe_by_partner
 
         partner_profile = _profile()
         SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=partner_profile, invited_by=self.owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
@@ -299,7 +366,7 @@ class ArchivePayloadMapDedupTests(TestCase):
 
     def test_a_map_that_is_both_primary_and_attached_is_only_listed_once(self):
         from urbanlens.dashboard.models.markup.model import MarkupMap
-        from urbanlens.dashboard.services.safety import _build_archive_payload
+        from urbanlens.dashboard.services.visits.safety import _build_archive_payload
 
         owner = _profile()
         checkin = _checkin(owner)

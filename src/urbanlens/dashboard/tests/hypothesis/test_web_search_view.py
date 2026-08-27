@@ -208,8 +208,7 @@ class SearchSubscriptionFeatureTests(TestCase):
     """Search subscription feature defaults."""
 
     def test_vip_defaults_grant_search_feature(self):
-        SubscriptionRole.ensure_defaults()
-
+        """The "vip" role is seeded by a migration, so it already exists here."""
         vip = SubscriptionRole.objects.get(slug="vip")
 
         self.assertTrue(vip.grants(SiteFeature.SEARCH))

@@ -3,10 +3,10 @@
 one) to invite the conversation partner to. Picking one stages it as a
 composer attachment - see `_share_pin_dialog.html`. Context: `partner`, `trips`.
 {% endcomment %}
-<dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="trip" data-field-name="trip_slug">
+<dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="trip" data-field-name="trip_slug" aria-labelledby="dm-share-dialog-title">
   <div class="dialog-header">
-    <span>Invite {{ partner.username }} to a trip</span>
-    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+    <span id="dm-share-dialog-title">Invite {{ partner.username }} to a trip</span>
+    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close">
       <i class="material-symbols-outlined">close</i>
     </button>
   </div>

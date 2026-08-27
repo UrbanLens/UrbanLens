@@ -28,7 +28,7 @@ from webauthn.registration.verify_registration_response import VerifiedRegistrat
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers import account as account_controllers
 from urbanlens.dashboard.models.account import WebAuthnCredential
-from urbanlens.dashboard.services import webauthn as webauthn_service
+from urbanlens.dashboard.services.auth import webauthn as webauthn_service
 
 
 def _request_with_session(path: str = "/", method: str = "get"):
@@ -441,7 +441,9 @@ class PasskeyRegistrationEndpointTests(TestCase):
         with patch("urbanlens.dashboard.controllers.webauthn.verify_and_save_registration", return_value=credential):
             response = self.client.post(reverse("settings.security.passkeys.register"), {"credential": "{}", "name": "Saved Key"})
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json(), {"ok": True, "name": "Saved Key"})
+        # The id is what lets an unlock enrollment delete a credential whose
+        # authenticator turns out not to support PRF.
+        self.assertEqual(response.json(), {"ok": True, "name": "Saved Key", "id": credential.pk})
 
     def test_both_endpoints_require_login(self) -> None:
         self.client.logout()

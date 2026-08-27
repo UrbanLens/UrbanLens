@@ -60,7 +60,7 @@ the cache plus a write-ahead outbox today (reads fall back to cache; offline
 mutations queue and replay in order on reconnect).
 
 **[r2] The r1 API design exists in v0.6.0** (`dashboard/external_api/`,
-`services/pin_sync.py`):
+`services/pins/pin_sync.py`):
 
 - `GET pins/` — cursor-paged sync feed ordered `(updated, pk)`:
   `modified_since` + opaque `cursor` → `{pins, next_cursor, sync_watermark}`;

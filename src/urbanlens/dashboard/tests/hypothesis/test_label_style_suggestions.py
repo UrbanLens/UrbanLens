@@ -90,7 +90,7 @@ def test_import_filename_label_uses_ai_style_for_new_label(monkeypatch: pytest.M
         ),
     )
     monkeypatch.setattr(
-        "urbanlens.dashboard.services.archive_extractor.validate_content_type",
+        "urbanlens.dashboard.services.import_export.archive_extractor.validate_content_type",
         lambda _filename, _raw_bytes: "csv",
     )
     monkeypatch.setattr(

@@ -31,7 +31,11 @@ class SettingsTosAcceptedDisplayTests(TestCase):
         response = self.client.get(reverse("settings.view"))
 
         self.assertContains(response, "Terms of Service accepted on")
-        self.assertContains(response, "Mar 4, 2025")
+        # The template formats with Django's "N", which is Associated Press
+        # style - AP does not abbreviate months of five letters or fewer, so
+        # March renders in full. (This asserted "Mar 4, 2025" and so never
+        # matched.)
+        self.assertContains(response, "March 4, 2025")
 
     def test_shows_a_fallback_when_not_recorded(self) -> None:
         self.user.profile.tos_accepted_at = None

@@ -277,11 +277,27 @@
             }
         });
 
+        // data-notif-url carries NotificationLog.url, the same unvalidated
+        // CharField _notification_push.html guards before navigating. These two
+        // sinks had no guard at all, so they were strictly less protected than
+        // the ones a scanner had already flagged. Same single-code-path check:
+        // let the browser's own parser decide, never a hand-rolled prefix test.
+        function notifUrlIfSameOrigin(url) {
+            if (typeof url !== 'string' || !url) return null;
+            try {
+                var parsed = new URL(url, window.location.origin);
+                var ok = (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.origin === window.location.origin;
+                return ok ? parsed.href : null;
+            } catch (err) {
+                return null;
+            }
+        }
+
         document.body.addEventListener('htmx:afterRequest', function (ev) {
             var elt = ev.detail.elt;
             if (!elt || !elt.classList || !elt.classList.contains('notif-item')) return;
             if (!ev.detail.successful) return;
-            var url = elt.dataset.notifUrl;
+            var url = notifUrlIfSameOrigin(elt.dataset.notifUrl);
             if (url && elt.classList.contains('notif-item--unread')) {
                 window.location = url;
             }
@@ -289,8 +305,9 @@
 
         document.getElementById('notif-dropdown-wrap').addEventListener('click', function (ev) {
             var item = ev.target.closest('.notif-item--link:not(.notif-item--unread)');
-            if (!item || !item.dataset.notifUrl) return;
-            window.location = item.dataset.notifUrl;
+            if (!item) return;
+            var target = notifUrlIfSameOrigin(item.dataset.notifUrl);
+            if (target) window.location = target;
         });
     }
 

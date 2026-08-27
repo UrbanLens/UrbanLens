@@ -22,7 +22,7 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 
 def _bearer(raw_key: str) -> dict:
@@ -67,7 +67,7 @@ class FriendMuteApiTests(TestCase):
         self._patch(True)
 
         self.friendship.refresh_from_db()
-        self.assertTrue(self.friendship.muted)
+        self.assertTrue(self.friendship.is_muted_by(self.profile))
         self.assertEqual(self.friendship.status, FriendshipStatus.ACCEPTED)
         # A staticmethod taking both profiles, not a bound instance method -
         # this is the gate that mute-as-a-status used to silently break.
@@ -82,7 +82,7 @@ class FriendMuteApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["is_muted"])
         self.friendship.refresh_from_db()
-        self.assertFalse(self.friendship.muted)
+        self.assertFalse(self.friendship.is_muted_by(self.profile))
         self.assertEqual(self.friendship.status, FriendshipStatus.ACCEPTED)
 
     def test_the_write_is_an_explicit_target_not_a_toggle(self) -> None:
@@ -92,7 +92,7 @@ class FriendMuteApiTests(TestCase):
         self._patch(True)
 
         self.friendship.refresh_from_db()
-        self.assertTrue(self.friendship.muted)
+        self.assertTrue(self.friendship.is_muted_by(self.profile))
 
     def test_a_body_without_is_muted_is_a_400(self) -> None:
         """Refuse rather than guess - guessing is how a toggle sneaks back in."""
@@ -120,7 +120,7 @@ class FriendMuteApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.friendship.refresh_from_db()
-        self.assertTrue(self.friendship.muted)
+        self.assertTrue(self.friendship.is_muted_by(self.profile))
 
     def test_a_read_only_credential_cannot_mute(self) -> None:
         """social:read must not imply social:write."""
@@ -131,4 +131,4 @@ class FriendMuteApiTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.friendship.refresh_from_db()
-        self.assertFalse(self.friendship.muted)
+        self.assertFalse(self.friendship.is_muted_by(self.profile))

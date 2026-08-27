@@ -249,7 +249,13 @@ _HOUSE_NUMBER_TOLERANCE = 1
 # Everyday punctuation kept as-is in sanitize_name (beyond letters/digits/space).
 # Deliberately excludes markup-significant characters (<, >, backtick, braces,
 # backslash, pipe, semicolon, ...) and symbols/emoji, which are dropped instead.
-_SAFE_NAME_PUNCTUATION: frozenset[str] = frozenset("-'.,&()/:!?\"#")
+#: Everyday name punctuation kept as-is. Underscore is included because it is a
+#: word character - not markup-significant, not a URL or query-string delimiter,
+#: and not a homograph - while being common in imported names ("Site_7", names
+#: derived from filenames or other tools' exports). Dropping it silently renamed
+#: those on save, a harsher outcome than for the riskier characters this set
+#: already permits.
+_SAFE_NAME_PUNCTUATION: frozenset[str] = frozenset("-'.,&()/:!?\"#_")
 
 # Typographic look-alikes folded to a plain-ASCII equivalent before filtering,
 # so e.g. a curly apostrophe survives sanitize_name instead of being dropped.

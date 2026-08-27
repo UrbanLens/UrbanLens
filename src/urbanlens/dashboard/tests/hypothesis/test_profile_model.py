@@ -6,8 +6,7 @@ DB-backed tests use django.test.TestCase with baker.
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
@@ -20,7 +19,6 @@ from urbanlens.dashboard.models.profile.model import (
     _haversine_km,
 )
 from urbanlens.dashboard.tests.hypothesis.strategies import lat_float, lon_float
-
 
 _hyp = settings(max_examples=100, deadline=None)
 _hyp_db = settings(max_examples=20, deadline=None)

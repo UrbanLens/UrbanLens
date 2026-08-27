@@ -10,19 +10,7 @@ Context: same as _saved_filter_form_dialog.html - saved_filter (optional),
 criteria, form, security_fields, security_level_choices, security_values,
 selected_tag_ids, selected_exclude_tag_ids, custom_field_values.
 {% endcomment %}
-<div class="form-row">
-    <label for="saved-filter-name">Filter name <span class="required">*</span></label>
-    <input type="text" name="filter_name" id="saved-filter-name" required maxlength="100"
-           value="{{ saved_filter.name|default:'' }}" placeholder="e.g. Unvisited 4-star spots" autocomplete="off">
-</div>
-<div class="form-row">
-    <label>Icon</label>
-    <div class="icon-picker-wrap">
-        {% with picker_id=saved_filter.uuid|default:"new" field_name="icon" show_upload=False %}
-        {% include "dashboard/partials/ui/_icon_picker.html" %}
-        {% endwith %}
-    </div>
-</div>
+{% include "dashboard/partials/pin_lists/_saved_filter_appearance_fields.html" %}
 <div class="form-row">
     <label for="saved-filter-name-contains">Pin name contains</label>
     <input type="text" name="name" id="saved-filter-name-contains" maxlength="150" autocomplete="off"
@@ -64,11 +52,11 @@ selected_tag_ids, selected_exclude_tag_ids, custom_field_values.
     <div class="fp-date-block" id="sf-visits-dates" style="display:none">
         <div class="fp-date-row">
             <span class="fp-date-label">After</span>
-            <input type="date" name="visited_after" id="sf-visited-after" class="fp-date-input" value="{{ criteria.visited_after|date:'Y-m-d'|default:'' }}">
+            <input type="date" name="visited_after" id="sf-visited-after" class="fp-date-input" value="{{ criteria.visited_after|date:'Y-m-d'|default:'' }}" aria-label="Visited on or after">
         </div>
         <div class="fp-date-row">
             <span class="fp-date-label">Before</span>
-            <input type="date" name="visited_before" id="sf-visited-before" class="fp-date-input" value="{{ criteria.visited_before|date:'Y-m-d'|default:'' }}">
+            <input type="date" name="visited_before" id="sf-visited-before" class="fp-date-input" value="{{ criteria.visited_before|date:'Y-m-d'|default:'' }}" aria-label="Visited on or before">
         </div>
     </div>
 </div>
@@ -76,41 +64,41 @@ selected_tag_ids, selected_exclude_tag_ids, custom_field_values.
 <div class="saved-filter-date-grid">
     <div class="form-row">
         <label for="id_created_after">Pinned after</label>
-        <input type="date" name="created_after" id="id_created_after" value="{{ criteria.created_after|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="created_after" id="id_created_after" value="{{ criteria.created_after|date:'Y-m-d'|default:'' }}" aria-label="Pinned on or after">
     </div>
     <div class="form-row">
         <label for="id_created_before">Pinned before</label>
-        <input type="date" name="created_before" id="id_created_before" value="{{ criteria.created_before|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="created_before" id="id_created_before" value="{{ criteria.created_before|date:'Y-m-d'|default:'' }}" aria-label="Pinned on or before">
     </div>
     <div class="form-row">
         <label for="id_date_built_after">Built after</label>
-        <input type="date" name="date_built_after" id="id_date_built_after" value="{{ criteria.date_built_after|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="date_built_after" id="id_date_built_after" value="{{ criteria.date_built_after|date:'Y-m-d'|default:'' }}" aria-label="Built on or after">
     </div>
     <div class="form-row">
         <label for="id_date_built_before">Built before</label>
-        <input type="date" name="date_built_before" id="id_date_built_before" value="{{ criteria.date_built_before|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="date_built_before" id="id_date_built_before" value="{{ criteria.date_built_before|date:'Y-m-d'|default:'' }}" aria-label="Built on or before">
     </div>
     <div class="form-row">
         <label for="id_date_abandoned_after">Abandoned after</label>
-        <input type="date" name="date_abandoned_after" id="id_date_abandoned_after" value="{{ criteria.date_abandoned_after|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="date_abandoned_after" id="id_date_abandoned_after" value="{{ criteria.date_abandoned_after|date:'Y-m-d'|default:'' }}" aria-label="Abandoned on or after">
     </div>
     <div class="form-row">
         <label for="id_date_abandoned_before">Abandoned before</label>
-        <input type="date" name="date_abandoned_before" id="id_date_abandoned_before" value="{{ criteria.date_abandoned_before|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="date_abandoned_before" id="id_date_abandoned_before" value="{{ criteria.date_abandoned_before|date:'Y-m-d'|default:'' }}" aria-label="Abandoned on or before">
     </div>
     <div class="form-row">
         <label for="id_last_viewed_after">Last viewed after</label>
-        <input type="date" name="last_viewed_after" id="id_last_viewed_after" value="{{ criteria.last_viewed_after|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="last_viewed_after" id="id_last_viewed_after" value="{{ criteria.last_viewed_after|date:'Y-m-d'|default:'' }}" aria-label="Last viewed on or after">
     </div>
     <div class="form-row">
         <label for="id_last_viewed_before">Last viewed before</label>
-        <input type="date" name="last_viewed_before" id="id_last_viewed_before" value="{{ criteria.last_viewed_before|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="last_viewed_before" id="id_last_viewed_before" value="{{ criteria.last_viewed_before|date:'Y-m-d'|default:'' }}" aria-label="Last viewed on or before">
     </div>
 </div>
 
 <div class="form-row">
     <label>Has links</label>
-    <select name="has_links" class="fp-select">
+    <select name="has_links" class="fp-select" aria-label="Has links">
         <option value="" {% if not criteria.has_links %}selected{% endif %}>Any</option>
         <option value="yes" {% if criteria.has_links == "yes" %}selected{% endif %}>Has links</option>
         <option value="no" {% if criteria.has_links == "no" %}selected{% endif %}>No links</option>

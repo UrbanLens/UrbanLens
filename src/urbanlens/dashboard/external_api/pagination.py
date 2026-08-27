@@ -1,6 +1,6 @@
 """Page-number pagination for the external API's *browse* list endpoints.
 
-Deliberately distinct from the pin sync feed (``services.pin_sync``, served by
+Deliberately distinct from the pin sync feed (``services.pins.pin_sync``, served by
 ``views.PinsView``/``PinTombstonesView``), which is cursor-based on
 ``(updated, pk)`` and hands back a watermark so a client can ask "what changed
 since?" and never miss a row that shifted position mid-walk. That feed must not
@@ -22,12 +22,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from django.db.models import QuerySet
 from rest_framework.pagination import PageNumberPagination
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from django.db.models import QuerySet
     from rest_framework.request import Request
     from rest_framework.response import Response
     from rest_framework.serializers import BaseSerializer
@@ -45,6 +45,55 @@ class ExternalApiPagination(PageNumberPagination):
     page_size = 25
     page_size_query_param = "page_size"
     max_page_size = 100
+
+
+def stable_ordering(queryset: QuerySet[Any] | list[Any]) -> QuerySet[Any] | list[Any]:
+    """Append a primary-key tie-break so paging cannot repeat or drop rows.
+
+    Page-number pagination is ``LIMIT``/``OFFSET`` underneath. Postgres may return
+    rows with equal sort keys in any order, and nothing obliges it to choose the
+    same order for the query behind page 2 as for page 1 - so with a tied ordering
+    a row can appear on both pages while another appears on neither, silently.
+    Several orderings in this project end in a plain ``CharField``
+    (``WikiOwner.name``, ``PinAlias.name``, ``Album.name``), which ties readily.
+
+    Left alone deliberately:
+
+    - **Lists.** Already materialised in a fixed order by their caller.
+    - **``distinct()`` queries.** ``SELECT DISTINCT`` requires every ``ORDER BY``
+      term to appear in the select list, so adding ``pk`` to a ``.values()``
+      projection that omits it is a database error, not a fix.
+    - **Aggregate queries.** Django folds ``ORDER BY`` terms into ``GROUP BY``;
+      appending ``pk`` would split every group into one row per row and change the
+      numbers the endpoint reports.
+    - **Orderings already ending in the primary key**, which are deterministic.
+    - **Sliced querysets.** Django raises ``TypeError: Cannot reorder a query once
+      a slice has been taken``, so reordering here would turn a working endpoint
+      into a 500. A caller that has already sliced has also already decided which
+      rows it wants, which is the thing pagination would otherwise be choosing.
+    - **Combined querysets** (``union``/``intersection``/``difference``), whose
+      ``ORDER BY`` may only name columns in the combined select list. ``pk`` is
+      usually there, but "usually" is not worth a 500 on an endpoint that works.
+
+    Args:
+        queryset: The rows about to be paginated, or a pre-built list.
+
+    Returns:
+        The same rows with a deterministic ordering, or the input unchanged when
+        one of the cases above applies.
+    """
+    if not isinstance(queryset, QuerySet):
+        return queryset
+    query = queryset.query
+    if query.distinct or query.distinct_fields or query.group_by:
+        return queryset
+    if query.is_sliced or query.combinator:
+        return queryset
+    meta = queryset.model._meta  # noqa: SLF001 - _meta is public API despite the underscore
+    ordering = list(query.order_by) or list(meta.ordering or [])
+    if any(term.lstrip("-") in ("pk", meta.pk.name) for term in ordering if isinstance(term, str)):
+        return queryset
+    return queryset.order_by(*ordering, "pk")
 
 
 class PaginatedListMixin:
@@ -72,8 +121,10 @@ class PaginatedListMixin:
         """Serialize one page of *queryset* into the standard envelope.
 
         Args:
-            queryset: The ordered rows to page through. Must have a
-                deterministic ordering, or pages will overlap and drop rows.
+            queryset: The rows to page through. A primary-key tie-break is
+                appended by ``stable_ordering`` where it is safe to do so, so a
+                caller whose ordering ties does not silently lose rows across
+                pages; see that function for the cases it must leave alone.
             serializer_class: The serializer to apply to the page, instantiated
                 with ``many=True``.
             request: The request whose ``page``/``page_size`` params drive
@@ -98,7 +149,7 @@ class PaginatedListMixin:
             page.
         """
         paginator = self.pagination_class()
-        page = paginator.paginate_queryset(queryset, request, view=self)
+        page = paginator.paginate_queryset(stable_ordering(queryset), request, view=self)
         rows = [row_builder(item) for item in page] if row_builder is not None else page
         serializer = serializer_class(rows, many=True, context=context or {})
         return paginator.get_paginated_response(serializer.data)

@@ -35,15 +35,34 @@
     </div>
 
     <div class="form-field">
-        <label class="form-label" for="merge-target-select">Target {{ singular_title|lower }}</label>
-        <select name="target_label_id" id="merge-target-select" class="form-input" required>
-            <option value="">- Select a {{ singular_title|lower }} -</option>
+        <label class="form-label" for="merge-target-search">Target {{ singular_title|lower }}</label>
+        <input type="search" id="merge-target-search" class="dialog-search"
+               placeholder="Search by name..." autocomplete="off">
+        <input type="hidden" name="target_label_id" id="merge-target-id">
+        <ul class="tag-dialog-list" id="merge-target-list">
             {% for candidate in candidates %}
-            <option value="{{ candidate.id }}">
-                {{ candidate.name }}{% if kind == 'tag' and not candidate.profile %} (global){% endif %}
-            </option>
+            <li class="tag-dialog-item" data-name="{{ candidate.name|lower }}">
+                <button type="button" class="tag-dialog-btn" data-id="{{ candidate.id }}">
+                    <span class="tag-dialog-icon">
+                        {% if candidate.custom_icon and not candidate.icon_is_overridden %}
+                        <img src="{{ candidate.custom_icon.url }}" alt="" style="width:16px;height:16px;object-fit:cover;border-radius:50%">
+                        {% elif candidate.icon %}
+                            {% if candidate.icon|is_material_icon %}
+                            <i class="material-icons" style="font-size:16px{% if candidate.color %};color:{{ candidate.color }}{% endif %}">{{ candidate.icon }}</i>
+                            {% else %}
+                            <span>{{ candidate.icon }}</span>
+                            {% endif %}
+                        {% else %}
+                        <i class="material-icons" style="font-size:16px;opacity:.3">{{ empty_icon }}</i>
+                        {% endif %}
+                    </span>
+                    <span class="tag-dialog-name">{{ candidate.name }}{% if kind == 'tag' and candidate.is_global %} (global){% endif %}</span>
+                </button>
+            </li>
+            {% empty %}
+            <li class="tag-dialog-item"><p class="form-hint">No other {{ singular_title|lower }} to merge into.</p></li>
             {% endfor %}
-        </select>
+        </ul>
         <p class="tag-merge-warning">
             {% if show_location_count %}
             All pins and locations in <strong>{{ label.name }}</strong> will be moved to the selected {{ singular_title|lower }}, then
@@ -55,7 +74,8 @@
     </div>
 
     <div class="tag-form-actions">
-        <button type="button" class="btn btn--primary" data-merge-name="{{ label.name|escapejs }}"
+        <button type="button" class="btn btn--primary" id="merge-submit-btn" disabled
+                data-merge-name="{{ label.name|escapejs }}"
                 onclick="(async function(btn){ if(await confirmDialog({title:'Merge {{ singular_title }}',message:'Merge &quot;'+btn.dataset.mergeName+'&quot; into the selected {{ singular_title|lower }}?\n\nThis cannot be undone.',confirmLabel:'Merge'})) btn.closest('form').requestSubmit(); })(this)">
             <i class="material-icons" style="font-size:1rem;vertical-align:middle;">merge</i>
             Merge
@@ -63,4 +83,33 @@
         <button type="button" class="btn btn--ghost"
                 onclick="this.closest('dialog').close()">Cancel</button>
     </div>
+
+    <script>
+    (function() {
+        var list = document.getElementById('merge-target-list');
+        var search = document.getElementById('merge-target-search');
+        var hiddenInput = document.getElementById('merge-target-id');
+        var submitBtn = document.getElementById('merge-submit-btn');
+        if (!list) return;
+
+        list.querySelectorAll('.tag-dialog-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                list.querySelectorAll('.tag-dialog-btn').forEach(function(b) { b.classList.remove('tag-dialog-btn--selected'); });
+                btn.classList.add('tag-dialog-btn--selected');
+                hiddenInput.value = btn.dataset.id;
+                if (submitBtn) submitBtn.disabled = false;
+            });
+        });
+
+        if (search) {
+            search.addEventListener('input', function() {
+                var q = search.value.toLowerCase().trim();
+                list.querySelectorAll('.tag-dialog-item').forEach(function(item) {
+                    var name = item.dataset.name || '';
+                    item.hidden = !(!q || name.indexOf(q) !== -1);
+                });
+            });
+        }
+    })();
+    </script>
 </form>

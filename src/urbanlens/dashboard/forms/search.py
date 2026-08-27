@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from functools import partial
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django import forms
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.services.custom_field_references import resolve_reference
+from urbanlens.dashboard.services.custom_fields.custom_field_references import resolve_reference
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
@@ -252,7 +252,7 @@ class SearchForm(forms.Form):
             geojson = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
             return None
-        from urbanlens.dashboard.services.geo import parse_multipolygon_geojson
+        from urbanlens.dashboard.services.geo.geo import parse_multipolygon_geojson
 
         try:
             return parse_multipolygon_geojson(geojson)
@@ -284,7 +284,12 @@ class SearchForm(forms.Form):
                     # always positive (Django's default auto-incrementing PK), so a
                     # negative id never occurs for a real label in practice, and this
                     # function's contract is to never raise on malformed input.
-                    validated.append({"op": op, "ids": [int(i) for i in ids if str(i).isdigit()]})
+                    group: dict[str, Any] = {"op": op, "ids": [int(i) for i in ids if str(i).isdigit()]}
+                    # Only meaningful on an "or" group - see
+                    # PinQuerySet.apply_label_groups.
+                    if op == "or" and str(g.get("min_priority") or "").isdigit():
+                        group["min_priority"] = int(g["min_priority"])
+                    validated.append(group)
             return validated or None
         except (json.JSONDecodeError, TypeError, ValueError):
             return None

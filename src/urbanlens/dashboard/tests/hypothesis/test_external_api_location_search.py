@@ -16,9 +16,9 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.map_pins.autocomplete import AutocompleteResult
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 _SEARCH_URL = "/dashboard/api/external/v1/locations/search/"
 _RESOLVE_URL = "/dashboard/api/external/v1/locations/resolve/"

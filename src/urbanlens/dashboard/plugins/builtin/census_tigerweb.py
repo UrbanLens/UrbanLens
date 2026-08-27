@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 
 class CensusTigerwebPanelSource(CoordinateGatedInfoPanelSource):
@@ -57,7 +57,7 @@ class CensusTigerwebPanelSource(CoordinateGatedInfoPanelSource):
         if tribal_land and tribal_land.get("name"):
             facts.append({"icon": "warning", "text": f"Within {tribal_land['name']} - tribal land, access rules may differ"})
 
-        return {"facts": facts, "meta": meta, "nested": True}
+        return {"facts": facts, "meta": meta}
 
 
 class CensusTigerwebPlugin(UrbanLensPlugin):

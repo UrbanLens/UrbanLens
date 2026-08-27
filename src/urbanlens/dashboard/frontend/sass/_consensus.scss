@@ -1,317 +1,330 @@
 // Consensus - wiki-data-completion game: gameplay, competitive lobby, and chat.
-// Mirrors _spotguessr.scss/_trivia.scss's structure and reuses the sitewide
-// card/button/panel base classes - only Consensus-specific layout lives here.
+//
+// Layout, chrome and motion come from `game_shell`; what stays here is the
+// Consensus-specific arrangement (the answer widgets, the lifetime-progression
+// HUD badge) plus one-line mixin includes that give the class names the
+// TypeScript writes their shared appearance.
 @use 'variables' as *;
+@use 'game_shell' as shell;
 
 .consensus-page {
-    max-width: 900px;
-    margin: 1.25rem auto;
-    padding: 0 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-
-    // Author CSS always beats the UA stylesheet's [hidden] { display: none },
-    // regardless of specificity - several elements below set an explicit
-    // display (flex/grid) with no [hidden] override, so this guarantees
-    // `hidden` always wins on this page (see _spotguessr.scss for the same
-    // note).
+    // Belt and braces alongside `.ul-game [hidden]`: several elements below set
+    // an explicit display, which beats the UA stylesheet's [hidden] rule
+    // regardless of specificity.
     [hidden] {
         display: none !important;
     }
-}
 
-.consensus-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem 1.25rem;
-}
+    // The game's calls to action read as game buttons, not as "Save profile".
+    .ul-game-cta {
+        @include shell.cta;
+    }
 
-.consensus-header-title {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    font-size: 1.25rem;
-    font-weight: 600;
-}
+    // The rail is a grid item with `grid-area: rail`, which only exists while
+    // the shell is rail-open; without this it auto-places into an implicit row
+    // under the stage at >=md.
+    @include up($breakpoint-md) {
+        .ul-game-shell:not(.is-rail-open) .ul-game-rail {
+            display: none;
+        }
+    }
 
-.consensus-points-chip {
-    display: flex;
-    align-items: baseline;
-    gap: .5rem;
-    margin-left: auto;
-    padding: .35rem .75rem;
-    border-radius: .5rem;
-    background: var(--ul-surface-2);
-    font-size: .85rem;
-}
-
-.consensus-points-label {
-    font-weight: 700;
-}
-
-.consensus-points-value {
-    font-weight: 600;
-}
-
-.consensus-points-next {
-    opacity: .7;
-    font-size: .75rem;
-}
-
-.consensus-panel {
-    padding: 1.25rem;
-    animation: consensus-fade-in .3s ease-out;
-}
-
-.consensus-panel-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: .5rem;
-
-    h2 {
-        margin: 0;
+    // Text-only rounds (name / description / choice) hide both the photo and
+    // the map, so the answer column takes the whole stage and centres in it.
+    // align-items (not align-content) so the dock keeps its content height and
+    // its own max-height/overflow can take over once it outgrows the track.
+    .ul-game-stage--single .ul-game-stage__play {
+        grid-template-rows: minmax(0, 1fr);
+        align-items: center;
     }
 }
 
-.consensus-panel-hint {
-    opacity: .75;
-    font-size: .9rem;
+// -- Launcher ------------------------------------------------------------------
+
+// The card surface, width and padding come from `.ul-game-panel--launcher`, so
+// all three games open on the same treatment.
+.consensus-launcher {
+    display: flex;
+    flex-direction: column;
+    gap: $space-sm;
 }
 
-// -- Settings/start form ---------------------------------------------------
+.consensus-panel-hint {
+    @include shell.hint;
+}
 
 #cs-start-form {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    margin-top: .75rem;
+    gap: $space-md;
+    margin-top: $space-sm;
 }
 
 .consensus-field {
     display: flex;
     flex-direction: column;
-    gap: .35rem;
+    gap: $space-xs;
     max-width: 12rem;
 }
 
 .consensus-invite-wrap {
     display: flex;
     flex-direction: column;
-    gap: .5rem;
-    padding: .75rem;
-    border-radius: .5rem;
+    gap: $space-sm;
+    padding: $space-sm;
+    border-radius: $radius-sm;
     background: var(--ul-surface-2);
+    border: 1px solid var(--ul-surface-2-border);
 }
 
 .consensus-friend-list {
     display: flex;
     flex-direction: column;
-    gap: .35rem;
-    max-height: 200px;
+    gap: $space-xs;
+    max-height: 12rem;
     overflow-y: auto;
 
     label {
         display: flex;
         align-items: center;
-        gap: .5rem;
+        gap: $space-sm;
     }
 }
 
-// -- Empty state ------------------------------------------------------------
-
-.consensus-empty-state-icon {
-    font-size: 2.5rem;
-    opacity: .5;
-    display: block;
-    margin: 0 auto .5rem;
-}
+// -- Empty state ---------------------------------------------------------------
 
 #cs-empty-state-panel {
-    text-align: center;
-    display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: .75rem;
+    text-align: center;
+    gap: $space-md;
 }
 
-// -- Lobby --------------------------------------------------------------------
+.consensus-empty-state-icon {
+    @include shell.empty-icon;
+}
+
+// -- Lobby ----------------------------------------------------------------------
 
 .consensus-lobby-list {
-    list-style: none;
-    margin: .75rem 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: .35rem;
-
-    li {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: .5rem .75rem;
-        border-radius: .4rem;
-        background: var(--ul-surface-2);
-    }
+    @include shell.lobby-list;
 }
 
 .consensus-lobby-status {
-    font-size: .75rem;
-    padding: .15rem .5rem;
-    border-radius: 1rem;
-    background: var(--ul-surface-3);
-
-    &--joined {
-        background: rgba(46, 160, 67, .2);
-    }
+    @include shell.lobby-status;
 }
 
 .consensus-lobby-actions {
-    display: flex;
-    gap: .75rem;
-    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
-// -- Gameplay ---------------------------------------------------------------
-
-.consensus-game-status {
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-    font-weight: 600;
-    margin-bottom: .75rem;
-}
+// -- HUD progression -------------------------------------------------------------
+// Lifetime level/points, not the session score - the one place the player sees
+// what a game actually earned them.
 
 .consensus-round-live-indicator {
-    font-size: .75rem;
-    font-weight: 500;
-    opacity: .7;
+    @include shell.live;
+}
+
+.consensus-progression {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+        'badge figures'
+        'meter meter';
+    align-items: center;
+    gap: $space-xs $space-sm;
+    padding: $space-xs $space-sm;
+    border-radius: $radius-sm;
+    border: 1px solid var(--ul-game-accent-line);
+    background: var(--ul-game-accent-soft);
+    min-width: 0;
+}
+
+.consensus-level-badge {
+    grid-area: badge;
+    @include flex-center;
+    min-width: 1.9rem;
+    height: 1.9rem;
+    padding: 0 $space-xs;
+    border-radius: $radius-full;
+    background: var(--ul-game-accent);
+    color: var(--ul-game-accent-contrast);
+    font-weight: 800;
+    font-size: .9rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.consensus-progression-figures {
+    grid-area: figures;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.15;
+}
+
+.consensus-progression-points {
+    display: inline-flex;
+    align-items: baseline;
+    gap: .2rem;
+}
+
+.consensus-progression-unit {
+    font-size: .7rem;
+    color: var(--ul-grey-6);
+}
+
+.consensus-progression-next {
+    font-size: .68rem;
+    color: var(--ul-grey-6);
+    @include truncate;
+
+    &:empty {
+        display: none;
+    }
+}
+
+.consensus-level-meter {
+    grid-area: meter;
+    height: 3px;
+    border-radius: $radius-full;
+    overflow: hidden;
+    background: var(--ul-surface-3);
+}
+
+.consensus-level-meter-fill {
+    display: block;
+    height: 100%;
+    width: 100%;
+    background: var(--ul-game-accent);
+    transform: scaleX(var(--consensus-level-progress, 0));
+    transform-origin: left;
+    transition: transform var(--ul-game-dur-panel) var(--ul-game-ease-move);
+}
+
+@include down($breakpoint-sm) {
+    .consensus-progression-figures,
+    .consensus-level-meter {
+        display: none;
+    }
+
+    .consensus-progression {
+        grid-template-columns: auto;
+        grid-template-areas: 'badge';
+        border: 0;
+        background: none;
+        padding: 0;
+    }
+}
+
+// -- Gameplay ---------------------------------------------------------------------
+
+.consensus-dock {
+    flex-direction: column;
+    align-items: stretch;
+    gap: $space-sm;
+    width: 100%;
+    max-width: 44rem;
+    margin-inline: auto;
+    max-height: 100%;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 .consensus-round-field-label {
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    font-size: .75rem;
-    opacity: .65;
-    margin: 0 0 .15rem;
+    text-align: center;
 }
 
 .consensus-round-wiki-name {
-    margin: 0 0 .75rem;
-    font-size: 1.4rem;
-}
-
-.consensus-round-photo {
-    width: 100%;
-    max-height: 360px;
-    object-fit: contain;
-    border-radius: .5rem;
-    background: var(--ul-surface-2);
-    margin-bottom: .75rem;
-    animation: consensus-fade-in .3s ease-out;
-}
-
-.consensus-round-map {
-    height: 260px;
-    border-radius: .5rem;
-    overflow: hidden;
-    margin-bottom: 1rem;
+    @include shell.clue;
 }
 
 .consensus-answer-area {
     display: flex;
     flex-direction: column;
-    gap: .5rem;
-    margin-bottom: 1rem;
+    gap: $space-sm;
 }
 
 .consensus-answer-group {
     display: flex;
     flex-direction: column;
-    gap: .35rem;
+    gap: $space-xs;
 
     input[type='text'],
     textarea,
     select {
         width: 100%;
     }
+
+    @include shell.hideable;
 }
 
 .consensus-round-actions {
     display: flex;
-    gap: .75rem;
     flex-wrap: wrap;
-    margin-bottom: .5rem;
+    align-items: center;
+    gap: $space-sm;
 }
 
 .consensus-photo-upload {
-    margin-top: 1rem;
-    padding-top: .75rem;
-    border-top: 1px solid var(--ul-border);
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: .5rem;
+    gap: $space-sm;
+    padding-top: $space-sm;
+    border-top: 1px solid var(--ul-surface-border);
 
     p {
         flex-basis: 100%;
-        margin: 0 0 .25rem;
     }
 }
 
-// -- Reveal / vote ------------------------------------------------------------
+// The label is the drop target; the upload button sits outside it so clicking
+// "Upload photo" cannot also re-open the file picker via label activation.
+.consensus-dropzone {
+    @include shell.dropzone;
+    flex: 1 1 14rem;
+    min-width: 0;
 
-.consensus-reveal-panel {
-    margin-top: 1.25rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--ul-border);
-    animation: consensus-fade-in .3s ease-out;
+    i {
+        color: var(--ul-game-accent-ink);
+    }
 
-    h3 {
-        text-align: center;
+    span {
+        @include truncate;
+        font-size: .85rem;
     }
 }
+
+// -- Reveal / vote --------------------------------------------------------------------
+// Nothing here may vary by resolution - see the template's note.
 
 .consensus-reveal-results {
-    list-style: none;
-    margin: .75rem 0 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: .35rem;
+    @include shell.scorelist;
+    text-align: left;
 }
 
 .consensus-vote-panel {
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px dashed var(--ul-border);
+    display: flex;
+    flex-direction: column;
+    gap: $space-sm;
+    padding-top: $space-sm;
+    border-top: 1px dashed var(--ul-surface-border);
+    text-align: left;
+
+    @include shell.hideable;
 }
 
 .consensus-vote-options {
     display: flex;
     flex-direction: column;
-    gap: .5rem;
-    margin-top: .5rem;
+    gap: $space-sm;
+
+    @include shell.hideable;
 }
 
 .consensus-vote-option {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: .15rem;
-    padding: .6rem .85rem;
-    border-radius: .5rem;
-    border: 1px solid var(--ul-surface-2-border);
-    background: var(--ul-surface-2);
-    text-align: left;
-    cursor: pointer;
-    width: 100%;
-
-    &:hover:not(:disabled) {
-        border-color: var(--ul-primary-color);
-    }
+    @include shell.vote-option;
 
     &:disabled {
         opacity: .6;
@@ -325,35 +338,30 @@
 
 .consensus-vote-option-submitted-by {
     font-size: .75rem;
-    opacity: .7;
+    color: var(--ul-grey-6);
 }
 
-// -- Score card -----------------------------------------------------------------
-// Shared row used by the reveal results list, the live scoreboard, and the
-// summary panel.
+// -- Score card -------------------------------------------------------------------------
+// One row shape for the reveal results, the live scoreboard and the summary.
+// Three separate TS builders emit it with three children each: either
+// avatar/info/points or rank/name/points.
 
 .consensus-score-card {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    padding: .35rem .6rem;
-    border-radius: .5rem;
-    background: var(--ul-surface-2);
-    font-size: .85rem;
+    @include shell.score-row;
+    grid-template-columns: auto minmax(0, 1fr) auto;
 
     &--solo {
-        justify-content: center;
+        grid-template-columns: minmax(0, 1fr);
+        justify-items: center;
         font-weight: 600;
         font-size: 1rem;
         background: none;
+        border-color: transparent;
     }
 }
 
 .consensus-score-card-rank {
-    font-weight: 700;
-    min-width: 1.5rem;
-    text-align: center;
-    opacity: .7;
+    @include shell.score-rank;
 }
 
 .consensus-score-card-avatar-wrap {
@@ -364,121 +372,68 @@
 .consensus-score-card-info {
     display: flex;
     flex-direction: column;
-    flex: 1;
     min-width: 0;
 }
 
 .consensus-score-card-name {
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    @include shell.score-name;
 }
 
 .consensus-score-card-subtitle {
-    font-size: .75rem;
-    opacity: .7;
-
-    &:empty {
-        display: none;
-    }
+    @include shell.score-subtitle;
 }
 
 .consensus-score-card-points {
-    font-weight: 700;
+    @include shell.score-points;
     white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-    margin-left: auto;
 }
 
 .consensus-scoreboard {
-    list-style: none;
-    margin: 0 0 1rem;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: .5rem;
+    @include shell.scorelist;
 }
 
-// -- Summary/recap panel --------------------------------------------------------
+// -- Summary ------------------------------------------------------------------------------
 
 .consensus-summary-panel {
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: .25rem;
+    gap: $space-sm;
+    overflow-y: auto;
 
     .consensus-scoreboard {
-        justify-content: center;
-        margin-top: .75rem;
+        width: 100%;
+        margin-top: $space-sm;
+        text-align: left;
     }
 
     .btn {
-        margin-top: 1rem;
+        margin-top: $space-md;
     }
 }
 
 .consensus-summary-icon {
-    font-size: 2.75rem;
-    color: $color-indigo-500;
-    animation: consensus-summary-icon-pop .5s cubic-bezier(.34, 1.56, .64, 1);
+    @include shell.summary-icon;
 }
 
-@keyframes consensus-summary-icon-pop {
-    0% {
-        opacity: 0;
-        transform: scale(.4) rotate(-15deg);
-    }
+// -- Mid-game invite dialog ---------------------------------------------------------------------
+// Built in JS and mounted into the shell so it stays painted in true fullscreen;
+// dialog-base sets padding: 0, so the body supplies its own.
 
-    100% {
-        opacity: 1;
-        transform: scale(1) rotate(0);
+.consensus-invite-more-dialog {
+    .consensus-friend-list {
+        padding: $space-md;
+        max-height: 16rem;
     }
 }
 
-// -- Chat ---------------------------------------------------------------------
-
-.consensus-chat-panel {
-    margin-top: 1.25rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--ul-border);
-    display: flex;
-    flex-direction: column;
-    gap: .5rem;
-}
+// -- Chat ------------------------------------------------------------------------------------
 
 .consensus-chat-log {
-    max-height: 160px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: .25rem;
-    font-size: .85rem;
+    @include shell.chat-log;
 
     .consensus-chat-username {
-        font-weight: 600;
-        margin-right: .35rem;
+        @include shell.chat-username;
     }
 }
 
 .consensus-chat-form {
-    display: flex;
-    gap: .5rem;
-
-    input {
-        flex: 1;
-    }
-}
-
-@keyframes consensus-fade-in {
-    from {
-        opacity: 0;
-        transform: translateY(6px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    @include shell.chat-form;
 }

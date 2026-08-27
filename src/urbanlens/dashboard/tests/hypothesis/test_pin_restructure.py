@@ -16,6 +16,7 @@ external service is contacted.
 
 from __future__ import annotations
 
+from unittest import mock
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -30,8 +31,10 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services import pin_restructure
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE, is_site_scope
+from urbanlens.dashboard.services.pins import pin_restructure
+
+from .place_helpers import official_geometry
 
 _coord_counter = 0
 
@@ -137,7 +140,7 @@ class NestableRootPinTests(TestCase):
         self.profile = self.user.profile
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.profile, location=self.location, slug="campus")
-        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_parcel_polygon())
+        official_geometry(self.location, _parcel_polygon())
 
     def _root_pin_at(self, latitude: float, longitude: float, **kwargs) -> Pin:
         return baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=latitude, longitude=longitude, google_place=None), **kwargs)
@@ -193,8 +196,18 @@ class RestructureOfferGatingTests(TestCase):
         self.assertContains(response, "Tool Shed")
 
     def test_offered_even_when_only_one_building_is_unpinned(self) -> None:
-        """Any building this would create and the user doesn't have is worth offering."""
-        for building in _BUILDINGS[1:]:
+        """Any building this would create and the user doesn't have is worth offering.
+
+        Pins the *outer* two, leaving "Main Hall" - deliberately not
+        ``_BUILDINGS[1:]``, which would leave Main Hall unpinned while parking a
+        pin on its exact centroid (it sits inside the Tool Shed footprint, so
+        that pin footprint-matches the shed and leaves the hall unmatched).
+        ``resolve_child_pin_location`` refuses a second pin at one point, so
+        that arrangement is one where the offered building genuinely cannot be
+        created - covered by ``BuildingUnderExistingRootPinTests`` - and is the
+        wrong fixture for asserting that a creatable building is still offered.
+        """
+        for building in (_BUILDINGS[0], _BUILDINGS[2]):
             baker.make(
                 Pin,
                 profile=self.user.profile,
@@ -235,17 +248,17 @@ class RestructureOfferGatingTests(TestCase):
 
     def test_an_uncached_parcel_polls_instead_of_blocking(self) -> None:
         pin = baker.make(Pin, profile=self.user.profile, location=_make_location(), slug="unknown-parcel")
-        with patch("urbanlens.dashboard.services.external_data.schedule_panel_fetch", return_value=True):
+        with patch("urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch", return_value=True):
             response = self.client.get(reverse("pin.restructure.offer", kwargs={"pin_slug": pin.slug}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "attempt=1")
 
     def test_a_spent_poll_budget_still_offers_whatever_is_known(self) -> None:
         """Nesting doesn't depend on the building lookup, so a slow REData mustn't hide it."""
-        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS
 
         pin = baker.make(Pin, profile=self.user.profile, location=_make_location(), slug="slow-parcel")
-        Boundary.objects.create(location=pin.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_parcel_polygon())
+        official_geometry(pin.location, _parcel_polygon())
         baker.make(Pin, profile=self.user.profile, location=baker.make(Location, latitude=41.7330, longitude=-73.9300, google_place=None), name="Inside")
 
         response = self.client.get(reverse("pin.restructure.offer", kwargs={"pin_slug": pin.slug}), {"attempt": str(MAX_POLL_ATTEMPTS)})
@@ -270,7 +283,7 @@ class RestructureOfferContentTests(TestCase):
         self.client.force_login(self.user)
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
-        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_parcel_polygon())
+        official_geometry(self.location, _parcel_polygon())
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
         baker.make(Pin, profile=self.user.profile, location=baker.make(Location, latitude=41.7338, longitude=-73.9306, google_place=None), name="Gatehouse")
         self.url = reverse("pin.restructure.offer", kwargs={"pin_slug": self.pin.slug})
@@ -287,6 +300,11 @@ class RestructureOfferContentTests(TestCase):
         self.assertContains(response, reverse("pin.restructure.apply", kwargs={"pin_slug": self.pin.slug}))
         self.assertContains(response, reverse("pin.restructure.dismiss", kwargs={"pin_slug": self.pin.slug}))
         self.assertContains(response, "scope=all")
+
+    def test_organize_button_loads_the_building_picker_instead_of_posting(self) -> None:
+        body = self.client.get(self.url).content.decode()
+        self.assertIn(f'hx-get="{reverse("pin.restructure.apply", kwargs={"pin_slug": self.pin.slug})}"', body)
+        self.assertNotIn(f'hx-post="{reverse("pin.restructure.apply", kwargs={"pin_slug": self.pin.slug})}"', body)
 
 
 class RestructureDismissTests(TestCase):
@@ -323,7 +341,7 @@ class RestructureApplyTests(TestCase):
         self.client.force_login(self.user)
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
-        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_parcel_polygon())
+        official_geometry(self.location, _parcel_polygon())
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
         self.stray = baker.make(
             Pin,
@@ -339,6 +357,24 @@ class RestructureApplyTests(TestCase):
         self.stray.refresh_from_db()
         self.assertEqual(self.stray.parent_pin_id, self.pin.pk)
         self.assertEqual(self.pin.detail_pins.filter(pin_type=PinType.BUILDING).count(), 3)
+
+    def test_get_renders_a_checked_building_list_and_map(self) -> None:
+        response = self.client.get(self.url)
+        self.assertContains(response, 'id="building-import-map"')
+        self.assertContains(response, 'name="building_keys"', count=3)
+        self.assertContains(response, "Tool Shed")
+        self.assertContains(response, "Main Hall")
+        self.assertContains(response, "Organize property")
+
+    def test_only_selected_buildings_are_created_but_existing_pins_are_still_nested(self) -> None:
+        response = self.client.get(self.url)
+        selected_key = response.context["rows"][0]["selection_key"]
+
+        self.client.post(self.url, {"building_selection": "1", "building_keys": selected_key})
+
+        self.stray.refresh_from_db()
+        self.assertEqual(self.stray.parent_pin_id, self.pin.pk)
+        self.assertEqual(self.pin.detail_pins.filter(pin_type=PinType.BUILDING).count(), 1)
 
     def test_a_nested_pin_keeps_everything_about_itself(self) -> None:
         """Nesting re-parents; it never merges or renames."""
@@ -386,13 +422,28 @@ class RestructureApplyTests(TestCase):
         created = self.pin.detail_pins.filter(pin_type=PinType.BUILDING).select_related("location")
         self.assertEqual(len({(str(c.location.latitude), str(c.location.longitude)) for c in created}), 3)
 
+    def test_created_pins_default_to_a_legible_icon_and_background(self) -> None:
+        """The generic per-type default (grey icon, no background) is unreadable on satellite imagery."""
+        self.client.post(self.url)
+        created = self.pin.detail_pins.filter(pin_type=PinType.BUILDING)
+        for pin in created:
+            self.assertEqual(pin.color, "#000000")
+            self.assertEqual(pin.detail_bg_color, "#ffffff")
+            self.assertGreater(pin.detail_bg_opacity, 0)
+
     def test_another_users_pin_is_not_reachable(self) -> None:
         other = baker.make(Pin, profile=baker.make(User).profile, location=_make_location(), slug="not-mine")
         self.assertEqual(self.client.post(reverse("pin.restructure.apply", kwargs={"pin_slug": other.slug})).status_code, 404)
 
 
 class RestructureWikiMirrorTests(TestCase):
-    """Child wikis are contributed only when a community wiki already exists."""
+    """The wiki mirror, which now runs *after* the request that triggered it.
+
+    The pin side has already succeeded by the time the mirror runs, so it was
+    moved onto a task: a wiki-side failure used to surface as a 500 for work
+    that was done (docs/PROBLEMS.md, 2026-08-18). These therefore exercise the
+    mirror directly, and the view's job is only to enqueue it.
+    """
 
     def setUp(self) -> None:
         super().setUp()
@@ -403,25 +454,46 @@ class RestructureWikiMirrorTests(TestCase):
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
         self.url = reverse("pin.restructure.apply", kwargs={"pin_slug": self.pin.slug})
 
-    def test_no_wiki_means_no_wiki_is_created(self) -> None:
-        self.client.post(self.url)
-        self.assertFalse(Wiki.objects.filter(location=self.location).exists())
+    def _mirror(self) -> int:
+        return pin_restructure.mirror_buildings_to_wiki(self.pin, _BUILDINGS, self.user.profile)
+
+    def test_the_view_enqueues_the_mirror_rather_than_running_it(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            self.client.post(self.url)
+
+        self.assertTrue(any("mirror_buildings" in getattr(call.args[0], "name", "") for call in enqueue.call_args_list), "the building import must hand the wiki mirror to a task")
+
+    def test_a_place_with_no_wiki_gains_one_to_hang_the_buildings_off(self) -> None:
+        """This used to assert the mirror created a *draft* rather than a published
+        page. Every place has a published page now, so the mirror publishes nothing
+        that was not already there - what is left to check is that it makes one when
+        the background task has not yet.
+        """
+        self._mirror()
+
+        self.assertTrue(Wiki.objects.filter(location=self.location).exists())
 
     def test_an_existing_wiki_gets_matching_child_wikis(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
-        self.client.post(self.url)
+
+        self._mirror()
+
         self.assertEqual(wiki.child_wikis.filter(pin_type=PinType.BUILDING).count(), 3)
 
     def test_the_import_is_one_wiki_edit_not_one_per_building(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
-        self.client.post(self.url)
+
+        self._mirror()
+
         edits = WikiEdit.objects.filter(wiki=wiki)
         self.assertEqual(edits.count(), 1)
         self.assertIn("child_wikis_imported", edits.first().changes)
 
     def test_the_wiki_becomes_parcel_scope_too(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
-        self.client.post(self.url)
+
+        self._mirror()
+
         self.assertTrue(is_site_scope(Wiki.objects.get(pk=wiki.pk)))
 
 
@@ -434,13 +506,36 @@ class BuildingImportPanelActionTests(TestCase):
         self.client.force_login(self.user)
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
-        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_parcel_polygon())
+        official_geometry(self.location, _parcel_polygon())
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
         self.url = reverse("pin.buildings.import", kwargs={"pin_slug": self.pin.slug})
 
     def test_creates_the_building_pins(self) -> None:
         self.client.post(self.url)
         self.assertEqual(self.pin.detail_pins.filter(pin_type=PinType.BUILDING).count(), 3)
+
+    def test_get_renders_a_checked_building_list_and_map(self) -> None:
+        response = self.client.get(self.url)
+        self.assertContains(response, 'id="building-import-map"')
+        self.assertContains(response, 'name="building_keys"', count=3)
+        self.assertContains(response, "Tool Shed")
+        self.assertContains(response, "Main Hall")
+        self.assertContains(response, "Add 3 buildings")
+
+    def test_post_imports_only_the_selected_buildings(self) -> None:
+        response = self.client.get(self.url)
+        selected_row = next(row for row in response.context["rows"] if row["name"] == "Main Hall")
+
+        self.client.post(self.url, {"building_selection": "1", "building_keys": selected_row["selection_key"]})
+
+        children = self.pin.detail_pins.filter(pin_type=PinType.BUILDING)
+        self.assertEqual(children.count(), 1)
+        self.assertEqual(children.get().name, "Main Hall")
+
+    def test_post_with_every_building_unchecked_imports_nothing(self) -> None:
+        response = self.client.post(self.url, {"building_selection": "1"})
+        self.assertEqual(self.pin.detail_pins.filter(pin_type=PinType.BUILDING).count(), 0)
+        self.assertIn("Select at least one building", response["HX-Trigger"])
 
     def test_it_never_nests_existing_top_level_pins(self) -> None:
         """The panel button is about buildings; re-parenting is the dialog's job."""
@@ -458,3 +553,153 @@ class BuildingImportPanelActionTests(TestCase):
         self.client.post(self.url)
         response = self.client.post(self.url)
         self.assertIn("already has a pin", response["HX-Trigger"])
+
+
+class MissingBuildingsParcelBoundaryTests(TestCase):
+    """REData's own ``is_on_property`` flag isn't guaranteed to agree with our
+    own parcel boundary (``plugins.builtin.parcel_buildings._building_within``'s
+    own docstring says as much) - a building it marks on-property but which
+    our boundary doesn't actually contain must not be suggested. The user can
+    still pin it by hand; it just should not be offered as a suggestion.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.location = _make_location()
+        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
+        # Narrower than _parcel_polygon(): Tool Shed and Main Hall are inside,
+        # the nameless building (#22, further east at -73.92960) is not - even
+        # though every one of _BUILDINGS carries no is_on_property flag at all
+        # (REData's default "yes").
+        boundary = MultiPolygon(
+            Polygon(((-73.940, 41.725), (-73.9298, 41.725), (-73.9298, 41.740), (-73.940, 41.740), (-73.940, 41.725))),
+            srid=4326,
+        )
+        official_geometry(self.location, boundary)
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+
+    def test_a_building_outside_the_boundary_is_not_offered(self) -> None:
+        missing = pin_restructure.missing_buildings(self.pin)
+        self.assertEqual({building["name"] for building in missing}, {"Tool Shed", "Main Hall"})
+
+    def test_the_import_dialog_omits_it(self) -> None:
+        response = self.client.get(reverse("pin.buildings.import", kwargs={"pin_slug": self.pin.slug}))
+        self.assertContains(response, 'name="building_keys"', count=2)
+        self.assertContains(response, "Add 2 buildings")
+
+    def test_the_panel_buttons_count_matches_what_the_dialog_would_add(self) -> None:
+        """The button's own promise - see PinController.parcel_buildings - must
+        never offer to add more than the dialog it opens actually will."""
+        response = self.client.get(reverse("pin.parcel_buildings", kwargs={"pin_slug": self.pin.slug}))
+        self.assertEqual(response.context["unpinned_count"], 2)
+
+    def test_a_building_already_pinned_outside_the_boundary_still_shows_on_the_property_panel(self) -> None:
+        """The boundary gate is for *suggestions* only - a building the owner
+        already pinned by hand stays visible regardless of where the parcel
+        data says it sits (see building_rows' own boundary_polygon docstring)."""
+        nameless = next(b for b in _BUILDINGS if b["building_number"] == "22")
+        baker.make(Pin, profile=self.user.profile, parent_pin=self.pin, location=_make_location(latitude=nameless["latitude"], longitude=nameless["longitude"]), name="Building 22")
+
+        response = self.client.get(reverse("pin.parcel_buildings", kwargs={"pin_slug": self.pin.slug}))
+        names = {row["name"] or row["building_number"] for row in response.context["rows"]}
+        self.assertIn("22", names)
+
+
+class BuildingUnderExistingRootPinTests(TestCase):
+    """A building whose centroid already carries one of the owner's *top-level* pins.
+
+    The reported bug. ``missing_buildings`` consulted only the parcel pin's own
+    children, so such a building counted as unpinned and was offered forever;
+    ``create_building_pins`` then asked ``resolve_child_pin_location`` for its
+    point, which refuses anywhere the profile already has a pin - top-level ones
+    included - and the building was silently skipped. Every attempt left the
+    count unchanged, so the panel button and the suggestion both stayed on the
+    page describing work that could never complete.
+
+    The pin standing on it is exactly what ``nestable_root_pins`` exists to
+    re-home, which is how the property still gets organized: by adopting that
+    pin, not by duplicating it.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.location = _make_location()
+        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="collide")
+        official_geometry(self.location, _parcel_polygon())
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+        self.occupied = _BUILDINGS[1]
+        # The owner's own top-level pin, standing exactly on "Main Hall".
+        self.stray = baker.make(
+            Pin,
+            profile=self.user.profile,
+            location=baker.make(Location, latitude=self.occupied["latitude"], longitude=self.occupied["longitude"], google_place=None),
+            name="Main Hall",
+        )
+        self.url = reverse("pin.buildings.import", kwargs={"pin_slug": self.pin.slug})
+
+    def _offered_names(self) -> set[str]:
+        return {building.get("name") or "" for building in pin_restructure.missing_buildings(self.pin)}
+
+    def test_a_building_under_an_existing_pin_is_not_offered(self) -> None:
+        """It cannot be pinned, so offering it is offering work that will fail."""
+        self.assertNotIn("Main Hall", self._offered_names())
+
+    def test_the_other_buildings_are_still_offered(self) -> None:
+        """Only the blocked one drops out - this must not silence the whole panel."""
+        self.assertEqual(self._offered_names(), {"Tool Shed", ""})
+
+    def test_importing_leaves_nothing_outstanding(self) -> None:
+        """After the import the button and suggestion have nothing left to describe."""
+        self.client.post(self.url)
+
+        self.assertEqual(pin_restructure.missing_buildings(self.pin), [])
+
+    def test_every_offered_building_is_actually_created(self) -> None:
+        """The count the button promises is the count the import delivers."""
+        offered = len(pin_restructure.missing_buildings(self.pin))
+
+        self.client.post(self.url)
+
+        self.assertEqual(self.pin.detail_pins.filter(pin_type=PinType.BUILDING).count(), offered)
+
+    def test_the_pin_standing_on_it_is_still_offered_for_nesting(self) -> None:
+        """Excluding the building must not also hide the action that resolves it."""
+        self.assertIn(self.stray, pin_restructure.nestable_root_pins(self.pin))
+
+
+class EmptyImportIsNotReportedAsSuccessTests(TestCase):
+    """An import that created nothing must not claim it did.
+
+    ``create_building_pins`` skips a building whose point is already pinned, so
+    a selection made entirely of those returned 0 - and the response still said
+    "Added 0 building pins." over a *success* toast, which is what made the
+    failure read as silent.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.location = _make_location()
+        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="empty-import")
+        official_geometry(self.location, _parcel_polygon())
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
+        self.url = reverse("pin.buildings.import", kwargs={"pin_slug": self.pin.slug})
+
+    def test_a_zero_result_import_does_not_claim_success(self) -> None:
+        with patch.object(pin_restructure, "create_building_pins", return_value=0):
+            response = self.client.post(self.url)
+
+        self.assertNotIn("Added 0 building pins", response["HX-Trigger"])
+        self.assertNotIn('"level": "success"', response["HX-Trigger"])
+
+    def test_a_zero_result_import_still_refreshes_the_page(self) -> None:
+        """The panel and suggestion must re-derive their counts either way."""
+        with patch.object(pin_restructure, "create_building_pins", return_value=0):
+            response = self.client.post(self.url)
+
+        self.assertIn("pinDetailPinsChanged", response["HX-Trigger"])

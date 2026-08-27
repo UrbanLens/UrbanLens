@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.forms.search import SearchForm
+from urbanlens.dashboard.models.labels.meta import KIND_USER
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
@@ -22,13 +23,17 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.services.map_snapshot import materialize_markup_map
-from urbanlens.dashboard.services.pin_list_markup import build_list_markup_snapshot
-from urbanlens.dashboard.services.pin_list_membership import add_pins_to_list, reorder_list_items, resync_smart_list
-from urbanlens.dashboard.services.pin_list_trip import copy_list_pins_to_trip
-from urbanlens.dashboard.services.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, column_length_error, text_length_error
+from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
+from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
+from urbanlens.dashboard.services.pins.pin_list_membership import add_pins_to_list, reorder_list_items, resync_smart_list
+from urbanlens.dashboard.services.pins.pin_list_trip import copy_list_pins_to_trip
+from urbanlens.dashboard.services.undo.handlers.pin_list import MODEL_LABEL as PIN_LIST_MODEL_LABEL
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
@@ -37,6 +42,13 @@ logger = logging.getLogger(__name__)
 _BULK_ADD_CONFIRM_THRESHOLD = 100
 
 _ITEMS_PANEL_TEMPLATE = "dashboard/partials/pin_lists/_items_panel.html"
+_ITEMS_ROWS_TEMPLATE = "dashboard/partials/pin_lists/_items_rows.html"
+
+#: Rows rendered per page of the items list - matches the height-based
+#: "revealed" HTMX pagination the Memories gallery uses (see
+#: controllers.photos.MemoriesPhotosView/_GALLERY_PAGE_SIZE), reused here
+#: rather than inventing a second pagination scheme for the same page shape.
+_ITEMS_PAGE_SIZE = 50
 
 
 def _get_pin_list_or_404(list_slug: str, profile: Profile) -> PinList:
@@ -77,16 +89,40 @@ def _default_trip_name_for_list(pin_list: PinList) -> str:
     return f'Trip from the "{pin_list.name}" list'
 
 
-def _list_items_with_labels(pin_list: PinList) -> list[PinListItem]:
+def _list_items_queryset(pin_list: PinList) -> QuerySet[PinListItem]:
     """Ordered list items with their pin's labels prefetched (icon/color/tag chips need these).
 
     Matches the same prefetch shape the main map's bulk pin endpoints use
     (see maps.py) so ``Pin.effective_icon``/``effective_color`` and the tag
     chip list resolve without N+1 queries.
+
+    ``pin__location__wiki`` and ``pin__reviews`` are part of that shape:
+    ``_pin_map_marker_data`` reads ``Pin.effective_name`` (which falls through to
+    ``Location.display_name``, and that reads the linked ``Wiki``) and
+    ``Pin.rating`` (which reads ``reviews``). Both model properties document the
+    prefetch they need in their own docstrings.
+
+    Returned as a queryset (not materialized), so a caller that only needs
+    one page of rows (``PinListItemsPageView``) can paginate it at the
+    database level instead of always pulling every item on the list.
     """
-    return list(
-        pin_list.items.select_related("pin", "pin__location").prefetch_related(Prefetch("pin__labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name"))).order_by("order"),
+    return (
+        pin_list.items.select_related("pin", "pin__location", "pin__location__wiki")
+        .prefetch_related(
+            Prefetch("pin__labels", queryset=Label.objects.exclude(kind=KIND_USER).order_by("-order", "name")),
+            "pin__reviews",
+        )
+        .order_by("order")
     )
+
+
+def _list_items_with_labels(pin_list: PinList) -> list[PinListItem]:
+    """Every item on the list, fully prefetched - see :func:`_list_items_queryset`.
+
+    Used where the full set is genuinely needed regardless of pagination -
+    the overview map plots every pin on the list, not just the current page.
+    """
+    return list(_list_items_queryset(pin_list))
 
 
 def _pin_map_marker_data(pin: Pin) -> dict[str, Any]:
@@ -120,9 +156,24 @@ def _items_map_data(items: list[PinListItem]) -> list[dict[str, Any]]:
     return [_pin_map_marker_data(item.pin) for item in items if item.pin.effective_latitude and item.pin.effective_longitude]
 
 
-def _render_items_panel(request: HttpRequest, pin_list: PinList) -> HttpResponse:
+def _paginated_items_context(request: HttpRequest, pin_list: PinList) -> dict[str, Any]:
+    """Build the items/page_obj/items_map_data context shared by the detail page and items panel.
+
+    ``items_map_data`` is built from the *full*, unpaginated list - the
+    overview map plots every pin on the list regardless of which page of
+    rows is currently rendered. ``items``/``page_obj`` are the first page of
+    that same already-materialized list, sliced in Python rather than
+    re-querying, so this costs no more than the unpaginated render did.
+    Later pages are fetched at the database level by
+    :class:`PinListItemsPageView` instead of repeating this full fetch.
+    """
     items = _list_items_with_labels(pin_list)
-    return render(request, _ITEMS_PANEL_TEMPLATE, {"pin_list": pin_list, "items": items, "items_map_data": _items_map_data(items)})
+    page_obj = get_page(request, items, _ITEMS_PAGE_SIZE)
+    return {"items": page_obj.object_list, "page_obj": page_obj, "items_map_data": _items_map_data(items)}
+
+
+def _render_items_panel(request: HttpRequest, pin_list: PinList) -> HttpResponse:
+    return render(request, _ITEMS_PANEL_TEMPLATE, {"pin_list": pin_list, **_paginated_items_context(request, pin_list)})
 
 
 def _show_toast(response: HttpResponse, message: str, level: str = "success") -> HttpResponse:
@@ -208,6 +259,9 @@ class PinListCreateView(LoginRequiredMixin, View):
         name = (body.get("name") or "").strip()
         if not name:
             return HttpResponse("List name is required.", status=400)
+        name_error = column_length_error(PinList, "name", name, "List name")
+        if name_error:
+            return HttpResponse(name_error, status=400)
         if PinList.objects.filter(profile=profile, name=name).exists():
             return HttpResponse("You already have a list with that name.", status=409)
 
@@ -232,7 +286,6 @@ class PinListDetailView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
-        items = _list_items_with_labels(pin_list)
         saved_filters = list(profile.saved_filters.all())
         trips = list(Trip.objects.filter(profiles=profile).order_by("name"))
         return render(
@@ -240,8 +293,7 @@ class PinListDetailView(LoginRequiredMixin, View):
             "dashboard/pages/pin_lists/detail.html",
             {
                 "pin_list": pin_list,
-                "items": items,
-                "items_map_data": _items_map_data(items),
+                **_paginated_items_context(request, pin_list),
                 "saved_filters": saved_filters,
                 "trips": trips,
                 **profile.get_map_center_template_context(),
@@ -283,12 +335,20 @@ class PinListEditView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
         body = _parse_body(request)
+        # A bare save() writes every column from this request's snapshot,
+        # silently reverting any field a concurrent request (another tab, or
+        # the external API's own PATCH endpoint further down this file - two
+        # separate implementations editing the same row) changed in between.
+        # Scoped the same way services.wiki.wiki_edits.save_edited_fields
+        # already does for exactly this reason on a comparably shared model.
+        changed_fields: set[str] = set()
 
         name = (body.get("name") or "").strip()
         if name and name != pin_list.name:
             if PinList.objects.filter(profile=profile, name=name).exclude(pk=pin_list.pk).exists():
                 return HttpResponse("You already have a list with that name.", status=409)
             pin_list.name = name
+            changed_fields.add("name")
 
         if "description" in body:
             description = body.get("description") or ""
@@ -296,6 +356,7 @@ class PinListEditView(LoginRequiredMixin, View):
             if length_error:
                 return HttpResponse(length_error, status=400)
             pin_list.description = description
+            changed_fields.add("description")
 
         # Rule changes (which filter/boundary is active) always resync a fresh
         # snapshot immediately, even before the list is marked "smart" - the
@@ -310,6 +371,7 @@ class PinListEditView(LoginRequiredMixin, View):
             new_is_smart = str(body.get("is_smart")).strip().lower() in {"true", "1", "yes", "on"}
             is_smart_turned_on = new_is_smart and not pin_list.is_smart
             pin_list.is_smart = new_is_smart
+            changed_fields.add("is_smart")
 
         if "saved_filter_uuid" in body:
             saved_filter_uuid = (body.get("saved_filter_uuid") or "").strip()
@@ -320,10 +382,11 @@ class PinListEditView(LoginRequiredMixin, View):
             else:
                 pin_list.smart_filter = None
                 pin_list.source_saved_filter = None
+            changed_fields.update({"smart_filter", "source_saved_filter"})
             rules_changed = True
 
         if "smart_boundary" in body:
-            from urbanlens.dashboard.services.geo import InvalidPolygonGeoJSONError, parse_multipolygon_geojson
+            from urbanlens.dashboard.services.geo.geo import InvalidPolygonGeoJSONError, parse_multipolygon_geojson
 
             polygon_geojson = body.get("smart_boundary")
             if polygon_geojson:
@@ -333,9 +396,11 @@ class PinListEditView(LoginRequiredMixin, View):
                     return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
             else:
                 pin_list.smart_boundary = None
+            changed_fields.add("smart_boundary")
             rules_changed = True
 
-        pin_list.save()
+        if changed_fields:
+            pin_list.save(update_fields=[*changed_fields, "updated"])
 
         if rules_changed or is_smart_turned_on:
             resync_smart_list(pin_list)
@@ -352,6 +417,7 @@ class PinListDeleteView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
+        stash_for_undo(PIN_LIST_MODEL_LABEL, [pin_list], profile)
         pin_list.delete()
         return HttpResponseRedirect(f"{reverse('organize.index')}?tab=lists")
 
@@ -366,6 +432,24 @@ class PinListItemsView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
         return _render_items_panel(request, pin_list)
+
+
+class PinListItemsPageView(LoginRequiredMixin, View):
+    """One page of a list's item rows, for infinite scroll past the first page.
+
+    GET /lists/<uuid>/items/page/?page=N
+
+    Unlike :class:`PinListItemsView` (which re-renders the whole panel, map
+    data included), this paginates ``_list_items_queryset`` directly at the
+    database level - the "load more" sentinel only needs more rows, not a
+    fresh map sync, so it never re-fetches the full, unpaginated list.
+    """
+
+    def get(self, request: HttpRequest, list_slug: str) -> HttpResponse:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
+        page_obj = get_page(request, _list_items_queryset(pin_list), _ITEMS_PAGE_SIZE)
+        return render(request, _ITEMS_ROWS_TEMPLATE, {"pin_list": pin_list, "items": page_obj.object_list, "page_obj": page_obj})
 
 
 class PinListAddPinsView(LoginRequiredMixin, View):
@@ -487,6 +571,9 @@ class PinListCreateTripView(LoginRequiredMixin, View):
         body = _parse_body(request)
 
         trip_name = (body.get("name") or "").strip() or _default_trip_name_for_list(pin_list)
+        name_error = column_length_error(Trip, "name", trip_name, "Trip name")
+        if name_error:
+            return HttpResponse(name_error, status=400)
         trip = Trip.objects.create(name=trip_name, creator=profile)
         TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
         copy_list_pins_to_trip(pin_list, trip, profile)
@@ -556,7 +643,7 @@ class PinListExportView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
-        from urbanlens.dashboard.services.export_formats import EXPORT_FORMATS
+        from urbanlens.dashboard.services.import_export.export_formats import EXPORT_FORMATS
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)

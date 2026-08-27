@@ -5,20 +5,33 @@ The group-chat extension of ``ConversationKey``: one random 32-byte key per
 (``crypto_box_seal``) once per member. The server stores only the sealed
 envelopes and can open none of them.
 
-Versioning is what enforces membership boundaries cryptographically:
+Versioning is how membership boundaries are *meant* to be enforced
+cryptographically. Read the caveat below before relying on that:
 
 - A **new member** gets envelopes only for versions created after they
   joined - old ciphertext stays unreadable to them even if they somehow
   obtained it (the server additionally never serves them pre-join messages).
 - A **removed member** keeps their old envelopes (their own history stays
   readable, matching the recoverability-over-forward-secrecy trade documented
-  in ``docs/e2ee.md``) but is excluded from every later version, so messages
+  in ``docs/designs/e2ee.md``) but is excluded from every later version, so messages
   sent after their removal are unreadable to them.
 
 Clients rotate to a new version whenever the latest version's envelope set no
 longer matches the group's active membership (the key endpoint reports this
 as ``needs_rotation``), and the server refuses to store a version whose
 envelopes don't cover the active membership exactly.
+
+**Caveat: the boundary is currently server-enforced, not cryptographic.**
+``services.messaging.group_chats.create_group_message`` validates only
+``key_version >= 1``. It does not check that the version exists, belongs to this
+group, or is the current one, so a client can encrypt under a pre-removal
+version whose envelope a removed member still holds - by accident (a stale tab,
+an offline outbox replaying) or deliberately. Those messages are not exposed
+today only because a removed member has no active membership and
+``GroupMessageQuerySet.visible_window`` never serves them the ciphertext. Do not
+add a code path that relies on the version alone to keep a removed member out.
+The open decision is recorded in "E2EE group messages: the cryptographic
+membership boundary depends on the server" in ``docs/PROBLEMS.md``.
 """
 
 from __future__ import annotations

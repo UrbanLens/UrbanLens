@@ -25,9 +25,12 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models import F
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.images import JPEG_BYTES
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin_suggestions import _PAGE_SIZE
 from urbanlens.dashboard.models.aliases.model import PinAlias
@@ -37,7 +40,7 @@ from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.pin_suggestions import LocationHit, accept_pin_suggestion, attach_suggestion_photos, ingest_location_hits, reject_pin_suggestion
+from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, accept_pin_suggestion, attach_suggestion_photos, ingest_location_hits, reject_pin_suggestion
 
 _PIN_LAT = Decimal("40.000000")
 _PIN_LON = Decimal("-74.000000")
@@ -184,6 +187,64 @@ class LocationHitWeightTests(TestCase):
         suggestion_lat = float(suggestion.latitude)
         unweighted_midpoint = (heavy_lat + light_lat) / 2
         self.assertLess(abs(suggestion_lat - heavy_lat), abs(suggestion_lat - unweighted_midpoint))
+
+
+class HitCountRaceConditionTests(TestCase):
+    """hit_count is updated via F() so a concurrent ingest can't clobber it (see
+    _upsert_matched_suggestion/_upsert_new_pin_suggestion - two overlapping scans for one
+    profile, e.g. a repeated Immich sweep overlapping a local-scan upload, is the documented
+    case)."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
+        self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
+
+    def test_matched_suggestion_survives_a_write_racing_between_read_and_save(self) -> None:
+        """A second ingest's increment lands between this ingest's read and its save - a
+        plain `existing.hit_count += weight` would silently overwrite it; the F() expression
+        must not."""
+        ingest_location_hits(self.profile, [_hit(40.0001, -74.0, "2024-01-01")], origin=PinSuggestionOrigin.IMMICH)
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(suggestion.hit_count, 1)
+
+        injected = {"done": False}
+
+        def racing_weight_of(hits):
+            if not injected["done"]:
+                injected["done"] = True
+                # Stands in for the other concurrent worker: commits its own increment
+                # after this ingest has already read hit_count=1 into its `existing`
+                # instance, but before this ingest's own save runs.
+                PinSuggestion.objects.filter(pk=suggestion.pk).update(hit_count=F("hit_count") + 100)
+            return sum(hit.weight for hit in hits)
+
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions._weight_of", side_effect=racing_weight_of):
+            ingest_location_hits(self.profile, [_hit(40.0001, -74.0, "2024-01-02")], origin=PinSuggestionOrigin.IMMICH)
+
+        suggestion.refresh_from_db()
+        self.assertEqual(suggestion.hit_count, 1 + 100 + 1)
+
+    def test_new_pin_suggestion_survives_a_write_racing_between_read_and_save(self) -> None:
+        """Same race as above, for the unmatched/new-pin-cluster branch."""
+        ingest_location_hits(self.profile, [_hit(41.0, -76.0, "2024-02-01")], origin=PinSuggestionOrigin.LOCAL_SCAN)
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(suggestion.hit_count, 1)
+
+        injected = {"done": False}
+
+        def racing_weight_of(hits):
+            if not injected["done"]:
+                injected["done"] = True
+                PinSuggestion.objects.filter(pk=suggestion.pk).update(hit_count=F("hit_count") + 100)
+            return sum(hit.weight for hit in hits)
+
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions._weight_of", side_effect=racing_weight_of):
+            ingest_location_hits(self.profile, [_hit(41.0001, -76.0001, "2024-02-02")], origin=PinSuggestionOrigin.LOCAL_SCAN)
+
+        suggestion.refresh_from_db()
+        self.assertEqual(suggestion.hit_count, 1 + 100 + 1)
 
 
 def _dt(day: str) -> datetime.datetime:
@@ -387,7 +448,7 @@ class AcceptPinSuggestionTests(TestCase):
         from urbanlens.dashboard.models.labels.meta import KIND_TAG
         from urbanlens.dashboard.models.labels.model import Label
 
-        label = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Abandoned")
+        label = ensure_label( kind=KIND_TAG, profile=self.profile, name="Abandoned")
         suggestion = PinSuggestion.objects.create(
             profile=self.profile,
             pin=None,
@@ -632,7 +693,7 @@ class PinSuggestionActionViewTests(TestCase):
         from urbanlens.dashboard.models.labels.meta import KIND_TAG
         from urbanlens.dashboard.models.labels.model import Label
 
-        label = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Abandoned")
+        label = ensure_label( kind=KIND_TAG, profile=self.profile, name="Abandoned")
         suggestion = self._suggestion(pin=None, latitude=Decimal("41.000000"), longitude=Decimal("-76.000000"), suggested_name="Old Mill")
         with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
             self.client.post(reverse("memories.locations.action", args=[suggestion.pk, "accept"]), {"name": "Old Mill", "label_ids": [str(label.pk)]})
@@ -770,7 +831,7 @@ class PhotoLocationScanPhotoUploadViewTests(TestCase):
             profile=self.profile, pin=None, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.LOCAL_SCAN, visit_dates=["2024-01-01"],
         )
 
-    def _upload(self, suggestion_id, *, filename: str = "a.jpg", content: bytes = b"fake-jpeg-bytes", content_type: str = "image/jpeg"):
+    def _upload(self, suggestion_id, *, filename: str = "a.jpg", content: bytes = JPEG_BYTES, content_type: str = "image/jpeg"):
         image_file = SimpleUploadedFile(filename, content, content_type=content_type)
         return self.client.post(reverse("tools.photo_scan.upload_photo"), {"suggestion_id": suggestion_id, "image": image_file})
 
@@ -967,6 +1028,22 @@ class PinSuggestionQueueViewSelectMapTests(TestCase):
     def test_empty_queue_has_no_map(self) -> None:
         response = self.client.get(reverse("memories.locations"))
         self.assertNotContains(response, 'id="pin-suggestions-map"')
+
+    def test_map_uses_the_shared_toolbar_not_the_bespoke_pill_button(self) -> None:
+        """Regression guard for the identical defect test_memories_unlogged.py
+        already fixed on the sibling visits.html page - this page still had
+        its own bespoke .pin-select-toggle pill (no layers panel or toolbar
+        styling) until now. See docs/GOALS_CODE_AUDIT.md ("Map UI consistency")."""
+        location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
+        pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
+        PinSuggestion.objects.create(profile=self.profile, pin=pin, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.IMMICH, visit_dates=["2024-01-01"], hit_count=1)
+
+        response = self.client.get(reverse("memories.locations"))
+
+        self.assertContains(response, 'id="pin-suggestions-select-toggle"')
+        self.assertContains(response, "map-btn-icon")
+        self.assertContains(response, 'id="pin-suggestions-map-buttons"')
+        self.assertNotContains(response, 'class="pin-select-toggle"')
 
 
 class PinSuggestionQueuePaginationTests(TestCase):
@@ -1237,7 +1314,7 @@ class AttachSuggestionPhotosTests(TestCase):
         self.addCleanup(self._dns_patch.stop)
 
     def test_downloads_and_stages_candidate_images(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()):
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
 
         self.assertEqual(len(created), 1)
@@ -1247,9 +1324,20 @@ class AttachSuggestionPhotosTests(TestCase):
         self.assertIsNone(image.pin_id)
         self.assertTrue(image.checksum)
 
+    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no
+        locking at all, unlike every interactive upload path (see
+        per_profile_upload_lock's docstring)."""
+        with (
+            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()),
+            mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire,
+        ):
+            attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
+        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+
     def test_never_exceeds_max_suggestion_photos(self) -> None:
         urls = [f"https://example.test/photo-{i}.jpg" for i in range(MAX_SUGGESTION_PHOTOS + 5)]
-        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()):
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()):
             created = attach_suggestion_photos(self.suggestion, urls, self.profile)
 
         self.assertEqual(len(created), MAX_SUGGESTION_PHOTOS)
@@ -1258,7 +1346,7 @@ class AttachSuggestionPhotosTests(TestCase):
     def test_respects_photos_already_attached_from_a_prior_call(self) -> None:
         baker.make(Image, profile=self.profile, pin=None, pin_suggestion=self.suggestion, checksum="already-here")
         urls = [f"https://example.test/photo-{i}.jpg" for i in range(MAX_SUGGESTION_PHOTOS)]
-        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()):
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()):
             created = attach_suggestion_photos(self.suggestion, urls, self.profile)
 
         self.assertEqual(len(created), MAX_SUGGESTION_PHOTOS - 1)
@@ -1267,7 +1355,7 @@ class AttachSuggestionPhotosTests(TestCase):
         import requests
 
         with mock.patch(
-            "urbanlens.dashboard.services.pin_suggestions.requests.get",
+            "urbanlens.dashboard.services.pins.pin_suggestions.requests.get",
             side_effect=[requests.exceptions.ConnectionError("boom"), _ok_photo_response()],
         ):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/broken.jpg", "https://example.test/ok.jpg"], self.profile)
@@ -1276,7 +1364,7 @@ class AttachSuggestionPhotosTests(TestCase):
 
     def test_an_oversized_download_is_skipped(self) -> None:
         huge = b"x" * (20 * 1024 * 1024 + 1)
-        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response(huge)):
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response(huge)):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/huge.jpg"], self.profile)
 
         self.assertEqual(created, [])
@@ -1284,8 +1372,8 @@ class AttachSuggestionPhotosTests(TestCase):
 
     def test_over_quota_stops_the_batch(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.pin_suggestions.quota_error_for_upload", return_value="Over quota"),
-            mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()) as mocked,
+            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.quota_error_for_upload", return_value="Over quota"),
+            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()) as mocked,
         ):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/a.jpg", "https://example.test/b.jpg"], self.profile)
 
@@ -1306,7 +1394,7 @@ class AttachSuggestionPhotosSsrfTests(TestCase):
         )
 
     def test_a_literal_private_ip_target_is_rejected(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get") as mocked:
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get") as mocked:
             created = attach_suggestion_photos(self.suggestion, ["http://169.254.169.254/latest/meta-data/"], self.profile)
         mocked.assert_not_called()
         self.assertEqual(created, [])
@@ -1315,7 +1403,7 @@ class AttachSuggestionPhotosSsrfTests(TestCase):
         redirect_response = mock.Mock(status_code=302, headers={"Location": "http://127.0.0.1/internal"}, is_redirect=True)
         with (
             mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
-            mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=redirect_response),
+            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=redirect_response),
         ):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
         self.assertEqual(created, [])

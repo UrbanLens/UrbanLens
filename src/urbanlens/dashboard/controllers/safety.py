@@ -23,23 +23,26 @@ from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus, SafetyContactOptOutScope
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.services.connections import get_connections
-from urbanlens.dashboard.services.images import image_to_gallery_json, parse_reposition_payload
-from urbanlens.dashboard.services.map_snapshot import default_markup_map_title
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.safety import (
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.text_limits import column_length_error
+from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title
+from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json, parse_reposition_payload
+from urbanlens.dashboard.services.social.connections import get_connections
+from urbanlens.dashboard.services.visits.safety import (
     CheckinArchivedError,
     ContactInput,
     SafetyValidationError,
     accept_checkin_partner_invite,
     apply_checkin_edit,
     attach_draft_markup_map,
+    blocked_default_contacts,
     check_in,
     create_checkin,
     decline_checkin_partner_invite,
     default_contacts_as_input,
     delete_checkin,
     find_community_wiki,
+    find_visible_community_wiki,
     get_active_checkin,
     get_active_checkins,
     get_or_create_preference,
@@ -66,6 +69,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from django.http import HttpRequest
+    from django.http.response import HttpResponseBase
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +237,7 @@ def _get_checkin_as_partner(profile: Profile, checkin_slug: str) -> SafetyChecki
     """Look up a check-in ``profile`` is an accepted partner on, by slug or UUID.
 
     A partner has no slug access of their own - the URL value reaching here is
-    always the check-in's UUID (see ``services.safety._notify_checkin_partner_invite``) -
+    always the check-in's UUID (see ``services.visits.safety._notify_checkin_partner_invite``) -
     but resolving the same way ``_get_checkin_by_slug`` does (slug then UUID)
     costs nothing and stays consistent.
 
@@ -451,6 +455,7 @@ class SafetySettingsView(LoginRequiredMixin, View):
             {
                 "preference": preference,
                 "default_contacts": default_contacts_as_input(profile),
+                "blocked_default_contacts": blocked_default_contacts(profile),
                 "connections": get_connections(profile),
             },
         )
@@ -524,6 +529,7 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             {
                 "preference": preference,
                 "default_contacts": default_contacts_as_input(profile),
+                "blocked_default_contacts": blocked_default_contacts(profile),
                 "connections": get_connections(profile),
                 "checkin": None,
                 "trip": trip,
@@ -548,6 +554,7 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
         error_context = {
             "preference": get_or_create_preference(profile),
             "default_contacts": default_contacts_as_input(profile),
+            "blocked_default_contacts": blocked_default_contacts(profile),
             "connections": get_connections(profile),
             "checkin": None,
             "trip": trip,
@@ -623,13 +630,13 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
 
         Two non-owner fallbacks exist, tried in order:
 
-        * An accepted partner (see ``services.safety.is_owner_or_accepted_partner``)
+        * An accepted partner (see ``services.visits.safety.is_owner_or_accepted_partner``)
           gets the exact same full detail page as the owner, minus the
           edit/contact-management/cancel/delete controls (``viewer_is_partner``
           in the template context) - a partner's whole point is seeing the plan
           "before it's missed", not a limited view.
         * Otherwise, a non-owner following the link from a community wiki comment
-          (see ``services.safety.post_checkin_to_community_wiki``) gets the
+          (see ``services.visits.safety.post_checkin_to_community_wiki``) gets the
           limited read-only status page - but only for check-ins that were
           actually posted to a wiki, and only via their UUID link.
 
@@ -683,7 +690,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         checkin.ensure_slug()
         _ensure_markup_map(checkin, owner)
         contacts = list(checkin.contacts.all())
-        destination_wiki = find_community_wiki(checkin.destination_latitude, checkin.destination_longitude)
+        destination_wiki = find_visible_community_wiki(checkin.destination_latitude, checkin.destination_longitude, owner)
         last_wiki_edit, wiki_editor_count = wiki_notify_stats(destination_wiki) if destination_wiki else (None, 0)
         return render(
             request,
@@ -698,6 +705,10 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                 "contact_picker_locked": checkin.notifications_locked or viewer_is_partner,
                 "connections": get_connections(owner),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
+                # No visibility filtering: reaching the check-in is the whole
+                # gate here, and a contact identified only by email has no
+                # profile for a visibility setting to be evaluated against.
+                "photos": Image.objects.filter(safety_checkin=checkin).exclude(image="").order_by("-created"),
                 "destination_wiki": destination_wiki,
                 "last_wiki_edit": last_wiki_edit,
                 "wiki_editor_count": wiki_editor_count,
@@ -753,6 +764,11 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             "dashboard/pages/safety/community_status.html",
             {
                 "checkin": checkin,
+                # Deliberately unscoped: gated on wiki_notified_at, so the
+                # check-in has already been posted to this wiki and the
+                # association is its own content rather than a lookup. This
+                # page also serves signed-out contacts, who have no profile to
+                # scope by.
                 "wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude) if checkin.wiki_notified_at and not is_archived else None,
                 "map_attribution": _MAP_ATTRIBUTION,
                 "viewer_is_contact": is_contact,
@@ -785,7 +801,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         checkin = _get_checkin_by_slug(profile, checkin_slug)
 
         if request.POST.get("action") == "cancel":
-            from urbanlens.dashboard.services.safety import cancel_checkin
+            from urbanlens.dashboard.services.visits.safety import cancel_checkin
 
             cancel_checkin(checkin)
             return redirect("safety.home")
@@ -855,7 +871,7 @@ class SafetyCheckinCancelView(LoginRequiredMixin, View):
         Returns:
             Redirect to the safety home page.
         """
-        from urbanlens.dashboard.services.safety import cancel_checkin
+        from urbanlens.dashboard.services.visits.safety import cancel_checkin
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         checkin = get_object_or_404(SafetyCheckin, uuid=checkin_uuid, profile=profile)
@@ -867,7 +883,7 @@ class SafetyCheckinDeleteView(LoginRequiredMixin, View):
     """Permanently delete a safety check-in (owner-only).
 
     If the check-in hasn't been resolved yet, it's routed through the normal
-    self-check-in flow first (``services.safety.check_in``) so any side effects
+    self-check-in flow first (``services.visits.safety.check_in``) so any side effects
     that flow carries - today, resolving the check-in and raising a visit
     suggestion; it does not itself email already-notified contacts - happen
     before the row disappears, rather than silently vanishing out from under
@@ -1044,7 +1060,7 @@ class SafetyCheckinPartnerInviteAcceptView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         # Same narrowly-scoped lookup the external API uses, so the two surfaces
         # cannot drift on which invitations a caller may address - see
-        # services.safety.get_partner_role for why it is scoped to the caller
+        # services.visits.safety.get_partner_role for why it is scoped to the caller
         # and why it carries no status filter.
         partner = get_partner_role(profile, checkin_uuid)
         if partner is None:
@@ -1207,7 +1223,12 @@ class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
             lng = float(request.GET.get("destination_longitude", ""))
         except ValueError:
             lat = lng = None
-        wiki = find_community_wiki(lat, lng)
+        # Scoped to the viewer: this reads coordinates straight from the query
+        # string, so the unscoped lookup made it a wiki enumerator.
+        # get_or_create rather than the reverse accessor - see the matching note
+        # in map_overlays.OverlayMediaPickerView.
+        viewer, _ = Profile.objects.get_or_create(user=request.user)
+        wiki = find_visible_community_wiki(lat, lng, viewer)
         last_wiki_edit, wiki_editor_count = wiki_notify_stats(wiki) if wiki else (None, 0)
         return render(
             request,
@@ -1329,7 +1350,7 @@ class SafetyCheckinMapAttachView(LoginRequiredMixin, View):
         if markup_map.pk == checkin.markup_map_id:
             # The picker (SafetyCheckinMapPickerView) already excludes the primary map from
             # its candidate list, but that's UI-only - re-enforce it here too, since
-            # services.safety._build_archive_payload's "maps" list is keyed by primary map
+            # services.visits.safety._build_archive_payload's "maps" list is keyed by primary map
             # first and would otherwise carry the same map twice once archived.
             return HttpResponseBadRequest("This map is already the check-in's primary route map.")
         checkin.markup_maps.add(markup_map)
@@ -1411,17 +1432,22 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
         from urbanlens.dashboard.models.images.model import MediaKind
-        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
 
         upload_error = image_upload_error(image_file, MediaKind.PHOTO)
         if upload_error:
             message, status = upload_error
             return JsonResponse({"error": message}, status=status)
 
+        caption = request.POST.get("caption", "").strip()
+        caption_error = column_length_error(Image, "caption", caption, "Caption")
+        if caption_error:
+            return JsonResponse({"error": caption_error}, status=400)
+
         checksum = compute_checksum(image_file)
         if Image.objects.filter(safety_checkin=checkin, checksum=checksum).exists():
             return JsonResponse({"error": "That photo is already on this check-in."}, status=409)
-        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
         with per_profile_upload_lock(profile):
             quota_error = quota_error_for_upload(profile, image_file.size)
@@ -1432,11 +1458,11 @@ class SafetyGalleryView(LoginRequiredMixin, View):
                 safety_checkin=checkin,
                 location=checkin.destination_location,
                 profile=profile,
-                caption=request.POST.get("caption", "").strip() or None,
+                caption=caption or None,
                 checksum=checksum,
                 file_size=image_file.size,
             )
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, img.pk)
@@ -1487,7 +1513,7 @@ class SafetyImageView(LoginRequiredMixin, View):
             204 on success.
         """
         img = self._get_image(request, checkin_slug, image_id)
-        img.image.delete(save=False)
+        delete_stored_file(img)
         img.delete()
         return HttpResponse(status=204)
 
@@ -1519,12 +1545,55 @@ class SafetyContactPortalView(View):
                 "contact": contact,
                 "other_contacts": checkin.contacts.exclude(pk=contact.pk),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
+                # No visibility filtering: reaching the check-in is the whole
+                # gate here, and a contact identified only by email has no
+                # profile for a visibility setting to be evaluated against.
+                "photos": Image.objects.filter(safety_checkin=checkin).exclude(image="").order_by("-created"),
                 "map_attribution": _MAP_ATTRIBUTION,
                 "is_archived": is_archived,
                 "can_unlock": False,
                 "archive_at": checkin.archive_scheduled_at,
             },
         )
+
+
+class SafetyContactPhotoView(View):
+    """Serve one check-in photo to an emergency contact, by magic-link token.
+
+    An emergency contact often has no account - that is the point of the portal -
+    so the login-gated media path can never reach them, and the photos on a
+    check-in are exactly what tells somebody whether to worry. The token is the
+    credential, and it is scoped to its own check-in: a contact on one check-in
+    cannot address a photo on another.
+
+    Deliberately not routed through ``photo_upload_visibility``. That setting
+    filters an audience the uploader published to; naming somebody as your
+    emergency contact is not publishing, and most contacts have no profile for
+    the setting to evaluate against.
+
+    GET /safety/contact/<uuid:token>/photo/<int:image_id>/
+    """
+
+    def get(self, request: HttpRequest, token: str, image_id: int) -> HttpResponseBase:
+        """Stream one photo belonging to the token's own check-in.
+
+        Args:
+            request: Incoming HTTP request.
+            token: The contact's magic-link token.
+            image_id: Primary key of the requested photo.
+
+        Returns:
+            The image bytes, or an nginx hand-off.
+
+        Raises:
+            Http404: Invalid token, or a photo that is not on this check-in.
+        """
+        from urbanlens.dashboard.controllers.media import resolve_media_path, serve_media_file
+
+        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin").by_token(token))
+        image = get_object_or_404(Image.objects.filter(pk=image_id, safety_checkin=contact.checkin).exclude(image=""))
+        rel_path, full_path = resolve_media_path(image.image.name)
+        return serve_media_file(rel_path, full_path)
 
 
 class SafetyContactMarkSafeView(View):
@@ -1639,6 +1708,18 @@ class SafetyCheckinMessageView(View):
                 # every other participant with an open socket (they'd only see it
                 # on their next manual reload).
                 post_chat_message(checkin, user=request.user, contact=contact, body=body)
+            except CheckinArchivedError as exc:
+                # A sibling of SafetyValidationError, not a subclass - both
+                # derive from ValueError - so the handler below never covered
+                # it, and posting to an archived check-in through this fallback
+                # was a 500. The external API distinguishes the two
+                # deliberately (409 vs 400: the body was fine, the check-in's
+                # plaintext is already sealed into its encrypted archive), and
+                # this surface should say the same thing. It matters most here:
+                # this is the no-JS/socket-down path, which runs precisely when
+                # something is already degraded.
+                logger.info("Safety chat HTTP fallback refused message on archived checkin %s", checkin.uuid)
+                return HttpResponse(exc.safe_message, status=409)
             except SafetyValidationError as exc:
                 logger.info("Safety chat HTTP fallback rejected message on checkin %s: %s", checkin.uuid, exc)
                 return HttpResponseBadRequest(exc.safe_message)

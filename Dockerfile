@@ -56,6 +56,14 @@ ENV LANG=en_US.UTF-8 \
 
 # Install Bun (JS runtime + package manager) via the official Docker image.
 # This avoids the curl-to-bash NVM install and gives a reproducible binary.
+#
+# Pinned to an exact patch, not the floating `1` tag: bun 1.4.0 dropped
+# `bun build --format iife` ("Formats besides 'esm' are not implemented"), and
+# `bin/build-frontend.ts` needs it for the entries-classic bundles (the scripts
+# loaded without type=module - core.js and friends). The floating tag turned
+# that into a build failure with no local change to blame, in every container
+# built after bun 1.4 shipped. Bump deliberately, after checking iife still
+# builds, rather than letting the tag move on its own.
 COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
 
 # Install uv (Python package/dependency manager) the same way.

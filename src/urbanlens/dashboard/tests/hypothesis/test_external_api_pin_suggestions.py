@@ -24,7 +24,7 @@ from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 
 def _bearer(raw_key: str) -> dict:
@@ -90,7 +90,7 @@ class PinSuggestionsViewTests(TestCase):
         self.assertEqual(suggestion.visit_dates, [])
 
     def test_photos_are_downloaded_and_staged_as_candidate_images(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()), mock.patch(
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()), mock.patch(
             "socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]
         ):
             response = self._post({"name": "Old Mill", "latitude": 42.5, "longitude": -73.5, "photos": ["https://example.test/photo.jpg"]})

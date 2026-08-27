@@ -173,7 +173,6 @@ class DeviceScanEntry(abstract.DashboardModel):
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_device_scan_entries"
-        indexes = [Index(fields=["device"], name="idxdb_scanentry_device")]
 
 
 class DeviceSignalReading(abstract.DashboardModel):

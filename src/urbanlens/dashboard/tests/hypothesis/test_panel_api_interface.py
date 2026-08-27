@@ -38,7 +38,7 @@ from urbanlens.dashboard.plugins.builtin.nominatim import NominatimPanelSource, 
 from urbanlens.dashboard.plugins.builtin.nps import NpsPanelSource
 from urbanlens.dashboard.plugins.builtin.parcel_buildings import ParcelBuildingsPanelSource, building_footprint_geojson
 from urbanlens.dashboard.plugins.builtin.usgs import UsgsTopoPanelSource
-from urbanlens.dashboard.services.external_data import (
+from urbanlens.dashboard.services.pins.external_data import (
     BoundaryPanelSource,
     GalleryMediaSource,
     InfoPanelSource,
@@ -163,11 +163,11 @@ class InfoPanelApiPayloadTests(TestCase):
 
     def test_payload_is_derived_from_render_context(self) -> None:
         """The same facts the web card shows, under the info key."""
-        LocationCache.set(self.pin.location, "photon", {"name": "Tool Shed", "osm_value": "historic_building", "city": "Poughkeepsie"}, query_key="")
+        LocationCache.set(self.pin.location, "photon", {"locality": "Poughkeepsie", "region": "New York", "country": "United States"}, query_key="")
         payload = self.source.api_payload(self.pin)
         assert payload is not None
-        self.assertEqual(payload[PanelApiKind.INFO.value]["heading_name"], "Tool Shed")
-        self.assertIn("Historic Building", payload[PanelApiKind.INFO.value]["chips"])
+        self.assertEqual(payload[PanelApiKind.INFO.value]["heading_name"], "Poughkeepsie")
+        self.assertIn({"label": "Region", "value": "New York"}, payload[PanelApiKind.INFO.value]["meta"])
 
     def test_empty_render_context_yields_none(self) -> None:
         """A settled-but-useless result is omitted, mirroring the web panel's 204."""
@@ -207,8 +207,21 @@ class GalleryMediaApiPayloadTests(TestCase):
         self.assertEqual(payload, {PanelApiKind.MEDIA.value: []})
 
     def test_items_serialize_field_for_field(self) -> None:
-        """Every MediaItem field survives the trip to JSON."""
-        item = {"url": "https://example.test/a.jpg", "thumb_url": "https://example.test/t.jpg", "caption": "A scan", "source": "Smithsonian", "page_url": "https://example.test/a"}
+        """Every MediaItem field survives the trip to JSON.
+
+        ``content_type`` is included even when the provider publishes none: an
+        API client deciding whether it can render an item needs to see the
+        field as empty rather than have to guess whether its absence means
+        "unknown format" or "this server predates the field".
+        """
+        item = {
+            "url": "https://example.test/a.jpg",
+            "thumb_url": "https://example.test/t.jpg",
+            "caption": "A scan",
+            "source": "Smithsonian",
+            "page_url": "https://example.test/a",
+            "content_type": "",
+        }
         LocationCache.set(self.pin.location, self.source.cache_source, {"items": [item]}, query_key="q")
         payload = self.source.api_payload(self.pin)
         assert payload is not None
@@ -279,13 +292,31 @@ class PanelReadinessTests(TestCase):
     def test_cache_backed_sources_cost_a_constant_number_of_queries(self) -> None:
         """The whole point: readiness for N panels is not N queries.
 
-        One query for the site's cache-age setting plus one for the location's
-        fresh rows. Asking each source individually is one query *per source*,
-        on every pin detail page render.
+        One query for the site's cache-age setting, one for the location's
+        fresh rows, and one more for the payloads of the panels that opt into a
+        content check (``inspects_content``) - those cannot answer "is there
+        anything to show" from a row's existence alone. Asking each source
+        individually is one query *per source*, on every pin detail render.
         """
         cache_backed = [source for source in panel_sources().values() if hasattr(source, "cache_source")]
         self.assertGreater(len(cache_backed), 5)
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
+            panel_readiness(self.pin, cache_backed)
+
+    def test_the_content_check_does_not_scale_with_how_many_panels_use_it(self) -> None:
+        """The property the count above is a proxy for.
+
+        A per-source payload fetch would reintroduce exactly the N+1 this
+        function exists to remove, so every opted-in source must be served by
+        the same single extra query.
+        """
+        from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource
+
+        cache_backed = [source for source in panel_sources().values() if isinstance(source, LocationCachePanelSource)]
+        inspecting = [source for source in cache_backed if source.inspects_content]
+        self.assertGreaterEqual(len(inspecting), 2, "this asserts nothing unless several panels opt in")
+
+        with self.assertNumQueries(3):
             panel_readiness(self.pin, cache_backed)
 
     def test_pin_without_a_location_is_ready_for_nothing(self) -> None:
@@ -308,9 +339,18 @@ class ParcelBuildingsApiPayloadTests(TestCase):
         self.profile = baker.make(User).profile
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
         self.source = ParcelBuildingsPanelSource()
+        # Both buildings have to actually sit on the parcel. `building_rows`
+        # drops a building that falls outside the property's real boundary,
+        # and a boundary gets derived as soon as this pin has a child - so a
+        # "second building" parked 200km away (as this fixture used to be)
+        # silently vanished from the payload the moment a test added one,
+        # rather than being reported as the unpinned building it stands for.
+        # Tool Shed therefore sits at the parcel pin's own coordinates: inside
+        # any boundary derived from it, and far enough from the Powerhouse
+        # child pin not to be matched to it.
         self.buildings = [
             {"name": "Powerhouse", "building_number": "9", "source": "cris", "latitude": 40.0010, "longitude": -74.0010, "geometry": _FOOTPRINT},
-            {"name": "Tool Shed", "building_number": "154", "source": "osm", "latitude": 41.5, "longitude": -75.5},
+            {"name": "Tool Shed", "building_number": "154", "source": "osm", "latitude": float(self.pin.location.latitude), "longitude": float(self.pin.location.longitude)},
         ]
 
     def _cache(self, provider: str = "redata") -> None:
@@ -511,7 +551,7 @@ class BespokeInfoPanelApiPayloadTests(TestCase):
         self._cache(
             source,
             {
-                "fullName": "Gateway National Recreation Area",
+                "full_name": "Gateway National Recreation Area",
                 "description": "A park.",
                 "url": "https://www.nps.gov/gate/",
                 "designation": "National Recreation Area",
@@ -531,7 +571,7 @@ class BespokeInfoPanelApiPayloadTests(TestCase):
     def test_nps_activity_chips_are_capped(self) -> None:
         """Dozens of activity tags stop characterizing a place and become noise."""
         source = NpsPanelSource()
-        self._cache(source, {"fullName": "Big Park", "activities": [{"name": f"Activity {index}"} for index in range(30)]})
+        self._cache(source, {"full_name": "Big Park", "activities": [{"name": f"Activity {index}"} for index in range(30)]})
         payload = source.api_payload(self.pin)
         assert payload is not None
         self.assertEqual(len(payload[PanelApiKind.INFO.value]["chips"]), 8)

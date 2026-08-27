@@ -498,7 +498,7 @@ For each candidate, ask:
 - Is it **free/open** enough to cache aggressively?
 - Can it run as a **background Celery task** with toast completion?
 
-Add new services to `SERVICE_REGISTRY` in `dashboard/services/rate_limiter.py` when integrating.
+Add new services to `SERVICE_REGISTRY` in `dashboard/services/core/rate_limiter.py` when integrating.
 
 ---
 
@@ -575,9 +575,9 @@ already-known server.
 
 | Area | Path |
 |---|---|
-| Gateway base class | `dashboard/services/gateway.py` |
+| Gateway base class | `dashboard/services/core/gateway.py` |
 | Satellite / street-view / boundary abstractions | `dashboard/services/apis/locations/base.py` |
 | Boundary provider chain | `dashboard/services/locations/boundaries.py` |
-| Rate limit registry | `dashboard/services/rate_limiter.py` |
+| Rate limit registry | `dashboard/services/core/rate_limiter.py` |
 | Pin UI integrations | `dashboard/controllers/pin.py` |
-| Search fallback | `dashboard/services/search.py` |
+| Search fallback | `dashboard/services/search/search.py` |

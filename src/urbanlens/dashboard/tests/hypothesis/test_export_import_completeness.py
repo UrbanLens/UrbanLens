@@ -14,6 +14,7 @@ from django.contrib.auth.models import User
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.article.model import Article
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
@@ -23,8 +24,8 @@ from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
 from urbanlens.dashboard.models.notifications.model import NotificationPreference
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services import export as export_service, import_data
-from urbanlens.dashboard.services.articles import save_article
+from urbanlens.dashboard.services.import_export import export as export_service, import_data
+from urbanlens.dashboard.services.wiki.articles import save_article
 from urbanlens.dashboard.tests.hypothesis.strategies import nonempty_name, short_text_or_none
 
 # DB-backed @given tests below never touch self.client - only the underlying
@@ -93,7 +94,7 @@ class ExportPhotosLabelsTests(TestCase):
 
     def test_photo_export_includes_label_uuids(self) -> None:
         profile = baker.make(User).profile
-        label = Label.objects.create(profile=profile, name="Abandoned", kind="tag")
+        label = ensure_label(profile=profile, name="Abandoned", kind="tag")
         image = baker.make(Image, profile=profile)
         image.labels.add(label)
 
@@ -173,7 +174,7 @@ class ImportPinCompletenessTests(TestCase):
         save_article(editor=self.exporter, content="An old mill.", pin=self.pin)
 
     def test_round_trip_creates_matching_pin(self) -> None:
-        from urbanlens.dashboard.services.import_data import ImportResult
+        from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_pins(self.exporter, temp_dir)
@@ -191,7 +192,7 @@ class ImportPinCompletenessTests(TestCase):
         """Idempotency: a pin that already exists for this user is skipped
         entirely (matching the pre-existing label behavior), so re-running an
         import never creates a second Review or Article for the same pin."""
-        from urbanlens.dashboard.services.import_data import ImportResult
+        from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_pins(self.exporter, temp_dir)
@@ -209,7 +210,7 @@ class ImportSettingsCompletenessTests(TestCase):
     """Exported settings groups and notification preferences round-trip through import."""
 
     def test_round_trip_applies_grouped_settings(self) -> None:
-        from urbanlens.dashboard.services.import_data import ImportResult
+        from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
         exporter = baker.make(User).profile
         exporter.ai_label_categories = True
@@ -237,7 +238,7 @@ class ImportCustomFieldsTests(TestCase):
     """New _import_custom_fields: definitions always import; pin-targeted values round-trip."""
 
     def test_definition_and_pin_value_round_trip(self) -> None:
-        from urbanlens.dashboard.services.import_data import ImportResult
+        from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
         exporter = baker.make(User).profile
         pin = baker.make(Pin, profile=exporter, name="Gatehouse")
@@ -265,7 +266,7 @@ class ImportCustomFieldsTests(TestCase):
         """Photo/profile/map-targeted field definitions still import (useful on
         their own); their values are skipped with a warning since this import
         pass can't resolve those entity types to a local object."""
-        from urbanlens.dashboard.services.import_data import ImportResult
+        from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
         exporter = baker.make(User).profile
         CustomField.objects.create(profile=exporter, entity_type=CustomFieldEntity.PROFILE, name="Relationship", field_type=CustomFieldType.TEXT)
@@ -498,14 +499,28 @@ class RoundTripPhotosTests(TestCase):
         row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000006", "filename": "mill.jpg"}
         with tempfile.TemporaryDirectory() as temp_dir:
             self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
-            with mock.patch("urbanlens.dashboard.services.storage.quota_error_for_upload", return_value="over quota"):
+            with mock.patch("urbanlens.dashboard.services.media.storage.quota_error_for_upload", return_value="over quota"):
                 result = self._import(temp_dir)
 
         self.assertFalse(Image.objects.filter(profile=self.importer).exists())
         self.assertTrue(any("storage quota" in w for w in result.warnings))
 
+    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no
+        locking at all, unlike every interactive upload path (see
+        per_profile_upload_lock's docstring)."""
+        from unittest import mock
+
+        row = {"uuid": "8a4f0a53-1111-4f77-9111-00000000000a", "filename": "mill.jpg"}
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
+            with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+                self._import(temp_dir)
+
+        acquire.assert_called_once_with(f"upload-quota-lock:{self.importer.pk}", 30)
+
     def test_labels_reattach_via_label_uuid_map(self) -> None:
-        label = Label.objects.create(profile=self.importer, name="Abandoned", kind="tag")
+        label = ensure_label(profile=self.importer, name="Abandoned", kind="tag")
         row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000007", "filename": "mill.jpg", "label_uuids": ["8a4f0a53-3333-4f77-9111-000000000001"]}
         with tempfile.TemporaryDirectory() as temp_dir:
             self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
@@ -537,6 +552,34 @@ class RoundTripPhotosTests(TestCase):
         # a falsy (None) caption round-trips to None, never to an empty string.
         self.assertEqual(image.caption, caption or None)
         self.assertEqual(result.created.get("photos"), 1)
+
+
+class RestoreOverlayImageQuotaLockTests(TestCase):
+    """MapAnnotationsImport._restore_overlay_image re-enters storage through the same
+    quota check a fresh upload gets (see RoundTripPhotosTests's class docstring)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.importer = baker.make(User).profile
+
+    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no
+        locking at all, unlike every interactive upload path (see
+        per_profile_upload_lock's docstring)."""
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            overlays_dir = os.path.join(temp_dir, "map_annotations")
+            os.makedirs(overlays_dir, exist_ok=True)
+            with open(os.path.join(overlays_dir, "overlay.png"), "wb") as fh:
+                fh.write(b"fake-png-bytes")
+
+            ctx = import_data.ImportContext(profile=self.importer, data_dir=temp_dir, result=import_data.ImportResult(), pin_uuid_map={}, label_uuid_map={})
+            with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+                image = import_data.MapAnnotationsImport()._restore_overlay_image({"filename": "overlay.png"}, ctx)
+
+        self.assertIsNotNone(image)
+        acquire.assert_called_once_with(f"upload-quota-lock:{self.importer.pk}", 30)
 
 
 class RoundTripTripsTests(TestCase):

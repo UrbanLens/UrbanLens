@@ -1,0 +1,143 @@
+{% comment %}
+Manage Image Overlays dialog body - HTMX-swapped by every add/edit/delete
+action (see controllers/map_overlays.py's _render_overlay_list). Rendered
+inside #map-overlays-dialog-body (see _map_annotations_panels.html).
+
+Every action re-targets the whole #map-overlays-dialog-body rather than an
+inner element, for the same reason _custom_layers_list.html does: the response
+is this entire template (list + add form), so swapping a fragment would splice
+duplicate forms in alongside the existing ones.
+
+Corner dragging is not handled here - it happens on the map itself
+(map-image-overlays.ts) and POSTs to the per-overlay corners endpoint. This
+dialog only owns the presentation settings.
+{% endcomment %}
+<ul id="map-overlay-manage-list" class="map-overlay-manage-list">
+    {% for row in rows %}
+    <li class="map-overlay-manage-row" id="map-overlay-row-{{ row.overlay.uuid }}" data-overlay-uuid="{{ row.overlay.uuid }}">
+        {% if row.overlay.tile_url_template %}
+        <span class="map-overlay-manage-thumb map-overlay-manage-thumb--tiles" title="Georeferenced tile overlay">
+            <i class="material-symbols-outlined">map</i>
+        </span>
+        {% else %}
+        <img class="map-overlay-manage-thumb" src="{{ row.overlay.source_url }}" alt="" loading="lazy"
+             onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'map-overlay-manage-thumb')">
+        {% endif %}
+        <div class="map-overlay-manage-fields">
+            <input type="text" name="name" class="map-overlay-manage-name" value="{{ row.overlay.name }}" maxlength="100"
+                   placeholder="Overlay name"
+                   hx-post="{{ row.edit_url }}" hx-trigger="change"
+                   hx-include="closest .map-overlay-manage-row"
+                   hx-target="#map-overlays-dialog-body" hx-swap="innerHTML"
+                   aria-label="Overlay name">
+            <label class="map-overlay-manage-opacity">
+                <span>Opacity</span>
+                <input type="range" name="opacity" min="0" max="100" step="5" value="{{ row.overlay.opacity }}"
+                       oninput="window.ulMapOverlayPreviewOpacity && window.ulMapOverlayPreviewOpacity(this.closest('.map-overlay-manage-row').dataset.overlayUuid, this.value)"
+                       hx-post="{{ row.edit_url }}" hx-trigger="change"
+                       hx-include="closest .map-overlay-manage-row"
+                       hx-target="#map-overlays-dialog-body" hx-swap="innerHTML">
+            </label>
+            <label class="map-overlay-manage-check">
+                <input type="checkbox" name="locked" value="1" {% if row.overlay.locked %}checked{% endif %}
+                       hx-post="{{ row.edit_url }}" hx-trigger="change"
+                       hx-include="closest .map-overlay-manage-row"
+                       hx-target="#map-overlays-dialog-body" hx-swap="innerHTML">
+                <span>Locked</span>
+            </label>
+            <label class="map-overlay-manage-check">
+                <input type="checkbox" name="default_visible" value="1" {% if row.overlay.default_visible %}checked{% endif %}
+                       hx-post="{{ row.edit_url }}" hx-trigger="change"
+                       hx-include="closest .map-overlay-manage-row"
+                       hx-target="#map-overlays-dialog-body" hx-swap="innerHTML">
+                <span>Show by default</span>
+            </label>
+            {% if layers %}
+            <label class="map-overlay-manage-check">
+                <span>Layer</span>
+                <select name="layer"
+                        hx-post="{{ row.edit_url }}" hx-trigger="change"
+                        hx-include="closest .map-overlay-manage-row"
+                        hx-target="#map-overlays-dialog-body" hx-swap="innerHTML">
+                    <option value="">Its own toggle</option>
+                    {% for layer in layers %}
+                    <option value="{{ layer.uuid }}" {% if row.overlay.layer_id == layer.id %}selected{% endif %}>{{ layer.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            {% endif %}
+        </div>
+        <input type="hidden" name="order" value="{{ row.overlay.order }}">
+        {% if not row.overlay.tile_url_template and not row.overlay.locked %}
+        <button type="button" class="btn btn--icon" title="Align on map"
+                onclick="window.ulMapOverlayStartAlign && window.ulMapOverlayStartAlign('{{ row.overlay.uuid }}')">
+            <i class="material-symbols-outlined">open_with</i>
+        </button>
+        {% endif %}
+        <button type="button" class="btn btn--icon btn--danger" title="Remove overlay"
+                hx-delete="{{ row.delete_url }}"
+                hx-confirm="Remove this image overlay from the map? The image itself is kept."
+                hx-target="#map-overlays-dialog-body" hx-swap="innerHTML">
+            <i class="material-symbols-outlined">delete</i>
+        </button>
+    </li>
+    {% empty %}
+    <li class="map-overlay-manage-empty">
+        No image overlays yet. Add a historical map or site plan and drag its corners to line it up.
+    </li>
+    {% endfor %}
+</ul>
+
+{% if at_limit %}
+<p class="map-overlay-manage-empty">This map already has the maximum of {{ max_overlays }} overlays.</p>
+{% else %}
+<form class="map-overlay-add-form" id="map-overlay-add-form"
+      hx-post="{{ create_url }}"
+      hx-encoding="multipart/form-data"
+      hx-target="#map-overlays-dialog-body" hx-swap="innerHTML">
+    {% csrf_token %}
+    <input type="text" name="name" class="map-overlay-add-name" placeholder="Name (e.g. Sanborn 1897, sheet 12)" maxlength="100">
+
+    <div class="map-overlay-add-sources">
+        <label class="map-overlay-dropzone" id="map-overlay-dropzone"
+               ondragover="event.preventDefault(); event.stopPropagation(); this.classList.add('is-dragover')"
+               ondragleave="this.classList.remove('is-dragover')"
+               ondrop="window.ulMapOverlayHandleDrop && window.ulMapOverlayHandleDrop(event, this)">
+            <i class="material-symbols-outlined map-overlay-dropzone-icon">cloud_upload</i>
+            <span class="map-overlay-dropzone-text">Drop an image here, or choose a file</span>
+            <input type="file" name="image" accept="image/*" class="map-overlay-dropzone-input"
+                   onchange="window.ulMapOverlaySyncSubmitState && window.ulMapOverlaySyncSubmitState()">
+        </label>
+        <label class="map-overlay-add-source">
+            <span>...or paste an image URL</span>
+            <input type="url" name="image_url" placeholder="https://..." maxlength="1000"
+                   oninput="window.ulMapOverlaySyncSubmitState && window.ulMapOverlaySyncSubmitState()">
+        </label>
+        <div class="map-overlay-media-pick">
+            <button type="button" class="btn btn--primary" id="map-overlay-pick-media-btn"
+                    onclick="window.ulMapOverlayPickFromMedia && window.ulMapOverlayPickFromMedia('{{ gallery_json_url }}')">
+                <i class="material-symbols-outlined">photo_library</i> Pick from this page's Media
+            </button>
+            <div id="map-overlay-media-picker" class="map-overlay-media-picker" hidden></div>
+        </div>
+        <input type="hidden" name="image_id" id="map-overlay-image-id">
+        <p class="map-overlay-picked-media" id="map-overlay-picked-media" hidden></p>
+    </div>
+
+    {% comment %}
+    Filled in by map-image-overlays.ts from the map's current viewport just
+    before submit - a new overlay lands covering roughly what the user is
+    looking at, which is the only placement that makes dragging the corners a
+    small adjustment rather than a hunt.
+    {% endcomment %}
+    <input type="hidden" name="corners" id="map-overlay-initial-corners">
+
+    {# Starts disabled - nothing is picked yet on a freshly (re)rendered form. #}
+    {# window.ulMapOverlaySyncSubmitState re-derives this from the fields     #}
+    {# above on every change, so it never stays clickable with nothing to add. #}
+    <button type="submit" class="btn btn--primary" id="map-overlay-add-submit" disabled
+            onclick="window.ulMapOverlaySeedCorners && window.ulMapOverlaySeedCorners()">
+        <i class="material-symbols-outlined">add_photo_alternate</i> Add overlay
+    </button>
+</form>
+{% endif %}

@@ -12,9 +12,11 @@ Covers:
 
 from __future__ import annotations
 
+from unittest import mock
 from unittest.mock import patch
 
 from django.urls import reverse
+from django.utils import timezone
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
@@ -27,16 +29,18 @@ from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.direct_messages import (
+from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+from urbanlens.dashboard.services.messaging.direct_messages import (
     REACTION_PICKER_EMOJIS,
     can_direct_message,
     conversations_for,
     create_direct_message,
+    has_any_conversation,
+    unread_conversations_for,
     has_used_direct_messages,
     is_safe_reaction_emoji,
     thread_page,
 )
-from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 _db_settings = settings(
     max_examples=20,
@@ -732,7 +736,7 @@ class NotificationChannelPreferenceTests(TestCase):
         title used the raw username directly - exposing the hidden sender in
         the bell/dropdown before the anonymized thread was ever opened.
         """
-        from urbanlens.dashboard.services.direct_messages import display_identity_for
+        from urbanlens.dashboard.services.messaging.direct_messages import display_identity_for
 
         Profile.objects.filter(pk=self.sender.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
         self.sender.refresh_from_db()
@@ -764,26 +768,26 @@ class MessageTextAlertTests(TestCase):
 
     def test_send_schedules_the_text_alert_task_when_enabled(self) -> None:
         self._set_toggles(whatsapp=True)
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as mock_enqueue:
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue:
             create_direct_message(self.sender, self.recipient, "hi")
         scheduled = {call.args[0].__name__ for call in mock_enqueue.call_args_list}
         self.assertIn("send_direct_message_text_alerts_if_unread", scheduled)
 
     def test_send_does_not_schedule_when_both_toggles_off(self) -> None:
         self._set_toggles()
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as mock_enqueue:
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue:
             create_direct_message(self.sender, self.recipient, "hi")
         scheduled = {call.args[0].__name__ for call in mock_enqueue.call_args_list}
         self.assertNotIn("send_direct_message_text_alerts_if_unread", scheduled)
 
     def test_alert_dispatches_per_enabled_channel(self) -> None:
-        from urbanlens.dashboard.services.direct_messages import send_message_text_alerts_now
+        from urbanlens.dashboard.services.messaging.direct_messages import send_message_text_alerts_now
 
         self._set_toggles(whatsapp=True, sms=False)
         message = create_direct_message(self.sender, self.recipient, "hi")
         with (
-            patch("urbanlens.dashboard.services.notification_delivery.send_whatsapp") as mock_wa,
-            patch("urbanlens.dashboard.services.notification_delivery.send_sms") as mock_sms,
+            patch("urbanlens.dashboard.services.notifications.notification_delivery.send_whatsapp") as mock_wa,
+            patch("urbanlens.dashboard.services.notifications.notification_delivery.send_sms") as mock_sms,
         ):
             send_message_text_alerts_now(message)
         mock_wa.assert_called_once()
@@ -802,22 +806,22 @@ class MessageTextAlertTests(TestCase):
         # would then run here - outside the patch below - and claim the
         # debounce marker, leaving the explicit calls with nothing to do. Stub
         # the scheduling so the two invocations under test are the only ones.
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             first = create_direct_message(self.sender, self.recipient, "hi")
             second = create_direct_message(self.sender, self.recipient, "still there?")
-        with patch("urbanlens.dashboard.services.notification_delivery.send_whatsapp") as mock_wa:
+        with patch("urbanlens.dashboard.services.notifications.notification_delivery.send_whatsapp") as mock_wa:
             send_direct_message_text_alerts_if_unread(first.pk)
             send_direct_message_text_alerts_if_unread(second.pk)
         mock_wa.assert_called_once()
 
     def test_alert_body_never_contains_message_content(self) -> None:
-        from urbanlens.dashboard.services.direct_messages import send_message_text_alerts_now
+        from urbanlens.dashboard.services.messaging.direct_messages import send_message_text_alerts_now
 
         Profile.objects.filter(pk=self.sender.pk).update(profile_visibility=VisibilityChoice.ANYONE)
         self.sender.refresh_from_db()
         self._set_toggles(sms=True)
         message = create_direct_message(self.sender, self.recipient, "secret rooftop door code 4711")
-        with patch("urbanlens.dashboard.services.notification_delivery.send_sms") as mock_sms:
+        with patch("urbanlens.dashboard.services.notifications.notification_delivery.send_sms") as mock_sms:
             send_message_text_alerts_now(message)
         body = mock_sms.call_args.args[1]
         self.assertNotIn("4711", body)
@@ -827,13 +831,13 @@ class MessageTextAlertTests(TestCase):
         """Same recipient-scoped masking as the thread/bell/email paths - the
         text alert goes out-of-band through a carrier, so a hidden sender's
         real username must not appear there either."""
-        from urbanlens.dashboard.services.direct_messages import display_identity_for, send_message_text_alerts_now
+        from urbanlens.dashboard.services.messaging.direct_messages import display_identity_for, send_message_text_alerts_now
 
         Profile.objects.filter(pk=self.sender.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
         self.sender.refresh_from_db()
         self._set_toggles(sms=True)
         message = create_direct_message(self.sender, self.recipient, "hi")
-        with patch("urbanlens.dashboard.services.notification_delivery.send_sms") as mock_sms:
+        with patch("urbanlens.dashboard.services.notifications.notification_delivery.send_sms") as mock_sms:
             send_message_text_alerts_now(message)
         body = mock_sms.call_args.args[1]
         self.assertNotIn(self.sender.username, body)
@@ -847,7 +851,7 @@ class MessageTextAlertTests(TestCase):
         self._set_toggles(whatsapp=True)
         message = create_direct_message(self.sender, self.recipient, "hi")
         DirectMessage.objects.filter(pk=message.pk).update(read_at=timezone.now())
-        with patch("urbanlens.dashboard.services.notification_delivery.send_whatsapp") as mock_wa:
+        with patch("urbanlens.dashboard.services.notifications.notification_delivery.send_whatsapp") as mock_wa:
             send_direct_message_text_alerts_if_unread(message.pk)
         mock_wa.assert_not_called()
 
@@ -869,7 +873,7 @@ class SelfDeletedMessageVisibilityTests(TestCase):
         _set_dm_visibility(self.partner, VisibilityChoice.ANYONE)
 
     def test_self_deleted_unread_message_does_not_count_as_unread(self) -> None:
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_self
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_self
 
         message = create_direct_message(self.partner, self.me, "hi")
         self.assertEqual(DirectMessage.objects.unread_conversation_count(self.me), 1)
@@ -877,7 +881,7 @@ class SelfDeletedMessageVisibilityTests(TestCase):
         self.assertEqual(DirectMessage.objects.unread_conversation_count(self.me), 0)
 
     def test_self_deleted_message_is_not_the_sidebar_preview(self) -> None:
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_self
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_self
 
         first = create_direct_message(self.partner, self.me, "keep me")
         second = create_direct_message(self.partner, self.me, "hide me")
@@ -887,7 +891,7 @@ class SelfDeletedMessageVisibilityTests(TestCase):
         self.assertEqual(conversations[0]["last_message"].pk, first.pk)
 
     def test_conversation_disappears_when_every_message_is_self_deleted(self) -> None:
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_self
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_self
 
         only = create_direct_message(self.partner, self.me, "hi")
         delete_message_for_self(only, self.me)
@@ -898,7 +902,7 @@ class SelfDeletedMessageVisibilityTests(TestCase):
         between() directly, without visible_to() - so a "remove for me" delete
         stuck in the sidebar/badge but reappeared the moment the thread reloaded.
         """
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_self, thread_page
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_self, thread_page
 
         keep = create_direct_message(self.partner, self.me, "keep me")
         hide = create_direct_message(self.partner, self.me, "hide me")
@@ -936,14 +940,14 @@ class SenderOwnDeletedForEveryoneVisibilityTests(TestCase):
         _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
 
     def test_visible_to_never_excludes_the_senders_own_deleted_for_everyone_row(self) -> None:
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
         message = create_direct_message(self.sender, self.recipient, "hi")
         delete_message_for_everyone(message, self.sender)
         self.assertIn(message, DirectMessage.objects.visible_to(self.sender))
 
     def test_conversation_stays_in_the_senders_sidebar_after_deleting_for_everyone(self) -> None:
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
         message = create_direct_message(self.sender, self.recipient, "hi")
         delete_message_for_everyone(message, self.sender)
@@ -953,7 +957,7 @@ class SenderOwnDeletedForEveryoneVisibilityTests(TestCase):
 
     def test_recipient_still_only_sees_the_tombstone(self) -> None:
         """The fix must not resurrect the message's content for the recipient."""
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
         message = create_direct_message(self.sender, self.recipient, "hi")
         delete_message_for_everyone(message, self.sender)
@@ -962,9 +966,83 @@ class SenderOwnDeletedForEveryoneVisibilityTests(TestCase):
 
     def test_recipient_self_delete_is_still_excluded_from_their_own_view(self) -> None:
         """The fix only changes the sender-side gate - deleted_by_recipient_at still hides it."""
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_self
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_self
 
         message = create_direct_message(self.sender, self.recipient, "hi")
         delete_message_for_self(message, self.recipient)
         self.assertNotIn(message, DirectMessage.objects.visible_to(self.recipient))
         self.assertIn(message, DirectMessage.objects.visible_to(self.sender))
+
+
+class UnreadDropdownScalingTests(TestCase):
+    """The navbar dropdown shows at most eight unread rows.
+
+    It used to build the entire inbox to find them - every partner's identity,
+    last message and mute state - and then slice. A user with hundreds of
+    conversations paid for all of them on every `msgOpen`, and the empty-state
+    flag ("all caught up" vs "no messages yet") was answered by testing the
+    length of that same list.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make("auth.User")  # absorbs the bootstrap site-admin promotion
+        self.me = _profile()
+
+    def _partner_with(self, *, unread: bool) -> None:
+        other = _profile()
+        message = baker.make(DirectMessage, sender=other, recipient=self.me, body="hi")
+        if not unread:
+            DirectMessage.objects.filter(pk=message.pk).update(read_at=timezone.now())
+
+    def test_only_unread_conversations_are_built(self) -> None:
+        for _ in range(3):
+            self._partner_with(unread=True)
+        for _ in range(5):
+            self._partner_with(unread=False)
+
+        rows = unread_conversations_for(self.me)
+
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(row["unread_count"] for row in rows))
+
+    def test_the_read_conversations_are_not_even_fetched(self) -> None:
+        """Rows built, not rows returned - the cost this was about."""
+        for _ in range(2):
+            self._partner_with(unread=True)
+        for _ in range(8):
+            self._partner_with(unread=False)
+
+        materialised: list = []
+        original = Profile.from_db.__func__
+
+        def counting(cls, db, field_names, values):
+            instance = original(cls, db, field_names, values)
+            materialised.append(instance)
+            return instance
+
+        with mock.patch.object(Profile, "from_db", classmethod(counting)):
+            unread_conversations_for(self.me)
+
+        # Two partners, not ten. An exact count would pin unrelated profile
+        # reads, so this asserts the shape: far fewer than the whole inbox.
+        self.assertLess(len(materialised), 8, f"built {len(materialised)} profiles for two unread conversations")
+
+    def test_an_all_read_inbox_still_reports_having_conversations(self) -> None:
+        """"All caught up" and "no messages yet" are different empty states."""
+        self._partner_with(unread=False)
+
+        self.assertEqual(unread_conversations_for(self.me), [])
+        self.assertTrue(has_any_conversation(self.me))
+
+    def test_an_empty_inbox_reports_no_conversations(self) -> None:
+        self.assertFalse(has_any_conversation(self.me))
+
+    def test_a_group_membership_alone_counts_as_a_conversation(self) -> None:
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
+
+        friend = _profile()
+        _make_accepted_friendship(self.me, friend)
+        create_group_chat(self.me, "Quiet", [friend])
+
+        self.assertTrue(has_any_conversation(self.me))

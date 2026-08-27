@@ -4,7 +4,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from django.db.models import Count, F, Max, Prefetch, Q
+from django.db.models import Count, DateField, F, Max, Min, Prefetch, Q
+from django.db.models.functions import Cast, Coalesce, Greatest
 from django.utils import timezone
 
 # Django Imports
@@ -29,8 +30,52 @@ TRIP_LIST_SORT_FIELDS: dict[str, str] = {
 }
 
 
+def _member_profiles() -> Prefetch:
+    """Prefetch each trip's memberships with their profile+user loaded.
+
+    The overview masks every listed trip's member identities
+    (``controllers.trip._apply_trip_list_identity_masking``), which walks
+    ``trip.memberships.all()``; without this that is two queries per trip.
+
+    Returns:
+        The ``memberships`` Prefetch to hand to ``prefetch_related``.
+    """
+    from urbanlens.dashboard.models.trips.model import TripMembership
+
+    return Prefetch("memberships", queryset=TripMembership.objects.select_related("profile__user"))
+
+
 class TripQuerySet(abstract.DashboardQuerySet):
     """Custom queryset for Trip models."""
+
+    def with_effective_dates(self) -> TripQuerySet:
+        """Annotate ``_eff_start``/``_eff_end`` so the date properties don't query per row.
+
+        ``Trip.effective_start_date``/``effective_end_date`` fall back to querying the
+        trip's activities, and ``timeline_status``/``duration_days`` read both, so any
+        page rendering a list of trips pays two activity queries per trip without this.
+        Both properties prefer these annotations when present.
+
+        Uses the later of ``scheduled_at`` and ``scheduled_end`` for the end date so
+        this agrees with the Memories feed's trip source; Postgres's ``GREATEST``
+        ignores NULLs. ``Min``/``Max`` are unaffected by the row multiplication a
+        caller's own joins may introduce, unlike the ``Count`` annotations in
+        :meth:`for_list_page`.
+
+        Returns:
+            The queryset with both annotations applied.
+        """
+        return (
+            self.annotate(
+                _first_activity_date=Cast(Min("activities__scheduled_at"), output_field=DateField()),
+                _last_activity_date=Cast(
+                    Greatest(Max("activities__scheduled_at"), Max("activities__scheduled_end")),
+                    output_field=DateField(),
+                ),
+            )
+            .annotate(_eff_start=Coalesce("start_date", "_first_activity_date"))
+            .annotate(_eff_end=Coalesce("end_date", "_last_activity_date", "_eff_start"))
+        )
 
     def for_list_page(self, profile: Profile, sort: str = "updated", direction: str = "desc") -> TripQuerySet | list[Trip]:
         """Return trips for the list page with counts and member prefetch.
@@ -72,6 +117,9 @@ class TripQuerySet(abstract.DashboardQuerySet):
                 comment_count=Count("comments", distinct=True),
                 pin_count=Count("activities__pin", distinct=True, filter=Q(activities__pin__isnull=False)),
             )
+            # Effective dates resolved in the same query rather than per row - see
+            # with_effective_dates, shared with the overview and calendar pages.
+            .with_effective_dates()
             .prefetch_related(
                 Prefetch(
                     "memberships",
@@ -140,7 +188,7 @@ class TripQuerySet(abstract.DashboardQuerySet):
         Returns:
             Trips ordered by `updated` descending, limited to `limit`.
         """
-        return self.filter(profiles=profile).select_related("creator__user").order_by("-updated")[:limit]
+        return self.filter(profiles=profile).select_related("creator__user").prefetch_related(_member_profiles()).with_effective_dates().order_by("-updated")[:limit]
 
     def recently_active_past(self, profile: Profile, since: datetime.datetime, limit: int = 6) -> list[Trip]:
         """Return the viewer's past trips that have had a comment posted since ``since``.
@@ -185,6 +233,8 @@ class TripQuerySet(abstract.DashboardQuerySet):
             .annotate(viewer_last_viewed_at=Max("memberships__last_viewed_at", filter=Q(memberships__profile=profile)))
             .filter(viewer_last_viewed_at__isnull=False)
             .select_related("creator__user")
+            .prefetch_related(_member_profiles())
+            .with_effective_dates()
             .order_by("-viewer_last_viewed_at")[:limit]
         )
 

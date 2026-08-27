@@ -81,6 +81,14 @@
                     </a>
                     {% endif %}
                 </div>
+                {% with recorded=visit_weather|dict_get:visit.pk %}
+                {% if recorded.summary %}
+                <div class="visit-weather" title="What the weather actually was that day (ERA5 reanalysis, via REData)">
+                    <i class="material-symbols-outlined">thermostat</i>
+                    <span>{{ recorded.summary }}</span>
+                </div>
+                {% endif %}
+                {% endwith %}
                 {% if visit.notes_html %}
                 <div class="visit-notes article-body">{{ visit.notes_html|safe }}</div>
                 {% endif %}
@@ -190,13 +198,13 @@
     {% include "dashboard/partials/ui/_pagination_controls.html" %}
 
     {# -- Log-a-visit dialog -------------------------------------------- #}
-    <dialog id="visit-add-dialog-{{ pin.slug }}" class="visit-add-dialog ul-dialog">
+    <dialog id="visit-add-dialog-{{ pin.slug }}" class="visit-add-dialog ul-dialog" aria-labelledby="dialog-title-log-a-visit">
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Log a Visit" %}
         {% include "dashboard/partials/pins/_visit_form.html" with dialog_id="visit-add-dialog-"|add:pin.slug %}
     </dialog>
 
     {# -- Edit-visit dialog: the form is lazily loaded via HTMX on click -- #}
-    <dialog id="visit-edit-dialog-{{ pin.slug }}" class="visit-add-dialog ul-dialog">
+    <dialog id="visit-edit-dialog-{{ pin.slug }}" class="visit-add-dialog ul-dialog" aria-labelledby="dialog-title-edit-visit">
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Visit" %}
         <div id="visit-edit-body-{{ pin.slug }}" class="visit-edit-body">
             <p class="visit-edit-loading">Loading&hellip;</p>
@@ -204,16 +212,16 @@
     </dialog>
 
     {# -- Shared lightbox for photos attached to a visit ------------------ #}
-    <dialog id="visit-photo-lightbox-{{ pin.slug }}" class="gallery-lightbox visit-photo-lightbox ul-dialog">
+    <dialog id="visit-photo-lightbox-{{ pin.slug }}" class="gallery-lightbox visit-photo-lightbox ul-dialog" aria-label="Visit photo viewer">
         <div class="lightbox-inner">
-            <button type="button" class="lightbox-close" onclick="this.closest('dialog').close()">
+            <button type="button" class="lightbox-close" onclick="this.closest('dialog').close()" aria-label="Close">
                 <i class="material-symbols-outlined">close</i>
             </button>
-            <button type="button" class="lightbox-nav lightbox-prev" onclick="visitLightboxNav(-1)">
+            <button type="button" class="lightbox-nav lightbox-prev" onclick="visitLightboxNav(-1)" aria-label="Previous">
                 <i class="material-symbols-outlined">chevron_left</i>
             </button>
             <img class="lightbox-img" src="" alt="">
-            <button type="button" class="lightbox-nav lightbox-next" onclick="visitLightboxNav(1)">
+            <button type="button" class="lightbox-nav lightbox-next" onclick="visitLightboxNav(1)" aria-label="Next">
                 <i class="material-symbols-outlined">chevron_right</i>
             </button>
             <p class="lightbox-caption"></p>

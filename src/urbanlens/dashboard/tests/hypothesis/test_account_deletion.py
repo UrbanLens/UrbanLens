@@ -2,7 +2,7 @@
 
 Covers:
 - ProfileQuerySet.due_for_deletion_reminder / due_for_hard_delete boundary conditions.
-- services.account_deletion: request/cancel/reminder/hard-delete, notifications, emails, idempotency.
+- services.profile.account_deletion: request/cancel/reminder/hard-delete, notifications, emails, idempotency.
 - RequestAccountDeletionView / CancelAccountDeletionView controllers.
 - The site-wide deletion banner rendering.
 """
@@ -26,9 +26,9 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import ACCOUNT_DELETION_GRACE_PERIOD, Profile
+from urbanlens.dashboard.models.profile.model import ACCOUNT_DELETION_GRACE_PERIOD, ACCOUNT_DELETION_REMINDER_LEAD, Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripComment
-from urbanlens.dashboard.services.account_deletion import (
+from urbanlens.dashboard.services.profile.account_deletion import (
     cancel_deletion,
     hard_delete_profile,
     request_deletion,
@@ -346,3 +346,81 @@ class AccountDeletionBannerTests(TestCase):
         _backdate_request(self.user.profile, datetime.timedelta(days=1))
         response = self.client.get(reverse("settings.view"))
         self.assertContains(response, "account-deletion-banner")
+
+
+class DeletionReminderOverlapLockTests(TestCase):
+    """Two overlapping sweeps must not both email the same account.
+
+    `due_for_deletion_reminder` filters on `deletion_reminder_sent_at__isnull=True`,
+    which guards at *selection* time, and `send_deletion_reminder` emails first
+    and stamps the marker afterwards - so without the overlap lock two runs both
+    select the same profile and both send. Celery delivers at least once, and a
+    slow sweep can outlast its own beat interval, so "two runs at once" is
+    ordinary rather than exotic.
+
+    The three sibling reminder sweeps (`send_due_checkin_reminders`,
+    `send_final_checkin_warnings`, `escalate_overdue_checkins`) already take this
+    lock; this one did not.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.user = baker.make(User, email="leaving@example.com")
+        self.profile = self.user.profile
+        self.profile.deletion_requested_at = timezone.now() - (ACCOUNT_DELETION_GRACE_PERIOD - ACCOUNT_DELETION_REMINDER_LEAD)
+        self.profile.save(update_fields=["deletion_requested_at"])
+
+    def test_a_run_holding_the_lock_blocks_a_concurrent_one(self) -> None:
+        from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+        from urbanlens.dashboard.tasks import (
+            _DELETION_REMINDER_LOCK_CACHE_KEY,
+            _DELETION_REMINDER_LOCK_TIMEOUT_SECONDS,
+            send_account_deletion_reminders,
+        )
+
+        token = acquire_lock(_DELETION_REMINDER_LOCK_CACHE_KEY, _DELETION_REMINDER_LOCK_TIMEOUT_SECONDS)
+        self.addCleanup(release_lock, _DELETION_REMINDER_LOCK_CACHE_KEY, token)
+        self.assertIsNotNone(token, "precondition: the lock must be free before the test takes it")
+
+        sent = send_account_deletion_reminders()
+
+        self.assertEqual(sent, 0, "the sweep ran while another held the lock")
+        self.profile.refresh_from_db()
+        self.assertIsNone(self.profile.deletion_reminder_sent_at, "a blocked run must leave the profile still due")
+
+    def test_the_blocked_profile_is_still_sent_on_the_next_tick(self) -> None:
+        """The lock must not lose a reminder - only defer it.
+
+        This is why a lock is right here and a claim-before-send is not: a
+        duplicate notice is noise, a missing one means no warning at all before
+        a permanent deletion.
+        """
+        from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+        from urbanlens.dashboard.tasks import (
+            _DELETION_REMINDER_LOCK_CACHE_KEY,
+            _DELETION_REMINDER_LOCK_TIMEOUT_SECONDS,
+            send_account_deletion_reminders,
+        )
+
+        token = acquire_lock(_DELETION_REMINDER_LOCK_CACHE_KEY, _DELETION_REMINDER_LOCK_TIMEOUT_SECONDS)
+        send_account_deletion_reminders()
+        release_lock(_DELETION_REMINDER_LOCK_CACHE_KEY, token)
+
+        self.assertEqual(send_account_deletion_reminders(), 1)
+        self.profile.refresh_from_db()
+        self.assertIsNotNone(self.profile.deletion_reminder_sent_at)
+
+    def test_an_uncontended_sweep_still_sends(self) -> None:
+        """Anti-vacuity: the lock must not stop the ordinary path."""
+        from urbanlens.dashboard.tasks import send_account_deletion_reminders
+
+        self.assertEqual(send_account_deletion_reminders(), 1)
+        self.profile.refresh_from_db()
+        self.assertIsNotNone(self.profile.deletion_reminder_sent_at)
+
+    def test_a_second_sweep_sends_nothing_further(self) -> None:
+        from urbanlens.dashboard.tasks import send_account_deletion_reminders
+
+        send_account_deletion_reminders()
+        self.assertEqual(send_account_deletion_reminders(), 0)

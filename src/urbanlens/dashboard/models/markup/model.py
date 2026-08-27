@@ -22,9 +22,11 @@ from django.db.models import (
 )
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.markup.meta import MapLayerMode, MarkupType, SecurityIndicatorType, normalize_layer_mode
-from urbanlens.dashboard.models.markup.queryset import MarkupMapManager, PinMarkupManager
-from urbanlens.dashboard.services.text_limits import MAX_MARKUP_LABEL_LENGTH
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
+from urbanlens.dashboard.models.markup.meta import CUSTOM_LAYER_ICON_CHOICES, MapLayerMode, MarkupType, SecurityIndicatorType, normalize_layer_mode
+from urbanlens.dashboard.models.markup.queryset import CustomLayerManager, MarkupMapManager, PinMarkupManager
+from urbanlens.dashboard.services.core.colors import sanitize_hex_color, sanitize_optional_color
+from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -40,23 +42,20 @@ logger = logging.getLogger(__name__)
 
 
 def _haversine_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Return the great-circle distance between two points in metres.
+    """Great-circle distance in metres.
 
     Args:
-        lat1: Latitude of the first point.
-        lng1: Longitude of the first point.
-        lat2: Latitude of the second point.
-        lng2: Longitude of the second point.
+        lat1: First latitude in degrees.
+        lng1: First longitude in degrees.
+        lat2: Second latitude in degrees.
+        lng2: Second longitude in degrees.
 
     Returns:
         Distance in metres.
     """
-    radius = 6_371_000.0
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lng2 - lng1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    return 2 * radius * math.asin(math.sqrt(a))
+    from urbanlens.dashboard.services.geo.distance import haversine_meters
+
+    return haversine_meters(lat1, lng1, lat2, lng2)
 
 
 class MarkupMap(abstract.FrontendDashboardModel):
@@ -133,7 +132,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
         related_name="associated_maps",
     )
     # Pins this map's geometry (saved viewport + markup) is detected to reveal,
-    # per services.map_pin_share_detection.detect_shared_pins - kept in sync by
+    # per services.sharing.map_pin_share_detection.detect_shared_pins - kept in sync by
     # models.markup.signals any time the viewport or items change, independent
     # of whether the map is ever actually shared. Deliberately separate from
     # `pin` (a single explicit, user-set link): a map can geometrically point
@@ -256,7 +255,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
 
         Args:
             snapshot: A snapshot dict already validated by
-                ``services.map_snapshot.sanitize_map_data``.
+                ``services.map.map_snapshot.sanitize_map_data``.
         """
         self.center_latitude = snapshot.get("center_lat")
         self.center_longitude = snapshot.get("center_lng")
@@ -286,10 +285,98 @@ class MarkupMap(abstract.FrontendDashboardModel):
         ordering = ["-updated"]
         indexes = [
             Index(fields=["uuid"], name="idxdb_mm_uuid"),
-            Index(fields=["profile"], name="idxdb_mm_profile"),
             Index(fields=["profile", "cloned_from"], name="idxdb_mm_profile_clonedfrom"),
-            Index(fields=["pin"], name="idxdb_mm_pin"),
         ]
+
+
+class CustomLayer(abstract.FrontendDashboardModel):
+    """A user-created, independently-toggleable group of markup items on a Pin or Wiki map.
+
+    Lets a user pull a subset of their :class:`PinMarkup` annotations (e.g.
+    every shape marking a tunnel system) into a named layer that shows/hides
+    as one unit in the map's layers panel, separately from the base "Markup"
+    layer. Exactly one of ``parent_pin`` / ``parent_wiki`` is set - the same
+    convention PinMarkup itself uses for parent_pin/parent_wiki/parent_map,
+    enforced by the owning controller rather than a DB constraint. Unlike
+    PinMarkup, a CustomLayer never attaches to a standalone MarkupMap -
+    layers only make sense on the pin detail / wiki pages where the layers
+    panel lives.
+
+    Deleting a layer never deletes its items: ``PinMarkup.layer`` is
+    ``SET_NULL``, so its markup simply falls back to the base layer.
+
+    Attributes:
+        uuid: Stable public identifier (used in URLs).
+        name: User-supplied display name (e.g. "Tunnels").
+        color: Optional accent color for the layer's button/swatch, from the
+            shared :data:`COLOR_CHOICES` palette.
+        icon: Optional Material Symbols icon name for the layer's button.
+        order: Display order among a pin/wiki's own layers.
+        default_visible: Whether this layer starts toggled on when the map
+            first loads. Defaults to False - custom layers are opt-in extras,
+            unlike the always-on base Markup layer.
+        parent_pin: The Pin whose detail map this layer belongs to, if personal.
+        parent_wiki: The Wiki whose map this layer belongs to, if shared.
+        profile: The user who created this layer.
+    """
+
+    name = CharField(max_length=100)
+    color = CharField(max_length=20, blank=True, default="", choices=COLOR_CHOICES)
+    icon = CharField(max_length=50, blank=True, default="", choices=CUSTOM_LAYER_ICON_CHOICES)
+    order = IntegerField(default=0)
+    default_visible = BooleanField(default=False)
+
+    parent_pin = ForeignKey(
+        "dashboard.Pin",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="custom_layers",
+    )
+    parent_wiki = ForeignKey(
+        "dashboard.Wiki",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="custom_layers",
+    )
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        related_name="custom_layers",
+    )
+
+    if TYPE_CHECKING:
+        parent_pin_id: int | None
+        parent_wiki_id: int | None
+        profile_id: int
+        items: QuerySet[PinMarkup]
+
+    objects = CustomLayerManager()
+
+    def to_json(self) -> dict:
+        """Compact serialisation for the layers panel and manage-layers dialog.
+
+        Returns:
+            dict with uuid, name, color, icon, order, default_visible.
+        """
+        return {
+            "uuid": str(self.uuid),
+            "name": self.name,
+            "color": self.color,
+            "icon": self.icon,
+            "order": self.order,
+            "default_visible": self.default_visible,
+        }
+
+    def __str__(self) -> str:
+        owner = f"pin={self.parent_pin_id}" if self.parent_pin_id else f"wiki={self.parent_wiki_id}"
+        return f"{self.name} [{owner}]"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_custom_layers"
+        ordering = ["order", "created"]
+        indexes = []
 
 
 class PinMarkup(abstract.FrontendDashboardModel):
@@ -371,14 +458,53 @@ class PinMarkup(abstract.FrontendDashboardModel):
         on_delete=CASCADE,
         related_name="markup_items",
     )
+    # The custom layer this item has been filed under, if any - see
+    # CustomLayer. SET_NULL so deleting a layer un-groups its items (falls
+    # back to the base Markup layer) instead of deleting them.
+    layer = ForeignKey(
+        CustomLayer,
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="items",
+    )
 
     if TYPE_CHECKING:
         parent_pin_id: int | None
         parent_wiki_id: int | None
         parent_map_id: int | None
         profile_id: int
+        layer_id: int | None
 
     objects = PinMarkupManager()
+
+    def coerce_colors(self) -> None:
+        """Reduce this item's colours to values a renderer can actually mean.
+
+        Separate from ``save`` because a bulk write never calls it: the undo
+        restore rebuilds a deleted map's annotations with ``bulk_create``, which
+        would otherwise reinstate a stored value verbatim - and a payload
+        written before this validation existed is exactly where a bad one would
+        be. ``PinMarkupQuerySet.bulk_create`` applies it for every such caller.
+
+        Invalid values fall back the same way the renderer's own ``safeColor``
+        does, so a bad colour degrades to the default instead of failing the
+        write.
+        """
+        self.color = sanitize_hex_color(self.color, "#e53e3e")
+        self.border_color = sanitize_optional_color(self.border_color)
+
+    def save(self, *args, **kwargs) -> None:
+        """Persist the item, coercing its colours first.
+
+        Enforced here rather than in each view because both colours are written
+        by several paths (the create/edit JSON endpoints, ``from_snapshot_shape``
+        on import, map clones) and are interpolated into markup that reaches
+        ``innerHTML`` on the client, where an arbitrary string would be a stored
+        XSS vector.
+        """
+        self.coerce_colors()
+        super().save(*args, **kwargs)
 
     def to_json(self) -> dict:
         """Compact serialisation for Leaflet rendering.
@@ -398,6 +524,7 @@ class PinMarkup(abstract.FrontendDashboardModel):
             "fill_opacity": self.fill_opacity,
             "border_opacity": self.border_opacity,
             "security_indicator": self.security_indicator,
+            "layer_uuid": str(self.layer.uuid) if self.layer is not None else None,
         }
 
     def to_snapshot_shape(self) -> dict | None:
@@ -470,7 +597,7 @@ class PinMarkup(abstract.FrontendDashboardModel):
 
         Args:
             shape: A shape dict already cleaned by
-                ``services.map_snapshot._sanitize_markup_shapes`` -
+                ``services.map.map_snapshot._sanitize_markup_shapes`` -
                 ``latlngs`` are ``[lat, lng]`` pairs.
 
         Returns:
@@ -542,9 +669,4 @@ class PinMarkup(abstract.FrontendDashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_pin_markup"
         ordering = ["created"]
-        indexes = [
-            Index(fields=["parent_pin"], name="idxdb_pm_pin"),
-            Index(fields=["parent_wiki"], name="idxdb_pm_wiki"),
-            Index(fields=["parent_map"], name="idxdb_pm_map"),
-            Index(fields=["profile"], name="idxdb_pm_profile"),
-        ]
+        indexes = []

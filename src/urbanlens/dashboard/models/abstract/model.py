@@ -6,6 +6,8 @@ import random
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from django.core.exceptions import FieldDoesNotExist
+
 # Django Imports
 from django.db import IntegrityError, models as django_models, transaction
 from django.db.models import UUIDField
@@ -18,6 +20,22 @@ from urbanlens.dashboard.models.abstract.queryset import DashboardManager, Front
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MAX_SLUG_LENGTH = 255
+
+
+def _is_slug_collision(error: IntegrityError) -> bool:
+    """Whether an IntegrityError is a *slug* unique-constraint violation.
+
+    The retry loops below regenerate the slug and try again - which only helps
+    when the slug was the colliding column. Matching any "duplicate key"
+    message (as this used to) meant a violation of some other constraint
+    (e.g. Pin's one-pin-per-location-per-profile) burned 20 slug
+    regenerations before surfacing, and the save() fallback then masked the
+    real conflict behind a uuid slug. Postgres includes the constraint/index
+    name in the message, and every slug uniqueness constraint in this app has
+    "slug" in its name (a naming rule this check makes load-bearing).
+    """
+    message = str(error)
+    return "duplicate key value violates unique constraint" in message and "slug" in message
 
 
 class DashboardModel(django_models.Model):
@@ -84,7 +102,10 @@ class PublicDashboardModel(FrontendDashboardModel):
         """Return the max_length of the slug field as declared on this model."""
         try:
             return self.__class__._meta.get_field("slug").max_length or _DEFAULT_MAX_SLUG_LENGTH  # noqa: SLF001
-        except Exception:
+        except FieldDoesNotExist:
+            # Only a genuinely slug-less model should fall back. Swallowing everything
+            # here would hand back the default length for a model whose slug column is
+            # *shorter*, and the over-long value then fails at the database instead.
             return _DEFAULT_MAX_SLUG_LENGTH
 
     def _slugify_qs(self):
@@ -163,7 +184,7 @@ class PublicDashboardModel(FrontendDashboardModel):
                         self.save(update_fields=["slug"])
                 break
             except IntegrityError as e:
-                if "duplicate key value violates unique constraint" in str(e):
+                if _is_slug_collision(e):
                     continue
                 raise
         if not self.slug:
@@ -185,7 +206,7 @@ class PublicDashboardModel(FrontendDashboardModel):
                     super().save(*args, **kwargs)
                 return
             except IntegrityError as e:
-                if "duplicate key value violates unique constraint" not in str(e):
+                if not _is_slug_collision(e):
                     raise
                 continue
 

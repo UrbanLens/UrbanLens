@@ -79,12 +79,18 @@ class PinSerializer(serializers.ModelSerializer):
         # explicit rename.  Only the pin-name editing flows set this guard.
         validated_data["name_is_user_provided"] = False
         pin = Pin.objects.create(**validated_data)
-        try:
-            from urbanlens.dashboard.services.auto_tag import AutoTagService
+        # Enqueued, not run here: AutoTagService falls through to the LLM gateway for
+        # anything its keyword stage misses, so doing this inline made every pin created
+        # through the REST API or an import wait on a network round-trip before the
+        # response came back. The other two creation paths
+        # (services.pins.pin_creation and the Google Maps import) already enqueue this
+        # same task; this call site was the one left behind. Tagging was always
+        # best-effort - the previous code swallowed its failures - so nothing in the
+        # response depends on it having run.
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import suggest_pin_category
 
-            AutoTagService().suggest_for_pin(pin, apply=True)
-        except (RuntimeError, OSError, ValueError):
-            logger.warning("Auto-tagging failed for pin %s", pin.pk, exc_info=True)
+        safely_enqueue_task(suggest_pin_category, pin.pk)
         return pin
 
     def update(self, instance, validated_data):

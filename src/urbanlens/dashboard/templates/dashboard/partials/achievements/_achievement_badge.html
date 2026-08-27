@@ -1,0 +1,51 @@
+{% load dashboard_tags %}
+{% comment %}
+One award tile. Renders the custom image when the admin uploaded one, and falls
+back to the Material Symbols name or emoji stored on `icon` otherwise.
+
+Context:
+  achievement - the Achievement to render
+  earned      - whether the subject has it (drives the locked styling)
+  earned_at   - when it was earned, if it was
+  value       - the subject's current value for the award's metric
+  percent     - 0-100 progress toward the threshold
+  show_progress - render the progress bar (owner-only; a stranger should not be
+                  able to read exact contribution counts off someone's profile)
+{% endcomment %}
+<div class="achievement{% if not earned %} achievement--locked{% endif %}"
+     {% if achievement.color %}style="--achievement-color: {{ achievement.color }}"{% endif %}
+     title="{{ achievement.requirement_text }}">
+    <div class="achievement__medal">
+        {% if achievement.custom_icon %}
+            <img class="achievement__image" src="{{ achievement.custom_icon.url }}" alt="" loading="lazy">
+        {% elif achievement.icon %}
+            {% if achievement.icon|is_material_icon %}
+                <i class="material-symbols-outlined achievement__icon">{{ achievement.icon }}</i>
+            {% else %}
+                <span class="achievement__icon achievement__icon--emoji">{{ achievement.icon }}</span>
+            {% endif %}
+        {% else %}
+            <i class="material-symbols-outlined achievement__icon">trophy</i>
+        {% endif %}
+        {% if not earned %}<i class="material-symbols-outlined achievement__lock">lock</i>{% endif %}
+    </div>
+
+    <div class="achievement__body">
+        <p class="achievement__name">{{ achievement.name }}</p>
+        {% if achievement.description %}
+        <p class="achievement__description">{{ achievement.description }}</p>
+        {% endif %}
+
+        {% if earned %}
+            <p class="achievement__meta">Earned {{ earned_at|date:"M j, Y" }}</p>
+        {% elif show_progress %}
+            <div class="achievement__progress" role="progressbar" aria-valuenow="{{ percent }}" aria-valuemin="0" aria-valuemax="100"
+                 aria-label="Progress toward {{ achievement.name }}">
+                <div class="achievement__progress-fill" style="width: {{ percent }}%"></div>
+            </div>
+            <p class="achievement__meta">{{ value }} / {{ achievement.threshold }} {{ achievement.metric_definition.unit|default:"" }}</p>
+        {% else %}
+            <p class="achievement__meta">{{ achievement.requirement_text }}</p>
+        {% endif %}
+    </div>
+</div>

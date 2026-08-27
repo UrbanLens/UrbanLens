@@ -38,7 +38,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.custom_field_references import REFERENCE_KINDS
+from urbanlens.dashboard.services.custom_fields.custom_field_references import REFERENCE_KINDS
 
 if TYPE_CHECKING:
     from django.http import HttpRequest

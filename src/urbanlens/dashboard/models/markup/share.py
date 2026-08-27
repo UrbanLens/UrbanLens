@@ -8,7 +8,7 @@ from django.core.validators import MaxLengthValidator
 from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, OneToOneField, TextField
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.services.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH
 
 
 class MarkupMapShare(abstract.DashboardModel):
@@ -19,7 +19,7 @@ class MarkupMapShare(abstract.DashboardModel):
     map and to carry the notification, mirroring PinShareDetailView's
     to_profile-scoped access pattern without any of PinShare's materialization
     machinery. The recipient's only action is to optionally clone the map into
-    their own account (see services.map_sharing.clone_markup_map).
+    their own account (see services.sharing.map_sharing.clone_markup_map).
     """
 
     markup_map = ForeignKey("dashboard.MarkupMap", on_delete=CASCADE, related_name="shares")
@@ -48,7 +48,4 @@ class MarkupMapShare(abstract.DashboardModel):
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_markup_map_shares"
-        indexes = [
-            Index(fields=["to_profile"], name="idxdb_mms_to_profile"),
-            Index(fields=["markup_map"], name="idxdb_mms_markup_map"),
-        ]
+        indexes = []

@@ -2,7 +2,7 @@
 
 Dispatches per ``Fact.data_type``: NUMBER/POINT facts converge via a
 trust-and-recency-weighted centroid (generalizing
-``services.photo_coordinates.recompute_estimated_coordinates``); every other
+``services.photos.photo_coordinates.recompute_estimated_coordinates``); every other
 data type (TEXT/CHOICE/BOOL/DATE) converges via trust-weighted agreement
 clustering with Bayesian-smoothed confidence, extending
 ``ConsensusProfile``'s Beta-Bernoulli trust pattern (see
@@ -17,11 +17,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
 from urbanlens.dashboard.models.facts.model import Fact, FactDataType, FactStatus
+from urbanlens.dashboard.services.geo.longitude import circular_mean_longitude
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -32,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 #: Below this many active evidence rows, a fact's value/status is left
 #: alone - not enough signal to be worth caching or surfacing. Mirrors
-#: ``services.photo_coordinates.MIN_GUESSES_FOR_ESTIMATE``.
+#: ``services.photos.photo_coordinates.MIN_GUESSES_FOR_ESTIMATE``.
 MIN_EVIDENCE_FOR_ESTIMATE = 5
 
 #: confidence >= this promotes a fact to CONFIRMED.
@@ -95,7 +97,7 @@ def _aggregate_point(weighted: list[_WeightedEvidence]) -> tuple[Any, float]:
         return None, 0.0
 
     avg_lat = sum(item.value.y * item.weight for item in weighted) / total_weight
-    avg_lng = sum(item.value.x * item.weight for item in weighted) / total_weight
+    avg_lng = circular_mean_longitude([item.value.x for item in weighted], [item.weight for item in weighted])
     centroid = Point(avg_lng, avg_lat, srid=4326)
 
     agreeing_weight = sum(item.weight for item in weighted if haversine_distance_meters(item.value, centroid) <= AGREEMENT_DISTANCE_METERS)
@@ -139,7 +141,14 @@ def _cluster_categorical(weighted: list[_WeightedEvidence]) -> tuple[list[tuple[
         else:
             cluster.append(item)
 
-    totals = sorted(((sum(item.weight for item in cluster), cluster[0].value) for cluster in clusters), reverse=True)
+    # key= on the weight alone: a bare `reverse=True` sorts the tuples, so two
+    # clusters of equal weight fall through to comparing their *values*. That was
+    # never the intent, and it raises for values that aren't mutually comparable -
+    # reachable here because FactEvidence keeps a per-row `data_type` so old rows
+    # stay interpretable after a key's registered type changes (one fact can hold a
+    # text row and a bool row), and every `value_*` column is nullable. Sorting on
+    # weight only leaves ties in evidence order, which is stable and cannot raise.
+    totals = sorted(((sum(item.weight for item in cluster), cluster[0].value) for cluster in clusters), key=lambda total: total[0], reverse=True)
     total_weight = sum(weight for weight, _value in totals)
     return totals, total_weight
 
@@ -210,7 +219,7 @@ def recompute(fact_id: int) -> None:
     (TEXT/CHOICE/BOOL/DATE), a previously-``CONFIRMED`` value is protected
     from flip-flopping by :func:`resolve_categorical`. NUMBER/POINT facts
     always recompute their centroid/mean fresh, mirroring
-    ``services.photo_coordinates.recompute_estimated_coordinates`` - a
+    ``services.photos.photo_coordinates.recompute_estimated_coordinates`` - a
     weighted average can't suddenly jump to a wildly different value from
     one new observation the way a discrete categorical winner can, so no
     equivalent gate is needed there.

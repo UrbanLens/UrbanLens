@@ -32,12 +32,12 @@ from django.views import View
 
 from urbanlens.dashboard.models.site_settings import (
     EnvironmentOverrideChoice,
-    SearchProviderChoice,
     SiteSettings,
 )
-from urbanlens.dashboard.services.infrastructure_stats import _format_duration
-from urbanlens.dashboard.services.json_safety import safe_json_for_script
-from urbanlens.dashboard.services.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
+from urbanlens.dashboard.services.admin.infrastructure_stats import _format_duration
+from urbanlens.dashboard.services.admin.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
+from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
+from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 logger = logging.getLogger(__name__)
@@ -120,7 +120,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         ranked_slugs = {slug for slug, _label, _ranked in name_source_order}
         name_source_order += [(slug, label, False) for slug, label in providers_by_slug.items() if slug not in ranked_slugs]
 
-        from urbanlens.dashboard.services.enrichment import enrichment_sources, last_run_summary, self_reported_skip
+        from urbanlens.dashboard.services.locations.enrichment import enrichment_sources, last_run_summary, self_reported_skip
 
         enrichment_source_rows = [
             {
@@ -139,7 +139,6 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "settings": settings,
                 "page_name": "site-admin",
                 "saved": request.GET.get("saved"),
-                "search_provider_choices": SearchProviderChoice.choices,
                 "environment_override_choices": EnvironmentOverrideChoice.choices,
                 "effective_environment_label": settings.get_effective_environment_label(),
                 "env_var_environment": os.getenv("UL_ENVIRONMENT", ""),
@@ -181,11 +180,6 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if app_title:
             settings.app_title = app_title
 
-        valid_providers = set(SearchProviderChoice.values)
-        provider = request.POST.get("search_provider", "")
-        if provider in valid_providers:
-            settings.search_provider = provider
-
         try:
             cache_days = int(request.POST.get("external_data_cache_days", settings.external_data_cache_days))
             settings.external_data_cache_days = max(1, cache_days)
@@ -196,7 +190,14 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             # Unknown slugs are tolerated: the name resolver ignores sources it
             # never sees, so a disabled plugin's slug can stay configured.
             slugs = [token.strip().lower() for token in request.POST.get("default_name_source_priority", "").split(",")]
-            settings.default_name_source_priority = ",".join(slug for slug in slugs if re.fullmatch(r"[a-z0-9_-]+", slug))
+            # The regex constrains each token's characters, not its length, and
+            # says nothing about how many tokens arrive - so the joined result
+            # has to be checked against the column it is going into.
+            joined = ",".join(slug for slug in slugs if re.fullmatch(r"[a-z0-9_-]+", slug))
+            priority_error = column_length_error(SiteSettings, "default_name_source_priority", joined, "Name source priority")
+            if priority_error:
+                return HttpResponse(priority_error, status=400)
+            settings.default_name_source_priority = joined
 
         if "enrichment_enabled" in request.POST:
             settings.enrichment_enabled = request.POST.get("enrichment_enabled") in {"1", "true", "on", "True"}
@@ -220,6 +221,12 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         try:
             max_attempts = int(request.POST.get("login_max_attempts", settings.login_max_attempts))
             settings.login_max_attempts = max(0, max_attempts)
+        except (ValueError, TypeError):
+            pass
+
+        try:
+            ip_max_attempts = int(request.POST.get("login_ip_max_attempts", settings.login_ip_max_attempts))
+            settings.login_ip_max_attempts = max(0, ip_max_attempts)
         except (ValueError, TypeError):
             pass
 
@@ -282,6 +289,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "max_bbox_area_km2",
                 "external_data_cache_days",
                 "login_max_attempts",
+                "login_ip_max_attempts",
                 "login_lockout_minutes",
                 "backup_frequency_hours",
                 "backup_retention",
@@ -561,22 +569,35 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
     request: HttpRequest
 
     def get(self, request: HttpRequest):
+        from django.db.models import Count
+
         from urbanlens.dashboard.models.site_settings import SiteSettings
         from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, UserSubscription
+        from urbanlens.dashboard.services.admin.cost_tracking import cost_per_user
+        from urbanlens.dashboard.services.billing import stripe_client
 
-        SubscriptionRole.ensure_defaults()
         grants = UserSubscription.objects.granted_by_admin(request.user).select_related("user", "role")
+        roles = SubscriptionRole.objects.all().annotate(
+            active_grant_count=Count("user_subscriptions", filter=Q(user_subscriptions__revoked_at__isnull=True), distinct=True),
+            paid_subscriber_count=Count(
+                "paid_subscriptions",
+                filter=Q(paid_subscriptions__status__in=["active", "trialing"]),
+                distinct=True,
+            ),
+        )
         return render(
             request,
             "dashboard/pages/site_admin_subscriptions.html",
             {
                 "page_name": "site-admin-subscriptions",
-                "roles": SubscriptionRole.objects.all(),
+                "roles": roles,
                 "grants": grants,
                 "site_features": SiteFeature.choices,
                 "site_settings": SiteSettings.get_current(),
                 "saved": request.GET.get("saved"),
                 "error": request.GET.get("error"),
+                "stripe_configured": stripe_client.is_configured(),
+                "current_cost_per_user": cost_per_user(),
             },
         )
 
@@ -604,7 +625,6 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         if not isinstance(request.user, User):
             return HttpResponseForbidden()
 
-        SubscriptionRole.ensure_defaults()
         is_htmx = bool(request.headers.get("HX-Request"))
         action = request.POST.get("action", "grant")
 
@@ -679,6 +699,57 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                 return response
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "email limits saved"}))
 
+        if action == "role_pricing":
+            from decimal import Decimal, InvalidOperation
+
+            from django.core.exceptions import ValidationError
+
+            from urbanlens.dashboard.services.billing.pricing import dollars_to_cents
+
+            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
+            if role is None:
+                if is_htmx:
+                    response = HttpResponse(status=404)
+                    response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Role not found - no changes saved."}})
+                    return response
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
+
+            def _parse_dollars(field: str) -> int | None:
+                raw = (request.POST.get(field) or "").strip()
+                if raw == "":
+                    return None
+                return dollars_to_cents(Decimal(raw))
+
+            error_message: str | None = None
+            try:
+                role.monthly_price_cents = _parse_dollars("monthly_price_dollars")
+                role.pwyw_minimum_cents = _parse_dollars("pwyw_minimum_dollars")
+            except InvalidOperation:
+                error_message = "Prices must be numbers."
+            else:
+                role.pay_what_you_want = request.POST.get("pay_what_you_want") == "on"
+                role.pwyw_dynamic_threshold = request.POST.get("pwyw_dynamic_threshold") == "on"
+                try:
+                    role.full_clean(validate_unique=False)
+                except ValidationError as exc:
+                    error_message = " ".join(msg for messages_list in exc.message_dict.values() for msg in messages_list)
+
+            if error_message:
+                if is_htmx:
+                    response = HttpResponse(status=400)
+                    response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": error_message}})
+                    return response
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": error_message}))
+
+            role.save(
+                update_fields=["monthly_price_cents", "pwyw_minimum_cents", "pay_what_you_want", "pwyw_dynamic_threshold", "updated"],
+            )
+            if is_htmx:
+                response = HttpResponse(status=204)
+                response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_pricing", "role": role.slug}})
+                return response
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "pricing saved"}))
+
         if action == "role_features":
             role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
             if role is None:
@@ -696,13 +767,46 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                 return response
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "features saved"}))
 
+        if action == "role_create":
+            name = request.POST.get("name", "").strip()[:100]
+            if not name:
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role name is required."}))
+            description = request.POST.get("description", "").strip()[:255]
+            role = SubscriptionRole.objects.create(slug=SubscriptionRole.unique_slug(name), name=name, description=description)
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": f'"{role.name}" role created'}))
+
+        if action == "role_rename":
+            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
+            if role is None:
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
+            name = request.POST.get("name", "").strip()[:100]
+            if not name:
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role name is required."}))
+            description = request.POST.get("description", "").strip()[:255]
+            SubscriptionRole.objects.filter(pk=role.pk).update(name=name, description=description)
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "role renamed"}))
+
+        if action == "role_delete":
+            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
+            if role is None:
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
+            name = role.name
+            role.delete()
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": f'"{name}" role deleted'}))
+
         if action == "default_features":
             from urbanlens.dashboard.models.site_settings import SiteSettings
 
             settings_obj = SiteSettings.get_current()
             valid_features = set(SiteFeature.values)
             selected = sorted(value for value in request.POST.getlist("features") if value in valid_features)
-            SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=",".join(selected))
+            # save(update_fields=...), not queryset.update(): the get_current() above
+            # memoises the row for the rest of this request (see
+            # models.site_settings.request_cache), and only post_save invalidates that
+            # memo. Writing the same single column either way, so this costs nothing
+            # and keeps anything added below from reading the pre-edit values.
+            settings_obj.default_features = ",".join(selected)
+            settings_obj.save(update_fields=["default_features", "updated"])
             if is_htmx:
                 response = HttpResponse(status=204)
                 response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "default_features", "role": "__default__"}})
@@ -739,46 +843,62 @@ def _parse_duration_months(raw: str | None) -> int | None:
 #: limits/usa_only/notes) - this is a manually curated, best-effort mapping
 #: rather than an exhaustive one; anything absent falls into "Other" so a new
 #: service is never hidden, just uncategorized until someone adds it here.
+#:
+#: That fallback stops being graceful once most of a family lands in it. As
+#: REData grew a domain per panel, 18 of its 32 service keys were sitting in
+#: "Other" - more than half the surface in the catch-all tab. Add the key here
+#: when you add the gateway; ``test_api_limit_categories`` fails if you don't.
+#: ``redata_capabilities`` is included: it started as the endpoint this very page
+#: reads, but the site-features panel now uses it per pin to discover which
+#: providers cover a coordinate, so it has a budget worth seeing.
 _API_LIMIT_CATEGORIES: dict[str, str] = {
     # Geocoding & Places
     "google_geocoding": "Geocoding & Places",
     "google_places": "Geocoding & Places",
     "nominatim": "Geocoding & Places",
     "photon": "Geocoding & Places",
+    "redata_geocode": "Geocoding & Places",
+    "redata_places": "Geocoding & Places",
+    "redata_cid_lookup": "Geocoding & Places",
     # Search & News
-    "google_search": "Search & News",
-    "brave_search": "Search & News",
-    "news": "Search & News",
     "gdelt": "Search & News",
     "marginalia_search": "Search & News",
     "mojeek_search": "Search & News",
-    "searxng": "Search & News",
     "duckduckgo": "Search & News",
+    "redata_search_web": "Search & News",
+    "redata_search_news": "Search & News",
     # Imagery & Maps
     "azure_maps": "Imagery & Maps",
-    "bing_maps": "Imagery & Maps",
     "google_maps": "Imagery & Maps",
     "apple_maps": "Imagery & Maps",
-    "mapbox": "Imagery & Maps",
-    "opentopomap": "Imagery & Maps",
     "esri": "Imagery & Maps",
-    "nasa_gibs": "Imagery & Maps",
-    "open_aerial_map": "Imagery & Maps",
     "panoramax": "Imagery & Maps",
     "mapillary": "Imagery & Maps",
     "kartaview": "Imagery & Maps",
     "google_earth": "Imagery & Maps",
     "osrm": "Imagery & Maps",
-    "routexl": "Imagery & Maps",
     "overture_building_attributes": "Imagery & Maps",
+    "redata_imagery": "Imagery & Maps",
+    "redata_routing": "Imagery & Maps",
+    "redata_media": "Imagery & Maps",
+    "redata_street_view": "Imagery & Maps",
+    "redata_historical_maps": "Imagery & Maps",
+    "redata_basemap_tiles": "Imagery & Maps",
     # Weather
     "openweathermap": "Weather",
     "open_meteo": "Weather",
+    "redata_weather": "Weather",
+    "redata_weather_history": "Weather",
     # Boundaries & GIS
     "overpass": "Boundaries & GIS",
     "census_tigerweb": "Boundaries & GIS",
-    "openhistoricalmap": "Boundaries & GIS",
     "open_elevation": "Boundaries & GIS",
+    "redata_elevation": "Boundaries & GIS",
+    "redata_boundary": "Boundaries & GIS",
+    "redata_land_cover": "Boundaries & GIS",
+    "redata_soil": "Boundaries & GIS",
+    "redata_hydrology": "Boundaries & GIS",
+    "redata_underground": "Boundaries & GIS",
     # Reference & Archives
     "wikipedia": "Reference & Archives",
     "wikimedia": "Reference & Archives",
@@ -787,15 +907,31 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "library_of_congress": "Reference & Archives",
     "internet_archive": "Reference & Archives",
     "wayback_machine": "Reference & Archives",
+    "redata_reference_documents": "Reference & Archives",
+    # The state/city historic inventories behind the historic-registers panel.
+    # Archival rather than regulatory: these are survey records, the same kind
+    # of material as the other entries here.
+    "redata_cultural_resources": "Reference & Archives",
+    "redata_public_locations": "Reference & Archives",
     # Parks & Regulatory
     "nps": "Parks & Regulatory",
     "epa_echo": "Parks & Regulatory",
     "usgs": "Parks & Regulatory",
     "usgs_earthquakes": "Parks & Regulatory",
     "inaturalist": "Parks & Regulatory",
+    "redata_hazards": "Parks & Regulatory",
+    "redata_nature_observations": "Parks & Regulatory",
+    "redata_national_parks": "Parks & Regulatory",
+    "redata_air_quality": "Parks & Regulatory",
+    "redata_incidents": "Parks & Regulatory",
+    "redata_permits": "Parks & Regulatory",
+    "redata_walkability": "Parks & Regulatory",
     # Business & Places Data
     "yelp": "Business & Places Data",
     "loopnet": "Business & Places Data",
+    "redata_points_of_interest": "Business & Places Data",
+    "redata_capabilities": "Business & Places Data",
+    "redata_api": "Business & Places Data",
     # Notifications
     "sms": "Notifications",
     "whatsapp": "Notifications",
@@ -807,7 +943,46 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "google_calendar": "Personal Media & Accounts",
     # AI
     "ollama": "AI",
+    "redata_photos": "AI",
+    "redata_labels": "AI",
 }
+
+
+def _redata_capabilities() -> dict | None:
+    """REData's capability index for the api-limits page, cached for an hour.
+
+    The index changes on REData deploys, not per request, and this page must
+    render whether or not REData is configured or reachable - so a failure is
+    a ``None`` (the template hides the card), never an exception.
+
+    Returns:
+        The ``{"domains", "text_domains"}`` body, or None when REData is
+        unconfigured or unreachable.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway import RedataCapabilitiesGateway
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+
+    if not redata_configured():
+        return None
+    cache_key = "ul_redata_capabilities"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached or None
+    try:
+        body = RedataCapabilitiesGateway().get_capabilities()
+    except Exception:
+        # Broad on purpose: this card is strictly optional, and the page must
+        # render whatever a gateway can throw (structured REData errors,
+        # transport errors, the test suite's network guard). The miss is
+        # cached briefly too, so an outage doesn't add a failing round-trip
+        # to every admin page load.
+        logger.warning("REData capabilities fetch failed; omitting the card", exc_info=True)
+        cache.set(cache_key, {}, 300)
+        return None
+    cache.set(cache_key, body, 3600)
+    return body
 
 
 class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
@@ -833,7 +1008,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     def _get_all_configs(self):
         """Return ApiRateLimit rows for every known service, creating missing ones."""
-        from urbanlens.dashboard.services.rate_limiter import all_service_defaults, get_limit_config
+        from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults, get_limit_config
 
         return [get_limit_config(key) for key in sorted(all_service_defaults())]
 
@@ -875,6 +1050,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "page_name": "site-admin-api-limits",
                 "services": enriched,
                 "tabs": tabs,
+                "redata_capabilities": _redata_capabilities(),
             },
         )
 
@@ -899,6 +1075,12 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         try:
             raw_per_30_days = post_data.get("calls_per_30_days", "").strip()
             cfg.calls_per_30_days = int(raw_per_30_days) if raw_per_30_days else None
+        except (ValueError, TypeError):
+            pass
+
+        try:
+            raw_min_interval = post_data.get("min_interval_seconds", "").strip()
+            cfg.min_interval_seconds = float(raw_min_interval) if raw_min_interval else None
         except (ValueError, TypeError):
             pass
 
@@ -960,7 +1142,7 @@ class SiteAdminPluginsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     def get(self, request: HttpRequest):
         from urbanlens.dashboard.plugins import plugin_registry
-        from urbanlens.dashboard.services.rate_limiter import get_limit_config
+        from urbanlens.dashboard.services.core.rate_limiter import get_limit_config
 
         entries = []
         for info in plugin_registry.plugins():
@@ -996,9 +1178,14 @@ class SiteAdminPluginsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
 
 class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Read-only directory of registered users for site administrators.
+    """Registered-user directory for site administrators, and account deletion.
 
     GET /site-admin/users/ → paginated, searchable list of users.
+    POST /site-admin/users/ → ``request_delete`` / ``cancel_delete`` for one account.
+
+    The listing is read-only; ``post`` is not (see its own docstring). An earlier
+    version of this docstring described the whole view as read-only, which was wrong
+    from the moment deletion was added here.
 
     This is deliberately privacy-preserving: even a site admin does not get a
     backdoor around a user's ``contact_visibility`` setting here. Email is
@@ -1027,8 +1214,8 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
     def get(self, request: HttpRequest):
         from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.models.subscriptions import active_subscription_roles
-        from urbanlens.dashboard.services.pagination import get_page
-        from urbanlens.dashboard.services.storage import get_quota_bytes, get_storage_used_bytes
+        from urbanlens.dashboard.services.core.pagination import get_page
+        from urbanlens.dashboard.services.media.storage import get_quota_bytes, get_storage_used_bytes
 
         if not isinstance(request.user, User):
             return HttpResponseForbidden()
@@ -1099,7 +1286,7 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
         admin using ``cancel_delete`` here).
         """
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.account_deletion import cancel_deletion, request_deletion
+        from urbanlens.dashboard.services.profile.account_deletion import cancel_deletion, request_deletion
 
         if not isinstance(request.user, User):
             return HttpResponseForbidden()
@@ -1252,7 +1439,7 @@ class SiteAdminHomeStatusPartialView(_AdminPermissionMixin, View):
 
     def get(self, request: HttpRequest):
         from urbanlens.core.version import get_current_git_branch, get_git_commit_at_start, get_git_update_status
-        from urbanlens.dashboard.services.infrastructure_stats import collect_infrastructure_service_stats
+        from urbanlens.dashboard.services.admin.infrastructure_stats import collect_infrastructure_service_stats
 
         infra_services = collect_infrastructure_service_stats()
         unhealthy_count = sum(1 for s in infra_services if s.status == "unhealthy")
@@ -1373,8 +1560,8 @@ class SiteAdminStatsSystemPartialView(_AdminPermissionMixin, View):
             get_git_commit_at_start,
             get_git_update_status,
         )
-        from urbanlens.dashboard.services.backups import collect_backup_stats
-        from urbanlens.dashboard.services.infrastructure_stats import collect_infrastructure_service_stats
+        from urbanlens.dashboard.services.admin.backups import collect_backup_stats
+        from urbanlens.dashboard.services.admin.infrastructure_stats import collect_infrastructure_service_stats
 
         uptime = _app_uptime()
         media_root = getattr(django_settings, "MEDIA_ROOT", "")
@@ -1413,7 +1600,7 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
     """
 
     def get(self, request: HttpRequest):
-        from urbanlens.dashboard.services.rate_limiter import all_service_defaults
+        from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults
 
         # all_service_defaults() (SERVICE_REGISTRY + every plugin's own
         # get_service_defaults()) - the static registry alone only covers the
@@ -1474,7 +1661,7 @@ class CeleryTaskStatusView(_AdminPermissionMixin, View):
     """
 
     def get(self, request, task_id: str):
-        from urbanlens.dashboard.services.celery import get_task_progress
+        from urbanlens.dashboard.services.core.celery import get_task_progress
 
         try:
             return JsonResponse(get_task_progress(task_id).as_dict())

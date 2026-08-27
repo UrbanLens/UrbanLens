@@ -10,12 +10,14 @@ stays unavailable through every retry.
 
 from __future__ import annotations
 
+import io
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
 from django.urls import reverse
 from model_bakery import baker
+from PIL import Image as PILImage
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.comments.model import Comment
@@ -24,12 +26,14 @@ from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripComment
-from urbanlens.dashboard.services.malware_scan import MalwareScanUnavailableError
+from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError
 from urbanlens.dashboard.tasks import scan_comment_image, scan_trip_comment_image
 
 
 def _fake_image(name: str = "photo.png") -> SimpleUploadedFile:
-    return SimpleUploadedFile(name, b"fake-image-bytes", content_type="image/png")
+    buf = io.BytesIO()
+    PILImage.new("RGB", (60, 40), color=(10, 20, 30)).save(buf, format="PNG")
+    return SimpleUploadedFile(name, buf.getvalue(), content_type="image/png")
 
 
 class StartCommentImageScanTests(TestCase):
@@ -44,7 +48,7 @@ class StartCommentImageScanTests(TestCase):
         from urbanlens.dashboard.controllers.comments import start_comment_image_scan
 
         comment = Comment.objects.create(pin=self.pin, profile=self.profile, text="hi", image=_fake_image())
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             start_comment_image_scan(comment)
         comment.refresh_from_db()
         self.assertTrue(comment.pending_scan)
@@ -55,7 +59,7 @@ class StartCommentImageScanTests(TestCase):
 
         trip = baker.make(Trip, creator=self.profile)
         comment = TripComment.objects.create(trip=trip, author=self.profile, text="hi", image=_fake_image())
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             start_comment_image_scan(comment)
         comment.refresh_from_db()
         self.assertTrue(comment.pending_scan)
@@ -75,7 +79,7 @@ class ScanCommentImageTaskTests(TestCase):
 
     def test_clean_result_clears_pending_scan(self) -> None:
         comment = self._pending_comment()
-        with patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", return_value=None):
+        with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value=None):
             result = scan_comment_image(comment.pk)
         comment.refresh_from_db()
         self.assertTrue(result)
@@ -84,7 +88,7 @@ class ScanCommentImageTaskTests(TestCase):
     def test_infected_result_deletes_the_comment_and_notifies_the_author(self) -> None:
         comment = self._pending_comment(text="my cool photo")
         comment_id = comment.pk
-        with patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", return_value="This file was flagged as malicious."):
+        with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value="This file was flagged as malicious."):
             result = scan_comment_image(comment_id)
         self.assertFalse(result)
         self.assertFalse(Comment.objects.filter(pk=comment_id).exists())
@@ -96,7 +100,7 @@ class ScanCommentImageTaskTests(TestCase):
         comment = self._pending_comment(text="retry me")
         comment_id = comment.pk
         with (
-            patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", side_effect=MalwareScanUnavailableError("down")),
+            patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", side_effect=MalwareScanUnavailableError("down")),
             patch.object(scan_comment_image, "max_retries", 0),
         ):
             result = scan_comment_image(comment_id)
@@ -111,7 +115,7 @@ class ScanCommentImageTaskTests(TestCase):
 
     def test_comment_no_longer_pending_is_a_no_op(self) -> None:
         comment = Comment.objects.create(pin=self.pin, profile=self.profile, text="already scanned", image=_fake_image(), pending_scan=False)
-        with patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload") as scan:
+        with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload") as scan:
             self.assertFalse(scan_comment_image(comment.pk))
         scan.assert_not_called()
 
@@ -129,7 +133,7 @@ class ScanTripCommentImageTaskTests(TestCase):
 
     def test_clean_result_clears_pending_scan(self) -> None:
         comment = self._pending_comment()
-        with patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", return_value=None):
+        with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value=None):
             result = scan_trip_comment_image(comment.pk)
         comment.refresh_from_db()
         self.assertTrue(result)
@@ -138,7 +142,7 @@ class ScanTripCommentImageTaskTests(TestCase):
     def test_infected_result_deletes_the_comment_and_notifies_the_author(self) -> None:
         comment = self._pending_comment(text="trip photo text")
         comment_id = comment.pk
-        with patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", return_value="This file was flagged as malicious."):
+        with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value="This file was flagged as malicious."):
             result = scan_trip_comment_image(comment_id)
         self.assertFalse(result)
         self.assertFalse(TripComment.objects.filter(pk=comment_id).exists())
@@ -201,7 +205,7 @@ class PostingACommentPhotoDoesNotBlockOnTheScanTests(TestCase):
         self.client.force_login(self.user)
 
     def test_post_succeeds_immediately_and_never_calls_the_scanner(self) -> None:
-        with patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload") as scan, patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+        with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload") as scan, patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             response = self.client.post(
                 reverse("pin.comments", args=[self.pin.slug]),
                 {"text": "check out this photo", "image": _fake_image()},

@@ -1,6 +1,6 @@
 """Memories → Locations page: review queue for batch-scan pin suggestions.
 
-Suggestions are produced in bulk by ``services.pin_suggestions.ingest_location_hits``
+Suggestions are produced in bulk by ``services.pins.pin_suggestions.ingest_location_hits``
 (called from the Immich full-library sweep and the Tools-page local folder scanner) -
 this controller only lets the owner accept or reject what was already found; it never
 triggers a scan itself.
@@ -19,6 +19,8 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.controllers.media_auth import mark_private_media
+from urbanlens.dashboard.controllers.pin_import_failures import pending_pin_import_failures
 from urbanlens.dashboard.controllers.pin_merge_suggestions import merge_suggestion_cards, pending_merge_suggestions
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
@@ -26,11 +28,11 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.immich import ImmichGateway
-from urbanlens.dashboard.services.celery import safely_enqueue_task
-from urbanlens.dashboard.services.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.pin_suggestions import accept_pin_suggestion, pending_suggestions_for_profile, reject_pin_suggestion
+from urbanlens.dashboard.services.pins.pin_suggestions import accept_pin_suggestion, pending_suggestions_for_profile, reject_pin_suggestion
 
 _ORGANIZE_LABEL_KINDS = (KIND_TAG, KIND_CATEGORY, KIND_STATUS)
 
@@ -62,7 +64,7 @@ def _pending_suggestions(profile: Profile) -> QuerySet[PinSuggestion]:
 
     Suggestions from a source the profile has turned off (or all of them, if
     ``pin_suggestions_enabled`` is off) are hidden, not deleted - see
-    ``services.pin_suggestions.pending_suggestions_for_profile``.
+    ``services.pins.pin_suggestions.pending_suggestions_for_profile``.
     """
     return pending_suggestions_for_profile(profile).select_related("pin", "pin__location").prefetch_related("candidate_images").order_by("-created")
 
@@ -104,6 +106,7 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
         suggestions_qs = _pending_suggestions(profile)
         page_obj = get_page(request, suggestions_qs, _PAGE_SIZE)
         merge_cards = merge_suggestion_cards(pending_merge_suggestions(profile))
+        import_failures = list(pending_pin_import_failures(profile))
         return render(
             request,
             "dashboard/pages/memories/locations.html",
@@ -120,6 +123,11 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
                 # no pagination/map of their own - see merge_suggestion_cards.
                 "merge_suggestion_cards": merge_cards,
                 "merge_suggestions_count": len(merge_cards),
+                # Places Google couldn't locate during an import - see
+                # controllers.pin_import_failures. Small in number like merge
+                # suggestions, so no pagination/map of its own either.
+                "pin_import_failures": import_failures,
+                "pin_import_failures_count": len(import_failures),
                 # The map (and its attribution) only renders when there are
                 # suggestions to plot - see locations.html's {% if pin_suggestions_count %}.
                 # pin-select-map.js disables Leaflet's own on-map attribution
@@ -200,14 +208,51 @@ class PinSuggestionImmichThumbnailView(LoginRequiredMixin, View):
         cached = cache.get(cache_key)
         if cached is not None:
             content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
+            return mark_private_media(HttpResponse(content, content_type=content_type))
 
         try:
             content, content_type = ImmichGateway(account=account).get_asset_thumbnail(asset_id)
         except GatewayRequestError:
             return HttpResponse(status=502)
         cache.set(cache_key, (content, content_type), _THUMBNAIL_CACHE_TTL)
-        return HttpResponse(content, content_type=content_type)
+        return mark_private_media(HttpResponse(content, content_type=content_type))
+
+
+def _bulk_accept_suggestion(suggestion: PinSuggestion, profile: Profile, *, resolve_names_async: bool) -> None:
+    """Accept one suggestion of a bulk batch without any inline external API call.
+
+    Passes ``fetch_if_missing=False`` down the accept chain so a brand-new
+    Location is created unnamed instead of blocking the request on a live
+    Google lookup per suggestion (a batch may hold up to
+    ``_MAX_BULK_SUGGESTIONS`` of them). The canonical name backfills in the
+    background via ``tasks.resolve_location_place_name`` - the same lazy path
+    PinOverviewView dispatches - so only the shared Location's official name
+    arrives late; the pin's own name comes from the suggestion and is set
+    immediately.
+
+    Args:
+        suggestion: The pending suggestion to accept.
+        profile: The accepting profile (must be ``suggestion.profile``).
+        resolve_names_async: Whether to dispatch the background name backfill
+            for a still-nameless Location - callers pass
+            ``profile.external_apis_enabled``, the same gate PinOverviewView
+            applies before enqueueing this task.
+    """
+    result = accept_pin_suggestion(suggestion, profile, fetch_if_missing=False)
+    if result.immich_import_visits:
+        from urbanlens.dashboard.tasks import import_immich_photos
+
+        safely_enqueue_task(
+            import_immich_photos,
+            result.pin.pk,
+            profile.pk,
+            list(result.immich_import_visits),
+            result.immich_import_visits,
+        )
+    if resolve_names_async and result.pin.location is not None and not result.pin.location.cached_place_name:
+        from urbanlens.dashboard.tasks import resolve_location_place_name
+
+        safely_enqueue_task(resolve_location_place_name, result.pin.location_id)
 
 
 class PinSuggestionBulkActionView(LoginRequiredMixin, View):
@@ -218,7 +263,7 @@ class PinSuggestionBulkActionView(LoginRequiredMixin, View):
     Modeled on ``controllers.pin_bulk``'s pattern: non-owned, already-handled,
     or nonexistent ids are silently skipped rather than erroring the whole
     batch. Bulk actions never carry a photo selection - see
-    ``services.pin_suggestions.accept_pin_suggestion``; any candidate photos on
+    ``services.pins.pin_suggestions.accept_pin_suggestion``; any candidate photos on
     a bulk-accepted suggestion are simply discarded, same as an unchecked
     single accept.
     """
@@ -243,23 +288,14 @@ class PinSuggestionBulkActionView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid suggestion id."}, status=400)
 
         suggestions = PinSuggestion.objects.filter(pk__in=suggestion_ids, profile=profile, status=PinSuggestionStatus.PENDING).select_related("pin")
+        resolve_names_async = profile.external_apis_enabled
         processed = 0
         for suggestion in suggestions:
             try:
                 if action == "reject":
                     reject_pin_suggestion(suggestion)
                 else:
-                    result = accept_pin_suggestion(suggestion, profile)
-                    if result.immich_import_visits:
-                        from urbanlens.dashboard.tasks import import_immich_photos
-
-                        safely_enqueue_task(
-                            import_immich_photos,
-                            result.pin.pk,
-                            profile.pk,
-                            list(result.immich_import_visits),
-                            result.immich_import_visits,
-                        )
+                    _bulk_accept_suggestion(suggestion, profile, resolve_names_async=resolve_names_async)
                 processed += 1
             except Exception:
                 logger.exception("Bulk pin suggestion action '%s' failed for suggestion %s", action, suggestion.pk)
@@ -282,20 +318,11 @@ class PinSuggestionAcceptAllView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest) -> JsonResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         suggestions = list(_pending_suggestions(profile)[:_MAX_BULK_SUGGESTIONS])
+        resolve_names_async = profile.external_apis_enabled
         processed = 0
         for suggestion in suggestions:
             try:
-                result = accept_pin_suggestion(suggestion, profile)
-                if result.immich_import_visits:
-                    from urbanlens.dashboard.tasks import import_immich_photos
-
-                    safely_enqueue_task(
-                        import_immich_photos,
-                        result.pin.pk,
-                        profile.pk,
-                        list(result.immich_import_visits),
-                        result.immich_import_visits,
-                    )
+                _bulk_accept_suggestion(suggestion, profile, resolve_names_async=resolve_names_async)
                 processed += 1
             except Exception:
                 logger.exception("Accept-all pin suggestions failed for suggestion %s", suggestion.pk)

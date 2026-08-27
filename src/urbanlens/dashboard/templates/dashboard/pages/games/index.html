@@ -1,43 +1,27 @@
 {% extends 'dashboard/themes/base.html' %}
 
-{% block title %}Games{% endblock %}
+{% block page_title %}Games &middot; UrbanLens{% endblock %}
 
 {% block hero %}
 {% include "dashboard/partials/ui/_page_hero.html" with icon="stadia_controller" title="Games" title_suffix_template="dashboard/partials/ui/_page_explainer_anchor.html" explainer_id="games-explainer" subtitle="Play games built on your own map data." modifier="top" %}
 {% endblock %}
 
 {% block subnav %}
-<div class="ul-page-subnav">
-    <div class="ul-page-subnav__inner">
-        <nav class="ul-subnav-tabs" aria-label="Games views">
-            <a href="{% url 'games.overview' %}" class="ul-subnav-tab is-active" aria-current="page">
-                <i class="material-symbols-outlined">stadia_controller</i>
-                <span>All Games</span>
-            </a>
-            {% for game in games %}
-            <a href="{{ game.url }}" class="ul-subnav-tab">
-                <i class="material-symbols-outlined">{{ game.icon }}</i>
-                <span>{{ game.name }}</span>
-            </a>
-            {% endfor %}
-        </nav>
-    </div>
-</div>
+{% include "dashboard/partials/games/_games_subnav.html" with active="games" %}
 {% endblock %}
 
 {% block content %}
-<div class="page-inner">
-    {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="games-explainer" kicker="Why play" heading="The more you play, the more it helps organize and correct your data." body="Rounds ask you to place or confirm real pins from your map. Every guess helps surface mislabeled locations, missing coordinates, and other details worth double-checking on the wiki." %}
+<div class="ul-game ul-game-hub">
+    {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="games-explainer" kicker="Why play" heading="Playing helps improve the wiki." body="Rounds ask you to place or confirm real pins from your map. Every guess helps identify mislabeled locations, missing coordinates, and other details worth double-checking." %}
 
     <div class="games-grid">
         {% for game in games %}
-        <a class="card games-card" href="{{ game.url }}">
-            <div class="games-card-icon"><i class="material-symbols-outlined">{{ game.icon }}</i></div>
-            <div class="games-card-body">
-                <h2 class="games-card-title">{{ game.name }}</h2>
-                <p class="games-card-description">{{ game.description }}</p>
-            </div>
-            <span class="games-card-play btn btn--primary">Play</span>
+        <a class="games-card" data-game="{{ game.url_name }}" href="{{ game.url }}">
+            <i class="material-symbols-outlined games-card-glyph" aria-hidden="true">{{ game.icon }}</i>
+            <div class="games-card-icon"><i class="material-symbols-outlined" aria-hidden="true">{{ game.icon }}</i></div>
+            <h2 class="games-card-title">{{ game.name }}</h2>
+            <p class="games-card-description">{{ game.description }}</p>
+            <span class="games-card-play">Play <i class="material-symbols-outlined" aria-hidden="true">arrow_forward</i></span>
         </a>
         {% endfor %}
     </div>

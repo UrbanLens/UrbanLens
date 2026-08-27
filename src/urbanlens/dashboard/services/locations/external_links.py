@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import IntegrityError, transaction
+
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
@@ -34,8 +36,20 @@ def add_pin_link(pin: Pin, url: str, name: str) -> bool:
 
     if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=url):
         return False
-    _link, created = PinLink.objects.get_or_create(pin=pin, url=url, defaults={"name": name})
-    return created
+    # The exists() check is only a fast path that avoids opening a savepoint for
+    # the common "already there" case. The unique constraint on (pin, md5(url))
+    # is what actually decides: this runs from a LocationCache signal whose panel
+    # fetches are concurrent (their own queue, concurrency 20), so two panels
+    # contributing the same URL can both pass the check. The loser's insert is
+    # absorbed here rather than escaping as a 500 from inside the signal.
+    if PinLink.objects.filter(pin=pin, url=url).exists():
+        return False
+    try:
+        with transaction.atomic():
+            PinLink.objects.create(pin=pin, url=url, name=name)
+    except IntegrityError:
+        return False
+    return True
 
 
 def add_wiki_link(wiki: Wiki, url: str, name: str) -> bool:
@@ -54,8 +68,15 @@ def add_wiki_link(wiki: Wiki, url: str, name: str) -> bool:
 
     if WikiAutoRemoval.objects.was_removed(wiki=wiki, kind=AutoRemovalKind.LINK, value=url):
         return False
-    _link, created = WikiLink.objects.get_or_create(wiki=wiki, url=url, defaults={"name": name})
-    return created
+    # Fast path only; the (wiki, md5(url)) constraint decides - see add_pin_link.
+    if WikiLink.objects.filter(wiki=wiki, url=url).exists():
+        return False
+    try:
+        with transaction.atomic():
+            WikiLink.objects.create(wiki=wiki, url=url, name=name)
+    except IntegrityError:
+        return False
+    return True
 
 
 def add_pin_and_wiki_link(pin: Pin, location: Location, url: str, name: str) -> None:

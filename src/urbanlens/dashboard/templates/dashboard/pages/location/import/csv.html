@@ -540,7 +540,7 @@
                     Drop files here or <strong id="iw-browse-label">browse</strong>
                 </span>
                 <input type="file" class="iw-file-input" id="iw-file-input" multiple
-                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.html,.zip,.tgz,.tar.gz{% if can_use_ai_features and profile.ai_enabled %},.txt,.docx{% endif %}{% if import_variant != "memories" %},image/*{% if can_upload_videos %},video/*{% endif %}{% endif %}">
+                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.html,.zip,.tgz,.tar.gz{% if can_use_ai_features and profile.ai_enabled %},.txt,.docx{% endif %}{% if import_variant != "memories" %},image/*{% if can_upload_videos %},video/*{% endif %}{% endif %}" aria-label="Choose files to import">
             </div>
             <div class="iw-selected-files" id="iw-selected-files"></div>
             <div class="iw-media-progress" id="iw-media-progress" hidden>
@@ -847,8 +847,11 @@ $('iw-btn-upload').addEventListener('click', async function () {
         $('closeImportDialog').disabled = false;
         renderPreview(parsedData);
         showStep('preview', 1);
+        // Neutral title: this channel carries per-file parse failures *and*
+        // notices about the preview itself (the pin cap), and "Could not import
+        // a file" misdescribes the second kind.
         (parsedData.warnings || []).forEach(function (w) {
-            toastr.warning(w, 'Could not import a file');
+            toastr.warning(w, 'Import warning');
         });
     } catch (err) {
         $('closeImportDialog').disabled = false;
@@ -948,8 +951,20 @@ function renderPreview(data) {
                that page's in-memory pin store) - pre-deselecting pins that are
                already on the user's map there saves them from uploading pins
                that would just come back as "existed" anyway. On pages without
-               it (e.g. Memories), every pin is selected by default as before. */
-            var localMatch = window.findLocalPinNear ? window.findLocalPinNear(pin.lat, pin.lng) : null;
+               it (e.g. Memories), every pin is selected by default as before.
+
+               TEMPORARY (legacy CID coordinate repair): pin.needs_repair means
+               either (a) this record's (lat, lng) is the same S2-derived guess
+               that mis-placed one of this profile's own pre-cutoff pins - the
+               pin findLocalPinNear would find nearby *is* that legacy pin, not
+               a genuine duplicate - or (b) this record's own cid came straight
+               out of that same imprecise S2-cell URL guess, which is wrong
+               roughly a third of the time, so it's worth re-selecting even
+               with no specific legacy pin found. Either way the proximity
+               check is skipped and this record stays selected to reach the
+               server-side repair (or a fresh, accurate resolution). Remove
+               with services.apis.locations.legacy_cid_coordinate_fix. */
+            var localMatch = (!pin.needs_repair && window.findLocalPinNear) ? window.findLocalPinNear(pin.lat, pin.lng) : null;
             pin._selected = !localMatch;
             if (localMatch) alreadyOnMapCount++;
 
@@ -1125,6 +1140,7 @@ $('iw-btn-confirm').addEventListener('click', async function () {
                             lng: p.lng,
                             description: p.description,
                             cid: p.cid,
+                            maps_url: p.maps_url,
                             label_ids: [],
                         };
                     }),

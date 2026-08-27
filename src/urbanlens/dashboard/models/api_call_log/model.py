@@ -12,8 +12,9 @@ class ApiCallLog(abstract.DashboardModel):
     """Log entry for one external API call.
 
     The ``created`` timestamp (from the base model) is the call time.
-    Rows accumulate over time; use the ``prune_older_than_days`` class method
-    or a management command to trim old records.
+    Rows are trimmed daily by ``tasks.prune_api_call_logs``; its retention is
+    set by the *costs page's* 12-month spend chart, not by the 30-day
+    rate-limit windows - see that task before shortening it.
     """
 
     service = CharField(
@@ -74,7 +75,11 @@ class ApiCallLog(abstract.DashboardModel):
         """Delete log entries older than ``days`` days.
 
         Args:
-            days: Entries older than this many days are deleted.
+            days: Entries older than this many days are deleted. The default
+                is safe for rate limiting but NOT for cost reporting - the
+                public costs page reconstructs 12 months of API spend from
+                these rows, so the scheduled caller
+                (``tasks.prune_api_call_logs``) passes 400.
 
         Returns:
             Number of rows deleted.

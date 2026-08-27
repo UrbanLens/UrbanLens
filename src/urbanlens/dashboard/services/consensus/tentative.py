@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.consensus.model import ConsensusFieldKind, ConsensusTentativeAnswer
@@ -26,10 +27,29 @@ COORDINATE_MERGE_DISTANCE_METERS = 15.0
 
 
 def record_tentative_answers(round_: ConsensusRound, distinct_answers: list[ConsensusAnswer]) -> list[ConsensusTentativeAnswer]:
-    """Upsert one ``ConsensusTentativeAnswer`` per distinct submitted value in ``distinct_answers``."""
-    if round_.field_kind == ConsensusFieldKind.PHOTO_COORDINATES:
-        return [_record_coordinate(round_, answer) for answer in distinct_answers]
-    return [_record_text(round_, answer) for answer in distinct_answers]
+    """Upsert one ``ConsensusTentativeAnswer`` per distinct submitted value in ``distinct_answers``.
+
+    Serialised per wiki. Both branches below are check-then-act - look for a matching
+    tentative answer, then either bump it or create one - and two rounds resolving at
+    once for the same wiki is ordinary, not exotic (separate sessions play the same
+    popular wiki concurrently). Unserialised, both reads miss and both write, which
+    splits one value's support across two rows so it never reaches the promotion
+    threshold, and the row-level ``+=`` loses an increment on top of that.
+
+    A unique constraint can't cover this on its own: the coordinate branch dedups by
+    *proximity*, which no constraint can express, and the text branch's constraint is on
+    ``Lower(text_value)`` while the lookup is on ``normalized_text`` - so a lost race
+    there surfaces as an IntegrityError out of round resolution rather than a duplicate.
+    Locking the parent wiki covers both, and only ever contends with another resolution
+    for the same wiki.
+    """
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    with transaction.atomic():
+        Wiki.objects.select_for_update().filter(pk=round_.wiki_id).first()
+        if round_.field_kind == ConsensusFieldKind.PHOTO_COORDINATES:
+            return [_record_coordinate(round_, answer) for answer in distinct_answers]
+        return [_record_text(round_, answer) for answer in distinct_answers]
 
 
 def _record_text(round_: ConsensusRound, answer: ConsensusAnswer) -> ConsensusTentativeAnswer:

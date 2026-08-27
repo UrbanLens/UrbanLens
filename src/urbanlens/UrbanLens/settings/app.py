@@ -27,6 +27,43 @@ _ENV_FILE_PATHS = [
     Path(DEFAULT_ROOT.parent, ".env"),
 ]
 
+#: Floors enforced on ``field_encryption_key`` (see ``_reject_weak_encryption_keys``).
+#: 32 characters is well below the 64 the documented generator produces, so it
+#: rejects hand-typed keys without failing a legitimately generated one. The
+#: alphabet floor is set against the distribution of random output rather than
+#: against any particular bad key: a random 32-character urlsafe-base64 string
+#: has ~26 distinct characters on average and falls below 16 only very rarely,
+#: while degenerate input (repeated characters, a short string concatenated with
+#: itself) lands under it immediately.
+MIN_FIELD_ENCRYPTION_KEY_LENGTH = 32
+MIN_FIELD_ENCRYPTION_KEY_ALPHABET = 16
+
+
+def _encryption_key_weakness(key: str) -> str | None:
+    """Describe why a field-encryption key is too weak to encrypt under, if it is.
+
+    Args:
+        key: The candidate key.
+
+    Returns:
+        An operator-facing explanation, or None when the key clears both floors.
+    """
+    if len(key) < MIN_FIELD_ENCRYPTION_KEY_LENGTH:
+        return (
+            f"field_encryption_key must be at least {MIN_FIELD_ENCRYPTION_KEY_LENGTH} characters "
+            f"(got {len(key)}). Generate one with: "
+            'python -c "import secrets; print(secrets.token_urlsafe(64))"'
+        )
+    # A crude stand-in for entropy, calibrated against random output rather
+    # than against any specific bad key - see the constant.
+    if len(set(key)) < MIN_FIELD_ENCRYPTION_KEY_ALPHABET:
+        return (
+            f"field_encryption_key uses only {len(set(key))} distinct characters, which is too "
+            "predictable to resist an offline attack against a stolen database. Use a random "
+            'value: python -c "import secrets; print(secrets.token_urlsafe(64))"'
+        )
+    return None
+
 
 def _default_allowed_hosts() -> list[str]:
     """Return the default ``ALLOWED_HOSTS`` list for the current environment.
@@ -81,6 +118,17 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "encryption survives a SECRET_KEY rotation."
         ),
     )
+    field_encryption_key_fallbacks: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "Retired field-encryption keys, comma-separated. Values are always written under the active "
+            "key but can still be read under any key listed here, so a key change is a rolling change "
+            "rather than data loss: add the new key, deploy, run `manage.py rotate_field_encryption`, "
+            "then drop the retired key from this list. Django's SECRET_KEY is always tried as a final "
+            "fallback, so setting field_encryption_key for the first time never orphans existing rows; "
+            "list the *old* SECRET_KEY here when rotating SECRET_KEY itself."
+        ),
+    )
     root_urlconf: str = Field(default="urbanlens.UrbanLens.urls", description="The root urlconf")
     admin_username: str = Field(default="Admin", description="The username to use for the admin user")
     admin_email: str = Field(default="admin@yourdomain.com", description="The email to use for the admin user")
@@ -121,6 +169,64 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "Only takes effect in development, local, or testing environments - ignored in staging/production."
         ),
     )
+    csp_enforce: bool = Field(
+        default=False,
+        description=(
+            "Send the Content-Security-Policy as an enforcing header instead of "
+            "Content-Security-Policy-Report-Only. Defaults to report-only so a deployment collects "
+            "violation reports for a release before anything is actually blocked. Set UL_CSP_ENFORCE=true "
+            "per environment once the reports for that environment are clean - see docs/NOTES.md."
+        ),
+    )
+    trusted_proxy_count: int = Field(
+        default=1,
+        description=(
+            "How many reverse proxies sit between the app and the internet, each appending to "
+            "X-Forwarded-For. Per-IP rate limiting reads the entry that many places from the right, "
+            "since anything further left was supplied by the client and can be forged. The default of 1 "
+            "matches the shipped topology (config/nginx appends its real_ip-resolved client address). "
+            "Set 0 when nothing fronts the app, so REMOTE_ADDR is used and X-Forwarded-For ignored - "
+            "but never leave it at 0 behind a proxy, or every request keys to the proxy's own address "
+            "and one attacker throttles the whole site."
+        ),
+    )
+
+    demo_mode: bool = Field(
+        default=False,
+        description=(
+            "This deployment IS the public demo instance. Enables the demo-login endpoint and the "
+            "demo banner. Isolation is the deployment boundary itself - a demo instance runs against "
+            "its own database, seeded synthetically, and never against real data. Setting this true "
+            "on an instance holding real user data would expose it: see docs/DEMO.md."
+        ),
+    )
+    demo_real_site_url: str = Field(
+        default="",
+        description=(
+            "Set on the demo instance: absolute URL of the real site, e.g. https://urbanlens.org. "
+            "The demo banner links there for 'create a real account'. Empty hides that link - the "
+            "demo's own signup would only make another throwaway account on the instance that is "
+            "about to delete it."
+        ),
+    )
+    demo_locations_file: str = Field(
+        default="",
+        description=(
+            "Path to the JSON manifest of locations a demo instance pins into every new demo "
+            "account (written by `manage.py import_public_locations`). Empty means no manifest, and "
+            "a demo account is seeded with no pins - which is the correct outcome when nothing has "
+            "been imported yet, rather than a reason to invent coordinates."
+        ),
+    )
+    demo_url: str = Field(
+        default="",
+        description=(
+            "Absolute URL of the demo instance, e.g. https://demo.urbanlens.org. Set on the *real* "
+            "site to show the 'Try the demo' button on the login and registration pages; empty hides "
+            "it. Deliberately a URL rather than a boolean, so the button cannot appear without a "
+            "destination that someone has actually provisioned."
+        ),
+    )
 
     # Classes
     default_auto_field: str = Field(default="django.db.models.BigAutoField", description="The default auto field")
@@ -142,6 +248,18 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     static_root: Path = Field(default=Path("frontend/static"), description="The name of the static directory")
 
     # APIs
+    #: Root of a mirror of the third-party scripts and stylesheets in
+    #: dashboard/services/core/vendor_assets.py. Unset, every one of them is
+    #: fetched from its public CDN, which is the historical behaviour and still
+    #: the default. Set, every tag points at the mirror instead - decided when
+    #: the page is rendered, so nothing branches at call time and nothing waits
+    #: for a CDN request to fail first.
+    #:
+    #: The mirrored files are deliberately not in this repository: they are other
+    #: projects' releases with their own licences, and vendoring them into an
+    #: open-source application is a redistribution decision this project has not
+    #: made. Point this at wherever they are served from.
+    vendor_asset_base_url: Url | None = Field(default=None, description="Root of a mirror of the third-party JS/CSS assets; unset uses the public CDNs")
     cloudflare_ai_endpoint: Url | None = Field(default=None, description="The cloudflare ai endpoint")
     cloudflare_worker_ai_endpoint: Url | None = Field(default=None, description="The cloudflare worker ai endpoint")
     cloudflare_ai_api_key: str | None = Field(default=None, description="The cloudflare ai key")
@@ -160,21 +278,10 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     apple_maps_api_key: str | None = Field(default=None, description="The apple maps JWT (pre-generated from Apple Developer private key)")
     usgs_api_key: str | None = Field(default=None, description="The USGS M2M application token (from EarthExplorer account settings)")
     usgs_username: str | None = Field(default=None, description="The USGS EarthExplorer username (required alongside usgs_api_key for M2M auth)")
-    mapbox_api_key: str | None = Field(default=None, description="The Mapbox public access token (pk.* token)")
-    bing_maps_api_key: str | None = Field(default=None, description="The Bing Maps API key (from Azure portal)")
     azure_maps_subscription_key: str | None = Field(default=None, description="The Azure Maps subscription key (Azure Portal -> Azure Maps account -> Authentication)")
     ollama_base_url: str | None = Field(default=None, description="Base URL of a self-hosted Ollama server (e.g. http://localhost:11434) for local, free AI photo-keyword generation")
     ollama_vision_model: str = Field(default="llava", description="Ollama vision model name used for photo keyword generation")
-    mapillary_access_token: str | None = Field(default=None, description="The Mapillary client access token")
-    brave_search_api_key: str | None = Field(default=None, description="The Brave Search API key")
-    searxng_base_url: str | None = Field(default=None, description="Base URL of a self-hosted or trusted SearXNG instance (e.g. https://searx.example.com), no API key required")
-    searxng_image_engines: Annotated[list[str], NoDecode] = Field(default_factory=list, description="Override the SearXNG image engines queried by the Web Images media provider (comma-separated engine names as configured in the instance's settings.yml); empty uses the built-in default list")
-    mojeek_api_key: str | None = Field(default=None, description="The Mojeek Search API key")
-    marginalia_api_key: str | None = Field(default=None, description="The Marginalia Search API key ('public' is Marginalia's own shared testing key when unset)")
-    smithsonian_api_key: str | None = Field(default=None, description="The smithsonian key")
-    yelp_api_key: str | None = Field(default=None, description="The Yelp Fusion API key (private key, server-side only)")
     openweathermap_api_key: str | None = Field(default=None, description="The openweathermap key")
-    nps_api_key: str | None = Field(default=None, description="The national park service api key")
     redata_api_url: str | None = Field(default=None, description="Base URL of the REData property-records service (e.g. https://redata.example.com), no trailing slash needed")
     redata_api_key: str | None = Field(default=None, description="Bearer API key for REData's external API - needs at least the parcels:read scope")
     discord_client_secret: str | None = Field(default=None, description="The discord client secret")
@@ -183,14 +290,11 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     twilio_auth_token: str | None = Field(default=None, description="The Twilio auth token")
     twilio_sms_from_number: str | None = Field(default=None, description="The Twilio phone number SMS notifications are sent from (E.164 format)")
     twilio_whatsapp_from_number: str | None = Field(default=None, description="The Twilio-approved WhatsApp sender number (E.164 format, without the 'whatsapp:' prefix)")
+    stripe_secret_key: str | None = Field(default=None, description="The Stripe secret API key (sk_...), for paid subscription checkout/billing-portal/webhook calls")
+    stripe_webhook_secret: str | None = Field(default=None, description="The Stripe webhook signing secret (whsec_...), for verifying incoming /billing/webhooks/stripe/ requests")
 
-    # Note: there are deliberately no database_* fields here. DATABASES is built directly in
-    # settings/base.py from UL_DB_* environment variables (not the UL_ prefix + field-name
-    # convention pydantic-settings would derive, e.g. UL_DATABASE_HOST) and exposed back to
-    # callers via the `databases` property below. A prior set of database_* fields here was
-    # never actually read by anything and used a different, non-working env var prefix -
-    # removed rather than wired up, since fixing the prefix mismatch without a live deployment
-    # to verify against risked silently breaking existing UL_DB_* configurations.
+    # Note: DATABASES is built directly in
+    # settings/base.py from UL_DB_* environment variables
 
     _secrets: dict | None = None
     _environment: BaseEnvironment | None = None
@@ -266,12 +370,74 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     def django(self) -> LazySettings:
         return conf.settings
 
-    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", "searxng_image_engines", mode="before")
+    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", "field_encryption_key_fallbacks", mode="before")
     @classmethod
     def _split_comma_separated(cls, value: Any) -> Any:
         """Allow list-valued settings to be provided as comma-separated strings via env vars."""
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("field_encryption_key", mode="after")
+    @classmethod
+    def _reject_weak_encryption_keys(cls, value: str | None) -> str | None:
+        """Refuse an active field-encryption key weak enough to brute-force offline.
+
+        The derivation is a single unsalted SHA256 (``models.fields._derive_fernet``),
+        so key strength *is* input strength - there is no stretching to hide behind.
+        Fernet tokens carry their own HMAC, so one stolen ciphertext row lets an
+        attacker verify guesses offline at hashing speed. Rejecting at configuration
+        time is the only point where this is still cheap to fix, and the operator
+        setting this variable is by definition trying to harden the install.
+
+        This is a floor, not an entropy oracle: it reliably catches short and
+        degenerate keys, but a sufficiently long hand-written passphrase will pass
+        while still being far weaker than generated output. Use the documented
+        ``secrets.token_urlsafe(64)`` command rather than treating acceptance here
+        as an endorsement.
+
+        Args:
+            value: The configured active key, if any.
+
+        Returns:
+            The value unchanged when it is acceptable.
+
+        Raises:
+            ValueError: When the key is too short or too repetitive to be a
+                machine-generated secret.
+        """
+        weakness = _encryption_key_weakness(value) if value else None
+        if weakness:
+            raise ValueError(weakness)
+        return value
+
+    @field_validator("field_encryption_key_fallbacks", mode="after")
+    @classmethod
+    def _warn_about_weak_fallback_keys(cls, value: list[str]) -> list[str]:
+        """Accept retired keys that would be refused as the active key, and say so.
+
+        Applying the floor here too would strand exactly the installs that need
+        to move off a weak key: the documented rotation is to list the old key
+        as a fallback, run ``manage.py rotate_field_encryption``, then drop it -
+        and a validator that refuses the old key stops the settings module from
+        loading at all, so the command that fixes it cannot start either. A
+        fallback only ever decrypts, and only until the rotation finishes, so
+        the useful action is a loud warning rather than a locked door.
+
+        Args:
+            value: The configured retired keys.
+
+        Returns:
+            The value unchanged.
+        """
+        for key in value:
+            weakness = _encryption_key_weakness(key)
+            if weakness:
+                logger.warning(
+                    "A retired field-encryption key is too weak to be accepted as the active key. "
+                    "It still decrypts existing rows, but finish the rotation and drop it: %s",
+                    weakness,
+                )
         return value
 
     @model_validator(mode="after")
@@ -315,25 +481,36 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                     setattr(self, key, value)
 
                 if not value.exists():
-                    # If the path contains a period, infer it is a file and only ensure its
-                    # parent directory exists; otherwise it's a directory and should be created
-                    # itself. (These two branches were previously swapped, which meant
-                    # directory-valued settings like backups_dir/downloads_dir/exports_dir/
-                    # static_root never actually got created - only their parent did.)
+                    # A path containing a period is inferred to be a file, so only its
+                    # parent is ensured; anything else is a directory and is created
+                    # itself. Getting this backwards silently leaves directory-valued
+                    # settings (backups_dir, downloads_dir, exports_dir, static_root)
+                    # uncreated while their parents exist, which fails far from here.
                     if "." not in value.name:
                         value.mkdir(parents=True, exist_ok=True)
                     else:
                         value.parent.mkdir(parents=True, exist_ok=True)
-            except FileNotFoundError:
-                logger.error("Error ensuring path: %s - %s", key, value)
+            except OSError:
+                # OSError, not FileNotFoundError: a read-only or wrong-owner app
+                # directory raises PermissionError, and letting that escape takes
+                # down settings import - and therefore every process - without
+                # reporting which path was at fault.
+                logger.warning("Could not ensure path %s (%s); continuing without it.", key, value, exc_info=True)
 
         # Ensure app.log, debugging.log, and test.log exist in log dir
         for filename in ["app.log", "debugging.log", "test.log"]:
-            if not self.log_root.exists():
-                self.log_root.mkdir(parents=True, exist_ok=True)
-            filepath = Path(self.log_root, filename)
-            if not filepath.exists():
-                Path(filepath).write_text("")
+            try:
+                if not self.log_root.exists():
+                    self.log_root.mkdir(parents=True, exist_ok=True)
+                filepath = Path(self.log_root, filename)
+                if not filepath.exists():
+                    filepath.write_text("")
+            except OSError:
+                # Pre-creating these is a convenience for the file handlers, not a
+                # requirement. Django's own logging config reports an unwritable log
+                # directory far more usefully than an unhandled error at import time,
+                # which surfaces as a silent container that never binds a port.
+                logger.warning("Could not pre-create %s in %s; continuing.", filename, self.log_root, exc_info=True)
 
     def refresh_django(self):
         """

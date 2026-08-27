@@ -33,15 +33,16 @@ of the owning model's file field):
   on top of host membership - pin comments visible to the pin's owner (pin
   comment threads are owner+author scoped, see
   ``controllers.comments.PinCommentsView``), wiki comments to anyone who can
-  see the wiki (``services.wiki_access.location_visible_to``), and trip
+  see the wiki (``services.wiki.wiki_access.location_visible_to``), and trip
   comments to the trip's members. This mirrors the gates
-  ``services.comments.visible_comment_tree``/``services.trip_comments.build_comment_tree``
+  ``services.comments.comments.visible_comment_tree``/``services.trips.trip_comments.build_comment_tree``
   apply to the comment's text, so tightening the privacy setting after a
   viewer already has the image URL revokes access to the file too.
 - ``avatars/`` - profile avatars render site-wide next to usernames, so any
   authenticated user may fetch them.
 - ``pin_custom_icons/`` / ``label_icons/`` - map/label icon decorations;
-  authenticated-only (see the TODOs inline and docs/PROBLEMS.md).
+  authenticated-only (see the TODOs inline, and "Authenticated media gate -
+  residual per-family risk" in docs/PROBLEMS.md).
 
 Unknown prefixes and files with no surviving owner row fall back to
 authenticated-only access rather than 404, since the file may legitimately
@@ -59,7 +60,7 @@ from django.conf import settings
 from django.http import FileResponse, Http404, HttpResponse
 from django.views import View
 
-from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError
+from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError, mark_private_media
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -139,49 +140,21 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
             logger.info("Denied media request for %s by profile %s", rel_path, profile.pk)
             raise Http404
 
-        if getattr(settings, "MEDIA_X_ACCEL", False):
-            # Hand the actual byte-serving back to nginx: the internal-only
-            # /_protected_media/ location aliases the media volume. Content-Type
-            # is deliberately left unset so nginx derives it from the file
-            # extension via its own mime.types.
-            response = HttpResponse()
-            del response["Content-Type"]
-            response["X-Accel-Redirect"] = settings.MEDIA_X_ACCEL_PREFIX + quote(rel_path)
-            return response
-
-        return FileResponse(full_path.open("rb"))  # lgtm[py/path-injection] -- already traversal-checked by _resolve_media_path below
+        return serve_media_file(rel_path, full_path)
 
     def _resolve_media_path(self, path: str) -> tuple[str, Path]:
-        """Resolve the requested path and verify it stays inside ``MEDIA_ROOT``.
+        """Delegate to :func:`resolve_media_path`.
 
         Args:
             path: The untrusted relative path from the URL.
 
         Returns:
-            Tuple of (normalized POSIX-style path relative to ``MEDIA_ROOT``,
-            resolved absolute ``Path`` of the file on disk).
+            Tuple of (path relative to ``MEDIA_ROOT``, absolute ``Path``).
 
         Raises:
-            Http404: The path is empty, contains a NUL byte, resolves outside
-                ``MEDIA_ROOT`` (traversal attempt), or isn't an existing file.
+            Http404: See :func:`resolve_media_path`.
         """
-        if not path or "\x00" in path:
-            raise Http404
-
-        media_root = Path(settings.MEDIA_ROOT).resolve()
-        try:
-            full_path = (media_root / path).resolve()  # lgtm[py/path-injection] -- checked against media_root just below, before any use
-        except (OSError, ValueError) as exc:
-            raise Http404 from exc
-
-        if full_path == media_root or not full_path.is_relative_to(media_root):
-            logger.warning("Blocked media path traversal attempt: %r", path)
-            raise Http404
-
-        if not full_path.is_file():  # lgtm[py/path-injection] -- reached only after the is_relative_to(media_root) check above
-            raise Http404
-
-        return full_path.relative_to(media_root).as_posix(), full_path
+        return resolve_media_path(path)
 
     def _authorized(self, profile: Profile, rel_path: str) -> bool:
         """Decide whether *profile* may fetch the file at *rel_path*.
@@ -215,7 +188,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
             # residual per-family risk".
             return True
         # TODO(media-auth): unknown path family - no owning model identified.
-        # Authenticated-only fallback; see docs/PROBLEMS.md.
+        # Authenticated-only fallback; see "Authenticated media gate - residual per-family risk" in docs/PROBLEMS.md.
         logger.info("Media request for unrecognized path family %r served authenticated-only", family)
         return True
 
@@ -239,7 +212,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         image = Image.objects.filter(image=rel_path).select_related("direct_message").first()
         if image is None:
             # Orphan file (row deleted, file left behind) - no owner to check.
-            # TODO(media-auth): authenticated-only fallback; see docs/PROBLEMS.md.
+            # TODO(media-auth): authenticated-only fallback; see "Authenticated media gate - residual per-family risk" in docs/PROBLEMS.md.
             return True
         if image.profile_id == profile.pk:
             return True
@@ -252,7 +225,11 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
                 # image that *also* lives in a pin/wiki gallery falls through
                 # to the normal photo-visibility check below.
                 return False
-        return Image.objects.visible_to(profile).filter(pk=image.pk).exists()
+        # pk filter first: `visible_to` eagerly resolves the uploader set of
+        # whatever queryset it is handed, so calling it on the unfiltered
+        # manager would walk every uploader on the site to answer about one
+        # image - on the path that serves every media file.
+        return Image.objects.filter(pk=image.pk).visible_to(profile).exists()
 
     def _authorize_comment_image(self, profile: Profile, rel_path: str) -> bool:
         """Authorize a ``comment_images/`` file via its Comment/TripComment row.
@@ -266,7 +243,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         """
         from urbanlens.dashboard.models.comments.model import Comment
         from urbanlens.dashboard.models.trips.model import TripComment, TripMembership
-        from urbanlens.dashboard.services.wiki_access import location_visible_to
+        from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
 
         comment = Comment.objects.filter(image=rel_path).select_related("pin", "wiki__location", "profile").first()
         if comment is not None:
@@ -278,7 +255,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
                 return False
             if not profile.can_view_comments_from(comment.profile):
                 # The author's comment_visibility setting hides the comment
-                # itself from this viewer (see services.comments.visible_comment_tree
+                # itself from this viewer (see services.comments.comments.visible_comment_tree
                 # gate 1) - the attachment must be hidden right along with it,
                 # not just from the rendered thread.
                 return False
@@ -302,5 +279,67 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
             return TripMembership.objects.filter(trip_id=trip_comment.trip_id, profile=profile).exists()
 
         # Orphan file - no surviving comment row to derive an owner from.
-        # TODO(media-auth): authenticated-only fallback; see docs/PROBLEMS.md.
+        # TODO(media-auth): authenticated-only fallback; see "Authenticated media gate - residual per-family risk" in docs/PROBLEMS.md.
         return True
+
+
+def resolve_media_path(path: str) -> tuple[str, Path]:
+    """Resolve a media path and verify it stays inside ``MEDIA_ROOT``.
+
+    Args:
+        path: The untrusted relative path.
+
+    Returns:
+        Tuple of (normalized POSIX-style path relative to ``MEDIA_ROOT``,
+        resolved absolute ``Path`` of the file on disk).
+
+    Raises:
+        Http404: The path is empty, contains a NUL byte, resolves outside
+            ``MEDIA_ROOT`` (traversal attempt), or isn't an existing file.
+    """
+    if not path or "\x00" in path:
+        raise Http404
+
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    try:
+        full_path = (media_root / path).resolve()  # lgtm[py/path-injection] -- checked against media_root just below, before any use
+    except (OSError, ValueError) as exc:
+        raise Http404 from exc
+
+    if full_path == media_root or not full_path.is_relative_to(media_root):
+        logger.warning("Blocked media path traversal attempt: %r", path)
+        raise Http404
+
+    if not full_path.is_file():  # lgtm[py/path-injection] -- reached only after the is_relative_to(media_root) check above
+        raise Http404
+
+    return full_path.relative_to(media_root).as_posix(), full_path
+
+
+def serve_media_file(rel_path: str, full_path: Path) -> HttpResponseBase:
+    """Serve one already-authorized media file.
+
+    Authorization is the caller's job - this only moves bytes. Split out so a
+    surface with its own credential (the safety contact portal authenticates by
+    magic-link token, not by login) can reuse the nginx hand-off instead of
+    reimplementing it.
+
+    Args:
+        rel_path: Path relative to ``MEDIA_ROOT``, already traversal-checked.
+        full_path: The resolved absolute path on disk.
+
+    Returns:
+        An ``X-Accel-Redirect`` response when nginx fronts the app, otherwise a
+        ``FileResponse`` streaming the file.
+    """
+    if getattr(settings, "MEDIA_X_ACCEL", False):
+        # Hand the actual byte-serving back to nginx: the internal-only
+        # /_protected_media/ location aliases the media volume. Content-Type
+        # is deliberately left unset so nginx derives it from the file
+        # extension via its own mime.types.
+        response = HttpResponse()
+        del response["Content-Type"]
+        response["X-Accel-Redirect"] = settings.MEDIA_X_ACCEL_PREFIX + quote(rel_path)
+        return mark_private_media(response)
+
+    return mark_private_media(FileResponse(full_path.open("rb")))  # lgtm[py/path-injection] -- already traversal-checked by resolve_media_path

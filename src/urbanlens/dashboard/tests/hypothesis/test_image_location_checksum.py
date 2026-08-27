@@ -10,8 +10,8 @@ Covers:
 
 from __future__ import annotations
 
-import io
 from decimal import Decimal
+import io
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
@@ -19,10 +19,11 @@ from django.utils import timezone
 from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.images import JPEG_BYTES
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.visits import _sync_visit_photos, _visit_dialog_context
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.services.images import compute_checksum
+from urbanlens.dashboard.services.media.images import compute_checksum
 
 _hyp = hyp_settings(max_examples=40, deadline=None)
 
@@ -59,7 +60,7 @@ class EffectiveCoordinateTests(TestCase):
     """Image.effective_latitude/longitude prefer own GPS, then the linked Location."""
 
     def test_own_gps_wins(self):
-        location = baker.prepare("dashboard.Location", latitude=Decimal("1"), longitude=Decimal("2"))
+        location = baker.prepare("dashboard.Location", latitude=Decimal(1), longitude=Decimal(2))
         img = Image(latitude=_LAT, longitude=_LNG, location=location)
         self.assertEqual(img.effective_latitude, _LAT)
         self.assertEqual(img.effective_longitude, _LNG)
@@ -119,16 +120,22 @@ class SyncVisitPhotosTests(TestCase):
         return self.factory.post("/", data)
 
     def test_new_upload_sets_location_and_checksum(self):
-        request = self._post(photos=[SimpleUploadedFile("a.jpg", b"photo-bytes-a", content_type="image/jpeg")])
+        # Real JPEG bytes: the upload path now requires a positive image
+        # identification, so a placeholder string is refused before it reaches
+        # the checksum logic this test is actually about.
+        request = self._post(photos=[SimpleUploadedFile("a.jpg", JPEG_BYTES, content_type="image/jpeg")])
         uploaded = _sync_visit_photos(request, self.pin, self.visit)
 
         self.assertTrue(uploaded)
         img = Image.objects.get(pin=self.pin, visit=self.visit)
         self.assertEqual(img.location_id, self.location.pk)
-        self.assertEqual(img.checksum, compute_checksum(io.BytesIO(b"photo-bytes-a")))
+        self.assertEqual(img.checksum, compute_checksum(io.BytesIO(JPEG_BYTES)))
 
     def test_duplicate_upload_reuses_existing_photo(self):
-        content = b"photo-bytes-dup"
+        # Same reason, and the *same* bytes on both sides - the point of this
+        # test is that an identical file is recognised, so the checksum seeded
+        # below and the one uploaded have to come from one source.
+        content = JPEG_BYTES
         existing = baker.make(
             "dashboard.Image",
             pin=self.pin,

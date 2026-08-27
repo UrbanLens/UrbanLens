@@ -7,7 +7,7 @@ from typing import Any, ClassVar
 from urllib.parse import urlencode
 
 from urbanlens.dashboard.services.apis.locations.base import create_bbox_str
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 _EARTH_ENGINE_URL = "https://earthengine.googleapis.com/v1"

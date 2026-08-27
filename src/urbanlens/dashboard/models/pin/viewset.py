@@ -9,8 +9,8 @@ from rest_framework.response import Response
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.serializer import PinSerializer
-from urbanlens.dashboard.services.pin_edit import PinHasChildrenError, PinMoveError, delete_pin, move_pin_to_coordinates
-from urbanlens.dashboard.services.wiki_access import wikis_hidden_by_pin_move
+from urbanlens.dashboard.services.pins.pin_edit import PinHasChildrenError, PinMoveError, delete_pin, move_pin_to_coordinates
+from urbanlens.dashboard.services.wiki.wiki_access import wikis_hidden_by_pin_move
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,10 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
     def get_queryset(self):
         if not self.request:
             return Pin.objects.none()
-        return Pin.objects.select_related("location").filter(profile__user=self.request.user)
+        # labels: categories/tags/statuses each read self.labels.all() via
+        # Labelled._labels_of_kind, so without this each pin costs a query.
+        # reviews: Pin.rating reads self.reviews.all().
+        return Pin.objects.select_related("location").prefetch_related("labels", "reviews").filter(profile__user=self.request.user)
 
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -132,7 +135,9 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
         A pin with descendants requires an explicit ``children`` query param:
         without one the request is refused with 409 and a payload describing
         how many child pins exist, so the UI can ask the user. ``children=delete``
-        removes the whole subtree (all of it restorable from Undo History);
+        removes the whole subtree (the pins and their photos restorable from
+        Undo History; CASCADEd content - comments, albums, links - is not, see
+        ``PinUndoHandler``);
         ``children=keep`` promotes the direct children to the deleted pin's own
         parent (or to top-level pins) and deletes only the pin itself.
         """

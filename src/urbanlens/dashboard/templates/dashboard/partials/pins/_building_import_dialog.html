@@ -1,0 +1,75 @@
+{% comment %}
+Shared body for the parcel-panel import action and the restructure offer. The
+enclosing dialog lives on the pin detail page so either HTMX-loaded button can
+replace this body, open it, and initialize its Leaflet preview afterwards.
+{% endcomment %}
+{% load map_components %}
+{% include "dashboard/partials/ui/_dialog_header.html" with title="Choose buildings to add" %}
+<form class="building-import-form"
+      data-restructure="{{ restructure|yesno:'1,0' }}"
+      data-nestable-count="{{ nestable_count|default:0 }}"
+      hx-post="{{ form_action }}"
+      {% if restructure %}hx-target="#pin-restructure-offer" hx-swap="outerHTML"{% else %}hx-swap="none"{% endif %}
+      hx-disabled-elt="find button[type='submit']"
+      hx-indicator="find .building-import-submit-spinner"
+      hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}">
+    {% csrf_token %}
+    <input type="hidden" name="building_selection" value="1">
+
+    <div class="building-import-layout ul-dialog-body">
+        <div class="building-import-choices">
+            {% if rows %}
+            <div class="building-import-select-tools">
+                <span><strong data-building-selected-count>{{ building_count }}</strong> of {{ building_count }} selected</span>
+                <button type="button" class="btn btn--ghost btn--sm" data-building-select-all>Uncheck all</button>
+            </div>
+            <ul class="building-import-list">
+                {% for row in rows %}
+                <li>
+                    <label class="building-import-item">
+                        <input type="checkbox" name="building_keys" value="{{ row.selection_key }}" checked>
+                        <span class="building-import-number">{{ row.building_number|default:"&mdash;" }}</span>
+                        <span class="building-import-info">
+                            <strong>{{ row.name|default:"Unnamed building" }}</strong>
+                            <small>
+                                {% if row.year_built %}Built {{ row.year_built }}{% endif %}
+                                {% if row.year_built and row.source_label %} &middot; {% endif %}
+                                {{ row.source_label }}
+                            </small>
+                        </span>
+                    </label>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="building-import-empty">There are no new buildings to add.</p>
+            {% endif %}
+        </div>
+        {% if rows %}
+        <div class="building-import-map-wrap">
+            {% map_toolbar "select_building_import" panel_id="building-import-map-buttons" %}
+            <div id="building-import-map" aria-label="Map of buildings to add"></div>
+            <div class="building-import-attribution">Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if restructure and nestable_count %}
+    <p class="building-import-nesting-note">
+        <i class="material-symbols-outlined">account_tree</i>
+        This will also move {{ nestable_count }} existing pin{{ nestable_count|pluralize }} under this property.
+    </p>
+    {% endif %}
+
+    <div class="dialog-actions">
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="submit" class="btn btn--primary" data-building-import-submit{% if not rows and not nestable_count %} disabled{% endif %}>
+            <i class="material-symbols-outlined">add_location_alt</i>
+            <span data-building-submit-label>
+                {% if restructure %}Organize property{% else %}Add {{ building_count }} building{{ building_count|pluralize }}{% endif %}
+            </span>
+        </button>
+        <span class="building-import-submit-spinner htmx-indicator"><i class="material-icons spin">autorenew</i> Adding pins...</span>
+    </div>
+</form>
+{{ rows|json_script:"building-import-map-data" }}

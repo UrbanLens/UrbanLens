@@ -6,6 +6,7 @@ import datetime
 from uuid import uuid4
 
 from django.db import IntegrityError, transaction
+from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 import pytest
@@ -17,10 +18,11 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyCheckinContact,
     SafetyCheckinMessage,
     SafetyCheckinStatus,
+    SafetyContactOptOut,
     SafetyContactOptOutScope,
 )
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
-from urbanlens.dashboard.services.safety import (
+from urbanlens.dashboard.services.visits.safety import (
     cancel_checkin,
     check_in,
     create_checkin,
@@ -29,6 +31,7 @@ from urbanlens.dashboard.services.safety import (
     get_active_checkins,
     is_contact_opted_out,
     mark_found_safe,
+    record_contact_opt_out,
 )
 
 
@@ -67,7 +70,7 @@ class SafetyCheckinLifecycleTests(TestCase):
 
         # A second conclusion attempt (e.g. a stray double-submit) must not raise
         # the exactly-one-origin constraint by creating a duplicate suggestion.
-        from urbanlens.dashboard.services.safety import _conclude_checkin
+        from urbanlens.dashboard.services.visits.safety import _conclude_checkin
 
         _conclude_checkin(checkin)
 
@@ -262,6 +265,89 @@ class SafetyCheckinContactByTokenTests(TestCase):
         self.assertEqual(result.checkin_id, self.checkin.pk)
 
 
+class SafetyContactPortalEscalationGateTests(TestCase):
+    """The token contact portal (and its markup JSON) must not disclose the plan, message,
+    route, or photos before the check-in has actually escalated - the token is only ever
+    emailed at escalation, but nothing previously stopped a leaked/guessed/forwarded token
+    from returning the full plan regardless of check-in state. See docs/GOALS_CODE_AUDIT.md
+    ("Safety check-ins")."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.checkin = _checkin(
+            self.profile,
+            plan_details="Meet at the north gate, follow the fence line.",
+            contact_message="Call the ranger station if I'm late.",
+        )
+        self.contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+
+    def _escalate(self):
+        self.checkin.escalated_at = timezone.now()
+        self.checkin.save(update_fields=["escalated_at", "updated"])
+
+    def test_portal_hides_the_plan_and_message_before_escalation(self):
+        response = self.client.get(reverse("safety.contact.portal", kwargs={"token": self.contact.token}))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertNotIn("Meet at the north gate", content)
+        self.assertNotIn("Call the ranger station", content)
+
+    def test_portal_shows_the_plan_and_message_once_escalated(self):
+        self._escalate()
+
+        response = self.client.get(reverse("safety.contact.portal", kwargs={"token": self.contact.token}))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn("Meet at the north gate", content)
+        self.assertIn("Call the ranger station", content)
+
+    def test_portal_hides_photos_before_escalation(self):
+        baker.make("dashboard.Image", safety_checkin=self.checkin, profile=self.profile, image="checkin_photos/trailhead.jpg")
+
+        response = self.client.get(reverse("safety.contact.portal", kwargs={"token": self.contact.token}))
+
+        self.assertNotIn("safety-photo-thumb", response.content.decode())
+
+    def test_portal_shows_photos_once_escalated(self):
+        baker.make("dashboard.Image", safety_checkin=self.checkin, profile=self.profile, image="checkin_photos/trailhead.jpg")
+        self._escalate()
+
+        response = self.client.get(reverse("safety.contact.portal", kwargs={"token": self.contact.token}))
+
+        self.assertIn("safety-photo-thumb", response.content.decode())
+
+    def test_markup_json_is_empty_before_escalation(self):
+        markup_map = baker.make("dashboard.MarkupMap", profile=self.profile)
+        self.checkin.markup_map = markup_map
+        self.checkin.save(update_fields=["markup_map", "updated"])
+        baker.make("dashboard.PinMarkup", parent_map=markup_map, profile=self.profile, markup_type="line", geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]})
+
+        response = self.client.get(reverse("safety.contact.markup.json", kwargs={"token": self.contact.token}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["markup_items"], [])
+
+    def test_markup_json_returns_items_once_escalated(self):
+        markup_map = baker.make("dashboard.MarkupMap", profile=self.profile)
+        self.checkin.markup_map = markup_map
+        self.checkin.save(update_fields=["markup_map", "updated"])
+        baker.make("dashboard.PinMarkup", parent_map=markup_map, profile=self.profile, markup_type="line", geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]})
+        self._escalate()
+
+        response = self.client.get(reverse("safety.contact.markup.json", kwargs={"token": self.contact.token}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["markup_items"]), 1)
+
+    def test_portal_is_a_404_for_an_unknown_token(self):
+        self.assertEqual(self.client.get(reverse("safety.contact.portal", kwargs={"token": uuid4()})).status_code, 404)
+
+    def test_markup_json_is_a_404_for_an_unknown_token(self):
+        self.assertEqual(self.client.get(reverse("safety.contact.markup.json", kwargs={"token": uuid4()})).status_code, 404)
+
+
 class OneActiveCheckinAtATimeTests(TestCase):
     """create_checkin()/get_active_checkin() enforce a single active check-in per profile."""
 
@@ -433,3 +519,33 @@ class SafetyContactOptOutBlocksNotificationTests(TestCase):
             contact_profile=None,
         )
         self.assertTrue(is_contact_opted_out(None, "contact@example.com", owner=self.owner))
+
+
+class RecordContactOptOutDedupTests(TestCase):
+    """record_contact_opt_out's docstring promises repeat clicks (or an email client's
+    link-scanner prefetching the confirm GET) don't create duplicate rows - previously
+    unenforced at the DB level, so a get_or_create race could insert two."""
+
+    def setUp(self):
+        self.owner = baker.make("auth.User").profile
+        self.checkin = _checkin(self.owner)
+        self.contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+
+    def test_repeat_calls_do_not_duplicate_a_checkin_scoped_opt_out(self):
+        record_contact_opt_out(self.contact, SafetyContactOptOutScope.CHECKIN)
+        record_contact_opt_out(self.contact, SafetyContactOptOutScope.CHECKIN)
+
+        self.assertEqual(SafetyContactOptOut.objects.filter(email="contact@example.com", scope=SafetyContactOptOutScope.CHECKIN, checkin=self.checkin).count(), 1)
+
+    def test_a_second_identical_row_is_rejected_at_the_database(self) -> None:
+        """Direct proof the constraint - not just the service function's own call
+        pattern - is what prevents the duplicate."""
+        record_contact_opt_out(self.contact, SafetyContactOptOutScope.CHECKIN)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            SafetyContactOptOut.objects.create(
+                contact_profile=None,
+                email="contact@example.com",
+                scope=SafetyContactOptOutScope.CHECKIN,
+                owner=None,
+                checkin=self.checkin,
+            )

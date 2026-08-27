@@ -17,9 +17,13 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
+from urbanlens.dashboard.models.labels.model import KIND_TAG, Label
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 _STALE = timezone.datetime(2020, 1, 1, tzinfo=timezone.get_default_timezone())
 
@@ -64,11 +68,40 @@ class LabelCustomizePinCacheInvalidationTests(TestCase):
         self.client.force_login(self.user)
 
     def test_customizing_a_global_label_bumps_own_pins_carrying_it(self) -> None:
-        global_label = baker.make(Label, profile=None, kind="tag", name="Visited", icon="check")
+        global_label = ensure_label( profile=None, kind="tag", name="Visited", icon="check")
         pin = _make_pin_with_label(self.profile, global_label)
 
         url = reverse("label.customize", kwargs={"label_kind": "tag", "label_id": global_label.id})
         response = self.client.post(url, data={"icon": "star", "color": "#ff0000"})
+        self.assertEqual(response.status_code, 200)
+
+        pin.refresh_from_db()
+        self.assertGreater(pin.updated, _STALE)
+
+
+class LabelDetailViewPinCacheInvalidationTests(TestCase):
+    """The external API's PATCH endpoint had the same gap as LabelEditView -
+    editing icon/color through it never bumped Pin.updated, so a label edit
+    made via the API left the client's map pin cache silently stale."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # first user is auto-promoted to bootstrap site admin
+        self.user = baker.make(User)
+        self.profile = Profile.objects.get(user=self.user)
+        _key, self.raw_key = generate_api_key(self.user, "Labels client")
+        ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value])
+
+    def test_patching_own_label_bumps_pins_carrying_it(self) -> None:
+        label = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Urbex", icon="place")
+        pin = _make_pin_with_label(self.profile, label)
+
+        response = self.client.patch(
+            f"/dashboard/api/external/v1/labels/{label.uuid}/",
+            {"icon": "explore"},
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {self.raw_key}",
+        )
         self.assertEqual(response.status_code, 200)
 
         pin.refresh_from_db()

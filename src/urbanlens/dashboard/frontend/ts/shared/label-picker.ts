@@ -40,10 +40,25 @@ export interface LabelGroup {
     ids: number[];
 }
 
+import { safeColor } from "./color-safety";
+
 type ChipMode = "incl" | "excl";
 
 function escHtml(value: unknown): string {
     return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+
+/**
+ * True when a candidate (by kind + lowercase name) passes the active kind-tab
+ * (empty string = "All") and search-text filters shared by every label picker.
+ * Pure so it's unit-testable without a DOM - see label-picker.test.ts.
+ */
+export function matchesLabelFilter(kind: string | undefined, name: string, activeKind: string, query: string): boolean {
+    const kindOk = !activeKind || kind === activeKind;
+    const q = query.toLowerCase().trim();
+    const searchOk = !q || name.toLowerCase().includes(q);
+    return kindOk && searchOk;
 }
 
 /**
@@ -94,6 +109,8 @@ export interface FilterPickerElements {
     formulaDisplayClear?: HTMLElement | null;
     /** Optional accordion/section element toggled `fp-acc-active` while non-empty. */
     accordion?: HTMLElement | null;
+    /** Optional `.tad-tabs` container (buttons with `data-tab="tag"|"category"|"status"|""`) filtering the availability list by kind. */
+    kindTabs?: HTMLElement | null;
 }
 
 export interface FilterPickerOptions {
@@ -110,7 +127,7 @@ export interface FilterPickerOptions {
 }
 
 export interface FilterPickerApi {
-    /** Remove every selection (and formula), restore the full list, fire onChange. */
+    /** Remove every selection (and formula), restore the available list (still subject to the active kind tab/search), fire onChange. */
     clear(): void;
     /** Re-render chips/columns/serialization from current state. */
     rebuild(): void;
@@ -134,13 +151,33 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
     let dropHandled = false; // set by drop handlers so dragend knows not to auto-remove
     let chipJustDragged = false; // suppresses the click browsers fire after dragend
     let availJustDragged = false; // same, for labels dragged straight from the list
+    let pressJustHandled = false; // same, for the click that follows a long-press/context-menu release
     // Non-null in formula mode: parsed groups are the canonical state.
     let formulaGroups: LabelGroup[] | null = null;
+    // Kind-tab filter ("" = All) and the formula bar's current search token - both only
+    // affect which available buttons are shown, never the formula parser/autocomplete
+    // (those keep resolving names against the full label set - see labelByNameMap below).
+    let activeKind = "";
+    let listQuery = "";
 
     // -- Helpers -------------------------------------------------------------
     const availButtons = (): HTMLElement[] => Array.from(els.list.querySelectorAll<HTMLElement>(".fp-label-avail"));
     const availById = (id: string): HTMLElement | null => els.list.querySelector<HTMLElement>(`[data-label-id="${id}"]`);
     const labelTextForId = (id: string): string => availById(id)?.dataset.labelText || String(id);
+
+    /** Combined visibility for one availability button: not already selected, and matches the active kind tab + search text. */
+    function isAvailVisible(btn: HTMLElement): boolean {
+        const id = btn.dataset.labelId || "";
+        if (labelState.has(id)) return false;
+        return matchesLabelFilter(btn.dataset.labelKind, btn.dataset.labelName || "", activeKind, listQuery);
+    }
+
+    /** Re-derives every availability button's visibility from scratch - the single place `.fp-label-avail` display is ever written. */
+    function refreshAvailVisibility(): void {
+        availButtons().forEach((btn) => {
+            btn.style.display = isAvailVisible(btn) ? "" : "none";
+        });
+    }
 
     function quoteLabelName(label: string): string {
         return /[\s\/\-\+\(\)]/.test(label) ? `"${label}"` : label;
@@ -160,16 +197,117 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
         return m;
     }
 
+    // -- Long-press: the touch/pen stand-in for right-click -------------------
+    // iOS Safari never fires `contextmenu` and no mobile browser starts an HTML5
+    // drag from touch, so excluding a label and flipping a chip between the
+    // columns are otherwise unreachable without typing a formula.
+    const LONG_PRESS_MS = 500;
+    // A finger drifts several px through a press its owner considers still, so
+    // this is looser than a mouse would need.
+    const LONG_PRESS_SLOP_PX = 10;
+
+    let pressTimer = 0;
+    let endPress: (() => void) | null = null;
+
+    /** Drops the pending long-press, if any, without running it. */
+    function cancelPress(): void {
+        if (pressTimer) window.clearTimeout(pressTimer);
+        pressTimer = 0;
+        endPress?.();
+        endPress = null;
+    }
+
+    function releasePress(): void {
+        pressJustHandled = false;
+        document.removeEventListener("click", releasePress);
+        document.removeEventListener("pointerdown", releasePress);
+    }
+
+    /**
+     * Takes ownership of the press in flight, false if the other path already
+     * has it - Android fires `contextmenu` for the very gesture the long-press
+     * timer is counting, and handling both would toggle twice.
+     *
+     * Claiming also neutralizes the click the release emits (see the
+     * `pressJustHandled` guards): that can't expire on a timer, since a press
+     * may be held for any length of time, so it lifts on the click itself or on
+     * the next pointerdown when the release produces no click at all.
+     */
+    function claimPress(emitsClick = true): boolean {
+        if (pressJustHandled) return false;
+        cancelPress();
+        if (!emitsClick) return true;
+        pressJustHandled = true;
+        document.addEventListener("click", releasePress);
+        document.addEventListener("pointerdown", releasePress);
+        return true;
+    }
+
+    /**
+     * True when a `contextmenu` came from a real mouse right-click, which emits
+     * no follow-up click to suppress - and can't be racing a long-press timer
+     * either, since startPress ignores mouse pointers. Arming the suppression
+     * for it would leave the guard set until some unrelated later click,
+     * swallowing keyboard (Enter/Space) activations in the meantime.
+     */
+    function isMouseContextMenu(event: MouseEvent): boolean {
+        const pointerType = (event as PointerEvent).pointerType;
+        return pointerType ? pointerType === "mouse" : event.button === 2;
+    }
+
+    /**
+     * Runs `action` once `event`'s pointer has been held roughly still for
+     * LONG_PRESS_MS. Mouse pointers are excluded: they already have right-click,
+     * and a slow left-click has to stay a plain click.
+     */
+    function startPress(event: PointerEvent, action: () => void): void {
+        if (event.pointerType === "mouse" || !event.isPrimary || event.button !== 0) return;
+        cancelPress();
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const onMove = (moveEvent: PointerEvent): void => {
+            if (Math.abs(moveEvent.clientX - startX) > LONG_PRESS_SLOP_PX || Math.abs(moveEvent.clientY - startY) > LONG_PRESS_SLOP_PX) cancelPress();
+        };
+        // Watched on the document rather than on the pressed element (which
+        // map-image-overlays.ts can do, via setPointerCapture) because `action`
+        // replaces the chip mid-gesture, and because capturing the pointer stops
+        // the element's own native drag from ever starting.
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", cancelPress);
+        document.addEventListener("pointercancel", cancelPress);
+        // A native drag swallows pointermove, so without this the timer would
+        // still fire midway through dragging a label between the columns.
+        document.addEventListener("dragstart", cancelPress);
+        endPress = (): void => {
+            document.removeEventListener("pointermove", onMove);
+            document.removeEventListener("pointerup", cancelPress);
+            document.removeEventListener("pointercancel", cancelPress);
+            document.removeEventListener("dragstart", cancelPress);
+        };
+        pressTimer = window.setTimeout(() => {
+            pressTimer = 0;
+            if (claimPress()) action();
+        }, LONG_PRESS_MS);
+    }
+
     // -- Chip HTML ------------------------------------------------------------
-    function chipHtml(id: string, label: string, color: string, icon: string, mode: ChipMode): string {
+    function chipHtml(id: string, label: string, rawColor: string, icon: string, mode: ChipMode): string {
+        const color = safeColor(rawColor);
         const bg = color ? color + "33" : mode === "incl" ? "rgba(34,197,94,.18)" : "rgba(239,68,68,.18)";
         const border = color ? color + "66" : mode === "incl" ? "rgba(34,197,94,.4)" : "rgba(239,68,68,.4)";
         const txtCol = mode === "incl" ? "#86efac" : "#fca5a5";
         const iconHtml = icon ? `<span style="font-size:.85em">${escHtml(icon)}</span>` : "";
+        const flip = mode === "incl" ? "exclude" : "include";
+        // Right-click/long-press is the fast path, but it's invisible - the
+        // button is the only cue that a chip has two states, and on touch the
+        // only one-tap way to flip it. Styled inline because `_map.scss` has no
+        // rule for it.
+        const toggleHtml = `<button type="button" class="fp-label-chip-toggle" title="Switch to ${flip}" aria-label="Switch to ${flip}"
+                      style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0;border:0;border-radius:50%;background:rgba(0,0,0,.25);color:inherit;font:inherit;line-height:1;cursor:pointer">${mode === "incl" ? "−" : "+"}</button>`;
         return `<span class="fp-label-chip fp-label-chip--${mode}" data-id="${escHtml(id)}" draggable="true"
-                      title="Click to remove · Right-click to ${mode === "incl" ? "exclude" : "include"} · Drag to move or drop outside to remove"
+                      title="Click to remove · Right-click or long-press to ${flip} · Drag to move or drop outside to remove"
                       style="background:${bg};border-color:${border};color:${txtCol}">
-                    ${iconHtml}<span class="fp-label-chip-text">${escHtml(label)}</span>
+                    ${iconHtml}<span class="fp-label-chip-text">${escHtml(label)}</span>${toggleHtml}
                 </span>`;
     }
 
@@ -219,7 +357,7 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
     /** Visual pill for one label in the read-only formula display (see groupsToFormulaHtml). */
     function formulaPillHtml(entry: LabelEntry | undefined, fallback: string, mode: ChipMode): string {
         const label = entry?.label ?? fallback;
-        const color = entry?.color;
+        const color = safeColor(entry?.color);
         const bg = color ? color + "33" : mode === "incl" ? "rgba(148,163,184,.16)" : "rgba(239,68,68,.16)";
         const border = color ? color + "66" : mode === "incl" ? "rgba(148,163,184,.4)" : "rgba(239,68,68,.4)";
         const txtCol = color || (mode === "incl" ? "rgba(226,232,240,.92)" : "#fca5a5");
@@ -268,6 +406,12 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
 
     // -- Rebuild selected chips UI --------------------------------------------
     function rebuild(): void {
+        // Single source of truth for availability-list visibility (selected/kind/search
+        // combined) - every mutation below routes through here instead of poking
+        // `.fp-label-avail` display directly, so the three conditions can't clobber
+        // each other.
+        refreshAvailVisibility();
+
         const isComplex = formulaGroups !== null && !isSimpleGroups(formulaGroups);
 
         if (isComplex) {
@@ -308,11 +452,16 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
             container.querySelectorAll<HTMLElement>(".fp-label-chip").forEach((chip) => {
                 const id = chip.dataset.id || "";
                 chip.addEventListener("click", () => {
-                    if (!chipJustDragged) removeLabel(id);
+                    if (!chipJustDragged && !pressJustHandled) removeLabel(id);
                 });
                 chip.addEventListener("contextmenu", (e) => {
                     e.preventDefault();
-                    toggleLabelMode(id);
+                    if (claimPress(!isMouseContextMenu(e))) toggleLabelMode(id);
+                });
+                chip.addEventListener("pointerdown", (e) => startPress(e, () => toggleLabelMode(id)));
+                chip.querySelector<HTMLElement>(".fp-label-chip-toggle")?.addEventListener("click", (e) => {
+                    e.stopPropagation(); // the chip body around it removes the label
+                    if (!pressJustHandled) toggleLabelMode(id);
                 });
                 chip.addEventListener("dragstart", (e) => {
                     dragId = id;
@@ -364,7 +513,6 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
             return;
         }
         labelState.set(id, mode);
-        btn.style.display = "none";
         rebuild();
         onChange();
     }
@@ -380,8 +528,6 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
     function removeLabel(id: string): void {
         formulaGroups = null;
         labelState.delete(id);
-        const btn = availById(id);
-        if (btn) btn.style.display = "";
         rebuild();
         onChange();
     }
@@ -389,9 +535,6 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
     function clear(): void {
         labelState.clear();
         formulaGroups = null;
-        availButtons().forEach((btn) => {
-            btn.style.display = "";
-        });
         inclMode = "and";
         rebuild();
         onChange();
@@ -432,20 +575,38 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
     els.modeBtn?.addEventListener("click", toggleInclMode);
     els.formulaDisplayClear?.addEventListener("click", clear);
 
+    // Kind tabs (All/Tags/Categories/Statuses) only filter the availability list's
+    // visibility - they never touch labelState/formulaGroups, so switching tabs mid-
+    // formula or mid-selection can't lose anything.
+    els.kindTabs?.querySelectorAll<HTMLElement>(".tad-tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+            els.kindTabs?.querySelectorAll(".tad-tab").forEach((t) => t.classList.remove("tad-tab--active"));
+            tab.classList.add("tad-tab--active");
+            activeKind = tab.dataset.tab || "";
+            refreshAvailVisibility();
+        });
+    });
+
     // Availability-list interactions are delegated so buttons appended later
     // (a label created inline from another dialog) work without re-wiring.
     els.list.addEventListener("click", (e) => {
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");
         if (!btn) return;
-        // Suppress the click some browsers fire on the source right after a drop.
-        if (availJustDragged) return;
+        // Suppress the click some browsers fire on the source right after a drop,
+        // and the one that follows a long-press release.
+        if (availJustDragged || pressJustHandled) return;
         addLabel(btn, "incl");
     });
     els.list.addEventListener("contextmenu", (e) => {
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");
         if (!btn) return;
         e.preventDefault();
-        addLabel(btn, "excl");
+        if (claimPress(!isMouseContextMenu(e))) addLabel(btn, "excl");
+    });
+    els.list.addEventListener("pointerdown", (e) => {
+        const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");
+        if (!btn) return;
+        startPress(e, () => addLabel(btn, "excl"));
     });
     els.list.addEventListener("dragstart", (e) => {
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");
@@ -723,6 +884,7 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
             // Clearing the box entirely while a filter is applied drops it now,
             // instead of leaving the stale filter active until another trigger.
             if (!text.trim() && (formulaGroups !== null || labelState.size > 0)) {
+                listQuery = "";
                 clear();
                 if (sugg) sugg.hidden = true;
                 if (errs) errs.hidden = true;
@@ -731,10 +893,8 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
             const cursor = bar.selectionStart ?? text.length;
             const tok = currentToken(text, cursor);
             showSuggestions(tok.text);
-            availButtons().forEach((btn) => {
-                const q = tok.text.toLowerCase();
-                btn.style.display = !q || (btn.dataset.labelName || "").includes(q) ? "" : "none";
-            });
+            listQuery = tok.text.toLowerCase();
+            refreshAvailVisibility();
             if (errs) {
                 if (tok.text && isDeadEnd(tok.text)) {
                     errs.textContent = `No label matches "${tok.text}"`;
@@ -835,9 +995,6 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
     function applyGroups(groups: LabelGroup[]): void {
         // Set BEFORE the state rebuild so serialization preserves structure.
         formulaGroups = groups;
-        availButtons().forEach((b) => {
-            b.style.display = "";
-        });
         labelState.clear();
         inclMode = "and";
         groups.forEach((g) => {
@@ -847,10 +1004,6 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
                 g.ids.forEach((id) => labelState.set(String(id), "incl"));
                 if (g.op === "or") inclMode = "or";
             }
-        });
-        labelState.forEach((_mode, id) => {
-            const btn = availById(id);
-            if (btn) btn.style.display = "none";
         });
         rebuild();
         onChange();
@@ -863,10 +1016,6 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
         }
         // Merged state may mix groups; fall back to simple chip mode.
         formulaGroups = null;
-        labelState.forEach((_mode, id) => {
-            const btn = availById(id);
-            if (btn) btn.style.display = "none";
-        });
         rebuild();
     }
 
@@ -888,12 +1037,15 @@ export interface ChipCandidate {
     name: string;
     icon?: string;
     color?: string;
+    kind?: string;
 }
 
 export interface ChipPickerOptions {
     chipsEl: HTMLElement;
     searchEl: HTMLInputElement;
     suggEl: HTMLElement;
+    /** Optional `.tad-tabs` container (buttons with `data-tab="tag"|"category"|"status"|""`) filtering suggestions by kind. */
+    tabsEl?: HTMLElement;
     /** Maximum suggestions rendered per query (default 12). */
     maxSuggestions?: number;
     /** Fired after every selection change (add or remove). */
@@ -909,11 +1061,12 @@ export interface ChipPickerApi {
 }
 
 export function createChipPicker(options: ChipPickerOptions): ChipPickerApi {
-    const { chipsEl, searchEl, suggEl } = options;
+    const { chipsEl, searchEl, suggEl, tabsEl } = options;
     const maxSuggestions = options.maxSuggestions ?? 12;
     const onChange = options.onChange || (() => {});
     let candidates: ChipCandidate[] = [];
     let selected: ChipCandidate[] = [];
+    let activeKind = "";
 
     function renderChips(): void {
         chipsEl.innerHTML = "";
@@ -934,9 +1087,8 @@ export function createChipPicker(options: ChipPickerOptions): ChipPickerApi {
     }
 
     function renderSuggestions(query: string): void {
-        const q = (query || "").toLowerCase().trim();
         const selectedIds = new Set(selected.map((s) => s.id));
-        const matches = candidates.filter((c) => !selectedIds.has(c.id) && (!q || c.name.toLowerCase().includes(q))).slice(0, maxSuggestions);
+        const matches = candidates.filter((c) => !selectedIds.has(c.id) && matchesLabelFilter(c.kind, c.name, activeKind, query)).slice(0, maxSuggestions);
         if (!matches.length) {
             suggEl.hidden = true;
             suggEl.innerHTML = "";
@@ -970,6 +1122,18 @@ export function createChipPicker(options: ChipPickerOptions): ChipPickerApi {
         }, 150),
     );
 
+    tabsEl?.querySelectorAll<HTMLElement>(".tad-tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+            tabsEl.querySelectorAll(".tad-tab").forEach((t) => t.classList.remove("tad-tab--active"));
+            tab.classList.add("tad-tab--active");
+            activeKind = tab.dataset.tab || "";
+            // Route through the search input's own focus/blur-close lifecycle
+            // instead of managing a second way to open/close the dropdown.
+            searchEl.focus();
+            renderSuggestions(searchEl.value);
+        });
+    });
+
     return {
         setCandidates(list: ChipCandidate[]): void {
             candidates = list || [];
@@ -983,6 +1147,8 @@ export function createChipPicker(options: ChipPickerOptions): ChipPickerApi {
             renderChips();
             searchEl.value = "";
             suggEl.hidden = true;
+            activeKind = "";
+            tabsEl?.querySelectorAll(".tad-tab").forEach((t, i) => t.classList.toggle("tad-tab--active", i === 0));
         },
         getSelectedIds(): string[] {
             return selected.map((s) => s.id);

@@ -56,6 +56,17 @@ async function get<T>(key: string): Promise<T | null> {
     return value;
 }
 
+async function remove(key: string): Promise<void> {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORE, "readwrite");
+        tx.objectStore(STORE).delete(key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error ?? new Error("IndexedDB delete failed"));
+    });
+    db.close();
+}
+
 async function removeByPrefix(prefix: string): Promise<void> {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
@@ -85,9 +96,33 @@ function conversationKeyKey(selfSlug: string, partnerSlug: string, version: numb
     return `conv:${selfSlug}:${partnerSlug}:${version}`;
 }
 
+/**
+ * Ask the browser to exempt this origin's storage from automatic eviction.
+ *
+ * Best-effort and deliberately un-awaited by callers' critical paths: browsers
+ * either grant it silently (Chromium/Firefox weigh engagement and installed
+ * state) or ignore it entirely (Safari, which evicts on its own 7-day
+ * inactivity schedule regardless). It matters most for OAuth-only accounts,
+ * whose cached identity is the ONLY unlock path that costs the user nothing -
+ * eviction there means falling back to a recovery key they may not have kept,
+ * since an SSO signin has no password from which to re-derive the wrap key.
+ */
+async function requestPersistentStorage(): Promise<void> {
+    try {
+        if (await navigator.storage?.persisted?.()) {
+            return;
+        }
+        await navigator.storage?.persist?.();
+    } catch {
+        // Not supported, or blocked by policy - the cache still works, it is
+        // just evictable. Never let this fail an unlock.
+    }
+}
+
 /** Cache the decrypted identity for a profile. */
 export async function putIdentity(selfSlug: string, identity: CachedIdentity): Promise<void> {
     await put(identityKey(selfSlug), identity);
+    await requestPersistentStorage();
 }
 
 /** Load the cached identity for a profile, or null when locked. */
@@ -133,7 +168,11 @@ export async function getGroupKey(selfSlug: string, groupUuid: string, version: 
 
 /** Wipe every cached key for a profile (logout-everywhere / key reset). */
 export async function clearProfileKeys(selfSlug: string): Promise<void> {
-    await removeByPrefix(identityKey(selfSlug));
+    // Deleted by exact key, not by prefix: "identity:jess" is a prefix of
+    // "identity:jess2", so resetting one account would evict a second account
+    // that shares the browser and silently lock it. The conv:/group: prefixes
+    // are safe because the slug there is followed by a ":" terminator.
+    await remove(identityKey(selfSlug));
     await removeByPrefix(`conv:${selfSlug}:`);
     await removeByPrefix(`group:${selfSlug}:`);
 }

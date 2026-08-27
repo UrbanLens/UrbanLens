@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from django.core.validators import MaxLengthValidator, validate_email
 from django.db.models import (
     CASCADE,
     SET_NULL,
@@ -25,11 +26,13 @@ from django.db.models import (
     PositiveIntegerField,
     Q,
     TextField,
+    UniqueConstraint,
     UUIDField,
 )
 from django.db.models.fields import CharField, DateTimeField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.fields import EncryptedTextField
 from urbanlens.dashboard.models.safety.queryset import (
     EmergencyContactDefaultManager,
     SafetyCheckinContactManager,
@@ -93,8 +96,15 @@ class EmergencyContactDefault(abstract.DashboardModel):
 
     owner = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_contact_defaults")
     contact_profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="+")
-    email = EmailField(null=True, blank=True)
-    label = CharField(max_length=150, blank=True, default="")
+    # Encrypted: this is a reusable template copied onto SafetyCheckinContact at
+    # check-in creation time (see services.visits.safety.save_contact_defaults) and
+    # never itself matched by value - only the copies are (against SafetyContactOptOut).
+    email = EncryptedTextField(null=True, blank=True, validators=[validate_email], fail_soft=True)
+    # Encrypted for the same reason as `email` above: it names a third party who
+    # never consented to being in this database, it persists indefinitely (a
+    # default is a template, not a resolved check-in), and it is only ever read
+    # as an attribute - never filtered, ordered, or matched by value.
+    label = EncryptedTextField(max_length=150, blank=True, default="", validators=[MaxLengthValidator(150)], fail_soft=True)
     order = IntegerField(default=0)
 
     if TYPE_CHECKING:
@@ -127,7 +137,6 @@ class EmergencyContactDefault(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_contact_defaults"
         ordering = ["order", "created"]
-        indexes = [Index(fields=["owner"], name="idxdb_ecd_owner")]
         constraints = [
             CheckConstraint(
                 condition=Q(contact_profile__isnull=False) ^ Q(email__isnull=False),
@@ -205,7 +214,7 @@ class SafetyCheckin(abstract.PublicDashboardModel):
     If the profile doesn't check in by ``checkin_by`` + ``grace_period``, the
     linked ``SafetyCheckinContact`` rows are notified. Concluding the check-in
     (self check-in, or a contact marking the profile safe) raises a
-    VisitSuggestion for the destination via ``services.safety._conclude_checkin``,
+    VisitSuggestion for the destination via ``services.visits.safety._conclude_checkin``,
     reusing the same confirm/reject flow as any other tentative visit.
 
     ``slug`` (from ``PublicDashboardModel``) is scoped per-profile - only the owner-facing
@@ -217,7 +226,7 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         profile: The profile who created and owns this check-in.
         trip: The Trip this check-in was started for, if any - a profile may
             have at most one active check-in per (profile, trip) scope (see
-            ``services.safety.get_active_checkin``), so a general (``trip``
+            ``services.visits.safety.get_active_checkin``), so a general (``trip``
             is ``None``) check-in and a trip-scoped one, or check-ins for two
             different trips, can be active at the same time.
         title: Short display label (e.g. "Weekend hike - Eagle Ridge").
@@ -238,22 +247,28 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         markup_map: The standalone MarkupMap holding the route/plan drawing shown on the
             detail page and contact portal, if any.
         notify_community_wiki: Whether escalation should also post a comment to the destination's
-            community wiki and notify users with pins there (see ``services.safety.notify_community_wiki``).
+            community wiki and notify users with pins there (see ``services.visits.safety.notify_community_wiki``).
         wiki_notified_at: When the community wiki comment was posted, if at all - also makes the
             escalation-time wiki notification idempotent.
         live_location_sharing_enabled: Whether the owner has opted into sharing their current
-            position with accepted partners (see ``services.safety.set_live_location_sharing``).
+            position with accepted partners (see ``services.visits.safety.set_live_location_sharing``).
         live_latitude: The owner's most recently shared position, if sharing is/was enabled.
         live_longitude: The owner's most recently shared position, if sharing is/was enabled.
         live_location_accuracy: Accuracy (meters) reported alongside ``live_latitude``/``live_longitude``.
         live_location_updated_at: When the live position was last updated, if ever.
-        archive_scheduled_at: When ``services.safety.archive_checkin`` should encrypt and scrub
+        archive_scheduled_at: When ``services.visits.safety.archive_checkin`` should encrypt and scrub
             this check-in's PII, if it has resolved - immediately on resolution if no one but the
             owner could ever see it, or after a 1-hour grace window otherwise (see
-            ``services.safety.schedule_checkin_archival``). ``None`` until resolved.
+            ``services.visits.safety.schedule_checkin_archival``). ``None`` until resolved.
         resolved_by_label: Display label of whoever concluded this check-in ("you", a partner's
             username, or a contact's display name) - captured for the archive payload, then
             scrubbed at archival like every other PII field on this model.
+        archive_failure_count: Consecutive ``archive_checkin`` failures (e.g. a corrupted E2EE key
+            bundle) - a successful archive removes the row from ``due_for_archival()`` for good, so
+            this only ever climbs.
+        archive_failed_at: When archival gave up after ``services.visits.safety.MAX_ARCHIVE_ATTEMPTS``
+            consecutive failures, if it ever did - excludes the row from further sweeps instead of
+            retrying forever, and flags it for manual review (see ``services.visits.safety.archive_checkin``).
     """
 
     title = CharField(max_length=200)
@@ -288,9 +303,11 @@ class SafetyCheckin(abstract.PublicDashboardModel):
     live_location_updated_at = DateTimeField(null=True, blank=True)
 
     # Post-resolution encryption/archival - see SafetyCheckinArchive and
-    # services.safety.schedule_checkin_archival/archive_checkin.
+    # services.visits.safety.schedule_checkin_archival/archive_checkin.
     archive_scheduled_at = DateTimeField(null=True, blank=True)
     resolved_by_label = CharField(max_length=150, blank=True, default="")
+    archive_failure_count = PositiveIntegerField(default=0)
+    archive_failed_at = DateTimeField(null=True, blank=True)
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_checkins")
     trip = ForeignKey(
@@ -399,7 +416,6 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         db_table = "dashboard_safety_checkins"
         ordering = ["-checkin_by"]
         indexes = [
-            Index(fields=["uuid"], name="idxdb_sc_uuid"),
             Index(fields=["profile", "trip", "status"], name="idxdb_sc_profile_trip_status"),
             Index(fields=["status", "checkin_by"], name="idxdb_sc_status_by"),
             # Backs SafetyCheckinQuerySet.due_for_archival(), polled by the 5-minute
@@ -458,7 +474,6 @@ class SafetyCheckinContact(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_checkin_contacts"
         indexes = [
-            Index(fields=["checkin"], name="idxdb_scc_checkin"),
             Index(fields=["token"], name="idxdb_scc_token"),
         ]
         constraints = [
@@ -512,10 +527,7 @@ class SafetyContactOptOut(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_contact_opt_outs"
         indexes = [
-            Index(fields=["contact_profile"], name="idxdb_scoo_profile"),
             Index(fields=["email"], name="idxdb_scoo_email"),
-            Index(fields=["owner"], name="idxdb_scoo_owner"),
-            Index(fields=["checkin"], name="idxdb_scoo_checkin"),
         ]
         constraints = [
             CheckConstraint(
@@ -529,6 +541,21 @@ class SafetyContactOptOut(abstract.DashboardModel):
                     | (Q(scope=SafetyContactOptOutScope.GLOBAL) & Q(owner__isnull=True) & Q(checkin__isnull=True))
                 ),
                 name="db_safety_contact_optout_scope_fields_match",
+            ),
+            # nulls_distinct=False so two opt-outs for the same target that both leave
+            # email/owner/checkin null (as every row does on at least one of those,
+            # per the two constraints above) are still caught - same reasoning as
+            # Label's uq_label_profile_name_kind_ci. Without it, a double-submitted
+            # opt-out link (or an email client prefetching the confirm GET) races
+            # record_contact_opt_out's get_or_create into two identical rows.
+            UniqueConstraint(
+                "contact_profile",
+                "email",
+                "scope",
+                "owner",
+                "checkin",
+                name="uq_safety_contact_optout_target_scope",
+                nulls_distinct=False,
             ),
         ]
 
@@ -550,7 +577,7 @@ class SafetyCheckinPartner(abstract.DashboardModel):
     anything goes wrong. Access requires ``status == ACCEPTED``: this is a real
     safety responsibility, not a passive share, so an invite must be actively
     accepted before any view/act access is granted (see
-    ``services.safety.is_owner_or_accepted_partner``).
+    ``services.visits.safety.is_owner_or_accepted_partner``).
 
     Only the check-in's owner may invite a partner - unlike Trip's
     ``allow_add_members`` permission matrix, a check-in has exactly one
@@ -592,7 +619,7 @@ class SafetyCheckinPartner(abstract.DashboardModel):
 class SafetyCheckinArchive(abstract.DashboardModel):
     """The encrypted, owner-only remnant of a concluded check-in.
 
-    Created by ``services.safety.archive_checkin`` once a resolved check-in's
+    Created by ``services.visits.safety.archive_checkin`` once a resolved check-in's
     grace window elapses: the check-in's PII (plan, contacts, chat, resolution
     details) is serialized to JSON, encrypted with a fresh random key
     (``crypto_secretbox``), and that key is sealed (``crypto_box_seal``) to
@@ -674,4 +701,3 @@ class SafetyCheckinMessage(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_checkin_messages"
         ordering = ["created"]
-        indexes = [Index(fields=["checkin"], name="idxdb_scm_checkin")]

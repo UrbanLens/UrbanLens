@@ -1,14 +1,14 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load static %}
 {% load map_components %}
 {% load dashboard_tags %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
+{% vendor_asset "leaflet_draw_css" %}
+{% vendor_asset "leaflet_draw_js" %}
 {% endblock %}
 
 {% block page_title %}{{ saved_filter.name }} - Filters - {{ site_title|default:"UrbanLens" }}{% endblock %}
@@ -78,7 +78,7 @@
 {# below) sends the user back to the Filters tab after either action, matching #}
 {# how the dialog's own Save/Delete already behave everywhere else on the site. #}
 {% url 'organize.index' as organize_url %}
-<dialog id="saved-filter-form-dialog" hidden data-success-redirect="{{ organize_url }}?tab=filters"></dialog>
+<dialog id="saved-filter-form-dialog" hidden data-success-redirect="{{ organize_url }}?tab=filters" aria-label="Saved filter"></dialog>
 {% include "dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html" %}
 <script>
 (function () {

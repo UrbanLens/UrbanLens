@@ -1,0 +1,197 @@
+{% load map_components %}
+{% comment %}
+One album's own view, swapped into #albums-panel in place of the album list.
+Carries the same root id so the "All albums" link can swap back.
+
+The main column is the photo grid and nothing else. Everything that configures
+the album (custom order, cover, delete) lives in the header's overflow menu,
+and the two large secondary surfaces - the map and the "add existing photos"
+picker - are opt-in panels rather than always-rendered page content.
+
+Expects (from controllers.albums._album_detail_context):
+  album, images, available_images, photo_count, cover, date_start, date_end
+  map_photos, placed_count
+  back_url, list_url, add_url, remove_url, reorder_url, edit_url, upload_url,
+  reposition_base
+{% endcomment %}
+<div id="albums-panel" class="albums-panel album-detail"
+     data-album-slug="{{ album.slug }}"
+     data-refresh-url="{{ detail_url }}"
+     data-list-url="{{ list_url }}"
+     data-reorder-url="{{ reorder_url }}"
+     data-remove-url="{{ remove_url }}"
+     data-add-url="{{ add_url }}"
+     data-upload-url="{{ upload_url }}"
+     data-reposition-base="{{ reposition_base }}">
+
+  <header class="albums-toolbar album-detail-toolbar">
+    <button type="button" class="btn btn--ghost album-back-btn" data-album-back
+            hx-get="{{ back_url }}" hx-target="#albums-panel" hx-swap="outerHTML">
+      <i class="material-symbols-outlined">arrow_back</i>
+      <span>All albums</span>
+    </button>
+
+    <div class="album-detail-heading">
+      <h3 class="album-detail-title">
+        <i class="material-symbols-outlined">{{ album.spec.icon }}</i>
+        <span>{{ album.name }}</span>
+        {% if album.spec.badge %}
+        <span class="album-detail-kind">{{ album.spec.label }}</span>
+        {% endif %}
+      </h3>
+      <p class="album-detail-meta">
+        <span class="album-detail-count">{{ photo_count }} photo{{ photo_count|pluralize }}</span>
+        {% include "dashboard/partials/albums/_album_date_range.html" with date_start=date_start date_end=date_end %}
+      </p>
+    </div>
+
+    <div class="album-detail-actions">
+      <input type="file" id="album-file-input" accept="image/*" multiple hidden aria-label="Choose photos to add">
+      <button type="button" class="btn btn--primary" data-album-upload-btn>
+        <i class="material-symbols-outlined">upload</i>
+        <span>Add photos</span>
+      </button>
+
+      <details class="album-menu album-detail-menu">
+        <summary class="album-menu-btn" title="Album options" aria-label="Album options">
+          <i class="material-symbols-outlined">more_vert</i>
+        </summary>
+        <div class="album-menu-list">
+          {% if available_images %}
+          <button type="button" class="album-menu-item" data-album-picker-open>
+            <i class="material-symbols-outlined">library_add</i> Add from this {{ context_type|default:"place" }}
+          </button>
+          {% endif %}
+          <button type="button" class="album-menu-item" data-album-map-toggle
+                  aria-controls="album-map-section" aria-expanded="false">
+            <i class="material-symbols-outlined">map</i> Show photo map
+          </button>
+
+          <form class="album-menu-form" hx-post="{{ edit_url }}" hx-target="#albums-panel" hx-swap="outerHTML"
+                hx-trigger="change from:find input">
+            {% csrf_token %}
+            <label class="album-menu-item album-menu-item--toggle">
+              <input type="checkbox" name="manual_order" value="1" {% if album.manual_order %}checked{% endif %}>
+              <span>
+                <strong>Custom order</strong>
+                <small>Drag photos to arrange them. Off shows newest first.</small>
+              </span>
+            </label>
+          </form>
+
+          <button type="button" class="album-menu-item album-menu-item--danger"
+                  hx-post="{{ delete_url }}" hx-target="#albums-panel" hx-swap="outerHTML"
+                  hx-confirm="Delete the album &quot;{{ album.name }}&quot;? The photos themselves are kept.">
+            <i class="material-symbols-outlined">delete</i> Delete album
+          </button>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  {% if album.description %}
+  <p class="album-detail-description">{{ album.description }}</p>
+  {% endif %}
+
+  {% comment %}
+  Photo map. Hidden until asked for from the menu - it is a correction tool,
+  not the album's primary content. Initialised by shared/album-map.ts, which
+  drives the same Leaflet photo-marker layer the pin detail map uses.
+  {% endcomment %}
+  <section id="album-map-section" class="album-map-section" hidden>
+    <div class="album-map-head">
+      <span class="album-map-hint settings-help">
+        {% if placed_count %}
+        Drag a marker to correct where a photo was taken. Only your own photos can be moved.
+        {% else %}
+        None of this album's photos have a position yet.
+        {% endif %}
+      </span>
+      <button type="button" class="btn btn--ghost btn--sm" data-album-map-toggle aria-controls="album-map-section">
+        <i class="material-symbols-outlined">close</i>
+        <span>Hide map</span>
+      </button>
+    </div>
+    <div class="album-map-wrap">
+      <div id="album-map" class="album-map"
+           data-center-lat="{{ map_center_lat|default_if_none:'' }}"
+           data-center-lng="{{ map_center_lng|default_if_none:'' }}"></div>
+      {% map_layers_panel layers="street,terrain,satellite,dark" variant="strip" panel_id="album-map-layers" extra_class="album-map-layers" %}
+    </div>
+  </section>
+
+  {% if images %}
+  <ul class="gallery-grid album-items-grid" id="album-items-grid"
+      {% if album.manual_order %}data-album-sortable="1"{% endif %}>
+    {% for img in images %}
+    <li class="gallery-item album-item" data-item-id="{{ img.album_item_id }}" data-id="{{ img.pk }}">
+      <img src="{{ img.display_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
+      <button type="button" class="album-item-remove" title="Remove from this album"
+              aria-label="Remove from this album" data-image-id="{{ img.pk }}">
+        <i class="material-symbols-outlined">close</i>
+      </button>
+      {% if img.caption %}<p class="album-item-caption">{{ img.caption }}</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="album-empty">
+    <i class="material-symbols-outlined">add_photo_alternate</i>
+    <p>This album is empty.</p>
+    <p class="settings-help">Drop photos anywhere on this page, use <strong>Add photos</strong> to upload,
+      {% if available_images %}or pick from the ones already here.{% else %}or upload some to this {{ context_type|default:"place" }} first.{% endif %}
+    </p>
+    <div class="album-empty-actions">
+      <button type="button" class="btn btn--primary" data-album-upload-btn>
+        <i class="material-symbols-outlined">upload</i> Upload photos
+      </button>
+      {% if available_images %}
+      <button type="button" class="btn btn--ghost" data-album-picker-open>
+        <i class="material-symbols-outlined">library_add</i> Pick existing
+      </button>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% comment %}
+  "Add from photos already here" picker. A dialog rather than a second grid
+  below the album, which previously doubled the page's length and made it
+  ambiguous which grid was the album.
+  {% endcomment %}
+  {% if available_images %}
+  <dialog id="album-picker-dialog" class="ul-dialog album-picker-dialog" aria-label="Add photos to album">
+    <form method="dialog" class="album-picker-head">
+      <h4>Add photos to &ldquo;{{ album.name }}&rdquo;</h4>
+      <button type="submit" class="album-picker-close" aria-label="Close">
+        <i class="material-symbols-outlined">close</i>
+      </button>
+    </form>
+    <p class="settings-help album-picker-hint">Click a photo to add it. It stays in the {{ context_type|default:"place" }}'s photos too.</p>
+    <ul class="gallery-grid album-add-grid">
+      {% for img in available_images %}
+      <li class="gallery-item album-add-item" data-id="{{ img.pk }}">
+        <button type="button" class="album-item-add" title="Add to this album"
+                aria-label="Add to this album" data-image-id="{{ img.pk }}">
+          <img src="{{ img.display_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
+          <span class="album-add-tick"><i class="material-symbols-outlined">add</i></span>
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+  </dialog>
+  {% endif %}
+
+  {% comment %}Drop target overlay for dragging files straight onto the album.{% endcomment %}
+  <div class="album-drop-overlay" data-album-drop-overlay hidden>
+    <div class="album-drop-overlay-inner">
+      <i class="material-symbols-outlined">cloud_upload</i>
+      <p>Drop photos into &ldquo;{{ album.name }}&rdquo;</p>
+    </div>
+  </div>
+  <div class="album-upload-progress" data-album-upload-progress hidden>
+    <div class="album-upload-bar" data-album-upload-bar></div>
+  </div>
+
+  {{ map_photos|json_script:"album-map-photos" }}
+</div>

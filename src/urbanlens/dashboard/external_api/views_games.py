@@ -90,7 +90,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     Guess,
     SpotGuessrMode,
 )
-from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.spotguessr import (
     overview as spotguessr_overview,
     relevance as spotguessr_relevance,
@@ -303,10 +303,14 @@ class SpotGuessrOverviewView(ExternalApiView):
             masked friend carries no slug at all: the slug is a stable handle
             that would identify them across requests and defeat the masking.
         """
+        entries = list(visible_friend_ratings(profile))
+        # Resolved for the whole list at once - the per-friend call rebuilds
+        # the caller's own friend/pin/trip sets on every row.
+        visible_pks = Profile.visible_profile_pks(profile, [entry["profile"] for entry in entries])
         rows = []
-        for entry in visible_friend_ratings(profile):
+        for entry in entries:
             friend: Profile = entry["profile"]
-            identity = resolve_visible_identity(profile, friend)
+            identity = resolve_visible_identity(profile, friend, visible_pks=visible_pks)
             rows.append(
                 {
                     "profile_slug": None if identity["is_masked"] else friend.slug,
@@ -466,7 +470,7 @@ class SpotGuessrSessionsView(PaginatedListMixin, ExternalApiView):
     )
     def post(self, request: Request) -> Response:
         """Start a solo session and return it together with its first round."""
-        serializer = SpotGuessrSessionCreateSerializer(data=request.data)
+        serializer = SpotGuessrSessionCreateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         profile = request.user.profile
@@ -479,6 +483,7 @@ class SpotGuessrSessionsView(PaginatedListMixin, ExternalApiView):
             use_aliases=data.get("use_aliases", True),
             geo_bounds_geojson=data.get("geo_bounds"),
             round_time_limit_seconds=data.get("round_time_limit_seconds"),
+            label_id=data.get("label_id"),
         )
         # Saved before the game starts, exactly as the web start does, so the
         # next start on *either* client opens with these settings.
@@ -664,7 +669,7 @@ class SpotGuessrRoundExpireView(SpotGuessrSessionScopedView):
         "POST": frozenset({ApiKeyScope.GAMES_WRITE}),
     }
 
-    @extend_schema(responses={200: SpotGuessrRoundExpireResponseSerializer, 404: ErrorSerializer, 409: ErrorSerializer})
+    @extend_schema(request=None, responses={200: SpotGuessrRoundExpireResponseSerializer, 404: ErrorSerializer, 409: ErrorSerializer})
     def post(self, request: Request, session_id: int, round_id: int) -> Response:
         """Reveal the round if its timer has genuinely expired, and report its state."""
         session, refusal = self.resolve_solo_session(request, session_id)
@@ -687,7 +692,7 @@ class SpotGuessrRoundFeedbackView(SpotGuessrSessionScopedView):
     """POST: thumbs up/down, or report, the photo a Photos-mode round just showed.
 
     Mirrors ``controllers.spotguessr.SpotGuessrPhotoFeedbackView``. Feeds
-    ``services.media_relevance.effective_relevance`` at a reduced weight (or,
+    ``services.media.media_relevance.effective_relevance`` at a reduced weight (or,
     for a report, full weight against "not relevant") - see
     ``services.spotguessr.relevance`` for exactly how. A 400 for a round with
     no photo (Named Place/Street View); a 403 for a round this profile never

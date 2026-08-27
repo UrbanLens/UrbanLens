@@ -7,19 +7,22 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import Polygon
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.forms.search import SearchForm
-from urbanlens.dashboard.models.labels.meta import ICON_CATEGORIES
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
-from urbanlens.dashboard.services.geo import dissolve_polygons
-from urbanlens.dashboard.services.pin_list_membership import resync_lists_for_saved_filter
-from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
+from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
+from urbanlens.dashboard.services.core.text_limits import column_length_error, column_max_length
+from urbanlens.dashboard.services.geo.geo import dissolve_polygons
+from urbanlens.dashboard.services.pins.pin_list_membership import resync_lists_for_saved_filter
+from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
+from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids, pins_fingerprint
 from urbanlens.dashboard.services.undo.handlers.saved_filter import MODEL_LABEL as SAVED_FILTER_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -29,6 +32,17 @@ if TYPE_CHECKING:
 _SECTION_TEMPLATE = "dashboard/partials/pins/_saved_filters_section.html"
 _TOOLBAR_TEMPLATE = "dashboard/partials/map/_saved_filters_toolbar.html"
 _FORM_DIALOG_TEMPLATE = "dashboard/partials/pin_lists/_saved_filter_form_dialog.html"
+_ALLOWED_COLORS = {hex_value for hex_value, _label in COLOR_CHOICES}
+
+
+def _clamp_opacity(raw: str | None) -> int:
+    """Parse a submitted opacity value, clamped to [0, 100] with a 100 fallback."""
+    if raw is None:
+        return 100
+    try:
+        return max(0, min(100, int(raw)))
+    except ValueError:
+        return 100
 
 
 def _render_section(request, profile: Profile) -> HttpResponse:
@@ -88,6 +102,9 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
         name = (request.POST.get("filter_name") or "").strip()
         if not name:
             return HttpResponse("A name is required to save a filter.", status=400)
+        name_error = column_length_error(SavedFilter, "name", name, "Filter name")
+        if name_error:
+            return HttpResponse(name_error, status=400)
         if SavedFilter.objects.name_taken_for(profile, name):
             return HttpResponse("You already have a saved filter with that name.", status=409)
 
@@ -103,8 +120,17 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
         if not criteria:
             return HttpResponse("No active filters to save.", status=400)
 
-        icon = (request.POST.get("icon") or "bookmark").strip()
-        SavedFilter.objects.create(profile=profile, name=name, icon=icon, criteria=criteria, order=profile.saved_filters.count())
+        icon = clean_icon(request.POST.get("icon"), default="bookmark", max_length=column_max_length(SavedFilter, "icon"))
+        color = clean_color(request.POST.get("color"), default="")
+        SavedFilter.objects.create(
+            profile=profile,
+            name=name,
+            icon=icon,
+            color=color if color in _ALLOWED_COLORS else "",
+            opacity=_clamp_opacity(request.POST.get("opacity")),
+            criteria=criteria,
+            order=profile.saved_filters.count(),
+        )
         return _render_section(request, profile)
 
 
@@ -154,6 +180,9 @@ def _build_filter_form_context(profile: Profile, filter_uuid) -> dict:
         "selected_exclude_tag_ids": initial.get("exclude_tags", []),
         "icon_categories": ICON_CATEGORIES,
         "current_icon": saved_filter.icon if saved_filter else "bookmark",
+        "color_choices": COLOR_CHOICES,
+        "current_color": saved_filter.color if saved_filter else "",
+        "current_opacity": saved_filter.opacity if saved_filter else 100,
     }
 
 
@@ -183,7 +212,16 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         context = _build_filter_form_context(profile, filter_uuid)
         return render(request, _FORM_DIALOG_TEMPLATE, context)
 
-    def post(self, request, filter_uuid):
+    def post(self, request, filter_uuid=None):
+        # This view backs two routes: `saved_filters.edit` (with a uuid) and
+        # `saved_filters.new` (without), which exists only to hx-get a blank
+        # form - the form itself posts to `saved_filters.create`. The parameter
+        # was required, so POSTing to `new/` raised TypeError before reaching
+        # any of this: a guaranteed 500 on a route nothing was meant to post to.
+        # Editing without naming what to edit is not a request this view can
+        # answer, so it is refused rather than quietly redirected to a create.
+        if filter_uuid is None:
+            return HttpResponseNotAllowed(["GET"])
         profile, _ = Profile.objects.get_or_create(user=request.user)
         saved_filter = get_object_or_404(SavedFilter, uuid=filter_uuid, profile=profile)
 
@@ -205,14 +243,17 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         if not criteria:
             return JsonResponse({"ok": False, "error": "No active filters to save."}, status=400)
 
+        color = clean_color(request.POST.get("color"), default="")
         saved_filter.name = name
         saved_filter.icon = (request.POST.get("icon") or "bookmark").strip()
+        saved_filter.color = color if color in _ALLOWED_COLORS else ""
+        saved_filter.opacity = _clamp_opacity(request.POST.get("opacity"))
         saved_filter.criteria = criteria
-        saved_filter.save(update_fields=["name", "icon", "criteria", "updated"])
+        saved_filter.save(update_fields=["name", "icon", "color", "opacity", "criteria", "updated"])
 
         # Refreshes every PinList still pointing at this filter, resolving the
         # matching pin ids once and reusing them across all of them - see
-        # services.pin_list_membership.resync_lists_for_saved_filter.
+        # services.pins.pin_list_membership.resync_lists_for_saved_filter.
         resync_lists_for_saved_filter(saved_filter)
 
         return JsonResponse({"ok": True, "uuid": str(saved_filter.uuid)})
@@ -300,7 +341,12 @@ class SavedFilterMatchCountsView(LoginRequiredMixin, View):
         # every (candidate, active) pair below - O(F^2) query construction for
         # F saved filters). Set intersections in Python are cheap in
         # comparison, so every pair is now just an in-memory set op.
-        matching_uuids: dict[str, set[str]] = {str(f.uuid): set(get_or_compute_matching_uuids(profile, f)) for f in saved_filters}
+        # fingerprint computed once for every filter below (was previously
+        # recomputed by get_or_compute_matching_uuids on every one of these N
+        # calls - an identical DB aggregate re-run once per saved filter the
+        # profile owns, on every single toolbar toggle that hits this view).
+        fingerprint = pins_fingerprint(profile)
+        matching_uuids: dict[str, set[str]] = {str(f.uuid): set(get_or_compute_matching_uuids(profile, f, fingerprint=fingerprint)) for f in saved_filters}
 
         counts: dict[str, int] = {}
         for candidate in saved_filters:

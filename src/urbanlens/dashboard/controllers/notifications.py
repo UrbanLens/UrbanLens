@@ -12,7 +12,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
-from urbanlens.dashboard.services.notification_center import get_preferences, mark_all_read, unread_count
+from urbanlens.dashboard.services.notifications.notification_center import get_preferences, mark_all_read, unread_count
 
 if TYPE_CHECKING:
     from django.http import HttpResponse
@@ -34,6 +34,7 @@ _PREF_FIELDS = [
     ("wiki_updated", "Community Wiki Updated"),
     ("wiki_safety_checkin", "Safety Check-in at a Pinned Location"),
     ("safety_checkin_partner_invite", "Safety Check-in Partner Invitation"),
+    ("achievement_earned", "Achievement Unlocked"),
 ]
 
 
@@ -41,7 +42,7 @@ def _get_or_create_prefs(profile: Profile) -> NotificationPreference:
     """Return the profile's preference row, creating the default one if absent.
 
     Thin alias kept for this module's existing callers; the implementation
-    lives in ``services.notification_center`` so the external API shares it.
+    lives in ``services.notifications.notification_center`` so the external API shares it.
 
     Args:
         profile: The owner whose preferences to read.
@@ -69,7 +70,12 @@ class NotificationDropdownView(LoginRequiredMixin, View):
 
     def get(self, request):
         profile = request.user.profile
-        notifications = list(NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20])
+        # pin_share/visit_suggestion are reverse OneToOne accessors the item
+        # template reads to decide whether to offer Accept/Decline (and the
+        # visit merge choice). Without them here each of the 20 rows costs two
+        # extra queries - and the miss is invisible, because a missing reverse
+        # OneToOne raises ObjectDoesNotExist, which Django templates swallow.
+        notifications = list(NotificationLog.objects.for_profile(profile).for_display().order_by("-created")[:20])
         unread_ids = [n.id for n in notifications if n.is_unread]
         if unread_ids:
             NotificationLog.objects.filter(id__in=unread_ids).mark_read()
@@ -93,7 +99,7 @@ class NotificationMarkReadView(LoginRequiredMixin, View):
     def post(self, request, notification_id):
         profile = request.user.profile
         notification = get_object_or_404(
-            NotificationLog.objects.select_related("source_profile"),
+            NotificationLog.objects.for_display(),
             id=notification_id,
             profile=profile,
         )
@@ -118,7 +124,7 @@ class NotificationMarkAllReadView(LoginRequiredMixin, View):
             request,
             "dashboard/partials/notifications/notification_dropdown.html",
             {
-                "notifications": NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20],
+                "notifications": NotificationLog.objects.for_profile(profile).for_display().order_by("-created")[:20],
                 "unread_count": 0,
             },
         )

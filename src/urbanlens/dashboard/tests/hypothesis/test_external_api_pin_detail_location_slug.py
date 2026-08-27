@@ -2,7 +2,7 @@
 
 The pin-detail payload shipped a ``wiki_slug`` field that reads naturally as
 "the slug to navigate to this pin's wiki with", but
-``services.wiki_access.resolve_visible_wiki`` - the resolver every wiki route
+``services.wiki.wiki_access.resolve_visible_wiki`` - the resolver every wiki route
 goes through - takes a *Location* slug/uuid, not a ``Wiki.slug``. The two are
 independent fields on unrelated models, so a client that fed ``wiki_slug`` to
 ``GET /wikis/{location_slug}/`` got a 404 for a wiki it could plainly see.
@@ -20,9 +20,9 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
-from urbanlens.dashboard.services.pin_detail import build_pin_detail
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_detail import build_pin_detail
 from urbanlens.dashboard.tests.hypothesis.test_external_api_wiki_oracle import grant_wiki_scopes
 
 

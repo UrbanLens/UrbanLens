@@ -1,12 +1,12 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load static %}
 {% load memories_components %}
 
 {% block header %}
 {# Leaflet powers the "confirm where this pin goes" dialog's placement map. #}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
 {% endblock %}
 
 {% block title %}Photos{% endblock %}
@@ -89,7 +89,7 @@
 {# Closes itself on any successful POST inside it (create-pin, or filing onto an     #}
 {# existing pin); GET searches (place + your-pins autocomplete) leave it open.       #}
 <dialog id="photo-pin-confirm-dialog" class="ul-dialog photo-pin-confirm-dialog"
-        hx-on:htmx:after-request="if(event.detail.successful && event.detail.requestConfig && event.detail.requestConfig.verb === 'post'){this.close()}">
+        hx-on:htmx:after-request="if(event.detail.successful && event.detail.requestConfig && event.detail.requestConfig.verb === 'post'){this.close()}" aria-labelledby="dialog-title-create-a-pin">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a pin" %}
     <div id="photo-pin-confirm-body" class="photo-pin-confirm-body">
         <p class="photo-pin-confirm-loading">Loading&hellip;</p>
@@ -354,7 +354,7 @@
     // Upload/delete mutate the grid directly (no htmx refetch, so the "All
     // photos" count next to the gallery header would otherwise stay at its
     // value as of last page load).
-    function _updatePhotoCountBadge(delta) {
+    function _updatePhotoCountLabel(delta) {
         var head = document.querySelector('.photos-gallery-head');
         if (!head) return;
         var badge = head.querySelector('.badge');
@@ -387,12 +387,14 @@
         var badge = (img.latitude !== null && img.longitude !== null)
             ? '<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>' : '';
         li.innerHTML =
-            '<button type="button" class="photo-tile-btn" onclick="photosOpenLightbox(' + img.id + ')">' +
+            // aria-label on the button: the thumbnail's alt is lost when the
+            // file 404s and the icon fallback replaces the <img>.
+            '<button type="button" class="photo-tile-btn" aria-label="Open photo: ' + ((img.caption || 'untitled') + '').replace(/"/g, '&quot;') + '" onclick="photosOpenLightbox(' + img.id + ')">' +
             '<img src="' + img.url + '" alt="" loading="lazy">' + badge + '</button>' +
             '<button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete(' + img.id + ')">' +
             '<i class="material-symbols-outlined">delete</i></button>';
         grid.insertBefore(li, grid.firstChild);
-        _updatePhotoCountBadge(1);
+        _updatePhotoCountLabel(1);
     }
 
     // -- Delete ----------------------------------------------------------------
@@ -400,12 +402,21 @@
         if (!confirm('Delete this photo? This cannot be undone.')) return;
         fetch(ACTION_BASE + id + '/delete/', { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
             .then(function (r) {
-                if (!r.ok) return;
+                // The bare `return` this replaces left a confirmed, irreversible
+                // action with no outcome at all - the tile stayed put and nothing
+                // was said, so a failed delete and a successful one looked the same.
+                if (!r.ok) {
+                    if (window.toastr) toastr.error('Could not delete that photo.');
+                    return;
+                }
                 var el = document.getElementById('photo-tile-' + id);
-                if (el) { el.remove(); _updatePhotoCountBadge(-1); }
+                if (el) { el.remove(); _updatePhotoCountLabel(-1); }
                 var card = document.getElementById('photo-card-' + id);
                 if (card) card.remove();
                 if (window.toastr) toastr.info('Photo deleted.');
+            })
+            .catch(function () {
+                if (window.toastr) toastr.error('Could not delete that photo.');
             });
     };
 

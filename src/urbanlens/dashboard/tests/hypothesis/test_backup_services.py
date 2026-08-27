@@ -12,7 +12,7 @@ from unittest import mock
 from hypothesis import given, settings as hyp_settings, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.backups import backup_files, collect_backup_stats, scheduled_backup_due
+from urbanlens.dashboard.services.admin.backups import backup_files, collect_backup_stats, scheduled_backup_due
 
 
 @dataclass(slots=True)
@@ -28,16 +28,29 @@ def _touch(path: Path, when: datetime, size: int = 1) -> None:
     os.utime(path, (timestamp, timestamp))
 
 
+# ``backup_files`` counts only files matching DatabaseBackup's own
+# ``backup_<YYYYMMDD>_<HHMMSS>.sql`` scheme, so a stray file can never inflate
+# admin-facing stats or be mistaken for a completed backup (see
+# core.controllers.backups.db.BACKUP_FILENAME_RE). Fixtures must therefore use
+# real backup names - these tests previously used "old.sql"/"a.sql" and so
+# asserted against a directory the helper correctly saw as empty.
+def _backup_name(when: datetime) -> str:
+    """A filename in DatabaseBackup's own naming scheme for ``when``."""
+    return f"backup_{when:%Y%m%d_%H%M%S}.sql"
+
+
 class BackupFilesTests(SimpleTestCase):
     """backup_files returns existing files newest-first."""
 
     def test_returns_only_files_sorted_by_mtime_descending(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
-            old = root / "old.sql"
-            new = root / "new.sql"
-            (root / "nested").mkdir()
             base = datetime(2026, 1, 1, tzinfo=UTC)
+            old = root / _backup_name(base)
+            new = root / _backup_name(base + timedelta(hours=1))
+            (root / "nested").mkdir()
+            # A stray non-backup file must be ignored rather than counted.
+            (root / "notes.txt").write_bytes(b"x")
             _touch(old, base)
             _touch(new, base + timedelta(hours=1))
 
@@ -53,11 +66,11 @@ class ScheduledBackupDueTests(SimpleTestCase):
     """scheduled_backup_due respects enablement, frequency, and latest backup time."""
 
     def test_disabled_backups_are_never_due(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.backups.backup_files", return_value=[]):
+        with mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", return_value=[]):
             self.assertFalse(scheduled_backup_due(_SiteSettings(backup_enabled=False)))
 
     def test_no_existing_backups_are_due(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.backups.backup_files", return_value=[]):
+        with mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", return_value=[]):
             self.assertTrue(scheduled_backup_due(_SiteSettings()))
 
     @given(
@@ -71,7 +84,7 @@ class ScheduledBackupDueTests(SimpleTestCase):
         fake_file = mock.Mock()
         fake_file.stat.return_value.st_mtime = latest.timestamp()
 
-        with mock.patch("urbanlens.dashboard.services.backups.backup_files", return_value=[fake_file]):
+        with mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", return_value=[fake_file]):
             due = scheduled_backup_due(_SiteSettings(backup_frequency_hours=frequency_hours), now=now)
 
         self.assertEqual(due, elapsed_hours >= frequency_hours)
@@ -84,12 +97,12 @@ class CollectBackupStatsTests(SimpleTestCase):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             base = datetime(2026, 1, 1, tzinfo=UTC)
-            _touch(root / "a.sql", base, size=1024)
-            _touch(root / "b.sql", base + timedelta(hours=2), size=2048)
+            _touch(root / _backup_name(base), base, size=1024)
+            _touch(root / _backup_name(base + timedelta(hours=2)), base + timedelta(hours=2), size=2048)
 
             with (
-                mock.patch("urbanlens.dashboard.services.backups.app_settings.backups_dir", root),
-                mock.patch("urbanlens.dashboard.services.backups.backup_files", wraps=lambda backup_dir=None: backup_files(root)),
+                mock.patch("urbanlens.dashboard.services.admin.backups.app_settings.backups_dir", root),
+                mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", wraps=lambda backup_dir=None: backup_files(root)),
             ):
                 stats = collect_backup_stats(_SiteSettings(backup_frequency_hours=12, backup_retention=7))
 

@@ -33,7 +33,7 @@ from urbanlens.dashboard.forms.settings_form import (
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.flickr.oauth import is_configured as flickr_is_configured
-from urbanlens.dashboard.services.storage import allowed_user_dimension_values, allowed_user_video_height_values, get_storage_settings_context
+from urbanlens.dashboard.services.media.storage import allowed_user_dimension_values, allowed_user_video_height_values, get_storage_settings_context
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -75,13 +75,13 @@ def _security_context(user: User, request: HttpRequest) -> dict:
     """Context for the Security section (passkeys, TOTP status, backup codes) and the
     Advanced tab's separate API Keys section.
 
-    Thin wrapper around ``services.two_factor.security_settings_context`` and
-    ``services.api_keys.api_keys_settings_context``, which are also called
+    Thin wrapper around ``services.auth.two_factor.security_settings_context`` and
+    ``services.auth.api_keys.api_keys_settings_context``, which are also called
     directly by the 2FA and API key action views (``two_factor.py``,
     ``api_keys.py``) so they can re-render just their own section for htmx requests.
     """
-    from urbanlens.dashboard.services.api_keys import api_keys_settings_context
-    from urbanlens.dashboard.services.two_factor import security_settings_context
+    from urbanlens.dashboard.services.auth.api_keys import api_keys_settings_context
+    from urbanlens.dashboard.services.auth.two_factor import security_settings_context
 
     return {**security_settings_context(user, request), **api_keys_settings_context(user, request)}
 
@@ -421,16 +421,17 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
     except (ImportError, OSError, ValueError):
         logger.warning("Google geocoding unavailable for %r", address, exc_info=True)
 
-    # Fall back to Nominatim (OpenStreetMap) - no API key required.
-    try:
-        from geopy.geocoders import Nominatim
+    # Fall back to Nominatim (OpenStreetMap) - no API key required. Through
+    # the shared rate-limited gateway helper, never a raw geopy client.
+    from urbanlens.dashboard.services.apis.locations.geocode_resolution import nominatim_geocode
+    from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
-        geolocator = Nominatim(user_agent="urbanlens-settings/1.0")
-        location = geolocator.geocode(address, timeout=5)
-        if location:
-            return JsonResponse({"lat": location.latitude, "lng": location.longitude})
-    except (ImportError, OSError, ValueError):
-        logger.warning("Nominatim geocoding failed for %r", address, exc_info=True)
+    try:
+        latitude, longitude = nominatim_geocode(address)
+    except RateLimitExceededError:
+        return JsonResponse({"error": "Address lookups are momentarily rate limited - try again shortly."}, status=429)
+    if latitude is not None and longitude is not None:
+        return JsonResponse({"lat": latitude, "lng": longitude})
 
     return JsonResponse({"error": "Location not found."}, status=404)
 

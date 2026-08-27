@@ -149,9 +149,34 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
         created = detect_dwells_and_create_visits(route, raw_points, self.profile)
 
         self.assertEqual(created, 1)
-        visit = PinVisit.objects.get(pin=self.pin, source=VisitSource.GEOLOCATION)
+        visit = PinVisit.objects.get(pin=self.pin, source=VisitSource.HISTORY)
         self.assertEqual(visit.visited_at, base)
         self.assertEqual(visit.route_id, route.pk)
+
+    def test_visit_logging_off_saves_the_route_but_logs_no_visit(self):
+        """track_routes and track_pin_visits are separate consents.
+
+        The route is the user's own track; a dwell writes a PinVisit, which is
+        what track_pin_visits governs - and its help text already promises it
+        covers imports. An otherwise-qualifying dwell must therefore produce
+        nothing while that setting is off.
+        """
+        self.profile.track_pin_visits = False
+        self.profile.save(update_fields=["track_pin_visits", "updated"])
+
+        base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        raw_points = [
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=5)),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=12)),
+        ]
+        route = self._saved_route(raw_points)
+
+        created = detect_dwells_and_create_visits(route, raw_points, self.profile)
+
+        self.assertEqual(created, 0)
+        self.assertFalse(PinVisit.objects.filter(pin=self.pin).exists())
+        self.assertTrue(Route.objects.filter(pk=route.pk).exists())
 
     def test_no_visit_for_dwell_shorter_than_minimum(self):
         base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
@@ -164,7 +189,7 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
         created = detect_dwells_and_create_visits(route, raw_points, self.profile)
 
         self.assertEqual(created, 0)
-        self.assertFalse(PinVisit.objects.filter(pin=self.pin, source=VisitSource.GEOLOCATION).exists())
+        self.assertFalse(PinVisit.objects.filter(pin=self.pin, source=VisitSource.HISTORY).exists())
 
     def test_no_visit_without_any_timestamps(self):
         raw_points = [
@@ -176,3 +201,61 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
         created = detect_dwells_and_create_visits(route, raw_points, self.profile)
 
         self.assertEqual(created, 0)
+
+    def test_candidate_pin_is_row_locked_while_creating_the_visit(self):
+        """Regression test: two concurrent imports of the same track (e.g. the same
+        GPX file uploaded twice) previously raced get_or_create's own SELECT with no
+        locking at all - closed by locking the candidate pin around the
+        check-then-create, same idiom as apply_pin_share_response."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        raw_points = [
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=12)),
+        ]
+        route = self._saved_route(raw_points)
+
+        with CaptureQueriesContext(connection) as queries:
+            created = detect_dwells_and_create_visits(route, raw_points, self.profile)
+
+        self.assertEqual(created, 1)
+        self.assertTrue(any("FOR UPDATE" in q["sql"].upper() for q in queries.captured_queries))
+
+
+class DwellVisitProvenanceTests(DetectDwellsAndCreateVisitsTests):
+    """A dwell detected in an uploaded track file is an *import*, not a live device ping.
+
+    ``VisitSource.GEOLOCATION`` is documented as "added when the user's device
+    provided a geolocation" and is what ``record_geolocation_visits`` writes,
+    gated by ``track_geolocation``. Dwell detection is reached from a route
+    *import* and gated by ``track_routes``, so stamping its rows GEOLOCATION both
+    labelled them "Geolocation" in the UI and claimed a provenance whose own
+    setting had no say over them. ``HISTORY`` ("Imported") is the value the
+    sibling Google Takeout importer already uses for the same kind of row.
+    """
+
+    def test_dwell_visits_are_recorded_as_imported(self):
+        base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        raw_points = [
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=12)),
+        ]
+        route = self._saved_route(raw_points)
+
+        detect_dwells_and_create_visits(route, raw_points, self.profile)
+
+        self.assertEqual(PinVisit.objects.get(pin=self.pin).source, VisitSource.HISTORY)
+
+    def test_no_dwell_visit_claims_the_live_geolocation_source(self):
+        base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        raw_points = [
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=12)),
+        ]
+        route = self._saved_route(raw_points)
+
+        detect_dwells_and_create_visits(route, raw_points, self.profile)
+
+        self.assertFalse(PinVisit.objects.filter(source=VisitSource.GEOLOCATION).exists())

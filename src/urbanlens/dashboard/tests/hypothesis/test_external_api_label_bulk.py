@@ -15,12 +15,13 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 _BASE = "/dashboard/api/external/v1/labels/"
 
@@ -38,8 +39,8 @@ class LabelBulkTestCase(TestCase):
         self.profile = Profile.objects.get(user=self.user)
         _api_key, self.raw_key = generate_api_key(self.user, "Label bulk client")
         ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.LABELS_READ.value, ApiKeyScope.LABELS_WRITE.value])
-        self.label_a = Label.objects.create(profile=self.profile, name="Rusty", kind=KIND_TAG)
-        self.label_b = Label.objects.create(profile=self.profile, name="Overgrown", kind=KIND_TAG)
+        self.label_a = ensure_label(profile=self.profile, name="Rusty", kind=KIND_TAG)
+        self.label_b = ensure_label(profile=self.profile, name="Overgrown", kind=KIND_TAG)
 
     def _post(self, path: str, payload: dict):
         return self.client.post(f"{_BASE}{path}", data=payload, content_type="application/json", **_bearer(self.raw_key))
@@ -57,7 +58,7 @@ class LabelReorderTests(LabelBulkTestCase):
         self.assertGreater(self.label_a.order, self.label_b.order)
 
     def test_global_labels_are_skipped_not_reordered(self) -> None:
-        global_label = Label.objects.create(profile=None, name="Everyone's", kind=KIND_TAG, order=5)
+        global_label = ensure_label(profile=None, name="Everyone's", kind=KIND_TAG, order=5)
         response = self._post("reorder/", {"uuids": [str(self.label_a.uuid), str(global_label.uuid)]})
         self.assertEqual(response.status_code, 200, response.content)
         body = response.json()
@@ -83,7 +84,7 @@ class LabelBulkDeleteTests(LabelBulkTestCase):
         self.assertFalse(Label.objects.filter(pk__in=[self.label_a.pk, self.label_b.pk]).exists())
 
     def test_protected_label_is_silently_dropped(self) -> None:
-        protected = Label.objects.create(profile=self.profile, name="Visited", kind=KIND_STATUS, is_protected=True)
+        protected = ensure_label(profile=self.profile, name="Visited", kind=KIND_STATUS, is_protected=True)
         response = self._post("bulk/delete/", {"uuids": [str(self.label_a.uuid), str(protected.uuid)]})
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["deleted"], 1)
@@ -91,7 +92,7 @@ class LabelBulkDeleteTests(LabelBulkTestCase):
 
     def test_no_matching_labels_is_a_404(self) -> None:
         other = baker.make(User)
-        theirs = Label.objects.create(profile=Profile.objects.get(user=other), name="Not yours", kind=KIND_TAG)
+        theirs = ensure_label(profile=Profile.objects.get(user=other), name="Not yours", kind=KIND_TAG)
         response = self._post("bulk/delete/", {"uuids": [str(theirs.uuid)]})
         self.assertEqual(response.status_code, 404)
 
@@ -103,13 +104,28 @@ class LabelBulkDeleteTests(LabelBulkTestCase):
 
 class LabelBulkEditTests(LabelBulkTestCase):
     def test_sets_icon_and_color_on_every_label(self) -> None:
-        response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "icon": "star", "color": "red"})
+        response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "icon": "star", "color": "#F44336"})
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["count"], 2)
         self.label_a.refresh_from_db()
         self.label_b.refresh_from_db()
         self.assertEqual(self.label_a.icon, "star")
-        self.assertEqual(self.label_b.color, "red")
+        self.assertEqual(self.label_b.color, "#F44336")
+
+    def test_a_named_css_colour_is_not_stored(self) -> None:
+        """This test previously posted "red" and asserted it round-tripped.
+
+        It never was a valid label colour: `Label.color` declares `choices` that are
+        all hex, and the renderers append an alpha suffix ("red33"), which is not a
+        colour and paints nothing. Since colours are validated on write, a non-hex
+        value now falls back to the field's default instead of being stored and
+        silently breaking the chip.
+        """
+        response = self._post("bulk/edit/", {"uuids": [str(self.label_b.uuid)], "color": "red"})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.label_b.refresh_from_db()
+        self.assertIsNone(self.label_b.color)
 
     def test_explicit_null_description_clears_it(self) -> None:
         Label.objects.filter(pk=self.label_a.pk).update(description="Old")
@@ -126,7 +142,7 @@ class LabelBulkEditTests(LabelBulkTestCase):
         self.assertEqual(self.label_a.icon, "keep-me")
 
     def test_adds_a_parent_to_every_label(self) -> None:
-        parent = Label.objects.create(profile=self.profile, name="Structures", kind=KIND_TAG)
+        parent = ensure_label(profile=self.profile, name="Structures", kind=KIND_TAG)
         response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "add_parent_uuids": [str(parent.uuid)]})
         self.assertEqual(response.status_code, 200, response.content)
         self.assertTrue(self.label_a.parents.filter(pk=parent.pk).exists())
@@ -143,7 +159,7 @@ class LabelBulkEditTests(LabelBulkTestCase):
         self.assertFalse(self.label_b.parents.filter(pk=self.label_a.pk).exists())
 
     def test_protected_label_is_silently_dropped_from_the_batch(self) -> None:
-        protected = Label.objects.create(profile=self.profile, name="Visited", kind=KIND_STATUS, is_protected=True)
+        protected = ensure_label(profile=self.profile, name="Visited", kind=KIND_STATUS, is_protected=True)
         response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid), str(protected.uuid)], "icon": "star"})
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["count"], 1)
@@ -178,7 +194,7 @@ class LabelBulkConvertTests(LabelBulkTestCase):
         self.assertEqual(self.label_a.kind, KIND_CATEGORY)
 
     def test_status_labels_cannot_be_converted_away(self) -> None:
-        status_label = Label.objects.create(profile=self.profile, name="Explored", kind=KIND_STATUS)
+        status_label = ensure_label(profile=self.profile, name="Explored", kind=KIND_STATUS)
         response = self._post("bulk/convert/", {"uuids": [str(status_label.uuid)], "target_kind": KIND_TAG})
         self.assertEqual(response.status_code, 404)
         status_label.refresh_from_db()
@@ -189,7 +205,7 @@ class LabelBulkConvertTests(LabelBulkTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_conversion_clears_the_labels_parents(self) -> None:
-        parent = Label.objects.create(profile=self.profile, name="Structures", kind=KIND_TAG)
+        parent = ensure_label(profile=self.profile, name="Structures", kind=KIND_TAG)
         self.label_a.parents.add(parent)
         response = self._post("bulk/convert/", {"uuids": [str(self.label_a.uuid)], "target_kind": KIND_CATEGORY})
         self.assertEqual(response.status_code, 200, response.content)

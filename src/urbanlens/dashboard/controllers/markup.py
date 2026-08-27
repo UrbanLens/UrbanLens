@@ -23,17 +23,21 @@ from django.views import View
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.markup.meta import normalize_layer_mode
-from urbanlens.dashboard.models.markup.model import MarkupMap, MarkupType, PinMarkup, SecurityIndicatorType
+from urbanlens.dashboard.models.markup.model import CustomLayer, MarkupMap, MarkupType, PinMarkup, SecurityIndicatorType
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.map_sharing import clone_markup_map
-from urbanlens.dashboard.services.map_snapshot import default_markup_map_title, sanitize_map_data
-from urbanlens.dashboard.services.safety import notify_contacts_of_update
-from urbanlens.dashboard.services.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
-from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
+from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.numbers import safe_int
+from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
+from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title, sanitize_map_data
+from urbanlens.dashboard.services.sharing.map_sharing import clone_markup_map
+from urbanlens.dashboard.services.undo.handlers.markup_map import MODEL_LABEL as MARKUP_MAP_MODEL_LABEL
+from urbanlens.dashboard.services.undo.service import stash_for_undo
+from urbanlens.dashboard.services.visits.safety import notify_contacts_of_update
+from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -66,6 +70,15 @@ def _apply_security_indicator(owner: Pin | Wiki, indicator: str) -> None:
     field = _INDICATOR_TO_FIELD.get(indicator)
     if not field:
         return
+    # The real row, for the read as much as the write. A concealed projection
+    # reports every indicator as UNKNOWN by rule, so reading one would turn this
+    # never-downgrade rule into a downgrade - a place surveyed as EVERYWHERE
+    # quietly reduced to SOME - and then the save would raise on the projection
+    # anyway, as a 500 only concealed accounts receive.
+    from urbanlens.dashboard.services.wiki.concealment import writable_wiki
+
+    if isinstance(owner, Wiki):
+        owner = writable_wiki(owner)
     current = getattr(owner, field, SecurityLevel.UNKNOWN)
     if current in {SecurityLevel.UNKNOWN, SecurityLevel.NO}:
         setattr(owner, field, SecurityLevel.SOME)
@@ -154,8 +167,77 @@ def _resolve_owner(
         return markup_map, PinMarkup.objects.for_map(markup_map)
     if location_slug is None:
         raise Http404
-    _location, wiki, _profile = resolve_visible_wiki(request, location_slug)
-    return wiki, PinMarkup.objects.for_wiki(wiki)
+    _location, wiki, profile = resolve_visible_wiki(request, location_slug)
+    # Filtered by who drew it, not hidden outright. The reason to hide community
+    # markup is that a hand-drawn entrance route says other people have been
+    # inside and compared notes - and that reason does not cover the viewer's
+    # own drawings, which tell them nothing they did not already know. Showing
+    # someone their own work back is also the only option that does not announce
+    # the concealment: a marker you placed yourself and cannot find afterwards
+    # is a malfunction, and a malfunction only some accounts get is a tell.
+    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+    return wiki, visible_rows(PinMarkup.objects.for_wiki(wiki), wiki, profile)
+
+
+def _owner_layer_kwargs(owner: Pin | Wiki | MarkupMap) -> dict:
+    """Return the CustomLayer filter kwargs (parent_pin/parent_wiki) for *owner*.
+
+    A MarkupMap owner (standalone maps have no custom layers) yields kwargs
+    that can never match any real CustomLayer, so a layer lookup against it
+    always resolves to None rather than needing a special case at each call site.
+    """
+    if isinstance(owner, Pin):
+        return {"parent_pin": owner}
+    if isinstance(owner, Wiki):
+        return {"parent_wiki": owner}
+    return {"pk": None}
+
+
+def _resolve_visible_layer(layer_uuid: str | None, owner: Pin | Wiki | MarkupMap, profile: Profile, owner_kwargs: dict) -> CustomLayer | None:
+    """Resolve a posted ``layer_uuid`` to a layer this profile may actually assign an item to.
+
+    Scoped by owner exactly as before (a layer belonging to a different pin/
+    wiki, or any value on the map_uuid route, resolves to None); additionally
+    scoped by ``visible_rows`` on a wiki owner, so a concealed viewer's own
+    write can't file an item under a stranger's layer - the layer they'd have
+    no way to see reflected back (the read side already nulls layer_uuid for
+    exactly this case; refusing it here keeps the write side consistent with
+    what the read side shows).
+
+    Args:
+        layer_uuid: The posted layer uuid, or a falsy value for "no layer".
+        owner: The Pin, Wiki, or MarkupMap the item belongs to.
+        profile: The requesting profile.
+        owner_kwargs: The already-computed parent_pin/parent_wiki filter dict.
+
+    Returns:
+        The resolved CustomLayer, or None.
+    """
+    if not layer_uuid:
+        return None
+    qs = CustomLayer.objects.filter(uuid=layer_uuid, **owner_kwargs)
+    if isinstance(owner, Wiki):
+        from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+        qs = visible_rows(qs, owner, profile)
+    return qs.first()
+
+
+def _current_layer_is_visible(layer_id: int, owner: Pin | Wiki | MarkupMap, profile: Profile) -> bool:
+    """Whether *profile* could see the CustomLayer *layer_id* under *owner*.
+
+    Always True off a wiki - concealment is a wiki-only concept, so a Pin's
+    or MarkupMap's own layers are never filtered. Used only on the "clear
+    this item's layer" write path, to tell a deliberate clear apart from a
+    concealed viewer's edit-panel echoing back the None their own read side
+    substituted for a layer they cannot see.
+    """
+    if not isinstance(owner, Wiki):
+        return True
+    from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+    return visible_rows(CustomLayer.objects.filter(pk=layer_id), owner, profile).exists()
 
 
 class MarkupJsonView(LoginRequiredMixin, View):
@@ -186,11 +268,30 @@ class MarkupJsonView(LoginRequiredMixin, View):
         include_children = pin_slug is not None and request.GET.get("children") == "1"
         if include_children and isinstance(owner, Pin):
             subtree = Pin.objects.filter(pk=owner.pk).with_descendants()
-            items = PinMarkup.objects.filter(parent_pin__in=subtree).select_related("parent_pin__location", "parent_pin__location__wiki")
+            items = PinMarkup.objects.filter(parent_pin__in=subtree).select_related("parent_pin__location", "parent_pin__location__wiki", "layer")
+
+        # A visible item can still be filed under a layer this viewer cannot
+        # see - wiki-scoped layer assignment isn't restricted to the item's
+        # own author, so "my own drawing" and "the layer I put it in" are
+        # independent visibility questions. Reusing the exact set
+        # custom_layers._resolve_layer_owner would return keeps the two
+        # surfaces from drifting: this is a no-op when concealment is off,
+        # since visible_rows then returns every layer unfiltered.
+        visible_layer_ids: set[int] | None = None
+        if location_slug is not None and isinstance(owner, Wiki):
+            from urbanlens.dashboard.services.wiki.concealment import visible_rows
+
+            profile, _ = Profile.objects.get_or_create(user=request.user)
+            visible_layer_ids = set(visible_rows(CustomLayer.objects.for_wiki(owner), owner, profile).values_list("pk", flat=True))
 
         markup_items = []
-        for m in items.order_by("created"):
+        for m in items.select_related("layer").order_by("created"):
             entry = m.to_json()
+            if visible_layer_ids is not None and m.layer_id is not None and m.layer_id not in visible_layer_ids:
+                # Ungroup rather than reference a layer this viewer cannot
+                # list - the item itself stays visible (own/friend markup is
+                # never hidden), it just renders as if filed under no layer.
+                entry["layer_uuid"] = None
             if include_children and m.parent_pin_id is not None and m.parent_pin_id != owner.pk and m.parent_pin is not None:
                 entry["owner_name"] = m.parent_pin.effective_name
             markup_items.append(entry)
@@ -230,7 +331,13 @@ class SafetyContactMarkupJsonView(View):
             JsonResponse with ``markup_items`` list, or 404 if the token is invalid.
         """
         contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin__markup_map").by_token(token))
-        markup_map = contact.checkin.markup_map
+        checkin = contact.checkin
+        # Mirrors the plan/message/photo gate in SafetyContactPortalView's template - the
+        # route is part of the trip plan, so it must not be reachable before an incident
+        # either, even by a caller hitting this JSON endpoint directly.
+        if checkin.escalated_at is None:
+            return JsonResponse({"markup_items": []})
+        markup_map = checkin.markup_map
         if markup_map is None:
             return JsonResponse({"markup_items": []})
         items = PinMarkup.objects.for_map(markup_map)
@@ -463,6 +570,7 @@ class MarkupMapDeleteView(LoginRequiredMixin, View):
             Empty 200 response on success.
         """
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
+        stash_for_undo(MARKUP_MAP_MODEL_LABEL, [markup_map], markup_map.profile)
         markup_map.delete()
         return HttpResponse("", status=200)
 
@@ -584,8 +692,8 @@ class MarkupView(LoginRequiredMixin, View):
         if security_indicator not in _ALLOWED_SECURITY_INDICATORS:
             security_indicator = ""
 
-        fill_opacity = int(body.get("fill_opacity") or profile.markup_fill_opacity)
-        border_opacity = int(body.get("border_opacity") or profile.markup_border_opacity)
+        fill_opacity = safe_int(body.get("fill_opacity"), profile.markup_fill_opacity)
+        border_opacity = safe_int(body.get("border_opacity"), profile.markup_border_opacity)
 
         if pin_slug is not None:
             owner_kwargs = {"parent_pin": owner}
@@ -593,17 +701,29 @@ class MarkupView(LoginRequiredMixin, View):
             owner_kwargs = {"parent_map": owner}
         else:
             owner_kwargs = {"parent_wiki": owner}
+
+        # CustomLayer only ever attaches to a Pin or Wiki (never a standalone
+        # MarkupMap), so owner_kwargs' parent_pin/parent_wiki double as the
+        # exact filter needed here - a layer_uuid belonging to a different
+        # pin/wiki (or any value on the map_uuid route) silently resolves to
+        # None rather than erroring, matching this view's existing lenient
+        # validation style (see security_indicator above).
+        layer = None
+        if map_uuid is None:
+            layer = _resolve_visible_layer(body.get("layer_uuid"), owner, profile, owner_kwargs)
+
         item = PinMarkup.objects.create(
             profile=profile,
             markup_type=markup_type,
             geometry=geometry,
             label=label,
-            color=body.get("color") or "#e53e3e",
-            stroke_width=int(body.get("stroke_width") or 3),
-            border_color=body.get("border_color") or "",
+            color=clean_color(body.get("color"), default="#e53e3e"),
+            stroke_width=safe_int(body.get("stroke_width"), 3),
+            border_color=clean_color(body.get("border_color"), default="", allow_none_keyword=True),
             fill_opacity=fill_opacity,
             border_opacity=border_opacity,
             security_indicator=security_indicator,
+            layer=layer,
             **owner_kwargs,
         )
         if security_indicator and isinstance(owner, (Pin, Wiki)):
@@ -648,6 +768,7 @@ class MarkupEditView(LoginRequiredMixin, View):
         """
         owner, item = self._get_item(request, pin_slug, location_slug, markup_uuid, map_uuid)
         body = _parse_body(request)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if "geometry" in body and isinstance(body["geometry"], dict):
             geometry = body["geometry"]
@@ -661,15 +782,34 @@ class MarkupEditView(LoginRequiredMixin, View):
                 return JsonResponse({"ok": False, "error": length_error}, status=400)
             item.label = label
         if "color" in body:
-            item.color = body["color"] or item.color
+            item.color = clean_color(body["color"], default=item.color)
         if "stroke_width" in body:
-            item.stroke_width = int(body["stroke_width"])
+            item.stroke_width = safe_int(body["stroke_width"], item.stroke_width)
         if "border_color" in body:
-            item.border_color = body["border_color"] or ""
+            item.border_color = clean_color(body["border_color"], default="", allow_none_keyword=True)
         if "fill_opacity" in body:
-            item.fill_opacity = int(body["fill_opacity"])
+            item.fill_opacity = safe_int(body["fill_opacity"], item.fill_opacity)
         if "border_opacity" in body:
-            item.border_opacity = int(body["border_opacity"])
+            item.border_opacity = safe_int(body["border_opacity"], item.border_opacity)
+        if "layer_uuid" in body:
+            layer_uuid = body.get("layer_uuid")
+            if layer_uuid:
+                item.layer = _resolve_visible_layer(layer_uuid, owner, profile, _owner_layer_kwargs(owner))
+            elif item.layer_id is None or _current_layer_is_visible(item.layer_id, owner, profile):
+                # A genuine clear: nothing to clear, or the layer being
+                # cleared was one this viewer could see and could
+                # therefore have deliberately chosen to remove.
+                item.layer = None
+            # else: item.layer_id names a layer this viewer cannot see - a
+            # concealed wiki hides that layer from the picker and nulls its
+            # layer_uuid on read (MarkupJsonView.get), so an empty
+            # layer_uuid here is indistinguishable from that display value
+            # being echoed straight back by an edit to some other field.
+            # Leaving the real assignment untouched is the only option that
+            # doesn't destroy it - the same class of bug as the wiki
+            # suggest-edit data loss fixed earlier this round (see
+            # docs/PROBLEMS.md's "forms post every field" entry): a display
+            # value must never be diffed/written back as the viewer's intent.
         if "security_indicator" in body:
             indicator = body.get("security_indicator") or ""
             item.security_indicator = indicator if indicator in _ALLOWED_SECURITY_INDICATORS else ""

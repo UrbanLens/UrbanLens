@@ -9,19 +9,21 @@ behaviors that are easy to get silently wrong: the per-list cap and the
 
 from __future__ import annotations
 
+from unittest import mock
 from uuid import uuid4
 
 from django.contrib.auth.models import User
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.external_api import views as external_api_views
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 _BASE = "/dashboard/api/external/v1/lists/"
 
@@ -196,6 +198,29 @@ class PinListDetailTests(ListsApiTestCase):
             **_bearer(self.raw_key),
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_concurrent_edit_to_another_field_survives_a_rename(self) -> None:
+        """PATCH must not clobber a field it never touched.
+
+        It used to end with a bare pin_list.save(), writing every column
+        from this request's snapshot - reverting any field a concurrent
+        request (another API call, or the internal PinListEditView) changed
+        in the window between this request's load and its own save.
+        """
+        real_get = external_api_views._get_pin_list
+
+        def load_then_inject_concurrent_write(*args, **kwargs):
+            loaded = real_get(*args, **kwargs)
+            PinList.objects.filter(pk=loaded.pk).update(description="Changed elsewhere")
+            return loaded
+
+        with mock.patch.object(external_api_views, "_get_pin_list", side_effect=load_then_inject_concurrent_write):
+            response = self.client.patch(self._url(), {"name": "Renamed"}, content_type="application/json", **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, 200)
+        self.pin_list.refresh_from_db()
+        self.assertEqual(self.pin_list.name, "Renamed")
+        self.assertEqual(self.pin_list.description, "Changed elsewhere", "a concurrent edit to another field was reverted by this request's save")
 
     def test_delete_removes_the_list_but_not_the_pins(self) -> None:
         pin = self._make_pin("Survivor")

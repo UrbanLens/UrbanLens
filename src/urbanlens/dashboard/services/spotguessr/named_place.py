@@ -1,6 +1,6 @@
 """Name/alias selection for Named Place mode rounds.
 
-See ``docs/designs/spotguessr.md`` ("Named Place mode") for the rules this
+See ``docs/designs/drafts/spotguessr.md`` ("Named Place mode") for the rules this
 encodes.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.services.public_pins import is_meaningful_name
+from urbanlens.dashboard.services.pins.public_pins import is_meaningful_name
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 def candidate_name_for_location(location: Location, *, use_aliases: bool = True) -> str | None:
     """Pick a meaningful name/alias to show for ``location``, or None if it has none.
 
-    Reuses ``services.public_pins.is_meaningful_name`` verbatim rather than
+    Reuses ``services.pins.public_pins.is_meaningful_name`` verbatim rather than
     a second heuristic - it already filters blank/placeholder/coordinate-
     shaped strings.
 

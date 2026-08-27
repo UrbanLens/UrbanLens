@@ -58,7 +58,7 @@ The project is designed to run entirely through Docker, so you don't need Python
    Every variable in `.env-sample` is documented inline, including where to get each external API key. You can leave integrations you don't need blank — the app degrades gracefully without them.
 3. Build and start the stack:
   ```bash
-   docker-compose up --build
+   docker compose up --build
   ```
 4. Visit the app at `http://localhost:21800` (nginx serves the app; the port is configurable via `UL_APP_PORT`).
 

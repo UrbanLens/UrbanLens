@@ -14,9 +14,12 @@ from django.db.models import DecimalField, Q
 
 # App Imports
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
+from urbanlens.dashboard.models.place.queryset import point_for_coordinates
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.place.model import Place
 
 logger = logging.getLogger(__name__)
 
@@ -76,43 +79,38 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
     def by_updated_year(self, year):
         return self.filter(updated__year=year)
 
-    def _boundary_polygon_q(self, pt) -> Q:
-        """Q expression matching Locations whose default Boundary *generated* polygon contains pt.
+    def in_domain_of(self, place: Place | None) -> Self:
+        """Locations resolving onto any place in ``place``'s access domain."""
+        if place is None:
+            return self.none()
+        return self.filter(place__domain_root_id=place.domain_root_id)
 
-        Only location-default rows and only `generated_polygon` (API-derived)
-        are used for matching. User/community-drawn polygons are excluded so a
-        boundary can't be inflated by an edit to capture unrelated pins. Both
-        property and building boundaries count - a point inside a building is
-        on that building's property.
+    def within_bounding_box(self, latitude: float, longitude: float) -> Self:
+        """Locations sharing the access domain of whatever is at this coordinate.
+
+        Resolution happens once, on Place, and the answer is a single
+        real-world thing - so "which locations cover this point?" is no longer
+        a geometry query over every location that ever copied a polygon, but a
+        lookup of the domain the point resolves into.
+
+        That is the fix for the campus case: importing 124 buildings used to
+        give 124 Locations their own copy of the same parcel outline, so every
+        point on the property matched all 125 at once. They now share one
+        domain and answer as one place.
+
+        Falls back to a 50 m proximity check for coordinates on no known
+        place, which is the pre-Place behaviour for locations nobody has
+        official geometry for.
         """
-        return Q(boundaries__pin__isnull=True) & Q(boundaries__wiki__isnull=True) & Q(boundaries__profile__isnull=True) & Q(boundaries__source="") & Q(boundaries__generated_polygon__contains=pt)
+        from urbanlens.dashboard.models.place.model import Place
 
-    def _locations_without_boundary_polygon(self):
-        """Return locations that have no default *generated* boundary polygon."""
-        from django.db.models import Subquery
-
-        from urbanlens.dashboard.models.boundary.model import Boundary
-
-        with_polygon = Boundary.objects.location_defaults().filter(generated_polygon__isnull=False).values("location_id")
-        return self.exclude(pk__in=Subquery(with_polygon))
-
-    def within_bounding_box(self, latitude: float, longitude: float):
-        """Return Locations whose default Boundary *generated* polygon contains this coordinate.
-
-        Only the API-derived `generated_polygon` on location-default Boundary
-        rows is considered, never a user/community-drawn `polygon`. A drawn
-        boundary can be inflated to capture unrelated pins, so it must not
-        influence location matching. Falls back to a 50 m proximity check (the
-        default circle boundary) for Locations that have no generated polygon
-        at all, mirroring ``LocationManager.get_all_for_point``.
-        """
-        from django.contrib.gis.geos import Point as GEOSPoint
-
-        pt = GEOSPoint(float(longitude), float(latitude), srid=4326)
-        in_boundary = self.filter(self._boundary_polygon_q(pt)).distinct()
-        if in_boundary.exists():
-            return in_boundary
-        return self._locations_without_boundary_polygon().filter(point__distance_lte=(pt, D(m=50))).distinct()
+        pt = point_for_coordinates(latitude, longitude)
+        if pt is None:
+            return self.none()
+        place = Place.objects.resolve_for_point(latitude, longitude)
+        if place is not None:
+            return self.filter(place__domain_root_id=place.domain_root_id).distinct()
+        return self.filter(place__isnull=True).filter(point__distance_lte=(pt, D(m=DEFAULT_RADIUS_METERS))).distinct()
 
     def filter_by_criteria(self, criteria):
         query = Q()
@@ -122,29 +120,29 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
 
 
 class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuerySet)):
-    """Manager for Location. Use get_for_point to find a Location whose Boundary polygon contains a coordinate."""
+    """Manager for Location. Use get_for_point to find the Location standing at a coordinate."""
 
     def get_for_point(self, latitude: float, longitude: float):
-        """Return the first Location whose default Boundary generated polygon contains (lat, lon), or None.
+        """Return the first Location sharing the access domain at (lat, lon), or None.
 
-        Falls back to a 50 m proximity check for Locations that have no boundary polygon.
+        Falls back to a 50 m proximity check for coordinates on no known place.
         """
         return self.within_bounding_box(latitude, longitude).first()
 
     def get_all_for_point(self, latitude: float, longitude: float) -> Self:
-        """Return ALL Locations whose default Boundary generated polygon contains (lat, lon) as a QuerySet.
+        """Return every Location sharing the access domain at (lat, lon).
 
-        Unlike get_for_point, this returns every match so callers can detect when a
-        coordinate falls inside multiple boundary polygons (ambiguous location).  Falls
-        back to 50 m proximity for Locations without a boundary polygon only when there
-        are no polygon matches at all.
+        These are locations describing the *same* real-world thing - one
+        parcel and the buildings on it - not competing candidates. For the
+        genuinely ambiguous case (two unrelated parcels whose county geometry
+        overlaps) see ``Place.objects.competing_for_point``.
 
         Args:
             latitude: WGS-84 latitude of the point to test.
             longitude: WGS-84 longitude of the point to test.
 
         Returns:
-            QuerySet of matching Location rows, ordered by name.  May be empty.
+            QuerySet of matching Location rows. May be empty.
         """
         return self.within_bounding_box(latitude, longitude)
 
@@ -200,9 +198,21 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
                 raise
             return existing, False
 
-    def get_nearby_or_create(self, latitude, longitude, threshold_meters=50, defaults=None):
+    def get_nearby_or_create(self, latitude, longitude, threshold_meters=0, defaults=None):
         """
-        Get or create a Location instance, considering two locations the same if they are within a certain distance threshold.
+        Get or create a Location instance, optionally treating nearby coordinates as the same.
+
+        The threshold now defaults to **exact**. Consolidating two drops at one
+        real place is the *place's* job: they resolve onto the same parcel and
+        share its wiki, its community, and its "places in common" entry without
+        either coordinate being thrown away. Snapping discarded whichever
+        coordinate arrived second - including when the first belonged to a
+        different user - which defeated the 6-decimal precision Location goes
+        to some trouble to store and enforce.
+
+        A non-zero threshold remains available for the few callers whose job
+        genuinely is radius matching (see
+        ``services.apis.locations.legacy_cid_coordinate_fix``).
 
         Args:
             latitude (float): Latitude of the location.
@@ -214,6 +224,9 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
             (Location, bool): Tuple of (Location instance, created boolean)
 
         """
+        if not threshold_meters:
+            return self.get_exact_or_create(latitude, longitude, defaults=defaults)
+
         point = Point(longitude, latitude, srid=4326)
 
         # Find existing locations within the threshold distance

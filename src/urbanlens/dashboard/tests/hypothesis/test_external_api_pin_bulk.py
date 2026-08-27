@@ -13,6 +13,7 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
@@ -21,8 +22,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.undo.model import UndoAction
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 _BASE = "/dashboard/api/external/v1/pins/bulk/"
 
@@ -190,7 +191,7 @@ class PinBulkEditTests(PinBulkTestCase):
         self.assertFalse(Review.objects.filter(profile=self.profile, pin=self.pin_a).exists())
 
     def test_adds_labels_to_every_pin(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Rusty", kind="tag")
+        label = ensure_label(profile=self.profile, name="Rusty", kind="tag")
         response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "add_label_uuids": [str(label.uuid)]})
         self.assertEqual(response.status_code, 200, response.content)
         self.assertTrue(self.pin_a.labels.filter(pk=label.pk).exists())
@@ -201,7 +202,7 @@ class PinBulkEditTests(PinBulkTestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_removing_a_label_writes_an_auto_removal_tombstone(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Rusty", kind="tag")
+        label = ensure_label(profile=self.profile, name="Rusty", kind="tag")
         self.pin_a.labels.add(label)
         response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid)], "remove_label_uuids": [str(label.uuid)]})
         self.assertEqual(response.status_code, 200, response.content)
@@ -209,7 +210,7 @@ class PinBulkEditTests(PinBulkTestCase):
         self.assertTrue(PinAutoRemoval.objects.filter(pin=self.pin_a, kind=AutoRemovalKind.LABEL, value=str(label.pk)).exists())
 
     def test_removing_a_label_absent_from_a_pin_is_a_silent_no_op(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Rusty", kind="tag")
+        label = ensure_label(profile=self.profile, name="Rusty", kind="tag")
         # Not attached to pin_a - removal must succeed without incident.
         response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid)], "remove_label_uuids": [str(label.uuid)]})
         self.assertEqual(response.status_code, 200, response.content)

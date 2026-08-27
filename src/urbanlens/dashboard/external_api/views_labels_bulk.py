@@ -29,7 +29,11 @@ from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_label_ids
+from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
+from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -77,6 +81,8 @@ class LabelReorderView(ExternalApiView):
 
         if reordered:
             Label.objects.bulk_update(reordered, ["order"])
+            # bulk_update fires no post_save; order decides a pin's icon.
+            refresh_map_pin_cache_for_label_ids([label.pk for label in reordered])
 
         return Response({"reordered": len(reordered), "skipped_global_uuids": skipped_global_uuids})
 
@@ -100,6 +106,7 @@ class LabelBulkDeleteView(ExternalApiView):
             return Response({"error": "No matching labels."}, status=404)
 
         count = len(labels)
+        stash_for_undo(LABEL_MODEL_LABEL, labels, request.user.profile)
         Label.objects.filter(pk__in=[label.pk for label in labels]).delete()
         return Response({"deleted": count})
 
@@ -155,7 +162,7 @@ class LabelBulkEditView(ExternalApiView):
                     label.icon = data["icon"] or None
                     update_fields.add("icon")
                 if "color" in data:
-                    label.color = data["color"] or None
+                    label.color = clean_color(data["color"])
                     update_fields.add("color")
                 if "description" in data:
                     label.description = data["description"] or None
@@ -165,6 +172,10 @@ class LabelBulkEditView(ExternalApiView):
                     update_fields.add("order")
             if update_fields:
                 Label.objects.bulk_update(labels, list(update_fields))
+                # bulk_update fires no post_save, so nothing else invalidates the
+                # cached pins carrying these labels - and icon/color/order all
+                # change what those pins draw.
+                refresh_map_pin_cache_for_label_ids([label.pk for label in labels])
 
             if parents:
                 for label in labels:

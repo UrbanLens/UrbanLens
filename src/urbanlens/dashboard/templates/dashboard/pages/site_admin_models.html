@@ -1,0 +1,112 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="model_training" title="Suggestion Models" subtitle="What is answering, and how well it scored against the alternatives." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/admin/_site_admin_tabs.html" with active="models" %}
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="site-admin-page page-content">
+
+    {% if not configured %}
+    <div class="card model-report__empty">
+        <i class="material-icons">cloud_off</i>
+        <p>REData is not configured for this deployment, so nothing is suggesting labels or scoring photos.</p>
+    </div>
+    {% else %}
+
+    <p class="form-hint">
+        Both figures below describe the models themselves. Nothing on this page is about an
+        individual contributor, and REData's per-contributor endpoint is deliberately not used
+        anywhere in this application.
+    </p>
+
+    {% for model in models %}
+    <section class="card model-report">
+        <h2>{{ model.title }}</h2>
+
+        {% if not model.summary.available %}
+        <p class="form-hint">Unavailable: {{ model.summary.message }}</p>
+
+        {% elif model.summary.ranker != "model" %}
+        <p><strong>The heuristic is answering.</strong></p>
+        <p class="form-hint">
+            No trained model has been promoted yet. This is a normal state rather than a
+            degraded one - the hand-weighted ranker answers until a model beats both it and the
+            incumbent on the same held-out split, and every user is cold on their first day
+            regardless of how much data REData holds overall.
+        </p>
+
+        {% else %}
+        <p>
+            <strong>Model version {{ model.summary.version|default:"?" }}</strong> is answering{% if model.summary.algorithm %},
+            trained with {{ model.summary.algorithm }}{% endif %}{% if model.summary.trained_at %} on {{ model.summary.trained_at }}{% endif %}.
+            {% if model.summary.training_rows %}<span class="form-hint">{{ model.summary.training_rows }} training rows.</span>{% endif %}
+        </p>
+
+        {% if model.summary.metrics %}
+        <h3>Holdout metrics</h3>
+        <table class="model-report__table">
+            <thead><tr><th>Source</th><th>Metrics on the same holdout</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td><strong>This model</strong></td>
+                    <td>
+                        {% for name, value in model.summary.metrics.items %}
+                        <span class="badge badge--muted">{{ name }}: {{ value }}</span>
+                        {% endfor %}
+                        {% for name, value in model.summary.ranking_metrics.items %}
+                        <span class="badge badge--muted">{{ name }}: {{ value }}</span>
+                        {% endfor %}
+                    </td>
+                </tr>
+                {% for baseline_name, baseline in model.summary.baseline_metrics.items %}
+                <tr>
+                    <td>{{ baseline_name }}</td>
+                    <td>
+                        {% if baseline.items %}
+                            {% for name, value in baseline.items %}
+                            <span class="badge badge--muted">{{ name }}: {{ value }}</span>
+                            {% endfor %}
+                        {% else %}{{ baseline }}{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p class="form-hint">
+            Brier score is the one to read first: it is a proper scoring rule, so unlike AUC it
+            penalises a model that ranks well while being systematically overconfident.
+        </p>
+        {% endif %}
+
+        {% if model.summary.schema_fingerprint %}
+        <p class="form-hint">Feature schema: <code>{{ model.summary.schema_fingerprint }}</code></p>
+        {% endif %}
+
+        {% if model.summary.features %}
+        <h3>Signals in use</h3>
+        <ul class="model-report__list">
+            {% for feature in model.summary.features %}
+            <li>
+                {% if feature.name %}<strong>{{ feature.name }}</strong>{% endif %}
+                {% if feature.kind %} <span class="badge badge--muted">{{ feature.kind }}</span>{% endif %}
+                {% if feature.description %} - {{ feature.description }}{% endif %}
+                {% if not feature.name and not feature.description %}{{ feature }}{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% endif %}
+    </section>
+    {% endfor %}
+    {% endif %}
+</div>
+{% endblock %}

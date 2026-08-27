@@ -36,6 +36,13 @@
         <div class="fp-formula-display-text" id="sf-formula-display-text"></div>
     </div>
 
+    <div class="tad-tabs" id="sf-label-kind-tabs" role="tablist">
+        <button type="button" class="tad-tab tad-tab--active" data-tab="" role="tab">All</button>
+        <button type="button" class="tad-tab" data-tab="tag" role="tab">Tags</button>
+        <button type="button" class="tad-tab" data-tab="category" role="tab">Categories</button>
+        <button type="button" class="tad-tab" data-tab="status" role="tab">Statuses</button>
+    </div>
+
     <div class="fp-formula-wrap">
         <input type="text" class="fp-formula-bar" id="sf-label-formula"
                placeholder="Search, or a formula: (Visited / Rooftop) - Demolished"
@@ -52,6 +59,7 @@
                 data-label-text="{{ label.name }}"
                 data-label-color="{{ label.color|default:'' }}"
                 data-label-icon="{{ label.icon|default:'' }}"
+                data-label-kind="{{ label.kind }}"
                 data-selected-mode="{% if label.pk in selected_tag_ids %}incl{% elif label.pk in selected_exclude_tag_ids %}excl{% endif %}"
                 {% if label.color %}style="border-color:{{ label.color }}55;background:{{ label.color }}18;color:{{ label.color }}cc"{% endif %}>
             {% if label.icon %}<span style="font-size:.9em">{{ label.icon }}</span>{% endif %}

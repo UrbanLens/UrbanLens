@@ -29,7 +29,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.safety import validate_notifiable_contacts
+from urbanlens.dashboard.services.visits.safety import validate_notifiable_contacts
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -345,3 +345,26 @@ class MaxSafetyCheckinContactsTests(TestCase):
         allowed, rejected = validate_notifiable_contacts(self.owner, contacts)
         self.assertEqual(len(allowed), 6)
         self.assertEqual(len(rejected), 0)
+
+
+class LoginIpMaxAttemptsAdminTests(TestCase):
+    """The site-admin settings page renders and persists ``login_ip_max_attempts``."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.admin_user = baker.make(User, username="founder")
+        self.client = Client()
+        self.client.force_login(self.admin_user)
+
+    def test_page_renders_the_field(self) -> None:
+        resp = self.client.get(reverse("site_admin"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "login_ip_max_attempts")
+
+    def test_post_persists_the_field(self) -> None:
+        self.client.post(reverse("site_admin"), data={"login_ip_max_attempts": "50"})
+        self.assertEqual(SiteSettings.get_current().login_ip_max_attempts, 50)
+
+    def test_post_clamps_negative_values_to_zero(self) -> None:
+        self.client.post(reverse("site_admin"), data={"login_ip_max_attempts": "-4"})
+        self.assertEqual(SiteSettings.get_current().login_ip_max_attempts, 0)

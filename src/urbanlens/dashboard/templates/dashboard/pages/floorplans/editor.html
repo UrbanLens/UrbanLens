@@ -1,0 +1,312 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
+{% load static %}
+{% load map_components %}
+
+{% block title %}Floorplan · {{ pin.effective_name }}{% endblock %}
+
+{% block header %}
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
+{# Patches L (touch-rotate, shift+drag rotate, a rotate control) - stock Leaflet has no #}
+{# concept of map bearing at all, so this can't be a small bolt-on; must load after #}
+{# leaflet.js, since it extends L.Map/L.DomUtil in place rather than wrapping them. #}
+{% vendor_asset "leaflet_rotate_js" %}
+{% endblock %}
+
+{% block hero %}
+{% url 'pin.details' pin.slug as pin_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="architecture" title="Floorplan" subtitle=pin.effective_name modifier="top" back_url=pin_url back_label="Back to pin" title_suffix_template="dashboard/partials/ui/_page_explainer_anchor.html" explainer_id="floorplan-first-walls" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        <nav class="ul-subnav-tabs" aria-label="Pin views">
+            <a href="{% url 'pin.details' pin.slug %}" class="ul-subnav-tab">
+                <i class="material-symbols-outlined">location_on</i>
+                <span>Overview</span>
+            </a>
+            <a href="{% url 'pin.floorplan' pin.slug %}" class="ul-subnav-tab is-active" aria-current="page">
+                <i class="material-symbols-outlined">architecture</i>
+                <span>Floorplan</span>
+            </a>
+        </nav>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="floorplan-page">
+{% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="floorplan-first-walls" kicker="Getting started" heading="Start by drawing the exterior walls." body="Arm the Wall tool and trace the building's outline. Once it's closed, rooms are generated automatically from the enclosed space, and the room, opening, and box-select tools become available." %}
+
+<div id="floorplan-origin-banner" class="floorplan-origin-banner" hidden>
+    From REData. Saving creates your own version.
+</div>
+
+<div class="floorplan-editor">
+    <div class="floorplan-editor__stage">
+        <div class="floorplan-map-shell">
+            {# Groups the drawing tools and the tool-options panel below them   #}
+            {# into one flex stack, so the second always clears the first      #}
+            {# regardless of how many rows either wraps to on a narrow phone -  #}
+            {# a fixed pixel offset between two things that can each reflow     #}
+            {# independently is exactly the bug _layout.scss's "Mobile map      #}
+            {# bottom dock" comment describes for the main map's own toolbars.  #}
+            <div class="floorplan-toolbar-stack">
+            {# Same markup/classes as the main map's own tool pill             #}
+            {# (_map_toolbar.html) - not that inclusion tag itself, since     #}
+            {# these tools are stateful (data-tool) rather than one-shot      #}
+            {# onclick actions, but the shared classes guarantee the same     #}
+            {# look, and the collapse toggle works for free (see             #}
+            {# themes/base.html's delegated .map-toolbar-collapse handler).  #}
+            {# The rotate control (leaflet-rotate, added to the map's own    #}
+            {# top-right corner) is reparented in here by floorplan-editor.ts #}
+            {# so it reads as one more tool instead of overlapping this pill. #}
+            <div id="floorplan-tools" class="map-buttons floorplan-toolbar" role="toolbar" aria-label="Drawing tools">
+                <button type="button" class="map-toolbar-collapse" aria-label="Toggle floorplan tools"
+                        data-tooltip="Collapse toolbar" data-tooltip-float="true" data-tooltip-pos="below">
+                    <i class="material-symbols-outlined">chevron_right</i>
+                </button>
+                <div class="map-buttons-content">
+                    <button type="button" class="map-btn-icon is-active" data-tool="select" aria-pressed="true" aria-label="Select"
+                            data-tooltip="Select (V) · drag to pan · ctrl+click for several · shift-drag keeps it square" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">arrow_selector_tool</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="box" aria-pressed="false" aria-label="Box select"
+                            data-tooltip="Box select (B) · drag a region" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">highlight_alt</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="rotate" aria-pressed="false" aria-label="Turn the plan"
+                            data-tooltip="Turn (T) · drag anywhere" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">rotate_90_degrees_ccw</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="wall" aria-pressed="false" aria-label="Draw walls"
+                            data-tooltip="Wall (W)" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">timeline</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="opening" aria-pressed="false" aria-label="Add an opening"
+                            data-tooltip="Opening (D) · tap a wall" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">sensor_door</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="room" aria-pressed="false" aria-label="Add room"
+                            data-tooltip="Click to generate a whole rectangular room, sized and joined from what's already drawn (R)" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">meeting_room</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" data-tool="marker" aria-pressed="false" aria-label="Add a marker"
+                            data-tooltip="Marker (M) · hazard, stair or lift" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">pin_drop</i>
+                    </button>
+                    {# A one-shot action, not a mode - no data-tool, wired on its own #}
+                    {# in floorplan-editor.ts, and it opens the same dialog as the    #}
+                    {# floor strip's "Add floor" button, prefilled to copy this floor. #}
+                    <button type="button" class="map-btn-icon" id="floorplan-copy-floor" aria-label="Copy this floor to a new one"
+                            data-tooltip="Copy this floor to a new one" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">content_copy</i>
+                    </button>
+                    {# One-shot actions too, not modes - styled identically to every #}
+                    {# other button in this toolbar rather than living apart on the  #}
+                    {# canvas, which is the only thing that made them look different. #}
+                    <button type="button" class="map-btn-icon" id="floorplan-undo" disabled aria-label="Undo"
+                            data-tooltip="Undo (Ctrl+Z)" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">undo</i>
+                    </button>
+                    <button type="button" class="map-btn-icon" id="floorplan-redo" disabled aria-label="Redo"
+                            data-tooltip="Redo (Ctrl+Shift+Z)" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">redo</i>
+                    </button>
+                </div>
+            </div>
+
+            {# What the armed tool will do next. Beside the tools rather than in #}
+            {# the sidebar, which stacks below the map on a phone - the settings #}
+            {# for a tool have to be reachable while using it. Built by          #}
+            {# floorplan-editor.ts, which knows which tool is armed. .map-buttons #}
+            {# for the same button styling and collapse behaviour as every other #}
+            {# toolbar (see themes/base.html's delegated .map-toolbar-collapse   #}
+            {# handler) - positioned just under the drawing tools rather than    #}
+            {# overlapping them.                                                 #}
+            <div id="floorplan-tool-options" class="map-buttons floorplan-tool-options" role="group" aria-label="Tool options" hidden>
+                <button type="button" class="map-toolbar-collapse" aria-label="Toggle tool options"
+                        data-tooltip="Collapse" data-tooltip-float="true" data-tooltip-pos="below">
+                    <i class="material-symbols-outlined">chevron_right</i>
+                </button>
+                <div id="floorplan-tool-options-content" class="map-buttons-content"></div>
+            </div>
+            </div>{# /.floorplan-toolbar-stack #}
+
+            {# The delete button lives over the canvas, not in the sidebar. The  #}
+            {# sidebar stacks below the map under 900px, so on a phone it would  #}
+            {# be off-screen for the whole time anyone was drawing - exactly     #}
+            {# when a selection is most likely to need deleting.                 #}
+            <div class="floorplan-canvas-controls">
+                <button type="button" id="floorplan-delete" class="btn btn--icon floorplan-canvas-controls__delete" hidden
+                        aria-label="Delete selection" data-tooltip="Delete (Del)" data-tooltip-float="true">
+                    <i class="material-symbols-outlined">delete</i>
+                </button>
+            </div>
+
+            {# Bottom right, horizontal - the same corner and layout as the main #}
+            {# map's saved-filters toolbar (_saved_filters_toolbar.html). .map- #}
+            {# buttons for identical button styling and the collapse toggle    #}
+            {# "for free"; the position override that keeps it bottom-right at #}
+            {# every breakpoint (rather than flipping to top-right on desktop  #}
+            {# like the drawing tools) lives in _floorplans.scss.              #}
+            <div id="floorplan-floors-panel" class="map-buttons floorplan-canvas-floors" role="group" aria-label="Floors">
+                <button type="button" class="map-toolbar-collapse" aria-label="Toggle floor list"
+                        data-tooltip="Floors" data-tooltip-float="true" data-tooltip-pos="above">
+                    <i class="material-symbols-outlined">chevron_right</i>
+                </button>
+                <div id="floorplan-floors" class="map-buttons-content floorplan-floors"></div>
+            </div>
+
+            {# Focusable and labelled: the canvas is the editor, and until now #}
+            {# it could not be reached by keyboard at all.                      #}
+            <div id="floorplan-map" class="floorplan-map"
+                 tabindex="0" role="application"
+                 aria-label="Floorplan canvas. Tab and Shift+Tab move between walls, openings, rooms and markers; arrow keys nudge what is selected; Escape leaves."
+                 data-json-url="{% url 'pin.floorplan.json' pin.slug %}"
+                 data-save-url="{% url 'pin.floorplan.save' pin.slug %}"
+                 data-publish-url="{% url 'pin.floorplan.publish' pin.slug %}"
+                 data-lat="{{ pin.effective_latitude }}"
+                 data-lng="{{ pin.effective_longitude }}"></div>
+
+            {# Same shared layers component/engine as every other map on the #}
+            {# site - backdrop, weather/borders, and "Image Overlays" (browse #}
+            {# this pin's own photos for a blueprint to pin and skew onto the #}
+            {# map). "Show floor below" is this page's own custom toggle,    #}
+            {# registered alongside the standard ones (see floorplan-editor.ts). #}
+            <div class="map-bottom-controls">
+                {% map_layers_panel "satellite,street,underlay,grid" panel_id="floorplan-layers" extra_class="map-layers-panel--inline" manage_overlays_url=manage_overlays_url %}
+            </div>
+
+            {# Revealed by floorplan-editor.ts when Leaflet did not load. It is a CDN #}
+            {# script, so without this the editor is a blank rectangle and a silent #}
+            {# ReferenceError, with nothing to say the saved plan is still intact. #}
+            <div id="floorplan-unavailable" class="floorplan-empty" hidden>
+                <h2>The map didn't load.</h2>
+                <p>Check your connection and try again. Your saved plan hasn't changed.</p>
+                <div class="floorplan-empty__actions">
+                    <button type="button" class="btn btn--primary" id="floorplan-retry-load">
+                        <i class="material-symbols-outlined">refresh</i> Try again
+                    </button>
+                </div>
+            </div>
+
+            <div id="floorplan-empty" class="floorplan-empty">
+                <h2>Draw the walls; the rooms appear on their own.</h2>
+                <p>Close a loop of walls and it becomes a room you can name.</p>
+                <div class="floorplan-empty__actions">
+                    {% if outline_json %}
+                    <button type="button" class="btn btn--primary" id="floorplan-start-outline">
+                        <i class="material-symbols-outlined">home_work</i> Start from the building outline
+                    </button>
+                    {% endif %}
+                    <button type="button" class="btn {% if outline_json %}btn--ghost{% else %}btn--primary{% endif %}" id="floorplan-start-rectangle">
+                        <i class="material-symbols-outlined">crop_square</i> Start from a rectangle
+                    </button>
+                    <button type="button" class="btn btn--ghost" data-tool="wall">
+                        <i class="material-symbols-outlined">timeline</i> Draw walls
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <p id="floorplan-hint" class="floorplan-hint" aria-live="polite"></p>
+        {# Announces the selection, which is otherwise only visible as a #}
+        {# highlight on the canvas.                                      #}
+        <p id="floorplan-live" class="sr-only" aria-live="polite"></p>
+    </div>
+
+    <aside class="floorplan-sidebar">
+        {# Predictable top-right corner, not tucked below other content - the #}
+        {# "more" menu (its two actions only apply after a first save; see    #}
+        {# updateMoreMenu()) is the only explicit action left now that every  #}
+        {# ordinary edit autosaves (see save()/markDirty() in floorplan-editor.ts). #}
+        <div class="floorplan-sidebar__header">
+            <span id="floorplan-save-status" class="floorplan-save-status" aria-live="polite"></span>
+            <button type="button" id="floorplan-retry-save" class="btn btn--sm btn--ghost" hidden>
+                <i class="material-symbols-outlined">refresh</i> Retry
+            </button>
+            <button type="button" id="floorplan-reload" class="btn btn--sm btn--primary" hidden>
+                <i class="material-symbols-outlined">sync</i> Reload
+            </button>
+            <div class="floorplan-sidebar__header-actions">
+                <div class="floorplan-more-menu">
+                    <button type="button" id="floorplan-more-toggle" class="btn btn--icon" aria-haspopup="true" aria-expanded="false" aria-label="More actions" data-tooltip="More actions" data-tooltip-float="true">
+                        <i class="material-symbols-outlined">more_vert</i>
+                    </button>
+                    <div id="floorplan-more-list" class="floorplan-more-menu__list" hidden>
+                        <button type="button" id="floorplan-save-version" class="btn btn--ghost" disabled>Save as new version</button>
+                        <button type="button" id="floorplan-publish" class="btn btn--ghost" disabled>Publish to wiki</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="floorplan-sidebar__section">
+            {# The strip itself is on the canvas; naming a floor is editing, and #}
+            {# belongs with the other editing rather than in a column sized for  #}
+            {# buttons.                                                          #}
+            <div id="floorplan-floor-fields"></div>
+            <div id="floorplan-form" class="floorplan-form"></div>
+            {# The site's shared icon picker, rendered once and shown only while #}
+            {# a marker is selected. Server-rendered because the icon set lives  #}
+            {# in Python; the editor reads its hidden input, which now announces #}
+            {# a pick (see shared/icon-picker.ts).                               #}
+            <div id="floorplan-marker-appearance" hidden>
+                <label class="floorplan-field"><span>Icon</span>
+                    {% include 'dashboard/partials/ui/_icon_picker.html' with picker_id="floorplan-marker" field_name="marker_icon" current_icon="" %}
+                </label>
+                <label class="floorplan-field"><span>Colour</span>
+                    {% include 'dashboard/partials/ui/_color_picker.html' with picker_id="floorplan-marker" field_name="marker_color" current_color="" %}
+                </label>
+            </div>
+        </div>
+
+        <details class="floorplan-details-accordion">
+            <summary>Add more details</summary>
+            <div class="floorplan-sidebar__section">
+                {# This floor's ceiling height / ground level - populated by #}
+                {# renderFloorFields() in floorplan-editor.ts, and rebuilt   #}
+                {# whenever the active floor changes. Plan-wide fields below #}
+                {# it are static markup instead, since they don't change     #}
+                {# with the floor; both live in the one disclosure so there  #}
+                {# is a single "more details" to open, not two.              #}
+                <div id="floorplan-floor-advanced-fields"></div>
+                <label class="floorplan-field"><span>Plan name</span>
+                    <input class="form-input" type="text" id="floorplan-name" placeholder="Ground floor"></label>
+                <label class="floorplan-field"><span>Date</span>
+                    <input class="form-input" type="date" id="floorplan-valid-from"></label>
+                <div id="floorplan-versions" class="floorplan-versions" hidden></div>
+            </div>
+        </details>
+    </aside>
+</div>
+</div>{# /.floorplan-page #}
+
+{# Same "Manage Image Overlays" dialog as the pin-detail and wiki maps - see #}
+{# _map_annotations_panels.html, this is the same markup verbatim. #}
+{% if manage_overlays_url %}
+<dialog id="map-overlays-dialog" class="custom-layers-dialog ul-dialog" aria-labelledby="dialog-title-image-overlays">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Image Overlays" %}
+    <div id="map-overlays-dialog-body" class="custom-layers-dialog-body ul-dialog-body"
+         hx-get="{{ manage_overlays_url }}" hx-trigger="load" hx-swap="innerHTML"></div>
+    {# Loads once, independent of the row-list body above - see the same #}
+    {# div's own comment in _map_annotations_panels.html. #}
+    <div class="map-overlay-historical ul-dialog-body">
+        <h4 class="map-overlay-historical-heading">Historical maps covering this location</h4>
+        <div id="map-overlay-historical-results"
+             hx-get="{% url 'pin.overlays.historical' pin.slug %}" hx-trigger="load" hx-swap="innerHTML">
+            <p class="map-overlay-manage-empty">Looking for georeferenced maps covering this spot...</p>
+        </div>
+    </div>
+</dialog>
+{% endif %}
+
+{{ outline_json|json_script:"floorplan-outline" }}
+{{ overlays_json|json_script:"floorplan-overlays" }}
+{{ labels_json|json_script:"floorplan-labels" }}
+{{ photos_json|json_script:"floorplan-photos" }}
+<script type="module" src="{% static 'dashboard/js/floorplan-editor.js' %}"></script>
+{% endblock %}

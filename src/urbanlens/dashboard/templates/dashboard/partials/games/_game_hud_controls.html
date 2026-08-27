@@ -1,0 +1,19 @@
+{% comment %}
+Shared HUD controls: rail drawer toggle, focus mode, true fullscreen.
+Include at the end of a game HUD's trailing group.
+
+No ids - game-shell.ts binds these purely by data-attribute, scoped to the
+shell element it was constructed with, so three games can render them without
+colliding. The focus control toggles in both directions and persists its state
+under `ul_game_immersive`, so a one-way exit would strand the player in the
+plain scrolling layout with nothing to press to get back.
+{% endcomment %}
+<button type="button" class="ul-game-hud__btn" data-game-rail-toggle aria-label="Players and chat" aria-pressed="false">
+    <i class="material-symbols-outlined">groups</i>
+</button>
+<button type="button" class="ul-game-hud__btn ul-game-hud__btn--focus" data-game-focus-toggle aria-label="Focus mode" title="Focus mode" aria-pressed="false">
+    <i class="material-symbols-outlined" data-game-focus-icon>open_in_full</i>
+</button>
+<button type="button" class="ul-game-hud__btn" data-game-fullscreen aria-label="Full screen" aria-pressed="false">
+    <i class="material-symbols-outlined" data-game-fullscreen-icon>fullscreen</i>
+</button>

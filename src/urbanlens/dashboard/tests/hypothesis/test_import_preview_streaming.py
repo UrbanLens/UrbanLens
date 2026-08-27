@@ -4,6 +4,7 @@ must actually be added to that label, not just create it unattached.
 """
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest import mock
 
 from model_bakery import baker
@@ -11,9 +12,12 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.links.model import PinLink
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
+from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import LEGACY_COORDINATE_CUTOFF
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 
 class ImportPreviewStreamingLabelAssignmentTests(TestCase):
@@ -100,19 +104,19 @@ class ImportPreviewDescriptionLengthTests(TestCase):
     def test_preview_pins_keeps_a_long_description_intact(self) -> None:
         long_description = "x" * 2000
         raw_pins = [{"latitude": 40.0, "longitude": -74.0, "name": "Old Mill", "description": long_description}]
-        preview = GoogleMapsGateway._preview_pins(raw_pins)
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
         self.assertEqual(preview[0]["description"], long_description)
 
     def test_preview_pins_clamps_at_the_real_max_length_not_500(self) -> None:
         huge_description = "x" * (MAX_PIN_DESCRIPTION_LENGTH + 1000)
         raw_pins = [{"latitude": 40.0, "longitude": -74.0, "name": "Old Mill", "description": huge_description}]
-        preview = GoogleMapsGateway._preview_pins(raw_pins)
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
         self.assertEqual(len(preview[0]["description"]), MAX_PIN_DESCRIPTION_LENGTH)
 
     def test_a_long_description_survives_the_full_preview_then_confirm_flow(self) -> None:
         long_description = "A" * 2000 + " full KMZ description text that must not be cut off."
         raw_pins = [{"latitude": 40.0, "longitude": -74.0, "name": "Old Mill", "description": long_description}]
-        preview = GoogleMapsGateway._preview_pins(raw_pins)
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
 
         list(
             self.gateway.import_preview_streaming(
@@ -124,6 +128,104 @@ class ImportPreviewDescriptionLengthTests(TestCase):
 
         pin = Pin.objects.get(profile=self.profile, name="Old Mill")
         self.assertEqual(pin.description, long_description)
+
+
+class ImportPreviewLegacyRepairFlagTests(TestCase):
+    """_preview_pins() flags records that would repair a pre-cutoff mis-placed pin,
+    or whose own coordinates are simply untrustworthy.
+
+    Regression coverage for the bug where re-importing to trigger the TEMPORARY
+    legacy CID coordinate repair (see services.apis.locations.legacy_cid_coordinate_fix)
+    never worked: the preview step's client-side "already on your map" check
+    compared the same S2-derived (lat, lng) guess that originally mis-placed the
+    pin against the user's existing pins, found that same legacy pin sitting
+    right there, and pre-deselected the record - so it was never sent to the
+    server-side repair at all. needs_repair tells the client to skip that check.
+
+    Also covers the broader, independent TEMPORARY condition: any record whose
+    own cid came from the imprecise S2-cell URL guess (_csv_row_iter's
+    "s2_guess") is force-selected even when no specific legacy pin match is
+    found - not every affected row still has one to find.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make("auth.User").profile
+
+    def _legacy_location(self, cid: int | None = None) -> Location:
+        location = Location.objects.create(latitude=40.0, longitude=-74.0)
+        Location.objects.filter(pk=location.pk).update(created=LEGACY_COORDINATE_CUTOFF - timedelta(days=30))
+        location = Location.objects.get(pk=location.pk)
+        if cid is not None:
+            GooglePlaceService().set_cid_for_entity(location, cid, fetch_if_missing=False)
+        return location
+
+    def _legacy_pin(self, location: Location, *, name: str = "") -> Pin:
+        pin = Pin.objects.create(profile=self.profile, location=location, name=name)
+        Pin.objects.filter(pk=pin.pk).update(created=LEGACY_COORDINATE_CUTOFF - timedelta(days=30))
+        return Pin.objects.get(pk=pin.pk)
+
+    def test_flags_a_record_whose_cid_matches_a_legacy_pin(self) -> None:
+        location = self._legacy_location(cid=12345)
+        self._legacy_pin(location, name="Old Water Tower")
+
+        raw_pins = [{"latitude": 40.0, "longitude": -74.0, "name": "Old Water Tower", "description": "", "cid": 12345}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertTrue(preview[0].get("needs_repair"))
+
+    def test_does_not_flag_a_record_with_no_matching_legacy_pin(self) -> None:
+        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Brand New Spot", "description": "", "cid": 999999}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertNotIn("needs_repair", preview[0])
+
+    def test_does_not_flag_an_ordinary_pin_with_no_cid(self) -> None:
+        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Some Place", "description": ""}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertNotIn("needs_repair", preview[0])
+
+    def test_flags_a_record_whose_cid_came_from_the_imprecise_s2_guess(self) -> None:
+        """TEMPORARY: force-selected on its own merits - no matching legacy pin
+        needed, since not every affected row still has one to find."""
+        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Brand New Spot", "description": "", "cid": 999999, "s2_guess": True}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertTrue(preview[0].get("needs_repair"))
+
+    def test_does_not_flag_a_record_whose_cid_did_not_come_from_the_s2_guess(self) -> None:
+        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Brand New Spot", "description": "", "cid": 999999, "s2_guess": False}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertNotIn("needs_repair", preview[0])
+
+
+class ImportPreviewMapsUrlPassthroughTests(TestCase):
+    """_preview_pins() carries a row's source Google Maps URL through to the preview
+    dict unchanged - not displayed, but re-used by a deferred REData lookup
+    (cid_resolution.resolve_cids), which resolves via the place's own URL faster
+    and more reliably than the bare cid alone. See GoogleMapsGateway._csv_row_iter.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make("auth.User").profile
+
+    def test_maps_url_is_carried_through_to_the_preview_dict(self) -> None:
+        url = "https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79"
+        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Black Point Ruins", "description": "", "cid": 0x59AC8820518A7E79, "maps_url": url}]
+
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertEqual(preview[0]["maps_url"], url)
+
+    def test_maps_url_is_none_when_the_row_had_no_url(self) -> None:
+        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Some Place", "description": ""}]
+
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertIsNone(preview[0]["maps_url"])
 
 
 class ImportPreviewDescriptionExtrasTests(TestCase):
@@ -146,7 +248,18 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
         )
 
     def test_html_is_stripped_from_the_saved_description(self) -> None:
-        self._run('<img src="https://example.com/a.jpg"><br><br>City: Poughkeepsie<br>State: NY')
+        # The <img> makes the importer try to materialize the photo, which fetches
+        # the URL. Unmocked, that reaches the real internet: the suite's network
+        # guard raises, `import_preview_streaming` catches RuntimeError and yields
+        # "Import failed unexpectedly", and this test still passed because the pin
+        # was already created by then - so it was asserting against a *failed*
+        # import. Mocked the same way test_img_src_becomes_a_pin_photo_not_a_link
+        # already does.
+        with mock.patch(
+            "urbanlens.dashboard.services.media.media_materialize.materialize_media_item",
+            return_value=mock.Mock(pin_id=None),
+        ):
+            self._run('<img src="https://example.com/a.jpg"><br><br>City: Poughkeepsie<br>State: NY')
         pin = Pin.objects.get(profile=self.profile, name="Old Mill")
         self.assertNotIn("<img", pin.description)
         self.assertIn("City: Poughkeepsie", pin.description)
@@ -164,7 +277,7 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
     def test_img_src_becomes_a_pin_photo_not_a_link(self) -> None:
         fake_image = mock.Mock(pin_id=None)
         with mock.patch(
-            "urbanlens.dashboard.services.media_materialize.materialize_media_item",
+            "urbanlens.dashboard.services.media.media_materialize.materialize_media_item",
             return_value=fake_image,
         ) as materialize:
             self._run('<img src="https://example.com/a.jpg">')

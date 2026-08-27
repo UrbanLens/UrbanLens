@@ -2,55 +2,59 @@
 
 from __future__ import annotations
 
+from django.http import Http404
 from django.views.generic import TemplateView
 
 
 class CostsView(TemplateView):
     """Render the public page showing UrbanLens's estimated running costs.
 
-    Reuses the same per-service cost estimates the site-admin API usage
-    report is built from (``ApiCallLog.objects.summary_by_service()`` +
-    ``ServiceDefaults.cost_per_call``), aggregated without any per-user or
-    per-request detail - only service-level totals are ever shown here.
+    Gated behind ``SiteSettings.public_costs_page_enabled`` (off by default) - the
+    page 404s until an admin turns it on from the site-admin cost tracking page.
+
+    Shows only the aggregate monthly total and its trend - the per-service external
+    API spend breakdown lives on the site-admin cost tracking page instead.
     """
 
     template_name = "dashboard/pages/costs/index.html"
 
     def get_context_data(self, **kwargs):
-        """Add the last-30-days cost breakdown to the template context.
+        """Add the cost breakdown and monthly total chart series to the context.
 
         Args:
             **kwargs: Standard ``TemplateView`` keyword arguments.
 
         Returns:
-            Template context including ``priced_services``, ``unpriced_service_count``,
-            and ``total_cost_30d``.
+            Template context including ``breakdown``, ``total_hardware_cost``,
+            ``cost_per_user``, ``active_user_count``, ``cost_per_supporter``,
+            ``active_supporter_count``, and the monthly total chart series.
         """
-        from urbanlens.dashboard.models.api_call_log import ApiCallLog
-        from urbanlens.dashboard.services.rate_limiter import all_service_defaults
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+        from urbanlens.dashboard.services.admin.cost_tracking import (
+            active_supporter_count,
+            active_user_count,
+            cost_per_supporter,
+            cost_per_user,
+            effective_monthly_cost,
+            monthly_cost_series,
+            total_hardware_cost,
+        )
+        from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
+
+        if not SiteSettings.get_current().public_costs_page_enabled:
+            raise Http404
 
         context = super().get_context_data(**kwargs)
         context["page_name"] = "costs"
 
-        service_defaults = all_service_defaults()
-        summaries = {row["service"]: row for row in ApiCallLog.objects.summary_by_service()}
-
-        priced_services = []
-        unpriced_service_count = 0
-        total_cost_30d = None
-        for service, defaults in service_defaults.items():
-            if defaults.cost_per_call is None:
-                unpriced_service_count += 1
-                continue
-            row = summaries.get(service, {})
-            cost_30d = row.get("total_cost")
-            if cost_30d is None:
-                continue
-            total_cost_30d = cost_30d if total_cost_30d is None else total_cost_30d + cost_30d
-            priced_services.append({"display_name": defaults.display_name, "cost_30d": cost_30d})
-
-        priced_services.sort(key=lambda entry: entry["cost_30d"], reverse=True)
-        context["priced_services"] = priced_services
-        context["unpriced_service_count"] = unpriced_service_count
-        context["total_cost_30d"] = total_cost_30d
+        breakdown = effective_monthly_cost()
+        series = monthly_cost_series()
+        context["breakdown"] = breakdown
+        context["total_hardware_cost"] = total_hardware_cost()
+        context["cost_per_user"] = cost_per_user()
+        context["active_user_count"] = active_user_count()
+        context["cost_per_supporter"] = cost_per_supporter()
+        context["active_supporter_count"] = active_supporter_count()
+        context["chart_labels"] = safe_json_for_script(series["labels"])
+        context["chart_total"] = safe_json_for_script([h + o + a for h, o, a in zip(series["hardware"], series["operating"], series["api"], strict=True)])
         return context

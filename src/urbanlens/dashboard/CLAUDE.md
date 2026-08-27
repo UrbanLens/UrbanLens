@@ -37,11 +37,18 @@ The project connects to many external APIs via service classes in `dashboard/ser
 
 External integrations are wired into the app through the plugin system: the API client stays a `Gateway` subclass in `dashboard/services/apis/`, and a small `UrbanLensPlugin` subclass (bundled ones live in `dashboard/plugins/builtin/`) declares its rate-limit defaults and contributions (pin-detail panels, imagery providers, hook callbacks). New integrations should be added as plugins; services not yet converted still register their defaults in `rate_limiter.SERVICE_REGISTRY`.
 
-When calling any API, track usage and cost per call (keep a running estimate). This is required groundwork for future cost reporting.
+API usage and cost tracking is **automatic**: the `Gateway` base wraps every request in a
+rate-limited session that writes an `ApiCallLog` row (with a `cost_estimate`) per call - no
+per-integration code needed. Only code that bypasses `self.session` (a bare `requests.*` call,
+an SDK client) must record itself via `rate_limiter.log_api_call`, as the AI services do.
 
 ## Gotchas
 
 - Any new pin/location share path must call `resolve_origin_share` + `record_share_exposure` to
   keep the `LocationExposure` provenance chain intact.
-- `EncryptedTextField` derives its key from Django `SECRET_KEY` - changing it corrupts all
-  encrypted data (Immich tokens, etc.).
+- `EncryptedTextField` writes under the active key (`UL_FIELD_ENCRYPTION_KEY`, else Django's
+  `SECRET_KEY`) and reads under any key in `UL_FIELD_ENCRYPTION_KEY_FALLBACKS`. Changing a key
+  is safe *only* via the rotation procedure in `docs/DATA_ENCRYPTION.md` (add new key → run
+  `manage.py rotate_field_encryption` → drop old key); swapping it in one step orphans every
+  row. Content fields set `fail_soft=True` and degrade to their default rather than raising;
+  credential fields raise so their callers can drop the row and prompt a reconnect.

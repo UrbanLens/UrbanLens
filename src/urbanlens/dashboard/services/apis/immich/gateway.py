@@ -15,7 +15,7 @@ import datetime
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence

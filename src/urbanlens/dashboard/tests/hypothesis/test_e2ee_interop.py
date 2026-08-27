@@ -2,7 +2,7 @@
 
 The browser encrypts everything with libsodium (``e2ee-crypto.ts``); the
 server stores opaque blobs and can decrypt nothing. These tests pin the wire
-formats documented in ``docs/e2ee.md`` by round-tripping them through PyNaCl,
+formats documented in ``docs/designs/e2ee.md`` by round-tripping them through PyNaCl,
 which shares libsodium's implementation - so a format drift on either side
 fails here instead of silently corrupting real users' history.
 

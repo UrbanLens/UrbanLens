@@ -20,16 +20,17 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from urbanlens.dashboard.controllers.media_auth import mark_private_media
 from urbanlens.dashboard.forms.immich_form import ImmichAccountForm
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, _haversine_km
 from urbanlens.dashboard.services.apis.immich import ImmichGateway
-from urbanlens.dashboard.services.celery import get_task_progress, safely_enqueue_task
-from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.photo_import import PhotoImportMode, visit_dates_for_pin
-from urbanlens.dashboard.services.visits import visit_logging_allowed
+from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
+from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -257,14 +258,14 @@ class PinImmichThumbnailView(LoginRequiredMixin, View):
         cached = cache.get(cache_key)
         if cached is not None:
             content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
+            return mark_private_media(HttpResponse(content, content_type=content_type))
 
         try:
             content, content_type = ImmichGateway(account=account).get_asset_thumbnail(asset_id)
         except GatewayRequestError:
             return HttpResponse(status=502)
         cache.set(cache_key, (content, content_type), _THUMBNAIL_CACHE_TTL)
-        return HttpResponse(content, content_type=content_type)
+        return mark_private_media(HttpResponse(content, content_type=content_type))
 
 
 class PinImmichImportView(LoginRequiredMixin, View):

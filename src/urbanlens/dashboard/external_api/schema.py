@@ -13,6 +13,9 @@ See :data:`E2EE_PREFIX`.
 
 from __future__ import annotations
 
+import threading
+
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from drf_spectacular.settings import spectacular_settings
 
 #: URL prefix of the external API mount.
@@ -127,3 +130,135 @@ def preprocess_external_api_only(endpoints: list, **_kwargs) -> list:
     """
     _pin_schema_path_prefix()
     return [(path, path_regex, method, callback) for path, path_regex, method, callback in endpoints if path.startswith(PUBLISHED_SCHEMA_PREFIXES)]
+
+
+#: Component name for the shared error body.
+ERROR_SCHEMA_NAME = "ErrorResponse"
+
+#: The envelope every refusal actually uses. DRF's own body is ``{"detail": ...}``;
+#: ``external_api.mixins`` rewrites it, and a generated client that has to
+#: special-case which endpoints use which shape is a client that will get it
+#: wrong somewhere.
+_ERROR_COMPONENT = {
+    "type": "object",
+    "properties": {"error": {"type": "string", "description": "Human-readable reason the request was refused."}},
+    "required": ["error"],
+}
+
+#: HTTP methods an OpenAPI path item can carry. Everything else in a path item
+#: (``parameters``, ``summary``) is not an operation and must be skipped.
+_OPERATION_KEYS = frozenset({"get", "put", "post", "delete", "options", "head", "patch", "trace"})
+
+
+def _error_response(description: str) -> dict:
+    """One response entry pointing at the shared error component."""
+    return {"description": description, "content": {"application/json": {"schema": {"$ref": f"#/components/schemas/{ERROR_SCHEMA_NAME}"}}}}
+
+
+def document_error_responses(result: dict, generator, request, public) -> dict:
+    """Declare the refusals every operation can already produce.
+
+    The published document described only success. Every authenticated endpoint
+    returns 401 without credentials and 403 when the key's scopes do not cover
+    the call, and every endpoint addressed by a path parameter returns 404 for
+    an id that does not resolve - none of which appeared in the schema. A client
+    generated from it therefore had no branch for the most likely failures it
+    would ever meet, and a strict generated client treats an undeclared status
+    as a protocol violation rather than as "your token expired".
+
+    Done as a postprocessing hook rather than per view because the omission is
+    not per view: responses are not declared individually anywhere, so declaring
+    them individually would be ~284 edits that the next endpoint would forget.
+
+    ``setdefault`` throughout, so a view that documents its own 401 - with a
+    better description, or a different shape - keeps it.
+
+    Args:
+        result: The generated schema, mutated in place.
+        generator: drf-spectacular's generator (unused).
+        request: The request the schema is being generated for (unused).
+        public: Whether this is the public schema (unused).
+
+    Returns:
+        The schema, with error responses declared.
+    """
+    result.setdefault("components", {}).setdefault("schemas", {}).setdefault(ERROR_SCHEMA_NAME, _ERROR_COMPONENT)
+
+    for path, path_item in result.get("paths", {}).items():
+        # A templated segment is the only way an operation can be handed an
+        # identifier that does not resolve.
+        addressable = "{" in path
+        for method, operation in path_item.items():
+            if method.lower() not in _OPERATION_KEYS or not isinstance(operation, dict):
+                continue
+            responses = operation.setdefault("responses", {})
+            if operation.get("security"):
+                responses.setdefault("401", _error_response("Authentication credentials were missing or invalid."))
+                responses.setdefault("403", _error_response("The credential is valid but does not carry the scope this operation requires."))
+            if addressable:
+                responses.setdefault("404", _error_response("No such resource, or it is not visible to this caller."))
+    return result
+
+
+class ApiKeyAuthenticationScheme(OpenApiAuthenticationExtension):
+    """Documents ``ApiKeyAuthentication`` in the generated OpenAPI schema.
+
+    Without this, drf-spectacular logged "could not resolve authenticator" for
+    every external-API view - some 200 warnings - and, far worse, emitted a
+    schema documenting **no authentication at all**, so a native client
+    generated from it had no idea an ``Authorization: Bearer ulk_...`` header
+    was required. Registration happens on import; this module is already
+    imported by the schema build via ``PREPROCESSING_HOOKS``.
+    """
+
+    target_class = "urbanlens.dashboard.external_api.authentication.ApiKeyAuthentication"
+    name = "apiKeyAuth"
+
+    def get_security_definition(self, auto_schema):
+        """The security scheme: HTTP bearer carrying a ``ulk_``-prefixed API key."""
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "description": "UrbanLens API key (`ulk_...`), created in Settings -> API Keys. OAuth2 access tokens share the Bearer scheme and are documented separately.",
+        }
+
+
+#: Guards the mutation :func:`patch_extension_thread_safety` serializes.
+_extension_load_lock = threading.Lock()
+
+
+def patch_extension_thread_safety() -> None:
+    """Serialize drf-spectacular's per-extension ``target_class`` resolution.
+
+    ``OpenApiGeneratorExtension._load_class`` resolves ``target_class`` from a
+    dotted string to the class object by mutating that *class* attribute in
+    place, with no lock - shared process-wide, not per-request. Two schema
+    requests arriving together (this app runs gevent workers, so genuinely
+    concurrent requests to one process are ordinary) can both see the string,
+    both start resolving, and one can read ``target_class`` mid-mutation - e.g.
+    as the ``None`` the other's failed-import branch just wrote - raising
+    ``AttributeError: 'NoneType' object has no attribute 'startswith'`` instead
+    of producing a schema. Not caused by anything registered in this app
+    (``ApiKeyAuthenticationScheme`` included), but every extension - ours and
+    drf-spectacular's own built-ins - shares this one base class and the same
+    race. See PROBLEMS.md, "concurrent requests to schema/ can 500".
+
+    Called once from ``DashboardConfig.ready()``, before any request can be
+    served. Idempotent - a second call (e.g. a test importing this module
+    directly) leaves an already-patched method alone.
+    """
+    from drf_spectacular.plumbing import OpenApiGeneratorExtension
+
+    unpatched = OpenApiGeneratorExtension.__dict__["_load_class"].__func__
+    if getattr(unpatched, "_urbanlens_serialized", False):
+        return
+
+    def _serialized_load_class(cls: type) -> None:
+        with _extension_load_lock:
+            # Whoever got the lock first may have already resolved this exact
+            # class while we were waiting for it.
+            if isinstance(cls.target_class, str):  # type: ignore[attr-defined]
+                unpatched(cls)
+
+    _serialized_load_class._urbanlens_serialized = True  # type: ignore[attr-defined]  # noqa: SLF001 - our own marker, not drf-spectacular's
+    OpenApiGeneratorExtension._load_class = classmethod(_serialized_load_class)  # type: ignore[assignment]  # noqa: SLF001 - the whole point is patching drf-spectacular's private hook

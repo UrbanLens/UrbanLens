@@ -271,164 +271,53 @@
         }
     }
 
-    // -- Tab bar --------------------------------------------------------------
-    .tad-tabs {
-        display: flex;
-        gap: 0;
-        border-bottom: 2px solid var(--ul-surface-raised-border);
-        padding: 0 .5rem;
-        flex-shrink: 0;
-        background: var(--ul-surface-raised);
-    }
+    // -- Tab bar (search + kind tabs, shared by every label picker) -----------
+    @include tad-tabs;
 
-    .tad-tab {
-        flex: 1;
-        padding: .5rem .4rem;
-        border: none;
-        border-bottom: 2px solid transparent;
-        margin-bottom: -2px;
-        background: transparent;
-        font-size: .8rem;
-        font-weight: 500;
-        color: var(--ul-grey-5);
-        cursor: pointer;
-        transition: color .12s, border-color .12s;
-        white-space: nowrap;
+    // -- Search + button list ---------------------------------------------------
+    @include tag-dialog-list;
 
-        &:hover {
-            color: $color-indigo-500;
-        }
-
-        &--active {
-            color: $color-indigo-500;
-            border-bottom-color: $color-indigo-500;
-        }
-    }
-
-    // -- Search ---------------------------------------------------------------
-    .dialog-search {
-        display: block;
-        width: calc(100% - 1.5rem);
-        margin: .6rem .75rem;
-        padding: .45rem .7rem;
-        border: 1px solid var(--ul-surface-raised-border);
-        border-radius: 8px;
-        font-size: .85rem;
-        box-sizing: border-box;
-        outline: none;
-        flex-shrink: 0;
-        background: var(--ul-surface-raised);
-        color: inherit;
-
-        &:focus {
-            border-color: $color-indigo-500;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
-        }
-    }
-
-    .tag-dialog-list {
-        list-style: none;
-        padding: 0 .5rem .5rem;
-        margin: 0;
-        overflow-y: auto;
-        flex: 1;
-    }
-
-    .tag-dialog-item {
-        margin-bottom: 2px;
-    }
-
-    .tag-dialog-btn {
+    // -- REData-suggested labels, lazily loaded above the tabs/list -------------
+    .tad-suggestions-header {
         display: flex;
         align-items: center;
-        gap: .55rem;
-        width: 100%;
-        padding: .5rem .6rem;
-        border: none;
-        border-radius: 8px;
-        background: transparent;
-        cursor: pointer;
-        font-size: .88rem;
-        text-align: left;
-        transition: background .12s;
-        color: inherit;
-
-        &:hover {
-            background: rgba(99, 102, 241, .08);
-        }
-    }
-
-    .tag-dialog-icon {
-        width: 20px;
-        text-align: center;
-        flex-shrink: 0;
-    }
-
-    .tag-dialog-name {
-        font-weight: 500;
-        flex: 1;
-    }
-
-    // -- Kind pill (shown in "All" tab next to label name) --------------------
-    .tad-kind-pill {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.5em 1em;
-        border-radius: 999px;
-        font-size: .7rem;
+        gap: .35rem;
+        padding: .6rem .75rem .3rem;
+        font-size: .75rem;
         font-weight: 600;
-        letter-spacing: .03em;
+        letter-spacing: .02em;
         text-transform: uppercase;
+        color: var(--ul-grey-6);
         flex-shrink: 0;
-        color: var(--ul-grey-0);
 
-        &--tag {
-            background-color: #{$color-purple-900};
-            color: #{$color-purple-100};
-        }
-
-        &--category {
-            background-color: #{$color-blue-900};
-            color: #{$color-blue-100};
-        }
-
-        &--status {
-            background-color: #{$color-green-900};
-            color: #{$color-green-100};
+        .material-symbols-outlined {
+            font-size: 1rem;
+            color: $color-indigo-500;
         }
     }
-}
 
-// -- Dark mode: tag-add-dialog feature colors ---------------------------------
-// Structural colors (background, text, border) are now fully token-driven via
-// @include dialog-base and var(--ul-*) custom properties. Only the feature-
-// specific indigo accent colours need explicit dark overrides here.
-[data-theme="dark"] {
-    .tag-add-dialog {
-        .tad-tab {
-            color: var(--ul-grey-6);
+    .tad-suggestions-list {
+        padding: 0 .5rem;
+        margin: 0 0 .3rem;
+        flex: 0 0 auto;
+        max-height: 8.5rem;
+        overflow-y: auto;
+    }
 
-            &:hover {
-                color: $color-indigo-400;
-            }
+    .tag-dialog-item--suggested .tag-dialog-btn {
+        background: rgba(99, 102, 241, .05);
+    }
 
-            &--active {
-                color: $color-indigo-400;
-                border-bottom-color: $color-indigo-400;
-            }
-        }
+    .tad-suggestion-confidence {
+        flex-shrink: 0;
+        font-size: .72rem;
+        font-weight: 600;
+        color: var(--ul-grey-6);
+    }
 
-        .dialog-search {
-            &:focus {
-                border-color: $color-indigo-400;
-                box-shadow: 0 0 0 3px rgba(129, 140, 248, .15);
-            }
-        }
-
-        .tag-dialog-btn {
-            &:hover {
-                background: rgba(129, 140, 248, .12);
-            }
+    [data-theme="dark"] & {
+        .tag-dialog-item--suggested .tag-dialog-btn {
+            background: rgba(129, 140, 248, .08);
         }
     }
 }
@@ -536,6 +425,18 @@
     // typography as the article/wiki editor - no white-space:pre-wrap here,
     // since paragraph/list breaks are now real HTML elements, not literal
     // newlines in escaped plain text.
+    .visit-weather {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .78rem;
+        color: var(--ul-grey-7);
+
+        .material-symbols-outlined {
+            font-size: 1rem;
+        }
+    }
+
     .visit-notes {
         font-size: .86rem;
         line-height: 1.4;
@@ -1467,6 +1368,96 @@
 }
 
 // -- Generic simple info panel (Photon, Census, EPA, iNaturalist, GDELT, USGS quakes) --
+// The NPS panel shipped with bespoke markup and no stylesheet at all - every
+// `nps-*` class in `pin_nps.html` matched nothing, so the card rendered with
+// only the generic `.card` chrome. These are the rules its own markup needs;
+// the fact grid deliberately mirrors `.simple-info-panel`'s `.simple-info-meta`
+// values so the two panels read alike. Not shared as one selector because
+// hoisting that rule out of `.simple-info-panel` changes its specificity for
+// every panel that uses it, which is a bigger change than this panel is worth.
+.nps-info {
+    .nps-image-wrap {
+        max-height: 11rem;
+        overflow: hidden;
+    }
+
+    .nps-image {
+        width: 100%;
+        max-height: 11rem;
+        object-fit: cover;
+        display: block;
+    }
+
+    .nps-image-caption,
+    .nps-description {
+        margin: .4rem 0 0;
+        font-size: .8rem;
+        color: var(--ul-grey-7);
+    }
+
+    .nps-park-name {
+        margin: .5rem 0 0;
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--ul-grey-9);
+    }
+
+    .nps-activities {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .3rem;
+        margin-top: .6rem;
+    }
+
+    .nps-activities-label {
+        font-size: .68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .02em;
+        color: var(--ul-grey-5);
+    }
+
+    .nps-activity-chip {
+        padding: .1rem .55rem;
+        font-size: .68rem;
+        font-weight: 600;
+        color: var(--ul-primary-color);
+        background: var(--ul-hover-bg-primary, rgba(37, 99, 235, .12));
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+    .nps-facts {
+        margin: .75rem 0 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: .3rem .75rem;
+    }
+
+    .nps-fact {
+        display: flex;
+        flex-direction: column;
+        gap: .05rem;
+        min-width: 0;
+
+        dt {
+            font-size: .68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .02em;
+            color: var(--ul-grey-5);
+        }
+
+        dd {
+            margin: 0;
+            font-size: .8rem;
+            color: var(--ul-grey-8);
+            overflow-wrap: break-word;
+        }
+    }
+}
+
 .simple-info-panel {
     .simple-info-heading {
         display: flex;
@@ -2653,7 +2644,7 @@ body.page-location-details {
 
 // -- Create-community-wiki dialog (seed-field/alias/photo picker) -----------
 
-.pin-wiki-create-dialog {
+.pin-wiki-share-dialog {
     max-width: 56rem;
 
     .ul-dialog-body {
@@ -2661,14 +2652,14 @@ body.page-location-details {
     }
 }
 
-.wiki-create-intro {
+.wiki-share-intro {
     font-size: .88rem;
     color: var(--ul-grey-7);
     margin: 0 0 .9rem;
     line-height: 1.5;
 }
 
-.wiki-create-hint {
+.wiki-share-hint {
     display: flex;
     align-items: flex-start;
     gap: .5rem;
@@ -2688,7 +2679,7 @@ body.page-location-details {
     }
 }
 
-.wiki-create-section {
+.wiki-share-section {
     margin-bottom: 1.15rem;
 
     &:last-of-type {
@@ -2696,7 +2687,7 @@ body.page-location-details {
     }
 }
 
-.wiki-create-section-title {
+.wiki-share-section-title {
     display: flex;
     align-items: center;
     gap: .4rem;
@@ -2713,7 +2704,7 @@ body.page-location-details {
     }
 }
 
-.wiki-create-section-hint {
+.wiki-share-section-hint {
     margin: .1rem 0 .5rem;
     font-size: .76rem;
     color: var(--ul-grey-5);
@@ -4120,24 +4111,6 @@ body.page-location-details {
     &:hover { color: var(--primary-color); border-color: var(--primary-color); }
 }
 
-.pin-link-add-form {
-    display: inline-flex;
-    align-items: center;
-    gap: .35rem;
-    flex-wrap: wrap;
-
-    input {
-        padding: .3rem .5rem;
-        border-radius: 6px;
-        border: 1px solid var(--ul-surface-border);
-        font-size: .82rem;
-    }
-
-    input[name="name"] { width: 9rem; }
-    input[name="url"] { width: 14rem; }
-}
-
-
 body.page-location-details .card {
     box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
 }
@@ -5037,6 +5010,9 @@ body.page-location-details .pin-detail-grid {
     > .page-onboarding,
     > #pin-detail-onboarding { grid-area: onboarding; }
 
+    > #pin-restructure-slot,
+    > #pin-restructure-offer { grid-area: onboarding; }
+
     > #pin-overview { grid-area: overview; }
 
     > .location-map,
@@ -5066,6 +5042,7 @@ body.page-location-details .pin-detail-grid {
     @include up($breakpoint-lg) {
         grid-template-columns: repeat(3, minmax(0, 1fr));
         grid-template-areas:
+            'onboarding onboarding onboarding'
             'overview   overview   overview'
             'map        map        map'
             'media      media      media'
@@ -5076,6 +5053,7 @@ body.page-location-details .pin-detail-grid {
 
     @include up($breakpoint-xl) {
         grid-template-areas:
+            'onboarding onboarding onboarding'
             'overview   overview   overview'
             'map        map        map'
             'media      media      media'
@@ -5264,43 +5242,7 @@ body.page-location-details .pin-detail-grid {
     font-family: inherit;
 }
 
-// -- Pin hierarchy: breadcrumb, floating actions menu, child-pin content labels --
-
-// "Child pin of {parent}" breadcrumb at the top of a child pin's detail page.
-.pin-parent-breadcrumb {
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
-    align-self: flex-start;
-    padding: .35rem .8rem .35rem .6rem;
-    border-radius: 999px;
-    background: var(--ul-color-accent-bg, rgba(30, 136, 229, .1));
-    border: 1px solid var(--ul-surface-border);
-    color: var(--ul-grey-8);
-    font-size: .85rem;
-    text-decoration: none;
-    transition: border-color .12s, background .12s, top .3s ease, right .3s ease;
-
-    i {
-        font-size: 1.05rem;
-        color: var(--primary-color);
-    }
-
-    &:hover {
-        border-color: var(--primary-color);
-        background: var(--ul-color-accent-bg, rgba(30, 136, 229, .16));
-    }
-
-    // Once the header has scrolled out of view, tuck the breadcrumb into the
-    // top-right corner instead - mirrors the wiki page's `.wiki-notice--pinned`.
-    &.pin-parent-breadcrumb--pinned {
-        position: fixed;
-        top: 0.2rem;
-        right: 0.5rem;
-        z-index: 999;
-        box-shadow: 0px 5px 20px rgba(0, 0, 0, 0.35);
-    }
-}
+// -- Pin hierarchy: floating actions menu, child-pin content labels --
 
 // Floating actions menu: bottom-right, follows the user as they scroll.
 .pin-actions-fab {

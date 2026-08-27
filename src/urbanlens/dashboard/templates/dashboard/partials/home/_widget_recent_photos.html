@@ -18,7 +18,13 @@ overview.html) via homeOpenLightbox() (overview.html's script block).
             data-copyright="{{ img.copyright|default:'' }}"
             data-source-url="{{ img.source_url|default:'' }}"
             data-taken-at="{{ img.taken_at|date:'c'|default:'' }}">
-            <button type="button" class="photo-tile-btn" onclick="homeOpenLightbox({{ img.pk }})">
+            {% comment %}
+            aria-label on the button, not just alt on the image: when the file
+            404s, urbanlensMediaThumbFallback swaps the <img> for an icon and
+            the button loses its only accessible name. axe reports that as
+            button-name at critical.
+            {% endcomment %}
+            <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.caption|default:'untitled' }}" onclick="homeOpenLightbox({{ img.pk }})">
                 <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy"
                      onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
                 {% if img.latitude and img.longitude %}<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>{% endif %}

@@ -8,7 +8,7 @@ and duplicate handling between wikis, and any moderation or review queue built
 on top of them.
 
 Every route here inherits the same non-negotiable rule as ``views_wiki``:
-resolution goes through ``services.wiki_access.resolve_visible_wiki``, so a
+resolution goes through ``services.wiki.wiki_access.resolve_visible_wiki``, so a
 wiki the caller has not earned access to is a 404 rather than a 403. A 403
 would confirm the location exists, which is precisely the disclosure the
 earned-access model is there to prevent - and governance endpoints are the

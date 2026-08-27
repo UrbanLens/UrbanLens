@@ -15,17 +15,17 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
-from oauth2_provider.models import get_access_token_model, get_application_model
+from oauth2_provider.models import get_access_token_model
 
+from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.external_api.views import AuthSessionView, UnscopedExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 AccessToken = get_access_token_model()
-Application = get_application_model()
 
 
 def _bearer(raw_key: str) -> dict:
@@ -90,7 +90,7 @@ class AuthSessionOauth2Tests(TestCase):
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         # Provisioned by the 0013 data migration during test DB setup.
-        self.application = Application.objects.get(client_id=FIRST_PARTY_CLIENT_ID)
+        self.application = first_party_application()
         self.expires = timezone.now() + timedelta(hours=1)
         self.token = AccessToken.objects.create(
             user=self.user,

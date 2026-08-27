@@ -1,3 +1,13 @@
+# Secrets must never enter an image layer: layers persist in /var/lib/docker
+# after the source file is rotated or deleted, and `docker history`/`docker save`
+# recovers them from any dangling image - so a baked secret outlives its own
+# rotation. The runtime gets these values from compose's `env_file:` instead
+# (see docker-compose.yml). `.git` is deliberately NOT excluded: it carries no
+# secrets (.env has never been tracked) and core/version.py shells out to it for
+# the admin update-check and the development self-update action.
+.env*
+!.env-sample
+
 __pycache__
 *.pyc
 *.pyo

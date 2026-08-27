@@ -1,14 +1,14 @@
 """Tests for the EPA ECHO plugin's exact-site/nearby-list split.
 
 Covers:
-- EpaEchoDetailPanelSource shows an unconditional card when a facility's DFR
-  coordinates are close enough to the pin's own to plausibly BE that pin, and
-  204s (renders nothing) otherwise.
+- EpaEchoDetailPanelSource shows an unconditional card when a facility's
+  REData-reported coordinates are close enough to the pin's own to plausibly
+  BE that pin, and 204s (renders nothing) otherwise.
 - EpaEchoNearbyPanelSource lists nearby facilities, excluding whichever one
   was matched as the exact site (it already has its own card).
 - EpaFacilityNameProvider only suggests a name when an exact-site match exists.
 - _fetch_epa_echo_data's distance-based exact-match logic against a handful
-  of DFR candidates.
+  of REData points-of-interest rows.
 """
 
 from __future__ import annotations
@@ -21,10 +21,10 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.plugins.builtin.epa_echo import (
-    _EXACT_MATCH_BUDGET_SECONDS,
     EpaEchoDetailPanelSource,
     EpaEchoNearbyPanelSource,
     EpaFacilityNameProvider,
+    _facility_from_poi,
     _fetch_epa_echo_data,
     _miles_between,
     _propagate_exact_site_to_nearby_locations,
@@ -33,6 +33,9 @@ from urbanlens.dashboard.plugins.builtin.epa_echo import (
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+_GATEWAY_PATH = "urbanlens.dashboard.services.apis.locations.redata_points_of_interest_gateway.RedataPointsOfInterestGateway"
 
 
 class MilesBetweenTests(SimpleTestCase):
@@ -42,30 +45,6 @@ class MilesBetweenTests(SimpleTestCase):
     def test_known_distance_is_approximately_correct(self) -> None:
         # ~1 degree of longitude at the equator is about 69 miles.
         self.assertAlmostEqual(_miles_between(0.0, 0.0, 0.0, 1.0), 69.17, delta=0.5)
-
-
-class NormalizeFacilityLatitudeTests(SimpleTestCase):
-    """EpaEchoGateway._normalize_facility's 'latitude' field - used to prioritize
-    which candidates the exact-match loop spends its rate-limited DFR lookups on
-    (see _fetch_epa_echo_data)."""
-
-    def test_valid_fac_lat_is_parsed_as_float(self) -> None:
-        from urbanlens.dashboard.services.apis.locations.epa_echo import _normalize_facility
-
-        result = _normalize_facility({"FacLat": "40.1234", "FacName": "Test"})
-        self.assertEqual(result["latitude"], 40.1234)
-
-    def test_missing_fac_lat_yields_none(self) -> None:
-        from urbanlens.dashboard.services.apis.locations.epa_echo import _normalize_facility
-
-        result = _normalize_facility({"FacName": "Test"})
-        self.assertIsNone(result["latitude"])
-
-    def test_empty_fac_lat_yields_none(self) -> None:
-        from urbanlens.dashboard.services.apis.locations.epa_echo import _normalize_facility
-
-        result = _normalize_facility({"FacLat": "", "FacName": "Test"})
-        self.assertIsNone(result["latitude"])
 
 
 class EpaEchoDetailPanelSourceTests(TestCase):
@@ -83,13 +62,13 @@ class EpaEchoDetailPanelSourceTests(TestCase):
         self.assertIsNone(self.source.render_context(self.pin, {}))
 
     def test_exact_site_renders_heading_name(self) -> None:
-        data = {"exact_site": {"name": "Old Mill Factory", "address": "123 Main St", "registry_id": "R1", "programs": []}}
+        data = {"exact_site": {"name": "Old Mill Factory", "address": "123 Main St", "registry_id": "R1", "compliance_status": "In compliance"}}
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["heading_name"], "Old Mill Factory")
 
     def test_footer_link_uses_the_detailed_facility_report_url(self) -> None:
-        data = {"exact_site": {"name": "Old Mill Factory", "address": "123 Main St", "registry_id": "R123", "programs": []}}
+        data = {"exact_site": {"name": "Old Mill Factory", "address": "123 Main St", "registry_id": "R123", "compliance_status": "In compliance"}}
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["footer_link"]["url"], "https://echo.epa.gov/detailed-facility-report?fid=R123")
@@ -100,13 +79,16 @@ class EpaEchoDetailPanelSourceTests(TestCase):
                 "name": "Old Mill Factory",
                 "address": "123 Main St",
                 "registry_id": "R1",
-                "programs": [{"statute": "RCRA", "quarters_in_significant_noncompliance": "2", "formal_actions": "1", "total_penalties": "$500", "last_inspection": "2025-01-01"}],
+                "compliance_status": "Significant Violator",
+                "significant_violator": True,
+                "quarters_in_noncompliance": "2",
+                "last_inspection": "2025-01-01",
             },
         }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertIn("Significant noncompliance", ctx["chips"])
-        self.assertTrue(any(entry["label"] == "Significant noncompliance" and "RCRA" in entry["value"] for entry in ctx["meta"]))
+        self.assertTrue(any(entry["label"] == "Significant noncompliance" for entry in ctx["meta"]))
 
     def test_clean_compliance_history_has_no_danger_chip(self) -> None:
         data = {
@@ -114,7 +96,10 @@ class EpaEchoDetailPanelSourceTests(TestCase):
                 "name": "Old Mill Factory",
                 "address": "123 Main St",
                 "registry_id": "R1",
-                "programs": [{"statute": "RCRA", "quarters_in_significant_noncompliance": "0", "formal_actions": "0", "total_penalties": "$0", "last_inspection": "2025-01-01"}],
+                "compliance_status": "In compliance",
+                "significant_violator": False,
+                "quarters_in_noncompliance": "0",
+                "last_inspection": "2025-01-01",
             },
         }
         ctx = self.source.render_context(self.pin, data)
@@ -122,7 +107,7 @@ class EpaEchoDetailPanelSourceTests(TestCase):
         self.assertEqual(ctx["chips"], [])
 
     def test_missing_registry_id_falls_back_to_generic_echo_link(self) -> None:
-        data = {"exact_site": {"name": "Old Mill Factory", "address": "123 Main St", "registry_id": "", "programs": []}}
+        data = {"exact_site": {"name": "Old Mill Factory", "address": "123 Main St", "registry_id": ""}}
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["footer_link"]["url"], "https://echo.epa.gov/")
@@ -151,7 +136,7 @@ class EpaEchoDetailPanelSourceFetchLinkTests(TestCase):
         return PinLink.objects.filter(pin=self.pin)
 
     def test_exact_site_match_adds_a_pin_link(self) -> None:
-        links = self._fetch_with({"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R123", "programs": []})
+        links = self._fetch_with({"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R123"})
         self.assertTrue(links.filter(url="https://echo.epa.gov/detailed-facility-report?fid=R123").exists())
 
     def test_no_exact_site_adds_no_link(self) -> None:
@@ -159,21 +144,20 @@ class EpaEchoDetailPanelSourceFetchLinkTests(TestCase):
         self.assertFalse(links.exists())
 
     def test_missing_registry_id_adds_no_link(self) -> None:
-        links = self._fetch_with({"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "", "programs": []})
+        links = self._fetch_with({"name": "Old Mill Factory", "address": "1 Main St", "registry_id": ""})
         self.assertFalse(links.exists())
 
     def test_link_is_also_added_to_the_locations_wiki_when_one_exists(self) -> None:
         from urbanlens.dashboard.models.links.model import WikiLink
-        from urbanlens.dashboard.models.wiki.model import Wiki
 
         wiki: Wiki = baker.make("dashboard.Wiki", location=self.location)
-        self._fetch_with({"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R123", "programs": []})
+        self._fetch_with({"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R123"})
         self.assertTrue(WikiLink.objects.filter(wiki=wiki, url="https://echo.epa.gov/detailed-facility-report?fid=R123").exists())
 
     def test_fetching_twice_does_not_duplicate_the_link(self) -> None:
         from urbanlens.dashboard.models.links.model import PinLink
 
-        exact_site = {"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R123", "programs": []}
+        exact_site = {"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R123"}
         self._fetch_with(exact_site)
         self._fetch_with(exact_site)
         self.assertEqual(PinLink.objects.filter(pin=self.pin, url="https://echo.epa.gov/detailed-facility-report?fid=R123").count(), 1)
@@ -205,7 +189,7 @@ class EpaEchoNearbyPanelSourceTests(TestCase):
                 {"name": "Exact Match Facility", "address": "1 A St", "registry_id": "RA", "compliance_status": "In compliance"},
                 {"name": "Other Facility", "address": "2 B St", "registry_id": "RB", "compliance_status": "In compliance"},
             ],
-            "exact_site": {"registry_id": "RA", "name": "Exact Match Facility", "address": "1 A St", "programs": []},
+            "exact_site": {"registry_id": "RA", "name": "Exact Match Facility", "address": "1 A St"},
         }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
@@ -217,7 +201,7 @@ class EpaEchoNearbyPanelSourceTests(TestCase):
         """If the only nearby facility IS the exact site, there's nothing left for this list to show."""
         data = {
             "facilities": [{"name": "Exact Match Facility", "address": "1 A St", "registry_id": "RA", "compliance_status": "In compliance"}],
-            "exact_site": {"registry_id": "RA", "name": "Exact Match Facility", "address": "1 A St", "programs": []},
+            "exact_site": {"registry_id": "RA", "name": "Exact Match Facility", "address": "1 A St"},
         }
         self.assertIsNone(self.source.render_context(self.pin, data))
 
@@ -284,7 +268,10 @@ class EpaFacilityNameProviderTests(TestCase):
 
 
 class FetchEpaEchoDataExactMatchTests(TestCase):
-    """_fetch_epa_echo_data's distance-based exact-match selection, against a mocked gateway."""
+    """_fetch_epa_echo_data's distance-based exact-match selection, against a mocked
+    RedataPointsOfInterestGateway. Unlike the direct EPA ECHO API this replaced, REData
+    resolves every candidate's coordinates and compliance attributes in a single call -
+    there is no separate, rate-limited per-candidate detail fetch left to test."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -294,57 +281,53 @@ class FetchEpaEchoDataExactMatchTests(TestCase):
             location=baker.make("dashboard.Location", latitude=40.0, longitude=-74.0),
         )
 
-    def _gateway(self, *, facilities, detail_by_registry_id):
-        gateway = mock.Mock()
-        gateway.get_nearby_facilities.return_value = facilities
-        gateway.get_facility_detail.side_effect = detail_by_registry_id.get
-        return gateway
+    def _poi(self, *, registry_id: str, name: str, latitude: float | None, longitude: float | None, **attributes) -> dict:
+        return {"external_id": registry_id, "name": name, "latitude": latitude, "longitude": longitude, "attributes": attributes}
 
     def test_no_facilities_returns_no_exact_site(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=self._gateway(facilities=[], detail_by_registry_id={})):
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            mock_gateway_cls.return_value.find_near.return_value = []
             result = _fetch_epa_echo_data(self.pin)
         self.assertIsNone(result["exact_site"])
 
     def test_facility_at_pin_coordinates_is_the_exact_site(self) -> None:
-        facilities = [{"name": "Right Here Facility", "address": "1 Main St", "registry_id": "R1"}]
-        details = {"R1": {"latitude": 40.0, "longitude": -74.0, "programs": []}}
-        with mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=self._gateway(facilities=facilities, detail_by_registry_id=details)):
+        pois = [self._poi(registry_id="R1", name="Right Here Facility", latitude=40.0, longitude=-74.0)]
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            mock_gateway_cls.return_value.find_near.return_value = pois
             result = _fetch_epa_echo_data(self.pin)
         assert result["exact_site"] is not None
         self.assertEqual(result["exact_site"]["registry_id"], "R1")
         self.assertEqual(result["exact_site"]["name"], "Right Here Facility")
 
     def test_facility_far_from_pin_coordinates_is_not_the_exact_site(self) -> None:
-        facilities = [{"name": "Far Away Facility", "address": "999 Elsewhere Ave", "registry_id": "R2"}]
-        details = {"R2": {"latitude": 41.0, "longitude": -75.0, "programs": []}}  # >0.1mi away
-        with mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=self._gateway(facilities=facilities, detail_by_registry_id=details)):
+        pois = [self._poi(registry_id="R2", name="Far Away Facility", latitude=41.0, longitude=-75.0)]  # >0.1mi away
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            mock_gateway_cls.return_value.find_near.return_value = pois
             result = _fetch_epa_echo_data(self.pin)
         self.assertIsNone(result["exact_site"])
 
     def test_closest_of_several_candidates_wins(self) -> None:
-        facilities = [
-            {"name": "Slightly Off Facility", "address": "2 Main St", "registry_id": "R1"},
-            {"name": "Dead On Facility", "address": "1 Main St", "registry_id": "R2"},
+        pois = [
+            self._poi(registry_id="R1", name="Slightly Off Facility", latitude=40.0005, longitude=-74.0),
+            self._poi(registry_id="R2", name="Dead On Facility", latitude=40.0, longitude=-74.0),
         ]
-        details = {
-            "R1": {"latitude": 40.0005, "longitude": -74.0, "programs": []},
-            "R2": {"latitude": 40.0, "longitude": -74.0, "programs": []},
-        }
-        with mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=self._gateway(facilities=facilities, detail_by_registry_id=details)):
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            mock_gateway_cls.return_value.find_near.return_value = pois
             result = _fetch_epa_echo_data(self.pin)
         assert result["exact_site"] is not None
         self.assertEqual(result["exact_site"]["registry_id"], "R2")
 
     def test_facility_with_no_registry_id_is_skipped(self) -> None:
-        facilities = [{"name": "No Registry Facility", "address": "1 Main St", "registry_id": ""}]
-        with mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=self._gateway(facilities=facilities, detail_by_registry_id={})):
+        pois = [self._poi(registry_id="", name="No Registry Facility", latitude=40.0, longitude=-74.0)]
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            mock_gateway_cls.return_value.find_near.return_value = pois
             result = _fetch_epa_echo_data(self.pin)
         self.assertIsNone(result["exact_site"])
 
-    def test_facility_with_no_detail_coordinates_is_skipped(self) -> None:
-        facilities = [{"name": "No Coords Facility", "address": "1 Main St", "registry_id": "R1"}]
-        details = {"R1": {"latitude": None, "longitude": None, "programs": []}}
-        with mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=self._gateway(facilities=facilities, detail_by_registry_id=details)):
+    def test_facility_with_no_coordinates_is_skipped(self) -> None:
+        pois = [self._poi(registry_id="R1", name="No Coords Facility", latitude=None, longitude=None)]
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            mock_gateway_cls.return_value.find_near.return_value = pois
             result = _fetch_epa_echo_data(self.pin)
         self.assertIsNone(result["exact_site"])
 
@@ -354,154 +337,23 @@ class FetchEpaEchoDataExactMatchTests(TestCase):
             profile=baker.make(User).profile,
             location=baker.make("dashboard.Location", latitude=48.8566, longitude=2.3522),  # Paris
         )
-        gateway = self._gateway(facilities=[], detail_by_registry_id={})
-        with mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway):
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
             result = _fetch_epa_echo_data(pin)
         self.assertEqual(result, {"facilities": [], "exact_site": None})
-        gateway.get_nearby_facilities.assert_not_called()
+        mock_gateway_cls.return_value.find_near.assert_not_called()
 
-    def test_exceeding_the_wall_clock_budget_stops_checking_further_candidates(self) -> None:
-        """Regression guard: a slow/degraded ECHO API must not be able to hold this Celery
-        task open anywhere near its 110s soft time limit and starve the ~10 other panel
-        fetches sharing the same worker pool on a cold pin page (docker-compose.yml's
-        celery-worker concurrency comment) - the loop must bail out on wall-clock time,
-        independent of the per-call timeout or candidate count."""
-        facilities = [
-            {"name": "First Facility", "address": "1 Main St", "registry_id": "R1"},
-            {"name": "Second Facility", "address": "2 Main St", "registry_id": "R2"},
-        ]
-        details = {
-            "R1": {"latitude": 41.0, "longitude": -75.0, "programs": []},  # not a match
-            "R2": {"latitude": 40.0, "longitude": -74.0, "programs": []},  # would match, if reached
-        }
-        gateway = self._gateway(facilities=facilities, detail_by_registry_id=details)
-        # Call 1 = loop start ("started"). Call 2 = budget check before candidate 1 (still
-        # within budget). Call 3 = budget check before candidate 2 (past the budget - stop).
-        monotonic_values = [0.0, 1.0, _EXACT_MATCH_BUDGET_SECONDS + 1]
-        with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway),
-            mock.patch("urbanlens.dashboard.plugins.builtin.epa_echo.time.monotonic", side_effect=monotonic_values),
-        ):
-            result = _fetch_epa_echo_data(self.pin)
-        self.assertIsNone(result["exact_site"])
-        gateway.get_facility_detail.assert_called_once_with("R1")
+    def test_facilities_are_persisted_to_epa_facility(self) -> None:
+        from urbanlens.dashboard.models.epa_facility.model import EpaFacility
 
-    def test_within_budget_checks_every_candidate(self) -> None:
-        facilities = [
-            {"name": "First Facility", "address": "1 Main St", "registry_id": "R1"},
-            {"name": "Second Facility", "address": "2 Main St", "registry_id": "R2"},
-        ]
-        details = {
-            "R1": {"latitude": 41.0, "longitude": -75.0, "programs": []},  # not a match
-            "R2": {"latitude": 40.0, "longitude": -74.0, "programs": []},  # exact match
-        }
-        gateway = self._gateway(facilities=facilities, detail_by_registry_id=details)
-        with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway),
-            mock.patch("urbanlens.dashboard.plugins.builtin.epa_echo.time.monotonic", return_value=0.0),
-        ):
-            result = _fetch_epa_echo_data(self.pin)
-        assert result["exact_site"] is not None
-        self.assertEqual(result["exact_site"]["registry_id"], "R2")
+        pois = [self._poi(registry_id="R1", name="Persisted Facility", latitude=40.0, longitude=-74.0, compliance_status="In compliance")]
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            mock_gateway_cls.return_value.find_near.return_value = pois
+            _fetch_epa_echo_data(self.pin)
 
-    def test_rate_limit_mid_loop_keeps_partial_results_instead_of_raising(self) -> None:
-        """Regression guard: ECHO's own 5-calls/minute limit (get_nearby_facilities alone
-        spends 2 of those) means the exact-match loop routinely exhausts it before finishing
-        all candidates. A RateLimitExceededError from get_facility_detail must stop the loop
-        and keep the already-fetched facilities list + any exact_site found so far, not
-        propagate and wipe out everything fetch() already has - see the module docstring for
-        why that used to leave the panel suppressed for 30 minutes with no cached data at all."""
-        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
-
-        facilities = [
-            {"name": "First Facility", "address": "1 Main St", "registry_id": "R1"},
-            {"name": "Second Facility", "address": "2 Main St", "registry_id": "R2"},
-        ]
-        gateway = self._gateway(facilities=facilities, detail_by_registry_id={"R1": {"latitude": 40.0, "longitude": -74.0, "programs": []}})
-        gateway.get_facility_detail.side_effect = [
-            {"latitude": 40.0, "longitude": -74.0, "programs": []},  # R1: exact match
-            RateLimitExceededError("epa_echo"),  # R2: rate limit trips here
-        ]
-        with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway),
-            mock.patch("urbanlens.dashboard.plugins.builtin.epa_echo.time.monotonic", return_value=0.0),
-        ):
-            result = _fetch_epa_echo_data(self.pin)
-        self.assertEqual(result["facilities"], facilities)
-        assert result["exact_site"] is not None
-        self.assertEqual(result["exact_site"]["registry_id"], "R1")
-
-    def test_candidates_are_checked_closest_by_latitude_first(self) -> None:
-        """Regression guard: ECHO's own rate limit usually allows checking only a
-        couple of candidates per fetch before RateLimitExceededError cuts the loop
-        short (see _EXACT_MATCH_BUDGET_SECONDS's comment) - that scarce budget must
-        be spent on the candidates most likely to be the true match, not just
-        whichever ones ECHO happened to list first. The true match here (RC) is
-        LAST in the raw facilities array but closest by latitude - the mocked
-        rate limit allows exactly one successful DFR lookup before the next
-        call trips it, so this only passes if RC (not RA, the array-order-
-        first candidate) was the one checked first. The loop keeps going after
-        finding a match (a closer candidate could still beat it), so a second
-        call happens too - checking that RA (the farthest, array-order-first
-        candidate) was never reached confirms the rate limit trips before the
-        loop gets that far, which is exactly why checking order matters here."""
-        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
-
-        facilities = [
-            {"name": "Far Facility A", "address": "1 Far St", "registry_id": "RA", "latitude": 45.0},
-            {"name": "Far Facility B", "address": "2 Far St", "registry_id": "RB", "latitude": 44.0},
-            {"name": "True Match", "address": "1 Main St", "registry_id": "RC", "latitude": 40.0001},
-        ]
-        gateway = mock.Mock()
-        gateway.get_nearby_facilities.return_value = facilities
-        gateway.get_facility_detail.side_effect = [
-            {"latitude": 40.0, "longitude": -74.0, "programs": []},
-            RateLimitExceededError("epa_echo"),
-        ]
-        with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway),
-            mock.patch("urbanlens.dashboard.plugins.builtin.epa_echo.time.monotonic", return_value=0.0),
-        ):
-            result = _fetch_epa_echo_data(self.pin)
-        checked_registry_ids = [call.args[0] for call in gateway.get_facility_detail.call_args_list]
-        self.assertEqual(checked_registry_ids[0], "RC")
-        self.assertNotIn("RA", checked_registry_ids)
-        assert result["exact_site"] is not None
-        self.assertEqual(result["exact_site"]["registry_id"], "RC")
-
-    def test_facilities_without_latitude_data_fall_back_to_original_order(self) -> None:
-        """No latitude on any candidate (e.g. a stale ECHO response shape) must not
-        crash the sort - ties should preserve the original array order."""
-        facilities = [
-            {"name": "First Facility", "address": "1 Main St", "registry_id": "R1"},
-            {"name": "Second Facility", "address": "2 Main St", "registry_id": "R2"},
-        ]
-        details = {
-            "R1": {"latitude": 41.0, "longitude": -75.0, "programs": []},
-            "R2": {"latitude": 40.0, "longitude": -74.0, "programs": []},
-        }
-        gateway = self._gateway(facilities=facilities, detail_by_registry_id=details)
-        with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway),
-            mock.patch("urbanlens.dashboard.plugins.builtin.epa_echo.time.monotonic", return_value=0.0),
-        ):
-            result = _fetch_epa_echo_data(self.pin)
-        assert result["exact_site"] is not None
-        self.assertEqual(result["exact_site"]["registry_id"], "R2")
-
-    def test_rate_limit_on_the_very_first_candidate_still_keeps_the_facilities_list(self) -> None:
-        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
-
-        facilities = [{"name": "First Facility", "address": "1 Main St", "registry_id": "R1"}]
-        gateway = self._gateway(facilities=facilities, detail_by_registry_id={})
-        gateway.get_facility_detail.side_effect = RateLimitExceededError("epa_echo")
-        with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway),
-            mock.patch("urbanlens.dashboard.plugins.builtin.epa_echo.time.monotonic", return_value=0.0),
-        ):
-            result = _fetch_epa_echo_data(self.pin)
-        self.assertEqual(result["facilities"], facilities)
-        self.assertIsNone(result["exact_site"])
+        entry = EpaFacility.objects.get(registry_id="R1")
+        self.assertEqual(entry.name, "Persisted Facility")
+        self.assertIsNotNone(entry.detail_fetched_at)
+        self.assertEqual(entry.data["compliance_status"], "In compliance")
 
 
 class PropagateExactSiteToNearbyLocationsTests(TestCase):
@@ -509,14 +361,13 @@ class PropagateExactSiteToNearbyLocationsTests(TestCase):
     confirmed for one Location, nearby pinned Locations whose own epa_echo cache
     has no match yet should immediately pick up the same match, instead of
     waiting on their own next fetch cycle (which could be stale for
-    `SiteSettings.external_data_cache_days` and might hit the same rate-limit
-    timing that produced no match the first time)."""
+    `SiteSettings.external_data_cache_days`)."""
 
     def setUp(self) -> None:
         super().setUp()
         self.owner = baker.make(User).profile
         self.location: Location = baker.make("dashboard.Location", latitude=40.0, longitude=-74.0)
-        self.exact_site = {"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R1", "latitude": 40.0, "longitude": -74.0, "programs": []}
+        self.exact_site = {"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R1", "latitude": 40.0, "longitude": -74.0}
 
     def _pinned_location(self, latitude: float, longitude: float) -> Location:
         from urbanlens.dashboard.models.pin.model import Pin
@@ -630,7 +481,7 @@ class DetailPanelFetchPropagatesExactSiteTests(TestCase):
 
         neighbor: Location = baker.make("dashboard.Location", latitude=40.0005, longitude=-74.0)
         baker.make(PinModel, profile=self.owner, location=neighbor)
-        exact_site = {"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R1", "latitude": 40.0, "longitude": -74.0, "programs": []}
+        exact_site = {"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R1", "latitude": 40.0, "longitude": -74.0}
 
         with mock.patch(
             "urbanlens.dashboard.plugins.builtin.epa_echo._fetch_epa_echo_data",
@@ -640,3 +491,80 @@ class DetailPanelFetchPropagatesExactSiteTests(TestCase):
 
         neighbor_row = LocationCache.objects.get(location=neighbor, source="epa_echo")
         self.assertEqual(neighbor_row.data["exact_site"], exact_site)
+
+
+class FacilityFromPoiKeyNamesTests(SimpleTestCase):
+    """The plugin's field names have to match the ones REData actually emits.
+
+    Two were guessed before REData's `epa_echo` provider module existed - the
+    docstring said so - and guessed wrong: `quarters_in_noncompliance` for
+    `quarters_with_violation`, and `last_inspection` for `last_inspection_date`.
+    Nothing failed. Every regulated facility simply printed "last inspected no
+    recorded inspection" and no non-compliance count, on a live page, for as
+    long as the guess stood.
+
+    The fixture below is REData's real shape, read from
+    `REData/src/redata/parcels/services/epa_echo/lookup.py`'s `attributes`
+    block - not the plugin's own shape, which is what made the original
+    mismatch invisible to tests.
+    """
+
+    def _redata_row(self) -> dict:
+        return {
+            "provider": "epa_echo",
+            "external_id": "110000123456",
+            "name": "Old Mill Factory",
+            "category": "Regulated facility",
+            "description": "123 Main St, Albany, NY, 12207",
+            "url": "https://echo.epa.gov/detailed-facility-report?fid=110000123456",
+            "latitude": 42.65,
+            "longitude": -73.75,
+            "attributes": {
+                "quarters_with_violation": "2",
+                "inspection_count": "7",
+                "last_inspection_date": "2025-01-01",
+                "programs": "",
+                "naics": "331110",
+                "sic": "3312",
+                "registry_id": "110000123456",
+                "address": "123 Main St, Albany, NY, 12207",
+                "compliance_status": "Significant Violator",
+                "significant_violator": True,
+                "active": True,
+                "search_lat": 42.65,
+                "search_lon": -73.75,
+            },
+        }
+
+    def test_the_compliance_fields_are_read_from_the_keys_redata_emits(self) -> None:
+        facility = _facility_from_poi(self._redata_row())
+
+        self.assertEqual(facility["last_inspection"], "2025-01-01")
+        self.assertEqual(facility["quarters_in_noncompliance"], "2")
+        self.assertEqual(facility["inspection_count"], "7")
+
+    def test_the_rest_of_the_shape_is_unchanged(self) -> None:
+        facility = _facility_from_poi(self._redata_row())
+
+        self.assertEqual(facility["registry_id"], "110000123456")
+        self.assertEqual(facility["name"], "Old Mill Factory")
+        self.assertEqual(facility["address"], "123 Main St, Albany, NY, 12207")
+        self.assertEqual(facility["compliance_status"], "Significant Violator")
+        self.assertTrue(facility["significant_violator"])
+
+    def test_a_row_with_no_attributes_degrades_rather_than_raising(self) -> None:
+        facility = _facility_from_poi({"external_id": "R1", "name": "Bare"})
+
+        self.assertEqual(facility["last_inspection"], "")
+        self.assertIsNone(facility["quarters_in_noncompliance"])
+
+    def test_the_card_says_when_it_was_inspected(self) -> None:
+        """End to end: the rendered fact used to read "last inspected no recorded inspection"."""
+        source = EpaEchoDetailPanelSource()
+        pin = None  # render_context does not touch the pin for this branch
+
+        context = source.render_context(pin, {"exact_site": _facility_from_poi(self._redata_row())})
+
+        assert context is not None
+        self.assertIn("last inspected 2025-01-01", context["facts"][0]["text"])
+        self.assertIn("2 quarter(s) in noncompliance", context["facts"][0]["text"])

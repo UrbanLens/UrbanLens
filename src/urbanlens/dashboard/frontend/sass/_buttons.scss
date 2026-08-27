@@ -26,12 +26,19 @@
 		// rendering here - Materialize's disabled-button rule used !important
 		// and always won, masking the token-based values above. Kept unchanged
 		// on purpose; revisit as a deliberate design decision, not in passing.
-		background-color: #DFDFDF;
+		background-color: var(--ul-grey-5);
 		border-color: var(--ul-grey-5b);
-		color: #9F9F9F;
+		color: rgba(0, 0, 0, 0.75);
 		box-shadow: none;
-		cursor: default;
 		pointer-events: none;
+		opacity: 1;
+        cursor: not-allowed;
+	}
+
+	// An <a> has no :disabled state - a link rendered inert (href dropped) flags
+	// itself with aria-disabled and greys out from here instead.
+	&[aria-disabled='true'] {
+		@include btn-disabled;
 	}
 
 	.material-symbols-outlined,

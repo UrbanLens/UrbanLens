@@ -375,3 +375,34 @@ class FetchInfoboxTests(SimpleTestCase):
         with mock.patch.object(self.gateway.session, "get", return_value=self._response(payload)):
             pairs = self.gateway._fetch_infobox("Some Article")
         self.assertEqual(len(pairs), 20)
+
+
+class CleanAndTrimExtractTests(SimpleTestCase):
+    """_clean_and_trim_extract() - article.extract is rendered with |safe (pin_wikipedia.html),
+    so this sanitization is the only thing standing between a hostile/compromised Wikipedia
+    response and script execution in the viewer's browser.
+    """
+
+    def test_script_and_event_handler_tags_are_stripped(self) -> None:
+        html = '<p onclick="alert(1)">Hello</p><img src="x" onerror="alert(1)"><script>alert(1)</script>'
+        result = WikipediaGateway._clean_and_trim_extract(html)
+        self.assertNotIn("<script", result)
+        self.assertNotIn("onclick", result)
+        self.assertNotIn("onerror", result)
+        self.assertNotIn("<img", result)
+
+    def test_javascript_href_is_dropped(self) -> None:
+        html = '<p><a href="javascript:alert(1)">link</a></p>'
+        result = WikipediaGateway._clean_and_trim_extract(html)
+        self.assertNotIn("javascript:", result)
+
+    def test_generic_attributes_like_title_and_lang_are_stripped(self) -> None:
+        """nh3/ammonia keeps a hardcoded "generic" attribute set (title, lang, ...) on every
+        tag regardless of an empty `attributes={}` allowlist unless `attribute_filter` also
+        rejects them - assert the extract cleaner actually does so, since the allowlist alone
+        does not guarantee "no attributes at all" as its call site intends.
+        """
+        html = '<p title="injected" lang="en">Hello</p>'
+        result = WikipediaGateway._clean_and_trim_extract(html)
+        self.assertNotIn("title=", result)
+        self.assertNotIn("lang=", result)

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import chain
+import logging
 from typing import TYPE_CHECKING
 
 from django.urls import reverse
@@ -19,6 +20,9 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from urbanlens.dashboard.models.profile.model import Profile
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,9 +187,17 @@ def get_journal_entries(profile: Profile, sources: Iterable[str] | None = None) 
     Returns:
         List of JournalEntry across the selected sources, newest first.
     """
-    selected = JOURNAL_SOURCES.values() if sources is None else [JOURNAL_SOURCES[key] for key in sources if key in JOURNAL_SOURCES]
+    selected = JOURNAL_SOURCES.items() if sources is None else [(key, JOURNAL_SOURCES[key]) for key in sources if key in JOURNAL_SOURCES]
     entries: list[JournalEntry] = []
-    for source in selected:
-        entries.extend(source(profile))
+    for key, source in selected:
+        # Isolated per source, for the reason the docstring above already gives for
+        # unknown keys: a journal missing one domain beats a 500. That reasoning only
+        # covered a key that isn't registered; a registered source that *raises* took
+        # the whole journal down with it. extend() consumes the generator incrementally,
+        # so a source failing partway keeps what it already yielded.
+        try:
+            entries.extend(source(profile))
+        except Exception:
+            logger.exception("Journal source %r failed; omitting it from the journal", key)
     entries.sort(key=lambda entry: entry.occurred_at, reverse=True)
     return entries

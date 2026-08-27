@@ -28,9 +28,9 @@ from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.direct_message_shares import recommend_friend_in_message, share_pin_in_message
-from urbanlens.dashboard.services.direct_messages import create_direct_message, serialize_direct_message
-from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+from urbanlens.dashboard.services.messaging.direct_message_shares import recommend_friend_in_message, share_pin_in_message
+from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message, serialize_direct_message
+from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
 
 def _profile() -> Profile:
@@ -61,12 +61,12 @@ class DeferBroadcastTests(TestCase):
         self.recipient = _profile()
         _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
 
-    @patch("urbanlens.dashboard.services.direct_messages._broadcast_direct_message")
+    @patch("urbanlens.dashboard.services.messaging.direct_messages._broadcast_direct_message")
     def test_defer_broadcast_skips_the_push(self, mock_broadcast) -> None:
         create_direct_message(self.sender, self.recipient, "hi", defer_broadcast=True)
         mock_broadcast.assert_not_called()
 
-    @patch("urbanlens.dashboard.services.direct_messages._broadcast_direct_message")
+    @patch("urbanlens.dashboard.services.messaging.direct_messages._broadcast_direct_message")
     def test_non_deferred_still_broadcasts(self, mock_broadcast) -> None:
         message = create_direct_message(self.sender, self.recipient, "hi")
         mock_broadcast.assert_called_once_with(message)
@@ -88,7 +88,7 @@ class SharePinBroadcastOrderingTests(TestCase):
         _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
         self.pin = baker.make(Pin, profile=self.sender, parent_pin=None)
 
-    @patch("urbanlens.dashboard.services.direct_message_shares.broadcast_direct_message")
+    @patch("urbanlens.dashboard.services.messaging.direct_message_shares.broadcast_direct_message")
     def test_broadcast_happens_after_share_is_attached(self, mock_broadcast) -> None:
         message = share_pin_in_message(self.sender, self.recipient, self.pin, "check this out")
         mock_broadcast.assert_called_once()
@@ -126,7 +126,7 @@ class RecommendFriendBroadcastOrderingTests(TestCase):
         _make_accepted_friendship(self.sender, self.recommended)
         _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
 
-    @patch("urbanlens.dashboard.services.direct_message_shares.broadcast_direct_message")
+    @patch("urbanlens.dashboard.services.messaging.direct_message_shares.broadcast_direct_message")
     def test_broadcast_happens_after_share_is_attached(self, mock_broadcast) -> None:
         message = recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet my friend")
         mock_broadcast.assert_called_once()
@@ -395,7 +395,7 @@ class ShareCompositeAtomicityTests(TestCase):
 
     def test_refused_trip_invite_message_leaves_no_membership_behind(self) -> None:
         from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-        from urbanlens.dashboard.services.direct_message_shares import invite_to_trip_in_message
+        from urbanlens.dashboard.services.messaging.direct_message_shares import invite_to_trip_in_message
 
         trip = Trip.objects.create(name="My Trip", creator=self.sender)
         TripMembership.objects.create(trip=trip, profile=self.sender)
@@ -407,7 +407,7 @@ class ShareCompositeAtomicityTests(TestCase):
 
     def test_refused_recommendation_leaves_no_grant_behind(self) -> None:
         from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
-        from urbanlens.dashboard.services.direct_message_shares import recommend_friend_in_message
+        from urbanlens.dashboard.services.messaging.direct_message_shares import recommend_friend_in_message
 
         recommended = _profile()
         _make_accepted_friendship(self.sender, recommended)
@@ -444,7 +444,7 @@ class RecommendationBlockTests(TestCase):
 
     def test_recommending_someone_who_blocked_the_recipient_is_refused(self) -> None:
         from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
-        from urbanlens.dashboard.services.direct_message_shares import recommend_friend_in_message
+        from urbanlens.dashboard.services.messaging.direct_message_shares import recommend_friend_in_message
 
         self._block(self.recommended, self.recipient)
         with self.assertRaises(PermissionError):
@@ -453,7 +453,7 @@ class RecommendationBlockTests(TestCase):
         self.assertFalse(DirectMessage.objects.between(self.sender, self.recipient).exists())
 
     def test_block_in_the_other_direction_is_also_refused(self) -> None:
-        from urbanlens.dashboard.services.direct_message_shares import recommend_friend_in_message
+        from urbanlens.dashboard.services.messaging.direct_message_shares import recommend_friend_in_message
 
         self._block(self.recipient, self.recommended)
         with self.assertRaises(PermissionError):
@@ -461,7 +461,7 @@ class RecommendationBlockTests(TestCase):
 
     def test_block_refusal_is_indistinguishable_from_recommendations_disabled(self) -> None:
         """The sender must not be able to tell "blocked" apart from "opted out"."""
-        from urbanlens.dashboard.services.direct_message_shares import recommend_friend_in_message
+        from urbanlens.dashboard.services.messaging.direct_message_shares import recommend_friend_in_message
 
         other = _profile()
         _make_accepted_friendship(self.sender, other)
@@ -483,7 +483,7 @@ class RecommendationBlockTests(TestCase):
 
     def test_block_placed_after_the_grant_kills_access_immediately(self) -> None:
         from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
-        from urbanlens.dashboard.services.direct_message_shares import recommend_friend_in_message
+        from urbanlens.dashboard.services.messaging.direct_message_shares import recommend_friend_in_message
 
         recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet them")
         self.assertTrue(DirectMessageTemporaryAccess.grants_access(self.recommended.pk, self.recipient.pk))

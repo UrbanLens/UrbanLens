@@ -7,9 +7,9 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
 from urbanlens.UrbanLens.environments.dev import Development
 from urbanlens.UrbanLens.environments.factory import select_environment
@@ -18,8 +18,6 @@ from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes
 from urbanlens.UrbanLens.environments.prod import Production
 from urbanlens.UrbanLens.environments.staging import Staging
 from urbanlens.UrbanLens.environments.test import Testing
-from urbanlens.core.tests.testcase import SimpleTestCase
-
 
 _hyp = settings(max_examples=50, deadline=None)
 

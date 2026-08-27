@@ -28,7 +28,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor
 from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.wiki.queryset import WikiManager
-from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel):
+class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
     """Community-editable page describing a shared, real-world place.
 
     Wiki is the *community* half of the place model:
@@ -110,10 +110,23 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         related_name="wikis",
     )
 
-    # The shared address/coordinate row this page describes.
+    # The shared address/coordinate row this page displays at, and routes by
+    # (/location/<slug>/wiki/). Coordinates and address are read from here.
     location = OneToOneField(
         "dashboard.Location",
         on_delete=RESTRICT,
+        related_name="wiki",
+    )
+    # The real-world thing this page is *about*, and the unit of dedup: one
+    # community page per parcel or building, however many coordinates people
+    # pinned it at. Location can't do that job - two users pinning opposite
+    # ends of the same property get two Locations and would get two wikis.
+    # Null for a coordinate no provider knows, which behaves as it always has.
+    place = OneToOneField(
+        "dashboard.Place",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
         related_name="wiki",
     )
     # Self-referential FK for community sub-markers ("child wikis") nested
@@ -137,13 +150,56 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         blank=True,
         related_name="created_wikis",
     )
-    # Flips true the first time a profile other than created_by views the
-    # wiki page (see LocationWikiView.get). Once true, the wiki is community
-    # content and its creator can no longer unilaterally delete it.
-    viewed_by_other = BooleanField(default=False)
+    # Only meaningful on a child wiki - a detail pin - where it records who
+    # placed it, and null means it was mirrored from building data. A
+    # top-level page has no creator: every pinned Location gets one
+    # automatically (tasks.ensure_wiki_for_location), so there is nobody to
+    # attribute it to and nothing about creating one to reward.
+
+    #: Scalar fields whose writes record provenance. Mirrors
+    #: services.wiki.wiki_edits.WIKI_EDITABLE_FIELDS - the fields a person can
+    #: change - plus pin_type and indoor_outdoor, which enrichment and the
+    #: Consensus game both write. Declared rather than inferred so a new column
+    #: does not start being versioned by accident.
+    #:
+    #: The reason this list matters: a concealed viewer is shown automatic
+    #: writes plus their own plus their friends', so every field a person can
+    #: change has to carry who changed it. See docs/designs/versioned-content.md.
+    #: True only on a concealed projection built by
+    #: ``services.wiki.concealment.conceal_wiki`` - a copy of this row carrying
+    #: the subset of field values one viewer is entitled to see. Declared here
+    #: rather than set ad hoc so the distinction is visible from the model, and
+    #: so reading it is a plain attribute access with an honest type. A row
+    #: loaded from the database is never concealed.
+    _ul_concealed: bool = False
+
+    #: Which viewer the projection above was built for, so re-concealing is a
+    #: no-op for that viewer and a rebuild for anyone else. None means signed
+    #: out, which is why this is a separate attribute rather than a falsy pk.
+    _ul_concealed_for: int | None = None
+
+    versioned_fields = (
+        "name",
+        "description",
+        "fences",
+        "alarms",
+        "cameras",
+        "security",
+        "signs",
+        "vps",
+        "plywood",
+        "locked",
+        "date_abandoned",
+        "date_last_active",
+        "pin_type",
+        "indoor_outdoor",
+    )
+
+    #: Where this model's field revisions are stored.
+    revision_model = "dashboard.WikiFieldRevision"
     # Hero banner photo for the wiki page. Any Image tied to this wiki
     # (community gallery uploads, or a materialized Media-gallery item, see
-    # services.media_materialize) is eligible; SET_NULL so deleting the photo
+    # services.media.media_materialize) is eligible; SET_NULL so deleting the photo
     # just drops the banner rather than the wiki. Display is further gated by
     # each viewer's own Profile.show_wiki_cover_photos preference.
     cover_photo = ForeignKey(
@@ -156,6 +212,7 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
 
     if TYPE_CHECKING:
         location_id: int
+        place_id: int | None
         parent_wiki_id: int | None
         created_by_id: int | None
         cover_photo_id: int | None
@@ -190,7 +247,13 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         return instance
 
     def save(self, *args, **kwargs) -> None:
-        """Save the wiki, keeping the alias list in sync with the name.
+        """Save the wiki, adopting its location's place and syncing its aliases.
+
+        A wiki describes whatever its location stands on, so an unset ``place``
+        adopts the location's on first save. Skipped when that place already
+        has a wiki - the OneToOne is the dedup rule, and the right way to reach
+        an existing page is ``Wiki.objects.existing_for_location``, not a
+        second row racing it.
 
         The alias list is the full set of names the place has ever been known
         by, including the current one - so whenever a meaningful ``name`` is
@@ -205,6 +268,12 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         update_fields = kwargs.get("update_fields")
         if update_fields is None or "name" in update_fields:
             self.name = sanitize_name(self.name) or ""
+        if self.place_id is None and self.location_id and update_fields is None:
+            from urbanlens.dashboard.models.location.model import Location
+
+            place_id = Location.objects.filter(pk=self.location_id).values_list("place_id", flat=True).first()
+            if place_id is not None and not type(self).objects.filter(place_id=place_id).exclude(pk=self.pk).exists():
+                self.place_id = place_id
         super().save(*args, **kwargs)
         if update_fields is not None and "name" not in update_fields:
             return
@@ -216,7 +285,21 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
                 # Case-insensitive lookup matches the alias uniqueness rule, so
                 # renaming to a different casing of an existing alias reuses
                 # that row instead of racing the DB constraint.
-                WikiAlias.objects.get_or_create(wiki=self, name__iexact=new_name, defaults={"name": new_name})
+                # created_by from the write context, not left null. The alias
+                # concealment rule reads `source` because created_by is null
+                # for the geocoder backfill too - so a rename alias with the
+                # default source=USER and no author matched neither branch and
+                # was concealed from everyone, including the person who had
+                # just renamed the wiki: the name showed with no alias row
+                # behind it, and re-adding it by hand hit the uniqueness
+                # constraint. The renamer is exactly who authored it.
+                from urbanlens.dashboard.models.abstract.versioning import current_write_actor
+
+                WikiAlias.objects.get_or_create(
+                    wiki=self,
+                    name__iexact=new_name,
+                    defaults={"name": new_name, "created_by_id": current_write_actor()},
+                )
             except DatabaseError:
                 logger.exception("Could not ensure alias for wiki %s name %r", self.pk, self.name)
         self._loaded_name = self.name
@@ -262,48 +345,33 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     # Self-service deletion
     # ------------------------------------------------------------------
 
-    def can_be_deleted_by(self, profile: Profile) -> bool:
-        """Whether ``profile`` may delete this wiki outright.
-
-        Only the profile that created the wiki may do so, and only before
-        anyone else has viewed it - once another profile has seen the page,
-        it's community content and deletion should go through normal
-        moderation rather than a unilateral self-service action.
-
-        Args:
-            profile: The profile requesting deletion.
-
-        Returns:
-            True if ``profile`` created this wiki and no one else has viewed it.
-        """
-        return self.created_by_id is not None and self.created_by_id == profile.id and not self.viewed_by_other
-
     # ------------------------------------------------------------------
     # Label helpers
     # ------------------------------------------------------------------
 
-    @property
-    def categories(self):
-        """Labels of kind "category" attached to this wiki."""
-        return self.labels.all().categories()
-
-    @property
-    def tags(self):
-        """Labels of kind "tag" attached to this wiki."""
-        return self.labels.all().tags()
-
-    @property
-    def statuses(self):
-        """Labels of kind "status" attached to this wiki."""
-        return self.labels.all().statuses()
-
     def add_category(self, category_name: str, save: bool = True) -> Label | None:
         """Attach a category label to this wiki by name, creating it if needed."""
-        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, Label
 
         category_name = category_name.lower()
         try:
-            category, _created = Label.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
+            category, _created = Label.objects.get_or_create(
+                name__iexact=category_name,
+                kind=KIND_CATEGORY,
+                # profile=None belongs in the *lookup*, not just defaults: this
+                # creates a global category, so the get must find a global one.
+                # Without it the get spans every profile's labels and returns
+                # MultipleObjectsReturned as soon as two users have a category of
+                # the same name - which the case-insensitive match below makes
+                # dramatically more likely.
+                profile=None,
+                # Looked up case-insensitively because the uniqueness constraint is
+                # (lower(name), profile, kind): an exact-match get would miss an
+                # existing "Factory" while creating "factory", and the insert would
+                # then violate the constraint. get_or_create cannot recover from that
+                # either - its retry repeats the same exact-match get.
+                defaults={"name": category_name},
+            )
             if category:
                 self.labels.add(category)
                 if save:
@@ -316,6 +384,22 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     # ------------------------------------------------------------------
     # Derived values
     # ------------------------------------------------------------------
+
+    @property
+    def effective_latitude(self) -> float:
+        """Wiki marker latitude, as a float - mirrors ``Pin.effective_latitude``.
+
+        Child markers (``services.pins.pin_restructure.match_marker`` and
+        friends) are typed as ``Pin | Wiki`` and read this name off whichever
+        one they were handed; keeping the same name and float type here is
+        what lets that code stay marker-neutral.
+        """
+        return float(self.location.latitude)
+
+    @property
+    def effective_longitude(self) -> float:
+        """Wiki marker longitude, as a float. See ``effective_latitude``."""
+        return float(self.location.longitude)
 
     @property
     def effective_date_last_active(self):
@@ -395,8 +479,6 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         db_table = "dashboard_wikis"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["uuid"], name="idxdb_wiki_uuid"),
             Index(fields=["name"], name="idxdb_wiki_name"),
             Index(fields=["location"], name="idxdb_wiki_location"),
-            Index(fields=["parent_wiki"], name="idxdb_wiki_parent_wiki"),
         ]

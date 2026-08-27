@@ -24,7 +24,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.export import _export_connections, _export_pins
+from urbanlens.dashboard.services.import_export.export import _export_connections, _export_pins
 
 
 def _read(temp_dir: str, filename: str):

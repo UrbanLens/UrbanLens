@@ -18,7 +18,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.services.api_keys import api_keys_settings_context, generate_api_key, revoke_api_key
+from urbanlens.dashboard.services.auth.api_keys import api_keys_settings_context, generate_api_key, revoke_api_key
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse

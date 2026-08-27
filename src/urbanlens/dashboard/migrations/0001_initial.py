@@ -35,7 +35,7 @@ def noop(apps, schema_editor):
     pass
 
 def backfill_primary_email_normalized(apps, schema_editor):
-    from urbanlens.dashboard.services.email_normalization import normalize_email
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 
     Profile = apps.get_model("dashboard", "Profile")
     updated = []

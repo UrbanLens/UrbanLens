@@ -18,7 +18,7 @@ class SafetyCheckinLocationSerializer(serializers.Serializer):
     ``latitude``/``longitude``/``accuracy`` are null whenever ``sharing_enabled``
     is false - disabling sharing clears the last-known fix rather than leaving
     a stale marker visible to partners (see
-    ``services.safety.set_live_location_sharing``), so there is nothing extra
+    ``services.visits.safety.set_live_location_sharing``), so there is nothing extra
     to scrub here.
     """
 

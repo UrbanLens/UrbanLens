@@ -12,8 +12,7 @@ exercise read the LocationCache directly.
 
 from __future__ import annotations
 
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
@@ -21,6 +20,7 @@ from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.place.model import PlaceKind
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.locations.site_scope import (
     BUILDING_MATCH_METERS,
@@ -35,6 +35,8 @@ from urbanlens.dashboard.services.locations.site_scope import (
     nearest_building,
     parcel_buildings,
 )
+
+from .place_helpers import official_geometry
 
 _coord_counter = 0
 
@@ -232,13 +234,9 @@ class ClassificationTests(TestCase):
         self.profile = baker.make("dashboard.Profile")
 
     def _location_on_a_footprint(self) -> Location:
-        """A location whose generated BUILDING boundary exists - i.e. it is on a building."""
+        """A location standing on a known building footprint."""
         location = _make_location()
-        Boundary.objects.create(
-            location=location,
-            boundary_type=BoundaryType.BUILDING,
-            generated_polygon=_footprint_around(float(location.latitude), float(location.longitude)),
-        )
+        official_geometry(location, _footprint_around(float(location.latitude), float(location.longitude)), kind=PlaceKind.BUILDING)
         return location
 
     def test_a_marker_on_a_building_footprint_is_a_building(self) -> None:

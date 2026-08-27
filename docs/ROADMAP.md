@@ -2,7 +2,7 @@
 
 A strategic planning document for agents (and humans) doing implementation, bug-hunting, and
 feature work on UrbanLens. Generated 2026-07-18 from a full review of `TODO.md`,
-`docs/FEATURES.md`, `docs/NOTES.md`, `docs/api-expansion-candidates.md`, `docs/notes/ai/todo.md`,
+`docs/FEATURES.md`, `docs/NOTES.md`, `docs/reports/api-expansion-candidates.md`, `docs/notes/ai/todo.md`,
 recent git history, and the codebase structure.
 
 **How to use this document:** You are probably a capable agent who can plan your own task. What
@@ -69,7 +69,7 @@ privacy bug.
    contacts, mentions) must check block status at the initiation point. A test named "blocked"
    must actually exercise a *blocked* relationship, not just a privacy tier.
 3. **Every pin/location share path calls `resolve_origin_share` + `record_share_exposure`**
-   (`services/share_provenance.py`) so the `LocationExposure` provenance chain stays intact. New
+   (`services/sharing/share_provenance.py`) so the `LocationExposure` provenance chain stays intact. New
    sharing surfaces (DM pin shares, group chats, trips, lists, markup maps, exports) must not
    bypass this.
 4. **External sync channels need separate revocation.** Membership removal is not the same as
@@ -84,7 +84,7 @@ privacy bug.
    The user-editable `polygon` is display-only — otherwise users could inflate boundaries to
    claim overlap with other users' pins/areas and widen their wiki access (§1.3.1 makes this
    invariant *more* critical, not less).
-7. **Community counts are fuzzed** (`services/community_counts.py`) — never expose exact
+7. **Community counts are fuzzed** (`services/wiki/community_counts.py`) — never expose exact
    "N users pinned this" counts; exact counts + timeline = individual activity inference.
 8. **Pin slugs are unique per-profile, not global.** Any slug lookup not scoped by profile
    silently returns another user's pin. Recurring bug source (uploads, galleries, weather).
@@ -131,7 +131,7 @@ When a TODO item is ambiguous, these tiebreakers reflect the owner's demonstrate
   and completes with a toast (UL-119). The `panel_fetch` queue exists specifically so slow panel
   fetches can't starve the general worker; CPU-heavy panels opt out via `PanelSource.queue`.
 - **Plugins > one-off integrations.** New external services are `Gateway` + `UrbanLensPlugin`
-  manifest (`docs/plugins.md`), not controller-level API calls.
+  manifest (`docs/designs/plugins.md`), not controller-level API calls.
 - **The app is beta.** Weirdness is a bug, not a convention. Fix it or log it in
   `docs/PROBLEMS.md`. Existing suboptimal patterns are not precedent.
 - **Free/open APIs before paid.** See §4.7.
@@ -291,18 +291,18 @@ The app now has real users with 8k+ pins; several systems were designed for hund
 - **Docstrings**: Google style, everywhere, Sphinx-consumed. Ruff enforces much of style;
   always run `ruff check --fix` before hand-fixing.
 - **MyPy**: fix types at the origin; no `cast`-to-silence. Known generics gaps: manager
-  typing for `Badge.objects.tags()` (UL-126) and `user.profile` (UL-127) — a proper
+  typing for `Label.objects.tags()` (UL-126) and `user.profile` (UL-127) — a proper
   generic `Manager`/`QuerySet` typing pass in `models/abstract/` would fix a whole class.
 
 ### 3.3 Extensibility
 
-- The **plugin contract** (`docs/plugins.md`) is the extension surface: rate-limited services,
+- The **plugin contract** (`docs/designs/plugins.md`) is the extension surface: rate-limited services,
   panels, imagery providers, name providers, enrichment sources, hooks. When adding a *new kind*
   of contribution (e.g. a new panel family, a routing provider chain, an export format), extend
   the plugin contract rather than hardcoding a registry — the cost is small and it keeps
   third-party parity.
 - **Import/export formats** live in `services/import_formats/` with documented formats
-  (`docs/import_formats.md`); new formats (XLS UL-162, KML/GPX/GeoJSON/CSV *export* UL-382,
+  (`docs/designs/drafts/import_formats.md`); new formats (XLS UL-162, KML/GPX/GeoJSON/CSV *export* UL-382,
   targeted/filtered exports UL-377) should slot into that framework symmetrically.
 - **AI gateway** is pluggable (OpenAI/Cloudflare/HF/Ollama). New AI features (trip suggestions
   UL-60, chat assistant UL-293, county-strategy property lookup UL-46) go through the gateway
@@ -331,8 +331,10 @@ The app now has real users with 8k+ pins; several systems were designed for hund
 
 ### 3.5 Testing strategy
 
-- **TDD for bug reports**: failing test first, then fix. Use pytest (never `manage.py test` —
-  staticfiles-manifest 500s), always set a unique `UL_TEST_DB_NAME`.
+- **TDD for bug reports**: failing test first, then fix. Use pytest (never `manage.py test` under
+  the default settings module — staticfiles-manifest 500s; see `docs/NOTES.md` for why, and why CI
+  running `manage.py test` under `settings.test` is nonetheless correct), always set a unique
+  `UL_TEST_DB_NAME`.
 - **Hypothesis property tests wherever possible** (UL-120/369) — but `@given` + `self.client`
   don't mix in this repo's TestCase (state leaks across examples): property-test pure
   logic/services directly; plain tests for views. (Fixing TestCase so they *do* mix is itself a
@@ -344,7 +346,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
   full-page renders where equivalent.
 - **Known worst-covered security-adjacent modules** (from the 2026-07-18 full run):
   `controllers/safety.py` (49%), direct-message-shares trio (54–58%),
-  `services/google_oauth.py` (39%), `consumers.py` (35%). These are the highest-value
+  `services/auth/google_oauth.py` (39%), `consumers.py` (35%). These are the highest-value
   coverage targets in the repo.
 - **Integration/E2E** (UL-368): nothing exists today. The chiron dev server
   (`https://dev.urbanlens.org`) is the natural target for a Playwright-style smoke suite
@@ -388,10 +390,23 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
    too vague to reproduce without asking Jess which specific setting/page - do that before
    spending more time on it, rather than guessing at a shared cause that these two related
    items turned out not to have.
-5. **Filter-view page defects cluster** (prompts backlog): page overflows footer; deleted
-   include/exclude polygons resurrect on next draw; map preview doesn't refresh on criteria
-   change; icon picker dead; badge picker lacks the map-sidebar's features. One agent should own
-   the whole page against the map sidebar as reference implementation (§2.3).
+5. **Filter-view page defects cluster** (prompts backlog) — TRIAGED 2026-08-08, three of five
+   already resolved: the dead icon picker was fixed by `entries/saved-filter-detail.ts` (its
+   own comment describes the missing-global root cause), the badge picker gained the map
+   sidebar's full engine 2026-07-23 (`shared/label-picker.ts`, browser-verified per
+   `docs/PROBLEMS.md`), and the preview *does* live-refresh on criteria change (debounced
+   change/input listeners + a supersession token; `_sfSaveRegions` even dispatches a synthetic
+   `change` because property assignment fires no DOM event). Two remain:
+   - **Polygon resurrection — mechanism identified, fix designed, needs a browser to verify.**
+     It is leaflet-draw's transactional delete: click-deletions only commit when the user
+     clicks the tiny "Save" link in the delete sub-toolbar; switching straight to the draw
+     tool disables delete mode, which *reverts* uncommitted deletions (`draw:deleted` never
+     fires, so `_sfSaveRegions` is never wrong - the layers genuinely come back). Fix: drop
+     `edit.remove` from the Draw control and implement immediate-commit deletion (a delete
+     toggle that removes a clicked layer from `drawnItems` and calls `_sfSaveRegions()` right
+     away), since the page's own save logic is already correct on every committed change.
+   - **Page overflows footer** — CSS; reproduce in a browser before touching it.
+
 6. **Pin-detail cache freshness** (UL-277) — items marked "fresh" after 10+ minutes;
    audit the freshness-window computation in `external_data.py`.
 7. ~~**Filter correctness**: unrated pin passing a rating filter (UL-270); sliders ignoring
@@ -461,7 +476,7 @@ close or convert to a bug."
     locality wrapped as one exact-phrase term specifically so a generic street address can't match
     the same address in an unrelated city. Already has dedicated test coverage naming this exact
     caller. No code change needed.
-16. ~~**Badge-kind-change UX** (UL-155)~~ RESOLVED 2026-07-19 (`02729c81`) — other properties do
+16. ~~**Label-kind-change UX** (UL-155)~~ RESOLVED 2026-07-19 (`02729c81`) — other properties do
     get updated correctly on a kind conversion (memberships migrate, parent/child hierarchy is
     cleared since it only makes sense within one kind, pin marker caches invalidate, protected
     labels are blocked), but it wasn't clear beforehand: the edit form's hint only mentioned
@@ -532,12 +547,12 @@ These have most of their machinery already built:
    manually pick photos in Google's own hosted UI, confirmed directly in
    `controllers/google_photos.py`'s own docstring.
 4. ~~**Geolocation visit creation** (UL-312)~~ VERIFIED-ALREADY-IMPLEMENTED 2026-07-19 — contrary
-   to this list treating it as unbuilt, `services.visits.record_geolocation_pin_visits()` already
+   to this list treating it as unbuilt, `services.visits.visits.record_geolocation_pin_visits()` already
    creates a same-day `PinVisit(source=GEOLOCATION)` for every pin whose boundary contains the
    device's point, wired end-to-end from a `MapController` endpoint through to the live GPS
    success callback in `map/index.html`, with full existing test coverage. No code change needed.
 5. ~~**Targeted exports + more formats** (UL-377, UL-382)~~ RESOLVED 2026-07-19 (`56c2113e`,
-   `de3394f2`) — `services/export_formats.py` adds GeoJSON/KML/GPX/CSV writers (typed against a
+   `de3394f2`) — `services/import_export/export_formats.py` adds GeoJSON/KML/GPX/CSV writers (typed against a
    small `_ExportablePin` Protocol, not the concrete `Pin` model, so tests don't need a DB) mirroring
    the existing import-side readers. Reachable two ways: the main map's multi-select toolbar
    (`PinBulkExportView`, `/map/pins/bulk-export/`) for an ad-hoc/search-scoped selection, and a new
@@ -586,6 +601,24 @@ Do not start these without a written design (add it to `docs/`):
 - **Property ownership records via county-strategy AI** (UL-46) — needs the AI-sandbox
   groundwork (UL-163) and a strategy-persistence schema; big but well-sketched in TODO.
 - **Offline maps** (UL-287), **native apps** (UL-72+) — out of current scope; note only.
+- **Hidden reputation/points system gating sensitive wiki content** (UL-397/UL-398) — design doc
+  at `docs/designs/reputation-and-gating.md`, **reviewed and corrected 2026-08-24**; read its
+  "Design review" section first, which supersedes the rest.
+  - The **ledger** is being built (models, rule registry, scoring, decay, caps, retraction).
+    Correction to an earlier note here: Consensus points are *not* a usable base — see the five
+    structural reasons in the design doc's inventory. The admin-visible-score conflict was
+    resolved by Jess 2026-08-21 and does not block.
+  - The **gate** is deliberately deferred. A six-channel audit
+    (`docs/designs/reputation-gating-tells.md`, 82 verified findings) established that concealing
+    a wiki by filtering its content cannot work here: the empty state is a row the viewer *owns*,
+    `Article.wiki` is a OneToOne so the first save always collides, and a gated account gets no
+    draft or enrichment run of its own. The workable shape is a copy-on-write shadow wiki, which
+    is a materially larger build; the decision is to get real score data first and then choose.
+  - Two live oracles found by that audit are already fixed (`f15f0a3b`, `5357d400`).
+- **Facts model: topic/geography-scoped reliability** (UL-399) — the Facts model itself already
+  exists and works (`dashboard/models/facts/`); missing piece is decomposing
+  `ConsensusProfile.trust_score`'s single global scalar into per-category/per-region posteriors.
+  See the same design doc.
 
 ### 4.5 Tier 5: UI polish backlog
 
@@ -609,8 +642,18 @@ of them may already be complete, and "fixing" them will lead to unwanted ui chan
 - Template partial reorg (UL-292); vestigial-asset cleanup task (UL-205, UL-370).
 - `TODO.md` hygiene (UL-363): when you complete or invalidate an item, strike it with an
   evidence note (the 2026-07-18 strike-sweep set the precedent format).
+- Comment-history cleanup sweep (UL-400) — "used to be X, now Y" narration instead of
+  current-behavior description; `tasks.py`, `controllers/pin.py`,
+  `services/social/friendship.py` are the densest spots found so far.
+- SCSS convention/duplication cleanup (UL-401) — bespoke button/component styles instead of the
+  shared `.btn` convention; measure with the DevTools disable-each-rule method before assuming
+  scale. Also 707 inline `style=` attributes across 114 templates to migrate to SCSS (excluding
+  email templates, where inline styles are required).
+- Floor plan editor CSS-convention + copy polish (UL-402) — not a redesign; audit found the
+  feature is complete and correctly built, just using one-off button classes instead of `.btn`
+  and a couple of overly wordy strings.
 
-### 4.7 API & data-source expansion (see `docs/api-expansion-candidates.md` for the full menu)
+### 4.7 API & data-source expansion (see `docs/reports/api-expansion-candidates.md` for the full menu)
 
 Priorities, biased free/open-first, aligned with that doc's recommendations:
 
@@ -656,9 +699,9 @@ adding anything.
 Compact recap of things that have each burned at least one prior agent. Scan before starting;
 details in `CLAUDE.md` and `docs/NOTES.md`.
 
-**Environment**: PowerShell + `.venv_windows\Scripts\*.exe`; Bash sandbox has no `/mnt/c`;
-Docker only on chiron (push branch → pull there → `docker compose up --build -d`); GDAL via
-pyogrio DLLs only when `UL_ENVIRONMENT=local`; sass via bun on Windows.
+**Environment**: see `CLAUDE.local.md` for the machine you are on - it is the authority, and
+differs per checkout. GDAL/GEOS must be present for anything importing `django.contrib.gis`,
+which is why tests run in the `app` container rather than on a bare host.
 
 **Django/ORM**: no `save()` in `post_save`/`__str__`; `dispatch_uid` always; linter strips
 signal guards — make them structurally redundant; migrations: indexes dead last, nullable+unique
@@ -722,6 +765,51 @@ non-obvious behavior → `docs/NOTES.md`; TODO strikes with evidence.
   calendar-sync revocation, account-deletion file cleanup, dead-unscoped-view removal, SSO/passkey
   coverage, full-suite coverage run + triage.
 - Known-open coverage holes: `controllers/safety.py` 49%, direct-message-shares 54–58%,
-  `services/google_oauth.py` 39%, `consumers.py` 35%.
+  `services/auth/google_oauth.py` 39%, `consumers.py` 35%.
 - Deployment: verify the HTTPS-enforcement nginx fix (`dfb04003`) and the nginx healthcheck fix
   (`d9033b03`) are live in production; staging worker saturation still unresolved (infra-side).
+
+---
+
+## Appendix B — Floorplan photos should be media, not a private copy (asked for 2026-08-23)
+
+A photo added to a floorplan - uploaded or by URL - should also land in the media the rest of the
+site shows: a pin floorplan adds to that pin's media; a wiki floorplan adds to the wiki's media
+**and** to the contributing user's pin media. A URL should get the same treatment other external
+URLs get - submitted to the Wayback Machine, and downloaded and cached locally - so the plan still
+renders when the source goes offline.
+
+Done that way it should *simplify* floorplan photos rather than add to them: a `FloorplanReference`
+becomes a pointer at a media row instead of a second place an image lives.
+
+**The constraint that decides the schema.** Deleting the media item must not delete the floorplan's
+reference. So images stay independent of the things citing them, with orphans collected when the
+last reference goes, rather than cascading from any one owner.
+
+State of the code, checked 2026-08-23:
+
+- `Image` is already independent in the right way. It is its own model, and its links to `pin`,
+  `wiki`, `location`, `safety_checkin`, `visit`, `direct_message` and `pin_suggestion` are all
+  nullable `on_delete=SET_NULL`. Deleting a pin detaches its photos rather than destroying them.
+  Only `profile` cascades.
+- **`FloorplanReference.image` is `on_delete=CASCADE`** (`models/floorplans/model.py`), so today
+  deleting the media item *does* destroy the floorplan reference citing it. This is the one thing
+  that has to change. `FloorplanReference` already carries its own `url` and caption, so a
+  reference whose image goes away can survive as a URL-backed one rather than vanishing.
+- **`Image`'s owner links are single FKs - one pin, one wiki per row - and that is not enough.**
+  Child pins mean one photo legitimately belongs to several pins at once: a photo of a building
+  belongs to the building's pin *and* to the parent parcel's pin, and in the general case to N of
+  them. The same applies to wikis. So pin and wiki attachment both need join tables (N:N), not the
+  single nullable FKs there now. Decided 2026-08-23.
+
+  This pulls in the same direction as the constraint above rather than against it: with a join
+  table, detaching a photo from one pin is deleting a join row, the image itself is untouched, and
+  "collect it when the last reference goes" becomes a count over the join tables plus
+  `FloorplanReference` - one rule covering every kind of citation instead of a special case per
+  owner. The existing single FKs become the thing to migrate off.
+- Wayback archiving exists (`tasks.archive_link_to_wayback`) but takes a *link* model, not an
+  image. Local materialisation of a remote photo exists for the external-provider path. Neither is
+  reachable from a floorplan reference yet.
+- **Not yet checked:** whether a general orphaned-image sweep exists. Comment-image cleanup does
+  (`tests/hypothesis/test_comment_image_cleanup.py`); a global one was not found in a first pass,
+  and should be confirmed rather than assumed either way before relying on "orphans get collected".

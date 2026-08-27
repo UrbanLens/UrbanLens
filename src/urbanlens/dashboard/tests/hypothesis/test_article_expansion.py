@@ -29,8 +29,8 @@ from urbanlens.dashboard.services.ai.article_expansion import (
 )
 from urbanlens.dashboard.services.ai.article_safety import ArticleSafetyVerdict, classify_article_text
 from urbanlens.dashboard.services.ai.link_extraction import run_extraction
-from urbanlens.dashboard.services.articles import get_article, save_article
-from urbanlens.dashboard.services.text_limits import MAX_ARTICLE_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_ARTICLE_LENGTH
+from urbanlens.dashboard.services.wiki.articles import get_article, save_article
 
 
 class _FakeGateway:

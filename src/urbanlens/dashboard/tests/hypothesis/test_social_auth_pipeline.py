@@ -78,8 +78,8 @@ class FetchAndSaveAvatarTests(TestCase):
         user.profile.avatar = "avatars/existing.jpg"
         user.profile.save(update_fields=["avatar"])
         with (
-            patch("urbanlens.dashboard.services.avatar.AvatarService.resolve_provider_url") as mock_resolve,
-            patch("urbanlens.dashboard.services.avatar.AvatarService.download") as mock_download,
+            patch("urbanlens.dashboard.services.profile.avatar.AvatarService.resolve_provider_url") as mock_resolve,
+            patch("urbanlens.dashboard.services.profile.avatar.AvatarService.download") as mock_download,
         ):
             fetch_and_save_avatar(_backend(), user, {}, is_new=False)
         mock_resolve.assert_not_called()
@@ -90,8 +90,8 @@ class FetchAndSaveAvatarTests(TestCase):
     def test_avatar_is_saved_when_profile_has_none(self) -> None:
         user = baker.make(User)
         with (
-            patch("urbanlens.dashboard.services.avatar.AvatarService.resolve_provider_url", return_value="https://example.com/a.jpg"),
-            patch("urbanlens.dashboard.services.avatar.AvatarService.download", return_value=b"\xff\xd8fakejpegbytes"),
+            patch("urbanlens.dashboard.services.profile.avatar.AvatarService.resolve_provider_url", return_value="https://example.com/a.jpg"),
+            patch("urbanlens.dashboard.services.profile.avatar.AvatarService.download", return_value=b"\xff\xd8fakejpegbytes"),
         ):
             fetch_and_save_avatar(_backend(), user, {}, is_new=True)
         user.profile.refresh_from_db()
@@ -100,8 +100,8 @@ class FetchAndSaveAvatarTests(TestCase):
     def test_unresolvable_provider_url_is_a_no_op(self) -> None:
         user = baker.make(User)
         with (
-            patch("urbanlens.dashboard.services.avatar.AvatarService.resolve_provider_url", return_value=None),
-            patch("urbanlens.dashboard.services.avatar.AvatarService.download") as mock_download,
+            patch("urbanlens.dashboard.services.profile.avatar.AvatarService.resolve_provider_url", return_value=None),
+            patch("urbanlens.dashboard.services.profile.avatar.AvatarService.download") as mock_download,
         ):
             fetch_and_save_avatar(_backend(), user, {}, is_new=True)
         mock_download.assert_not_called()
@@ -111,8 +111,8 @@ class FetchAndSaveAvatarTests(TestCase):
     def test_failed_download_saves_nothing(self) -> None:
         user = baker.make(User)
         with (
-            patch("urbanlens.dashboard.services.avatar.AvatarService.resolve_provider_url", return_value="https://example.com/a.jpg"),
-            patch("urbanlens.dashboard.services.avatar.AvatarService.download", return_value=None),
+            patch("urbanlens.dashboard.services.profile.avatar.AvatarService.resolve_provider_url", return_value="https://example.com/a.jpg"),
+            patch("urbanlens.dashboard.services.profile.avatar.AvatarService.download", return_value=None),
         ):
             fetch_and_save_avatar(_backend(), user, {}, is_new=True)
         user.profile.refresh_from_db()

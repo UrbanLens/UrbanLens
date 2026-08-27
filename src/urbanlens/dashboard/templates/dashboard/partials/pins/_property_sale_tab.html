@@ -1,7 +1,8 @@
 
 {% if sales %}
 <div class="po-sale-list">
-    {% for sale in sales %}
+    {% for row in sales %}
+    {% with sale=row.sale %}
     <div class="po-sale-row" id="po-sale-{{ sale.id }}">
         <div class="po-sale-main">
             <span class="po-sale-date">{{ sale.sale_date|default:"Undated" }}</span>
@@ -22,15 +23,16 @@
         </div>
         <div class="po-sale-parties">
             <span class="po-sale-party">
-                {% for owner in sale.previous_owners.all %}{{ owner.name }}{% if not forloop.last %}, {% endif %}{% empty %}Unknown{% endfor %}
+                {% for owner in row.previous_owners %}{{ owner.name }}{% if not forloop.last %}, {% endif %}{% empty %}{% if row.parties_withheld %}Subscribers only{% else %}Unknown{% endif %}{% endfor %}
             </span>
             <i class="material-symbols-outlined po-sale-arrow">arrow_forward</i>
             <span class="po-sale-party">
-                {% for owner in sale.new_owners.all %}{{ owner.name }}{% if not forloop.last %}, {% endif %}{% empty %}Unknown{% endfor %}
+                {% for owner in row.new_owners %}{{ owner.name }}{% if not forloop.last %}, {% endif %}{% empty %}{% if row.parties_withheld %}Subscribers only{% else %}Unknown{% endif %}{% endfor %}
             </span>
         </div>
         {% if sale.notes %}<p class="po-sale-notes">{{ sale.notes|linebreaksbr }}</p>{% endif %}
     </div>
+    {% endwith %}
     {% endfor %}
 </div>
 {% else %}
@@ -45,7 +47,7 @@
     <input type="text" name="previous_owners" class="po-input" placeholder="Previous owner(s), comma-separated (optional)" maxlength="500">
     <input type="text" name="new_owners" class="po-input" placeholder="New owner(s), comma-separated (optional)" maxlength="500">
     <input type="number" name="sale_price" class="po-input po-price-input" placeholder="Sale price" min="0" step="0.01">
-    <input type="date" name="sale_date" class="po-input">
+    <input type="date" name="sale_date" class="po-input" aria-label="Sale date">
     <input type="text" name="notes" class="po-input" placeholder="Notes (optional)">
     <button type="submit" class="btn btn--icon-sm po-add-btn" title="Record sale">
         <i class="material-symbols-outlined">add</i>

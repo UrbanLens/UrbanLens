@@ -264,6 +264,16 @@ body.page-auth {
     text-decoration: underline;
 }
 
+// For a control that has to be a form button - it changes durable state, so it
+// cannot be a GET link - while reading as one of the links beside it.
+button.auth-inline-link {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+}
+
 // -- Info page (check email, verify complete, etc.) ------------------------
 .auth-info-icon {
     text-align: center;
@@ -453,6 +463,93 @@ body.page-auth {
 
         &:hover {
             text-decoration: underline;
+        }
+    }
+}
+
+// -- "Try the demo" call to action (login + registration) --------------------
+// Rendered by partials/auth/_demo_cta.html, and only when a demo instance has
+// been provisioned. Deliberately quieter than the primary submit and the social
+// buttons: it is an escape hatch for people not ready to sign up, not the
+// action either page is asking for.
+.auth-demo-cta {
+    margin-top: 1.25rem;
+
+    &__rule {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        margin-bottom: .9rem;
+        color: var(--ul-grey-5, #9ca3af);
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+
+        &::before,
+        &::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: var(--ul-surface-raised-border, #e5e7eb);
+        }
+    }
+
+    &__btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .5rem;
+        width: 100%;
+        text-decoration: none;
+
+        .material-symbols-outlined {
+            font-size: 1.15rem;
+        }
+    }
+
+    &__note {
+        margin: .55rem 0 0;
+        text-align: center;
+        font-size: .78rem;
+        line-height: 1.35;
+        color: var(--ul-grey-6, #6b7280);
+    }
+}
+
+// -- Demo-mode banner --------------------------------------------------------
+// Sits on every page of a demo instance (partials/layout/_demo_banner.html).
+// Not dismissible on purpose: somebody who forgets they are in the demo will
+// think the pins they just added were saved, and the account is deleted within
+// a day.
+.demo-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: .6rem;
+    padding: .5rem 1rem;
+    background: $color-indigo-600;
+    color: #fff;
+    font-size: .85rem;
+    line-height: 1.35;
+    text-align: center;
+
+    .material-symbols-outlined {
+        font-size: 1.15rem;
+    }
+
+    &__text strong {
+        font-weight: 700;
+    }
+
+    &__cta {
+        color: #fff;
+        font-weight: 600;
+        text-decoration: underline;
+        white-space: nowrap;
+
+        &:hover {
+            text-decoration: none;
         }
     }
 }

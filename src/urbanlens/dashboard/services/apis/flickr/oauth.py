@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from requests_oauthlib import OAuth1Session
 
-from urbanlens.dashboard.services.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
 REQUEST_TOKEN_URL = "https://www.flickr.com/services/oauth/request_token"  # noqa: S105 # nosec B105 - OAuth endpoint URL, not a credential

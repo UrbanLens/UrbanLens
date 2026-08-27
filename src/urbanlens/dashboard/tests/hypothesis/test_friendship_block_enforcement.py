@@ -26,7 +26,7 @@ from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.direct_messages import can_direct_message, create_direct_message
+from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message, create_direct_message
 
 
 def _profile(**kwargs) -> Profile:

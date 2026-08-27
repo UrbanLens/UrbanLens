@@ -17,16 +17,16 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
-from urbanlens.dashboard.services.notification_text_alerts import (
+from urbanlens.dashboard.services.notifications.notification_text_alerts import (
     TEXT_ALERTABLE_TYPES,
     schedule_notification_text_alerts,
     send_notification_text_alerts_now,
 )
 from urbanlens.dashboard.tasks import send_notification_text_alerts_if_unread
 
-_ENQUEUE_PATCH = "urbanlens.dashboard.services.celery.safely_enqueue_task"
-_WHATSAPP_PATCH = "urbanlens.dashboard.services.notification_delivery.send_whatsapp"
-_SMS_PATCH = "urbanlens.dashboard.services.notification_delivery.send_sms"
+_ENQUEUE_PATCH = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
+_WHATSAPP_PATCH = "urbanlens.dashboard.services.notifications.notification_delivery.send_whatsapp"
+_SMS_PATCH = "urbanlens.dashboard.services.notifications.notification_delivery.send_sms"
 
 
 class _AlertTestBase(TestCase):
@@ -103,10 +103,22 @@ class ScheduleNotificationTextAlertsTests(_AlertTestBase):
         enqueue.assert_not_called()
 
     def test_every_alertable_type_has_both_preference_fields(self) -> None:
+        """Resolved by enum *member name*, which is how production reads them.
+
+        This used to derive the column from the type's value. That held only
+        because the one type whose value and column stem disagree
+        (``SAFETY_CHECKIN_PARTNER_INVITE`` -> ``safety_ci_partner_invite`` vs
+        ``safety_checkin_partner_invite*``) was missing from the set - the very
+        omission that made its toggles unfirable. Keeping the value-based
+        derivation here would have re-asserted the bug.
+        """
+        from urbanlens.dashboard.models.notifications.meta.type import NotificationType
+
         prefs = self._prefs()
         for ntype in TEXT_ALERTABLE_TYPES:
-            self.assertTrue(hasattr(prefs, f"{ntype}_whatsapp"), ntype)
-            self.assertTrue(hasattr(prefs, f"{ntype}_sms"), ntype)
+            stem = NotificationType(ntype).name.lower()
+            self.assertTrue(hasattr(prefs, f"{stem}_whatsapp"), ntype)
+            self.assertTrue(hasattr(prefs, f"{stem}_sms"), ntype)
 
     def test_signal_schedules_on_creation(self) -> None:
         """The post_save signal wires creation to scheduling after commit.

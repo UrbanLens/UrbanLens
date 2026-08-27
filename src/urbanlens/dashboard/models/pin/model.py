@@ -28,8 +28,8 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
@@ -55,10 +55,14 @@ class PinType(TextChoices):
 
     ``PARCEL`` and ``BUILDING`` are the two that drive scope: a parcel is the
     grounds of a place (a campus, a lot) and is described by the buildings
-    nested under it, while a building is a single structure described by its
-    own building-level records. ``LOCATION_MARKER`` is the "unspecified"
-    default - a pin left on it is classified automatically (see
-    ``services.locations.site_scope``).
+    standing on it, while a building is a single structure described by its
+    own building-level records.
+
+    ``LOCATION_MARKER`` is not "unknown" - it is the honest answer for an
+    ordinary property, where the parcel and the building are the same thing
+    and singling out either would be inventing a distinction. It is also the
+    default, and is derived automatically from the place a marker resolves
+    onto (see ``services.places.scope``).
     """
 
     LOCATION_MARKER = "location", "Location"
@@ -67,10 +71,37 @@ class PinType(TextChoices):
     ENTRANCE = "entrance", "Entrance"
     POINT_OF_INTEREST = "poi", "Point of Interest"
     DANGER = "danger", "Danger"
+    STAIR = "stair", "Stair"
+    ELEVATOR = "elevator", "Elevator / shaft"
     OTHER = "other", "Other"
 
+    @property
+    def icon(self) -> str:
+        """The Material Symbols glyph for this type.
 
-class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel):
+        One mapping, shared by the detail-pin lists, the child-wiki list, and
+        the type badge on both detail pages - the three places that previously
+        each carried their own ``{% if %}`` ladder and could drift apart.
+        """
+        return PIN_TYPE_ICONS.get(self.value, "push_pin")
+
+
+#: Material Symbols glyph per :class:`PinType`. Module-level so templates can
+#: reach it through the ``pin_type_icon`` filter without instantiating the enum.
+PIN_TYPE_ICONS: dict[str, str] = {
+    PinType.LOCATION_MARKER.value: "place",
+    PinType.PARCEL.value: "apartment",
+    PinType.BUILDING.value: "business",
+    PinType.ENTRANCE.value: "door_front",
+    PinType.POINT_OF_INTEREST.value: "star",
+    PinType.DANGER.value: "warning",
+    PinType.STAIR.value: "stairs",
+    PinType.ELEVATOR.value: "elevator",
+    PinType.OTHER.value: "more_horiz",
+}
+
+
+class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
     """A user's personal record for a physical location.
 
     Pin is the *personal* half of the two-model design:
@@ -132,6 +163,14 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # buildings or new matching top-level pins turn up later, so a declined
     # suggestion can never come back on its own.
     restructure_offer_dismissed = BooleanField(default=False)
+
+    # When this pin's confident buildings were automatically turned into child
+    # pins (see services.pins.auto_nest). One-shot per pin: once stamped, the
+    # sweep never runs for it again, so deleting an auto-created child is a
+    # decision that sticks rather than something the next refresh undoes.
+    # Buildings discovered later go through the explicit "add buildings"
+    # dialog instead.
+    buildings_auto_nested_at = DateTimeField(null=True, blank=True)
 
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.
@@ -195,7 +234,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # Best-effort, heuristic link to a map-detected share that plausibly
     # explains how the owner learned about this location, for pins the owner
     # created themselves rather than by accepting a share. Populated lazily
-    # (see services.map_sharing.infer_source_share_for_pin) only when the
+    # (see services.sharing.map_sharing.infer_source_share_for_pin) only when the
     # owner explicitly shares this pin onward, so reshare chains still credit
     # the map that originally revealed it. Never set by _create_pin_from_share
     # - source_share covers that case exactly, and the two are never both
@@ -209,7 +248,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     )
     # Hero banner photo for the pin detail page. Any Image tied to this pin
     # (its own gallery uploads or a materialized Media-gallery item, see
-    # services.media_materialize) is eligible; SET_NULL so deleting the photo
+    # services.media.media_materialize) is eligible; SET_NULL so deleting the photo
     # just drops the banner rather than the pin.
     cover_photo = ForeignKey(
         "dashboard.Image",
@@ -231,6 +270,9 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         markup_items: DjangoManager[PinMarkup]
         visit_history: DjangoManager[PinVisit]
         wiki_id: int | None
+        # Transient bookkeeping shared by the pre/post-save child-boundary hooks.
+        child_boundary_previous_parent_id: int | None
+        child_boundary_position_changed: bool
 
     objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
 
@@ -276,7 +318,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         Moving the pin to a different Location also propagates the owner's
         share-chain exposures onto the new location here, so the "infection"
         follows the pin no matter which write path moved it (see
-        ``services.share_provenance``).
+        ``services.sharing.share_provenance``).
         """
         update_fields = kwargs.get("update_fields")
         if update_fields is None or "name" in update_fields:
@@ -330,7 +372,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             return
         old_location_id = getattr(self, "_loaded_location_id", None)
         if old_location_id is not None and self.location_id != old_location_id:
-            from urbanlens.dashboard.services.share_provenance import propagate_exposures_for_pin_move
+            from urbanlens.dashboard.services.sharing.share_provenance import propagate_exposures_for_pin_move
 
             propagate_exposures_for_pin_move(self, old_location_id)
         self._loaded_location_id = self.location_id
@@ -501,10 +543,17 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         """Label supplying the map icon, when the icon is inherited from a label."""
         if self.custom_icon or self.icon:
             return None
+        from urbanlens.dashboard.models.labels.meta import KIND_USER
+
+        # `.all()` + a Python filter, not `.exclude(kind=...)`: a filtered call on the
+        # related manager builds a fresh queryset and so ignores prefetch_related("labels"),
+        # which made this one query per pin on every list that renders effective_icon /
+        # effective_color. Unprefetched callers still pay exactly one query, as before.
+        #
         # Secondary sort by name matches services.map_pins.payload._ordered_location_labels'
         # tie-break - without it, two labels sharing the same `order` on one pin could pick
         # a different "winning" icon here than the map marker resolves to.
-        labels = sorted((label for label in self.labels.exclude(kind="user")), key=lambda label: (-label.order, label.name or ""))
+        labels = sorted((label for label in self.labels.all() if label.kind != KIND_USER), key=lambda label: (-label.order, label.name or ""))
         for label in labels:
             if label.custom_icon and not label.icon_is_overridden:
                 return label
@@ -687,6 +736,23 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         return None
 
     @property
+    def community_wiki(self):
+        """The community page for the place this pin stands on, if there is one.
+
+        Not the same as ``self.wiki``, which is a cache set only when a pin is
+        explicitly linked, nor as ``self.location.wiki``, which is the page
+        anchored to this exact coordinate. Resolving through the *place* is
+        what lets the second person to pin a property see the page the first
+        one created, instead of being offered a "Create Community Wiki" button
+        for a wiki that already exists.
+        """
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        if self.wiki_id and self.wiki is not None:
+            return self.wiki
+        return Wiki.objects.get_for_location(self.location) if self.location_id else None
+
+    @property
     def effective_name(self) -> str:
         """User's custom name, or the place's community/official name."""
         return self.name or (self.location.display_name if self.location else "")
@@ -735,29 +801,20 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         return None
 
     @property
-    def categories(self):
-        """Labels of kind "category" attached to this pin."""
-        return self.labels.all().categories()
-
-    @property
-    def tags(self):
-        """Labels of kind "tag" attached to this pin."""
-        return self.labels.all().tags()
-
-    @property
-    def statuses(self):
-        """Labels of kind "status" attached to this pin."""
-        return self.labels.all().statuses()
-
-    @property
     def rating(self) -> int:
-        try:
-            review = self.reviews.all().latest()
-            if review:
-                return review.rating
-        except ObjectDoesNotExist:
+        """The most recent review's rating, or 0.
+
+        Uses `max()` over `self.reviews.all()` rather than `.latest()`: `latest()`
+        appends ORDER BY + LIMIT and so always issues a query, even when the caller
+        has done `prefetch_related("reviews")`. `.all()` reads the prefetch cache when
+        one exists and costs a single query when it does not. `Review.Meta` sets
+        `get_latest_by = "created"`, which is what the key below reproduces.
+        """
+        reviews = self.reviews.all()
+        if not reviews:
             logger.debug("no rating found for pin %s", self.id)
-        return 0
+            return 0
+        return max(reviews, key=lambda review: review.created).rating
 
     # ------------------------------------------------------------------
     # Category helpers (personal classification for this pin)
@@ -769,10 +826,10 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         Args:
             category_id: Primary key of the category-kind Label to assign.
         """
-        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, Label
 
-        category = Label.objects.get(id=category_id, kind="category")
-        self.labels.remove(*self.labels.filter(kind="category"))
+        category = Label.objects.get(id=category_id, kind=KIND_CATEGORY)
+        self.labels.remove(*self.labels.filter(kind=KIND_CATEGORY))
         self.labels.add(category)
         # No self.save() needed: M2M .add()/.remove() persist immediately. Calling save()
         # here would needlessly re-fire the full post_save signal chain (Redis map-cache
@@ -787,11 +844,27 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         Returns:
             The attached Label, or None if the lookup/creation failed.
         """
-        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, Label
 
         category_name = category_name.lower()
         try:
-            category, _ = Label.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
+            category, _ = Label.objects.get_or_create(
+                name__iexact=category_name,
+                kind=KIND_CATEGORY,
+                # profile=None belongs in the *lookup*, not just defaults: this
+                # creates a global category, so the get must find a global one.
+                # Without it the get spans every profile's labels and returns
+                # MultipleObjectsReturned as soon as two users have a category of
+                # the same name - which the case-insensitive match below makes
+                # dramatically more likely.
+                profile=None,
+                # Looked up case-insensitively because the uniqueness constraint is
+                # (lower(name), profile, kind): an exact-match get would miss an
+                # existing "Factory" while creating "factory", and the insert would
+                # then violate the constraint. get_or_create cannot recover from that
+                # either - its retry repeats the same exact-match get.
+                defaults={"name": category_name},
+            )
             if category:
                 # No self.save() needed - see change_category's comment above.
                 self.labels.add(category)
@@ -805,11 +878,24 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # ------------------------------------------------------------------
 
     def __str__(self) -> str:
-        status_labels = ", ".join(s.name for s in self.labels.filter(kind="status")) if self.pk else "None"
+        """A short, query-free label for admin lists, logs and error pages.
 
-        return f"Name: {self.effective_name}\nDescription: {self.description or ''}\nPriority: {self.priority}\nLast Visited: {self.last_visited}\nStatus: {status_labels}"
+        Deliberately does not touch `labels` or `location`: `__str__` runs on every repr,
+        so a query here is one per row in an admin list and one per log line. It also
+        stays on a single line - the previous multi-line form rendered as a paragraph
+        inside select dropdowns and broke log grepping.
+        """
+        return self.name or f"Pin {self.pk}"
 
     def to_json(self) -> dict[str, Any]:
+        from urbanlens.dashboard.models.labels.meta import KIND_STATUS, KIND_TAG
+
+        # Filtered in Python, not with .filter(): calling .filter() on a prefetched
+        # many-to-many builds a fresh queryset and ignores the prefetch cache, so a
+        # caller that prefetch_related("labels") still paid a query per kind per pin.
+        # .all() reads the cache when one is present, and costs a single query when
+        # it is not.
+        labels = list(self.labels.all())
         return {
             "uuid": str(self.uuid),
             "slug": self.slug or str(self.uuid),
@@ -828,12 +914,12 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             "last_visited": self.last_visited.isoformat() if self.last_visited else "never",
             "latitude": self.effective_latitude,
             "longitude": self.effective_longitude,
-            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.labels.filter(kind="status")],
+            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in labels if s.kind == KIND_STATUS],
             "profile": self.profile.id,
             "name_is_user_provided": self.name_is_user_provided,
             "rating": self.rating,
             "color": self.effective_color,
-            "tags": [{"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon} for t in self.labels.filter(kind="tag")],
+            "tags": [{"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon} for t in labels if t.kind == KIND_TAG],
         }
 
     def to_detail_json(self) -> dict:
@@ -860,6 +946,45 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     def _slugify_base(self) -> str:
         return self.effective_name or "pin"
 
+    def slug_is_placeholder(self) -> bool:
+        """Whether this pin's slug was derived from a placeholder rather than a name.
+
+        A pin created before anything knew what it was gets a slug like
+        ``unnamed-location`` or ``dropped-pin``, and slugs are generated once and
+        never revisited - so naming the pin afterwards left the placeholder in the
+        URL forever. Reported from staging: a pin named "HRSH", with three
+        aliases, still addressed as ``unnamed-location``.
+
+        Decided by reading the slug back as words and asking the same question the
+        naming service asks of any name. That keeps the rule in one place, and
+        means a slug is only ever replaced when it says nothing - a slug derived
+        from a real name is never touched, so existing links keep working.
+
+        Returns:
+            True when the current slug carries no information.
+        """
+        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+        if not self.slug:
+            return True
+        return not is_meaningful_name(self.slug.replace("-", " "))
+
+    def refresh_placeholder_slug(self) -> bool:
+        """Replace a placeholder slug once this pin has a real name.
+
+        Args:
+            None.
+
+        Returns:
+            True when the slug was replaced.
+        """
+        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+        if not self.slug_is_placeholder() or not is_meaningful_name(self.effective_name):
+            return False
+        self.regenerate_slug()
+        return True
+
     def _slugify_qs(self):
         qs = Pin.objects.filter(profile_id=self.profile_id)
         if self.pk:
@@ -874,13 +999,9 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["uuid"], name="idxdb_pin_uuid"),
-            Index(fields=["profile"], name="idxdb_pin_profile"),
             Index(fields=["profile", "priority"], name="idxdb_pin_pfile_prio"),
             Index(fields=["profile", "last_visited"], name="idxdb_pin_pfile_lvisit"),
             Index(fields=["profile", "updated"], name="idxdb_profile_update"),
-            Index(fields=["location"], name="idxdb_pin_location"),
-            Index(fields=["parent_pin"], name="idxdb_pin_parent_pin"),
         ]
         constraints = [
             UniqueConstraint(

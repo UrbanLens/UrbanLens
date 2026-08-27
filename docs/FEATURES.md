@@ -14,17 +14,26 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   it points to (canonical name, address, coordinates, Google CID). See `docs/NOTES.md` for why
   this split exists.
 - Pin types: location, parcel, building, entrance, POI, danger, other
-- **Parcel vs. building scope** — a pin (or wiki) with two or more child markers typed as
-  buildings describes the *grounds* those buildings sit on, not a structure, so its
-  building-level cards (CRIS Building USN Point, Building Attributes, Building Characteristics)
-  suppress themselves and a "Buildings on this Property" list stands in for them. Child markers
-  are typed automatically - the detail-pin dialog's Type select defaults to "Auto", and a marker
-  landing on a known building footprint becomes a building, while entrances and landmarks don't.
-  An explicitly chosen type always wins. See `docs/NOTES.md`.
+- **Place** — one row per real-world parcel or building, and the unit everything shared hangs off:
+  official geometry, the community wiki, boundary votes, and access. A coordinate resolves onto the
+  most specific place containing it, so two people pinning opposite ends of one property share its
+  page, its community, and its "places in common" entry without either coordinate being discarded.
+  Buildings sit `PART_OF` their parcel; a split campus or a multi-parcel site sits above its parts
+  via `MEMBER_OF`. See `docs/NOTES.md` and `docs/designs/place-consolidation.md`.
+- **Parcel vs. building scope** — on a property holding several buildings, a marker commits to
+  describing either the *grounds* or one structure. A parcel-scoped marker suppresses its
+  building-level cards (CRIS Building USN Point, Building Attributes, Building Characteristics) in
+  favour of a "Buildings on this Property" list, and draws only the parcel; a building-scoped
+  marker draws only its own footprint, and its wiki is created with that footprint as its boundary.
+  On an ordinary single-building property neither distinction exists, so markers stay neutral and
+  both outlines are drawn. Scope is derived from the place and applies to *every* user's marker on
+  it; an explicitly chosen type always wins. A badge in the page header names the scope whenever it
+  isn't the neutral default. See `docs/NOTES.md`.
 - **"Organize this property?"** — one suggestion, shown once the first time you open a pin's detail
   page, covering both halves of the same question: create a sub pin per building here (named and
-  numbered from REData's county GIS + NY SHPO CRIS, or OpenStreetMap, and mirrored as child wikis
-  when the place already has a community wiki), and nest any of your existing *top-level* pins that
+  numbered from REData's county GIS + NY SHPO CRIS, or OpenStreetMap, and mirrored into the place's
+  community wiki - seeding an invisible draft wiki if none exists yet, so the buildings are never
+  silently dropped), and nest any of your existing *top-level* pins that
   stand inside the property boundary — useful for maps built before child pins existed. Nesting only
   re-parents; nothing is merged, renamed, or deleted. Three answers: yes, no (permanent for that
   pin, even if new buildings turn up later), or don't show again (Settings → Map → Pin Organization
@@ -44,11 +53,13 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   the receiving side's own pin at the other end still dedupe correctly, since both fall inside the
   same footprint even though they're farther apart than the fallback proximity radius covers.
   Non-building markers (entrances, hazards, POIs) are always proximity-matched
-- **Community wikis nest themselves automatically** — when two independently-created wikis'
-- **Community wikis nest themselves automatically** — when two independently-created wikis'
-  boundaries turn out to nest (a building's wiki inside a campus's, once both have a real property
-  boundary), the smaller becomes a child of the bigger with no confirmation needed - re-parenting
-  only, nothing else moves, since a wiki's Location never changes. See `docs/NOTES.md`.
+- **Community wikis nest themselves automatically** — when two independently-created wikis turn out
+  to describe a place and something inside it (a building's wiki inside a campus's), the inner one
+  becomes a child of the outer with no confirmation needed - re-parenting only, nothing else moves.
+  Nesting follows place lineage, so it agrees with access by construction. See `docs/NOTES.md`.
+- **One wiki per place** — creating a wiki for a coordinate that already has one, however far apart
+  the two coordinates are on the same property, returns the existing page instead of a second one.
+  A viewer who has earned the page reaches it from their own location's URL.
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
 - Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
 - Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo)
@@ -68,7 +79,26 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
 - Targeted export of a pin selection (main map's multi-select toolbar) or a whole saved list
   (a list's "more actions" menu) as GeoJSON, KML, GPX, or CSV
-- Data export/import of a user's full dataset, plus scheduled/on-demand backups
+- Data export/import of a user's full dataset, plus scheduled/on-demand backups. The archive
+  carries safety check-in history, map annotations, saved searches/routes, pin aliases, and the
+  profile's contact/social fields - all importable, with deliberate exceptions: live-status
+  safety check-ins never import (a restore must not re-arm reminders), and secondary emails never
+  import (verification state must not transfer)
+
+## Public Locations
+
+A small, highly selective set of locations can be voted **public** by the users who already have
+them pinned, and public locations are then suggested to every account (opt-out). The point is to
+give a new user a populated map without exposing anything vulnerable — the eligibility rules are
+the safety mechanism, so they run entirely server-side (`services/pins/public_pins.py`) and users
+never see the rule engine, only vote buttons on a place that already qualifies.
+
+- Voting is **anonymous in the UI**: a voter sees only their own choice, and no running tally is
+  shown before an outcome is settled
+- Candidates cycle `OPEN`/`SUSPENDED` as eligibility comes and goes; `PASSED`/`REJECTED` are
+  terminal
+- `evaluate_public_pin_candidates` runs hourly to re-run eligibility, settle open votes, and fan
+  out suggestions — idempotent at any frequency
 
 ## Search & Navigation
 
@@ -108,12 +138,32 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   the wiki (`Image.wiki`) and a "Manage" tab for uploads. Thumbs-up/down are **community votes**
   (net score up − down, highest ranked first); because relevance is stored per-Location
   (`MediaRelevance`), a relevance mark made on any user's pin detail page already counts here
+- **REData photo relevance scoring** — every new photo (upload, Google Places business photo
+  backfill, or Media-gallery item materialized via "mark relevant"/"send to wiki") is submitted to
+  REData's photo-scoring service with whatever signal is available (capture/location coordinates,
+  capture date, uploader/photographer, wiki abandonment date); REData returns a calibrated
+  confidence ("is this really a photo of this place") cached on the `Image` row
+  (`services.photos.redata_relevance`). Relevant/not-relevant votes on a materialized photo are
+  forwarded too, as REData's training signal - never as a scoring input. The pin detail page's own-
+  photos preview and the wiki's Photos tab order by this confidence (vote score first on the wiki,
+  confidence breaking ties, including when nothing has been voted on at all); a REData outage or
+  missing configuration silently falls back to upload-recency ordering
+- **REData label suggestions** — each profile's Tag and Category labels only (never Status,
+  People, or Media) are synced to REData as a private per-profile taxonomy whenever they're
+  created, edited, reparented, or deleted/converted away (retired, not hard-deleted), and a pin's
+  complete current tag/category set is resynced whenever it changes, from any of the ~20 call
+  sites that touch `Pin.labels` (`models.labels.signals`, the `Pin.labels` `m2m_changed` receiver
+  in `models.pin.signals`, `services.labels.redata_suggestions`). The pin detail page's "Add
+  Labels" dialog lazily loads a "Suggested for this place" section from REData's suggestion
+  endpoint, scored against that profile's own vocabulary; a management command
+  (`backfill_redata_labels`) primes REData with taxonomy/assignments that predate this
+  integration. A REData outage or missing configuration silently disables sync and suggestions
 - **Wiki article auto-seeding** — a wiki with no article yet is automatically started from a
   confidently-matched Wikipedia article the first time one is cached for its location (converted
   to Markdown, with a required CC BY-SA attribution footer linking back to the source) - never
-  overwrites an existing article, seeded or human-written (`services.wiki_seed`,
+  overwrites an existing article, seeded or human-written (`services.wiki.wiki_seed`,
   `models.cache.signals`)
-- Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, Photon, EPA ECHO, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
+- Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
 - Boundary drawing — property/building polygons per pin, generated automatically from a typed
   provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:
   REData's authoritative county GIS parcel/building geometry (`RedataBoundaryProvider`, US-only,
@@ -123,49 +173,245 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, freehand, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations
 - Detail pins — sub-markers placed inside a pin/wiki's bounding box for finer-grained mapping
   (rooms, entrances, hazards, etc.)
+- **Georeferenced image overlays** — drop a historical map image (a Sanborn fire-insurance sheet,
+  a site plan, an old survey) onto a pin's or wiki's map and drag its **four corners** until the
+  old streets sit on the real ones. Four free corners means a full projective transform, so a scan
+  that is rotated, sheared, or trapezoidal (as flatbed scans of century-old paper usually are)
+  still lines up — an axis-aligned bounding box cannot express that. The image comes from an
+  upload, a pick from that page's own Media gallery (materialized to a real `Image` first, so it
+  survives the provider rotating its URL), or an external image URL. Per-overlay opacity, a lock
+  to stop a placed sheet drifting, and either its own layers-panel toggle or membership in a
+  custom layer (`models.map_overlay`, `controllers/map_overlays.py`,
+  `frontend/ts/shared/map-image-overlays.ts`)
+- **Georeferenced historical map overlays** — "Browse georeferenced historical maps" in the same
+  manage-overlays dialog lists REData's community-georeferenced sheets covering the location
+  (Sanborn plans, cadastral atlases, panoramic views placed by real control points via Allmaps/Map
+  Warper) and adds one as a pre-placed, warped **tile** overlay - no corner dragging needed, same
+  opacity/visibility/layer controls. Tiles stream through UrbanLens's own authenticated proxy
+  (`controllers/historical_map_tiles.py`; 200s and definitive 404s cached, institutional outages
+  never cached) so REData's API key stays server-side
+- **OpenHistoricalMap time slider** (beta) — a compact time slider below the map on pin-detail and
+  wiki pages lets a beta user scrub through years and see OpenHistoricalMap's dated vector data
+  (roads, buildings, land-use tagged with `start_date`/`end_date`) overlaid on the live map, for
+  locations where OHM has nearby dated coverage. Gated by `SiteFeature.BETA_FEATURES`; the slider
+  is hidden entirely, not shown disabled, when there's no coverage or the viewer lacks beta access
+  - a deliberate stopgap ahead of REData's own future temporal-imagery endpoints (see
+  `plugins.builtin.satellite_imagery`'s module docstring for the pattern this follows). See
+  `services/apis/locations/open_historical_map.py`
+
+
+## Building Floorplans
+
+Interior structure for one building: walls are the only drawn geometry, and everything else derives
+from or hangs off them. Absent by default - most buildings will never have one, so nothing loads a
+floorplan alongside a building; they answer only through their own endpoints
+(`controllers/floorplans.py`).
+
+- **Wall-first data model** (`models/floorplans/`) - a room is not a polygon but a named seed point
+  that binds, at render time, to whichever enclosed region of the wall graph contains it (the
+  face-derivation in `frontend/ts/shared/floorplan/planar.ts`), so a partition shared by two rooms
+  exists once and moving a wall can never destroy a room's name, photos or labels. `FloorplanWall`
+  segments (exterior / interior / virtual - a dashed hint for a boundary that isn't physically there
+  / collapsed) carry `FloorplanOpening`s as intervals along themselves (`t_start`/`t_end`, not their
+  own coordinates) so a door or window cannot outlive its wall or drift off it; `FloorplanLock` rows
+  hang off an opening. `FloorplanMarker` covers point features (hazard / stair / elevator), with
+  `connector_id` tying a stair or shaft to its counterpart on other storeys and an optional
+  `linked_pin` making a marker a real detail pin elsewhere on the site. Every item draws from
+  per-plan **source** and **reference pools** by uuid, and may carry the owner's labels.
+- **Versioned whole-document, by date** — a layout change (a renovation, a fire) is a *new*
+  `Floorplan` row with a later `valid_from`; the undated baseline is in force from the beginning of
+  time. `?date=YYYY-MM-DD` answers "as of then", no date answers current
+  (`models/floorplans/queryset.py`)
+- **Geometry is plan-local metres, not WGS-84** - one origin per plan, shared across its floors so
+  storeys stack and align, with lengths/angles/right-angle snapping computed as ordinary metres
+  instead of needing a latitude correction at every step. Conversion to WGS-84 happens only at the
+  edges - map rendering and the GeoJSON endpoint below (`services/floorplans/features.py`, mirrored
+  by `frontend/ts/shared/floorplan/coords.ts`)
+- **Visual editor** (`/map/pin/<slug>/floorplan/`, `frontend/ts/entries/floorplan-editor.ts`) — draw
+  walls over satellite imagery or a georeferenced blueprint overlay, with leaflet-rotate squaring
+  the view (and the snap grid) to a building that isn't north-facing. Seven tools - select, box
+  select, rotate, wall, opening, room, marker - each with its own options panel beside the toolbar
+  rather than behind a modifier key, since a modifier cannot be seen and does not exist on a phone.
+  Rooms are *derived*, not vertex-edited: dragging a wall's corner, a corner it shares with other
+  walls, its whole body, or a room by its fill (propagate / rigid-move / detach modifiers) is how
+  geometry changes, and enclosed regions recompute from that. A room owns the partitions on its
+  boundary but never the building's shell, and a corner resting on a wall the room does not own
+  slides along it rather than dragging it. An outline nothing subdivides is the building, not a
+  room, and is captioned only if someone names it deliberately.
+- **What an opening is, in detail** — kind (door / doorway / gate / window / hatch), which way a
+  door swings, drawn as the plan symbol; how high its sill sits; and the locks fitted to it, each
+  with its own type, engagement state and the description/condition/material every item carries.
+  Openings drag along their wall and onto a different wall, keeping the metre width they were given
+  rather than the fraction. Storeys carry their own floor-to-ceiling height and height above sea
+  level
+- **Floors as a stack** — add above or below (so a basement is drawable), duplicate a storey
+  directly above the one it came from, delete from the middle and have the rest renumber, and name
+  a floor without losing the number that says which storey it is. No manual Save button - autosave
+  debounces every edit, backed by an undo stack that takes a typed name back whole and a drag back
+  on its own. A plan saved from another tab stops autosaving and offers a reload rather than
+  overwriting it. A new floor seeds its exterior walls from the storey nearest it, or the building's
+  real footprint when there is none. Versions are switchable in-page, and "Save as new version"
+  forks rather than overwrites
+- **Personal by default, shared on purpose** — a plan records where the doors are, what locks them
+  and what opens those locks, so local plans are scoped to their author. "Publish to wiki" copies a
+  version onto the place's community wiki (the author keeps their own), after which anyone who can
+  see that wiki can see and edit it, each save recorded as a `WikiEdit`. Resolution order is: your
+  own plan, then the community one, then REData's (external, none exist upstream yet)
+- **GeoJSON feature endpoint** (`/map/pin/<slug>/floorplan/features/`) — the map-facing counterpart
+  to the document, mirroring REData's: flat features filtered by viewport (`?bbox=`), storey
+  (`?level=`) and element kind (`?kind=`), capped and reporting `truncated` rather than silently
+  cutting off. The bbox filter runs in the database on the spatial index, so a renderer asks for a
+  viewport's worth of one storey instead of ten storeys of every wall. Every feature carries the
+  uuid it can be edited by, so anything clicked on a map is findable in the document
+- **Photos attach to anything, and pool once** — the item details block offers this pin's own
+  photos as thumbnails, and attaching cites a per-plan **reference** row rather than the image, so
+  one photo attached to a wall, a door and its lock exists once and a photo nothing cites any more
+  leaves the pool. Attaching never writes to the image: what is *not* offered is setting a photo's
+  own coordinates or heading, because those cannot yet be set without overwriting what its EXIF
+  reported, and that provenance question wants answering first (see the KNOWN OMISSION in
+  `models/images/model.py`). **Source** rows work the same way for where a plan came from
+- **Historical aerial captures in the satellite carousel** — REData's `/imagery/timeline/`
+  contributes dated frames alongside current imagery, so a site that has been demolished,
+  re-roofed or cleared can be seen as it was. Continuous satellite ranges are deliberately not
+  listed as slides: they are dates to materialise on request, not images that already exist
+- **Extra basemap layers from REData** — `/tiles/sources/` layers are registered alongside the
+  built-in ones and served through an UrbanLens proxy, so REData's key stays server-side
+- **Distress signals on the property card** — recorded liens/fines and tax delinquency from
+  REData's `/parcels/{uuid}/liens/` and `/parcels/{uuid}/tax-payments/`. For this application
+  they are the most telling records on the card: an open code-enforcement lien and years of
+  unpaid tax are what "abandoned" looks like in public records
 
 ## External Data Enrichment (Pin Detail Page)
 
-On-demand, cached lookups shown as panels on the pin detail page:
+On-demand, cached lookups shown as panels on the pin detail page. Many of these are now backed by
+REData (`../REData`, a standalone service reached via `UL_REDATA_API_URL`/`UL_REDATA_API_KEY`)
+rather than calling their upstream provider directly - REData pools rate limits/credentials across
+every UrbanLens deployment and normalizes each provider family's response shape. A handful of
+integrations central to this app's own purpose (Nominatim, Esri, OpenWeatherMap/Open-Meteo, OSRM)
+keep a direct implementation as a fallback for when REData isn't configured or fails; most others
+were removed outright in favor of REData-only (no direct fallback); a few (Wikimedia Commons,
+Nominatim's own OSM extratags, Azure Maps' geocode+POI panel, USGS Historical Topo Maps) stay
+direct-only because REData's contract can't reproduce what they show:
 
 - **Wikipedia** — best-matching article
-- **Wikimedia Commons**, **Smithsonian Open Access**, **Library of Congress** — archival photos/media
-- **Web Images (SearXNG)** — broad web-image search across many engines (Flickr, imgur, Pinterest,
-  DeviantArt, Openverse, Unsplash, …) via a self-hosted SearXNG instance, using an aggressive
+- **Historical map picker** — georeferenced sheets covering a pin (Sanborn fire-insurance plans,
+  cadastral atlases, panoramic views) added as map overlays; each row shows the institution's own
+  thumbnail and links its catalogue page, and discloses a loose georeference ("placed to ±60 m")
+  where that figure is meaningful (`controllers.map_overlays`)
+- **National Park Service** — the nearest NPS unit, with what it costs to get in and when it is
+  open (day-grouped from NPS's published hours), its directions page, designation and activities
+  (`plugins.builtin.nps`)
+- **Recorded weather on a visit** — each row in a pin's Visit History says what the weather actually
+  was that day (ERA5 reanalysis via REData, worldwide, back to 1940), grouped by location and
+  clustered by date so a page of visits costs one request per place rather than one per visit
+  (`services.locations.visit_weather.recorded_days`)
+- **Historic Registers** — what the historic inventories say about the pin: the nationwide National
+  Register plus 24 state SHPO and city/county registers, from REData's cultural-resources registry.
+  Renders only REData's standardized fields (name, type, status, year built, style, use), so a
+  register REData adds appears without a release; which registers cover the point comes from
+  `GET /capabilities/`. New York's CRIS is excluded here — it has its own richer panel below
+  (`plugins.builtin.redata_historic_registers`)
+- **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider)
+- **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
+- **Historic Newspapers (Chronicling America)** — dated newspaper pages (1794-1963) about the
+  place, in the Media gallery; USA only, via REData (`ChroniclingAmericaMediaProvider`)
+- **Aerial & Drone footage** — a Media-gallery tab of overhead views, from REData's pooled media
+  index filtered with `is_aerial` (`plugins.builtin.redata_aerial_media`)
+- **Digital Commonwealth** (Massachusetts) — photographs, maps, and documents from MA libraries/museums/archives, via REData; Massachusetts pins only
+- **Media previews** — Media-gallery items in formats no browser renders (archival TIFFs, scanned
+  PDF inventory/nomination forms, HEIC) are rasterized to JPEG/PNG server-side rather than left as
+  a broken tile or an anonymous document icon (`services.media.previews`). Remote sources go
+  through a signature-gated endpoint (`controllers/media_preview.py`) so it can't be pointed at an
+  arbitrary URL; the in-app REData proxies (CRIS attachments, LoopNet photos) render their own via
+  `?preview=1`, passing already-displayable files straight through
+- **Web Images** — broad web-image search across many engines (Flickr, imgur, Pinterest,
+  DeviantArt, Openverse, Unsplash, …) via REData's web-search image mode, using an aggressive
   three-clause relevance query (all non-nickname aliases · state/country + municipality · the site's
   urbex/abandoned subject vocabulary) so a same-named place or operating business elsewhere is
-  excluded; requires `UL_SEARXNG_BASE_URL` (`plugins.builtin.searxng_images`)
-- **National Park Service** (USA) — nearby park info
+  excluded (`plugins.builtin.searxng_images`)
+- **National Park Service** (USA) — nearest park info, via REData
+- **Yelp** — nearby business details, via REData
 - **LoopNet** (USA) — commercial real-estate listings
 - **Property Records** (USA) — county parcel ownership/tax/sale-history lookup, retrieved from
-  REData (`../REData`, a standalone service) via `RedataGateway`
+  REData via `RedataGateway`
   (`services.apis.property_records.redata_gateway`); populates the wiki's Ownership and Sale
   History cards with `OFFICIAL`-sourced records in addition to a details card. Coverage varies by
-  county. Requires `UL_REDATA_API_URL`/`UL_REDATA_API_KEY` to be configured
-- **USGS Historical Topo Maps** (USA) — historical topographic maps
-- **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim structured data and Photon nearest-feature lookup)
-- **Regional Data** — US Census, Wildlife, Seismic, and EPA data loaded on demand per sub-tab
+  county. **Owner names and contact details from those `OFFICIAL` records are subscriber-only**
+  (`SiteFeature.PROPERTY_OWNERS`, enforced in `services.property.owner_access`) - the parcel, tax,
+  assessment and district facts stay open to everyone, as do a user's own private `PinOwner` notes
+  and any `WikiOwner` the community typed in themselves
+- **USGS Historical Topo Maps** (USA) — historical topographic maps, direct-only (a gallery of
+  individually-dated scans, a shape REData's imagery contract doesn't offer)
+- **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim
+  structured data, kept direct-only for its OSM extratags REData doesn't normalize; Photon
+  nearest-feature lookup, via REData)
+- **Regional Data** — US Census, Wildlife (iNaturalist), Seismic (USGS earthquakes), and EPA data
+  loaded on demand per sub-tab; the Wildlife/Seismic/EPA nearby-facility lookups are via REData
 - **Building Characteristics** — structured property/building data (appears for commercial and historic properties)
 - **Buildings on this Property** — every structure standing on the parcel, with names and building
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
   OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering
   that building, or offers to create the ones that have none (`plugins.builtin.parcel_buildings`).
   Also shown on the wiki page
-- **News** — web news results scoped to the location (appears for notable locations)
-- **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Falls back to the free, keyless Open-Meteo API when OpenWeatherMap isn't configured or fails
-- **Sunrise/sunset & golden hour** — always via Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
-- Satellite imagery carousel: Google Maps, Esri (incl. Wayback historical imagery), NASA GIBS,
-  Mapbox, Bing Maps, OpenAerialMap
-- Street-view carousel: Google Street View, Mapillary, KartaView
-- Web/image search panels (Google/Brave search, Google Image Search)
+- **News** — recent news coverage scoped to the location (appears for notable locations), via
+  REData's GDELT-backed search
+- **Cameras & Structures** — mapped surveillance cameras (individual agency registers plus
+  OpenStreetMap's worldwide contributed set, which outside Chicago and Austin is the only camera
+  source there is), FCC-registered antenna structures, FAA facilities, EPA contamination programmes
+  and storage tanks near the pin, grouped by REData's own category label
+  (`plugins.builtin.redata_site_features`). **Which sources are asked is discovered at request time
+  from REData's `/capabilities/` index, not listed in UrbanLens** — most of these providers are
+  generated on REData's side from dataset tables, so a register REData adds appears here with no
+  UrbanLens release. Providers that already have their own panel (Yelp, EPA ECHO, NPS places) are
+  excluded so nothing is shown twice
+- **Underground Structures** — OSM-mapped tunnels, culverts, station levels, shafts and buried
+  utility runs within 250 m, enterable features first, via REData (`plugins.builtin.redata_underground`)
+- **Permits & Violations** (US cities) — the site's building-permit/code-violation/site-plan filing
+  chronology with deep links to city records and plan drawings where published, via REData
+  (`plugins.builtin.redata_permits`); flags when a dense block capped the result
+- **Reported Incidents** (US cities) — block-scale police-incident reports from city open-data
+  portals as visit-safety context, via REData (`plugins.builtin.redata_incidents`); traffic
+  collisions excluded, block-scale location precision stated on the panel
+- **Water & Hydrology** (USA) — streams, waterbodies, wetlands (USFWS NWI decoded) within 1 km and
+  the containing HUC12 watershed, via REData (`plugins.builtin.redata_hydrology`)
+- **Site Conditions** (USA) — NLCD land cover, EPA walkability index (incl. transit distance), and
+  USDA SSURGO soil composition (dominant-first, no invented averages) folded into one panel, via
+  REData (`plugins.builtin.redata_site_conditions`)
+- **Air Quality** — current modelled readings (Copernicus CAMS, worldwide) with a count — never an
+  average — of nearby community sensors, via REData (`plugins.builtin.redata_air_quality`)
+- **Fire & Disaster History** (USA) — NIFC wildfire perimeters that reached the site (back to
+  ~1900) and FEMA disaster declarations for its county (since 1953, with which assistance
+  programmes were authorised), via REData's hazards registry (`plugins.builtin.hazard_history`)
+- The Property Records card also lists the parcel's **assessment history** (annual assessor
+  valuations with their review stage — mailed/certified/board — Cook County today, via REData's
+  `/parcels/{uuid}/assessments/`), and **supplementary recorded sales** (CT OPM, Cook County via
+  `/parcels/{uuid}/sale-records/`) feed the Sale History cards — matched to the parcel by
+  address/PIN before attribution, with non-arms-length transfers excluded (see
+  `docs/designs/redata-integration.md`)
+- **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Via REData when configured, falling back to a direct OpenWeatherMap/Open-Meteo call
+- **What the weather was** — a finished trip's weather panel used to be empty, because the forecast
+  can say nothing about a day that has passed. Past activities now show the *recorded* conditions for
+  their day (high/low, rainfall, snowfall, peak wind and gust) from REData's `/weather/history/`
+  (Open-Meteo ERA5 reanalysis, worldwide, back to 1940). One request covers a whole date range, so a
+  week-long trip costs one lookup per location; a recorded day never changes, so it is cached
+  permanently rather than under the external-data freshness window. Days inside ERA5's ~6-day
+  publication lag are not requested at all, so they are never cached as blank
+- **Sunrise/sunset & golden hour** — via REData when configured, falling back to direct Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
+- Satellite imagery carousel: Google Maps and Esri (incl. up to 5 historical Wayback releases) are
+  direct; additional providers (NASA GIBS, Mapbox, Bing Maps, OpenAerialMap, OpenTopoMap) via REData
+- Street-view carousel: Google Street View is direct; Mapillary, KartaView, and Panoramax are via
+  REData's `/street-view/timeline/` - one dated slide per capture date (representative frame
+  nearest the pin, newest first), so the carousel reads as a decay progression rather than an
+  undated handful of recent frames
 - Debug overlay (admin-only) to inspect raw external-API responses per panel
 
 All external integrations are cached (DB-backed, per-Location) and rate-limited per service, with
 usage tracked in `ApiCallLog`/`ApiRateLimit` and toggled at `/site-admin/api-limits/`. A per-call
 cost estimate (`ApiCallLog.cost_estimate`, from `ServiceDefaults.cost_per_call`) is logged for
 services with a known published rate - `null` means "not priced," not "confirmed free," since
-most services don't have a rate configured yet. Aggregated into a 30-day cost breakdown on the
-site-admin API usage report and the public `/costs/` transparency page.
+most services don't have a rate configured yet. Aggregated into a per-service 30-day cost
+breakdown on the site-admin API usage report; the public `/costs/` transparency page (below) shows
+a coarser blended figure instead, not a per-service breakdown.
 
 Beyond on-demand fetches, an hourly **background enrichment** task drips high-value lookups
 (official names, aliases, street addresses, building boundaries) into whatever rate-limit budget
@@ -176,7 +422,7 @@ buffer, per-run caps).
 ## Extensibility: Plugin System
 
 Third-party integrations are packaged as **plugins** (`dashboard/plugins/builtin/`) — see
-`docs/plugins.md` for the full contribution API. A plugin can add rate-limited services, pin-detail
+`docs/designs/plugins.md` for the full contribution API. A plugin can add rate-limited services, pin-detail
 panels, satellite/street-view providers, place-name providers, and lifecycle hooks. Plugins are
 discoverable from bundled modules, an env-var module list, or pip entry points, and can be
 enabled/disabled per-install or per-service without a restart. Inventory at `/site-admin/plugins/`.
@@ -197,6 +443,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   clusters the rest into suggested new pins, reviewed on a multi-select map with bulk accept,
   pagination, and opt-in photo import
 - Storage quota accounting per user (role-based), automatic downscaling/WebP conversion on upload
+- **HEIC/HEIF uploads are accepted and re-encoded to a format browsers render** (JPEG, or WebP when
+  the uploader's policy asks for it). The transcode is not part of the downscale policy: it runs even
+  for a user with downscaling and WebP conversion both off, because the stored bytes are what a plain
+  `<img src>` gets and only Safari renders HEIC. GPS is still stripped or kept per the user's own
+  setting, independently
 
 ## Trips
 
@@ -244,6 +495,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 ## Social Layer
 
 - Friendships: request/accept/reject/ignore/remove/block/mute, invite by email
+- **Mute is per-person and actually silences** — one column per side of the shared relationship
+  row, so muting someone does not mute you to them. It suppresses the in-app notification and
+  everything that hangs off it (live toast, WhatsApp/SMS, native push) for every notification type
+  except the safety check-in family, which is exempt on purpose. Applied in one place
+  (`NotificationLog.objects.notify`) and enforced by `bin/check_notification_choke_point.py`
 - Configurable friend-request visibility ("anyone", "friends of friends", "anything in common", etc.)
 - Public/friends-scoped profile pages with visibility controls per field (9 controls, each with 7 granularity levels from "Anyone" to "No one"), "view my profile as..." preview mode
 - **Identity masking in shared spaces** — a trip or group chat member whose `profile_visibility`
@@ -259,20 +515,41 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Private per-profile notes and trust ratings you keep about other users (not visible to them)
 - Multiple verified email addresses per account, for easier friend discovery
 - Social/community links on profile (site, Discord/Signal/etc.)
+- **Interaction preferences** — consent-style statements a profile can state about how they'd like
+  to be treated, on or off the site (taking/sharing/tagging/using photos of them, friend requests,
+  meetups, exploring with others, plus a free-text "other preferences" note). Shown on the public
+  profile page purely for informational, consent-based interactions - nothing here is technically
+  enforced yet (see `Profile.PREFERENCE_FIELDS`/`interaction_preferences`). Each choice field shares
+  its base wording (`ConsentPreferenceWording` mixin in `models/profile/meta.py`) so options like
+  "Please ask first" read identically across fields while each still declares its own member set.
 
 ## Labels (Tags, Categories, Statuses, People)
 
-A single unified `Label` model (with a `kind`) backs four distinct UI concepts:
+A single unified `Label` model (with a `kind`) backs five distinct UI concepts:
 
 - **Tags** — freeform labels on pins/wikis
 - **Categories** — hierarchical classification of pins/wikis
 - **Statuses** — workflow state labels
 - **People labels** — private labels a user applies to other profiles
+- **Media labels** — labels on photos/videos/documents, for site search (own "Organize" tab,
+  `LabelImageMembershipView`)
 
-Shared features across all four: create/edit/delete, merge, hierarchical parent/child
-relationships, bulk edit and bulk convert between kinds, per-user color/icon customization
-(`LabelCustomization`) on top of shared global labels, drag-to-reorder priority, and a unified
-"Organize" management page.
+Shared features across all five: create/edit/delete, hierarchical parent/child relationships,
+generic bulk edit, per-user color/icon customization (`LabelCustomization`, genuinely per-profile),
+and a unified "Organize" management page. Two features are deliberately narrower than that: **bulk
+convert between kinds** and **drag-to-reorder priority** are restricted to Tags/Categories/Statuses
+- People and Media labels are server-side blocked from both (`_ORGANIZE_KINDS` in
+`controllers/labels.py`; converting a People label via a crafted request is explicitly guarded
+against, not just hidden in the UI). Multi-item **merge** does work for all five kinds; the
+single-item merge UI is just hidden for People/Media.
+
+Not every label-picking surface shares one implementation. The map filter sidebar, saved-filter
+dialog, and bulk-edit dialog's label sections share the `createFilterPicker`/`createChipPicker`
+factories in `ts/shared/label-picker.ts` and its search + kind-tab filtering UX. The quick-add-pin
+dialog, the label merge target picker, add-labels-to-pin/location/image, and the organize page's
+parent/child picker are separate, bespoke implementations that predate those factories - one of
+them (the organize page's picker) doesn't even share the `@mixin tad-tabs` styling, by its own
+code comment ("underline style, not pill buttons").
 
 ## Notifications
 
@@ -280,7 +557,12 @@ relationships, bulk edit and bulk convert between kinds, per-user color/icon cus
 - Real-time push over WebSockets (`ws/notifications/`) with desktop `Notification` API support and
   a 60s polling fallback
 - Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls
-- **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. WhatsApp/SMS delivery is wired for every event type: DMs and safety check-ins keep their dedicated pipelines, and all other types dispatch centrally via a `NotificationLog` post_save signal (`services/notification_text_alerts.py`) — delayed 2 minutes, skipped if read in the meantime, debounced per type per 6h.
+- **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. WhatsApp/SMS delivery is wired for every event type: DMs and safety check-ins keep their dedicated pipelines, and all other types dispatch centrally via a `NotificationLog` post_save signal (`services/notifications/notification_text_alerts.py`) — delayed 2 minutes, skipped if read in the meantime, debounced per type per 6h.
+- **Native-app push** (`models/push_device`, `services/notifications/push.py`): a backgrounded app
+  holds no WebSocket, so it registers a push destination instead. **UnifiedPush** — an app-chosen,
+  self-hostable push server such as ntfy — is the default transport, matching the project's
+  self-hosted ethos and keeping an F-Droid build free of Play Services. An FCM row kind exists for
+  a future Play-Store flavour and is deliberately not dispatched yet
 - Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications)
 
 ## Custom Fields
@@ -306,26 +588,128 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
   with "Don't show again" opt-out per tooltip
 - Login lockout after repeated failed attempts
 - **External API keys** (Settings → Security → API keys): create/revoke/view API keys that let a
-  third-party application act on the user's behalf with an extremely limited, scoped grant -
-  currently reading only the owner's uuid and creating pins through the exact same
-  `services.pin_creation.create_pin_for_profile` path the map UI uses. Keys are hashed
-  (never stored in plaintext, like backup codes) and revocation takes effect immediately.
-  See `dashboard/external_api/` and the REST API section above.
+  third-party application act on the user's behalf with a scoped grant, drawn from a ~30-value
+  `ApiKeyScope` vocabulary (pins, photos, wikis, trips, messaging, friends, notifications, safety
+  check-ins, lists, labels, custom fields, undo, panels, assistant, games, search, device scans,
+  and more) covering 100+ endpoints under `dashboard/external_api/` - grown well past this
+  feature's original "read uuid, create pins" scope as mobile-app parity work landed. A freshly
+  issued personal-access-token key's default grant (`PROFILE_READ`, `PINS_READ`, `PINS_WRITE`,
+  `PUSH_MANAGE`) already covers reading/patching/deleting the owner's own pins, not just creating
+  one. OAuth2 clients (PKCE) can additionally be user-consented into scopes a bare PAT key cannot
+  hold (e.g. `messages:*`) - see `OAUTH2_ONLY_SCOPES`. Keys are hashed (never stored in plaintext,
+  like backup codes) and revocation takes effect immediately. See `dashboard/external_api/` and
+  the REST API section above.
 
 ## Undo / Data Safety
 
-- Generic, cache-backed undo framework: deleting a pin, wiki, safety check-in, or trip stages the
-  action for a limited window before it's finalized
+- Generic undo framework: deleting a pin, wiki, trip, safety check-in, saved filter, pin list,
+  label, or markup map stashes a durable snapshot (on the ``UndoAction`` row itself, not in a
+  cache) restorable for a retention window. Restores pre-check the constraints the recreate
+  could violate and refuse cleanly rather than 500ing; relational pieces that were never part
+  of the deletion (a list's member pins, a label's parents, a map's annotation authors)
+  restore leniently, skipping whatever has since been deleted
 - Settings → Undo History page to review and restore recently undo-able actions
+
+## Achievements
+
+Admin-defined awards users earn for contributing. An achievement is a **metric** plus a
+**threshold** plus an icon, so new ones can be added at any time with no deploy — saving one
+queues a backfill that grants it retroactively to everyone who already qualifies. Tiers
+("10 pins", "100 pins") are just several achievements sharing a metric.
+
+- **Where they show**: an Achievements section on every profile page, visible to exactly the
+  audience that can see that profile (it reuses `Profile.can_view_profile`), plus a full
+  catalogue at `/profile/<slug>/achievements/all/`. Progress bars toward unearned awards are
+  shown only to the profile's owner — they would otherwise leak exact contribution counts.
+- **Defining them**: Site Admin → Achievements (`/site-admin/achievements/`), or Django admin.
+  Each award takes a name, description, metric, threshold, a Material Symbols icon name or emoji
+  or an uploaded image, a colour, a display order, plus `is_active` (retire without revoking) and
+  `is_secret` (hidden until earned).
+- **Metrics** (`services/achievements/metrics.py`, extensible via `register()`): pins created,
+  wikis created, wiki edits, photos uploaded, markup maps created, places visited, places rated
+  by stars / vulnerability / danger (independently), trips planned, trips attended, comments
+  written, friends, people invited who joined, and longest streak for each of the five streak
+  kinds. Each metric documents its own exclusions (background draft wikis and externally sourced
+  photos do not count, for instance).
+- **Streaks**: consecutive days of logging in, uploading a photo, editing a wiki, pinning a spot,
+  or commenting. One `ProfileActivityDay` row per profile per kind per day makes repeats within a
+  day free, and `ProfileStreak` caches current/longest. Awards compare against **longest**, so
+  breaking a streak never revokes what it earned.
+- **Awards are permanent**: deleting pins lowers the metric but keeps the award.
+- **Evaluation**: signals on the contributing models queue a narrowly scoped re-check (only the
+  metrics that event could move) on transaction commit — and only when some active award actually
+  measures one of them, so a site with no award on a metric does no background work when it
+  changes. A nightly `sweep_achievements` task catches thresholds no write crosses, such as
+  "trips attended" ticking up when a trip ends.
+
+## Cost Tracking
+
+Admin-defined running-cost accounting: depreciating hardware/infrastructure **components**
+(a one-time replacement cost amortized evenly over a number of years, e.g. "Hard Drives / $1000 /
+10 years") plus recurring monthly **operating costs** (e.g. "Electricity / $100/mo"). Either stops
+counting via a `retired_at` timestamp rather than deletion, so all-time totals stay accurate.
+
+- **Site Admin → Costs** (`/site-admin/costs/`): add/edit/retire/delete any number of components
+  and operating costs, KPI cards (total recorded expenses all-time, average monthly expense,
+  effective cost for the last 30 days, cost per active user), and a stacked monthly chart, all
+  updating live via HTMX after every edit.
+- **Combined with tracked API spend**: the "effective monthly cost" and every stat/chart merge
+  admin-defined hardware/operating costs with the existing `ApiCallLog.cost_estimate` data (the
+  same external-API cost tracking the site-admin API usage report is built from) into one figure,
+  broken out by source (Hardware / Operating / External APIs) rather than shown as disconnected
+  numbers.
+- **Public transparency page** at `/costs/` mirrors the combined totals, cost-per-user, and chart
+  for anyone to see — gated behind `SiteSettings.public_costs_page_enabled` (off by default,
+  toggled from the Costs admin page); the page 404s until an admin turns it on, and a footer link
+  appears only once it's enabled.
+- Calculations live in `services/admin/cost_tracking.py`, reused by both the admin and public
+  views so the numbers can never drift apart.
+
+## Paid Subscriptions
+
+Users can pay to hold a `SubscriptionRole` directly via Stripe Checkout, instead of waiting for an
+admin grant. Per role, a site admin can independently enable any combination of:
+
+- **Fixed price**: a flat $/month.
+- **Pay-what-you-want (PWYW)**: the user picks any amount at or above Stripe's own $0.50 minimum;
+  any nonzero pledge holds the role (e.g. a generic "support the site" role).
+- **PWYW with a dynamic threshold**: same as above, but the role's features are gated by
+  `threshold_met`, a stored flag comparing the pledge against the site's *current* cost-per-user
+  (`services.admin.cost_tracking.cost_per_user()`, the same figure shown on `/costs/`) - the
+  "pay over the running cost to get VIP" case. Recomputed on every successful charge and other
+  qualifying Stripe webhook events, plus a nightly sweep (`sync_stripe_subscriptions`, all
+  subscriptions, not per-user-anniversary) as a safety net for missed deliveries - so a pledge
+  that used to clear the bar can silently stop granting access (Stripe's own `status` stays
+  unchanged) within about a day even without a webhook. **Banked overpayment can extend access
+  past that point**: a lump-sum or higher-than-threshold pledge accrues a usage-ledger runway
+  (`has_banked_access`) that keeps granting the role's features for a time even after the current
+  pledge stops clearing the threshold, or after the subscription is canceled outright - see
+  `services/billing/banking.py`.
+- A static PWYW minimum is also available as a non-dynamic alternative to the cost-per-user gate.
+
+Managed from **Settings → Membership** (checkout, pledge updates, cancellation, and a link to
+Stripe's hosted billing portal) and **Site Admin → Subscriptions** (per-role pricing). Stripe
+webhooks (`/billing/webhooks/stripe/`) keep `RoleSubscription` status/pledge/threshold in sync;
+a daily `sync_stripe_subscriptions` task re-syncs from Stripe as a safety net for missed
+deliveries. `user_has_feature()`/`active_subscription_roles()` treat an active, threshold-met
+paid subscription the same as an admin-issued grant. Service layer lives in `services/billing/`.
 
 ## Site Administration
 
+- The api-limits page also shows a **REData capabilities** card - every domain the connected
+  REData instance can answer, its endpoint, prewarm status, and providers (with billable/pinned
+  flags), generated from REData's own registries and cached for an hour
 - `/site-admin/` panel: user management, site-wide settings, usage stats (KPIs, system, API),
-  subscription role management, per-service API rate-limit toggles, plugin inventory, UI component
-  showcase, dev toolbar (theme/map-dark-mode toggles, session reset)
+  subscription role management, per-service API rate-limit toggles, plugin inventory,
+  achievement definitions, cost tracking, UI component showcase, dev toolbar (theme/map-dark-mode
+  toggles, session reset)
 - Data export/import tooling and on-demand/scheduled database backups
 - Subscription roles grant feature flags (`SiteFeature`) per user; pending grants can attach to an
   email invite for users who haven't joined yet
+- `/health/` returns a liveness response for Docker healthchecks and load-balancer probes
+  (`controllers/health.py`, `AllowAny`) - the compose stack gates `app`/`app-ws`/`nginx` startup on it
+- `/thanks/` credits page, rendering live contributor data pulled from the GitHub API
+  (`controllers/thanks.py` via `services/apis/infra/github/contributors.py`)
 
 ## AI Integration
 
@@ -357,20 +741,23 @@ for the boundary rationale:
   `MapController.post_add_pin` instead, not this router) and a `reviews`
   `create_or_update` action for the star-rating widget.
 - **External, API-key-authenticated**, under `/dashboard/api/external/v1/`. Lets a third-party
-  application act on a user's behalf with an extremely limited, scoped grant - see "External API
-  keys" under Account & Auth below. Independently versioned and never shares serializers/viewsets
-  with the internal surface.
+  application act on a user's behalf with a scoped grant - see "External API keys" under Account
+  & Auth below. Independently versioned and never shares serializers/viewsets with the internal
+  surface.
 
 ## Direct Messaging
 
 - End-to-end encrypted 1:1 direct messages and named group chats
-- **Group-chat scope (deliberate, as of 2026-07-18):** group chats support text (plaintext or
-  E2EE), pin sharing (one provenance-tracked PinShare per member), rename, creator-managed
-  membership, per-member mute, and unread tracking. They intentionally do *not* yet have 1:1
-  parity for: reactions, image attachments, replies/quotes, map attachments, coordinate/address
-  detection, disappearing messages, typing indicators, read receipts, or delete-for-self (only
-  the sender's delete-for-everyone exists). A group whose creator leaves becomes permanently
-  unmanaged (no ownership transfer). Extending any of these is a product decision, not a bug fix.
+- **Group-chat scope (deliberate, as of 2026-07-18; reactions added 2026-07-29):** group chats
+  support text (plaintext or E2EE), pin sharing (one provenance-tracked PinShare per member),
+  rename, creator-managed membership, per-member mute, unread tracking, and **message reactions**
+  (`Reaction.group_message`, with live WebSocket broadcast - reachable via the external/mobile API
+  today; the web UI's group-chat thread has no reaction picker or live-update handler yet, unlike
+  the 1:1 thread's). They still intentionally do *not* have 1:1 parity for: image attachments,
+  replies/quotes, map attachments, coordinate/address detection, disappearing messages, typing
+  indicators, read receipts, or delete-for-self (only the sender's delete-for-everyone exists). A
+  group whose creator leaves becomes permanently unmanaged (no ownership transfer). Extending any
+  of these is a product decision, not a bug fix.
 - Rich compose toolbar: image attachment, share location/map, share pin, @mention, emoji. The
   map composer dialog has two tabs - draw a new map, or choose one of your existing maps (search
   by title) - both attach the same way
@@ -395,7 +782,12 @@ for the boundary rationale:
 - `ws/messages/` — direct-message delivery, typing indicators, read/open tracking, and
   reaction updates for DMs and group chats (with an HTTP fallback for sending)
 - `ws/safety/checkin/<uuid>/chat/` and `ws/safety/contact/<token>/chat/` — safety check-in chat,
-  shared between the check-in owner and emergency contacts
+  shared between the check-in owner, every accepted partner, and every emergency contact. The
+  session route additionally joins a narrower live-location group that contacts never join;
+  removing a partner or a contact force-closes their open socket
+- `ws/spotguessr/session/<id>/`, `ws/trivia/session/<id>/`, `ws/consensus/session/<id>/` — one
+  channel-layer group per game session. Every state change stays a durable HTTP POST that
+  broadcasts over the socket; the only client-to-server frame these accept is a chat message
 
 ## Games: SpotGuessr
 
@@ -410,7 +802,7 @@ play, all three guess modes.** Everything below the line is not yet built.
   it up), and **Street View** (imagery from the existing Street View integration, point-scored;
   map-click or pin search)
 - Photos-mode community-relevance feedback: in-game thumbs up/down/report on the shown photo
-  feed a blended relevance score (`services.media_relevance.effective_relevance`) alongside the
+  feed a blended relevance score (`services.media.media_relevance.effective_relevance`) alongside the
   wiki's own thumbs, weighted down for in-game signal (thumbs down at only a token weight - see
   the design doc's "Photo relevance feedback"); an "allow arbitrary external photos" setting
   (off by default) opts a session out of the relevance filter
@@ -421,8 +813,9 @@ play, all three guess modes.** Everything below the line is not yet built.
   `Image.effective_latitude`/`effective_longitude` until a real coordinate takes over - see the
   design doc's "Crowd-sourced photo coordinates"
 - Eligibility engine: a location is only ever offered if it's pinned by every *joined*
-  participant (an invited-but-not-yet-accepted player never gates this) — no exceptions, no
-  caching across sessions
+  participant (an invited-but-not-yet-accepted player never gates this) — no exceptions. A short
+  prewarm cache (`services/spotguessr/prewarm.py`, up to 20 minutes) may pre-pick a location ahead
+  of when it's shown, but only after it already passed this same eligibility check
 - Scoring: geodesic point distance when a photo/Street View shot has its own coordinates,
   geodesic distance to the location's effective property boundary (0 inside it) otherwise
   (always the boundary rule for Named Place) — real PostGIS `ST_Distance`, not an approximation
@@ -525,3 +918,39 @@ Everything below the line is not yet built.
 Not yet built: a moderation review UI for AI-rejected questions (the only way to inspect why a
 question was rejected today is direct DB access) - explicitly decided against, not just
 unbuilt - see the design doc's "Known gaps" section.
+
+
+## Games: Consensus
+
+The wiki-data-completion game, and the only game that writes back to shared data. A round shows a
+player one missing or unconfirmed piece of data about a `Wiki` they have a visited pin for — a
+name, description, alias, or a photo's coordinates — and the player supplies it. The per-field-kind
+registry driving round generation and answer application lives in `services/consensus/fields.py`,
+so a new answerable field is a registry entry rather than new game code.
+
+- **Solo and competitive modes.** Solo applies an answer to the live wiki the instant it is
+  submitted, no trust check. Competitive mode races participants and resolves disagreement by a
+  plain one-vote-per-participant tally, applying the winning value the same unconditional way the
+  instant the round resolves; an unsettled vote is meant to land in a cross-session *tentative*
+  pool that later sessions can confirm (`ConsensusTentativeAnswer`), but **nothing currently
+  promotes a tentative row to applied** - `record_tentative_answers` accumulates `support_count`
+  across sessions, and the `PENDING → APPLIED/DISMISSED` lifecycle the model defines is otherwise
+  dead code (no controller, task, or admin path ever drives it past `PENDING`). An unsettled
+  disagreement today just accumulates support forever rather than ever resolving. See
+  `docs/FEATURES_CODE_AUDIT.md`'s Consensus section for the open question this raises.
+- **Trust, tracked but not yet gating the write.** `ConsensusProfile` carries a real Beta-Bernoulli
+  posterior (`trust_alpha`/`trust_beta`) updated from trust-check rounds — rounds whose answer is
+  already known — starting from a weakly-informative prior so a new player is neither trusted nor
+  distrusted. That posterior is genuinely consulted in two places: how often a trust-check round is
+  injected, and the confidence weight attached to a `FactEvidence` row (a separate metadata layer
+  read by AI article-writing and Consensus's own recheck-round picker). It does **not** currently
+  weight or gate which answers get applied to the live wiki fields (`Wiki.name`/`description`/etc.)
+  - a brand-new or actively-distrusted account's answer overwrites those fields with exactly the
+  same immediacy as a maximally-trusted veteran's. Points and levels are Consensus-only and
+  deliberately not shared with SpotGuessr/Trivia's Glicko-2 ratings, and are awarded for out-of-game
+  manual wiki edits too (`models/wiki_edit/signals.py`)
+- **Session flow** under `games/consensus/`: home, friends, start, lobby, invite, join, begin,
+  round, answer, vote, end — with `ws/consensus/session/<id>/` pushing round and resolution
+  updates, and a stall sweep (`sweep_stalled_consensus_sessions`) reclaiming abandoned sessions
+- Answers feed the same fact-confidence machinery documented under the wiki sections
+  (`services/facts/confidence.py`), which converges a value by trust-weighted agreement clustering

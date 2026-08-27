@@ -11,6 +11,7 @@ from urbanlens.dashboard.services.spotguessr.glicko2 import DEFAULT_TAU, Opponen
 from urbanlens.dashboard.services.spotguessr.named_place import candidate_name_for_location
 from urbanlens.dashboard.services.spotguessr.photo_coordinates import record_guess
 from urbanlens.dashboard.services.spotguessr.photos import candidate_image_for_location
+from urbanlens.dashboard.services.spotguessr.prewarm import consume_for_session, consume_for_solo_start, store_for_session, store_for_solo_start
 from urbanlens.dashboard.services.spotguessr.ratings import apply_round_ratings
 from urbanlens.dashboard.services.spotguessr.realtime import broadcast, session_group_name
 from urbanlens.dashboard.services.spotguessr.relevance import EXPLICIT_KINDS, backfill_no_reaction, record_feedback
@@ -42,7 +43,8 @@ from urbanlens.dashboard.services.spotguessr.street_view import candidate_street
 # this import runs - importing session any earlier intermittently raises
 # ImportError ("partially initialized module") depending on which process
 # happens to trigger this package's import first (celery workers hit it,
-# a plain `manage.py check` didn't) - see docs/PROBLEMS.md.
+# a plain `manage.py check` didn't) - see "Package __init__ import
+# ordering" in docs/NOTES.md.
 from urbanlens.dashboard.services.spotguessr.session import (
     GameConfig,
     SpotGuessrError,

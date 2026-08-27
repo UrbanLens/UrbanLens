@@ -11,7 +11,7 @@ from django.contrib.gis.geos import Point
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.db.models import SET_NULL, ForeignKey, Index
-from django.db.models.fields import CharField, DecimalField, SlugField
+from django.db.models.fields import CharField, DateTimeField, DecimalField, SlugField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.location.queryset import LocationManager
@@ -84,8 +84,25 @@ class Location(abstract.PublicDashboardModel):
         related_name="+",
     )
 
+    # The real-world parcel or building these coordinates sit on. A *resolved,
+    # cached* relationship, never an identity: it is recomputed whenever the
+    # containing place's geometry changes, so a provider correcting a boundary
+    # can move a location to a different place without any of the pin, share,
+    # or wiki provenance keyed off this row being disturbed. Null means the
+    # coordinate is on no known place, which behaves exactly as every location
+    # did before places existed.
+    place = ForeignKey(
+        "dashboard.Place",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="locations",
+    )
+    place_resolved_at = DateTimeField(null=True, blank=True)
+
     if TYPE_CHECKING:
         google_place_id: int | None
+        place_id: int | None
         wiki: Wiki
         activities: DjangoManager[TripActivity]
         markup_items: DjangoManager[PinMarkup]
@@ -286,8 +303,6 @@ class Location(abstract.PublicDashboardModel):
         The area-suffixed placeholder is still rejected by
         :func:`~urbanlens.dashboard.services.locations.naming.is_meaningful_name`,
         so it never leaks into external API queries or saved names.
-
-        # TODO: This should be assessed for deletion.
         """
         try:
             wiki = self.wiki
@@ -423,7 +438,7 @@ class Location(abstract.PublicDashboardModel):
             )
 
     def save(self, *args, **kwargs) -> None:
-        """Sanitize the official name, sync the PostGIS point, then let PublicDashboardModel mint a routing slug."""
+        """Sanitize the official name, sync the PostGIS point, resolve the place, then mint a routing slug."""
         from urbanlens.dashboard.services.locations.naming import sanitize_name
 
         if self.pk is not None:
@@ -437,6 +452,17 @@ class Location(abstract.PublicDashboardModel):
             lon = float(self.longitude)
             lat = float(self.latitude)
             self.point = Point(lon, lat, srid=4326)
+
+        # A new coordinate on ground somebody has already fetched resolves
+        # immediately, from geometry we hold - no provider call, and no window
+        # where a location that plainly stands on a known parcel doesn't say
+        # so. ``place_resolved_at`` is deliberately left unset: the chain has
+        # not run for *this* point, and it may still turn up a building
+        # footprint that refines the answer.
+        if self.pk is None and self.place_id is None and self.latitude is not None and self.longitude is not None:
+            from urbanlens.dashboard.models.place.model import Place
+
+            self.place = Place.objects.resolve_for_point(self.latitude, self.longitude)
 
         super().save(*args, **kwargs)
 
@@ -465,7 +491,6 @@ class Location(abstract.PublicDashboardModel):
             Index(fields=["uuid"], name="idxdb_loc_uuid"),
             Index(fields=["latitude", "longitude"], name="idxdb_loc_lat_long"),
             Index(fields=["official_name"], name="idxdb_loc_offname"),
-            Index(fields=["google_place"], name="idxdb_loc_gplace"),
         ]
         unique_together = [
             ["latitude", "longitude"],

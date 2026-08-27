@@ -9,8 +9,7 @@ only wiki access must not reach them.
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -18,9 +17,9 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.comments import top_level_comment_queryset, visible_comment_tree
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.comments.comments import top_level_comment_queryset, visible_comment_tree
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 BASE = "/dashboard/api/external/v1/pins"
 

@@ -2,7 +2,7 @@
 
 Always computed via PostGIS ``ST_Distance`` over a ``geography`` cast (correct
 in meters at any latitude) - never the codebase's other, approximate
-"degrees x 111,320" shortcut (``services.map_sharing``), since scoring
+"degrees x 111,320" shortcut (``services.sharing.map_sharing``), since scoring
 fairness depends on being right at sub-kilometer scale, not just
 trip-planning scale. Mirrors the existing ``Distance()`` convention already
 used in ``models/pin/queryset.py`` and ``services/memories/photos.py``.
@@ -30,15 +30,15 @@ def location_boundary_polygon(location: Location) -> GEOSGeometry | None:
     Deliberately bypasses ``Boundary.objects.effective_polygon_for_pin``/
     ``_for_wiki``: those resolve a specific pin's or wiki's customized
     boundary, which could differ per participant. Scoring must use exactly
-    one boundary for every participant in a session, so this only ever
-    reads the location-default row - falling back to the same circle those
-    helpers use when no polygon has been generated yet.
+    one boundary for every participant in a session, so this only ever reads
+    the place's own official outline - falling back to the same circle those
+    helpers use when no provider knows the coordinate.
     """
-    row = Boundary.objects.row_for_location(location, BoundaryType.PROPERTY)
-    if row is not None:
-        polygon = row.effective_polygon
-        if polygon is not None:
-            return polygon
+    from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
+
+    polygon = parcel_polygon_for_location(location)
+    if polygon is not None:
+        return polygon
     return circle_for_coordinates(location.latitude, location.longitude)
 
 

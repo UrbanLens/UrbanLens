@@ -1,0 +1,29 @@
+{
+    "name": "urbanlens-integration-tests",
+    "version": "0.0.0",
+    "private": true,
+    "description": "On-demand integration tests for a deployed UrbanLens instance.",
+    "type": "module",
+    "scripts": {
+        "test": "playwright test",
+        "test:smoke": "playwright test --project=smoke",
+        "test:services": "playwright test --project=services",
+        "test:api": "playwright test --project=api",
+        "test:ui": "playwright test --project=ui",
+        "test:a11y": "playwright test --project=a11y",
+        "_comment:visual": "Needs UL_E2E_VISUAL=1 in the environment - the project is not registered without it. Set as a variable rather than inline here, because an inline VAR=value prefix is not portable to Windows shells.",
+        "test:visual": "playwright test --project=visual",
+        "_comment:crossbrowser": "Needs UL_E2E_CROSS_BROWSER=1 in the environment, for the same reason.",
+        "test:crossbrowser": "playwright test --project=ui --project=ui-firefox --project=ui-webkit --project=ui-mobile",
+        "report": "playwright show-report reports/html",
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "codegen": "playwright codegen"
+    },
+    "devDependencies": {
+        "@axe-core/playwright": "4.13.0",
+        "@playwright/test": "1.62.1",
+        "@types/node": "24.10.1",
+        "axe-core": "4.13.0",
+        "typescript": "5.9.3"
+    }
+}

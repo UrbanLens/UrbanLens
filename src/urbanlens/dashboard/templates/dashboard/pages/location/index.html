@@ -1,18 +1,17 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load vendor_assets %}
 {% load static %}
 
 {% block header %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"
-    integrity="sha384-JP5UPxIO2Tm2o79Fb0tGYMa44jkWar53aBoCbd8ah0+LcCDoohTIYr+zIXyfGIJN" crossorigin="anonymous"></script>
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
+{% vendor_asset "leaflet_draw_css" %}
+{% vendor_asset "leaflet_draw_js" %}
 <script src="{% static 'js/cover-hero.js' %}"></script>
 <script src="{% static 'js/page-tabs.js' %}" defer></script>
 <script src="{% static 'js/article-editor.js' %}" defer></script>
 <script type="module" src="{% static 'dashboard/js/article-wysiwyg.js' %}"></script>
+<script type="module" src="{% static 'dashboard/js/albums.js' %}"></script>
 {% endblock %}
 
 {% block hero %}
@@ -31,6 +30,9 @@
             <button type="button" class="ul-subnav-tab" data-tab="visits">
                 <i class="material-symbols-outlined">directions_walk</i><span>Visits</span>
                 {% if pin_visit_count %}<span class="page-tab-badge">{{ pin_visit_count }}</span>{% endif %}
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="photos">
+                <i class="material-symbols-outlined">photo_library</i><span>Photos</span>
             </button>
             <button type="button" class="ul-subnav-tab" data-tab="article"
                     title="Your private article about this place - only you can see it">
@@ -150,15 +152,6 @@
          hx-timeout="25000"></div>
     {% endif %}
 
-    {% if parent_pin %}
-    {# -- Child pin: obvious way back up to the parent -------------------- #}
-    <a class="pin-parent-breadcrumb" href="{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid %}"
-       title="This is a child pin - open its parent pin">
-        <i class="material-symbols-outlined">arrow_back</i>
-        <span>Child pin of <strong>{{ parent_pin.effective_name }}</strong></span>
-    </a>
-    {% endif %}
-
     {# -- Title + details (swappable) ------------------------------------ #}
     <div id="pin-overview"
          hx-get="{% url 'pin.overview' pin.slug %}"
@@ -174,6 +167,10 @@
         <div class="card-header">
             <i class="material-symbols-outlined">place</i>
             <h3>Location</h3>
+            <a class="card-header-link" href="{% url 'pin.floorplan' pin.slug %}"
+               title="Draw or view this building's floorplan - floors, rooms, walls, doors - over the map">
+                <i class="material-symbols-outlined">architecture</i> Floorplan
+            </a>
         </div>
         <div class="map-wrapper" id="pin-detail-map-wrapper"
              {% if profile.pin_detail_map_height %}style="height: {{ profile.pin_detail_map_height }}px"{% endif %}>
@@ -182,6 +179,7 @@
             {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="detailpins" actions=detail_pin_bulk_actions %}
 
         </div>
+        {% include "dashboard/partials/layout/_temporal_imagery_slider.html" %}
         <div class="map-resize-handle" id="pin-detail-map-resize-handle"
              title="Drag to resize the map" role="separator" aria-orientation="horizontal"
              aria-label="Resize map"></div>
@@ -359,6 +357,13 @@
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
+        <div class="media-provider-loader" id="media-loader-digital_commonwealth"
+            hx-get="{% url 'pin.media' pin.slug 'digital_commonwealth' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
         <div class="media-provider-loader" id="media-loader-yelp"
             hx-get="{% url 'pin.media' pin.slug 'yelp' %}"
             hx-trigger="load"
@@ -454,7 +459,7 @@
                  hx-get="{% url 'pin.links' pin.slug %}"
                  hx-trigger="pinLinksChanged from:body"
                  hx-swap="innerHTML">
-                {% include "dashboard/partials/pins/_pin_links_row.html" with pin=pin links=pin.links.all add_url="pin.links" delete_url_name="pin.link.delete" row_id="pin-links-row" owner_slug=pin.slug use_dialog=True %}
+                {% include "dashboard/partials/pins/_pin_links_row.html" with pin=pin links=pin.links.all delete_url_name="pin.link.delete" row_id="pin-links-row" owner_slug=pin.slug show_badge=True %}
             </div>
         </div>
         {% endwith %}
@@ -660,6 +665,23 @@
     </div>
 </section>
 
+{# -- Photos tab: albums first, then this pin's photos not in any album ---- #}
+<section class="page-tab-panel" data-tab-panel="photos" hidden>
+    {# ?album= is carried through so a deep link (or a Back navigation) loads #}
+    {# that album directly instead of the list. See controllers.albums.       #}
+    <div id="albums-panel"
+        hx-get="{% url 'pin.albums' pin.slug %}{% if request.GET.album %}?album={{ request.GET.album|urlencode }}{% endif %}"
+        hx-trigger="load"
+        hx-swap="outerHTML"
+        class="albums-panel card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">photo_library</i>
+            <span>Photos</span>
+        </div>
+        <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+    </div>
+</section>
+
 {# -- Article tab: the user's private, Wikipedia-style article, plus a ------ #}
 {# Wikipedia sub-tab (moved here from the Overview tab's aux grid) showing -- #}
 {# the matched Wikipedia article read-only for reference/comparison. -------- #}
@@ -820,29 +842,34 @@
 <script src="{% static 'js/bulk-toolbar.js' %}"></script>
 
 {# -- Create community wiki dialog (content loaded via HTMX) --------------- #}
-<dialog id="pin-wiki-create-dialog" class="pin-wiki-create-dialog ul-dialog">
-    <div id="pin-wiki-create-dialog-body"></div>
+<dialog id="pin-wiki-share-dialog" class="pin-wiki-share-dialog ul-dialog" aria-label="Share to community wiki">
+    <div id="pin-wiki-share-dialog-body"></div>
 </dialog>
 
 {# -- Share pin dialog (content loaded via HTMX from pin.share.dialog) ------ #}
-<dialog id="pin-share-dialog" class="pin-share-dialog ul-dialog"></dialog>
+<dialog id="pin-share-dialog" class="pin-share-dialog ul-dialog" aria-label="Share pin"></dialog>
+
+{# -- Select parcel buildings to import as child pins ---------------------- #}
+<dialog id="building-import-dialog" class="building-import-dialog ul-dialog" aria-label="Import buildings"></dialog>
+
+{% include "dashboard/partials/pins/_detail_pin_bulk_edit_dialog.html" %}
 
 {# -- Import Photos dialog (Immich/Flickr/Google Photos tabs) -------------- #}
-<dialog id="pin-import-photos-dialog" class="pin-import-photos-dialog ul-dialog">
+<dialog id="pin-import-photos-dialog" class="pin-import-photos-dialog ul-dialog" aria-label="Import photos">
     {% include "dashboard/partials/pins/_import_photos_dialog.html" %}
 </dialog>
 
 {# -- Import a public Flickr album by URL (distinct from the per-user OAuth #}
 {# "Flickr" tab above - see controllers/flickr.py's module docstring) ------ #}
-<dialog id="flickr-album-dialog" class="ul-dialog"></dialog>
+<dialog id="flickr-album-dialog" class="ul-dialog" aria-label="Flickr album"></dialog>
 
 {# -- Add link dialog -------------------------------------------------------- #}
-<dialog id="pin-link-add-dialog" class="pin-link-add-dialog ul-dialog">
-    {% include "dashboard/partials/pins/_pin_link_add_dialog.html" %}
+<dialog id="pin-link-add-dialog" class="pin-link-add-dialog ul-dialog" aria-label="Add a link">
+    {% include "dashboard/partials/pins/_pin_link_add_dialog.html" with add_url="pin.links" owner_slug=pin.slug row_id="pin-links-row" %}
 </dialog>
 
 {# -- Pin edit dialog ------------------------------------------------------ #}
-<dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">
+<dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog" aria-labelledby="dialog-title-edit-pin">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Pin" %}
     <form id="pin-edit-form"
           hx-post="{% url 'pin.edit' pin.slug %}"
@@ -970,18 +997,19 @@
         const nameInput = document.getElementById('add-to-list-new-name');
         const name = (nameInput.value || '').trim();
         if (!name) { nameInput.focus(); return; }
-        fetch("{% url 'lists.create' %}", {
-            method: 'POST',
-            headers: { 'X-CSRFToken': "{{ csrf_token }}", 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ name }),
-        }).then((r) => r.json()).then((data) => {
-            if (data.ok) {
+        // The `data.ok === false` branch this replaces was dead code: lists.create
+        // never answers with JSON on failure, it answers 409 plus the plain text
+        // "You already have a list with that name." r.json() threw on that body,
+        // inside a chain with no .catch - so the likeliest failure of this feature
+        // did nothing at all. ulSendJson surfaces the server's own sentence.
+        window.ulSendJson("{% url 'lists.create' %}", 'POST', { name }, { headers: { Accept: 'application/json' } })
+            .then((data) => {
                 nameInput.value = '';
                 addPinsToList(data.uuid);
-            } else if (typeof toastr !== 'undefined') {
-                toastr.error('Could not create that list.');
-            }
-        });
+            })
+            .catch((err) => {
+                if (typeof toastr !== 'undefined') toastr.error((err && err.message) || 'Could not create that list.');
+            });
     }
 
     // -- Pin edit dialog: submit only the fields the user actually changed ------
@@ -1052,6 +1080,7 @@
      data-main-marker-owner-uuid="{{ pin.uuid }}"
      data-pin-slug="{{ pin.slug }}"
      data-default-map-view="{{ default_map_view }}"
+     data-profile-uuid="{{ request.user.profile.uuid }}"
      data-openweathermap-api-key="{{ openweathermap_api_key }}"
      data-markup-json-url="{{ markup_json_url }}{% if include_children %}?children=1{% endif %}"
      data-markup-create-url="{{ markup_create_url }}"
@@ -1059,6 +1088,8 @@
      data-detail-pins-json-url="{{ detail_pins_json_url }}{% if include_children %}?children=1{% endif %}"
      data-detail-pin-create-url="{{ detail_pin_create_url }}"
      data-detail-pin-edit-url-template="{{ detail_pin_edit_url_template }}"
+     data-overlay-corners-url-template="{{ overlay_corners_url_template }}"
+     data-detail-pins-bulk-edit-url="{% url 'pin.bulk_edit' %}"
      data-boundary-url="{{ boundary_url }}"
      data-photo-gallery-json-url="{{ photo_gallery_json_url }}{% if include_children %}?children=1{% endif %}"
      data-nearby-pins-json-url="{{ nearby_pins_json_url }}"
@@ -1067,28 +1098,12 @@
      data-media-relevance-url="{% url 'pin.media.relevance' pin.slug %}"
      data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
      data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
-     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
+     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"
+     data-temporal-years="{{ temporal_slider_years|join:',' }}"
+     data-temporal-imagery-url-template="{{ temporal_imagery_url_template }}"></div>
 <script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script>
 
-
-    // -- Pin the "child pin of" breadcrumb to the corner once it scrolls away --
-    (function initPinParentBreadcrumbScroll() {
-        const breadcrumb = document.querySelector('.pin-parent-breadcrumb');
-        const header = document.querySelector('.app-nav');
-        if (!breadcrumb || !header) return;
-        let ticking = false;
-        function update() {
-            ticking = false;
-            breadcrumb.classList.toggle('pin-parent-breadcrumb--pinned', header.getBoundingClientRect().bottom <= 0);
-        }
-        window.addEventListener('scroll', function () {
-            if (ticking) return;
-            ticking = true;
-            requestAnimationFrame(update);
-        }, { passive: true });
-        update();
-    }());
 
     // -- Pin detail onboarding ------------------------------------------------
     (function initPinDetailOnboarding() {
@@ -1363,7 +1378,10 @@
         }
 
         // HTMX does not perform a swap for 204 No Content responses, so the
-        // "Loading..." placeholder stays visible forever.  Remove it explicitly.
+        // "Loading..." placeholder stays visible forever. Dismiss it explicitly
+        // (window.ulFlyToToolsFab, see ts/shared/fly-to-dismiss.ts) rather than a bare
+        // el.remove() - the card shrinks and flies toward the tools FAB instead
+        // of vanishing instantly and shifting the page underneath it.
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {
             var el = evt.detail && evt.detail.elt;
             if (isExtPanel204(el) && evt.detail.xhr.status === 204) {
@@ -1385,7 +1403,7 @@
                         }
                     }
                 }
-                el.remove();
+                window.ulFlyToToolsFab(el);
             }
         });
 
@@ -1404,27 +1422,27 @@
                 return;
             }
             if (el.id === 'loopnet-section') {
-                el.remove();
+                window.ulFlyToToolsFab(el);
                 return;
             }
             el.innerHTML = '<div class="card"><div class="card-body"><span class="view-muted">External data temporarily unavailable.</span></div></div>';
         }, true);
 
-        // Network failure: just remove the placeholder.
+        // Network failure: just dismiss the placeholder.
         document.body.addEventListener('htmx:sendError', function (evt) {
             var el = evt.detail && evt.detail.elt;
             if (isExtPanel204(el)) {
                 evt.stopImmediatePropagation();
-                el.remove();
+                window.ulFlyToToolsFab(el);
             }
         }, true);
 
-        // Request timeout: remove silently instead of showing the global toast.
+        // Request timeout: dismiss silently instead of showing the global toast.
         document.body.addEventListener('htmx:timeout', function (evt) {
             var el = evt.detail && evt.detail.elt;
             if (isExtPanel204(el)) {
                 evt.stopImmediatePropagation();
-                el.remove();
+                window.ulFlyToToolsFab(el);
             }
         }, true);
     }());
@@ -1551,7 +1569,7 @@
         var TAB_LABELS = {
             smithsonian: 'Smithsonian', wikimedia: 'Wikimedia', wikipedia_media: 'Wikipedia', loc: 'Library of Congress',
             yelp: 'Yelp', google_images: 'Google Images', google_maps: 'Google Maps', searxng_images: 'Web Images',
-            internet_archive: 'Internet Archive', loopnet: 'LoopNet', cris_building: 'NY Historic Preservation (CRIS)',
+            internet_archive: 'Internet Archive', digital_commonwealth: 'Digital Commonwealth', loopnet: 'LoopNet', cris_building: 'NY Historic Preservation (CRIS)',
         };
 
         // Builds the single combined tab strip: All | Mine | <source tabs> |
@@ -1567,7 +1585,19 @@
         function rebuildMediaTabs() {
             var g = grid();
             var tabsEl = document.getElementById('media-tabs');
-            if (!g || !tabsEl) return;
+            if (!tabsEl) return;
+            if (!g) {
+                // Nothing to build tabs from. A container still advertising
+                // role="tablist" with no role="tab" inside it is an axe
+                // `aria-required-children` violation at critical, and it tells
+                // a screen reader there is a tab strip here when there is not.
+                tabsEl.removeAttribute('role');
+                tabsEl.removeAttribute('aria-label');
+                tabsEl.innerHTML = '';
+                return;
+            }
+            tabsEl.setAttribute('role', 'tablist');
+            tabsEl.setAttribute('aria-label', 'Media view');
             var counts = {};
             var notRelevantCount = 0;
             var total = 0;
@@ -1578,10 +1608,10 @@
                 if (src && src !== 'photos' && !isNotRelevant) counts[src] = (counts[src] || 0) + 1;
                 if (isNotRelevant) notRelevantCount += 1;
             });
-            var countBadge = document.getElementById('media-count-badge');
-            if (countBadge) {
-                countBadge.textContent = String(total);
-                countBadge.hidden = total === 0;
+            var countLabel = document.getElementById('media-count-badge');
+            if (countLabel) {
+                countLabel.textContent = String(total);
+                countLabel.hidden = total === 0;
             }
             var sources = Object.keys(counts);
             var showSourceTabs = sources.length >= 2;
@@ -1589,20 +1619,27 @@
             if (activeTab === 'not_relevant' && !notRelevantCount) activeTab = 'all';
 
             var currentView = section().dataset.mediaView || 'all';
-            var html = '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === 'all' ? ' active' : '') +
-                '" data-tab="all">All<span class="media-tab-count">' + total + '</span></button>';
-            html += '<button type="button" class="card-tab media-tab' + (currentView === 'mine' ? ' active' : '') +
-                '" data-tab="mine">Mine</button>';
+            // role="tab"/aria-selected on every generated button, matching the
+            // statically-rendered article sub-tabs above. Without them the
+            // surrounding role="tablist" has no valid children, which axe
+            // reports as `aria-required-children` at critical - the strip reads
+            // to a screen reader as a list of unrelated buttons rather than as
+            // one control with a current selection.
+            function mediaTab(selected, tab, inner) {
+                return '<button type="button" role="tab" aria-selected="' + (selected ? 'true' : 'false') +
+                    '" class="card-tab media-tab' + (selected ? ' active' : '') + '" data-tab="' + tab + '">' + inner + '</button>';
+            }
+
+            var html = mediaTab(currentView === 'all' && activeTab === 'all', 'all', 'All<span class="media-tab-count">' + total + '</span>');
+            html += mediaTab(currentView === 'mine', 'mine', 'Mine');
             if (showSourceTabs) {
                 sources.sort().forEach(function (src) {
                     var label = TAB_LABELS[src] || src;
-                    html += '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === src ? ' active' : '') +
-                        '" data-tab="' + src + '">' + label + '<span class="media-tab-count">' + counts[src] + '</span></button>';
+                    html += mediaTab(currentView === 'all' && activeTab === src, src, label + '<span class="media-tab-count">' + counts[src] + '</span>');
                 });
             }
             if (notRelevantCount) {
-                html += '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === 'not_relevant' ? ' active' : '') +
-                    '" data-tab="not_relevant">Not Relevant<span class="media-tab-count">' + notRelevantCount + '</span></button>';
+                html += mediaTab(currentView === 'all' && activeTab === 'not_relevant', 'not_relevant', 'Not Relevant<span class="media-tab-count">' + notRelevantCount + '</span>');
             }
             tabsEl.innerHTML = html;
             tabsEl.querySelectorAll('.media-tab').forEach(function (btn) {
@@ -1757,11 +1794,10 @@
                 document.querySelectorAll('[data-media-sort]').forEach(function (b) { b.classList.toggle('active', b === sortBtn); });
                 var g2 = grid();
                 if (g2) { sortMediaGallery(g2); if (window.initAdaptivePagination) window.initAdaptivePagination(document, true); }
-                fetch('{% url "pin.media.sort" %}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-                    body: JSON.stringify({ sort: sort }),
-                });
+                // A display preference: worth reporting if it does not stick, but the
+                // sort the user just asked for has already been applied locally.
+                window.ulSendJson('{% url "pin.media.sort" %}', 'POST', { sort: sort })
+                    .catch(function () { if (window.toastr) toastr.warning("Couldn't save your sort preference."); });
             }
         });
         document.querySelectorAll('[data-media-sort]').forEach(function (b) {
@@ -1787,14 +1823,13 @@
             rebuildMediaTabs();
             applyMediaTabFilter(activeTab);
             if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
-            fetch('{% url "pin.media.relevance" pin.slug %}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-                body: JSON.stringify({
-                    source: source, item_key: key, url: url, is_relevant: nextRelevant,
-                    page_url: itemEl.dataset.mediaPageUrl || '', caption: itemEl.dataset.mediaCaption || '',
-                }),
-            }).then(function (resp) { return resp.json(); }).then(function (data) {
+            // The thumb state is applied optimistically above, so a refused vote has
+            // to be reported - otherwise it silently reverts on the next page load.
+            window.ulSendJson('{% url "pin.media.relevance" pin.slug %}', 'POST', {
+                source: source, item_key: key, url: url, is_relevant: nextRelevant,
+                page_url: itemEl.dataset.mediaPageUrl || '', caption: itemEl.dataset.mediaCaption || '',
+            }).then(function (data) {
+                data = data || {};
                 if (data.materialize_error && window.toastr) toastr.warning("Marked relevant, but couldn't save a local copy: " + data.materialize_error);
                 if (!data.image_url) return;
                 itemEl.dataset.mediaUrl = data.image_url;
@@ -1936,12 +1971,14 @@
             var payload = items.map(function (item) {
                 return { source: item.dataset.mediaSource, url: item.dataset.mediaUrl, page_url: item.dataset.mediaPageUrl, caption: item.dataset.mediaCaption };
             });
-            fetch('{% url "pin.media.send_to_wiki" pin.slug %}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-                body: JSON.stringify({ items: payload }),
-            }).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function (data) {
-                if (window.toastr) toastr.success((data.created || items.length) + ' photo(s) sent to the wiki.');
+            // The inner .json().catch(=> {}) used to swallow a 500's HTML error page
+            // and fall through to the success toast below. ulSendJson throws first.
+            window.ulSendJson('{% url "pin.media.send_to_wiki" pin.slug %}', 'POST', { items: payload }).then(function (data) {
+                data = data || {};
+                // Queued, not stored: the downloads run in the background, so the
+                // photos appear on the wiki shortly after this returns.
+                var n = (data.queued != null ? data.queued : items.length);
+                if (window.toastr) toastr.success(n + ' photo(s) queued for the wiki - they\'ll appear shortly.');
                 window.mediaToggleSelectMode();
             }).catch(function () { if (window.toastr) toastr.error('Failed to send photos to the wiki.'); });
         };

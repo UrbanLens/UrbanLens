@@ -41,7 +41,8 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.plugins.builtin.epa_echo import EpaEchoDetailPanelSource, EpaEchoNearbyPanelSource
-from urbanlens.dashboard.services.external_data import get_panel_source
+from urbanlens.dashboard.services.pins.external_data import get_panel_source
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -58,7 +59,7 @@ _EPA_DATA = {
 }
 
 
-class GatedPanelServingTests(TestCase):
+class GatedPanelServingTests(RedataConfiguredMixin, TestCase):
     """``PinController.panel_info`` must refuse a source the viewer's plan excludes."""
 
     def setUp(self) -> None:

@@ -21,10 +21,18 @@ interface ConfirmDialogOptions {
     message?: string;
     confirmLabel?: string;
     cancelLabel?: string;
+    /** Shows a third button; picking it resolves with "alt" rather than a boolean. */
+    altLabel?: string;
+    /** false renders the primary button as non-destructive. */
+    danger?: boolean;
 }
 
 interface HtmxApi {
     process(element: Element): void;
+    /** Dispatch an htmx event on an element - used to fire `ul:unhide` on sections
+     * whose hx-get was skipped while they were collapsed. Declared here because the
+     * inline script that called it was never typechecked. */
+    trigger(element: Element, event: string, detail?: unknown): void;
     ajax(verb: string, url: string, options: Record<string, unknown>): void;
 }
 
@@ -45,8 +53,15 @@ interface CommentMapComposerOptions {
 
 declare global {
     interface Window {
-        toastr: Toastr;
-        confirmDialog?: (options: ConfirmDialogOptions) => Promise<boolean>;
+        // A CDN <script> in dashboard/themes/base.html, so it is absent whenever that
+        // request does not land. shared/dialogs.ts's toast falls back; reach for it
+        // rather than window.toastr directly.
+        toastr?: Toastr;
+        // Resolves "alt" when the caller offered altLabel and the user picked it - the
+        // pin-delete "keep child pins" path depends on that third outcome. This was
+        // declared as Promise<boolean> while the implementation could already return
+        // "alt", so callers narrowing on it were trusting a type that was not true.
+        confirmDialog?: (options: ConfirmDialogOptions | string) => Promise<boolean | "alt">;
         htmx?: HtmxApi;
         ulBulkToolbar?: UlBulkToolbar;
         csrftoken: string;
@@ -54,6 +69,21 @@ declare global {
         // element (legacy comment/visit/trip-comment usage) or an options
         // object with no form, which switches it into standalone save mode.
         _openCommentMapComposer: (formOrOptions: HTMLElement | CommentMapComposerOptions) => void;
+        // Adds an external Media-gallery item to an album. Defined by
+        // shared/album-items.ts; called from the server-rendered Media gallery
+        // tiles, which that module doesn't own.
+        albumAddExternalMedia?: (addUrl: string, media: { source: string; url: string; page_url?: string; caption?: string }) => Promise<void>;
+        // Georeferenced map image overlays. Defined by shared/map-image-overlays.ts's
+        // wireManageOverlaysDialog(), called from both the pin/wiki map entry and
+        // the floorplan editor, and invoked by name from the server-rendered
+        // manage-overlays dialog, which can't import either.
+        ulMapOverlayStartAlign?: (uuid: string) => void;
+        ulMapOverlayPreviewOpacity?: (uuid: string, value: string) => void;
+        ulMapOverlaySeedCorners?: () => void;
+        ulMapOverlayPickFromMedia?: (galleryJsonUrl?: string) => void;
+        ulMapOverlayChooseImage?: (id: number, caption: string) => void;
+        ulMapOverlaySyncSubmitState?: () => void;
+        ulMapOverlayHandleDrop?: (event: DragEvent, zone: HTMLElement) => void;
     }
 
     const toastr: Toastr;

@@ -1,7 +1,7 @@
 """Organize-photos helpers for the Memories Photos page: pin matching, classification, and visit logging.
 
 These build on the lower-level PinVisit/VisitSuggestion helpers in
-``services.visits`` and are the operations the Photos page controllers call when a
+``services.visits.visits`` and are the operations the Photos page controllers call when a
 user confirms, pins, or manually files an uploaded photo. Ingestion (raising a
 ``VisitSuggestion`` from a freshly uploaded, unfiled photo) lives in
 ``services.memories.visits.maybe_suggest_photo_visit``.
@@ -17,9 +17,10 @@ from django.contrib.gis.measure import D
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.visits import add_visited_status, resolve_location_for_point, sync_last_visited, visit_logging_allowed
+from urbanlens.dashboard.services.visits.visits import add_visited_status, resolve_location_for_point, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from decimal import Decimal
 
     from urbanlens.dashboard.models.images.model import Image
@@ -57,12 +58,39 @@ def find_matching_pin(profile: Profile, latitude: Decimal | float, longitude: De
     )
 
 
-def classify_photo(image: Image) -> PhotoState:
+def pending_suggestion_image_ids(images: Sequence[Image]) -> set[int]:
+    """Return which of *images* have a pending photo-origin VisitSuggestion.
+
+    One query for the whole batch, to pass to :func:`classify_photo` when
+    classifying a list - see that function's ``pending_image_ids``.
+
+    Args:
+        images: The photos about to be classified.
+
+    Returns:
+        The subset of their primary keys with a pending suggestion.
+    """
+    from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
+
+    if not images:
+        return set()
+    return set(
+        VisitSuggestion.objects.filter(origin_image__in=images, status=VisitSuggestionStatus.PENDING).values_list("origin_image_id", flat=True),
+    )
+
+
+def classify_photo(image: Image, pending_image_ids: set[int] | None = None) -> PhotoState:
     """Return the organize state of an uploaded photo.
 
     Args:
         image: The Image to classify (``visit``, coordinates, and
             ``organize_dismissed`` are read).
+        pending_image_ids: Precomputed output of
+            :func:`pending_suggestion_image_ids`. Callers classifying a *list*
+            should pass it, otherwise this issues a suggestion-exists query per
+            photo. Passed explicitly rather than read off a prefetch attribute
+            so that forgetting it costs queries rather than silently returning
+            the wrong state.
 
     Returns:
         - ``"filed"``: already tied to a visit, or dismissed - no action needed.
@@ -74,7 +102,11 @@ def classify_photo(image: Image) -> PhotoState:
 
     if image.visit_id or image.organize_dismissed:
         return "filed"
-    if VisitSuggestion.objects.filter(origin_image=image, status=VisitSuggestionStatus.PENDING).exists():
+    if pending_image_ids is not None:
+        has_pending = image.pk in pending_image_ids
+    else:
+        has_pending = VisitSuggestion.objects.filter(origin_image=image, status=VisitSuggestionStatus.PENDING).exists()
+    if has_pending:
         return "suggested"
     if image.effective_latitude is not None and image.effective_longitude is not None:
         return "needs_pin"
@@ -124,13 +156,19 @@ def _resuggest_nearby_unfiled_photos(profile: Profile, pin: Pin, *, exclude_imag
     already_suggested = set(
         VisitSuggestion.objects.filter(origin_image__in=candidates, status=VisitSuggestionStatus.PENDING).values_list("origin_image_id", flat=True),
     )
+    # One query for the dates in play, rather than one per candidate. Safe to compute
+    # up front because neither branch below adds a date to the set: the "already
+    # visited" branch logs another visit on a date that is already in it, and
+    # maybe_suggest_photo_visit creates a VisitSuggestion, never a PinVisit.
+    candidate_dates = {candidate.taken_at.date() for candidate in candidates if candidate.taken_at}
+    visited_dates = {visit.visited_at.date() for visit in pin.visit_history.filter(visited_at__date__in=candidate_dates)} if candidate_dates else set()
     for candidate in candidates:
         if candidate.pk in already_suggested:
             continue
         matched_pin = find_matching_pin(profile, candidate.latitude, candidate.longitude)
         if matched_pin is None or matched_pin.pk != pin.pk:
             continue
-        if pin.visit_history.filter(visited_at__date=candidate.taken_at.date()).exists():
+        if candidate.taken_at and candidate.taken_at.date() in visited_dates:
             log_visit_on_pin(profile, candidate, pin)
         else:
             maybe_suggest_photo_visit(candidate)

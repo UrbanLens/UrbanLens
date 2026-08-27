@@ -35,7 +35,7 @@ from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.external_api.views_pin_article import OwnedPinRequiredMixin
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.comments.model import Comment
-from urbanlens.dashboard.services.comments import ALLOWED_EMOJIS, aggregate_reactions, comment_is_visible, toggle_reaction
+from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, aggregate_reactions, comment_is_visible, toggle_reaction
 
 if TYPE_CHECKING:
     from rest_framework.request import Request

@@ -16,7 +16,7 @@ from typing import ClassVar
 import requests
 
 from urbanlens.dashboard.services.ai.vision import _KEYWORD_PROMPT, _parse_keyword_text  # reuse the shared prompt/parsing, not worth duplicating
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
