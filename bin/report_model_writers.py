@@ -60,10 +60,10 @@ def _model_names() -> set[str]:
     """
     names: set[str] = set()
     for path in pathlib.Path("src").rglob("models/**/*.py"):
-        if any(skip in str(path) for skip in _SKIP):
+        if any(skip in path.as_posix() for skip in _SKIP):
             continue
         try:
-            tree = ast.parse(path.read_text())
+            tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError:
             continue
         for node in ast.walk(tree):
@@ -179,10 +179,10 @@ def main(argv: list[str]) -> int:
     bare_saves: dict[str, list[str]] = collections.defaultdict(list)
 
     for path in pathlib.Path("src").rglob("*.py"):
-        if any(skip in str(path) for skip in _SKIP):
+        if any(skip in path.as_posix() for skip in _SKIP):
             continue
         try:
-            tree = ast.parse(path.read_text())
+            tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError:
             continue
         fresh = _freshly_constructed(tree, models)

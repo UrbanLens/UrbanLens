@@ -70,7 +70,7 @@ def check() -> int:
     for directory in directories:
         app_label = directory.parent.name
         on_disk = {path.stem for path in directory.glob("*.py") if path.name != "__init__.py"}
-        committed = {path.stem for path in directory.glob("*.py") if path.name != "__init__.py" and str(path) in tracked}
+        committed = {path.stem for path in directory.glob("*.py") if path.name != "__init__.py" and path.as_posix() in tracked}
 
         for stray in sorted(on_disk - committed):
             problems.append(f"{directory}/{stray}.py is not tracked by git - commit it or remove it before it becomes someone's dependency")
@@ -79,7 +79,7 @@ def check() -> int:
             if path.name == "__init__.py":
                 continue
             scanned += 1
-            block = _DEPENDENCIES_BLOCK.search(path.read_text())
+            block = _DEPENDENCIES_BLOCK.search(path.read_text(encoding="utf-8"))
             if block is None:
                 continue
             graph.setdefault(app_label, {}).setdefault(path.stem, set())

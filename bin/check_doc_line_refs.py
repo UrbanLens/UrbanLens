@@ -82,14 +82,14 @@ def check(*, report_drift: bool = False) -> int:
     suspected_drift: list[str] = []
 
     for document in _documentation_files():
-        for line_number, line in enumerate(document.read_text().splitlines(), 1):
+        for line_number, line in enumerate(document.read_text(encoding="utf-8").splitlines(), 1):
             identifiers = [name for name in _IDENTIFIER.findall(line) if len(name) >= _MIN_IDENTIFIER_LENGTH]
             for citation in _CITATION.finditer(line):
                 cited_path, cited_line = citation.group(1).lstrip("./"), int(citation.group(2))
                 matches = index.get(cited_path, [])
                 if len(matches) != 1:
                     continue
-                source = pathlib.Path(matches[0]).read_text().splitlines()
+                source = pathlib.Path(matches[0]).read_text(encoding="utf-8").splitlines()
                 if cited_line > len(source):
                     past_end.append(f"{document}:{line_number}: cites {cited_path}:{cited_line}, but that file has {len(source)} lines")
                     continue

@@ -63,11 +63,16 @@ def _visible_paths() -> set[str]:
 
 
 def _module_candidates(module: str) -> list[str]:
-    """Paths that would satisfy ``import module`` - a module file or a package."""
+    """Paths that would satisfy ``import module`` - a module file or a package.
+
+    Returned as posix-style strings since that's what ``git ls-files`` emits
+    (even on Windows) - comparing against ``str(Path(...))`` here would compare
+    backslash-joined paths against forward-slash ones and never match.
+    """
     relative = module.replace(".", "/")
     return [
-        str(_PACKAGE_ROOT / f"{relative}.py"),
-        str(_PACKAGE_ROOT / relative / "__init__.py"),
+        (_PACKAGE_ROOT / f"{relative}.py").as_posix(),
+        (_PACKAGE_ROOT / relative / "__init__.py").as_posix(),
     ]
 
 
@@ -152,7 +157,7 @@ def _missing_templates(visible: set[str], python_files: list[str]) -> list[str]:
         for template in sorted(_referenced_templates(source)):
             if pathlib.Path(template).name in _CONVENTION_TEMPLATES:
                 continue
-            if any(str(root / template) in visible for root in _TEMPLATE_ROOTS):
+            if any((root / template).as_posix() in visible for root in _TEMPLATE_ROOTS):
                 continue
             problems.append(f"{path}: renders {template}, which no committed file provides")
     return problems

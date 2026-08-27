@@ -48,7 +48,7 @@ _ALLOW_MARKER = "signal-update-ok:"
 
 def _iter_python_files() -> list[pathlib.Path]:
     """Return production Python files, excluding tests and migrations."""
-    return [p for p in sorted(SEARCH_ROOT.rglob("*.py")) if "/tests/" not in str(p) and "/migrations/" not in str(p)]
+    return [p for p in sorted(SEARCH_ROOT.rglob("*.py")) if "/tests/" not in p.as_posix() and "/migrations/" not in p.as_posix()]
 
 
 def _subscribed_models(tree: ast.AST) -> dict[str, set[str]]:

@@ -91,7 +91,7 @@ def main() -> int:
     versioned_models: dict[str, pathlib.Path] = {}
 
     for path in sorted(SEARCH_ROOT.rglob("*.py")):
-        if "/tests/" in str(path) or "/migrations/" in str(path):
+        if "/tests/" in path.as_posix() or "/migrations/" in path.as_posix():
             continue
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -153,7 +153,7 @@ def _field_exists_anywhere(field_name: str) -> bool:
     if _ALL_FIELD_NAMES is None:
         _ALL_FIELD_NAMES = set()
         for path in SEARCH_ROOT.rglob("*.py"):
-            if "/tests/" in str(path) or "/migrations/" in str(path):
+            if "/tests/" in path.as_posix() or "/migrations/" in path.as_posix():
                 continue
             try:
                 tree = ast.parse(path.read_text(encoding="utf-8"))
