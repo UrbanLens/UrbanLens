@@ -73,13 +73,18 @@
     // "\" as "/" in an authority and strips TAB/LF/CR before parsing. Any
     // check that parses differently than the sink will eventually disagree
     // with it, so the sink's own parser is the only safe arbiter.
-    function isSafeUrl(url) {
-        if (typeof url !== 'string' || !url) return false;
+    // Returns the URL to navigate to, or null. It hands back the *parsed*
+    // href rather than a yes/no, so a caller cannot check one string and then
+    // navigate to another - the value that was validated is the only value
+    // available to assign.
+    function safeNotifUrl(url) {
+        if (typeof url !== 'string' || !url) return null;
         try {
             var parsed = new URL(url, window.location.origin);
-            return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.origin === window.location.origin;
+            var ok = (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.origin === window.location.origin;
+            return ok ? parsed.href : null;
         } catch (err) {
-            return false;
+            return null;
         }
     }
 
@@ -88,9 +93,10 @@
         var toast = n.message
             ? toastr.info(escapeHtml(n.message), escapeHtml(n.title))
             : toastr.info(escapeHtml(n.title));
-        if (toast && n.url && isSafeUrl(n.url)) {
+        var toastTarget = safeNotifUrl(n.url);
+        if (toast && toastTarget) {
             toast.css('cursor', 'pointer');
-            toast.on('click', function () { window.location = n.url; });
+            toast.on('click', function () { window.location = toastTarget; });
         }
     }
 
@@ -105,7 +111,8 @@
             });
             note.onclick = function () {
                 window.focus();
-                if (n.url && isSafeUrl(n.url)) window.location = n.url;
+                var target = safeNotifUrl(n.url);
+                if (target) window.location = target;
                 note.close();
             };
         } catch (err) {

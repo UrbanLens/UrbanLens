@@ -263,11 +263,33 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         return leaflet.latLngBounds(entry.corners.map((corner) => leaflet.latLng(corner[0], corner[1])));
     }
 
+    /**
+     * An overlay URL that is safe to hand to the DOM, or "" if it is not.
+     *
+     * Overlay URLs are supplied by whoever created the overlay, and on a wiki
+     * that is not necessarily the person viewing it. The server already
+     * validates them, but this is the sink, so it decides on its own terms
+     * rather than trusting that: anything that is not an http(s) URL or a
+     * same-origin path - `javascript:`, `data:`, a protocol-relative `//host`
+     * - is dropped rather than assigned.
+     */
+    function safeOverlayUrl(raw: string): string {
+        if (!raw) return "";
+        try {
+            const parsed = new URL(raw, window.location.origin);
+            if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+            return parsed.href;
+        } catch {
+            return "";
+        }
+    }
+
     function add(entry: MapOverlayEntry): void {
         if (entry.tile_url_template) {
             // Pre-georeferenced tile pyramid: Leaflet's own tile layer does
             // the drawing, and `bounds` stops it requesting tiles outside
             // the sheet's footprint (the proxy would 404 them anyway).
+            if (!safeOverlayUrl(entry.tile_url_template.replace(/\{[zxys]\}/g, "0"))) return;
             const tileLayer = leaflet.tileLayer(entry.tile_url_template, {
                 opacity: entry.opacity / 100,
                 bounds: boundsFor(entry),
@@ -284,7 +306,9 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         img.className = "ul-map-overlay-image";
         img.alt = entry.name || "Map overlay";
         img.draggable = false;
-        img.src = entry.url;
+        const src = safeOverlayUrl(entry.url);
+        if (!src) return;
+        img.src = src;
 
         const item: LiveOverlay = { entry, img, tileLayer: null, handles: [], aligning: false, visible: false };
         item.handles = entry.corners.map((_corner, index) => makeHandle(item, index));
