@@ -118,6 +118,76 @@ def _0048_encrypt_existing_preference_fields(apps, schema_editor) -> None:
             _0048__encrypt_column(cursor, table, column)
 
 
+_TABLE = "dashboard_images"
+_0066__field = EncryptedTextField()
+_COLUMN = "exif_data"
+
+
+def _0066_decrypt_existing_exif_data(apps, schema_editor) -> None:
+    """Real reverse: decrypt back to plaintext JSON text before the column returns to jsonb.
+
+    Per "Migration rollbacks decrypt" in docs/DATA_ENCRYPTION.md. A value not
+    shaped like a Fernet token (they begin ``gAAAA``) is left alone - it was
+    written before the forward pass, and re-processing it would corrupt real
+    plaintext. A token-shaped value no key can decrypt raises, aborting and
+    rolling back the reverse rather than leaving something the pre-0066 code
+    would try to parse as JSON.
+
+    Runs before the ``AlterField`` is undone, because Django reverses operations
+    in reverse order - so the column is still ``text`` here.
+    """
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(
+            f"SELECT id, {_COLUMN} FROM {_TABLE} WHERE {_COLUMN} LIKE 'gAAAA%%'"
+        )
+        for pk, ciphertext in cursor.fetchall():
+            cursor.execute(
+                f"UPDATE {_TABLE} SET {_COLUMN} = %s WHERE id = %s",
+                [_0066__field.from_db_value(ciphertext, None, None), pk],
+            )
+
+
+def _0066__already_encrypted(value: str) -> bool:
+    """True when ``value`` is already ciphertext this install can read.
+
+    Keeps the pass idempotent, as in 0048 - re-encrypting ciphertext yields a
+    value whose single decrypt returns the inner ciphertext, which looks like
+    permanent corruption.
+
+    Args:
+        value: The raw stored column value.
+
+    Returns:
+        True when the value decrypts under some configured key.
+    """
+    try:
+        _fernet().decrypt(value.encode())
+    except (InvalidToken, UnicodeEncodeError):
+        return False
+    return True
+
+
+def _0066_encrypt_existing_exif_data(apps, schema_editor) -> None:
+    """Encrypt every pre-existing EXIF snapshot in place.
+
+    Raw cursor rather than the ORM, as in 0039/0048, so the pass is unaffected
+    by the historical model's field type and by its order relative to the
+    ``AlterField``. Without it every pre-existing row would read as an
+    undecryptable value on first load after deploy.
+    """
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(
+            f"SELECT id, {_COLUMN} FROM {_TABLE} WHERE {_COLUMN} IS NOT NULL AND {_COLUMN} != ''"
+        )
+        for pk, stored in cursor.fetchall():
+            if _0066__already_encrypted(stored):
+                continue
+            cursor.execute(
+                f"UPDATE {_TABLE} SET {_COLUMN} = %s WHERE id = %s",
+                [_0066__field.get_prep_value(stored), pk],
+            )
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("dashboard", "0030_v0_7_0"),
@@ -190,6 +260,27 @@ class Migration(migrations.Migration):
                 deferrable=django.db.models.constraints.Deferrable["DEFERRED"],
                 fields=("floorplan", "level"),
                 name="floorplan_floor_unique_level",
+            ),
+        ),
+        migrations.AddField(
+            model_name="profile",
+            name="credential_prompt_snoozed_until",
+            field=models.DateTimeField(blank=True, null=True),
+        ),
+        migrations.AddField(
+            model_name="profile",
+            name="auto_create_building_pins",
+            field=models.BooleanField(
+                default=True,
+                help_text="Automatically add child pins for the buildings on a property when they are confidently identified. Ambiguous buildings still wait for your approval.",
+            ),
+        ),
+        migrations.AddField(
+            model_name="profile",
+            name="disable_auto_tagging",
+            field=models.BooleanField(
+                default=False,
+                help_text="Turn off automatic tagging of your pins. Individual labels can also be excluded on the Organize page.",
             ),
         ),
         migrations.AlterField(
@@ -306,5 +397,21 @@ class Migration(migrations.Migration):
         migrations.RunPython(
             code=_0048_encrypt_existing_preference_fields,
             reverse_code=_0048_decrypt_existing_preference_fields,
+        ),
+        migrations.AddField(
+            model_name="image",
+            name="source_media_url",
+            field=models.URLField(blank=True, max_length=500, null=True),
+        ),
+        migrations.AlterField(
+            model_name="image",
+            name="exif_data",
+            field=urbanlens.dashboard.models.fields.EncryptedJSONField(
+                blank=True, fail_soft=True, null=True
+            ),
+        ),
+        migrations.RunPython(
+            code=_0066_encrypt_existing_exif_data,
+            reverse_code=_0066_decrypt_existing_exif_data,
         ),
     ]
