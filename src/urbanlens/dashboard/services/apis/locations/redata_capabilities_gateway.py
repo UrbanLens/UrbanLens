@@ -17,6 +17,7 @@ import logging
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +95,14 @@ def applicable_providers(domain_tag: str, latitude: float, longitude: float) -> 
 
     try:
         index = RedataCapabilitiesGateway().get_capabilities(latitude=latitude, longitude=longitude)
-    except LocationContextUnavailableError:
-        logger.info("REData capability index unavailable for %s at %.4f,%.4f", domain_tag, latitude, longitude, exc_info=True)
+    except LocationContextUnavailableError as exc:
+        logger.info(
+            "REData capability index unavailable for %s at %s,%s: %s",
+            domain_tag,
+            redact_coordinate(latitude),
+            redact_coordinate(longitude),
+            exc.reason,
+        )
         return []
 
     tags: list[str] = []

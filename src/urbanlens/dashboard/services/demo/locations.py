@@ -40,6 +40,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from urbanlens.dashboard.services.security.redact import redact_coordinate
+
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
 
@@ -232,7 +234,11 @@ def pool_locations() -> list[Location]:
             longitude=quantize_coordinate(longitude, "longitude"),
         ).first()
         if location is None:
-            logger.warning("demo: manifest names a location that was never imported (%s, %s)", latitude, longitude)
+            logger.warning(
+                "demo: manifest names a location that was never imported (%s, %s)",
+                redact_coordinate(latitude),
+                redact_coordinate(longitude),
+            )
             continue
         resolved.append(location)
     return resolved

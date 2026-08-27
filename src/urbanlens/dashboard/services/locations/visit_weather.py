@@ -34,6 +34,8 @@ from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
+from urbanlens.dashboard.services.security.redact import redact_coordinate
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
@@ -234,8 +236,15 @@ def _fetch_days(latitude: float, longitude: float, start: date, end: date) -> di
 
     try:
         days = RedataWeatherHistoryGateway().get_history(latitude, longitude, start=start, end=end)
-    except LocationContextUnavailableError:
-        logger.info("Historical weather unavailable for %.4f,%.4f %s..%s", latitude, longitude, start, end, exc_info=True)
+    except LocationContextUnavailableError as exc:
+        logger.info(
+            "Historical weather unavailable for %s,%s %s..%s: %s",
+            redact_coordinate(latitude),
+            redact_coordinate(longitude),
+            start,
+            end,
+            exc.reason,
+        )
         return {}
     return {str(entry["date"]): entry for entry in days if isinstance(entry, dict) and entry.get("date")}
 

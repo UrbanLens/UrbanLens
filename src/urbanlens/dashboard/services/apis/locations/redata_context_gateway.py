@@ -222,7 +222,12 @@ class RedataLocationContextGateway(Gateway):
         try:
             response = self.session.post(f"{base_url.rstrip('/')}/{path.lstrip('/')}", json=json_body, headers=self._headers, timeout=_REQUEST_TIMEOUT)
         except OSError as exc:
-            raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+            # str(exc) on a requests/urllib3 connection error routinely embeds the full
+            # request URL, including the lat/lng (or address) query params callers pass
+            # in - which would undo every redact_coordinate()/redact_text() call a
+            # caller wraps its *own* logging in. The exception type is enough for an
+            # operator to diagnose a network failure without re-leaking the coordinate.
+            raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {type(exc).__name__}") from exc
 
         if response.status_code == 200:
             try:
@@ -258,7 +263,12 @@ class RedataLocationContextGateway(Gateway):
         try:
             return self.session.get(f"{base_url.rstrip('/')}/{path.lstrip('/')}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
         except OSError as exc:
-            raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+            # str(exc) on a requests/urllib3 connection error routinely embeds the full
+            # request URL, including the lat/lng (or address) query params callers pass
+            # in - which would undo every redact_coordinate()/redact_text() call a
+            # caller wraps its *own* logging in. The exception type is enough for an
+            # operator to diagnose a network failure without re-leaking the coordinate.
+            raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {type(exc).__name__}") from exc
 
     def _raise_for_error_status(self, response: requests.Response, path: str) -> NoReturn:
         """Translate a non-200 REData response into a :class:`LocationContextUnavailableError`.

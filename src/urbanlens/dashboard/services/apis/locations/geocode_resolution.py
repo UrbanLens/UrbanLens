@@ -29,6 +29,7 @@ import logging
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
 from urbanlens.dashboard.services.apis.locations.redata_geocode_gateway import RedataGeocodeGateway
+from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_text
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ def geocode_address(address: str) -> tuple[float | None, float | None]:
         try:
             envelope = RedataGeocodeGateway().geocode(address, limit=1)
         except LocationContextUnavailableError as exc:
-            logger.warning("REData geocode failed for an address lookup, falling back to direct Nominatim: %s", exc)
+            logger.warning("REData geocode failed for an address lookup, falling back to direct Nominatim: %s", exc.reason)
         else:
             if envelope.results:
                 result = envelope.results[0]
@@ -96,5 +97,10 @@ def nominatim_geocode(address: str) -> tuple[float | None, float | None]:
             try:
                 return float(latitude), float(longitude)
             except (TypeError, ValueError):
-                logger.warning("Nominatim returned unparseable coordinates for %r: %r, %r", address, latitude, longitude)
+                logger.warning(
+                    "Nominatim returned unparseable coordinates for %s: %s, %s",
+                    redact_text(address),
+                    redact_coordinate(latitude),
+                    redact_coordinate(longitude),
+                )
     return (None, None)

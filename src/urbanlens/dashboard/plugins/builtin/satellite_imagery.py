@@ -32,6 +32,7 @@ from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, Sat
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
 from urbanlens.dashboard.services.apis.locations.redata_imagery_gateway import RedataImageryGateway
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -259,7 +260,12 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         try:
             envelope = gateway.get_timeline(latitude, longitude)
         except LocationContextUnavailableError as exc:
-            logger.debug("REData imagery timeline unavailable for %s, %s: %s", latitude, longitude, exc)
+            logger.debug(
+                "REData imagery timeline unavailable for %s, %s: %s",
+                redact_coordinate(latitude),
+                redact_coordinate(longitude),
+                exc.reason,
+            )
             return
 
         for entry in flatten_timeline(envelope):

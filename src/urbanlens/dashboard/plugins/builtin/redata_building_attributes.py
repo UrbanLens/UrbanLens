@@ -35,6 +35,7 @@ from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -167,7 +168,12 @@ def _fetch_building_payload(latitude: float, longitude: float, *, location: Loca
             raise
         # Every other reason is REData's settled answer about this coordinate
         # (no coverage, manual lookup only, nothing found) and is worth caching.
-        logger.debug("redata_building_attributes: no buildings near %.2f,%.2f (%s)", latitude, longitude, exc.reason)
+        logger.debug(
+            "redata_building_attributes: no buildings near %s,%s (%s)",
+            redact_coordinate(latitude),
+            redact_coordinate(longitude),
+            exc.reason,
+        )
         return {}
 
     return _nearest_building(buildings, latitude, longitude) or {}
