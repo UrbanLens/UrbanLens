@@ -207,7 +207,16 @@ class ImageVisibilityFriendTests(TestCase):
         # second. A photo nobody shared is invisible to everyone but its owner
         # whatever relationship they have, so testing the relationship rules on an
         # unshared photo would only ever re-assert the first gate.
-        self.image: Image = baker.make("dashboard.Image", profile=self.uploader, pin=None, wiki=baker.make("dashboard.Wiki"))
+        wiki = baker.make("dashboard.Wiki")
+        self.image: Image = baker.make("dashboard.Image", profile=self.uploader, pin=None, wiki=wiki)
+        # visible_to()'s container gate asks whether the VIEWER can reach this
+        # specific wiki (earned only by a pin at its place - see
+        # models/wiki/CLAUDE.md), not merely whether the photo sits on *some*
+        # wiki. Giving the viewer their own pin there opens that gate without
+        # giving the uploader one, so no common-pin relationship is created as
+        # a side effect - keeping these tests isolated to the relationship
+        # gate the class is named for.
+        Pin.objects.create(profile=self.viewer, location=wiki.location)
 
     def _set_upload_visibility(self, visibility: str) -> None:
         self.uploader.photo_upload_visibility = visibility

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import tempfile
+from unittest.mock import patch
 import zipfile
 
 from django.contrib.auth.models import User
@@ -38,7 +39,16 @@ def _expected_files() -> set[str]:
 
 class RunExportEndToEndTests(TestCase):
     def _run(self, user: User) -> set[str]:
-        with tempfile.TemporaryDirectory() as export_dir_path:
+        # run_export schedules cleanup of export_dir_path via a Celery countdown
+        # (services.import_export.export.schedule_export_cleanup) once the archive
+        # is built. In UL_CELERY_TASK_ALWAYS_EAGER=True test runs that countdown is
+        # not honored - eager mode runs the task inline, immediately - so the
+        # cleanup would delete export.zip before this helper gets to read it.
+        # Stub the enqueue per tests/CLAUDE.md's convention for background work.
+        with (
+            tempfile.TemporaryDirectory() as export_dir_path,
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
+        ):
             ok = run_export(user.pk, _TYPES, export_dir_path, "https://example.test", job_id="test-job")
             self.assertTrue(ok, "run_export reported failure")
             zip_path = Path(export_dir_path) / "export.zip"

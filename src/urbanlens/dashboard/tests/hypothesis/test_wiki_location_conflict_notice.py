@@ -30,12 +30,21 @@ def _fake_location(**overrides: object) -> types.SimpleNamespace:
 
 class WikiLocationConflictNoticeTests(SimpleTestCase):
     def _render(self, other_locations, user_pin=None):
+        location = _fake_location(slug="current-place")
         return render_to_string(
             "dashboard/pages/location/wiki.html",
             {
                 "other_locations": other_locations,
                 "user_pin": user_pin,
-                "location": _fake_location(slug="current-place"),
+                "location": location,
+                # wiki.html's add-link dialog and About card both reference
+                # `wiki.location.slug` unconditionally (outside any {% if %}
+                # guard) to build a reverse-url argument, which raises
+                # NoReverseMatch if `wiki` is missing from context - unlike a
+                # bare undefined variable, which Django resolves to "" and
+                # renders silently. The real view always supplies a genuine
+                # Wiki here (you can't view a wiki page without one existing).
+                "wiki": types.SimpleNamespace(location=location),
             },
         )
 
