@@ -129,7 +129,5 @@ def locations_with_eligible_photo(location_ids: Iterable[int], *, solo_profile: 
         return []
 
     return list(
-        Image.objects.filter(_eligible_photo_filter(solo_profile), location_id__in=ids, media_type=MediaKind.PHOTO)
-        .values_list("location_id", flat=True)
-        .distinct(),
+        Image.objects.filter(_eligible_photo_filter(solo_profile), location_id__in=ids, media_type=MediaKind.PHOTO).values_list("location_id", flat=True).distinct(),
     )
