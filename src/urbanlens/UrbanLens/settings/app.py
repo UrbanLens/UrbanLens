@@ -27,6 +27,17 @@ _ENV_FILE_PATHS = [
     Path(DEFAULT_ROOT.parent, ".env"),
 ]
 
+#: Environments where a working ``.env`` is a local-checkout convenience.
+#: Everywhere else the process is configured entirely from real environment
+#: variables (compose's ``env_file:``) and ``.env`` is deliberately kept out
+#: of the image - see ``bin/init.py``'s ``copy_sample_env``, which reached
+#: this same allow-list after treating a missing .env as needing action took
+#: staging down on 2026-08-17. Kept in sync with that one by hand: this
+#: module cannot import ``bin/init.py`` (a standalone, Django-free script
+#: that must run before Django is even configured) without creating the
+#: layering violation it exists to avoid.
+_ENV_FILE_ENVIRONMENTS = frozenset({EnvironmentTypes.LOCAL, EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.TESTING})
+
 #: Floors enforced on ``field_encryption_key`` (see ``_reject_weak_encryption_keys``).
 #: 32 characters is well below the 64 the documented generator produces, so it
 #: rejects hand-typed keys without failing a legitimately generated one. The
@@ -460,10 +471,20 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                 if env_path.stat().st_size == 0:
                     logger.warning("Found .env file but it is empty: %s", env_path)
                 return
-        logger.warning(
-            ".env file not found; API keys and secrets will be missing. Checked: %s",
-            ", ".join(str(p) for p in _ENV_FILE_PATHS),
-        )
+        checked = ", ".join(str(p) for p in _ENV_FILE_PATHS)
+        # self.environment_name isn't wired to UL_ENVIRONMENT (select_environment(),
+        # which would set it, is never called in the runtime app - see the module-level
+        # ENVIRONMENT_NAME in settings/base.py for the value Django itself branches on).
+        # Read the same env var the same way base.py does, rather than trust this field.
+        environment_name = os.getenv("UL_ENVIRONMENT", "local").strip().lower()
+        if environment_name not in _ENV_FILE_ENVIRONMENTS:
+            logger.info(
+                "No .env file in %s, and none is needed: this environment is configured from real environment variables. Checked: %s",
+                environment_name,
+                checked,
+            )
+            return
+        logger.warning(".env file not found; API keys and secrets will be missing. Checked: %s", checked)
 
     def ensure_paths(self) -> None:
         """
