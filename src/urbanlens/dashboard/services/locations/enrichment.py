@@ -46,6 +46,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from celery.exceptions import SoftTimeLimitExceeded
 from django.db.models import Q
 
+from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, get_limit_config, service_is_enabled
 
 if TYPE_CHECKING:
@@ -591,6 +592,15 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
                 except RequestCancelledError as exc:
                     # The service hit its live rate limit or was disabled
                     # mid-run - stop this source, let the others continue.
+                    logger.info("Enrichment source %s stopped early: %s", source.key, exc)
+                    entry["skipped"] = "rate_limited"
+                    break
+                except GatewayRateLimitedError as exc:
+                    # The upstream service reported its own request budget is
+                    # exhausted (e.g. REData's Google Places budget) - expected
+                    # and self-clearing, not a bug. Every remaining candidate
+                    # would fail identically, so stop this source now instead
+                    # of logging a traceback per candidate.
                     logger.info("Enrichment source %s stopped early: %s", source.key, exc)
                     entry["skipped"] = "rate_limited"
                     break

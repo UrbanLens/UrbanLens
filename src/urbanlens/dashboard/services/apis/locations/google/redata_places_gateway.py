@@ -28,10 +28,20 @@ from dataclasses import dataclass
 import logging
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError, GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
+
+#: REData's own error code for "Places API (New) request budget is exhausted
+#: right now" - a known, expected, self-clearing condition (REData enforces
+#: its own budget against Google, independent of anything in this codebase's
+#: rate_limiter), not a bug worth a traceback. Always paired with a 503.
+_RATE_LIMITED_ERROR = "rate_limited"
+
+
+def _is_rate_limited_body(body: Any) -> bool:
+    return isinstance(body, dict) and body.get("error") == _RATE_LIMITED_ERROR
 
 
 def _rows(body: Any) -> list[dict[str, Any]]:
@@ -111,6 +121,26 @@ class RedataPlacesGateway(Gateway):
         except OSError as exc:
             raise GatewayRequestError(f"Could not reach REData: {exc}") from exc
 
+    def _error_for(self, response: Any, message: str) -> GatewayRequestError:
+        """Build the exception a failed ``response`` should raise.
+
+        Args:
+            response: The non-success ``requests.Response`` being reported.
+            message: The exception message.
+
+        Returns:
+            :class:`~urbanlens.dashboard.services.core.gateway.GatewayRateLimitedError`
+            when REData's body identifies its own exhausted request budget,
+            else the plain, less specific ``GatewayRequestError``.
+        """
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+        if _is_rate_limited_body(body):
+            return GatewayRateLimitedError(message)
+        return GatewayRequestError(message)
+
     def get_place(self, place_id: str) -> dict[str, Any] | None:
         """Fetch (and, on REData's end, permanently cache) one place's full details.
 
@@ -136,7 +166,7 @@ class RedataPlacesGateway(Gateway):
         if response.status_code == 404:
             return None
         logger.warning("REData place details fetch failed (%s): %s", response.status_code, response.text[:500])
-        raise GatewayRequestError(f"REData place details request failed with status {response.status_code}.")
+        raise self._error_for(response, f"REData place details request failed with status {response.status_code}.")
 
     def search_nearby(self, latitude: float, longitude: float, radius_meters: float = 200, included_types: list[str] | None = None, max_results: int = 20) -> list[dict[str, Any]]:
         """Search places near a coordinate via REData.
@@ -164,7 +194,7 @@ class RedataPlacesGateway(Gateway):
         response = self._request("/api/v1/places/search/nearby/", params=params)
         if response.status_code != 200:
             logger.warning("REData nearby places search failed (%s): %s", response.status_code, response.text[:500])
-            raise GatewayRequestError(f"REData nearby places search failed with status {response.status_code}.")
+            raise self._error_for(response, f"REData nearby places search failed with status {response.status_code}.")
         return _rows(response.json())
 
     def search_text(self, query: str, latitude: float | None = None, longitude: float | None = None, radius_meters: float = 200, max_results: int = 20) -> list[dict[str, Any]]:
@@ -191,7 +221,7 @@ class RedataPlacesGateway(Gateway):
         response = self._request("/api/v1/places/search/text/", params=params)
         if response.status_code != 200:
             logger.warning("REData text places search failed (%s): %s", response.status_code, response.text[:500])
-            raise GatewayRequestError(f"REData text places search failed with status {response.status_code}.")
+            raise self._error_for(response, f"REData text places search failed with status {response.status_code}.")
         return _rows(response.json())
 
     def autocomplete(self, query: str, latitude: float | None = None, longitude: float | None = None, radius_meters: float = 200) -> list[dict[str, Any]]:
@@ -222,7 +252,7 @@ class RedataPlacesGateway(Gateway):
         response = self._request("/api/v1/places/autocomplete/", params=params)
         if response.status_code != 200:
             logger.warning("REData autocomplete failed (%s): %s", response.status_code, response.text[:500])
-            raise GatewayRequestError(f"REData autocomplete request failed with status {response.status_code}.")
+            raise self._error_for(response, f"REData autocomplete request failed with status {response.status_code}.")
         return _rows(response.json())
 
     def download_photo(self, place_id: str, photo_record_id: int) -> tuple[bytes, str] | None:
@@ -248,4 +278,4 @@ class RedataPlacesGateway(Gateway):
         if response.status_code == 404:
             return None
         logger.warning("REData photo download failed (%s): %s", response.status_code, response.text[:500])
-        raise GatewayRequestError(f"REData photo download failed with status {response.status_code}.")
+        raise self._error_for(response, f"REData photo download failed with status {response.status_code}.")

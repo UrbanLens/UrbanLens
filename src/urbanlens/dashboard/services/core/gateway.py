@@ -113,3 +113,14 @@ class GatewayRequestError(RuntimeError):
     Swap this for whatever error base class UrbanLens's other gateways already
     raise, if one exists -- this is a self-contained stand-in.
     """
+
+
+class GatewayRateLimitedError(GatewayRequestError):
+    """Raised when an external gateway reports that its own request budget is exhausted.
+
+    A subclass rather than a sibling of :class:`GatewayRequestError`, so every
+    existing ``except GatewayRequestError`` keeps working unchanged. Callers
+    that loop over many candidates in one run (e.g. scheduled enrichment) can
+    catch this specific type to stop early instead of retrying every
+    remaining candidate against a budget that will not refill mid-run.
+    """

@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.enrichment import (
@@ -249,16 +250,17 @@ class _RecordingSource(EnrichmentSource):
     verbose_name = "Recording source"
     service_keys = ("svc_cycle",)
 
-    def __init__(self, fail_after: int | None = None) -> None:
+    def __init__(self, fail_after: int | None = None, fail_with: Exception | None = None) -> None:
         self.enriched_pks: list[int] = []
         self.fail_after = fail_after
+        self.fail_with = fail_with or RateLimitExceededError("svc_cycle")
 
     def missing_filter(self) -> Q:
         return Q()
 
     def enrich(self, location) -> bool:
         if self.fail_after is not None and len(self.enriched_pks) >= self.fail_after:
-            raise RateLimitExceededError("svc_cycle")
+            raise self.fail_with
         self.enriched_pks.append(location.pk)
         return True
 
@@ -345,6 +347,20 @@ class RunEnrichmentCycleTests(TestCase):
         for index in range(3):
             baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
         source = _RecordingSource(fail_after=1)
+        summary = self._run(source)
+        self.assertEqual(len(source.enriched_pks), 1)
+        self.assertEqual(summary["sources"]["recording"]["skipped"], "rate_limited")
+        self.assertEqual(summary["sources"]["recording"]["enriched"], 1)
+
+    def test_upstream_gateway_rate_limit_mid_run_stops_source_gracefully(self) -> None:
+        # A source's own gateway (e.g. REData) reporting its request budget is
+        # exhausted must be treated the same as this codebase's own
+        # RateLimitExceededError: stop this source, don't retry every
+        # remaining candidate against a budget that won't refill mid-run, and
+        # don't log a traceback for a known, expected condition.
+        for index in range(3):
+            baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
+        source = _RecordingSource(fail_after=1, fail_with=GatewayRateLimitedError("REData budget exhausted"))
         summary = self._run(source)
         self.assertEqual(len(source.enriched_pks), 1)
         self.assertEqual(summary["sources"]["recording"]["skipped"], "rate_limited")
