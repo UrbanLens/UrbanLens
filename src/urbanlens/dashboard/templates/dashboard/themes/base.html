@@ -92,6 +92,14 @@
             newestOnTop: true,
             showDuration: 280,
             hideDuration: 220,
+            // toastr renders a message with .html() and defaults this to false,
+            // so every toast was an HTML sink. Server error strings reach it
+            // verbatim (see floorplan-editor.ts's save handler), and some of
+            // those embed the caller's own input via CPython messages like
+            // "invalid literal for int() with base 10: '<x>'". Escaping here
+            // makes that structurally impossible for every toast on the site,
+            // rather than depending on each producer sanitising its message.
+            escapeHtml: true,
         };
 
         {% if messages %}

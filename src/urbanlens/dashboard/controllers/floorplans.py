@@ -270,9 +270,15 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
 
         try:
             bbox = _parse_bbox(request.GET.get("bbox"))
-            level = int(request.GET["level"]) if request.GET.get("level") else None
         except ValueError as exc:
+            # _parse_bbox raises only its own literal messages, so echoing is safe.
             return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+        try:
+            level = int(request.GET["level"]) if request.GET.get("level") else None
+        except ValueError:
+            # int()'s message quotes the caller's input back verbatim, which the
+            # client renders into a toast - do not echo it.
+            return JsonResponse({"ok": False, "error": "level must be a whole number."}, status=400)
 
         # One filter serves both wall kinds and marker kinds - they never
         # collide, and a caller asking for "stair" means markers whether or not

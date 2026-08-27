@@ -46,6 +46,7 @@ from typing import TYPE_CHECKING, Any
 from django.utils import timezone
 
 from urbanlens.dashboard.models.link_extraction.model import MAX_EXTRACTION_URL_LENGTH, LinkExtraction, LinkExtractionStatus
+from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -469,10 +470,11 @@ def _validate_extraction_url(url: str) -> str:
     a user could point the extractor at internal services (SSRF), including
     via a hostname whose DNS they control.
 
-    This closes the DNS-at-submission-time gap but not a rebind that happens
-    *between* this check and the actual fetch - callers on that path (see
-    :func:`fetch_page_text`) re-validate immediately before connecting to
-    keep that window as small as possible.
+    This is submission-time validation: it rejects an obviously-internal link
+    at the moment a user pastes it. It does *not* protect the fetch, because
+    the url it returns gets resolved again when something connects to it. The
+    fetch is protected separately, by :func:`fetch_page_text` connecting to
+    the address it validated - see :mod:`services.security.url_safety`.
 
     Args:
         url: The submitted url.
@@ -567,15 +569,16 @@ _MAX_REDIRECTS = 5
 def fetch_page_text(url: str) -> str:
     """Fetch the target page and return its visible text.
 
-    Re-validates ``url`` (and every redirect hop) immediately before each
-    connection rather than trusting the submission-time check alone - this
-    call runs from a Celery task that may execute long after the request that
-    queued it, and a hostile server can otherwise SSRF via a 3xx redirect to
-    an internal address regardless of the original host's DNS. The
-    redirect-following loop itself is shared with ``services.media.media_materialize``
-    and ``services.pins.pin_suggestions`` via
-    :func:`~urbanlens.dashboard.services.media.media_materialize.fetch_with_revalidated_redirects`
-    (previously each had its own copy).
+    Runs from a Celery task that may execute long after the request that
+    queued it, so the submission-time check is far too stale to rely on: the
+    host's DNS can have changed, and a hostile server can redirect to an
+    internal address regardless. Each hop is therefore resolved once and
+    connected to at *that* address, via the shared
+    :func:`~urbanlens.dashboard.services.media.media_materialize.fetch_with_revalidated_redirects`.
+    Note that merely re-validating the url before handing it to ``requests``
+    would not help - ``requests`` resolves it again independently, so a
+    short-TTL record can answer public for the check and loopback for the
+    connection.
 
     Args:
         url: A url already validated by :func:`_validate_extraction_url`.
@@ -609,10 +612,10 @@ def fetch_page_text(url: str) -> str:
             if len(body) > MAX_FETCH_BYTES:
                 break
     except UnsafeUrlError as exc:
-        logger.info("Link extraction fetch failed for %s: %s", url, exc)
+        logger.info("Link extraction fetch failed for %s: %s", redact_text(url), exc)
         raise LinkExtractionError(str(exc)) from exc
     except requests.RequestException as exc:
-        logger.info("Link extraction fetch failed for %s: %s", url, exc)
+        logger.info("Link extraction fetch failed for %s: %s", redact_text(url), exc)
         raise LinkExtractionError("The page couldn't be fetched.") from exc
 
     text = _html_to_text(body.decode(response.encoding or "utf-8", errors="replace"))

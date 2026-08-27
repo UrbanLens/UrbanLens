@@ -32,6 +32,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import GEOSGeometry
@@ -276,7 +277,10 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
         parcel_uuid = gateway.lookup_parcel_uuid(latitude, longitude)
         buildings = gateway.lookup_buildings(parcel_uuid) if parcel_uuid else []
     except (PropertyRecordsUnavailableError, ValueError):
-        logger.debug("parcel_buildings: REData unavailable near %.2f,%.2f", latitude, longitude, exc_info=True)
+        # Rounding is not redaction - ~1km still narrows an undisclosed site to a
+        # handful of candidates, and exc_info would re-leak the exact coordinate
+        # from the failed request's own URL. See services/security/redact.py.
+        logger.debug("parcel_buildings: REData unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
         buildings = []
 
     if buildings:

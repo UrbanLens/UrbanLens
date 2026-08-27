@@ -62,17 +62,19 @@
         return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // NotificationLog.url is a plain CharField (not validated at the DB
-    // level) - every current call site fills it via Django's reverse() or
-    // leaves it blank, but that's an application-level convention, not a
-    // guarantee the client can rely on. Gate the window.location sinks below
-    // on this so a stray "javascript:" (or a future call site that forgets
-    // to use reverse()) can't be navigated to. Allows same-origin relative
-    // paths ("/foo", not "//foo" which is scheme-relative to another host)
-    // and same-origin absolute http(s) URLs.
+    // NotificationLog.url is a plain CharField - NotificationLog.save() now
+    // normalizes it, but this stays as the client-side backstop for rows
+    // written before that, and for any future path that bypasses save().
+    //
+    // Everything goes through the browser's own URL parser. There is
+    // deliberately no hand-parsed fast path for "starts with a slash": the
+    // guard used to early-return true for that, which let "/\evil.com",
+    // "/<TAB>/evil.com" and nine other inputs through, because WHATWG treats
+    // "\" as "/" in an authority and strips TAB/LF/CR before parsing. Any
+    // check that parses differently than the sink will eventually disagree
+    // with it, so the sink's own parser is the only safe arbiter.
     function isSafeUrl(url) {
         if (typeof url !== 'string' || !url) return false;
-        if (url.charAt(0) === '/' && url.charAt(1) !== '/') return true;
         try {
             var parsed = new URL(url, window.location.origin);
             return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.origin === window.location.origin;

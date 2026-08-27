@@ -2438,10 +2438,18 @@ class MapAnnotationsImport(ImportType):
             ctx.result.inc_skipped("map_overlays")
             return
 
-        # An imported image_url is rendered client-side exactly like the one
-        # controllers.map_overlays._image_from_request accepts from a live form
-        # POST - an import file is just another untrusted source, so it gets the
-        # same ensure_public_http_url/is_web_safe gate rather than a raw pass-through.
+        # An imported image_url is rendered client-side as an <img src>, so it
+        # gets the same ensure_public_http_url/is_web_safe gate a live form POST
+        # gets - an import file is just another untrusted source.
+        #
+        # It does NOT match the live path any more: that one now downloads a
+        # pasted url (controllers.map_overlays._image_from_request) so the
+        # column can only hold our own MEDIA_URL, because a stored foreign url
+        # reports every viewer's IP and User-Agent back to whoever supplied it.
+        # Import still stores the url as-is - it has no download step, and
+        # these overlays are pin-scoped, so the only viewer is the importer
+        # themselves. Give this the same treatment if import ever grows a
+        # download step, or if wiki-scoped overlays become importable.
         image_url = str(row.get("image_url") or "")[:1000]
         if image_url:
             try:

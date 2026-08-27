@@ -25,6 +25,11 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 
 _CORNERS = [[40.002, -74.002], [40.002, -74.000], [40.000, -74.000], [40.000, -74.002]]
 
+#: A pasted overlay URL goes through the SSRF guard, which resolves the
+#: hostname. Stub the lookup so these tests don't depend on live DNS (or on a
+#: particular host still resolving to a public address).
+_PUBLIC_DNS_RESULT = [(2, 1, 6, "", ("93.184.216.34", 0))]
+
 
 def _png_bytes() -> bytes:
     """A tiny real PNG - the upload path sniffs magic bytes, not the filename."""
@@ -82,10 +87,23 @@ class OverlayOwnerTests(TestCase):
         self.client.force_login(self.user)
 
     def _create(self, **extra):
-        return self.client.post(
-            reverse("pin.overlays", args=[self.pin.slug]),
-            {"corners": json.dumps(_CORNERS), "image_url": "https://upload.wikimedia.org/sheet.jpg", **extra},
-        )
+        """POST a pasted-external-URL overlay with DNS and the download stubbed.
+
+        A pasted URL is resolved (the SSRF guard) and then downloaded, so
+        without both stubs the request does a real lookup and reaches out to
+        the real host.
+        """
+        from urbanlens.dashboard.models.images.model import Image
+
+        materialized = baker.make(Image, profile=self.user.profile, pin=self.pin)
+        with (
+            patch("socket.getaddrinfo", return_value=_PUBLIC_DNS_RESULT),
+            patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=materialized),
+        ):
+            return self.client.post(
+                reverse("pin.overlays", args=[self.pin.slug]),
+                {"corners": json.dumps(_CORNERS), "image_url": "https://upload.wikimedia.org/sheet.jpg", **extra},
+            )
 
     def test_an_external_url_overlay_is_created(self) -> None:
         response = self._create(name="Sanborn 1897")
@@ -94,6 +112,32 @@ class OverlayOwnerTests(TestCase):
         self.assertEqual(overlay.name, "Sanborn 1897")
         self.assertEqual(overlay.corners(), _CORNERS)
         self.assertEqual(overlay.profile, self.user.profile)
+
+    def test_a_pasted_external_url_is_downloaded_not_referenced(self) -> None:
+        """The stored column must never hold the foreign URL.
+
+        An overlay's URL is handed to every viewer's browser as an ``<img
+        src>``. On a wiki, anyone who can see the place can add an overlay, so
+        a referenced URL would report each viewer's IP, User-Agent and timing
+        back to whoever planted it.
+        """
+        from urbanlens.dashboard.models.images.model import Image
+
+        materialized = baker.make(Image, profile=self.user.profile, pin=self.pin)
+        with (
+            patch("socket.getaddrinfo", return_value=_PUBLIC_DNS_RESULT),
+            patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=materialized) as mock_materialize,
+        ):
+            response = self.client.post(
+                reverse("pin.overlays", args=[self.pin.slug]),
+                {"corners": json.dumps(_CORNERS), "name": "Sanborn 1897", "image_url": "https://tracker.example/beacon.jpg"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        mock_materialize.assert_called_once()
+        overlay = MapImageOverlay.objects.for_pin(self.pin).get()
+        self.assertEqual(overlay.image_id, materialized.pk)
+        self.assertNotIn("tracker.example", overlay.image_url)
 
     def test_an_uploaded_image_overlay_is_created(self) -> None:
         upload = SimpleUploadedFile("sheet.png", _png_bytes(), content_type="image/png")

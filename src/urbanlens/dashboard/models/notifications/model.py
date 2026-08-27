@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import cached_property
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from django.db import models
@@ -17,8 +18,15 @@ from urbanlens.dashboard.models.notifications.meta import (
     Status,
 )
 from urbanlens.dashboard.models.notifications.queryset import NotificationManager
+from urbanlens.dashboard.services.security.redact import redact_text
 
 logger = logging.getLogger(__name__)
+
+#: A single leading slash, then no slash and no backslash. Rejects "//host"
+#: and "/\host" (WHATWG treats "\" as "/" in an authority, so both leave the
+#: origin), any absolute URL, and any scheme including "javascript:". Also
+#: rejects the raw TAB/LF/CR that URL parsers strip before parsing.
+_URL_IS_SAFE_PATH = re.compile(r"^/(?![/\\])[^\s\\]*$")
 
 
 class NotificationLog(abstract.FrontendDashboardModel):
@@ -72,9 +80,22 @@ class NotificationLog(abstract.FrontendDashboardModel):
         A title is display text, so clipping is preferable to failing the
         write, and doing it here covers the call sites that do not know how long
         the name they interpolated can be.
+
+        Also drops any ``url`` that is not a plain same-origin path. Every
+        producer today builds this with ``reverse()``, but that is a convention
+        no code enforces, and the value is assigned straight to
+        ``window.location`` in four places and rendered into an ``href`` in
+        three more - so one producer passing a raw string would be an open
+        redirect or, via a ``javascript:`` scheme in the ``href`` sinks, stored
+        XSS. Enforcing it here rather than with a ``validators=[...]`` entry is
+        deliberate: validators only run under ``full_clean()``, which the
+        ``notify()`` path never calls.
         """
         if self.title:
             self.title = self.title[: self._meta.get_field("title").max_length]
+        if self.url and not _URL_IS_SAFE_PATH.match(self.url):
+            logger.warning("Refusing to store a non-relative notification url (%s); dropping it.", redact_text(self.url))
+            self.url = ""
         return super().save(*args, **kwargs)
 
     @property

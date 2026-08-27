@@ -640,7 +640,7 @@ def _filename_from_url(url: str) -> str:
 
 
 def _download_photo_bytes(url: str) -> bytes:
-    """Follow redirects (each hop re-validated) and return the downloaded bytes.
+    """Follow redirects (each hop pinned to its validated address) and return the bytes.
 
     Delegates the redirect-following loop to
     ``services.media.media_materialize.fetch_with_revalidated_redirects`` (shared
@@ -660,8 +660,8 @@ def attach_suggestion_photos(suggestion: PinSuggestion, photo_urls: list[str], p
 
     Mirrors ``services.media.media_materialize.materialize_media_item``'s
     download/redirect/quota handling (manual redirect-following so every hop
-    is re-validated by ``services.security.url_safety.ensure_public_http_url``, closing
-    the DNS-rebind window between check and connect), but stages the result
+    is resolved once and connected to at that address, leaving no second
+    resolution for a DNS rebind to answer), but stages the result
     against a ``PinSuggestion`` (candidate, not yet a real gallery photo)
     instead of a Pin/Wiki gallery. Stops once ``MAX_SUGGESTION_PHOTOS`` is
     reached; urls beyond the cap are silently dropped, same as an Immich

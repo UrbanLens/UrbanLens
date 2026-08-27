@@ -252,11 +252,18 @@ def _date_in(raw) -> datetime.date | None:
     """Parse an ISO date or None.
 
     Raises:
-        ValueError: Not an ISO date.
+        ValueError: Not an ISO date. The message is deliberately ours rather
+            than ``fromisoformat``'s, which quotes the offending input back
+            verbatim - these messages are surfaced to the client, so echoing
+            caller-supplied text there makes the error response a reflection
+            sink.
     """
     if not raw:
         return None
-    return datetime.date.fromisoformat(str(raw))
+    try:
+        return datetime.date.fromisoformat(str(raw))
+    except ValueError as exc:
+        raise ValueError("must be a date in YYYY-MM-DD form") from exc
 
 
 #: Ceilings on how much one document may describe. Generous for any real

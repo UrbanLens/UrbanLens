@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.images.model import Image, ImageSource, QuotaExe
 from urbanlens.dashboard.models.images.relevance import media_item_key
 from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.media.images import compute_checksum
-from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
+from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url, fetch_public_url
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -136,18 +136,19 @@ def fetch_with_revalidated_redirects(
     timeout: float = _DOWNLOAD_TIMEOUT,
     headers: dict[str, str] | None = None,
 ) -> requests.Response:
-    """Fetch ``url`` via GET, manually following redirects with per-hop SSRF re-validation.
+    """Fetch ``url`` via GET, with rebind-proof SSRF protection on every hop.
 
     Shared by every service that downloads a user- or provider-supplied url
     from the server (this module, ``services.pins.pin_suggestions``'s
     ``_download_photo_bytes``, and ``services.ai.link_extraction``'s
     ``fetch_page_text`` - previously each had its own copy of this loop).
 
-    ``ensure_public_http_url`` closes the DNS-at-check-time gap but not a
-    rebind that happens *between* a check and the actual connection - each
-    hop here is fetched with ``allow_redirects=False`` and re-validated
-    immediately before connecting (including every redirect hop) to keep
-    that window as small as possible; see that function's docstring.
+    Thin wrapper over :func:`services.security.url_safety.fetch_public_url`,
+    which resolves each hop once and connects to that address. This used to
+    call ``ensure_public_http_url`` and then hand the *url* to ``requests``,
+    which re-resolved it - so an attacker serving a short-TTL record could
+    answer public for the check and loopback for the connection, and the
+    per-hop re-validation only multiplied their attempts per request.
 
     Args:
         url: The url to fetch. Already validated once by the caller, if
@@ -164,32 +165,12 @@ def fetch_with_revalidated_redirects(
 
     Raises:
         UnsafeUrlError: A hop's target failed the public-reachability check,
-            a redirect response had no ``Location`` header, or the chain
-            exceeded ``max_redirects`` hops.
+            the connection landed on an unvalidated address, a redirect
+            response had no ``Location`` header, or the chain exceeded
+            ``max_redirects`` hops.
         requests.RequestException: The underlying request failed.
     """
-    fetch_url = url
-    for _hop in range(max_redirects + 1):
-        fetch_url = ensure_public_http_url(fetch_url)
-        # ensure_public_http_url (above) re-validates this exact hop - literal
-        # IP and resolved hostname - immediately before the connection below;
-        # CodeQL doesn't model it as a sanitizer.
-        response = requests.get(  # lgtm[py/full-ssrf]
-            fetch_url,
-            timeout=timeout,
-            stream=True,
-            allow_redirects=False,
-            headers=headers,
-        )
-        if response.is_redirect:
-            redirect_target = response.headers.get("Location")
-            response.close()
-            if not redirect_target:
-                raise UnsafeUrlError(f"{url} redirected with no target.")
-            fetch_url = urljoin(fetch_url, redirect_target)
-            continue
-        return response
-    raise UnsafeUrlError(f"{url} redirects too many times.")
+    return fetch_public_url(url, headers=headers, timeout=timeout, max_redirects=max_redirects)
 
 
 def materialize_media_item(

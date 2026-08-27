@@ -33,7 +33,8 @@ import requests
 
 from urbanlens.dashboard.controllers.media_auth import mark_private_media
 from urbanlens.dashboard.services.media.previews import MAX_PREVIEW_SOURCE_BYTES, render_preview, signature_is_valid
-from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
+from urbanlens.dashboard.services.security.redact import redact_text
+from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -53,7 +54,7 @@ _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.man
 
 
 def _fetch_source(url: str) -> tuple[bytes, str] | None:
-    """Download a preview source, revalidating every redirect hop.
+    """Download a preview source, pinning each hop to the address it validated to.
 
     Args:
         url: The absolute http(s) URL to fetch.
@@ -62,46 +63,30 @@ def _fetch_source(url: str) -> tuple[bytes, str] | None:
         ``(body, content_type)``, or None when the URL was unsafe, the fetch
         failed, or the response exceeded :data:`MAX_PREVIEW_SOURCE_BYTES`.
     """
-    session = requests.Session()
-    for _ in range(_MAX_REDIRECTS + 1):
-        try:
-            ensure_public_http_url(url)
-        except UnsafeUrlError:
-            logger.info("Preview source rejected as unsafe: %s", url[:200])
-            return None
-        try:
-            # ensure_public_http_url (above) re-validates this exact hop - literal
-            # IP and resolved hostname - immediately before the connection below;
-            # CodeQL doesn't model it as a sanitizer.
-            response = session.get(  # lgtm[py/full-ssrf]
-                url,
-                headers={"User-Agent": _USER_AGENT},
-                timeout=_FETCH_TIMEOUT,
-                stream=True,
-                allow_redirects=False,
-            )
-        except requests.RequestException:
-            logger.info("Preview source fetch failed: %s", url[:200], exc_info=True)
-            return None
+    try:
+        response = fetch_public_url(
+            url,
+            headers={"User-Agent": _USER_AGENT},
+            timeout=_FETCH_TIMEOUT,
+            max_redirects=_MAX_REDIRECTS,
+        )
+    except UnsafeUrlError:
+        logger.info("Preview source rejected as unsafe: %s", redact_text(url))
+        return None
+    except requests.RequestException:
+        logger.info("Preview source fetch failed: %s", redact_text(url))
+        return None
 
-        with response:
-            if response.is_redirect or response.is_permanent_redirect:
-                location = response.headers.get("Location")
-                if not location:
-                    return None
-                url = requests.compat.urljoin(url, location)
-                continue
-            if response.status_code != 200:
+    with response:
+        if response.status_code != 200:
+            return None
+        body = bytearray()
+        for chunk in response.iter_content(64 * 1024):
+            body.extend(chunk)
+            if len(body) > MAX_PREVIEW_SOURCE_BYTES:
+                logger.info("Preview source exceeded the size cap: %s", redact_text(url))
                 return None
-            body = bytearray()
-            for chunk in response.iter_content(64 * 1024):
-                body.extend(chunk)
-                if len(body) > MAX_PREVIEW_SOURCE_BYTES:
-                    logger.info("Preview source exceeded the size cap: %s", url[:200])
-                    return None
-            return bytes(body), response.headers.get("Content-Type", "")
-    logger.info("Preview source exceeded the redirect cap: %s", url[:200])
-    return None
+        return bytes(body), response.headers.get("Content-Type", "")
 
 
 class MediaPreviewView(View):

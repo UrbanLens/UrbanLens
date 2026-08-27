@@ -215,8 +215,17 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
             return None, "", str(exc)
         return image, "", None
 
+    # A pasted external URL, materialized rather than referenced - the same
+    # treatment a Media-gallery pick gets directly above, and for a stronger
+    # reason than link rot. A stored foreign URL is handed to every viewer's
+    # browser as an <img src>, so on a wiki - which anyone who can see the
+    # place can add an overlay to, not just its author - it becomes a beacon:
+    # the planter's server learns the IP, User-Agent and timing of everyone
+    # who opens that specific page. Downloading it here means the column can
+    # only ever hold a URL under our own MEDIA_URL.
     external_url = (request.POST.get("image_url") or "").strip()
     if external_url:
+        from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
         from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
 
         try:
@@ -224,12 +233,22 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
         except UnsafeUrlError as exc:
             return None, "", str(exc)
         if not is_web_safe(external_url):
-            # An external URL is loaded by the browser directly (nothing
-            # server-side ever fetches it), so a TIFF or PDF here would be a
-            # silently blank overlay. Upload it instead and the normal media
-            # pipeline can rasterize it.
+            # A TIFF or PDF would be a silently blank overlay in the browser.
+            # Upload it instead and the normal media pipeline can rasterize it.
             return None, "", "That link isn't an image a browser can display. Upload the file instead."
-        return None, external_url, None
+        try:
+            image = materialize_media_item(
+                location=_owner_location(owner),
+                profile=profile,
+                source="external_url",
+                url=external_url,
+                page_url="",
+                caption=(request.POST.get("name") or "").strip(),
+                **({"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}),
+            )
+        except MaterializeError as exc:
+            return None, "", str(exc)
+        return image, "", None
 
     return None, "", "Choose an image to overlay."
 
