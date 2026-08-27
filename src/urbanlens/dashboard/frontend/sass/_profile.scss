@@ -634,6 +634,12 @@
     font-size: 0.875rem;
     color: var(--ul-grey-6);
     margin: 0;
+
+    // Inline links here sit in running text, so color alone can't distinguish
+    // them (axe: link-in-text-block).
+    a {
+        text-decoration: underline;
+    }
 }
 
 // A grouped sub-form within a larger section (e.g. Community/Memories/External
