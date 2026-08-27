@@ -1,13 +1,17 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 
 import { installLeaveConfirmation } from "./leave-confirmation";
 
 /**
- * Each case installs its own guard, as separate pages do. `beforeEach` uninstalls
- * every guard from earlier cases, so `document` does not accumulate a
- * capture-phase click listener per test for the rest of the run. Guards are also
- * disarmed defensively - each closes over its *own* armed flag, so even a
- * leftover would stay inert rather than answering the current test's dialog.
+ * Each case installs its own guard, as separate pages do. `afterEach` uninstalls
+ * every guard from the case that just ran, so `document`/`window` do not
+ * accumulate a listener per test for the rest of the run - including this
+ * file's very last test, whose guard would otherwise survive into whichever
+ * test file bun runs next in the same process and answer *its* beforeunload/
+ * click dispatches. A `beforeEach` only protects the next test in this same
+ * file, which does nothing for the last one. Guards are also disarmed
+ * defensively - each closes over its *own* armed flag, so even a leftover
+ * would stay inert rather than answering the current test's dialog.
  */
 interface Guard {
     /** Arm this guard - i.e. the page now has something worth losing. */
@@ -62,9 +66,11 @@ function beforeUnload(): Event {
     return event;
 }
 
-beforeEach(() => {
-    // Unbind earlier cases' listeners so `document` does not accumulate one per
-    // test, and disarm their flags so nothing lingering can answer this case.
+afterEach(() => {
+    // Unbind this case's listeners so `document`/`window` do not accumulate one
+    // per test, and disarm their flags so nothing lingering can answer a later
+    // case - in this file or, since these listeners are global, in whichever
+    // file bun runs next.
     handles.splice(0).forEach((handle) => {
         handle.uninstall();
     });
