@@ -17,17 +17,26 @@ otherwise. Silence means no. Two cases differ:
 
 from __future__ import annotations
 
+import io
+
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from model_bakery import baker
+from PIL import Image as PILImage
 
 from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.photos.uploads import upload_photo_for_owner
+
+
+def _jpeg_bytes() -> bytes:
+    buf = io.BytesIO()
+    PILImage.new("RGB", (60, 40), color=(10, 20, 30)).save(buf, format="JPEG")
+    return buf.getvalue()
 
 
 class DeleteFromPinGalleryTests(TestCase):
@@ -40,7 +49,7 @@ class DeleteFromPinGalleryTests(TestCase):
         self.client.force_login(self.owner_user)
 
     def _photo(self, *, on_wiki: bool, source: str = ImageSource.UPLOAD) -> Image:
-        result = upload_photo_for_owner(self.pin, self.owner, SimpleUploadedFile("p.jpg", b"not-a-real-jpeg", content_type="image/jpeg"), "caption")
+        result = upload_photo_for_owner(self.pin, self.owner, SimpleUploadedFile("p.jpg", _jpeg_bytes(), content_type="image/jpeg"), "caption")
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
         fields = {"source": source}
         if on_wiki:

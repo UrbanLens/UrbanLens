@@ -9,8 +9,8 @@ images came to be fetched from a different release than the library using them.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
+import re
 from unittest import mock
 
 from django.template import Context, Template
@@ -76,7 +76,7 @@ class VendorAssetResolutionTests(SimpleTestCase):
 
     def test_a_stylesheet_and_a_script_render_their_own_tag(self) -> None:
         with _mirrored(""):
-            self.assertIn("<link rel=\"stylesheet\"", vendor_asset_tag("leaflet_css"))
+            self.assertIn('<link rel="stylesheet"', vendor_asset_tag("leaflet_css"))
             self.assertIn("<script src=", vendor_asset_tag("leaflet_js"))
 
     def test_an_unknown_asset_fails_the_render_rather_than_writing_nothing(self) -> None:
@@ -103,7 +103,7 @@ class NoRawCdnUrlsInTemplatesTests(SimpleTestCase):
         offenders: list[str] = []
         pattern = re.compile("|".join(re.escape(host) for host in _CDN_HOSTS))
         for path in _TEMPLATE_ROOT.rglob("*.html"):
-            for number, line in enumerate(path.read_text().splitlines(), 1):
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 if pattern.search(line):
                     offenders.append(f"{path.relative_to(_TEMPLATE_ROOT)}:{number}: {line.strip()[:100]}")
         self.assertEqual(offenders, [], "add the asset to VENDOR_ASSETS and use {% vendor_asset %}:\n" + "\n".join(offenders))

@@ -88,7 +88,7 @@ class EveryFriendAcceptedSiteSetsSourceProfileTests(SimpleTestCase):
     def _sites_missing_source_profile(self) -> list[str]:
         missing = []
         for path in self._MODULES:
-            tree = ast.parse(path.read_text())
+            tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if not (isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "create"):
                     continue
@@ -107,6 +107,6 @@ class EveryFriendAcceptedSiteSetsSourceProfileTests(SimpleTestCase):
 
     def test_the_scan_still_finds_the_sites(self) -> None:
         """Guard against the check passing because it matched nothing."""
-        found = sum(path.read_text().count("NotificationType.FRIEND_ACCEPTED") for path in self._MODULES)
+        found = sum(path.read_text(encoding="utf-8").count("NotificationType.FRIEND_ACCEPTED") for path in self._MODULES)
 
         self.assertGreaterEqual(found, 3, "expected three FRIEND_ACCEPTED sites - has this moved?")

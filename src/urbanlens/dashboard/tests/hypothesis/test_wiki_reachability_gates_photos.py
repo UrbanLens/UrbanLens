@@ -14,10 +14,13 @@ carries a positive control, or the file could pass by breaking the feature.
 
 from __future__ import annotations
 
+import io
+
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from model_bakery import baker
+from PIL import Image as PILImage
 
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
@@ -26,6 +29,12 @@ from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.photos.attachment import attach_to_wiki
 from urbanlens.dashboard.services.photos.uploads import upload_photo_for_owner
+
+
+def _jpeg_bytes() -> bytes:
+    buf = io.BytesIO()
+    PILImage.new("RGB", (60, 40), color=(10, 20, 30)).save(buf, format="JPEG")
+    return buf.getvalue()
 
 
 class WikiReachabilityTestCase(TestCase):
@@ -58,7 +67,7 @@ class WikiReachabilityTestCase(TestCase):
 
     def _contribute(self, pin: Pin, wiki: Wiki, name: str) -> Image:
         """Upload a photo to *pin* and deliberately contribute it to *wiki*."""
-        result = upload_photo_for_owner(pin, self.owner, SimpleUploadedFile(f"{name}.jpg", b"not-a-real-jpeg", content_type="image/jpeg"), name)
+        result = upload_photo_for_owner(pin, self.owner, SimpleUploadedFile(f"{name}.jpg", _jpeg_bytes(), content_type="image/jpeg"), name)
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
         attach_to_wiki(result, wiki, added_by=self.owner)
         Image.objects.filter(pk=result.pk).update(wiki=wiki)
@@ -141,7 +150,7 @@ class TripActivityPhotosTests(WikiReachabilityTestCase):
 
     def _pin_photo(self, pin: Pin, name: str) -> Image:
         """A photo on the owner's pin, contributed to no wiki."""
-        result = upload_photo_for_owner(pin, self.owner, SimpleUploadedFile(f"{name}.jpg", b"not-a-real-jpeg", content_type="image/jpeg"), name)
+        result = upload_photo_for_owner(pin, self.owner, SimpleUploadedFile(f"{name}.jpg", _jpeg_bytes(), content_type="image/jpeg"), name)
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
         return result
 

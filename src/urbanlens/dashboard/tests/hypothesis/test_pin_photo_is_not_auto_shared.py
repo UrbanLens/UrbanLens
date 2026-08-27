@@ -11,10 +11,13 @@ Everything on a wiki is there because a person put it there.
 
 from __future__ import annotations
 
+import io
+
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from model_bakery import baker
+from PIL import Image as PILImage
 
 from urbanlens.dashboard.models.images.attachment import ImageAttachment
 from urbanlens.dashboard.models.images.model import Image
@@ -26,7 +29,9 @@ from urbanlens.dashboard.services.photos.uploads import upload_photo_for_owner
 
 
 def _file(name: str = "house.jpg") -> SimpleUploadedFile:
-    return SimpleUploadedFile(name, b"not-a-real-jpeg", content_type="image/jpeg")
+    buf = io.BytesIO()
+    PILImage.new("RGB", (60, 40), color=(10, 20, 30)).save(buf, format="JPEG")
+    return SimpleUploadedFile(name, buf.getvalue(), content_type="image/jpeg")
 
 
 class PinPhotoIsNotAutoSharedTests(TestCase):

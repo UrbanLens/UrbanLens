@@ -119,7 +119,7 @@ class EveryByteServingViewIsMarkedTests(SimpleTestCase):
 
     def _image_body_returns(self, module: str) -> list[int]:
         """Line numbers of ``return HttpResponse(<bytes>, content_type=...)`` not wrapped."""
-        tree = ast.parse((_CONTROLLERS / module).read_text())
+        tree = ast.parse((_CONTROLLERS / module).read_text(encoding="utf-8"))
         unwrapped = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.Return) or node.value is None:
@@ -144,6 +144,6 @@ class EveryByteServingViewIsMarkedTests(SimpleTestCase):
 
     def test_the_check_would_notice_a_regression(self) -> None:
         """Guard against the scan silently matching nothing at all."""
-        marked = sum((_CONTROLLERS / module).read_text().count("mark_private_media(") for module in _BYTE_SERVING_MODULES)
+        marked = sum((_CONTROLLERS / module).read_text(encoding="utf-8").count("mark_private_media(") for module in _BYTE_SERVING_MODULES)
 
         self.assertGreaterEqual(marked, len(_BYTE_SERVING_MODULES), "scan found almost no marked responses - it has stopped measuring anything")

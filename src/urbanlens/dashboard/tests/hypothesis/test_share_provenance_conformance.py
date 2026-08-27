@@ -61,7 +61,7 @@ class ShareProvenanceConformanceTests(SimpleTestCase):
         for path in sorted(_SOURCE_ROOT.rglob("*.py")):
             if "tests" in path.parts or "migrations" in path.parts:
                 continue
-            source = path.read_text()
+            source = path.read_text(encoding="utf-8")
             if "PinShare" not in source:
                 continue
             try:

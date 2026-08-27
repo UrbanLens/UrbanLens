@@ -20,10 +20,13 @@ feature it guards.
 
 from __future__ import annotations
 
+import io
+
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from model_bakery import baker
+from PIL import Image as PILImage
 
 from urbanlens.dashboard.models.images.attachment import ImageAttachment
 from urbanlens.dashboard.models.images.model import Image
@@ -37,6 +40,12 @@ from urbanlens.dashboard.services.photos.uploads import upload_photo_for_owner
 #: Distinctive enough that finding it anywhere in a response is unambiguous.
 PRIVATE_CAPTION = "zzq-private-caption-nonce"
 PRIVATE_PIN_NAME = "zzq-private-pin-name"
+
+
+def _jpeg_bytes(color: tuple[int, int, int] = (10, 20, 30)) -> bytes:
+    buf = io.BytesIO()
+    PILImage.new("RGB", (60, 40), color=color).save(buf, format="JPEG")
+    return buf.getvalue()
 
 
 class WikiNeighbourTestCase(TestCase):
@@ -57,13 +66,13 @@ class WikiNeighbourTestCase(TestCase):
 
     def _private_photo(self) -> Image:
         """A photo uploaded to the owner's own pin, never contributed anywhere."""
-        result = upload_photo_for_owner(self.owner_pin, self.owner, SimpleUploadedFile("private.jpg", b"not-a-real-jpeg", content_type="image/jpeg"), PRIVATE_CAPTION)
+        result = upload_photo_for_owner(self.owner_pin, self.owner, SimpleUploadedFile("private.jpg", _jpeg_bytes(), content_type="image/jpeg"), PRIVATE_CAPTION)
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
         return result
 
     def _shared_photo(self) -> Image:
         """A photo the owner deliberately contributed to the wiki."""
-        result = upload_photo_for_owner(self.owner_pin, self.owner, SimpleUploadedFile("shared.jpg", b"also-not-a-jpeg", content_type="image/jpeg"), "deliberately shared")
+        result = upload_photo_for_owner(self.owner_pin, self.owner, SimpleUploadedFile("shared.jpg", _jpeg_bytes((30, 20, 10)), content_type="image/jpeg"), "deliberately shared")
         assert isinstance(result, Image)
         attach_to_wiki(result, self.wiki, added_by=self.owner)
         Image.objects.filter(pk=result.pk).update(wiki=self.wiki)

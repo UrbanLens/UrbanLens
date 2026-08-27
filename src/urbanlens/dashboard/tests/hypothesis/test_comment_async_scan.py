@@ -10,12 +10,14 @@ stays unavailable through every retry.
 
 from __future__ import annotations
 
+import io
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
 from django.urls import reverse
 from model_bakery import baker
+from PIL import Image as PILImage
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.comments.model import Comment
@@ -29,7 +31,9 @@ from urbanlens.dashboard.tasks import scan_comment_image, scan_trip_comment_imag
 
 
 def _fake_image(name: str = "photo.png") -> SimpleUploadedFile:
-    return SimpleUploadedFile(name, b"fake-image-bytes", content_type="image/png")
+    buf = io.BytesIO()
+    PILImage.new("RGB", (60, 40), color=(10, 20, 30)).save(buf, format="PNG")
+    return SimpleUploadedFile(name, buf.getvalue(), content_type="image/png")
 
 
 class StartCommentImageScanTests(TestCase):

@@ -63,7 +63,7 @@ _EXPECTED_KEYS = frozenset(
 
 def _declared_cache_version() -> int:
     """Read ``PIN_CACHE_VERSION`` out of the TypeScript module."""
-    match = re.search(r"PIN_CACHE_VERSION\s*=\s*(\d+)", _PIN_CACHE_TS.read_text())
+    match = re.search(r"PIN_CACHE_VERSION\s*=\s*(\d+)", _PIN_CACHE_TS.read_text(encoding="utf-8"))
     assert match is not None, f"PIN_CACHE_VERSION not found in {_PIN_CACHE_TS}"
     return int(match.group(1))
 

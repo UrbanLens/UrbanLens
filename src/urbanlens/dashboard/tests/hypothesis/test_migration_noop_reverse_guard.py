@@ -91,7 +91,7 @@ def _noop_reverse_files() -> dict[str, list[str]]:
     """
     found: dict[str, list[str]] = {}
     for path in sorted(MIGRATIONS_DIR.glob("[0-9]*.py")):
-        tree = ast.parse(path.read_text())
+        tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
                 continue
@@ -129,7 +129,7 @@ class MigrationNoopReverseGuardTests(SimpleTestCase):
         """Omitting a reverse entirely makes `migrate` refuse - which is a different, louder failure."""
         missing = []
         for path in sorted(MIGRATIONS_DIR.glob("[0-9]*.py")):
-            tree = ast.parse(path.read_text())
+            tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
                     continue

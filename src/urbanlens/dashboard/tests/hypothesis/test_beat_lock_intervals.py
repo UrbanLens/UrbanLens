@@ -115,7 +115,7 @@ class BeatLockIntervalTests(SimpleTestCase):
         schedule appear in the map. Without this, adding an eleventh scheduled
         sweep would silently get no interval check at all.
         """
-        tree = ast.parse(_TASKS_PATH.read_text())
+        tree = ast.parse(_TASKS_PATH.read_text(encoding="utf-8"))
         guarded = {
             node.name
             for node in ast.walk(tree)
@@ -129,7 +129,7 @@ class BeatLockIntervalTests(SimpleTestCase):
 
     def test_the_scan_still_finds_the_known_locks(self) -> None:
         """Guard against the AST scan quietly matching nothing after a refactor."""
-        tree = ast.parse(_TASKS_PATH.read_text())
+        tree = ast.parse(_TASKS_PATH.read_text(encoding="utf-8"))
         guarded = sum(
             1
             for node in ast.walk(tree)
