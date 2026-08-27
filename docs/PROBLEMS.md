@@ -3616,21 +3616,28 @@ thirteen failures and left three genuine ones, each a different rule:
   `role="tab"` and `aria-selected`, and the container drops the role entirely
   when it has nothing to put in it.
 - **`link-in-text-block`, serious, the settings page.** `a[href$="locations/"]`
-  is distinguishable from surrounding prose by colour alone. **Not fixed** - the
-  repair is an underline (or other non-colour affordance) on inline links, which
-  is a site-wide visual decision rather than a local patch.
+  is distinguishable from surrounding prose by colour alone. **Fixed 2026-08-27**
+  with an underline scoped to `.settings-section-desc a`. Two other inline links
+  on the same settings template (`.settings-help`, ~lines 762/809) have the
+  identical defect under a different selector and were deliberately left
+  untouched - worth a follow-up pass rather than one-off patches per selector.
 
 Both fixes were verified against the deployment: the pin detail page's scan is
 now clean. The home page's is not, because clearing `button-name` uncovered a
 second defect underneath it:
 
 - **`image-alt`, critical, the home page.** axe reports `.photo-tile > img` with
-  no `alt` and no `aria-label`. Both templates that render a photo tile put the
-  `<img>` inside the `.photo-tile-btn` button and do give it an `alt`, so this is
-  either a third render path or an image the thumbnail-fallback script rewrites
-  after load - `urbanlensMediaThumbFallback` is the obvious suspect, since it
-  swaps the element when a file 404s and the dev deployment has no media files.
-  Worth ten minutes in front of a browser rather than another blind edit.
+  no `alt` and no `aria-label`. **Investigated 2026-08-27, does not reproduce
+  against current source**: `_widget_recent_photos.html`'s `<img>` has carried
+  `alt="{{ img.caption|default:'Photo' }}"` since its original commit, and the
+  thumbnail-fallback hypothesis is ruled out -
+  `urbanlensMediaThumbFallback` replaces a 404'd `<img>` with a `<span>`
+  entirely (`img.replaceWith(span)`), it doesn't leave an `<img>` with a
+  stripped `alt`. The `.photo-tile > img` selector also can't match this
+  element's actual DOM position (nested one level deeper, under
+  `.photo-tile-btn`). Most likely explanation: the deployment this was scanned
+  against predates the current HEAD. Needs a fresh scan against a current
+  deploy before treating this as still open.
 
 ## OPEN (ratcheted) 2026-08-24: one pin-detail page load can exhaust the database connection pool
 
