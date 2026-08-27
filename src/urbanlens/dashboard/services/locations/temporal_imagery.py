@@ -20,7 +20,7 @@ Two concerns live here:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.locations.open_historical_map import MAX_YEAR, MIN_YEAR, OpenHistoricalMapGateway, OpenHistoricalMapUnavailableError
@@ -51,7 +51,13 @@ class OhmTemporalCoveragePanelSource(LocationCachePanelSource):
 
     key = "ohm_temporal_coverage"
     cache_source = OHM_COVERAGE_CACHE_SOURCE
-    required_feature: ClassVar[SiteFeature | None] = SiteFeature.BETA_FEATURES
+
+    # Deliberately no `required_feature` here: this source is a background-only
+    # LocationCache panel (not an InfoPanelSource, no api_kinds), so it never
+    # reaches the tab strip or the external API - `required_feature` would sit
+    # unread by both surfaces panel_visible_to() actually gates. The real
+    # BETA_FEATURES check lives where the data is shown: temporal_slider_years()
+    # below and the temporal-imagery view (controllers/temporal_imagery.py).
 
     def gate(self, pin: Pin) -> bool:
         """Skip pins with no usable coordinates - mirrors ``CoordinateGatedInfoPanelSource``."""
