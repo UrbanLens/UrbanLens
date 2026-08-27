@@ -31,6 +31,9 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.album.model import Album
+from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanFloor, FloorplanMarker
+from urbanlens.dashboard.models.images.attachment import ImageAttachment
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 from urbanlens.dashboard.models.markup.model import CustomLayer
@@ -91,6 +94,53 @@ class PinMergePreservesAttachmentsTests(TestCase):
 
         own.refresh_from_db()
         self.assertEqual(own.parent_pin_id, self.survivor.pk)
+
+    def test_an_image_attachment_survives_and_moves_to_the_survivor(self) -> None:
+        image = baker.make(Image, profile=self.profile)
+        attachment = baker.make(ImageAttachment, image=image, pin=self.loser)
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        attachment.refresh_from_db()
+        self.assertEqual(attachment.pin_id, self.survivor.pk)
+
+    def test_a_duplicate_image_attachment_is_dropped_not_left_dangling(self) -> None:
+        """The same photo already attached to both pins is one attachment, not a collision."""
+        image = baker.make(Image, profile=self.profile)
+        kept = baker.make(ImageAttachment, image=image, pin=self.survivor)
+        dropped = baker.make(ImageAttachment, image=image, pin=self.loser)
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        self.assertTrue(ImageAttachment.objects.filter(pk=kept.pk).exists())
+        self.assertFalse(ImageAttachment.objects.filter(pk=dropped.pk).exists())
+        self.assertEqual(ImageAttachment.objects.filter(pin=self.survivor, image=image).count(), 1)
+
+    def test_a_floorplan_markers_twin_is_unlinked_not_deleted(self) -> None:
+        """Repointing the twin onto survivor would let a later floorplan save silently
+        overwrite survivor's name/location, so the marker is unlinked instead - its own
+        position/kind/floor data survives, and the editor mints a fresh twin next save."""
+        floor = baker.make(FloorplanFloor, floorplan=baker.make(Floorplan, profile=self.profile))
+        marker = baker.make(FloorplanMarker, floor=floor, linked_pin=self.loser)
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        marker.refresh_from_db()
+        self.assertIsNone(marker.linked_pin_id)
+
+    def test_an_existing_twin_on_survivor_is_undisturbed(self) -> None:
+        """Survivor is already another marker's twin - unlinking the loser's marker (rather
+        than reassigning it onto survivor) never touches that unrelated marker."""
+        floor = baker.make(FloorplanFloor, floorplan=baker.make(Floorplan, profile=self.profile))
+        existing = baker.make(FloorplanMarker, floor=floor, linked_pin=self.survivor, name="Existing")
+        moved = baker.make(FloorplanMarker, floor=floor, linked_pin=self.loser, name="Moved")
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        existing.refresh_from_db()
+        moved.refresh_from_db()
+        self.assertEqual(existing.linked_pin_id, self.survivor.pk)
+        self.assertIsNone(moved.linked_pin_id)
 
     def test_no_cascade_relation_to_pin_is_left_unhandled(self) -> None:
         """The completeness arm: the next model with a parent_pin fails here.

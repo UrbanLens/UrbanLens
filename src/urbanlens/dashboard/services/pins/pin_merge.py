@@ -18,11 +18,17 @@ Every relation FK'd to Pin falls into one of three buckets:
   rows, the ``labels`` M2M).
 - **Auto-dedup** - a uniqueness constraint could conflict, but the conflict is
   unambiguous (identical alias/owner text, the same auto-removal tombstone,
-  the same outstanding share, the same list membership) - :func:`merge_pins`
-  resolves these itself, keeping one side by a fixed rule and dropping the
-  redundant other (``PinAlias``, ``PinOwner``, ``PinAutoRemoval``, ``PinShare``,
-  ``PinListItem``; ``Review`` similarly, keeping whichever the same reviewer
-  most recently updated).
+  the same outstanding share, the same list membership, the same photo already
+  attached) - :func:`merge_pins` resolves these itself, keeping one side by a
+  fixed rule and dropping the redundant other (``PinAlias``, ``PinOwner``,
+  ``PinAutoRemoval``, ``PinShare``, ``PinListItem``, ``ImageAttachment``;
+  ``Review`` similarly, keeping whichever the same reviewer most recently
+  updated). ``FloorplanMarker.linked_pin`` - a synced twin, not a plain FK -
+  is unlinked rather than deleted or reassigned: reassigning it onto the
+  survivor would let a later, unrelated floorplan save silently overwrite the
+  survivor's own name/location with the marker's; unlinking loses nothing,
+  since the marker's own position/kind/floor data lives on the marker, not
+  the twin, and the editor mints it a fresh twin pin on its next save.
 - **Ask the user** - both pins can hold genuinely different content for the
   same slot (``Article``, a same-type ``Boundary``, a ``CustomFieldValue`` for
   the same ``CustomField``) - see :func:`plan_merge_conflicts`. Silently
@@ -50,6 +56,7 @@ from urbanlens.dashboard.models.auto_removals.model import PinAutoRemoval
 from urbanlens.dashboard.models.boundary.model import Boundary
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.custom_fields.model import CustomFieldValue
+from urbanlens.dashboard.models.images.attachment import ImageAttachment
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.link_extraction.model import LinkExtraction
 from urbanlens.dashboard.models.links.model import PinLink
@@ -70,6 +77,7 @@ if TYPE_CHECKING:
     from django.db.models import Model
 
     from urbanlens.dashboard.models.article.model import Article
+    from urbanlens.dashboard.models.floorplans.model import FloorplanMarker
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -140,6 +148,11 @@ class MergeFieldConflict:
 def _get_article(pin: Pin) -> Article | None:
     """The pin's Article, or None - safe against the reverse OneToOne's DoesNotExist."""
     return getattr(pin, "article", None)
+
+
+def _get_floorplan_marker(pin: Pin) -> FloorplanMarker | None:
+    """The pin's FloorplanMarker twin, or None - safe against the reverse OneToOne's DoesNotExist."""
+    return getattr(pin, "floorplan_marker", None)
 
 
 def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
@@ -438,6 +451,40 @@ def _repoint_other_merge_suggestions(survivor: Pin, loser: Pin) -> None:
             suggestion.save(update_fields=["pin_b", "updated"])
 
 
+def _merge_image_attachments(survivor: Pin, loser: Pin) -> None:
+    """Reassign loser's image attachments onto survivor, dropping duplicates of an already-attached photo."""
+    survivor_image_ids = set(ImageAttachment.objects.filter(pin=survivor).values_list("image_id", flat=True))
+    for attachment in list(ImageAttachment.objects.filter(pin=loser)):
+        if attachment.image_id in survivor_image_ids:
+            attachment.delete()
+            continue
+        attachment.pin = survivor
+        if _save_within_savepoint(attachment, ["pin", "updated"]):
+            survivor_image_ids.add(attachment.image_id)
+        else:
+            attachment.delete()
+
+
+def _merge_floorplan_marker(survivor: Pin, loser: Pin) -> None:
+    """Unlink the loser's floorplan-marker twin rather than repointing it.
+
+    ``linked_pin`` is ``OneToOne`` and doubles as a synced twin -
+    ``services.floorplans.serialization._sync_linked_pin`` overwrites
+    whichever pin it points at with the marker's own name/kind/location/icon/
+    color on *every* save of that floorplan document, not just the edited
+    marker's. Repointing it onto survivor would silently overwrite a pin the
+    profile deliberately kept the next time anyone touches that floorplan.
+    Unlinking is safe either way: the marker's own position/kind/floor data
+    lives on the marker itself, not the twin, and the floorplan editor mints a
+    fresh twin pin on its next save.
+    """
+    marker = _get_floorplan_marker(loser)
+    if marker is None:
+        return
+    marker.linked_pin = None
+    marker.save(update_fields=["linked_pin", "updated"])
+
+
 def _merge_albums(survivor: Pin, loser: Pin) -> None:
     """Move the loser's albums onto the survivor, re-slugging on collision.
 
@@ -518,6 +565,11 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         # overlays and layers were destroyed by the delete() below.
         MapImageOverlay.objects.filter(parent_pin=loser).update(parent_pin=survivor)
         CustomLayer.objects.filter(parent_pin=loser).update(parent_pin=survivor)
+        # Same drift, two more CASCADE relations that postdate this module:
+        # an attachment can collide on (image, pin) uniqueness, and a marker's
+        # twin is OneToOne, so both get their own dedup-aware helper above.
+        _merge_image_attachments(survivor, loser)
+        _merge_floorplan_marker(survivor, loser)
 
         PinVisit.objects.filter(pin=loser).update(pin=survivor)
         Image.objects.filter(pin=loser).update(pin=survivor)
