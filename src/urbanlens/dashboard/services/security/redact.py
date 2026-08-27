@@ -31,7 +31,12 @@ def _fingerprint(value: str) -> str:
     password-hashing-grade iteration counts. A keyed HMAC still makes the fingerprint
     non-reversible and non-forgeable without the key, which is all this needs.
     """
-    digest = hmac.new(_REDACTION_SALT, value.encode("utf-8"), hashlib.sha256).digest()  # lgtm[py/weak-sensitive-data-hashing]
+    # CodeQL alert #463 (py/weak-sensitive-data-hashing): dismissed as a false positive. This is a
+    # keyed HMAC used for log-correlation fingerprints, not password storage/verification -- see
+    # the module and function docstrings above. The legacy "# lgtm[...]" syntax this line used to
+    # carry is not honored by this repo's default code-scanning setup, so it never actually
+    # suppressed anything; dismissing via the GitHub API is the durable fix.
+    digest = hmac.new(_REDACTION_SALT, value.encode("utf-8"), hashlib.sha256).digest()
     return digest.hex()[:8]
 
 

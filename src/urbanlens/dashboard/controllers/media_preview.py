@@ -70,7 +70,16 @@ def _fetch_source(url: str) -> tuple[bytes, str] | None:
             logger.info("Preview source rejected as unsafe: %s", url[:200])
             return None
         try:
-            response = session.get(url, headers={"User-Agent": _USER_AGENT}, timeout=_FETCH_TIMEOUT, stream=True, allow_redirects=False)
+            # ensure_public_http_url (above) re-validates this exact hop - literal
+            # IP and resolved hostname - immediately before the connection below;
+            # CodeQL doesn't model it as a sanitizer.
+            response = session.get(  # lgtm[py/full-ssrf]
+                url,
+                headers={"User-Agent": _USER_AGENT},
+                timeout=_FETCH_TIMEOUT,
+                stream=True,
+                allow_redirects=False,
+            )
         except requests.RequestException:
             logger.info("Preview source fetch failed: %s", url[:200], exc_info=True)
             return None
