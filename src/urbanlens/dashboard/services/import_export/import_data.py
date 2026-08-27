@@ -2424,6 +2424,8 @@ class MapAnnotationsImport(ImportType):
             ctx: The shared import context.
         """
         from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
+        from urbanlens.dashboard.services.media.previews import is_web_safe
+        from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
 
         uuid_str = _safe_uuid(row.get("uuid"))
         if uuid_str and MapImageOverlay.objects.filter(uuid=uuid_str, profile=ctx.profile).exists():
@@ -2436,11 +2438,25 @@ class MapAnnotationsImport(ImportType):
             ctx.result.inc_skipped("map_overlays")
             return
 
+        # An imported image_url is rendered client-side exactly like the one
+        # controllers.map_overlays._image_from_request accepts from a live form
+        # POST - an import file is just another untrusted source, so it gets the
+        # same ensure_public_http_url/is_web_safe gate rather than a raw pass-through.
+        image_url = str(row.get("image_url") or "")[:1000]
+        if image_url:
+            try:
+                ensure_public_http_url(image_url, max_length=1000)
+            except UnsafeUrlError:
+                image_url = ""
+            else:
+                if not is_web_safe(image_url):
+                    image_url = ""
+
         overlay = MapImageOverlay(
             profile=ctx.profile,
             parent_pin_id=pin_pk,
             name=str(row.get("name") or "")[:100],
-            image_url=str(row.get("image_url") or "")[:1000],
+            image_url=image_url,
             opacity=_bounded_int(row.get("opacity"), default=70),
             order=_bounded_int(row.get("order"), default=0, low=0, high=10_000),
             default_visible=bool(row.get("default_visible", True)),
