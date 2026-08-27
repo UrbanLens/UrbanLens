@@ -8,9 +8,7 @@ import django.contrib.gis.db.models.fields
 import django.core.validators
 from django.db import migrations, models
 import django.db.migrations.operations.special
-import django.db.models.constraints
 import django.db.models.deletion
-import django.db.models.functions.text
 import django.utils.timezone
 
 import urbanlens.dashboard.models.fields
@@ -1011,16 +1009,6 @@ class Migration(migrations.Migration):
         migrations.RunPython(
             code=_0042_merge_duplicate_labels, reverse_code=_0042_noop_reverse
         ),
-        migrations.AddConstraint(
-            model_name="label",
-            constraint=models.UniqueConstraint(
-                django.db.models.functions.text.Lower("name"),
-                models.F("profile"),
-                models.F("kind"),
-                name="uq_label_profile_name_kind_ci",
-                nulls_distinct=False,
-            ),
-        ),
         migrations.CreateModel(
             name="StripeProcessedRefund",
             fields=[
@@ -1071,33 +1059,9 @@ class Migration(migrations.Migration):
             code=_0046_drop_duplicate_event_links,
             reverse_code=django.db.migrations.operations.special.RunPython.noop,
         ),
-        migrations.AddConstraint(
-            model_name="tripcalendarlink",
-            constraint=models.UniqueConstraint(
-                condition=models.Q(("google_event_id", ""), _negated=True),
-                fields=("profile", "google_event_id"),
-                name="db_tcl_profile_event_unique",
-            ),
-        ),
         migrations.RunPython(
             code=_0047_drop_duplicate_links,
             reverse_code=django.db.migrations.operations.special.RunPython.noop,
-        ),
-        migrations.AddConstraint(
-            model_name="pinlink",
-            constraint=models.UniqueConstraint(
-                models.F("pin"),
-                django.db.models.functions.text.MD5("url"),
-                name="db_plink_pin_url_unique",
-            ),
-        ),
-        migrations.AddConstraint(
-            model_name="wikilink",
-            constraint=models.UniqueConstraint(
-                models.F("wiki"),
-                django.db.models.functions.text.MD5("url"),
-                name="db_wlink_wiki_url_unique",
-            ),
         ),
         migrations.AlterField(
             model_name="friendinvitation",
@@ -1265,10 +1229,6 @@ class Migration(migrations.Migration):
             name="tile_url_template",
             field=models.CharField(blank=True, default="", max_length=500),
         ),
-        migrations.RemoveIndex(model_name="album", name="idxdb_album_pin"),
-        migrations.RemoveIndex(model_name="album", name="idxdb_album_wiki"),
-        migrations.RemoveIndex(model_name="albumitem", name="idxdb_albumitem_album"),
-        migrations.RemoveIndex(model_name="albumitem", name="idxdb_albumitem_image"),
         migrations.RemoveIndex(model_name="boundaryvote", name="idxdb_bv_place"),
         migrations.RemoveIndex(model_name="customlayer", name="idxdb_cl_pin"),
         migrations.RemoveIndex(model_name="customlayer", name="idxdb_cl_wiki"),
@@ -2209,9 +2169,6 @@ class Migration(migrations.Migration):
                 "abstract": False,
             },
         ),
-        migrations.RemoveIndex(
-            model_name="floorplanelement", name="idx_floorplan_element_kind"
-        ),
         migrations.RemoveField(model_name="floorplanroom", name="floor"),
         migrations.RemoveField(model_name="floorplanroom", name="labels"),
         migrations.RemoveField(model_name="floorplanroom", name="parent"),
@@ -2580,14 +2537,6 @@ class Migration(migrations.Migration):
         migrations.RunPython(
             code=_0062_renumber_levels,
             reverse_code=django.db.migrations.operations.special.RunPython.noop,
-        ),
-        migrations.AddConstraint(
-            model_name="floorplanfloor",
-            constraint=models.UniqueConstraint(
-                deferrable=django.db.models.constraints.Deferrable["DEFERRED"],
-                fields=("floorplan", "level"),
-                name="floorplan_floor_unique_level",
-            ),
         ),
         migrations.AlterField(
             model_name="floorplanwall",
