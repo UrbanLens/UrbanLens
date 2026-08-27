@@ -26,6 +26,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+class FloorplanValidationError(ValueError):
+    """A document failed validation, with a message written for the submitter.
+
+    Subclasses ``ValueError`` so existing handlers keep working. The point of
+    the separate type is that its message is *known* to be safe to echo back:
+    a bare ``ValueError`` reaching a handler may be an incidental one from
+    somewhere deeper (a dict lookup, a conversion inside a library), and
+    returning its text to the caller leaks internals. Handlers echo this type
+    and answer a generic message for anything else.
+    """
+
+
 #: FloorplanFloor.level is a SmallIntegerField; past these a value reaches the
 #: database as a DataError, which is a 500 rather than something a client can
 #: act on.
@@ -217,7 +230,7 @@ def _int_in(raw, field: str) -> int | None:
     try:
         return int(raw)
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"{field} must be a whole number") from exc
+        raise FloorplanValidationError(f"{field} must be a whole number") from exc
 
 
 def _float_in(raw, field: str) -> float | None:
@@ -231,7 +244,7 @@ def _float_in(raw, field: str) -> float | None:
     try:
         return float(raw)
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"{field} must be a number") from exc
+        raise FloorplanValidationError(f"{field} must be a number") from exc
 
 
 def _required_float_in(raw, field: str) -> float:
@@ -244,7 +257,7 @@ def _required_float_in(raw, field: str) -> float:
     """
     value = _float_in(raw, field)
     if value is None:
-        raise ValueError(f"{field} is required")
+        raise FloorplanValidationError(f"{field} is required")
     return value
 
 
@@ -263,7 +276,7 @@ def _date_in(raw) -> datetime.date | None:
     try:
         return datetime.date.fromisoformat(str(raw))
     except ValueError as exc:
-        raise ValueError("must be a date in YYYY-MM-DD form") from exc
+        raise FloorplanValidationError("must be a date in YYYY-MM-DD form") from exc
 
 
 #: Ceilings on how much one document may describe. Generous for any real
@@ -297,7 +310,7 @@ def _text_in(raw, field: str, limit: int) -> str:
     """
     text = "" if raw is None else str(raw)
     if len(text) > limit:
-        raise ValueError(f"{field} must be {limit} characters or fewer (got {len(text)})")
+        raise FloorplanValidationError(f"{field} must be {limit} characters or fewer (got {len(text)})")
     return text
 
 
@@ -359,14 +372,14 @@ def _reject_oversized(document: dict[str, Any]) -> None:
     if not isinstance(floors, list):
         return
     if len(floors) > _MAX_FLOORS:
-        raise ValueError(f"a plan cannot have more than {_MAX_FLOORS} floors (got {len(floors)})")
+        raise FloorplanValidationError(f"a plan cannot have more than {_MAX_FLOORS} floors (got {len(floors)})")
     for floor in floors:
         if not isinstance(floor, dict):
             continue
         for key, ceiling in (("walls", _MAX_WALLS_PER_FLOOR), ("rooms", _MAX_ROOMS_PER_FLOOR), ("markers", _MAX_MARKERS_PER_FLOOR)):
             items = floor.get(key)
             if isinstance(items, list) and len(items) > ceiling:
-                raise ValueError(f"a floor cannot have more than {ceiling} {key} (got {len(items)})")
+                raise FloorplanValidationError(f"a floor cannot have more than {ceiling} {key} (got {len(items)})")
         walls = floor.get("walls")
         if not isinstance(walls, list):
             continue
@@ -375,7 +388,7 @@ def _reject_oversized(document: dict[str, Any]) -> None:
                 continue
             openings = wall.get("openings")
             if isinstance(openings, list) and len(openings) > _MAX_OPENINGS_PER_WALL:
-                raise ValueError(f"a wall cannot have more than {_MAX_OPENINGS_PER_WALL} openings (got {len(openings)})")
+                raise FloorplanValidationError(f"a wall cannot have more than {_MAX_OPENINGS_PER_WALL} openings (got {len(openings)})")
 
 
 def _choice_in(raw, choices, field: str, default: str) -> str:
@@ -389,7 +402,7 @@ def _choice_in(raw, choices, field: str, default: str) -> str:
     if raw is None or raw == "":
         return default
     if raw not in choices:
-        raise ValueError(f"unknown {field} {raw!r} - expected one of {sorted(choices)}")
+        raise FloorplanValidationError(f"unknown {field} {raw!r} - expected one of {sorted(choices)}")
     return str(raw)
 
 
@@ -463,7 +476,7 @@ def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, prof
     try:
         row.built_date = _date_in(payload.get("built_date"))
     except ValueError as exc:
-        raise ValueError(f"built_date: {exc}") from exc
+        raise FloorplanValidationError(f"built_date: {exc}") from exc
     attributes = dict(payload.get("attributes") or {})
     local = dict(attributes.get(LOCAL_NAMESPACE) or {})
     label_uuids = local.pop("labels", None) or payload.get("labels") or []
@@ -641,7 +654,7 @@ def _reject_duplicate_levels(payload: Any) -> None:
             continue
         level = _int_in(entry.get("level"), "level") or 0
         if level in seen:
-            raise ValueError(f"two floors cannot share level {level}")
+            raise FloorplanValidationError(f"two floors cannot share level {level}")
         seen.add(level)
 
 
@@ -709,14 +722,14 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
         floor.floorplan = floorplan
         level = _int_in(payload.get("level"), "level") or 0
         if not _MIN_LEVEL <= level <= _MAX_LEVEL:
-            raise ValueError(f"level must be between {_MIN_LEVEL} and {_MAX_LEVEL}")
+            raise FloorplanValidationError(f"level must be between {_MIN_LEVEL} and {_MAX_LEVEL}")
         floor.level = level
         designation = str(payload.get("designation") or "").strip()
         # Refused rather than truncated, matching this module's 400-not-500
         # style: a designation silently cut to "4A2345678" is worse than a
         # client being told it sent something it cannot have meant.
         if len(designation) > 8:
-            raise ValueError("designation must be 8 characters or fewer")
+            raise FloorplanValidationError("designation must be 8 characters or fewer")
         floor.designation = designation
         floor.name = _text_in(payload.get("name"), "floor.name", 255)
         floor.elevation_meters = _float_in(payload.get("elevation_meters"), "elevation_meters")
@@ -795,7 +808,7 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
                 # the constraint is an IntegrityError (a 500), while this is a
                 # 400 that names what is wrong.
                 if not 0 <= t_start < t_end <= 1:
-                    raise ValueError(f"opening must satisfy 0 <= t_start < t_end <= 1, got {t_start} and {t_end}")
+                    raise FloorplanValidationError(f"opening must satisfy 0 <= t_start < t_end <= 1, got {t_start} and {t_end}")
                 opening.t_start = t_start
                 opening.t_end = t_end
                 opening.swing = _choice_in(payload.get("swing"), FloorplanOpeningSwing.values, "opening swing", FloorplanOpeningSwing.NONE)
@@ -834,7 +847,7 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
                         # ValueError rather than the TypeError ruff wants, because
                         # every caller in controllers/floorplans.py turns a
                         # ValueError from this module into a 400 naming the field.
-                        raise ValueError("key_attributes must be an object")  # noqa: TRY004
+                        raise FloorplanValidationError("key_attributes must be an object")
                     lock.key_attributes = key_attributes
                     return lock
 
