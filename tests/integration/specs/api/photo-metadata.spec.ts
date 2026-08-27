@@ -123,13 +123,23 @@ test.describe("photo metadata", () => {
         expect(await (await api.get(`photos/${photo.uuid}/`)).text(), "a cleared label is still attached").not.toContain(label.uuid);
     });
 
-    test("a vote is accepted and can be withdrawn", async ({ api, apiRequestContext, account }) => {
+    test("a vote on a plain upload is refused, not accepted", async ({ api, apiRequestContext, account }) => {
+        // A relevance vote is keyed by the (location, media_source_key,
+        // media_item_key) identity that services.media.media_materialize sets
+        // when an externally-sourced Media gallery item is materialized onto a
+        // wiki - see PhotoVoteView's docstring and
+        // PhotoVoteTests.test_plain_upload_cannot_be_voted_on in
+        // test_external_api_photos.py. A plain upload never carries that
+        // identity, even once shared to a wiki (services.photos.attachment's
+        // attach_to_wiki sets Image.wiki, nothing else), and the external API
+        // has no endpoint that performs the materialization itself - only the
+        // web UI's wiki Media gallery does, through WikiMediaVoteView. So the
+        // only half of this feature reachable from here is the refusal.
         const photo = await uploadPhoto(api, apiRequestContext, account.apiKey ?? "", "voted photo");
 
-        for (const value of [1, -1, 0]) {
-            const response = await api.post(`photos/${photo.uuid}/vote/`, { value });
-            expect(response.status(), `voting ${value} answered ${response.status()}: ${(await response.text()).slice(0, 200)}`).toBeLessThan(300);
-        }
+        const response = await api.post(`photos/${photo.uuid}/vote/`, { value: 1 });
+        expect(response.status(), `voting on a plain upload answered ${response.status()}, expected a 400 refusal: ${(await response.text()).slice(0, 200)}`).toBe(400);
+        expect(await response.json(), "the refusal did not use the standard error envelope").toHaveProperty("error");
     });
 
     test("a vote outside the allowed values is refused", async ({ api, apiRequestContext, account }) => {

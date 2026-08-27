@@ -62,11 +62,25 @@ const DEFAULT_LONGITUDE = -73.7562;
  * pin would land on the same coordinates and every test but the first would
  * fail. ~0.4 degrees is tens of kilometres, so a collision needs two draws to
  * land within metres of each other.
+ *
+ * That distance doesn't protect against the *property*-level refusal below,
+ * though: two draws inside the same parcel/place still collide however far
+ * apart in degrees they are, which is exactly why that refusal exists.
+ * Re-drawing coordinates is still the right response to it - a fresh draw is
+ * simply unlikely to land on the same property again.
  */
 const COORDINATE_SPREAD_DEGREES = 0.4;
 
-/** Message `create_pin_for_profile` refuses a too-close pin with. */
-const TOO_CLOSE_MESSAGE = "already have a pin at this location";
+/**
+ * Substring common to every "you already have a pin ..." refusal
+ * `create_pin_for_profile` (`services/pins/pin_creation.py`) can raise:
+ * the exact-coordinate check, the one-root-pin-per-property check, and the
+ * location-level unique-constraint fallback. All three are answered the same
+ * way here - draw new coordinates and try again - so matching only one of the
+ * exact phrasings (as this used to) left the others falling through to an
+ * immediate throw on the very first collision.
+ */
+const TOO_CLOSE_MESSAGE = "already have a pin";
 
 /** Attempts to find free coordinates before giving up. */
 const PLACEMENT_ATTEMPTS = 4;

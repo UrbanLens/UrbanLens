@@ -434,6 +434,16 @@ Recorded so they do not have to be rediscovered:
   cannot make the precondition it needs through the surface it is testing. They
   resolve the wiki and skip with that reason; they start running the moment one
   exists. Recorded as a finding in `docs/PROBLEMS.md`, 2026-08-24.
+- **A photo vote's success path cannot be exercised at all.**
+  `POST photos/{uuid}/vote/` only accepts a photo carrying the
+  `(location, media_source_key, media_item_key)` identity that
+  `services.media.media_materialize.materialize_media_item` sets when an
+  externally-sourced Media gallery item is sent to a wiki - a plain upload
+  never has it, even once shared to a wiki (see `PhotoVoteView`'s docstring).
+  That materialization only happens through the web UI's wiki Media gallery
+  (`WikiMediaVoteView`), which the published API has no equivalent of, so
+  `api/photo-metadata.spec.ts` can only assert the refusal, not a successful
+  vote-and-withdraw.
 - **Games (SpotGuessr, Trivia, Consensus) are uncovered.** Each is
   WebSocket-driven with its own session lifecycle and deserves its own spec
   file; the socket helpers to write them are in `lib/websocket.ts`. They are
