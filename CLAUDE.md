@@ -8,37 +8,26 @@ UrbanLens is a Django mapping application for photographers and urban explorers 
 
 **This project is in beta.** Anything inconsistent or suboptimal are bugs - not conventions to follow or replicate. When something looks wrong, it probably is.
 
-**Docs** - `docs/FEATURES.md` - an inventory of features. Infrastructure should be reused whenever possible (e.g. a generic height-based client pagination system, a shared visit dialog, shared map toolbar/layers components). `docs/NOTES.md` - explains some non-obvious behavior; `docs/designs/plugins.md` - documents the plugin contribution API.
+**Docs** - 
 
-`docs/TOOLING.md` - the diagnostic and CI tooling: how to run tests fast, mutation
-testing, the two "where to look" reports, the three structural CI checks, and the
-shared test helpers. Each entry records the defect that motivated it, so its value
-does not have to be re-derived.
+Files in `docs/`
 
-`docs/TEST_COVERAGE_GAPS.md` - every defect the integration/contract suites found
-that the pytest suite did not, with why pytest missed it and what would close the
-gap. Read it before adding endpoint tests: several were missed for a structural
-reason, and a test written without understanding that reason passes while the
-defect stays.
+`FEATURES.md` - an inventory of features. Infrastructure should be reused whenever possible (e.g. a generic height-based client pagination system, a shared visit dialog, shared map toolbar/layers components). 
 
-`docs/CONTRACT_TESTS.md` - the schemathesis suite in `tests/contract/`, which holds
-the external API to its own published OpenAPI document. Runs in-process (no
-deployment) or against a live one. Read it before touching a serializer's
-declared types - and note the three pytest-django traps it records, which cost a
-session to find.
+`NOTES.md` - explains some non-obvious behavior; 
 
-`docs/INTEGRATION_TESTS.md` - the on-demand Playwright suite in `tests/integration/`,
-run by hand against staging. It answers what the pytest suite structurally cannot:
-whether the deployed pieces work together. Read it before adding a test there -
-particularly the rules about waiting for HTMX and never signing out on the shared
-session.
+`designs/plugins.md` - plugin contribution API.
 
-`docs/LOCATION_DATA_TESTS.md` - the opt-in `location` project inside that suite,
-which exercises one real place (Hudson River State Hospital) through the parcel,
-building, wiki, media and property-record pipelines. Read it before asserting
-anything about place data: it records which numbers are invariants, which are
-bounds, and which are questions for a human - and the root-cause defect that
-currently stops a new pin ever getting its parcel.
+`TOOLING.md` - the diagnostic and CI tooling
+
+`TEST_COVERAGE_GAPS.md` - every defect the integration/contract suites found
+that the pytest suite did not
+
+`CONTRACT_TESTS.md` - the schemathesis suite in `tests/contract/`.
+
+`INTEGRATION_TESTS.md` - the on-demand Playwright suite in `tests/integration/`
+
+`LOCATION_DATA_TESTS.md` - the opt-in `location` project inside that suite
 
 `CLAUDE.local.md` at the repo root contains environment-specific info.
 
@@ -63,15 +52,8 @@ Common development commands should be added to `pyproject.toml` scripts, `packag
 
 ## Git Workflow
 
-Commit every batch of changes as its own commit, without waiting to be asked - a "batch" is one
-logically complete unit of work (one fix, one feature increment, one doc update), the same
-granularity already used throughout this repo's history.
-
-Push after each commit (or small group of commits) without asking for confirmation first, as long
-as the current branch isn't `main` - which it never should be; work happens on feature branches.
-Plain `git push` only: never force-push, never push directly to `main`, and never skip hooks
-(`--no-verify`) to force a commit or push through - if a hook fails, fix the underlying issue
-instead.
+Commit every batch of changes without waiting to be asked - a "batch" is one
+logically complete unit of work. Push after the work you were asked to do is complete, without waiting to be asked.
 
 ## Project Structure
 
@@ -124,26 +106,27 @@ docs/
 ## Code Quality
 Prefer OOP, inheritance, and generics for abstraction and extensibility.
 
-Docstrings: Use Google-style docstrings. These will be consumed by Sphinx for ReadTheDocs-style documentation - completeness matters.
+Use Google docstrings. These will be consumed by Sphinx for ReadTheDocs-style documentation - completeness matters.
 
 - Type hints throughout; MyPy with Django stubs
 - Modern Python (3.12+)
 - Choose actively maintained, modern libraries over dated equivalents
 
-**Comments**:
 Comments should be concise, and only included when not obvious. Assume that someone competent and familiar with the tech, will be working on code after you; unnecessary explanation is a burden.
 
 If an explanation is necessary, only explain why this approach is used now, not its history. Do not authoritatively state we've made design decisions, because it discourages reassessing our implementation in the future.
 
 ## Testing
 
-Use Model Bakery for fixtures. Use pytest.
+Use pytest and Model Bakery.
 
-Test everything substantive. Do not create trivial unit tests, such as to test a logging message; this causes minor changes to result in tests failures. Mock and patch, especially when testing anything that contacts an external service. Use hypothesis property-based tests whenever possible. Use SimpleTestCase when DB access isn't needed.
+Test everything substantive. Do not create trivial unit tests, such as testing a logging message; this causes minor changes to result in tests failures. Mock and patch. Use hypothesis property-based tests whenever possible. Use SimpleTestCase often, and whenever DB access isn't needed.
 
-Set `UL_TEST_DB_NAME` to a unique value when running pytest, so parallel agent sessions don't collide.
+Run tests with --reuse-db to make them fast, at the cost of potential collissions. Run only targetted regression tests for most work. Run the full suite without --reuse-db one final time before merging a PR. Running many unit tests often takes time, so if you have additional work to do, do it while the test runs.
 
-When a user reports a bug, reproduce it with a failing unit test (TDD), then fix - the test guards against regression.
+Set a unique `UL_TEST_DB_NAME`, so parallel agent sessions don't collide.
+
+When a user reports a bug, reproduce it with a failing test (TDD), then fix - the test guards against regression.
 
 ## Common Patterns
 
