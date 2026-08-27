@@ -50,11 +50,6 @@ class Migration0039ReverseTests(SimpleTestCase):
         self.assertEqual(field.from_db_value(ciphertext, None, None), plaintext)
 
     def test_the_migration_wires_the_real_reverse(self) -> None:
-        # Filtered by `op.code is` rather than assumed-to-be-the-only-one: since the
-        # v0.7.0 squash, this file's `Migration.operations` holds every squashed
-        # migration's operations, not just 0039's - same reason
-        # `test_migration_0007_wires_its_token_decrypt_reverse_too` below already
-        # has to do this.
         run_python_ops = [op for op in _migration.Migration.operations if type(op).__name__ == "RunPython" and op.code is _migration._0039_encrypt_existing_contact_and_note_fields]
         self.assertEqual(len(run_python_ops), 1)
         self.assertIs(run_python_ops[0].reverse_code, _migration._0039_decrypt_existing_contact_and_note_fields)
