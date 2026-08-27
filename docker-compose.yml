@@ -211,6 +211,11 @@ services:
   nginx:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_nginx
     image: nginxinc/nginx-unprivileged:alpine
+    # Every other front-line/stateless service here (app, app-ws, clamav, valkey)
+    # restarts unless-stopped; this one didn't, so when a bad config once made it
+    # exit on startup (see django.conf's location regex fix) it just stayed down
+    # silently instead of at least crash-looping visibly.
+    restart: unless-stopped
     volumes:
       - static_volume:/app/src/urbanlens/frontend/static
       - media_volume:/app/src/urbanlens/media
