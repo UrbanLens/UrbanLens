@@ -14,8 +14,10 @@ Context:
     data-copyright="{{ img.copyright|default:'' }}"
     data-source-url="{{ img.source_url|default:'' }}"
     data-taken-at="{{ img.taken_at|date:'c'|default:'' }}">
-    {# See _widget_recent_photos.html: the image's alt disappears when the
-       thumbnail falls back to an icon, so the name lives on the button. #}
+    {% comment %}
+    See _widget_recent_photos.html: the image's alt disappears when the
+    thumbnail falls back to an icon, so the name lives on the button.
+    {% endcomment %}
     <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.caption|default:'untitled' }}" onclick="photosOpenLightbox({{ img.pk }})">
         <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy"
              onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
