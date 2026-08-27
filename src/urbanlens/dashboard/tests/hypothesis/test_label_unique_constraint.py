@@ -31,11 +31,15 @@ from urbanlens.dashboard.models.profile.model import Profile
 
 
 def _migration_0042():
-    """Load migration 0042 by path - its module name starts with a digit."""
+    """Load the module holding the 0042 merge logic, by path since it starts with a digit.
+
+    The 0042 data migration was squashed into 0030_v0_7_0.py, which still
+    defines ``_merge`` and ``_0042_merge_duplicate_labels`` under those names.
+    """
     import importlib.util
     import pathlib
 
-    path = pathlib.Path(__file__).resolve().parents[2] / "migrations" / "0042_label_merge_duplicates.py"
+    path = pathlib.Path(__file__).resolve().parents[2] / "migrations" / "0030_v0_7_0.py"
     spec = importlib.util.spec_from_file_location("migration_0042", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

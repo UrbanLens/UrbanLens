@@ -28,7 +28,7 @@ def _callers() -> list[pathlib.Path]:
     """Every non-test module that calls the upload helper."""
     hits = []
     for path in _SRC.rglob("*.py"):
-        if "/tests/" in str(path) or path.name == "uploads.py":
+        if "tests" in path.parts or path.name == "uploads.py":
             continue
         text = path.read_text(encoding="utf-8")
         if re.search(rf"\b{_HELPER}\s*\(", text):

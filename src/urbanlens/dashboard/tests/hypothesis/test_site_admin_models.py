@@ -192,7 +192,7 @@ class ReputationIsNotConsumedTests(SimpleTestCase):
         root = self._source_root()
         offenders = []
         for path in root.rglob("*.py"):
-            if "/tests/" in str(path):
+            if "tests" in path.parts or "migrations" in path.parts:
                 continue
             tree = ast.parse(path.read_text(encoding="utf-8"))
             # Identity of the *node*, not of its string value: equal short
