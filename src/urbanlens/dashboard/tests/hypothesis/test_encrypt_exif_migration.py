@@ -54,7 +54,7 @@ class EncryptExistingExifDataTests(TestCase):
         _write_raw(self.image.pk, json.dumps(_PLAINTEXT))
 
     def test_a_plaintext_row_is_encrypted(self) -> None:
-        _0066_module.encrypt_existing_exif_data(None, _schema_editor())
+        _0066_module._0066_encrypt_existing_exif_data(None, _schema_editor())
 
         stored = _read_raw(self.image.pk)
         self.assertTrue(stored.startswith("gAAAA"), "the pre-existing row was left in plaintext")
@@ -62,17 +62,17 @@ class EncryptExistingExifDataTests(TestCase):
 
     def test_the_row_reads_back_through_the_field(self) -> None:
         """The point of the pass: no row reads as undecryptable after deploy."""
-        _0066_module.encrypt_existing_exif_data(None, _schema_editor())
+        _0066_module._0066_encrypt_existing_exif_data(None, _schema_editor())
 
         self.image.refresh_from_db()
         self.assertEqual(self.image.exif_data, _PLAINTEXT)
 
     def test_running_it_twice_does_not_double_encrypt(self) -> None:
         """Re-encrypting ciphertext decrypts to ciphertext - corruption that looks permanent."""
-        _0066_module.encrypt_existing_exif_data(None, _schema_editor())
+        _0066_module._0066_encrypt_existing_exif_data(None, _schema_editor())
         after_once = _read_raw(self.image.pk)
 
-        _0066_module.encrypt_existing_exif_data(None, _schema_editor())
+        _0066_module._0066_encrypt_existing_exif_data(None, _schema_editor())
 
         self.assertEqual(_read_raw(self.image.pk), after_once)
         self.image.refresh_from_db()
@@ -81,15 +81,15 @@ class EncryptExistingExifDataTests(TestCase):
     def test_a_null_row_is_left_alone(self) -> None:
         other = baker.make(Image, image=None, exif_data=None)
 
-        _0066_module.encrypt_existing_exif_data(None, _schema_editor())
+        _0066_module._0066_encrypt_existing_exif_data(None, _schema_editor())
 
         self.assertIsNone(_read_raw(other.pk))
 
     def test_the_reverse_puts_the_plaintext_back(self) -> None:
         """A rollback must leave text the pre-0066 code can parse as JSON."""
-        _0066_module.encrypt_existing_exif_data(None, _schema_editor())
+        _0066_module._0066_encrypt_existing_exif_data(None, _schema_editor())
 
-        _0066_module.decrypt_existing_exif_data(None, _schema_editor())
+        _0066_module._0066_decrypt_existing_exif_data(None, _schema_editor())
 
         self.assertEqual(json.loads(_read_raw(self.image.pk)), _PLAINTEXT)
 
@@ -97,6 +97,6 @@ class EncryptExistingExifDataTests(TestCase):
         """A row written after a partial forward pass is real plaintext - not ours to touch."""
         _write_raw(self.image.pk, json.dumps({"Make": "written later"}))
 
-        _0066_module.decrypt_existing_exif_data(None, _schema_editor())
+        _0066_module._0066_decrypt_existing_exif_data(None, _schema_editor())
 
         self.assertEqual(json.loads(_read_raw(self.image.pk)), {"Make": "written later"})

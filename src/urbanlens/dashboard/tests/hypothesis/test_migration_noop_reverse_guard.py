@@ -56,11 +56,30 @@ REVIEWED: dict[str, str] = {
         "max_upload_file_size_mb at 900. The cap is lossy and still an ordinary integer afterwards."
     ),
     "0010_v0_6_0.py": "Backfills (intro_seen, notification uuids, unchanged defaults) plus create_first_party_client, which seeds a row that is harmless to leave behind.",
-    "0046_trip_calendar_link_event_unique.py": "drop_duplicate_event_links merges duplicates so a unique constraint can be added. Un-merging is impossible and unnecessary - what remains is valid in the old schema.",
-    "0047_link_url_unique.py": "drop_duplicate_links, same shape as 0046: duplicates removed ahead of a constraint, and the survivors read fine either way.",
     "0020_seed_vip_subscription_role.py": "Seeds a subscription role. Leaving it on reverse is harmless; deleting it could orphan subscriptions referencing it.",
-    "0033_quota_exemptions.py": "mark_existing_external_media_exempt sets a boolean on existing rows. Lossy, valid either way.",
-    "0042_label_merge_duplicates.py": "merge_duplicate_labels clears the way for 0043's unique constraint. Same shape as 0005 - un-merging is impossible and merged labels stay valid.",
+    # v0.7.0's squash (bin/squash_urbanlens_migrations.py, this repo's ../infrastructure)
+    # folded 0030-0072 into one file, so this entry replaces the four it used to be:
+    # 0033_quota_exemptions.py, 0042_label_merge_duplicates.py,
+    # 0046_trip_calendar_link_event_unique.py, 0047_link_url_unique.py. Their reasoning
+    # carries forward unchanged; nothing about the forward/reverse pair itself changed,
+    # only the function names (squashmigrations couldn't auto-import them across the
+    # digit-leading module boundary, so they were inlined under new `_NNNN_` names).
+    #
+    # NOTE: the squashed file also carries two noop reverses this entry does NOT cover -
+    # _0062_clear_generated_names and _0062_renumber_levels, from the pre-squash
+    # 0062_floorplan_floor_designation.py. That file was never reviewed either (this gap
+    # predates the squash - `git show <pre-squash commit>:.../0062_floorplan_floor_designation.py`
+    # confirms both were already RunPython.noop before v0.7.0), so it is not filled in
+    # here rather than guessed at: someone who knows whether the pre-migration code
+    # tolerates a blank/non-contiguous floor level after a reverse needs to make that
+    # call, the same way 0007 and 0039's *actual* corruption incidents got caught.
+    "0030_v0_7_0.py": (
+        "mark_existing_external_media_exempt (was 0033) sets a boolean on existing rows - lossy, valid either way. "
+        "merge_duplicate_labels (was 0042) clears the way for 0043's unique constraint, same shape as 0005 - "
+        "un-merging is impossible and merged labels stay valid. drop_duplicate_event_links (was 0046) and "
+        "drop_duplicate_links (was 0047) both merge/remove duplicates ahead of a unique constraint - un-merging is "
+        "impossible and unnecessary, what remains is valid in the old schema."
+    ),
 }
 
 
@@ -124,7 +143,10 @@ class MigrationNoopReverseGuardTests(SimpleTestCase):
     # -- guard the guard ----------------------------------------------------
 
     def test_the_scan_still_finds_migrations(self) -> None:
-        self.assertGreaterEqual(len(list(MIGRATIONS_DIR.glob("[0-9]*.py"))), 40, "the migration scan found almost nothing - the path resolution broke")
+        # Lowered from 40 by the v0.7.0 squash, which folded 0030-0072 into one file
+        # (31 remain) - a squash resets this count by design, so the floor only needs
+        # to catch "the scan found almost nothing", not track the exact total.
+        self.assertGreaterEqual(len(list(MIGRATIONS_DIR.glob("[0-9]*.py"))), 20, "the migration scan found almost nothing - the path resolution broke")
 
     def test_the_scan_still_finds_noop_reverses(self) -> None:
         """Without this, an AST change that matched nothing would pass silently."""

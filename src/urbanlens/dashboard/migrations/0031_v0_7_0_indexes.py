@@ -7,22 +7,16 @@ class Migration(migrations.Migration):
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
     operations = [
-        migrations.AddIndex(
-            model_name="album",
-            index=models.Index(fields=["parent_pin"], name="idxdb_album_pin"),
-        ),
-        migrations.AddIndex(
-            model_name="album",
-            index=models.Index(fields=["parent_wiki"], name="idxdb_album_wiki"),
-        ),
-        migrations.AddIndex(
-            model_name="albumitem",
-            index=models.Index(fields=["album"], name="idxdb_albumitem_album"),
-        ),
-        migrations.AddIndex(
-            model_name="albumitem",
-            index=models.Index(fields=["image"], name="idxdb_albumitem_image"),
-        ),
+        # idxdb_album_pin, idxdb_album_wiki, idxdb_albumitem_album,
+        # idxdb_albumitem_image and idx_floorplan_element_kind are deliberately not
+        # here: 0030_v0_7_0.py's squashed range also contains a later migration
+        # (0045_drop_duplicate_fk_indexes) that removes each of them as a redundant
+        # FK index. Splitting their AddIndex into this later-running migration while
+        # the RemoveIndex stayed in 0030 made 0030 try to remove an index that,
+        # from a fresh database, does not exist yet - `ValueError: No index named
+        # idxdb_album_pin on model Album`. Since nothing runs between the add and
+        # the remove, the pair is a pure no-op; both sides were deleted rather than
+        # reordered.
         migrations.AddIndex(
             model_name="image",
             index=models.Index(
@@ -35,12 +29,6 @@ class Migration(migrations.Migration):
             index=models.Index(
                 fields=["place", "profile", "valid_from"],
                 name="idx_floorplan_place_owner_date",
-            ),
-        ),
-        migrations.AddIndex(
-            model_name="floorplanelement",
-            index=models.Index(
-                fields=["floorplan", "kind"], name="idx_floorplan_element_kind"
             ),
         ),
         migrations.AddIndex(

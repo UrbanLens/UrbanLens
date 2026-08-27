@@ -1265,10 +1265,6 @@ class Migration(migrations.Migration):
             name="tile_url_template",
             field=models.CharField(blank=True, default="", max_length=500),
         ),
-        migrations.RemoveIndex(model_name="album", name="idxdb_album_pin"),
-        migrations.RemoveIndex(model_name="album", name="idxdb_album_wiki"),
-        migrations.RemoveIndex(model_name="albumitem", name="idxdb_albumitem_album"),
-        migrations.RemoveIndex(model_name="albumitem", name="idxdb_albumitem_image"),
         migrations.RemoveIndex(model_name="boundaryvote", name="idxdb_bv_place"),
         migrations.RemoveIndex(model_name="customlayer", name="idxdb_cl_pin"),
         migrations.RemoveIndex(model_name="customlayer", name="idxdb_cl_wiki"),
@@ -2208,9 +2204,6 @@ class Migration(migrations.Migration):
                 "ordering": ("sort_order", "id"),
                 "abstract": False,
             },
-        ),
-        migrations.RemoveIndex(
-            model_name="floorplanelement", name="idx_floorplan_element_kind"
         ),
         migrations.RemoveField(model_name="floorplanroom", name="floor"),
         migrations.RemoveField(model_name="floorplanroom", name="labels"),

@@ -32,9 +32,14 @@ class Migration0039ReverseTests(SimpleTestCase):
         self.assertEqual(field.from_db_value(ciphertext, None, None), plaintext)
 
     def test_the_migration_wires_the_real_reverse(self) -> None:
-        run_python_ops = [op for op in _migration.Migration.operations if type(op).__name__ == "RunPython"]
+        # Filtered by `op.code is` rather than assumed-to-be-the-only-one: since the
+        # v0.7.0 squash, this file's `Migration.operations` holds every squashed
+        # migration's operations, not just 0039's - same reason
+        # `test_migration_0007_wires_its_token_decrypt_reverse_too` below already
+        # has to do this.
+        run_python_ops = [op for op in _migration.Migration.operations if type(op).__name__ == "RunPython" and op.code is _migration._0039_encrypt_existing_contact_and_note_fields]
         self.assertEqual(len(run_python_ops), 1)
-        self.assertIs(run_python_ops[0].reverse_code, _migration.decrypt_existing_contact_and_note_fields)
+        self.assertIs(run_python_ops[0].reverse_code, _migration._0039_decrypt_existing_contact_and_note_fields)
 
     def test_forward_and_reverse_cover_the_same_columns(self) -> None:
         """The shared _ENCRYPTED_COLUMNS constant is what makes drift impossible - pin its size against the AlterFields."""
@@ -64,10 +69,11 @@ class Migration0048ReverseTests(SimpleTestCase):
     """
 
     def test_the_migration_wires_the_real_reverse(self) -> None:
-        run_python_ops = [op for op in _migration_0048.Migration.operations if type(op).__name__ == "RunPython"]
+        # See the identical comment on Migration0039ReverseTests' version of this test.
+        run_python_ops = [op for op in _migration_0048.Migration.operations if type(op).__name__ == "RunPython" and op.code is _migration_0048._0048_encrypt_existing_preference_fields]
 
         self.assertEqual(len(run_python_ops), 1)
-        self.assertIs(run_python_ops[0].reverse_code, _migration_0048.decrypt_existing_preference_fields)
+        self.assertIs(run_python_ops[0].reverse_code, _migration_0048._0048_decrypt_existing_preference_fields)
 
     def test_forward_and_reverse_cover_the_same_columns(self) -> None:
         """Both directions walk `_COLUMNS`, so drift between them is impossible by construction."""
