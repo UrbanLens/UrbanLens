@@ -65,7 +65,7 @@ variant="strip": compact icon row for dialogs (comment map composer/viewer).
         {% if manage_overlays_url %}
         <button type="button" class="map-layer-btn map-layers-manage-btn"
                 hx-get="{{ manage_overlays_url }}" hx-target="#map-overlays-dialog-body" hx-swap="innerHTML"
-                onclick="document.getElementById('map-overlays-dialog').showModal()">
+                onclick="document.getElementById('map-overlays-dialog').showModal(); document.body.dispatchEvent(new Event('mapOverlaysOpen'));">
             <span class="map-layer-thumb map-layer-thumb--icon">
                 <i class="material-symbols-outlined">add_photo_alternate</i>
             </span>

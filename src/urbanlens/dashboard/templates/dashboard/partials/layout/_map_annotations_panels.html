@@ -96,14 +96,16 @@ a sibling #map-annotations-config element, not from this partial).
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Image Overlays" %}
     <div id="map-overlays-dialog-body" class="custom-layers-dialog-body ul-dialog-body"
          hx-get="{{ manage_overlays_url }}" hx-trigger="load" hx-swap="innerHTML"></div>
-    {# Loads once, independent of the row-list body above (which re-renders on #}
-    {# every add/edit/delete) - a sibling load target so lining up an overlay's #}
-    {# opacity slider doesn't re-query REData's historical-maps API each time. #}
+    {# Fetches when the dialog opens (see the "Overlays" button's onclick in #}
+    {# _layers_panel.html) rather than on page load, and is a sibling load #}
+    {# target independent of the row-list body above - lining up an #}
+    {# overlay's opacity slider re-renders that body without re-querying #}
+    {# REData's historical-maps API too. #}
     {% if manage_overlays_historical_url %}
     <div class="map-overlay-historical ul-dialog-body">
         <h4 class="map-overlay-historical-heading">Historical maps covering this location</h4>
         <div id="map-overlay-historical-results"
-             hx-get="{{ manage_overlays_historical_url }}" hx-trigger="load" hx-swap="innerHTML">
+             hx-get="{{ manage_overlays_historical_url }}" hx-trigger="mapOverlaysOpen from:body" hx-swap="innerHTML">
             <p class="map-overlay-manage-empty">Looking for georeferenced maps covering this spot...</p>
         </div>
     </div>
