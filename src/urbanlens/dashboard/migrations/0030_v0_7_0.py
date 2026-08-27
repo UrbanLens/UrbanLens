@@ -700,22 +700,6 @@ class Migration(migrations.Migration):
                 fields=("album", "image"), name="uq_album_item"
             ),
         ),
-        migrations.AddIndex(
-            model_name="album",
-            index=models.Index(fields=["parent_pin"], name="idxdb_album_pin"),
-        ),
-        migrations.AddIndex(
-            model_name="album",
-            index=models.Index(fields=["parent_wiki"], name="idxdb_album_wiki"),
-        ),
-        migrations.AddIndex(
-            model_name="albumitem",
-            index=models.Index(fields=["album"], name="idxdb_albumitem_album"),
-        ),
-        migrations.AddIndex(
-            model_name="albumitem",
-            index=models.Index(fields=["image"], name="idxdb_albumitem_image"),
-        ),
         migrations.AddField(
             model_name="image",
             name="quota_exempt_reason",
@@ -758,13 +742,6 @@ class Migration(migrations.Migration):
                 ],
                 default="",
                 max_length=20,
-            ),
-        ),
-        migrations.AddIndex(
-            model_name="image",
-            index=models.Index(
-                fields=["profile", "quota_exempt_reason"],
-                name="idxdb_image_profile_quota",
             ),
         ),
         migrations.CreateModel(
@@ -1997,19 +1974,6 @@ class Migration(migrations.Migration):
                 blank=True, related_name="spanning_rooms", to="dashboard.floorplanfloor"
             ),
         ),
-        migrations.AddIndex(
-            model_name="floorplan",
-            index=models.Index(
-                fields=["place", "profile", "valid_from"],
-                name="idx_floorplan_place_owner_date",
-            ),
-        ),
-        migrations.AddIndex(
-            model_name="floorplanelement",
-            index=models.Index(
-                fields=["floorplan", "kind"], name="idx_floorplan_element_kind"
-            ),
-        ),
         migrations.RunPython(code=_0055_protect, reverse_code=_0055_unprotect),
         migrations.AddField(
             model_name="profile",
@@ -2433,18 +2397,6 @@ class Migration(migrations.Migration):
         migrations.DeleteModel(name="FloorplanLock"),
         migrations.DeleteModel(name="FloorplanRoom"),
         migrations.DeleteModel(name="FloorplanElement"),
-        migrations.AddIndex(
-            model_name="floorplanmarker",
-            index=models.Index(
-                fields=["connector_id"], name="idx_floorplan_marker_connector"
-            ),
-        ),
-        migrations.AddIndex(
-            model_name="floorplanwall",
-            index=models.Index(
-                fields=["floor", "kind"], name="idx_floorplan_wall_kind"
-            ),
-        ),
         migrations.AddConstraint(
             model_name="floorplanopening",
             constraint=models.CheckConstraint(
