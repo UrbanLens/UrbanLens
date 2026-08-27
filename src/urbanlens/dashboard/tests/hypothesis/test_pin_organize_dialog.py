@@ -150,9 +150,9 @@ class PinWikiLinkVisibilityTests(TestCase):
         self.assertIsNotNone(location.slug)
 
         # The overview HTMX fragment (loaded right after) should now show the
-        # "Create Community Wiki" button instead of rendering nothing.
+        # "Share to Community Wiki" button instead of rendering nothing.
         overview = self.client.get(reverse("pin.overview", args=[pin.slug]))
-        self.assertContains(overview, "Create Community Wiki")
+        self.assertContains(overview, "Share to Community Wiki")
 
     def test_overview_fragment_backfills_the_slug_even_without_a_prior_page_load(self) -> None:
         """PinOverviewView must not depend on PinController.view having run first.
@@ -170,6 +170,6 @@ class PinWikiLinkVisibilityTests(TestCase):
         self.assertIsNone(location.slug)
 
         overview = self.client.get(reverse("pin.overview", args=[pin.slug]))
-        self.assertContains(overview, "Create Community Wiki")
+        self.assertContains(overview, "Share to Community Wiki")
         location.refresh_from_db()
         self.assertIsNotNone(location.slug)
