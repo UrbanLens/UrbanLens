@@ -187,10 +187,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      # Pinned to the same exact patch as the Dockerfile (see its comment): bun
+      # 1.4.0 dropped `bun build --format iife` and also changed enough
+      # `preventDefault`/event-dispatch behavior under `bun test` to fail
+      # autosave-guard.test.ts, which passes clean on 1.3.14.
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.14
 
       - name: Install frontend dependencies
         run: npm install

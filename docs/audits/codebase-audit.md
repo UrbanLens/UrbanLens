@@ -273,8 +273,9 @@ doesn't actually rescue the most common failure case.
 6. **[improvement]** `_dialog.html:30-153` — ~120-line inline `<script>` block for the search
    dialog bypasses the TS build/lint/type-check pipeline entirely, unlike every other JS-heavy
    interaction in the codebase.
-7. **[improvement]** `services/search/search.py:100,122` — `except (ImportError, DatabaseError,
-   Exception):` — the specific exceptions are redundant subclasses of `Exception` already listed; misleading.
+7. **[improvement, fixed]** `services/search/search.py` — `except (ImportError, DatabaseError,
+   Exception):` — the specific exceptions were redundant subclasses of `Exception` already listed;
+   misleading. The file has since been rewritten and no longer has this pattern.
 8. **[improvement]** `providers.py:663-666` (`MarkupMapSearchProvider`) — `seen_map_ids` dedup set
    is seeded with a key format that can never match the second loop's dedup key — dead pre-seed.
 9. **[improvement]** `controllers/region_search.py:24` — only search-slice view missing method-level docstring/type hints.
@@ -330,9 +331,9 @@ regression with an already-fixed sibling sitting right next to it in the same co
 2. **[bug/security]** `models/immich/model.py:83` + `forms/immich_form.py` — same Immich SSRF gap
    independently found in unit 07 above (no private-IP/scheme guard on `server_url`, server-side
    ping + proxying). Low urgency (self-hosted, single-tenant) but worth documenting/guarding.
-3. **[improvement]** `_immich_account.html:58-92` — 30-line `<style>` block embedded in an HTMX
-   partial (not in SCSS source) that gets re-injected as a duplicate `<style>` tag on every
-   connect/disconnect toggle (`hx-swap="outerHTML"`).
+3. **[improvement, fixed]** `_immich_account.html` — a 30-line `<style>` block was embedded in an
+   HTMX partial (not in SCSS source), re-injected as a duplicate `<style>` tag on every
+   connect/disconnect toggle (`hx-swap="outerHTML"`). The block is gone from the template now.
 4. **[improvement]** `tasks.py` (import_immich_photos, import_flickr_photos, import_google_photos,
    import_flickr_album_photos) — each issues one dedupe `.exists()` query per photo inside the
    download loop instead of a batched pre-check.
@@ -608,9 +609,11 @@ email-safety rate limiting are carefully documented with races explicitly consid
 "11×4 matrix" is not actually table-driven: only WhatsApp/SMS got centralized; in-app/email are
 still hand-rolled at 10+ call sites, several of which never check the user's preference at all.
 
-1. **[bug]** `controllers/pin_sharing.py:273` + `services/sharing/pin_sharing.py:76` — `PIN_SHARED`
-   notifications created unconditionally with no read of `recipient.notification_preferences.pin_shared`
-   anywhere — the preference has zero effect on this event type, duplicated in two places.
+1. **[bug, fixed]** `controllers/pin_sharing.py` + `services/sharing/pin_sharing.py` — `PIN_SHARED`
+   notifications were created unconditionally with no read of
+   `recipient.notification_preferences.pin_shared` anywhere — the preference had zero effect on
+   this event type, duplicated in two places. `controllers/pin_sharing.py` now reads the
+   preference and gates the notification on it.
 2. **[bug]** `controllers/comments.py:592-617` (`_notify_reply`, `_notify_reaction`) —
    `COMMENT_REPLY`/`COMMENT_LIKED` created with no `DeliveryPreference` check at all, unlike
    `friend_request`/`added_to_trip`/`visit_suggested` which do check — settings-page controls are silent no-ops.
@@ -693,11 +696,12 @@ is both contact and partner" case), opt-out scoping, the "exactly one of profile
 correctly routed through. Found one confirmed privacy bypass, one confirmed information leak, and
 several pieces of dead/broken code that would crash the moment anything tried to use them.
 
-1. **[bug]** `controllers/friendship.py:666` — `invite_by_email`'s visibility check for a matched
-   existing account only tests `!= VisibilityChoice.NO_ONE`, unlike `request_friend` (line 317)
+1. **[bug, fixed]** `controllers/friendship.py` — `invite_by_email`'s visibility check for a
+   matched existing account only tested `!= VisibilityChoice.NO_ONE`, unlike `request_friend`
    which runs the full `visibility_permits` evaluator — a profile restricted to FRIENDS/COMMON_PIN/
-   COMMON_FRIEND/COMMON_TRIP/ANYTHING_IN_COMMON can still be friend-requested by any stranger who
-   knows their email. Only the NO_ONE case is tested.
+   COMMON_FRIEND/COMMON_TRIP/ANYTHING_IN_COMMON could still be friend-requested by any stranger who
+   knew their email; only the NO_ONE case was tested. The invite logic has since moved to
+   `services/social/friendship.py::invite_by_email`, which now runs the full evaluator.
 2. **[bug]** `controllers/userprofile.py:157-158` + `templates/pages/profile/index.html:66-77` —
    `common_pin_count` is shown unconditionally; only the *link* to detail is gated by
    `can_view_common_pins_with` — any two strangers see "3 Places in Common" even when the setting
@@ -995,10 +999,12 @@ existence-oracle leaks explicitly guarded, E2EE reset/rewrap atomicity matches i
 genuine attention to concurrent-write races and anti-ballot-stuffing. Two real problems: a TOCTOU
 race in the outbound-email rate limiter, and an inconsistent dedup path for owner creation.
 
-1. **[bug]** `services/security/email_safety.py:89-111`, consumed at `controllers/friendship.py:649-720` and
-   `services/visits/visit_invites.py:82-109` — `email_rate_limit_error()` is a non-atomic check-then-act
-   read with the matching write happening much later after an SMTP send; concurrent requests can
-   all pass the check before any logs, letting per-hour/day/month invite-email caps be exceeded arbitrarily.
+1. **[bug, fixed]** `services/security/email_safety.py:106` (`email_rate_limit_error`), consumed at
+   `services/social/friendship.py` and `services/visits/visit_invites.py:82-109` — the check was a
+   non-atomic check-then-act read with the matching write happening much later after an SMTP send;
+   concurrent requests could all pass the check before any logged, letting per-hour/day/month
+   invite-email caps be exceeded arbitrarily. `email_rate_limit_error` now atomically reserves an
+   in-flight slot via `cache.add`/`cache.incr` before counting a caller against each limit.
 2. **[bug]** `controllers/property_owner.py:331-338` (`WikiOwnershipPanelView.post`) — adds an owner
    unconditionally with no dedup, while the Sale-tab path just below (`:411-416`) does
    `filter(name__iexact=name).first()` first — two code paths for the same shared model disagree on
