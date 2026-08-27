@@ -19,6 +19,7 @@ import secrets
 from typing import TYPE_CHECKING
 
 from cryptography.fernet import InvalidToken
+from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, override_settings
@@ -217,7 +218,7 @@ class FailSoftSaveRoundTripTests(TestCase):
 
     def test_unrelated_save_does_not_destroy_an_unreadable_value(self) -> None:
         with using_keys(OLD_KEY):
-            profile: Profile = baker.make(Profile)
+            profile: Profile = baker.make(User).profile
             Profile.objects.filter(pk=profile.pk).update(phone_number="+15551234567")
 
         # Key mismatch: the number is unreadable, and the user edits something else.
@@ -236,7 +237,7 @@ class FailSoftSaveRoundTripTests(TestCase):
     def test_nullable_fail_soft_field_is_still_destroyed_by_a_save(self) -> None:
         """Documents the known limit, so it fails loudly if the gap is ever closed."""
         with using_keys(OLD_KEY):
-            profile: Profile = baker.make(Profile)
+            profile: Profile = baker.make(User).profile
             Profile.objects.filter(pk=profile.pk).update(bio="written under the old key")
 
         with using_keys(NEW_KEY):
@@ -307,7 +308,7 @@ class RotateFieldEncryptionCommandTests(TestCase):
 
     def test_rotation_makes_the_old_key_unnecessary(self) -> None:
         with using_keys(OLD_KEY):
-            profile: Profile = baker.make(Profile)
+            profile: Profile = baker.make(User).profile
             Profile.objects.filter(pk=profile.pk).update(bio="written under the old key")
 
         # New key active, old key retained so the existing row still reads.
@@ -321,7 +322,7 @@ class RotateFieldEncryptionCommandTests(TestCase):
 
     def test_dry_run_reports_without_rewriting(self) -> None:
         with using_keys(OLD_KEY):
-            profile: Profile = baker.make(Profile)
+            profile: Profile = baker.make(User).profile
             Profile.objects.filter(pk=profile.pk).update(bio="unchanged")
 
         with using_keys(NEW_KEY, [OLD_KEY]):
@@ -336,7 +337,7 @@ class RotateFieldEncryptionCommandTests(TestCase):
 
     def test_reports_rows_no_key_can_decrypt(self) -> None:
         with using_keys(OLD_KEY):
-            profile: Profile = baker.make(Profile)
+            profile: Profile = baker.make(User).profile
             Profile.objects.filter(pk=profile.pk).update(bio="orphaned")
 
         # Neither the active key nor any fallback can read this row.
@@ -356,10 +357,10 @@ class RotateFieldEncryptionCommandTests(TestCase):
         pass if the rotation actually rewrote it, rather than merely not raising.
         """
         with using_keys(LOST_KEY):
-            orphan: Profile = baker.make(Profile)
+            orphan: Profile = baker.make(User).profile
             Profile.objects.filter(pk=orphan.pk).update(bio="orphaned")
         with using_keys(OLD_KEY):
-            healthy: Profile = baker.make(Profile)
+            healthy: Profile = baker.make(User).profile
             # update() runs the field's get_prep_value, so plaintext in means encrypted at rest.
             Profile.objects.filter(pk=healthy.pk).update(bio="readable")
 
@@ -378,7 +379,7 @@ class RotateFieldEncryptionCommandTests(TestCase):
     def test_the_flag_is_required_to_skip(self) -> None:
         """Without it the command must still refuse - the safe default stands."""
         with using_keys(OLD_KEY):
-            profile: Profile = baker.make(Profile)
+            profile: Profile = baker.make(User).profile
             Profile.objects.filter(pk=profile.pk).update(bio="orphaned")
 
         with using_keys(NEW_KEY), pytest.raises(CommandError, match="could not be decrypted"):
@@ -386,7 +387,7 @@ class RotateFieldEncryptionCommandTests(TestCase):
 
     def test_rotation_is_safe_to_run_twice(self) -> None:
         with using_keys(OLD_KEY):
-            profile: Profile = baker.make(Profile)
+            profile: Profile = baker.make(User).profile
             Profile.objects.filter(pk=profile.pk).update(bio="idempotent")
 
         with using_keys(NEW_KEY, [OLD_KEY]):

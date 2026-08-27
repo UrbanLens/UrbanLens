@@ -179,7 +179,7 @@ class ReorderPropertyTests(TestCase):
     @given(st.permutations(range(5)))
     @settings(deadline=None, max_examples=10)
     def test_permutation_in_contiguous_out(self, permutation) -> None:
-        profile = baker.make(Profile)
+        profile = baker.make(User).profile
         pin_list = baker.make(PinList, profile=profile)
         items = [baker.make(PinListItem, pin_list=pin_list, pin=baker.make("dashboard.Pin", profile=profile), order=i) for i in range(5)]
         submitted = [items[i].pk for i in permutation]

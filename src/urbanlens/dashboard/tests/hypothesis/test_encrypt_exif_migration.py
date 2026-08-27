@@ -26,7 +26,7 @@ from urbanlens.dashboard.models.images.model import Image
 
 #: A migration module name starts with a digit, so it is not a legal identifier
 #: and cannot be reached with an ordinary import statement.
-_0066_module = importlib.import_module("urbanlens.dashboard.migrations.0030_v0_7_0")
+_0066_module = importlib.import_module("urbanlens.dashboard.migrations.0031_v0_7_0_indexes")
 
 _PLAINTEXT = {"Make": "ACME Cameras", "GPSInfo": {"1": "N"}}
 

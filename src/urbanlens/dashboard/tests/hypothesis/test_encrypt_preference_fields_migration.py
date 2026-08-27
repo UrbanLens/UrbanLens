@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from importlib import import_module
 
+from django.contrib.auth.models import User
 from django.db import connection
 from model_bakery import baker
 
@@ -24,7 +25,7 @@ from urbanlens.dashboard.models.friendship.invitation.model import FriendInvitat
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import EmergencyContactDefault
 
-_migration = import_module("urbanlens.dashboard.migrations.0030_v0_7_0")
+_migration = import_module("urbanlens.dashboard.migrations.0031_v0_7_0_indexes")
 encrypt_existing_preference_fields = _migration._0048_encrypt_existing_preference_fields
 
 
@@ -38,7 +39,7 @@ class EncryptPreferenceFieldsMigrationTests(TestCase):
     """The data pass re-encrypts pre-existing plaintext in place, and only once."""
 
     def test_profile_preference_text_survives_the_retrofit(self) -> None:
-        profile: Profile = baker.make(Profile)
+        profile: Profile = baker.make(User).profile
         with connection.cursor() as cursor:
             cursor.execute(
                 "UPDATE dashboard_profiles SET additional_preferences = %s, photo_taking_preference_other = %s WHERE id = %s",
@@ -54,7 +55,9 @@ class EncryptPreferenceFieldsMigrationTests(TestCase):
     def test_contact_label_survives_the_retrofit(self) -> None:
         # email (not contact_profile) to satisfy the exactly-one-target check
         # constraint; it is itself encrypted, which is what the label now joins.
-        contact: EmergencyContactDefault = baker.make(EmergencyContactDefault, email="dana@example.com", contact_profile=None, label="")
+        contact: EmergencyContactDefault = baker.make(
+            EmergencyContactDefault, owner=baker.make(User).profile, email="dana@example.com", contact_profile=None, label=""
+        )
         with connection.cursor() as cursor:
             cursor.execute("UPDATE dashboard_safety_contact_defaults SET label = %s WHERE id = %s", ["Dana (sister)", contact.pk])
 
@@ -63,7 +66,7 @@ class EncryptPreferenceFieldsMigrationTests(TestCase):
         self.assertEqual(EmergencyContactDefault.objects.get(pk=contact.pk).label, "Dana (sister)")
 
     def test_invitation_note_survives_the_retrofit(self) -> None:
-        invitation: FriendInvitation = baker.make(FriendInvitation, email="newcomer@example.com", message=None)
+        invitation: FriendInvitation = baker.make(FriendInvitation, inviter=baker.make(User).profile, email="newcomer@example.com", message=None)
         with connection.cursor() as cursor:
             cursor.execute("UPDATE dashboard_friendinvitation SET message = %s WHERE id = %s", ["come explore with us", invitation.pk])
 
@@ -73,7 +76,7 @@ class EncryptPreferenceFieldsMigrationTests(TestCase):
 
     def test_invitation_email_is_left_plaintext(self) -> None:
         """The signup path matches open invitations by exact email - encrypting it would silently break that."""
-        baker.make(FriendInvitation, email="newcomer@example.com", message=None)
+        baker.make(FriendInvitation, inviter=baker.make(User).profile, email="newcomer@example.com", message=None)
 
         encrypt_existing_preference_fields(apps=None, schema_editor=_FakeSchemaEditor())
 
@@ -81,7 +84,7 @@ class EncryptPreferenceFieldsMigrationTests(TestCase):
 
     def test_the_column_really_holds_ciphertext_afterwards(self) -> None:
         """Guards against the pass silently no-op'ing and leaving plaintext at rest."""
-        profile: Profile = baker.make(Profile)
+        profile: Profile = baker.make(User).profile
         with connection.cursor() as cursor:
             cursor.execute("UPDATE dashboard_profiles SET additional_preferences = %s WHERE id = %s", ["ask first", profile.pk])
 
@@ -95,7 +98,7 @@ class EncryptPreferenceFieldsMigrationTests(TestCase):
 
     def test_running_twice_does_not_double_encrypt(self) -> None:
         """A re-run (retried deploy, squashed-migration replay) must be harmless."""
-        profile: Profile = baker.make(Profile)
+        profile: Profile = baker.make(User).profile
         with connection.cursor() as cursor:
             cursor.execute("UPDATE dashboard_profiles SET additional_preferences = %s WHERE id = %s", ["ask first", profile.pk])
 
@@ -107,7 +110,7 @@ class EncryptPreferenceFieldsMigrationTests(TestCase):
         self.assertEqual(Profile.objects.get(pk=profile.pk).additional_preferences, "ask first")
 
     def test_empty_values_are_left_alone(self) -> None:
-        profile: Profile = baker.make(Profile)
+        profile: Profile = baker.make(User).profile
 
         encrypt_existing_preference_fields(apps=None, schema_editor=_FakeSchemaEditor())
 

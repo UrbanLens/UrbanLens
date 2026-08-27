@@ -15,12 +15,30 @@ from __future__ import annotations
 import importlib
 from string import printable
 
+from django.apps import apps
 from hypothesis import given, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.fields import EncryptedTextField
 
 _migration = importlib.import_module("urbanlens.dashboard.migrations.0030_v0_7_0")
+
+
+def _encrypted_alter_field_count(migration_module, columns: tuple[tuple[str, str], ...]) -> int:
+    """How many of *migration_module*'s ``AlterField`` ops touch one of *columns*.
+
+    0030/0031 are squash migrations bundling unrelated schema changes, so
+    ``Migration.operations`` holds far more ``AlterField`` ops than the
+    encryption pass alone - counting all of them drifts every time an
+    unrelated field elsewhere in the squash gets its own ``AlterField``.
+    Matching by (model, field) against the same table names the encryption
+    functions themselves use keeps the count tied to encryption, not to the
+    squash's unrelated churn.
+    """
+    table_to_model = {model._meta.db_table: model.__name__.lower() for model in apps.get_app_config("dashboard").get_models()}
+    expected = {(table_to_model[table], column) for table, column in columns}
+    actual = {(op.model_name, op.name) for op in migration_module.Migration.operations if type(op).__name__ == "AlterField"}
+    return len(expected & actual)
 
 
 class Migration0039ReverseTests(SimpleTestCase):
@@ -43,8 +61,7 @@ class Migration0039ReverseTests(SimpleTestCase):
 
     def test_forward_and_reverse_cover_the_same_columns(self) -> None:
         """The shared _ENCRYPTED_COLUMNS constant is what makes drift impossible - pin its size against the AlterFields."""
-        alter_fields = [op for op in _migration.Migration.operations if type(op).__name__ == "AlterField"]
-        self.assertEqual(len(_migration._ENCRYPTED_COLUMNS), len(alter_fields))
+        self.assertEqual(len(_migration._ENCRYPTED_COLUMNS), _encrypted_alter_field_count(_migration, _migration._ENCRYPTED_COLUMNS))
 
     def test_migration_0007_wires_its_token_decrypt_reverse_too(self) -> None:
         """0007 encrypts credential tokens with the same in-place pattern; its rollback must decrypt, not noop."""
@@ -54,7 +71,7 @@ class Migration0039ReverseTests(SimpleTestCase):
         self.assertIs(token_ops[0].reverse_code, migration_0007.decrypt_existing_tokens)
 
 
-_migration_0048 = importlib.import_module("urbanlens.dashboard.migrations.0030_v0_7_0")
+_migration_0048 = importlib.import_module("urbanlens.dashboard.migrations.0031_v0_7_0_indexes")
 
 
 class Migration0048ReverseTests(SimpleTestCase):
@@ -77,9 +94,7 @@ class Migration0048ReverseTests(SimpleTestCase):
 
     def test_forward_and_reverse_cover_the_same_columns(self) -> None:
         """Both directions walk `_COLUMNS`, so drift between them is impossible by construction."""
-        alter_fields = [op for op in _migration_0048.Migration.operations if type(op).__name__ == "AlterField"]
-
-        self.assertEqual(len(_migration_0048._COLUMNS), len(alter_fields))
+        self.assertEqual(len(_migration_0048._COLUMNS), _encrypted_alter_field_count(_migration_0048, _migration_0048._COLUMNS))
 
     def test_the_reverse_can_tell_ciphertext_from_plaintext(self) -> None:
         """The `gAAAA%` discriminator is what stops a rollback corrupting real plaintext.
