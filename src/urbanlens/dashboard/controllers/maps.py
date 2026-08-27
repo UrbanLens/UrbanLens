@@ -34,7 +34,11 @@ from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
-from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_creation import (
+    PinCreationError,
+    PinCreationForbiddenError,
+    create_pin_for_profile,
+)
 from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids, pins_fingerprint
 from urbanlens.dashboard.services.security.redact import redact_secret
 from urbanlens.UrbanLens.settings.app import settings
@@ -187,7 +191,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
 
         filter_labels_list = list(filter_labels)
-        filter_labels_json = safe_json_for_script([{"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""} for b in filter_labels_list])
+        filter_labels_json = safe_json_for_script(
+            [
+                {"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""}
+                for b in filter_labels_list
+            ]
+        )
 
         from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity
 
@@ -243,7 +252,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "show_places_layer": show_places_layer,
                 "use_pin_cache": profile.use_pin_cache,
                 **profile.get_map_center_template_context(),
-                "map_default_zoom": (profile.remembered_map_zoom if profile.map_center_mode == MapCenterMode.REMEMBER and profile.remembered_map_zoom else profile.map_default_zoom or 13),
+                "map_default_zoom": (
+                    profile.remembered_map_zoom
+                    if profile.map_center_mode == MapCenterMode.REMEMBER and profile.remembered_map_zoom
+                    else profile.map_default_zoom or 13
+                ),
                 "default_map_view": profile.default_map_view,
                 "map_dark_mode": profile.map_dark_mode,
                 # Live-updated by JS as the user switches layers - see the shared
@@ -256,17 +269,23 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def infrastructure_features(self, request, *args, **kwargs):
         """Return viewport-scoped active and historic rail/water routes as GeoJSON."""
         from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
-        from urbanlens.dashboard.services.map.infrastructure_map import infrastructure_feature_collection, parse_infrastructure_bbox
+        from urbanlens.dashboard.services.map.infrastructure_map import (
+            infrastructure_feature_collection,
+            parse_infrastructure_bbox,
+        )
 
         try:
             bounds = parse_infrastructure_bbox(request.GET.get("bbox"))
         except ValueError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            logger.warning("Unable to parse infrastructure bbox: %s", str(exc))
+            return JsonResponse({"error": "Unable to parse infrastructure bbox"}, status=400)
 
         try:
             collection = infrastructure_feature_collection(bounds)
         except RateLimitExceededError:
-            return JsonResponse({"error": "Infrastructure data is temporarily busy. Please try again shortly."}, status=503)
+            return JsonResponse(
+                {"error": "Infrastructure data is temporarily busy. Please try again shortly."}, status=503
+            )
 
         response = JsonResponse(collection)
         response["Cache-Control"] = "private, max-age=300"
@@ -344,9 +363,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                         # A profile can only ever have one root pin per location - if this
                         # candidate already has one, "Use this" can't relink the new pin
                         # there (it would collide); the client offers to merge instead.
-                        existing_pin = Pin.objects.filter(profile=request.user.profile, location=loc, parent_pin__isnull=True).exclude(pk=pin.pk).first()
+                        existing_pin = (
+                            Pin.objects.filter(profile=request.user.profile, location=loc, parent_pin__isnull=True)
+                            .exclude(pk=pin.pk)
+                            .first()
+                        )
                         if existing_pin is not None:
-                            entry["existing_pin_url"] = reverse("pin.details", kwargs={"pin_slug": existing_pin.slug or str(existing_pin.uuid)})
+                            entry["existing_pin_url"] = reverse(
+                                "pin.details", kwargs={"pin_slug": existing_pin.slug or str(existing_pin.uuid)}
+                            )
                             entry["existing_pin_name"] = existing_pin.effective_name
                     conflicting_locations.append(entry)
                 response["conflicting_locations"] = conflicting_locations
@@ -542,7 +567,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # Label._get_customization silently finds no override (it reads a prefetch
             # attr, it does not query), so a customized label rendered the user's icon
             # on the map marker and the global one in this sidebar for the same pin.
-            .prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind=KIND_USER).with_customizations_for(profile).order_by("-order", "name")))
+            .prefetch_related(
+                Prefetch(
+                    "labels",
+                    queryset=Label.objects.exclude(kind=KIND_USER)
+                    .with_customizations_for(profile)
+                    .order_by("-order", "name"),
+                )
+            )
         )
 
         search_form = SearchForm(request.GET, profile=profile)
@@ -566,7 +598,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         page_size = _PIN_LIST_PAGE_SIZE
         with contextlib.suppress(TypeError, ValueError):
-            page_size = max(_PIN_LIST_MIN_PAGE_SIZE, min(_PIN_LIST_MAX_PAGE_SIZE, int(request.GET.get("page_size", page_size))))
+            page_size = max(
+                _PIN_LIST_MIN_PAGE_SIZE, min(_PIN_LIST_MAX_PAGE_SIZE, int(request.GET.get("page_size", page_size)))
+            )
 
         page_obj = get_page(request, query, page_size)
         extra_query_parts = [f"bounds={urllib.parse.quote(bounds_param)}" if bounds else "", f"page_size={page_size}"]
@@ -617,7 +651,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             quota_error = quota_error_for_upload(profile, image.size)
             if quota_error:
                 return HttpResponse(quota_error, status=413)
-            img = Image.objects.create(image=image, pin=pin, location=pin.location, profile=profile, checksum=checksum, file_size=image.size)
+            img = Image.objects.create(
+                image=image, pin=pin, location=pin.location, profile=profile, checksum=checksum, file_size=image.size
+            )
         safely_enqueue_task(process_image_upload, img.pk)
         return HttpResponse(status=200)
 
@@ -674,7 +710,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             Pin.objects.filter(profile=profile)
             .detail_pins()
             .select_related("location", "parent_pin", "parent_pin__location")
-            .prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind=KIND_USER).order_by("-order", "name")))
+            .prefetch_related(
+                Prefetch("labels", queryset=Label.objects.exclude(kind=KIND_USER).order_by("-order", "name"))
+            )
             .annotate(child_count=Count("detail_pins", distinct=True))
         )
 
@@ -828,7 +866,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             from urbanlens.dashboard.models.labels.model import KIND_USER as _KIND_USER
 
             # visible_to: same foreign-label-id guard as post_add_pin.
-            new_labels = Label.objects.exclude(kind=_KIND_USER).visible_to(request.user.profile).filter(id__in=label_ids)
+            new_labels = (
+                Label.objects.exclude(kind=_KIND_USER).visible_to(request.user.profile).filter(id__in=label_ids)
+            )
             new_ids = set(new_labels.values_list("pk", flat=True))
             removed = pin.labels.filter(kind__in={KIND_TAG, KIND_CATEGORY, KIND_STATUS}).exclude(pk__in=new_ids)
             for label in removed:
@@ -918,8 +958,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 try:
                     from urbanlens.dashboard.services.apis.locations import places_resolution
 
-                    raw_results = places_resolution.search_nearby_landmarks(lat, lng, radius, ["historical_landmark"], api_key=api_key or "")
-                    logger.info("Google Places (new API): found %d results near (%.4f, %.4f)", len(raw_results), lat, lng)
+                    raw_results = places_resolution.search_nearby_landmarks(
+                        lat, lng, radius, ["historical_landmark"], api_key=api_key or ""
+                    )
+                    logger.info(
+                        "Google Places (new API): found %d results near (%.4f, %.4f)", len(raw_results), lat, lng
+                    )
                     for r in raw_results:
                         loc = r.get("location", {})
                         place_lat = loc.get("latitude")
@@ -965,7 +1009,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
         if use_nps and redata_configured:
             try:
-                from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
+                from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import (
+                    RedataNationalParksGateway,
+                )
 
                 # Omits radius_meters - REData's own 100km default for this endpoint
                 # (RedataNationalParksGateway.DEFAULT_RADIUS_METERS) is exactly what this
@@ -1076,7 +1122,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if pin.get("tags"):
                 tags = pin["tags"]
                 if tags and isinstance(tags[0], dict):
-                    pin["tags_data"] = [{"id": t.get("id"), "name": t["name"], "color": t.get("color"), "icon": t.get("icon")} for t in tags]
+                    pin["tags_data"] = [
+                        {"id": t.get("id"), "name": t["name"], "color": t.get("color"), "icon": t.get("icon")}
+                        for t in tags
+                    ]
                     pin["tags"] = ", ".join(t["name"] for t in tags)
                 else:
                     pin["tags_data"] = [{"name": t} for t in tags]
@@ -1140,7 +1189,9 @@ def _parse_bbox(bbox_str: str) -> tuple[float, float, float, float] | None:
     return south, west, north, east
 
 
-def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: str | None = None, fetch_if_missing: bool = True) -> Location:
+def _create_location_with_canonical_name(
+    lat: float, lon: float, *, place_name: str | None = None, fetch_if_missing: bool = True
+) -> Location:
     """Create a new Location using its canonical Google place name.
 
     The user's custom pin name must never be used as a Location's official_name

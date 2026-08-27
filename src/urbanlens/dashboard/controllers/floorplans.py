@@ -68,7 +68,11 @@ def _building_choices(pin: Pin) -> list[dict]:
     if len(buildings) < 2:
         return []
 
-    children = {child.location.place_id: child for child in pin.detail_pins.select_related("location") if child.location_id and child.location.place_id}
+    children = {
+        child.location.place_id: child
+        for child in pin.detail_pins.select_related("location")
+        if child.location_id and child.location.place_id
+    }
     return [
         {
             "name": building.name or "Unnamed building",
@@ -172,14 +176,18 @@ class FloorplanJsonView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.floorplans.resolution import resolve_document
         from urbanlens.dashboard.services.floorplans.serialization import document_for
 
-        pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
+        pin = get_object_or_404(
+            Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user
+        )
         place = _building_place(pin)
         if place is None:
             # A placeless plan belongs to this pin alone, so there is no
             # community/REData cascade to consult - just the user's own row.
             from urbanlens.dashboard.models.floorplans.model import Floorplan
 
-            own = Floorplan.objects.filter(place__isnull=True, pin=pin, profile=pin.profile).order_by("-created").first()
+            own = (
+                Floorplan.objects.filter(place__isnull=True, pin=pin, profile=pin.profile).order_by("-created").first()
+            )
             if own is None:
                 return HttpResponse(status=204)
             # Its own binding: this path always has a document, while the
@@ -247,7 +255,9 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.floorplans.resolution import resolve_floorplan_row
         from urbanlens.dashboard.services.wiki.wiki_access import place_visible_to
 
-        pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
+        pin = get_object_or_404(
+            Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user
+        )
         place = _building_place(pin)
         if place is None:
             return HttpResponse(status=204)
@@ -257,7 +267,9 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
             # A specific version's uuid may name the caller's own plan or a
             # published one - same fallback as the unversioned lookup below,
             # just pinned to one exact row instead of "current".
-            floorplan = Floorplan.objects.filter(place=place, profile=pin.profile, uuid=version_uuid, wiki__isnull=True).first()
+            floorplan = Floorplan.objects.filter(
+                place=place, profile=pin.profile, uuid=version_uuid, wiki__isnull=True
+            ).first()
             if floorplan is None and place_visible_to(place, pin.profile):
                 floorplan = Floorplan.objects.filter(place=place, uuid=version_uuid, wiki__isnull=False).first()
         else:
@@ -313,7 +325,9 @@ class FloorplanSaveView(LoginRequiredMixin, View):
             save_document,
         )
 
-        pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
+        pin = get_object_or_404(
+            Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user
+        )
         # A plan may be placeless: not every pin resolves to a known building
         # outline, and refusing to save one made the editor a dead end for
         # exactly the properties that most need mapping by hand.
@@ -345,7 +359,9 @@ class FloorplanSaveView(LoginRequiredMixin, View):
         # it has to be fixed before the first wall lands and must never move
         # afterwards - shifting it would silently translate the whole drawing.
         if floorplan.origin_lat is None or floorplan.origin_lng is None:
-            document.setdefault("plan_origin", {"lat": float(pin.effective_latitude), "lng": float(pin.effective_longitude)})
+            document.setdefault(
+                "plan_origin", {"lat": float(pin.effective_latitude), "lng": float(pin.effective_longitude)}
+            )
         try:
             save_document(floorplan, document, profile=pin.profile)
         except StaleDocumentError as exc:
@@ -353,9 +369,11 @@ class FloorplanSaveView(LoginRequiredMixin, View):
             # someone else has already replaced. The editor stops autosaving on
             # this rather than retrying, since retrying is how the other tab's
             # work gets destroyed.
-            return JsonResponse({"ok": False, "error": str(exc), "stale": True}, status=409)
+            logger.warning("Stale Document Error: %s", str(exc))
+            return JsonResponse({"ok": False, "error": "Stale Document Error", "stale": True}, status=409)
         except FloorplanValidationError as exc:
-            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+            logger.warning("FloorPlanValidationError: %s", str(exc))
+            return JsonResponse({"ok": False, "error": "Floorplan Validation Error"}, status=400)
         except ValueError:
             # Not a validation failure the serializer raised deliberately, so
             # its text is not known to be safe to show - it may carry internals
@@ -387,13 +405,19 @@ class FloorplanPublishView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.floorplans.resolution import publish_to_wiki
         from urbanlens.dashboard.services.floorplans.serialization import document_for
 
-        pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
+        pin = get_object_or_404(
+            Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user
+        )
         place = _building_place(pin)
         if place is None:
             return JsonResponse({"ok": False, "error": "This pin has no single building."}, status=400)
 
-        version_uuid = request.POST.get("version") or (json.loads(request.body or b"{}").get("uuid") if request.body else "")
-        floorplan = Floorplan.objects.filter(place=place, uuid=version_uuid or None, profile=pin.profile, wiki__isnull=True).first()
+        version_uuid = request.POST.get("version") or (
+            json.loads(request.body or b"{}").get("uuid") if request.body else ""
+        )
+        floorplan = Floorplan.objects.filter(
+            place=place, uuid=version_uuid or None, profile=pin.profile, wiki__isnull=True
+        ).first()
         if floorplan is None:
             return JsonResponse({"ok": False, "error": "Save your floorplan before publishing it."}, status=404)
 
@@ -438,10 +462,17 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
         context["building_choices"] = _building_choices(pin) if context["place"] is None else []
         context["outline_json"] = _building_outline(pin)
         context["overlays_json"] = overlay_payload(pin.image_overlays.all())
-        context["labels_json"] = [{"uuid": str(label.uuid), "name": label.name} for label in Label.objects.filter(profile=pin.profile).order_by("name")]
+        context["labels_json"] = [
+            {"uuid": str(label.uuid), "name": label.name}
+            for label in Label.objects.filter(profile=pin.profile).order_by("name")
+        ]
         # The reference pool attaches to every item, so the photos already on
         # this pin are the likeliest evidence for a wall, a door or its lock.
-        context["photos_json"] = [{"uuid": str(image.uuid), "url": image.image.url, "caption": image.caption or ""} for image in pin.images.order_by("-created")[:60] if image.image]
+        context["photos_json"] = [
+            {"uuid": str(image.uuid), "url": image.image.url, "caption": image.caption or ""}
+            for image in pin.images.order_by("-created")[:60]
+            if image.image
+        ]
         # Same "Manage Image Overlays" dialog as the pin-detail and wiki maps -
         # browsing this pin's own photos for a blueprint/site plan to pin and
         # skew onto the floorplan map, not a bespoke picker.
