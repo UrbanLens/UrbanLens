@@ -26,6 +26,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     GameSessionParticipantStatus,
     GameSessionStatus,
     Guess,
+    SpotGuessrMode,
 )
 from urbanlens.dashboard.services.social.connections import are_connections
 from urbanlens.dashboard.services.spotguessr import eligibility, geo_bonus, modes, photo_coordinates, prewarm, realtime, relevance, scoring, selection, serializers
@@ -552,6 +553,17 @@ def generate_round_content(
             label_id=config.label_id,
         ).values_list("pk", flat=True),
     )
+
+    if mode == SpotGuessrMode.PHOTOS:
+        # Same "resolved once" reasoning as eligible_ids above, aimed at a
+        # different cost: without this, a profile with no wiki/own-pin photos
+        # anywhere makes the loop below try every eligible location one at a
+        # time, each attempt paying its own Image query in _build_photos - see
+        # photos.locations_with_eligible_photo.
+        from urbanlens.dashboard.services.spotguessr import photos
+
+        solo_profile = participants[0] if len(participants) == 1 else None
+        eligible_ids = photos.locations_with_eligible_photo(eligible_ids, solo_profile=solo_profile)
 
     for _attempt in range(_MAX_LOCATION_ATTEMPTS):
         candidates = Location.objects.filter(pk__in=eligible_ids).exclude(pk__in=excluded_ids)
