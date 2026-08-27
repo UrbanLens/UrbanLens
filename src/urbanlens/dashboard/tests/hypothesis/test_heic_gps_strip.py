@@ -77,7 +77,7 @@ class HeicGpsStripTests(TestCase):
     def test_the_gps_is_removed(self) -> None:
         image = self._stored_heic()
 
-        downscale_stored_image(image, None, convert_webp=False, strip_gps=True)
+        downscale_stored_image(image, None, convert_webp=False)
         image.save()
 
         self.assertFalse(self._gps_present(image), "the app promised to remove this and must actually do it")
@@ -86,22 +86,13 @@ class HeicGpsStripTests(TestCase):
         """A strip that corrupts the image would be a worse bug than the one it fixes."""
         image = self._stored_heic()
 
-        downscale_stored_image(image, None, convert_webp=False, strip_gps=True)
+        downscale_stored_image(image, None, convert_webp=False)
         image.save()
 
         with image.image.open("rb") as stored:
             reopened = PILImage.open(stored)
             reopened.load()
         self.assertEqual(reopened.size, (48, 48))
-
-    def test_gps_is_left_alone_when_no_strip_was_asked_for(self) -> None:
-        """Stripping is the user's setting, not a default this format opts into."""
-        image = self._stored_heic()
-
-        downscale_stored_image(image, None, convert_webp=False, strip_gps=False)
-        image.save()
-
-        self.assertTrue(self._gps_present(image))
 
     def test_a_heic_upload_is_not_refused(self) -> None:
         """It just works now - there is nothing for the user to convert or re-enable."""
@@ -142,7 +133,7 @@ class HeicIsStoredInARenderableFormatTests(TestCase):
     def test_a_heic_is_transcoded_even_with_every_policy_switch_off(self) -> None:
         image = self._stored_heic()
 
-        downscale_stored_image(image, None, convert_webp=False, strip_gps=False)
+        downscale_stored_image(image, None, convert_webp=False)
         image.save()
 
         self.assertEqual(self._stored_format(image), "JPEG")
@@ -152,7 +143,7 @@ class HeicIsStoredInARenderableFormatTests(TestCase):
         """The transcode is a floor, not an override of the uploader's policy."""
         image = self._stored_heic()
 
-        downscale_stored_image(image, None, convert_webp=True, strip_gps=False)
+        downscale_stored_image(image, None, convert_webp=True)
         image.save()
 
         self.assertEqual(self._stored_format(image), "WEBP")
@@ -173,4 +164,4 @@ class HeicIsStoredInARenderableFormatTests(TestCase):
         PILImage.new("RGB", (48, 48), (10, 20, 30)).save(buffer, format="JPEG")
         image.image.save("plain.jpg", SimpleUploadedFile("plain.jpg", buffer.getvalue(), content_type="image/jpeg"), save=True)
 
-        self.assertIsNone(downscale_stored_image(image, None, convert_webp=False, strip_gps=False))
+        self.assertIsNone(downscale_stored_image(image, None, convert_webp=False))

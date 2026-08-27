@@ -592,7 +592,7 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
     get_limit_config(service)
 
     to_raise: RequestCancelledError | None = None
-    entry_pk = -1
+    entry_pk: int
 
     with transaction.atomic():
         config = ApiRateLimit.objects.select_for_update().get(service=service)
