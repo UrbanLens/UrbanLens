@@ -208,7 +208,7 @@ class PinVisitEndpointTests(SubResourceTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.visited_at = timezone.now() - timedelta(days=1)
+        self.visited_at = timezone.now() - timedelta(days=10)
 
     def test_create_returns_201_and_updates_last_visited(self) -> None:
         response = self._post(f"{_base(self.pin)}visits/", {"visited_at": self.visited_at.isoformat()})

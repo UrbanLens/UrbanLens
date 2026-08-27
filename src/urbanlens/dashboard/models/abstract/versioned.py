@@ -208,9 +208,23 @@ class VersionedModel(Model):
 
     @classmethod
     def from_db(cls, db: Any, field_names: Any, values: Any) -> Any:
-        """Load, snapshotting the versioned fields so ``save()`` can diff them."""
+        """Load, snapshotting the versioned fields so ``save()`` can diff them.
+
+        Snapshots only the versioned fields actually present in this load.
+        Reaching for one that was deferred (e.g. Django's delete
+        ``Collector``, which loads cascaded rows via ``.only()`` when the
+        model has no delete-signal listeners) would trigger the field's
+        ``DeferredAttribute`` to call ``refresh_from_db``, which re-fetches
+        through a fresh ``.only()`` query and re-enters this very method on
+        the result - with a *different* single field loaded and the rest
+        deferred again, recursing across ``versioned_fields`` without ever
+        terminating. A versioned field missing from the snapshot is simply
+        treated as unknown by ``save()``, which is correct for a field this
+        instance never loaded.
+        """
         instance = super().from_db(db, field_names, values)
-        instance._version_snapshot = {name: getattr(instance, name, None) for name in cls.versioned_fields}  # noqa: SLF001
+        loaded = set(field_names)
+        instance._version_snapshot = {name: getattr(instance, name, None) for name in cls.versioned_fields if name in loaded}  # noqa: SLF001
         return instance
 
     def save(self, *args: Any, **kwargs: Any) -> None:
