@@ -277,7 +277,7 @@ The **revision chain** answers it. `EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA` / `SYSTE
 
 ### 2.12 `Image.source` — **looks like provenance, is not**
 
-`models/images/model.py:125`. `GOOGLE_MAPS` is written by enrichment (`photo_enrichment.py:195`) *and* by user-driven materialisation (`media_materialize.py:299`). `WIKIMEDIA`/`SMITHSONIAN`/`LOC`/`YELP` only ever exist because a user up-voted. `UPLOAD`/`FLICKR` are always user acts. **Recommendation: never classify on `source`.** Use `profile_id IS NULL`, optionally corroborated by `media_source_key IS NULL` (materialize always sets it at `:304-305`; enrichment never does — the cleanest positive "a user caused this row" marker in the schema).
+`models/images/model.py`. `GOOGLE_MAPS` is written by enrichment (`photo_enrichment.py:195`) *and* by user-driven materialisation (`media_materialize.py`). `WIKIMEDIA`/`SMITHSONIAN`/`LOC`/`YELP` only ever exist because a user up-voted. `UPLOAD`/`FLICKR` are always user acts. **Recommendation: never classify on `source`.** Use `profile_id IS NULL`, optionally corroborated by `media_source_key IS NULL` (materialize always sets it; enrichment never does — the cleanest positive "a user caused this row" marker in the schema).
 
 ### 2.13 `Image.caption` / `author` / `copyright` / `source_url` — no per-field source
 
@@ -303,8 +303,8 @@ Two routes write the *same columns with the same values*:
 
 Every plausible discriminator fails:
 - `created_by` is NULL on both (neither path passes it; the only writers are `wiki/queryset.py (draft/claim code, removed 2026-08-25),222` for top-level wikis).
-- `pin_type_is_user_provided` is `False` on both — user placement with the dialog's "Auto" option writes `_PROVISIONAL_PIN_TYPE` with the flag `False`, then `classify_detail_marker` can flip it to `BUILDING` while leaving the flag `False` (`tasks.py:227-265`). The flag means "an editor chose this type", never "a human created this row".
-- `place_id` fails in **both** directions: `place_by_key.get(...)` returns `None` for a building the provisioner could not reconcile, so seeded rows can also be placeless (`pin_restructure.py:571,594`), and nothing back-fills a child wiki's `place` later.
+- `pin_type_is_user_provided` is `False` on both — user placement with the dialog's "Auto" option writes `_PROVISIONAL_PIN_TYPE` with the flag `False`, then `classify_detail_marker` can flip it to `BUILDING` while leaving the flag `False` (`tasks.py`). The flag means "an editor chose this type", never "a human created this row".
+- `place_id` fails in **both** directions: `place_by_key.get(...)` returns `None` for a building the provisioner could not reconcile, so seeded rows can also be placeless (`pin_restructure.py`), and nothing back-fills a child wiki's `place` later.
 - The paired `WikiEdit` differs (`child_wiki_added` vs. one aggregate `child_wikis_imported`) but the import entry names only a count, not which rows.
 
 One *one-directional* signal does hold: seeding sets only `name` and leaves `description`/`icon`/`color`/`detail_bg_color`/`detail_border_color` at defaults. So **non-default styling or a non-empty description proves user contribution** — but the converse does not hold.
