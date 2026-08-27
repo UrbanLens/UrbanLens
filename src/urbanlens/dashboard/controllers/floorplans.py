@@ -354,8 +354,9 @@ class FloorplanSaveView(LoginRequiredMixin, View):
             # this rather than retrying, since retrying is how the other tab's
             # work gets destroyed.
             return JsonResponse({"ok": False, "error": str(exc), "stale": True}, status=409)
-        except FloorplanValidationError as exc:
-            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+        except FloorplanValidationError:
+            logger.exception("Floorplan validation failed for pin %s", pin_slug)
+            return JsonResponse({"ok": False, "error": "That floorplan couldn't be saved."}, status=400)
         except ValueError:
             # Not a validation failure the serializer raised deliberately, so
             # its text is not known to be safe to show - it may carry internals
