@@ -242,6 +242,7 @@ from urbanlens.dashboard.services.pins.pin_subresources import (
 from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, accept_pin_suggestion, attach_suggestion_photos, ingest_location_hits, pending_suggestions_for_profile, reject_pin_suggestion
 from urbanlens.dashboard.services.pins.pin_sync import InvalidSyncCursorError, StaleDeletedSinceError, sync_pins_page, sync_tombstones_page
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities, resolve_visible_identity
+from urbanlens.dashboard.services.profile.profile_annotations import get_annotations
 from urbanlens.dashboard.services.profile.profile_settings import SettingsValidationError, apply_settings_patch, read_settings
 from urbanlens.dashboard.services.search.filter_criteria import CriteriaOwnershipError, validate_criteria_ownership
 from urbanlens.dashboard.services.social.friendship import (
@@ -3997,6 +3998,10 @@ class ProfileDetailView(ExternalApiView):
             "started_exploring": target.started_exploring,
             "is_self": is_self,
             "friendship_status": friendship.status if friendship else None,
+            # Never queried for a self-view: nicknaming yourself is refused at
+            # write time, so the row can never exist and the lookup would be
+            # pure waste on the endpoint's most common call shape.
+            "nickname": None if is_self else get_annotations(viewer, target).nickname,
             "contact": None,
             "visibility": None,
             **{field: getattr(target, field) for field, _label in Profile.PREFERENCE_FIELDS},

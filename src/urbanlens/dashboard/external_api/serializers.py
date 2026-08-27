@@ -2076,6 +2076,11 @@ class ProfileDetailSerializer(serializers.Serializer):
     is_self = serializers.BooleanField(read_only=True)
     #: Null when no relationship row exists at all.
     friendship_status = serializers.ChoiceField(choices=FriendshipStatus.choices, read_only=True, allow_null=True)
+    #: The caller's own private nickname for this profile, or null when the
+    #: caller assigned none - including when viewing your own profile, since a
+    #: nickname cannot describe its own author. Never the nickname someone
+    #: else assigned to this profile; see ``services.profile.profile_annotations``.
+    nickname = serializers.CharField(read_only=True, allow_null=True)
     #: Omitted unless contact visibility permits this caller.
     contact = ProfileContactSerializer(read_only=True, allow_null=True)
     #: Present only on your own profile.
