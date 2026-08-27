@@ -661,7 +661,10 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
         # not the IntegrityError the database would raise (a 500 to the user).
         conflict = find_conflicting_label(profile=profile, name=name, kind=self.kind)
         if conflict is not None:
-            return HttpResponse(label_conflict_message(conflict, singular_title=cfg.singular_title), status=400)
+            # conflict.name is user-supplied (the colliding label's own name); this response is raw
+            # text/html, not a Template, so it isn't auto-escaped - escape() matches the pattern used
+            # for label.name elsewhere in this file (see LabelDeleteView, LabelBulkConvertView).
+            return HttpResponse(escape(label_conflict_message(conflict, singular_title=cfg.singular_title)), status=400)
 
         custom_icon, icon_error = _validated_custom_icon(request)
         if icon_error:
@@ -780,7 +783,9 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
             # case) is not reported as colliding with itself.
             conflict = find_conflicting_label(profile=profile, name=name, kind=new_kind, exclude_pk=label.pk)
             if conflict is not None:
-                return HttpResponse(label_conflict_message(conflict, singular_title=self._cfg().singular_title), status=400)
+                # See LabelCreateView.post above: raw text/html HttpResponse, so
+                # conflict.name (user-supplied) needs explicit escaping here.
+                return HttpResponse(escape(label_conflict_message(conflict, singular_title=self._cfg().singular_title)), status=400)
             name_error = column_length_error(Label, "name", name, self._cfg().singular_title)
             if name_error:
                 return HttpResponse(name_error, status=400)
