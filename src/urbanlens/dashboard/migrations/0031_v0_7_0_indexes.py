@@ -1,5 +1,7 @@
 from django.conf import settings
 from django.db import migrations, models
+import django.db.models.constraints
+import django.db.models.functions.text
 
 class Migration(migrations.Migration):
     dependencies = [
@@ -7,16 +9,6 @@ class Migration(migrations.Migration):
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
     operations = [
-        # idxdb_album_pin, idxdb_album_wiki, idxdb_albumitem_album,
-        # idxdb_albumitem_image and idx_floorplan_element_kind are deliberately not
-        # here: 0030_v0_7_0.py's squashed range also contains a later migration
-        # (0045_drop_duplicate_fk_indexes) that removes each of them as a redundant
-        # FK index. Splitting their AddIndex into this later-running migration while
-        # the RemoveIndex stayed in 0030 made 0030 try to remove an index that,
-        # from a fresh database, does not exist yet - `ValueError: No index named
-        # idxdb_album_pin on model Album`. Since nothing runs between the add and
-        # the remove, the pair is a pure no-op; both sides were deleted rather than
-        # reordered.
         migrations.AddIndex(
             model_name="image",
             index=models.Index(
@@ -41,6 +33,48 @@ class Migration(migrations.Migration):
             model_name="floorplanwall",
             index=models.Index(
                 fields=["floor", "kind"], name="idx_floorplan_wall_kind"
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="label",
+            constraint=models.UniqueConstraint(
+                django.db.models.functions.text.Lower("name"),
+                models.F("profile"),
+                models.F("kind"),
+                name="uq_label_profile_name_kind_ci",
+                nulls_distinct=False,
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="tripcalendarlink",
+            constraint=models.UniqueConstraint(
+                condition=models.Q(("google_event_id", ""), _negated=True),
+                fields=("profile", "google_event_id"),
+                name="db_tcl_profile_event_unique",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="pinlink",
+            constraint=models.UniqueConstraint(
+                models.F("pin"),
+                django.db.models.functions.text.MD5("url"),
+                name="db_plink_pin_url_unique",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="wikilink",
+            constraint=models.UniqueConstraint(
+                models.F("wiki"),
+                django.db.models.functions.text.MD5("url"),
+                name="db_wlink_wiki_url_unique",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="floorplanfloor",
+            constraint=models.UniqueConstraint(
+                deferrable=django.db.models.constraints.Deferrable["DEFERRED"],
+                fields=("floorplan", "level"),
+                name="floorplan_floor_unique_level",
             ),
         ),
     ]
