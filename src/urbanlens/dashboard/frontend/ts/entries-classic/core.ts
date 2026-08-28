@@ -38,6 +38,7 @@ import { installGlobalPopupDismiss } from "../shared/popup-dismiss";
 import { installGlobalReactionPicker } from "../shared/reaction-picker";
 import { installGlobalSafetyLiveLocation } from "../shared/safety-live-location";
 import { installGlobalScrollToHash } from "../shared/scroll-to-hash";
+import { installUndoBar } from "../shared/undo-bar";
 import { installGlobalUndoMapRefresh } from "../shared/undo-map-refresh";
 
 installGlobalAutosaveGuard();
@@ -53,6 +54,7 @@ installGlobalReactionPicker();
 installGlobalSafetyLiveLocation();
 installGlobalScrollToHash();
 installGlobalUndoMapRefresh();
+installUndoBar();
 installGlobalLocationSearchEngine();
 installGlobalMapContextMenu();
 installGlobalMapLayers();

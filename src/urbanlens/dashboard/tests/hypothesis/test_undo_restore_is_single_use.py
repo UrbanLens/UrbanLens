@@ -1,22 +1,9 @@
 """An undo entry must restore once, however many times it is submitted.
 
-``restore_undo_action`` checks expiry, calls the handler's ``restore()``, then
-deletes the entry - with nothing claiming the row in between. Both halves of a
-double-submit fetch the entry while it still exists, so both pass the check and
-both restore. The user asked for one undo and gets two copies of everything.
-
-A double-click on Undo is the ordinary way in: the button issues a POST, and all
-three entry points (the web undo view, the pin bulk-delete view, and the external
-API) look the entry up and hand it straight to the service.
-
-Whether a duplicate actually appears depends today on whether the *handler*
-happens to hit a unique constraint on the way - ``PinUndoHandler`` is saved by
-``db_pin_unique_location_per_profile`` for root pins, and the saved-filter, label,
-wiki, pin-list, markup-map and safety-checkin handlers all re-check something
-before recreating. ``TripUndoHandler.restore`` does an unconditional
-``Trip.objects.create``, so it duplicates outright. That difference is exactly why
-the guard belongs in the service rather than in each handler: a new handler
-without a convenient unique constraint silently inherits the bug.
+``restore_undo_action`` claims the row under a lock and stamps ``undone_at``
+so a second submit finds it already consumed. Both halves of a double-submit
+fetch the entry while it still exists, so without the claim both would restore
+and the user would get two copies of everything.
 """
 
 from __future__ import annotations
@@ -62,12 +49,13 @@ class UndoRestoreIsSingleUseTests(TestCase):
             "the undo ran twice and restored two copies",
         )
 
-    def test_the_entry_is_gone_after_a_successful_restore(self) -> None:
+    def test_the_entry_stays_on_the_redo_stack_after_a_successful_restore(self) -> None:
         restore_undo_action(self._fetch())
 
-        self.assertFalse(UndoAction.objects.filter(pk=self.action.pk).exists())
+        action = UndoAction.objects.get(pk=self.action.pk)
+        self.assertIsNotNone(action.undone_at)
 
-    def test_the_second_attempt_leaves_no_extra_entry_behind(self) -> None:
+    def test_the_second_attempt_leaves_the_undone_entry_in_place(self) -> None:
         """A refused second attempt must not resurrect or orphan the entry."""
         first, second = self._fetch(), self._fetch()
         restore_undo_action(first)
@@ -75,7 +63,8 @@ class UndoRestoreIsSingleUseTests(TestCase):
         with self.assertRaises(UndoExpiredError):
             restore_undo_action(second)
 
-        self.assertFalse(UndoAction.objects.filter(pk=self.action.pk).exists())
+        action = UndoAction.objects.get(pk=self.action.pk)
+        self.assertIsNotNone(action.undone_at)
 
     def test_the_restore_claims_the_row_under_a_lock(self) -> None:
         """The mechanism: without it, two real requests race rather than queue."""

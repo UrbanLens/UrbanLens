@@ -171,6 +171,9 @@ def create_pin_alias(pin: Pin, *, name: str, kind: str = AliasType.ALTERNATE) ->
             alias = PinAlias.objects.create(pin=pin, name=cleaned, kind=kind)
     except IntegrityError as exc:
         raise AliasExistsError from exc
+    from urbanlens.dashboard.services.undo.mutations import stash_pin_alias_add
+
+    stash_pin_alias_add(pin, alias)
     touch_pin(pin)
     return alias
 
@@ -187,6 +190,9 @@ def delete_pin_alias(pin: Pin, alias: PinAlias) -> None:
     """
     if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(pin.effective_name):
         raise AliasIsCurrentNameError
+    from urbanlens.dashboard.services.undo.mutations import stash_pin_alias_remove
+
+    stash_pin_alias_remove(pin, alias)
     # Tombstone first: an external-source sync or the pin<->wiki alias-mirror
     # signal could otherwise recreate this exact name the moment either one
     # next runs, silently undoing the deletion.
@@ -234,6 +240,9 @@ def promote_alias_to_name(pin: Pin, alias: PinAlias) -> Pin:
     # Must be .save(), never queryset.update(): Pin.save() is what keeps the
     # alias rows in sync on a name change, and update() bypasses it entirely.
     pin.save(update_fields=["name", "name_is_user_provided", "updated"])
+    from urbanlens.dashboard.services.undo.mutations import stash_pin_alias_promote
+
+    stash_pin_alias_promote(pin, before_name=old_name, after_name=pin.name)
     return pin
 
 

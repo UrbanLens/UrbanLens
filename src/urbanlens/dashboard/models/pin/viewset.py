@@ -71,6 +71,7 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
             # confirmed move can't then be rejected for an unrelated bad field.
             serializer = self.get_serializer(instance, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
+            before_fields = {"name": instance.name, "description": instance.description}
 
             if "latitude" in request.data or "longitude" in request.data:
                 parsed = self._parse_coordinates(request.data)
@@ -101,6 +102,14 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
                     return Response({"detail": exc.safe_message}, status=status.HTTP_400_BAD_REQUEST)
 
             self.perform_update(serializer)
+            instance.refresh_from_db()
+            from urbanlens.dashboard.services.undo.mutations import stash_pin_fields
+
+            stash_pin_fields(
+                instance,
+                before=before_fields,
+                after={"name": instance.name, "description": instance.description},
+            )
         logger.info("Pin with id %s updated", instance.id)
         return Response(serializer.data)
 

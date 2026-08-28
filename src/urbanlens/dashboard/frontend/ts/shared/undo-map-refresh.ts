@@ -20,7 +20,8 @@ function isRestoreRequest(detail: { successful?: boolean; requestConfig?: { verb
     if (!detail.successful) return false;
     if ((detail.requestConfig?.verb ?? "").toLowerCase() !== "post") return false;
     const path = detail.requestConfig?.path ?? "";
-    return path.includes("/undo/") && path.endsWith("/restore/");
+    if (!path.includes("/undo/")) return false;
+    return path.endsWith("/restore/") || path.endsWith("/undo/") || path.endsWith("/redo/");
 }
 
 function onAfterRequest(event: Event): void {

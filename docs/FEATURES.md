@@ -647,7 +647,15 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
   cache) restorable for a retention window. Restores pre-check the constraints the recreate
   could violate and refuse cleanly rather than 500ing; relational pieces that were never part
   of the deletion (a list's member pins, a label's parents, a map's annotation authors)
-  restore leniently, skipping whatever has since been deleted
+  restore leniently, skipping whatever has since been deleted. Mutations (moving a pin,
+  adding/removing labels or aliases, album membership, photo map position/metadata) stash a
+  before/after payload on the same stack. Undo stamps the row rather than deleting it, so
+  redo is a second pass over the same entry; a new action discards the redo stack
+- Floating undo/redo buttons at the bottom-right of every authenticated page, hidden until
+  an action is available, with Ctrl+Z / Ctrl+Shift+Z (and Ctrl+Y). They lift above other
+  floating chrome (saved filters, floorplan floors, toasts, the page footer) rather than
+  covering it. The floorplan editor's in-memory history drives the same buttons while that
+  page is open
 - Settings → Undo History page to review and restore recently undo-able actions
 
 ## Achievements

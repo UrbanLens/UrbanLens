@@ -78,6 +78,8 @@ class PinBulkDeleteView(ExternalApiView):
             # failure must roll back both together, never leave a committed
             # UndoAction claiming a deletion that didn't happen.
             undo_action = stash_for_undo(PIN_MODEL_LABEL, subtree, request.user.profile)
+            if undo_action is None:
+                raise RuntimeError("stash_for_undo returned None outside an apply")
             Pin.objects.filter(pk__in=[pin.pk for pin in pins]).delete()
 
         return Response(

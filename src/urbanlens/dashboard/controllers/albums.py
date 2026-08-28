@@ -777,12 +777,19 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
             # Re-scope through eligible_images_for so an id from another place
             # (or one this viewer can't see) can't be filed into this album.
             images = list(eligible_images_for(owner, profile).filter(pk__in=image_ids))
-            response["added"] += add_images_to_album(album, images, profile)
+            added = add_images_to_album(album, images, profile)
+            response["added"] += added
             move_from = (body.get("move_from") or "").strip()
+            source_album_id = None
             if move_from and move_from != album.slug:
                 source = _qs.filter(slug=move_from).first()
                 if source is not None:
                     response["removed"] = remove_images_from_album(source, image_ids)
+                    source_album_id = source.pk
+            if added:
+                from urbanlens.dashboard.services.undo.mutations import stash_album_add
+
+                stash_album_add(profile, album, [image.pk for image in images], source_album_id=source_album_id)
 
         media = body.get("media")
         if isinstance(media, dict) and media.get("url"):
@@ -884,6 +891,9 @@ class AlbumUploadView(LoginRequiredMixin, View):
         image, response = create_uploaded_photo(request, owner, profile, album=album)
         if image is not None:
             add_images_to_album(album, [image], profile)
+            from urbanlens.dashboard.services.undo.mutations import stash_album_add
+
+            stash_album_add(profile, album, [image.pk])
             payload = json.loads(response.content)
             item = album.items.filter(image_id=image.pk).first()
             if item is not None:
@@ -894,6 +904,9 @@ class AlbumUploadView(LoginRequiredMixin, View):
             existing = existing_photo_for_upload(owner, profile, request.FILES.get("image"))
             if existing is not None:
                 add_images_to_album(album, [existing], profile)
+                from urbanlens.dashboard.services.undo.mutations import stash_album_add
+
+                stash_album_add(profile, album, [existing.pk])
                 payload = image_to_gallery_json(existing, request, profile)
                 item = album.items.filter(image_id=existing.pk).first()
                 if item is not None:
@@ -923,8 +936,14 @@ class AlbumRemovePhotosView(LoginRequiredMixin, View):
             JSON with how many membership rows were removed.
         """
         _owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
         image_ids = _int_ids(_parse_body(request).get("image_ids"))
-        return JsonResponse({"removed": remove_images_from_album(album, image_ids)})
+        removed = remove_images_from_album(album, image_ids)
+        if removed:
+            from urbanlens.dashboard.services.undo.mutations import stash_album_remove
+
+            stash_album_remove(profile, album, image_ids)
+        return JsonResponse({"removed": removed})
 
 
 class AlbumItemsView(LoginRequiredMixin, View):

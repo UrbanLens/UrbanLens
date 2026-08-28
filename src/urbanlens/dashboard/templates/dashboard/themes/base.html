@@ -52,6 +52,22 @@
     {% include 'dashboard/partials/layout/_dev_toolbar.html' %}
     {% endif %}
 
+    {% if request.user.is_authenticated %}
+    <nav id="ul-undo-bar" class="ul-undo-bar" hidden aria-label="Undo and redo"
+         data-stack-url="{% url 'undo.stack' %}"
+         data-undo-url="{% url 'undo.perform' %}"
+         data-redo-url="{% url 'undo.redo' %}">
+        <button type="button" class="map-btn-icon" id="ul-undo-btn" hidden aria-label="Undo"
+                data-tooltip="Undo (Ctrl+Z)" data-tooltip-float="true" data-tooltip-pos="above">
+            <i class="material-symbols-outlined">undo</i>
+        </button>
+        <button type="button" class="map-btn-icon" id="ul-redo-btn" hidden aria-label="Redo"
+                data-tooltip="Redo (Ctrl+Shift+Z)" data-tooltip-float="true" data-tooltip-pos="above">
+            <i class="material-symbols-outlined">redo</i>
+        </button>
+    </nav>
+    {% endif %}
+
     {% comment %}
     Fixed bottom-left tools menu, shared across every page. Currently only surfaces
        sections the user collapsed on the current page (see the collapsible-sections

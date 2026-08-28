@@ -240,10 +240,21 @@ class DetailPinEditView(LoginRequiredMixin, View):
             detail_pin.pin_type, detail_pin.pin_type_is_user_provided = _requested_pin_type(body)
             reclassify = not detail_pin.pin_type_is_user_provided
 
+        old_lat, old_lng = float(detail_pin.effective_latitude), float(detail_pin.effective_longitude)
         if new_location is not None:
             detail_pin.location = new_location
 
         detail_pin.save()
+        if moved:
+            from urbanlens.dashboard.services.undo.mutations import stash_pin_move
+
+            stash_pin_move(
+                detail_pin,
+                before_lat=old_lat,
+                before_lng=old_lng,
+                after_lat=float(detail_pin.effective_latitude),
+                after_lng=float(detail_pin.effective_longitude),
+            )
         # A moved auto-typed marker may have landed on (or left) a building, so
         # its classification is re-derived from wherever it now sits.
         if reclassify or (moved and not detail_pin.pin_type_is_user_provided):
@@ -489,6 +500,18 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         if new_location is not None:
             child_wiki.location = new_location
         child_wiki.save()
+
+        if moved:
+            from urbanlens.dashboard.services.undo.mutations import stash_wiki_move
+
+            stash_wiki_move(
+                child_wiki,
+                profile,
+                before_lat=float(old_lat),
+                before_lng=float(old_lon),
+                after_lat=float(child_wiki.location.latitude),
+                after_lng=float(child_wiki.location.longitude),
+            )
 
         if reclassify or (moved and not child_wiki.pin_type_is_user_provided):
             _schedule_classification("wiki", child_wiki.pk)

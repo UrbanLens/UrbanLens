@@ -628,7 +628,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.mouse.down();
         for (let step = 1; step <= 8; step++) await page.mouse.move(before.grab.x, before.grab.y - step * 8);
         await page.mouse.up();
-        expect(await page.locator("#floorplan-undo").isDisabled()).toBe(false);
+        expect(await page.locator("#ul-undo-btn").isVisible()).toBe(true);
         expect((await planExtent()).top).toBeLessThan(before.top - 20);
 
         await page.keyboard.press("Control+z");
@@ -676,27 +676,26 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.close();
     });
 
-    test("on a phone, undo and the floor switcher stay on the canvas", async () => {
-        // They used to live in the sidebar, which stacks below the map under
-        // 900px - so for the whole time anyone was drawing on a phone, the one
-        // control you reach for after a mistake was off the bottom of the page.
+    test("on a phone, undo, the floor switcher, and delete stay reachable", async () => {
+        // Floor switcher and delete live on the canvas because the sidebar stacks
+        // below the map under 900px. Undo is the shared floating bar: still on
+        // screen, and not in the sidebar, after a drag makes it available.
         await openEditor({ width: 375, height: 812 });
-        // Delete only appears with a selection, and it is on this list for the
-        // same reason as the other two: the sidebar it also lives in is below a
-        // 72vh map, and a phone has no Delete key.
         const plan = await planExtent();
         await page.mouse.click(plan.grab.x, plan.grab.y);
         await settle();
+        await page.mouse.move(plan.grab.x, plan.grab.y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) await page.mouse.move(plan.grab.x, plan.grab.y - step * 8);
+        await page.mouse.up();
+        await settle();
 
-        for (const selector of ["#floorplan-undo", "#floorplan-floors", "#floorplan-delete"]) {
+        for (const selector of ["#floorplan-floors", "#floorplan-delete"]) {
             const placement = await page.evaluate((which) => {
                 const node = document.querySelector(which as string);
                 if (!node) return null;
                 const rect = node.getBoundingClientRect();
                 return {
-                    // Structural, not positional: a control can be made to
-                    // overlap the map with CSS while still living in a panel
-                    // that scrolls away, which is what this is guarding against.
                     inShell: Boolean(node.closest(".floorplan-map-shell")),
                     rendered: rect.width > 0 && rect.height > 0,
                     onScreen: rect.top >= 0 && rect.bottom <= window.innerHeight,
@@ -707,6 +706,27 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             expect(placement!.rendered, `${selector} should be rendered`).toBe(true);
             expect(placement!.onScreen, `${selector} should be reachable without scrolling`).toBe(true);
         }
+
+        const undo = await page.evaluate(() => {
+            const node = document.getElementById("ul-undo-btn");
+            if (!node) return null;
+            const rect = node.getBoundingClientRect();
+            const floors = document.getElementById("floorplan-floors-panel")?.getBoundingClientRect();
+            const overlap = floors
+                ? !(rect.right <= floors.left || floors.right <= rect.left || rect.bottom <= floors.top || floors.bottom <= rect.top)
+                : false;
+            return {
+                inSidebar: Boolean(node.closest(".floorplan-sidebar")),
+                rendered: rect.width > 0 && rect.height > 0,
+                onScreen: rect.top >= 0 && rect.bottom <= window.innerHeight,
+                overlapFloors: overlap,
+            };
+        });
+        expect(undo, "undo button is missing").not.toBeNull();
+        expect(undo!.inSidebar, "undo should not live in the sidebar").toBe(false);
+        expect(undo!.rendered, "undo should be rendered").toBe(true);
+        expect(undo!.onScreen, "undo should be reachable without scrolling").toBe(true);
+        expect(undo!.overlapFloors, "undo should not cover the floor strip").toBe(false);
         await page.close();
     });
 
@@ -736,14 +756,20 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
             await openEditor(viewport);
             await page.locator('[data-tool="wall"]').click(); // give the options panel content
             await settle();
+            const plan = await planExtent();
+            await page.mouse.move(plan.grab.x, plan.grab.y);
+            await page.mouse.down();
+            await page.mouse.move(plan.grab.x, plan.grab.y - 24);
+            await page.mouse.up();
+            await settle();
 
             const overlaps = await page.evaluate(() => {
                 // Leaflet's own zoom control is on this list too - it is no
-                // longer reparented into .floorplan-canvas-controls (undo and
-                // redo moved into #floorplan-tools instead), so it is once
-                // again a free-floating control that could collide with the
-                // rest, same as on every other map.
-                const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls", ".leaflet-control-zoom"];
+                // longer reparented into .floorplan-canvas-controls, so it is
+                // once again a free-floating control that could collide with
+                // the rest, same as on every other map. The shared undo bar
+                // must clear the floor strip (and the rest) once it is visible.
+                const selectors = ["#floorplan-tools", ".floorplan-tool-options", ".floorplan-canvas-controls", ".floorplan-canvas-floors", ".map-bottom-controls", ".leaflet-control-zoom", "#ul-undo-bar"];
                 const boxes = selectors
                     .map((selector) => ({ selector, node: document.querySelector(selector) }))
                     .filter((entry) => entry.node && !(entry.node as HTMLElement).hidden)
@@ -1475,12 +1501,12 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await expectRoomNamed("Plant room");
 
         // One press takes back the whole name, not one letter of it.
-        await page.locator("#floorplan-undo").click();
+        await page.locator("#ul-undo-btn").click();
         await settle();
         await expectRoomNamed("Island");
 
         // The next takes back the drag, which was never part of that group.
-        await page.locator("#floorplan-undo").click();
+        await page.locator("#ul-undo-btn").click();
         await settle();
         const back = await page.evaluate(() => {
             const fills = Array.from(document.querySelectorAll("#floorplan-map path.floorplan-room"));
@@ -1794,7 +1820,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
 
         // Undo puts the blank canvas back rather than leaving a plan nobody
         // asked for.
-        await page.locator("#floorplan-undo").click();
+        await page.locator("#ul-undo-btn").click();
         await settle();
         expect(await page.locator(".floorplan-wall").count()).toBe(0);
         expect(await page.evaluate(() => (document.getElementById("floorplan-empty") as HTMLElement).hidden)).toBe(false);
@@ -1824,7 +1850,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await settle();
         expect(await disabledness()).toEqual({ room: false, opening: false, box: false });
 
-        await page.locator("#floorplan-undo").click();
+        await page.locator("#ul-undo-btn").click();
         await settle();
         expect(await disabledness()).toEqual({ room: true, opening: true, box: true });
         await page.close();
@@ -2013,7 +2039,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         for (let waited = 0; waited < 40 && saves.lastName !== "Boiler house"; waited++) await page.waitForTimeout(250);
         expect(saves.lastName).toBe("Boiler house");
 
-        await page.locator("#floorplan-undo").click();
+        await page.locator("#ul-undo-btn").click();
         await settle();
         expect(await nameField.inputValue(), "undo left the renamed plan on screen").toBe(before);
 
@@ -2123,7 +2149,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         expect(await named(), "renumbering moved the storeys' contents rather than their labels").toEqual(["1:Attic", "G:"]);
 
         // And it is undoable, like every other edit here.
-        await page.locator("#floorplan-undo").click();
+        await page.locator("#ul-undo-btn").click();
         await settle();
         expect(await named(), "undo did not put the deleted storey back").toEqual(["2:Attic", "1:", "G:"]);
         await page.close();
@@ -2895,7 +2921,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.locator("#floorplan-map").focus();
         await page.keyboard.press("ArrowRight");
         await settle();
-        expect(await page.evaluate(() => (document.getElementById("floorplan-undo") as HTMLButtonElement).disabled), "nothing to undo before switching").toBe(false);
+        expect(await page.evaluate(() => !document.getElementById("ul-undo-btn")?.hidden), "nothing to undo before switching").toBe(true);
         const wallsBefore = await page.locator(".floorplan-wall").count();
 
         // The version list lives behind "Add more details".
@@ -2904,7 +2930,7 @@ describe.skipIf(!BUILT)("floorplan editor in a browser", () => {
         await page.waitForFunction((was) => document.querySelectorAll(".floorplan-wall").length !== was, wallsBefore, { timeout: 15000 });
         await settle();
 
-        expect(await page.evaluate(() => (document.getElementById("floorplan-undo") as HTMLButtonElement).disabled), "undo still points at the version that was left").toBe(true);
+        expect(await page.evaluate(() => document.getElementById("ul-undo-btn")?.hidden), "undo still points at the version that was left").toBe(true);
         await page.close();
     });
 

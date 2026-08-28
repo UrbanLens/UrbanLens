@@ -43,6 +43,7 @@ class PinListUndoHandler(UndoHandler):
     """
 
     model_label = MODEL_LABEL
+    model = PinList
 
     @classmethod
     def serialize(cls, instances: Sequence[PinList]) -> list[dict[str, Any]]:

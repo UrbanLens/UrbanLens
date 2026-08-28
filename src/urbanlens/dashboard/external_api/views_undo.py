@@ -45,6 +45,10 @@ _DOMAIN_READ_SCOPES_BY_MODEL_LABEL: dict[str, ApiKeyScope] = {
     "pin_list": ApiKeyScope.LISTS_READ,
     "label": ApiKeyScope.LABELS_READ,
     "markup_map": ApiKeyScope.PINS_READ,
+    "pin_mutation": ApiKeyScope.PINS_READ,
+    "wiki_mutation": ApiKeyScope.WIKI_READ,
+    "label_membership": ApiKeyScope.LABELS_READ,
+    "photo_mutation": ApiKeyScope.PHOTOS_READ,
 }
 
 _DOMAIN_WRITE_SCOPES_BY_MODEL_LABEL: dict[str, ApiKeyScope] = {
@@ -56,6 +60,10 @@ _DOMAIN_WRITE_SCOPES_BY_MODEL_LABEL: dict[str, ApiKeyScope] = {
     "pin_list": ApiKeyScope.LISTS_WRITE,
     "label": ApiKeyScope.LABELS_WRITE,
     "markup_map": ApiKeyScope.PINS_WRITE,
+    "pin_mutation": ApiKeyScope.PINS_WRITE,
+    "wiki_mutation": ApiKeyScope.WIKI_WRITE,
+    "label_membership": ApiKeyScope.LABELS_WRITE,
+    "photo_mutation": ApiKeyScope.PHOTOS_WRITE,
 }
 
 

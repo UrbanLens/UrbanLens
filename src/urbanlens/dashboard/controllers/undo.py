@@ -1,4 +1,4 @@
-"""Undo-history controller: settings-page listing, per-entry restore, and clear-all."""
+"""Undo-history controller: settings-page listing, stack undo/redo, restore, and clear-all."""
 
 from __future__ import annotations
 
@@ -7,12 +7,22 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.undo import UndoAction
-from urbanlens.dashboard.services.undo.service import UndoExpiredError, clear_undo_history, get_undo_history, restore_undo_action
+from urbanlens.dashboard.services.undo.service import (
+    NothingToUndoError,
+    UndoExpiredError,
+    clear_undo_history,
+    get_undo_history,
+    redo_latest,
+    restore_undo_action,
+    stack_state,
+    undo_latest,
+)
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -28,8 +38,18 @@ def _request_profile(request: HttpRequest) -> Profile:
 
 
 def _with_toast(response: HttpResponse, message: str, level: str = "success") -> HttpResponse:
-    response["HX-Trigger"] = json.dumps({"showToast": {"level": level, "message": message}})
+    triggers = json.loads(response.headers.get("HX-Trigger", "{}")) if response.headers.get("HX-Trigger") else {}
+    triggers["showToast"] = {"level": level, "message": message}
+    response["HX-Trigger"] = json.dumps(triggers)
     return response
+
+
+def _stack_response(profile: Profile, *, ok: bool = True, error: str | None = None, status: int = 200) -> JsonResponse:
+    payload = stack_state(profile)
+    payload["ok"] = ok
+    if error:
+        payload["error"] = error
+    return JsonResponse(payload, status=status)
 
 
 class UndoHistoryView(LoginRequiredMixin, View):
@@ -38,6 +58,41 @@ class UndoHistoryView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
         profile = _request_profile(request)
         return render(request, _PARTIAL, {"actions": list(get_undo_history(profile))})
+
+
+class UndoStackView(LoginRequiredMixin, View):
+    """GET /undo/stack/ - whether the floating undo/redo buttons should show."""
+
+    def get(self, request: HttpRequest) -> JsonResponse:
+        return _stack_response(_request_profile(request))
+
+
+class UndoPerformView(LoginRequiredMixin, View):
+    """POST /undo/undo/ - undo the newest entry on the caller's stack."""
+
+    def post(self, request: HttpRequest) -> JsonResponse:
+        profile = _request_profile(request)
+        try:
+            undo_latest(profile)
+        except NothingToUndoError:
+            return _stack_response(profile, ok=False, error="Nothing to undo.", status=409)
+        except UndoExpiredError:
+            return _stack_response(profile, ok=False, error="That undo has expired.", status=410)
+        return _stack_response(profile)
+
+
+class UndoRedoView(LoginRequiredMixin, View):
+    """POST /undo/redo/ - redo the most recently undone entry."""
+
+    def post(self, request: HttpRequest) -> JsonResponse:
+        profile = _request_profile(request)
+        try:
+            redo_latest(profile)
+        except NothingToUndoError:
+            return _stack_response(profile, ok=False, error="Nothing to redo.", status=409)
+        except UndoExpiredError:
+            return _stack_response(profile, ok=False, error="That redo has expired.", status=410)
+        return _stack_response(profile)
 
 
 class UndoRestoreView(LoginRequiredMixin, View):

@@ -72,7 +72,7 @@ class UndoServiceTests(TestCase):
         self.assertEqual(undo_action.model_label, "pin")
         self.assertIn("Old Mill", undo_action.object_repr)
 
-    def test_restore_recreates_instance_and_deletes_row(self) -> None:
+    def test_restore_recreates_instance_and_keeps_the_row_for_redo(self) -> None:
         old_pk = self.pin.pk
         undo_action = stash_for_undo("pin", [self.pin], self.profile)
         self.pin.delete()
@@ -82,7 +82,8 @@ class UndoServiceTests(TestCase):
         self.assertEqual(len(restored), 1)
         self.assertNotEqual(restored[0].pk, old_pk)
         self.assertEqual(restored[0].name, "Old Mill")
-        self.assertFalse(UndoAction.objects.filter(pk=undo_action.pk).exists())
+        undo_action.refresh_from_db()
+        self.assertIsNotNone(undo_action.undone_at)
 
     def test_restore_expired_action_raises_and_deletes_row(self) -> None:
         undo_action = stash_for_undo("pin", [self.pin], self.profile)
@@ -340,7 +341,7 @@ class UndoRestoreViewTests(TestCase):
         self.profile = self.user.profile
         self.client.force_login(self.user)
 
-    def test_restores_and_removes_entry(self) -> None:
+    def test_restores_and_marks_entry_undone(self) -> None:
         pin = baker.make(Pin, profile=self.profile, name="Restorable")
         undo_action = stash_for_undo("pin", [pin], self.profile)
         pin.delete()
@@ -349,7 +350,8 @@ class UndoRestoreViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(Pin.objects.filter(profile=self.profile, name="Restorable").exists())
-        self.assertFalse(UndoAction.objects.filter(pk=undo_action.pk).exists())
+        undo_action.refresh_from_db()
+        self.assertIsNotNone(undo_action.undone_at)
 
     def test_other_profile_cannot_restore(self) -> None:
         pin = baker.make(Pin, profile=self.profile, name="Not Yours")

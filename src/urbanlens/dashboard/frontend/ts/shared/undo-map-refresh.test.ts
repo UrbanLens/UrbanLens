@@ -20,6 +20,14 @@ describe("after an undo restore", () => {
         expect(localStorage.getItem("ul_pins_dirty")).toBe("1");
     });
 
+    test("an undo or redo POST also flags", () => {
+        afterRequest({ successful: true, requestConfig: { verb: "post", path: "/dashboard/undo/undo/" } });
+        expect(localStorage.getItem("ul_pins_dirty")).toBe("1");
+        localStorage.clear();
+        afterRequest({ successful: true, requestConfig: { verb: "post", path: "/dashboard/undo/redo/" } });
+        expect(localStorage.getItem("ul_pins_dirty")).toBe("1");
+    });
+
     test("a failed restore does not flag", () => {
         afterRequest({ successful: false, requestConfig: { verb: "post", path: "/dashboard/undo/abc-123/restore/" } });
         expect(localStorage.getItem("ul_pins_dirty")).toBeNull();

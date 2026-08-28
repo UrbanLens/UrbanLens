@@ -19,7 +19,7 @@
             <div class="undo-history-row-info">
                 <span class="undo-history-badge">{{ action.model_label|title }}</span>
                 <span class="undo-history-repr">{{ action.object_repr }}</span>
-                <span class="undo-history-time">Deleted {{ action.created|naturaltime }} · expires {{ action.expires_at|naturaltime }}</span>
+                <span class="undo-history-time">{% if action.kind == "mutate" %}Changed{% else %}Deleted{% endif %} {{ action.created|naturaltime }} · expires {{ action.expires_at|naturaltime }}</span>
             </div>
             <button type="button"
                     class="btn btn--primary"
@@ -32,6 +32,6 @@
         {% endfor %}
     </ul>
     {% else %}
-    <p class="settings-help">No recent deletions. Deleted pins, wikis, safety check-ins, and trips show up here for 7 days.</p>
+    <p class="settings-help">No recent undo-able actions. Destructive edits and deletions show up here for 7 days.</p>
     {% endif %}
 </div>

@@ -155,6 +155,11 @@ def apply_image_map_update(image: Image, body: bytes) -> dict[str, Any]:
         raise ValueError("Invalid request data.")  # noqa: TRY004
 
     fields: list[str] = []
+    before = {
+        "latitude": str(image.latitude) if image.latitude is not None else None,
+        "longitude": str(image.longitude) if image.longitude is not None else None,
+        "map_hidden": bool(image.map_hidden),
+    }
     if "latitude" in data or "longitude" in data:
         image.latitude, image.longitude = coerce_coordinates(data)
         image.map_hidden = False
@@ -165,6 +170,15 @@ def apply_image_map_update(image: Image, body: bytes) -> dict[str, Any]:
     else:
         raise ValueError("Invalid request data.")
     image.save(update_fields=[*fields, "updated"])
+    after = {
+        "latitude": str(image.latitude) if image.latitude is not None else None,
+        "longitude": str(image.longitude) if image.longitude is not None else None,
+        "map_hidden": bool(image.map_hidden),
+    }
+    if image.profile_id:
+        from urbanlens.dashboard.services.undo.mutations import stash_photo_fields
+
+        stash_photo_fields(image.profile, image, before=before, after=after)
     return {
         "latitude": float(image.latitude) if image.latitude is not None else None,
         "longitude": float(image.longitude) if image.longitude is not None else None,

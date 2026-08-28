@@ -32,6 +32,14 @@ class UndoActionQuerySet(abstract.FrontendDashboardQuerySet["UndoAction"]):
 
         return self.filter(created__lt=timezone.now() - UNDO_RETENTION)
 
+    def undoable(self) -> UndoActionQuerySet:
+        """Restrict to entries that have not yet been undone (the undo stack)."""
+        return self.filter(undone_at__isnull=True)
+
+    def redoable(self) -> UndoActionQuerySet:
+        """Restrict to entries already undone (the redo stack)."""
+        return self.filter(undone_at__isnull=False)
+
 
 class UndoActionManager(abstract.FrontendDashboardManager.from_queryset(UndoActionQuerySet)):
     """Manager for UndoAction."""

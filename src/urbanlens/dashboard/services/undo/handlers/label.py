@@ -52,6 +52,7 @@ class LabelUndoHandler(UndoHandler):
     """
 
     model_label = MODEL_LABEL
+    model = Label
 
     @classmethod
     def serialize(cls, instances: Sequence[Label]) -> list[dict[str, Any]]:

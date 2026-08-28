@@ -299,8 +299,12 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
     if pin.parent_pin_id is None and Pin.objects.filter(profile_id=pin.profile_id, location=location, parent_pin__isnull=True).exclude(pk=pin.pk).exists():
         raise PinMoveError("You already have a pin at these exact coordinates.")
 
+    before_lat, before_lng = float(pin.effective_latitude), float(pin.effective_longitude)
     pin.location = location
     pin.save(update_fields=["location", "updated"])
+    from urbanlens.dashboard.services.undo.mutations import stash_pin_move
+
+    stash_pin_move(pin, before_lat=before_lat, before_lng=before_lng, after_lat=latitude, after_lng=longitude)
 
 
 def reparent_pin(pin: Pin, new_parent: Pin | None) -> None:

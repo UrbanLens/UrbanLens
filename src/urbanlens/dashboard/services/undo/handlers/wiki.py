@@ -78,6 +78,7 @@ class WikiUndoHandler(UndoHandler):
     """
 
     model_label = MODEL_LABEL
+    model = Wiki
 
     @classmethod
     def serialize(cls, instances: Sequence[Wiki]) -> list[dict[str, Any]]:

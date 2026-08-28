@@ -1349,7 +1349,13 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
         label = get_object_or_404(Label.objects.visible_to(profile), id=label_id, kind__in=_ORGANIZE_KINDS)
         if action == "add":
             pin.labels.add(label)
+            from urbanlens.dashboard.services.undo.mutations import stash_label_add
+
+            stash_label_add(profile, target="pin", target_id=pin.pk, label=label)
         elif action == "remove":
+            from urbanlens.dashboard.services.undo.mutations import stash_label_remove
+
+            stash_label_remove(profile, target="pin", target_id=pin.pk, label=label)
             # Tombstone first: keyword/AI auto-tagging can otherwise silently
             # reattach this exact label the next time it runs on this pin.
             PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LABEL, value=str(label.pk))
@@ -1415,7 +1421,13 @@ class LabelLocationMembershipView(LoginRequiredMixin, View):
         label = get_object_or_404(Label.objects.visible_to(profile), id=label_id, kind__in=_ORGANIZE_KINDS)
         if action == "add":
             wiki.labels.add(label)
+            from urbanlens.dashboard.services.undo.mutations import stash_label_add
+
+            stash_label_add(profile, target="wiki", target_id=wiki.pk, label=label)
         elif action == "remove":
+            from urbanlens.dashboard.services.undo.mutations import stash_label_remove
+
+            stash_label_remove(profile, target="wiki", target_id=wiki.pk, label=label)
             # Tombstone first: keyword/AI auto-tagging can otherwise silently
             # reattach this exact label the next time it runs on this wiki.
             WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.LABEL, value=str(label.pk))
@@ -1509,12 +1521,21 @@ class LabelImageMembershipView(LoginRequiredMixin, View):
             if isinstance(label, HttpResponse):
                 return label
             image.labels.add(label)
+            from urbanlens.dashboard.services.undo.mutations import stash_label_add
+
+            stash_label_add(profile, target="image", target_id=image.pk, label=label)
             return self._render(request, profile, image)
 
         label_id = _membership_label_id(request)
         label = get_object_or_404(Label.objects.visible_to(profile), id=label_id, kind=KIND_MEDIA)
         if action == "add":
             image.labels.add(label)
+            from urbanlens.dashboard.services.undo.mutations import stash_label_add
+
+            stash_label_add(profile, target="image", target_id=image.pk, label=label)
         elif action == "remove":
+            from urbanlens.dashboard.services.undo.mutations import stash_label_remove
+
+            stash_label_remove(profile, target="image", target_id=image.pk, label=label)
             image.labels.remove(label)
         return self._render(request, profile, image)

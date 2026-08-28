@@ -58,6 +58,7 @@ class MarkupMapUndoHandler(UndoHandler):
     """
 
     model_label = MODEL_LABEL
+    model = MarkupMap
 
     @classmethod
     def serialize(cls, instances: Sequence[MarkupMap]) -> list[dict[str, Any]]:

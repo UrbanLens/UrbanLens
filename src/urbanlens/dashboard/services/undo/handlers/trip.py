@@ -40,6 +40,7 @@ class TripUndoHandler(UndoHandler):
     """
 
     model_label = MODEL_LABEL
+    model = Trip
 
     @classmethod
     def serialize(cls, instances: Sequence[Trip]) -> list[dict[str, Any]]:

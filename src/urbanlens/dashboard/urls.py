@@ -1186,6 +1186,9 @@ urlpatterns = [
     path("settings/google-calendar/", calendar_sync.GoogleCalendarSettingsSectionView.as_view(), name="settings.google_calendar"),
     path("settings/google-calendar/disconnect/", calendar_sync.GoogleCalendarSettingsDisconnectView.as_view(), name="settings.google_calendar.disconnect"),
     path("site-admin/models/", site_admin_models.SiteAdminModelsView.as_view(), name="site_admin_models"),
+    path("undo/stack/", undo.UndoStackView.as_view(), name="undo.stack"),
+    path("undo/undo/", undo.UndoPerformView.as_view(), name="undo.perform"),
+    path("undo/redo/", undo.UndoRedoView.as_view(), name="undo.redo"),
     path("undo/<uuid:undo_id>/restore/", undo.UndoRestoreView.as_view(), name="undo.restore"),
     re_path(
         r"^(?P<label_kind>tags?|categor(y|ies)|status(es)?|people|media)/",

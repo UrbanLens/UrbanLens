@@ -1,8 +1,9 @@
-"""Base class and registry for per-model undo-delete handlers.
+"""Base class and registry for per-model undo handlers.
 
 See the modules under ``services.undo.handlers`` for the concrete, per-model
-serialize/restore logic. Importing ``services.undo.handlers`` (done once by
-``services.undo.service``) populates the registry below.
+serialize/restore (deletes) and undo/redo mutation logic. Importing
+``services.undo.handlers`` (done once by ``services.undo.service``) populates
+the registry below.
 """
 
 from __future__ import annotations
@@ -13,9 +14,15 @@ from typing import TYPE_CHECKING, Any, ClassVar
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from django.db.models import Model
+
 
 class UndoHandler(abc.ABC):
-    """Serializes/restores instances of one model for the undo-delete framework.
+    """Serializes/restores instances of one model for the undo framework.
+
+    Delete handlers (``supports_delete`` True, the default) capture a snapshot
+    before the row is removed and recreate it on undo. Mutation handlers
+    (``MutationUndoHandler``) record a reversible change instead.
 
     Cascade-deleted children (comments, notes, contacts, markup annotations,
     etc.) are gone the instant the parent is deleted - before ``serialize``
@@ -27,6 +34,10 @@ class UndoHandler(abc.ABC):
     """
 
     model_label: ClassVar[str]
+    #: The Django model this delete handler recreates. Used to re-delete the
+    #: restored rows on redo. Mutation handlers leave this None.
+    model: ClassVar[type[Model] | None] = None
+    supports_delete: ClassVar[bool] = True
 
     @classmethod
     @abc.abstractmethod
@@ -42,6 +53,58 @@ class UndoHandler(abc.ABC):
     @abc.abstractmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Any]:
         """Recreate instances from a payload previously returned by ``serialize``."""
+
+    @classmethod
+    def redo_delete(cls, payload: dict[str, Any]) -> None:
+        """Re-delete rows that ``restore`` just recreated (the redo of a delete-undo).
+
+        Args:
+            payload: Wrapped stash of the form ``{"entries": ..., "restored_pks": [...]}``.
+        """
+        pks = payload.get("restored_pks") or []
+        if cls.model is None or not pks:
+            return
+        cls.model.objects.filter(pk__in=pks).delete()
+
+    @classmethod
+    def undo_mutation(cls, payload: dict[str, Any]) -> None:  # noqa: ARG003 - interface; override uses payload
+        """Apply the inverse of a stashed mutation.
+
+        Args:
+            payload: The dict previously given to ``stash_mutation``.
+        """
+        raise TypeError(f"{cls.model_label} does not support mutations.")
+
+    @classmethod
+    def redo_mutation(cls, payload: dict[str, Any]) -> None:  # noqa: ARG003 - interface; override uses payload
+        """Re-apply a stashed mutation after it was undone.
+
+        Args:
+            payload: The dict previously given to ``stash_mutation``.
+        """
+        raise TypeError(f"{cls.model_label} does not support mutations.")
+
+
+class MutationUndoHandler(UndoHandler):
+    """Undo handler for a reversible change rather than a deletion.
+
+    ``serialize``/``restore`` are not used. The payload is a dict describing
+    the change, applied by ``undo_mutation`` / ``redo_mutation``.
+    """
+
+    supports_delete = False
+
+    @classmethod
+    def serialize(cls, instances: Sequence[Any]) -> list[dict[str, Any]]:  # noqa: ARG003 - mutations are not serialized
+        raise TypeError(f"{cls.model_label} records mutations, not deletions.")
+
+    @classmethod
+    def describe(cls, instances: Sequence[Any]) -> str:  # noqa: ARG003 - mutations are not serialized
+        raise TypeError(f"{cls.model_label} records mutations, not deletions.")
+
+    @classmethod
+    def restore(cls, payload: list[dict[str, Any]]) -> list[Any]:  # noqa: ARG003 - mutations are not serialized
+        raise TypeError(f"{cls.model_label} records mutations, not deletions.")
 
 
 _HANDLERS: dict[str, type[UndoHandler]] = {}

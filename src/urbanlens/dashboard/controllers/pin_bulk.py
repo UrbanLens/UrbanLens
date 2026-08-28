@@ -117,6 +117,8 @@ class PinBulkDeleteView(LoginRequiredMixin, View):
             # `subtree` above in one bulk operation - no need to delete each subtree member
             # individually.
             undo_action = stash_for_undo(PIN_MODEL_LABEL, subtree, profile)
+            if undo_action is None:
+                raise RuntimeError("stash_for_undo returned None outside an apply")
             Pin.objects.filter(pk__in=[p.pk for p in pins]).delete()
 
         descendant_count = len(subtree) - len(pins)

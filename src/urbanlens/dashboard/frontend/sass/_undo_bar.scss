@@ -1,0 +1,34 @@
+@use 'variables' as *;
+
+// Floating undo/redo, bottom-right of the viewport. Hidden entirely when
+// neither action is possible. --ul-undo-offset-y is set by undo-bar.ts when
+// another floating control (saved filters, floorplan floors, toasts) already
+// occupies this corner.
+.ul-undo-bar {
+    position: fixed;
+    // Above map toolbars (1000) and the sticky page footer (9999); below toasts (10070).
+    z-index: 10050;
+    right: 10px;
+    bottom: 10px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-sm;
+    box-shadow: var(--ul-shadow-md);
+    transform: translateY(calc(-1 * var(--ul-undo-offset-y, 0px)));
+    transition: transform .2s ease;
+
+    &[hidden] {
+        display: none;
+    }
+
+    .map-btn-icon {
+        &[hidden] {
+            display: none;
+        }
+    }
+}

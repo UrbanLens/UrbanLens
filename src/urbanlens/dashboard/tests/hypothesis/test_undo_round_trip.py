@@ -71,7 +71,7 @@ class UndoRoundTripTests(TestCase):
 
     def test_every_registered_handler_has_a_builder_here(self) -> None:
         """A new handler must come with coverage, rather than silently skipping it."""
-        missing = [label for label in sorted(_HANDLERS) if self._build(label) is None]
+        missing = [label for label, handler in sorted(_HANDLERS.items()) if handler.supports_delete and self._build(label) is None]
 
         self.assertEqual(missing, [], f"undo handlers with no round-trip coverage: {missing}")
 
@@ -79,7 +79,9 @@ class UndoRoundTripTests(TestCase):
         losses: list[str] = []
         checked = 0
 
-        for model_label in sorted(_HANDLERS):
+        for model_label, registered in sorted(_HANDLERS.items()):
+            if not registered.supports_delete:
+                continue
             instance = self._build(model_label)
             if instance is None:
                 continue  # reported by the companion test above

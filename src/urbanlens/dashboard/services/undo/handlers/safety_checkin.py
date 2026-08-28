@@ -74,6 +74,7 @@ class SafetyCheckinUndoHandler(UndoHandler):
     """
 
     model_label = MODEL_LABEL
+    model = SafetyCheckin
 
     @classmethod
     def serialize(cls, instances: Sequence[SafetyCheckin]) -> list[dict[str, Any]]:

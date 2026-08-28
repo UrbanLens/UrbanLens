@@ -145,7 +145,7 @@ class UndoRestoreTests(_UndoApiTestCase):
         self.assertEqual(response.status_code, 410)
         self.assertFalse(UndoAction.objects.filter(pk=entry.pk).exists())
 
-    def test_successful_restore_recreates_the_pin_and_deletes_the_entry(self) -> None:
+    def test_successful_restore_recreates_the_pin_and_marks_the_entry_undone(self) -> None:
         """A real stash -> delete -> restore round-trip recreates the pin."""
         pin = baker.make(Pin, profile=self.profile, name="Steel Mill", name_is_user_provided=True)
         entry = stash_for_undo("pin", [pin], self.profile)
@@ -159,4 +159,5 @@ class UndoRestoreTests(_UndoApiTestCase):
         self.assertEqual(response.json(), {"restored": True})
         self.assertFalse(Pin.objects.filter(pk=pin_pk).exists())
         self.assertTrue(Pin.objects.filter(profile=self.profile, name="Steel Mill").exists())
-        self.assertFalse(UndoAction.objects.filter(pk=entry.pk).exists())
+        entry.refresh_from_db()
+        self.assertIsNotNone(entry.undone_at)

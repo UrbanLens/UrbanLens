@@ -14,6 +14,7 @@
 
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
+import { installUndoBar, registerLocalUndoProvider, syncUndoBar } from "../shared/undo-bar";
 import { PlanProjection, type Pt, distance, interiorPoint, pointInRing, projectOnSegment, rotate } from "../shared/floorplan/coords";
 import {
     type Floor,
@@ -208,6 +209,7 @@ function boot(): void {
     // Both pickers are server-rendered markup calling a window global from an
     // inline onclick, so the page that uses them has to install them.
     installGlobalColorPicker();
+    installUndoBar();
     const mapElement = document.getElementById("floorplan-map");
     if (!mapElement) return;
     // Rebound so the null check survives into the closures below.
@@ -735,10 +737,7 @@ function boot(): void {
     }
 
     function updateHistoryButtons(): void {
-        const undoButton = document.getElementById("floorplan-undo") as HTMLButtonElement | null;
-        if (undoButton) undoButton.disabled = !history.canUndo;
-        const redoButton = document.getElementById("floorplan-redo") as HTMLButtonElement | null;
-        if (redoButton) redoButton.disabled = !history.canRedo;
+        syncUndoBar();
     }
 
     /**
@@ -824,8 +823,14 @@ function boot(): void {
         void save(false);
     });
     document.getElementById("floorplan-reload")?.addEventListener("click", () => window.location.reload());
-    document.getElementById("floorplan-undo")?.addEventListener("click", undo);
-    document.getElementById("floorplan-redo")?.addEventListener("click", redo);
+    registerLocalUndoProvider({
+        canUndo: () => history.canUndo,
+        canRedo: () => history.canRedo,
+        undoLabel: () => (history.canUndo ? "Edit" : null),
+        redoLabel: () => (history.canRedo ? "Edit" : null),
+        undo,
+        redo,
+    });
     updateHistoryButtons();
 
     // -------------------------------------------------------------- selection
@@ -3120,17 +3125,8 @@ function boot(): void {
         }
         if (typing) return;
         const key = event.key.toLowerCase();
-        if (key === "z" && (event.ctrlKey || event.metaKey)) {
-            event.preventDefault();
-            if (event.shiftKey) redo();
-            else undo();
-            return;
-        }
-        if (key === "y" && (event.ctrlKey || event.metaKey)) {
-            event.preventDefault();
-            redo();
-            return;
-        }
+        // Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z / Ctrl+Y are handled by the shared
+        // undo bar (see undo-bar.ts), which also drives the floating buttons.
         // One letter per tool, and the letter each tool's own tooltip names.
         // There used to be digits alongside - 1 select, 2 wall, 3 marker - from
         // when those were the only three tools. Seven tools later they covered

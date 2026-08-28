@@ -247,11 +247,13 @@ class LocationAliasView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": name_error}, status=400)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
-            # See PinAliasView.post's atomic() comment - same reasoning here.
             with transaction.atomic():
-                WikiAlias.objects.create(wiki=wiki, name=name, kind=kind, created_by=profile)
+                alias = WikiAlias.objects.create(wiki=wiki, name=name, kind=kind, created_by=profile)
         except IntegrityError:
             return JsonResponse({"ok": False, "error": "That alias already exists."}, status=409)
+        from urbanlens.dashboard.services.undo.mutations import stash_wiki_alias_add
+
+        stash_wiki_alias_add(wiki, profile, alias)
         WikiEdit.objects.create(
             wiki=wiki,
             editor=profile,
@@ -267,6 +269,9 @@ class LocationAliasDeleteView(LoginRequiredMixin, View):
         if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(wiki.name):
             return HttpResponse("This alias is the current name - pick another name first.", status=400)
         alias_name = alias.name
+        from urbanlens.dashboard.services.undo.mutations import stash_wiki_alias_remove
+
+        stash_wiki_alias_remove(wiki, profile, alias)
         # Tombstone first: an external-source sync or the pin<->wiki alias-mirror
         # signal could otherwise recreate this exact name the moment either one
         # next runs, silently undoing the deletion.
@@ -290,7 +295,12 @@ class LocationAliasUseView(LoginRequiredMixin, View):
         # real row - see concealment.writable_wiki. The panel then re-renders
         # from what was written, not from the pre-write projection.
         target = writable_wiki(wiki)
+        before_name = target.name
         edit = promote_wiki_alias_to_name(target, profile, alias)
+        if edit is not None:
+            from urbanlens.dashboard.services.undo.mutations import stash_wiki_alias_promote
+
+            stash_wiki_alias_promote(target, profile, before_name=before_name, after_name=target.name)
         response = _render_location_panel(request, location, target, profile)
         if edit is None:
             # The alias was already the wiki's name, so nothing was written.

@@ -24,6 +24,7 @@ class SavedFilterUndoHandler(UndoHandler):
     """Restores a saved filter's name, icon, criteria, and sidebar order."""
 
     model_label = MODEL_LABEL
+    model = SavedFilter
 
     @classmethod
     def serialize(cls, instances: Sequence[SavedFilter]) -> list[dict[str, Any]]:
