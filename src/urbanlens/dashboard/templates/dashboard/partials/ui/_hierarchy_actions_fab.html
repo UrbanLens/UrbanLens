@@ -1,0 +1,75 @@
+{% comment %}
+Floating Actions menu for pin/wiki hierarchy: the page-wide "child pin
+details" toggle, jump-to-parent, and (pins only) detach.
+
+The whole button is omitted when there is nothing to show.
+
+Expects:
+  has_children       - show the child-details toggle
+  include_children   - current toggle state
+  parent_url         - optional; parent pin/wiki detail URL
+  parent_name        - optional; used in detach confirm
+  parent_item_label  - optional; defaults to "Open parent pin"
+  detach_url         - optional; pin.detach_parent POST URL
+{% endcomment %}
+{% if has_children or parent_url %}
+<div class="pin-actions-fab" id="pin-actions-fab">
+    <div class="pin-actions-menu" id="pin-actions-menu" hidden>
+        {% if has_children %}
+        {# Both directions are explicit: a parcel pin defaults the toggle ON #}
+        {# (its children are the content), so a bare URL would no longer mean #}
+        {# "off" and the toggle could never be turned off. #}
+        <a class="pin-actions-item{% if include_children %} is-active{% endif %}"
+           href="{{ request.path }}?children={% if include_children %}0{% else %}1{% endif %}"
+           title="Show everything from nested child pins on this page - map details, photos, and notes">
+            <i class="material-symbols-outlined">{% if include_children %}toggle_on{% else %}toggle_off{% endif %}</i>
+            <span>Child pin details</span>
+            <span class="pin-actions-state">{% if include_children %}On{% else %}Off{% endif %}</span>
+        </a>
+        {% endif %}
+        {% if parent_url %}
+        <a class="pin-actions-item" href="{{ parent_url }}">
+            <i class="material-symbols-outlined">arrow_upward</i>
+            <span>{{ parent_item_label|default:"Open parent pin" }}</span>
+        </a>
+        {% if detach_url %}
+        <button type="button" class="pin-actions-item pin-actions-item--danger"
+                hx-post="{{ detach_url }}"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                hx-confirm="Detach this pin from {{ parent_name }}? It becomes a top-level pin on your main map again."
+                hx-swap="none">
+            <i class="material-symbols-outlined">link_off</i>
+            <span>Detach from parent</span>
+        </button>
+        {% endif %}
+        {% endif %}
+    </div>
+    <button type="button" class="pin-actions-fab-btn" id="pin-actions-fab-btn"
+            aria-haspopup="true" aria-expanded="false" title="Pin actions">
+        <i class="material-symbols-outlined">account_tree</i>
+        <span class="pin-actions-fab-label">Actions</span>
+        {% if include_children %}<span class="pin-actions-fab-dot" title="Child pin details are on"></span>{% endif %}
+    </button>
+</div>
+<script>
+(function () {
+    var fab = document.getElementById('pin-actions-fab');
+    var btn = document.getElementById('pin-actions-fab-btn');
+    var menu = document.getElementById('pin-actions-menu');
+    if (!fab || !btn || !menu) return;
+    btn.addEventListener('click', function () {
+        var open = menu.hidden;
+        menu.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
+        fab.classList.toggle('is-open', open);
+    });
+    document.addEventListener('click', function (e) {
+        if (!fab.contains(e.target) && !menu.hidden) {
+            menu.hidden = true;
+            btn.setAttribute('aria-expanded', 'false');
+            fab.classList.remove('is-open');
+        }
+    });
+}());
+</script>
+{% endif %}

@@ -178,6 +178,14 @@ class LocationWikiView(LoginRequiredMixin, View):
         custom_layers = list(visible_rows(CustomLayer.objects.for_wiki(wiki), wiki, profile).order_by("order", "created"))
         visible_layer_ids = {layer.pk for layer in custom_layers}
 
+        wiki_is_site_scope = site_scope.is_site_scope(wiki)
+        # Page-wide "show child pin details" toggle: when on (?children=1), the
+        # map, photo gallery, and comments all include content from this wiki's
+        # child wikis (any depth). Off by default except on a parcel wiki,
+        # whose children *are* the content, matching the pin detail page.
+        include_children = request.GET.get("children", "1" if wiki_is_site_scope else "0") == "1"
+        has_child_wikis = visible_rows(wiki.child_wikis.all(), wiki, profile).exists()
+
         return render(
             request,
             "dashboard/pages/location/wiki.html",
@@ -203,7 +211,9 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "profile": profile,
                 "show_wiki_cover_photo": show_wiki_cover_photo,
                 "wiki_cover_candidates": wiki_cover_candidates,
-                "is_site_scope": site_scope.is_site_scope(wiki),
+                "is_site_scope": wiki_is_site_scope,
+                "has_child_wikis": has_child_wikis,
+                "include_children": include_children,
                 **scope_badge(wiki),
                 # Counted over what this viewer can see, not over every row - a
                 # badge computed on the raw set announces the comments it is

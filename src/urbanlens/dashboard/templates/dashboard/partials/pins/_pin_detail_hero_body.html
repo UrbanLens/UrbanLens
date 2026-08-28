@@ -24,15 +24,15 @@ in context, plus the wiki/linking context used by the overview panel.
             {% include "dashboard/partials/ui/_scope_badge.html" %}
         </p>
         <h1 id="pin-detail-hero-title" class="ul-page-hero__title">
-            <a class="pin-detail-hero-parent-link" href="{% url 'pin.details' pin.parent_pin.slug|default:pin.parent_pin.uuid %}"
-               data-tooltip="Back to {{ pin.parent_pin.effective_name }}" data-tooltip-pos="bottom">
-                <i class="material-symbols-outlined">arrow_back</i>{{ pin.parent_pin.effective_name }}
-            </a>
-        </h1>
-        <p class="ul-page-hero__subtitle pin-detail-hero-child-name">
-            <i class="material-symbols-outlined">place</i>
             <span class="pin-name-editable" tabindex="0" role="button"
                   data-raw-name="{{ pin.effective_name }}" title="Click to rename">{{ pin.effective_name }}</span>
+        </h1>
+        <p class="pin-detail-hero-parent">
+            <a class="pin-detail-hero-parent-link" href="{% url 'pin.details' pin.parent_pin.slug|default:pin.parent_pin.uuid %}"
+               data-tooltip="Back to {{ pin.parent_pin.effective_name }}" data-tooltip-pos="bottom">
+                <i class="material-symbols-outlined">arrow_back</i>
+                <span>Part of {{ pin.parent_pin.effective_name }}</span>
+            </a>
         </p>
         {% else %}
         <p class="ul-page-hero__eyebrow">

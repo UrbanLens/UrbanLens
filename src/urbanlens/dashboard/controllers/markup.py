@@ -260,15 +260,18 @@ class MarkupJsonView(LoginRequiredMixin, View):
         Returns:
             JsonResponse with ``markup_items`` list, plus ``view`` (centre,
             zoom, layer_mode, show_borders, title) on the map route. On the
-            pin route, ``?children=1`` additionally includes markup belonging
-            to every descendant child pin, each item annotated with the owning
-            child pin's name (``owner_name``).
+            pin/wiki route, ``?children=1`` additionally includes markup belonging
+            to every descendant child pin/wiki, each item annotated with the owning
+            child's name (``owner_name``).
         """
         owner, items = _resolve_owner(request, pin_slug, location_slug, map_uuid)
-        include_children = pin_slug is not None and request.GET.get("children") == "1"
+        include_children = request.GET.get("children") == "1"
         if include_children and isinstance(owner, Pin):
             subtree = Pin.objects.filter(pk=owner.pk).with_descendants()
             items = PinMarkup.objects.filter(parent_pin__in=subtree).select_related("parent_pin__location", "parent_pin__location__wiki", "layer")
+        elif include_children and isinstance(owner, Wiki):
+            subtree = Wiki.objects.filter(pk=owner.pk).with_descendants()
+            items = PinMarkup.objects.filter(parent_wiki__in=subtree).select_related("parent_wiki__location", "layer")
 
         # A visible item can still be filed under a layer this viewer cannot
         # see - wiki-scoped layer assignment isn't restricted to the item's
@@ -294,6 +297,8 @@ class MarkupJsonView(LoginRequiredMixin, View):
                 entry["layer_uuid"] = None
             if include_children and m.parent_pin_id is not None and m.parent_pin_id != owner.pk and m.parent_pin is not None:
                 entry["owner_name"] = m.parent_pin.effective_name
+            elif include_children and m.parent_wiki_id is not None and m.parent_wiki_id != owner.pk and m.parent_wiki is not None:
+                entry["owner_name"] = m.parent_wiki.name
             markup_items.append(entry)
         payload: dict = {"markup_items": markup_items}
         if isinstance(owner, MarkupMap):

@@ -171,6 +171,7 @@ export function initAlbumMap(): void {
             showMapContextMenu({
                 lat: event.latlng.lat,
                 lng: event.latlng.lng,
+                zoom: map.getZoom(),
                 clientX: event.originalEvent.clientX,
                 clientY: event.originalEvent.clientY,
                 extraItems: [

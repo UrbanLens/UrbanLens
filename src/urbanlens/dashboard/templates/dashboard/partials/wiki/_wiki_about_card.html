@@ -1,5 +1,5 @@
 {% comment %}
-Wiki "About" card - description, dates, and security indicators.
+Wiki "About" card - description, identity fields, coordinates, dates, and security indicators.
 
 Context:
   wiki - Wiki instance
@@ -23,6 +23,22 @@ inside this card.
     <div class="card__body wiki-meta-body">
         {% if wiki.description %}
         <p id="wiki-field-description" class="wiki-description">{{ wiki.description }}</p>
+        {% endif %}
+        {% if wiki.deduplicated_identity_fields or wiki.latitude and wiki.longitude %}
+        <div class="wiki-meta-facts">
+            {% for label, value in wiki.deduplicated_identity_fields %}
+            <div class="detail-item {% if label == 'Place Name' %}detail-item--place{% elif label == 'Official Name' %}detail-item--official{% else %}detail-item--address{% endif %}">
+                <span class="field-label">{{ label }}</span>
+                <span class="field-value">{{ value }}</span>
+            </div>
+            {% endfor %}
+            {% if wiki.latitude and wiki.longitude %}
+            <div class="detail-item detail-item--coordinates">
+                <span class="field-label">Coordinates</span>
+                <span class="field-value">{{ wiki.latitude|floatformat:5 }}, {{ wiki.longitude|floatformat:5 }}</span>
+            </div>
+            {% endif %}
+        </div>
         {% endif %}
         {% include "dashboard/partials/pins/_pin_links_row.html" with wiki=wiki links=wiki.links.all delete_url_name="location.wiki.link.delete" row_id="wiki-links-row" owner_slug=wiki.location.slug dialog_id="wiki-link-add-dialog" show_label=True %}
         {% if wiki.date_abandoned or wiki.effective_date_last_active %}

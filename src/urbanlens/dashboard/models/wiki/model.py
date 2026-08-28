@@ -405,6 +405,14 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         """Wiki marker longitude, as a float. See ``effective_latitude``."""
         return float(self.location.longitude)
 
+    def descendants(self):
+        """Return every wiki nested below this one (children, grandchildren, ...).
+
+        Returns:
+            A ``WikiQuerySet`` over the full subtree, excluding this wiki itself.
+        """
+        return Wiki.objects.filter(pk=self.pk).with_descendants().exclude(pk=self.pk)
+
     @property
     def effective_date_last_active(self):
         """Date the place was last active, inferred from date_abandoned if unset."""

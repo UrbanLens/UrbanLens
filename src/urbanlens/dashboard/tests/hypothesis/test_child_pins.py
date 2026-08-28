@@ -787,3 +787,39 @@ class VisitedLabelPropagationTests(TestCase):
         other = ensure_label( kind=KIND_STATUS, name="Demolished", profile=self.profile)
         self.grandchild.labels.add(other)
         self.assertNotIn(other, self.root.labels.all())
+
+
+class PinActionsFabVisibilityTests(TestCase):
+    """The floating Actions button only appears when it has something to show."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def _page(self, pin: Pin):
+        pin.slug = pin.ensure_slug()
+        pin.save(update_fields=["slug"])
+        return self.client.get(reverse("pin.details", kwargs={"pin_slug": pin.slug}))
+
+    def test_hidden_when_the_pin_has_no_children_and_no_parent(self) -> None:
+        pin = _make_pin(self.profile, name="Lonely")
+        response = self._page(pin)
+        self.assertNotContains(response, "pin-actions-fab")
+        self.assertNotContains(response, "Child pin details")
+
+    def test_toggle_shown_when_the_pin_has_children(self) -> None:
+        parent = _make_pin(self.profile, name="Campus")
+        _make_pin(self.profile, name="Boiler", parent_pin=parent)
+        response = self._page(parent)
+        self.assertContains(response, "pin-actions-fab")
+        self.assertContains(response, "Child pin details")
+
+    def test_toggle_hidden_on_a_childless_nested_pin_but_parent_actions_remain(self) -> None:
+        parent = _make_pin(self.profile, name="Campus")
+        child = _make_pin(self.profile, name="Boiler", parent_pin=parent)
+        response = self._page(child)
+        self.assertContains(response, "pin-actions-fab")
+        self.assertContains(response, "Open parent pin")
+        self.assertNotContains(response, "Child pin details")
+

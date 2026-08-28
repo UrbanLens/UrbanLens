@@ -55,6 +55,11 @@ class EmptyWikiRendersTheAddLinkAffordanceTests(TestCase):
         self.assertNotIn("wiki-meta-dates", html)
         self.assertNotIn("security-indicators", html)
 
+    def test_coordinates_are_shown(self) -> None:
+        html = _render_about_card(self.wiki)
+        self.assertIn("detail-item--coordinates", html)
+        self.assertIn("Coordinates", html)
+
 
 class WikiWithOnlyALinkStillRendersTests(TestCase):
     """Anti-vacuity: the card must actually reflect content, not render blindly."""
@@ -68,3 +73,25 @@ class WikiWithOnlyALinkStillRendersTests(TestCase):
 
         self.assertIn("example.com", html)
         self.assertNotIn("No links yet.", html)
+
+
+class WikiAboutCardIdentityFieldsTests(TestCase):
+    """Place Name / Official Name / Address / coordinates mirror the pin details card."""
+
+    def test_official_name_and_coordinates_render(self) -> None:
+        location = baker.make(
+            Location,
+            official_name="Riverside Mill",
+            latitude="41.73610",
+            longitude="-73.75790",
+            street_number="42",
+            route="Mill St",
+        )
+        wiki = baker.make(Wiki, location=location, name="Riverside", description=None, date_abandoned=None, **_ALL_UNKNOWN)
+        html = _render_about_card(wiki)
+        self.assertIn("Official Name", html)
+        self.assertIn("Riverside Mill", html)
+        self.assertIn("Coordinates", html)
+        self.assertIn("41.73610", html)
+        self.assertIn("-73.75790", html)
+

@@ -369,7 +369,7 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 # -- Wiki comments -------------------------------------------------------------
 
 
-def _visible_wiki_comments(wiki: Wiki, profile: Profile) -> QuerySet[Comment]:
+def _visible_wiki_comments(wiki: Wiki, profile: Profile, *, include_children: bool = False) -> QuerySet[Comment]:
     """The wiki's comments as *profile* is entitled to see them.
 
     One function rather than the same two lines at each of the three call sites:
@@ -380,13 +380,19 @@ def _visible_wiki_comments(wiki: Wiki, profile: Profile) -> QuerySet[Comment]:
     Args:
         wiki: The wiki whose comments are being listed.
         profile: The viewer.
+        include_children: When True, also list comments on descendant child wikis.
 
     Returns:
         A comment queryset, filtered when this viewer is concealed.
     """
+    from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
     from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
 
-    rows = wiki.comments.all()
+    if include_children:
+        subtree = WikiModel.objects.filter(pk=wiki.pk).with_descendants()
+        rows = Comment.objects.filter(wiki__in=subtree).select_related("wiki", "wiki__location")
+    else:
+        rows = wiki.comments.all()
     return conceal_rows(rows, profile) if concealment_active(wiki, profile) else rows
 
 
@@ -409,7 +415,10 @@ def _visible_wiki_reply_prefetch(wiki: Wiki, profile: Profile) -> QuerySet[Comme
 
     if not concealment_active(wiki, profile):
         return None
-    return conceal_rows(Comment.objects.filter(wiki=wiki), profile)
+    from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
+
+    wiki_ids = WikiModel.objects.filter(pk=wiki.pk).with_descendants()
+    return conceal_rows(Comment.objects.filter(wiki__in=wiki_ids), profile)
 
 
 class WikiCommentsView(LoginRequiredMixin, View):
@@ -419,8 +428,9 @@ class WikiCommentsView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import concealment_active
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        include_children = request.GET.get("children") == "1"
         ctx = _build_context(
-            _visible_wiki_comments(wiki, profile),
+            _visible_wiki_comments(wiki, profile, include_children=include_children),
             profile,
             request,
             replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
@@ -428,6 +438,8 @@ class WikiCommentsView(LoginRequiredMixin, View):
             wiki=wiki,
             location=wiki.location,
             context_type="wiki",
+            include_children=include_children,
+            extra_query="children=1" if include_children else "",
         )
         return _render_comments(request, ctx)
 
@@ -449,7 +461,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
-            parent = get_object_or_404(_visible_wiki_comments(wiki, profile), id=parent_id)
+            parent = get_object_or_404(_visible_wiki_comments(wiki, profile, include_children=True), id=parent_id)
         comment = Comment.objects.create(
             wiki=wiki,
             profile=profile,
@@ -465,8 +477,9 @@ class WikiCommentsView(LoginRequiredMixin, View):
             attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
             notify_reply(profile, parent, reply=comment)
+        include_children = request.GET.get("children") == "1"
         ctx = _build_context(
-            _visible_wiki_comments(wiki, profile),
+            _visible_wiki_comments(wiki, profile, include_children=include_children),
             profile,
             request,
             replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
@@ -474,6 +487,8 @@ class WikiCommentsView(LoginRequiredMixin, View):
             wiki=wiki,
             location=wiki.location,
             context_type="wiki",
+            include_children=include_children,
+            extra_query="children=1" if include_children else "",
         )
         return _render_comments(request, ctx)
 
@@ -485,7 +500,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import concealment_active
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        comment = get_object_or_404(_visible_wiki_comments(wiki, profile), id=comment_id)
+        comment = get_object_or_404(_visible_wiki_comments(wiki, profile, include_children=True), id=comment_id)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map
@@ -501,8 +516,9 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         # orphaned top-level comments. Re-render the whole panel rather than just
         # removing the deleted <li>, so those replies stay visible in place
         # instead of disappearing until the next reload.
+        include_children = request.GET.get("children") == "1"
         ctx = _build_context(
-            _visible_wiki_comments(wiki, profile),
+            _visible_wiki_comments(wiki, profile, include_children=include_children),
             profile,
             request,
             replies_qs=_visible_wiki_reply_prefetch(wiki, profile),
@@ -510,6 +526,8 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
             wiki=wiki,
             location=wiki.location,
             context_type="wiki",
+            include_children=include_children,
+            extra_query="children=1" if include_children else "",
         )
         return _render_comments(request, ctx)
 

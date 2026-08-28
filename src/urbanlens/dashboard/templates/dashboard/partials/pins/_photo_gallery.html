@@ -76,8 +76,10 @@ Context:
       {% endif %}
       <button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox({{ img.pk }})">
         <img src="{{ img.thumb_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy" decoding="async">
-        {% if include_children and img.pin_id != pin.id %}
+        {% if include_children and context_type == "pin" and img.pin_id != pin.id %}
         <span class="gallery-child-ribbon" title="Photo from the child pin {{ img.pin.effective_name }}">{{ img.pin.effective_name }}</span>
+        {% elif include_children and context_type == "wiki" and img.wiki_id != wiki.id %}
+        <span class="gallery-child-ribbon" title="Photo from the child wiki {{ img.wiki.name }}">{{ img.wiki.name }}</span>
         {% endif %}
         {% if img.latitude and img.longitude %}
         <span class="gallery-has-coords" title="Has GPS coordinates">
@@ -86,10 +88,15 @@ Context:
         {% endif %}
       </button>
       {% if img.profile == profile %}
-      {% if include_children and img.pin_id != pin.id %}
+      {% if include_children and context_type == "pin" and img.pin_id != pin.id %}
       {# Child-pin photos are managed from their own pin's page. #}
       <a class="gallery-delete-btn gallery-open-child-btn" title="Open {{ img.pin.effective_name }}"
          href="{% url 'pin.details' img.pin.slug|default:img.pin.uuid %}">
+        <i class="material-symbols-outlined">open_in_new</i>
+      </a>
+      {% elif include_children and context_type == "wiki" and img.wiki_id != wiki.id %}
+      <a class="gallery-delete-btn gallery-open-child-btn" title="Open {{ img.wiki.name }}"
+         href="{% url 'location.wiki' img.wiki.location.slug %}">
         <i class="material-symbols-outlined">open_in_new</i>
       </a>
       {% else %}

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.gis.db.models import PointField
@@ -26,6 +25,7 @@ from django.db.models.fields import BooleanField, CharField, DateField, DateTime
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.addressable import collapse_identity_fields
 from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
@@ -41,14 +41,6 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.visits import PinVisit
 
 logger = logging.getLogger(__name__)
-
-_DEDUP_NORMALIZE_RE = re.compile(r"[^a-z0-9]+")
-
-
-def _normalize_for_dedup(text: str) -> str:
-    """Casefold and strip punctuation/whitespace differences for near-duplicate text comparison."""
-    return _DEDUP_NORMALIZE_RE.sub(" ", text.casefold()).strip()
-
 
 class PinType(TextChoices):
     """What a pin/wiki marker physically represents.
@@ -638,19 +630,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             candidates.append(("Official Name", self.effective_official_name))
         if self.effective_address:
             candidates.append(("Address", self.effective_address))
-
-        kept: list[tuple[str, str]] = []
-        kept_normalized: list[str] = []
-        for label, value in sorted(candidates, key=lambda pair: len(pair[1]), reverse=True):
-            normalized = _normalize_for_dedup(value)
-            if any(normalized in existing for existing in kept_normalized):
-                continue
-            kept.append((label, value))
-            kept_normalized.append(normalized)
-
-        display_order = {"Place Name": 0, "Official Name": 1, "Address": 2}
-        kept.sort(key=lambda pair: display_order[pair[0]])
-        return kept
+        return collapse_identity_fields(candidates)
 
     def get_unique_search_name(self, *, include_country: bool = True, quote_name: bool = False, include_address: bool = True, quote_locality: bool = False) -> str | None:
         """Name to use when searching for this location in external APIs.

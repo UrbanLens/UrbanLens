@@ -23,6 +23,7 @@ from urbanlens.dashboard.controllers.image_gallery import create_uploaded_photo
 from urbanlens.dashboard.models.album.model import ALBUM_KIND_SPECS, Album, AlbumKind, album_kind_spec
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_LENGTH, column_max_length, text_length_error
 from urbanlens.dashboard.services.media.images import image_to_gallery_json
@@ -54,8 +55,6 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from django.http import HttpRequest
 
-    from urbanlens.dashboard.models.wiki.model import Wiki
-
 logger = logging.getLogger(__name__)
 
 #: Read from the column rather than repeated as a literal: the name is
@@ -80,9 +79,9 @@ def _panel_owner(request: HttpRequest, owner: Pin | Wiki) -> Pin | Wiki:
 
 
 def _include_children(request: HttpRequest, owner: Pin | Wiki) -> bool:
-    """Whether this request should list descendant pins' albums and photos."""
+    """Whether this request should list descendant pins'/wikis' albums and photos."""
     flag = request.GET.get("children") or request.POST.get("children")
-    if flag == "1" and isinstance(owner, Pin):
+    if flag == "1" and isinstance(owner, (Pin, Wiki)):
         return True
     return bool(request.GET.get("from_pin") or request.POST.get("from_pin")) and isinstance(owner, Pin)
 
@@ -91,6 +90,8 @@ def _listing_owners(owner: Pin | Wiki, include_children: bool) -> list[Pin | Wik
     """The pin/wiki set whose albums appear on this Photos tab."""
     if include_children and isinstance(owner, Pin):
         return list(Pin.objects.filter(pk=owner.pk).with_descendants().select_related("location"))
+    if include_children and isinstance(owner, Wiki):
+        return list(Wiki.objects.filter(pk=owner.pk).with_descendants().select_related("location"))
     return [owner]
 
 
@@ -373,6 +374,9 @@ def _photos_context(owner: Pin | Wiki, viewer: Profile | None, *, include_childr
         if include_children and isinstance(album_owner, Pin) and album_owner.pk != owner.pk:
             row["owner_pin_name"] = album_owner.effective_name
             row["detail_query"] = urlencode({"back": list_url, "from_pin": _owner_slug(owner), "children": "1"})
+        elif include_children and isinstance(album_owner, Wiki) and album_owner.pk != owner.pk:
+            row["owner_pin_name"] = album_owner.name
+            row["detail_query"] = urlencode({"back": list_url, "children": "1"})
         rows.append(row)
     loose_qs = loose_images_for(listing, viewer)
     loose_count = loose_qs.count()

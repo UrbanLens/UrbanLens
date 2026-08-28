@@ -34,6 +34,26 @@ class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet)
         """Return only child wikis (community sub-markers nested under a parent wiki)."""
         return self.filter(parent_wiki__isnull=False)
 
+    def with_descendants(self) -> Self:
+        """Expand this queryset to include the full child-wiki subtree of each wiki.
+
+        Walks ``parent_wiki`` children level by level (BFS) until no new
+        descendants are found, matching ``PinQuerySet.with_descendants``.
+
+        Returns:
+            A fresh QuerySet over this queryset's wikis plus every descendant.
+        """
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        root_ids = set(self.values_list("pk", flat=True))
+        all_ids = set(root_ids)
+        frontier = root_ids
+        while frontier:
+            children = set(Wiki.objects.filter(parent_wiki_id__in=frontier).values_list("pk", flat=True))
+            frontier = children - all_ids
+            all_ids |= frontier
+        return Wiki.objects.filter(pk__in=all_ids)
+
     def by_category(self, category):
         return self.filter(labels__name=category, labels__kind=KIND_CATEGORY)
 

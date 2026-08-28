@@ -46,6 +46,8 @@ export interface ShowMapContextMenuOptions {
     lng: number;
     clientX: number;
     clientY: number;
+    /** Leaflet zoom; extra decimal places are kept when zoomed in. */
+    zoom?: number;
     /** Place name or other heading above the coordinate row. */
     header?: string | HTMLElement;
     /** Extra block between the header and the shared actions (place details, etc.). */
@@ -65,6 +67,39 @@ export interface BindMapContextMenuOptions {
 }
 
 const MENU_CLASS = "map-context-menu";
+
+/** Fewest decimal places we have always copied (~11 cm). Never go below this. */
+export const MIN_COORDINATE_COPY_DIGITS = 6;
+/** Cap: sub-centimetre, beyond what a mouse click can specify even at max zoom. */
+const MAX_COORDINATE_COPY_DIGITS = 8;
+/** First zoom at which a pixel is fine enough to justify a 7th decimal (~1 cm). */
+const ZOOM_FOR_7_DIGITS = 17;
+/** First zoom at which a pixel is fine enough to justify an 8th decimal (~1 mm). */
+const ZOOM_FOR_8_DIGITS = 19;
+
+/**
+ * Decimal places for a copied lat/lng, based on Leaflet zoom.
+ *
+ * A mouse click is a couple of pixels; at city/street zooms that is metres
+ * wide, so six decimals (what we have always copied) is already more precise
+ * than the click. Once the map is zoomed into a building or closer, extra
+ * digits keep the click's true position instead of rounding it away.
+ *
+ * @param zoom - Leaflet zoom, or a non-finite stand-in when the map is unknown.
+ * @returns An integer in ``[6, 8]``.
+ */
+export function coordinateCopyPrecision(zoom: number | undefined): number {
+    if (!Number.isFinite(zoom)) return MIN_COORDINATE_COPY_DIGITS;
+    if ((zoom as number) >= ZOOM_FOR_8_DIGITS) return MAX_COORDINATE_COPY_DIGITS;
+    if ((zoom as number) >= ZOOM_FOR_7_DIGITS) return 7;
+    return MIN_COORDINATE_COPY_DIGITS;
+}
+
+/** Formats ``lat, lng`` at the precision a click at *zoom* can realistically specify. */
+export function formatCopiedCoordinates(lat: number, lng: number, zoom?: number): string {
+    const digits = coordinateCopyPrecision(zoom);
+    return `${lat.toFixed(digits)}, ${lng.toFixed(digits)}`;
+}
 
 let dismissHandler: ((event: MouseEvent) => void) | null = null;
 let closeCallback: (() => void) | null = null;
@@ -162,8 +197,7 @@ export function showMapContextMenu(options: ShowMapContextMenuOptions): HTMLElem
     closeMapContextMenus();
     closeCallback = options.onClose ?? null;
 
-    const latFmt = options.lat.toFixed(6);
-    const lngFmt = options.lng.toFixed(6);
+    const coordText = formatCopiedCoordinates(options.lat, options.lng, options.zoom);
     const menu = document.createElement("div");
     menu.className = MENU_CLASS;
 
@@ -193,10 +227,10 @@ export function showMapContextMenu(options: ShowMapContextMenuOptions): HTMLElem
     coordItem.type = "button";
     coordItem.className = `${MENU_CLASS}__item ${MENU_CLASS}__coords`;
     coordItem.title = "Click to copy coordinates";
-    appendIconLabel(coordItem, "gps_fixed", `${latFmt}, ${lngFmt}`);
+    appendIconLabel(coordItem, "gps_fixed", coordText);
     coordItem.addEventListener("click", () => {
         navigator.clipboard
-            .writeText(`${latFmt}, ${lngFmt}`)
+            .writeText(coordText)
             .then(() => toast.success("Coordinates copied to clipboard"))
             .catch(() => toast.error("Could not copy coordinates"));
         close();
@@ -270,6 +304,7 @@ export function bindMapContextMenu(map: L.Map, options: BindMapContextMenuOption
         showMapContextMenu({
             lat,
             lng,
+            zoom: map.getZoom(),
             clientX: event.originalEvent.clientX,
             clientY: event.originalEvent.clientY,
             extraItems: options.extraItems?.(lat, lng) ?? [],

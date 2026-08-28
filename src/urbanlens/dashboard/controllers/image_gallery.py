@@ -132,6 +132,29 @@ def _pin_gallery_images(request: HttpRequest, pin: Pin, profile: Profile):
     return images.visible_to(profile), include_children
 
 
+def _wiki_gallery_images(request: HttpRequest, wiki: Wiki, profile: Profile):
+    """Images for a wiki's gallery, optionally including child-wiki photos.
+
+    With ``?children=1`` (the wiki page's "show child pin details" toggle)
+    photos uploaded to any descendant child wiki are included too.
+
+    Args:
+        request: Current request (read for the ``children`` flag).
+        wiki: The wiki whose gallery is being rendered.
+        profile: The requesting profile (visibility filtering).
+
+    Returns:
+        Tuple of (queryset, include_children flag).
+    """
+    include_children = request.GET.get("children") == "1"
+    if include_children:
+        subtree = Wiki.objects.filter(pk=wiki.pk).with_descendants()
+        images = Image.objects.filter(wiki__in=subtree).select_related("profile", "wiki", "wiki__location")
+    else:
+        images = Image.objects.filter(wiki=wiki).select_related("profile")
+    return images.visible_to(profile), include_children
+
+
 class PinGalleryView(LoginRequiredMixin, View):
     """HTML gallery panel for the pin detail page (loaded via HTMX)."""
 
@@ -374,7 +397,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealment_active
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).order_by("-created")
+        images, include_children = _wiki_gallery_images(request, wiki, profile)
         # A third gate, on top of the container and settings gates visible_to
         # already applies. Provider media stays - a fresh wiki carries it - and
         # uploads survive only from the viewer or a friend. Paginated *after*
@@ -382,7 +405,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
         # front of.
         if concealment_active(wiki, profile):
             images = conceal_rows(images, profile)
-        page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
+        page_obj = get_page(request, images.order_by("-created"), _GALLERY_PAGE_SIZE)
         return {
             "location": location,
             "wiki": conceal_wiki(wiki, profile),
@@ -390,6 +413,8 @@ class WikiGalleryView(LoginRequiredMixin, View):
             "page_obj": page_obj,
             "profile": profile,
             "context_type": "wiki",
+            "include_children": include_children,
+            "extra_query": "children=1" if include_children else "",
         }
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
@@ -409,13 +434,19 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows, concealment_active
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        images = Image.objects.filter(wiki=wiki).select_related("profile").visible_to(profile).with_coords()
+        images, include_children = _wiki_gallery_images(request, wiki, profile)
+        images = images.with_coords()
         # This layer plots photos at their capture coordinates, so an unfiltered
         # payload does not merely list other people's contributions - it maps
         # where they stood.
         if concealment_active(wiki, profile):
             images = conceal_rows(images, profile)
-        data = [image_to_gallery_json(img, request, profile) for img in images]
+        data = []
+        for img in images:
+            entry = image_to_gallery_json(img, request, profile)
+            if include_children and img.wiki_id is not None and img.wiki_id != wiki.pk and img.wiki is not None:
+                entry["child_pin_name"] = img.wiki.name
+            data.append(entry)
         return JsonResponse({"images": data})
 
 

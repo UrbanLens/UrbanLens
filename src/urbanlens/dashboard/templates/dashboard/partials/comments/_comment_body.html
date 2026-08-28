@@ -26,6 +26,11 @@
        title="Written on the child pin {{ comment.pin.effective_name }}">
         <i class="material-symbols-outlined">subdirectory_arrow_right</i>{{ comment.pin.effective_name }}
     </a>
+    {% elif include_children and context_type == "wiki" and comment.wiki_id != wiki.id %}
+    <a class="comment-child-chip" href="{% url 'location.wiki' comment.wiki.location.slug %}"
+       title="Written on the child wiki {{ comment.wiki.name }}">
+        <i class="material-symbols-outlined">subdirectory_arrow_right</i>{{ comment.wiki.name }}
+    </a>
     {% endif %}
     {% if comment.profile == profile %}
     <button type="button" class="comment-delete-btn" title="Delete"
@@ -135,7 +140,7 @@
     {% for reply_item in replies %}
     {% with r=reply_item.comment %}
     <li class="comment-item comment-item--reply" id="comment-{{ r.id }}">
-      {% include "dashboard/partials/comments/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin location=location trip=trip profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=True %}
+      {% include "dashboard/partials/comments/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin wiki=wiki location=location trip=trip profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=True include_children=include_children %}
     </li>
     {% endwith %}
     {% endfor %}

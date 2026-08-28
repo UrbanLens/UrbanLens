@@ -9,7 +9,13 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { closeMapContextMenus, showMapContextMenu, STREETVIEW_CHECK_URL } from "./map-context-menu";
+import {
+    closeMapContextMenus,
+    coordinateCopyPrecision,
+    formatCopiedCoordinates,
+    showMapContextMenu,
+    STREETVIEW_CHECK_URL,
+} from "./map-context-menu";
 
 const originalFetch = globalThis.fetch;
 const originalClipboard = navigator.clipboard;
@@ -91,6 +97,21 @@ describe("showMapContextMenu", () => {
         expect(document.querySelector(".map-context-menu")).toBeNull();
     });
 
+    test("copies extra decimal places when the map is zoomed in", async () => {
+        const menu = showMapContextMenu({
+            lat: 42.65261234,
+            lng: -73.75781234,
+            zoom: 19,
+            clientX: 40,
+            clientY: 80,
+        });
+        const coords = menu.querySelector<HTMLButtonElement>(".map-context-menu__coords");
+        expect(menu.textContent).toContain("42.65261234, -73.75781234");
+        coords?.click();
+        await Promise.resolve();
+        expect(copied).toBe("42.65261234, -73.75781234");
+    });
+
     test("appends extra items after the shared actions", () => {
         let clicked = false;
         const menu = open([
@@ -123,5 +144,29 @@ describe("showMapContextMenu", () => {
         const text = menu.textContent || "";
         expect(text.indexOf("Place name")).toBeLessThan(text.indexOf("A nearby park"));
         expect(text.indexOf("A nearby park")).toBeLessThan(text.indexOf("Directions here"));
+    });
+});
+
+describe("coordinateCopyPrecision", () => {
+    test("never drops below the six decimals we have always copied", () => {
+        expect(coordinateCopyPrecision(undefined)).toBe(6);
+        expect(coordinateCopyPrecision(2)).toBe(6);
+        expect(coordinateCopyPrecision(16)).toBe(6);
+    });
+
+    test("adds a digit once zoomed into a building", () => {
+        expect(coordinateCopyPrecision(17)).toBe(7);
+        expect(coordinateCopyPrecision(18)).toBe(7);
+    });
+
+    test("adds a second digit at close-up zoom", () => {
+        expect(coordinateCopyPrecision(19)).toBe(8);
+        expect(coordinateCopyPrecision(21)).toBe(8);
+    });
+
+    test("formatCopiedCoordinates uses that many places", () => {
+        expect(formatCopiedCoordinates(1.23456789, 2.34567891, 10)).toBe("1.234568, 2.345679");
+        expect(formatCopiedCoordinates(1.23456789, 2.34567891, 17)).toBe("1.2345679, 2.3456789");
+        expect(formatCopiedCoordinates(1.23456789, 2.34567891, 19)).toBe("1.23456789, 2.34567891");
     });
 });

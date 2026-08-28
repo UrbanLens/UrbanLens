@@ -78,3 +78,16 @@ class LocationDetailPinJsonChildWikiTests(TestCase):
         baker.make(Pin, profile=self.viewer.profile, location=empty_location)
         data = self._get(empty_location)
         self.assertEqual(data["detail_pins"], [])
+
+    def test_children_flag_includes_grandchildren_with_owner_names(self) -> None:
+        grandchild = _make_child_wiki(self.child_a, name="Attic Hatch")
+        request = self.factory.get(f"/location/{self.location.slug}/pins/json/", {"children": "1"})
+        request.user = self.viewer
+        response = LocationDetailPinJsonView.as_view()(request, location_slug=self.location.slug)
+        data = json.loads(response.content)
+        by_name = {item["name"]: item for item in data["detail_pins"]}
+        self.assertEqual(set(by_name), {"North Entrance", "South Entrance", "Attic Hatch"})
+        self.assertNotIn("owner_name", by_name["North Entrance"])
+        self.assertEqual(by_name["Attic Hatch"]["owner_name"], "North Entrance")
+        self.assertEqual(by_name["Attic Hatch"]["uuid"], str(grandchild.uuid))
+

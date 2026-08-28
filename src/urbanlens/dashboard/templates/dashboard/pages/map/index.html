@@ -1458,6 +1458,7 @@
             window.MapContextMenu.show({
                 lat: lat,
                 lng: lng,
+                zoom: map.getZoom(),
                 clientX: anchor.x,
                 clientY: anchor.y,
                 extraItems: [
@@ -2663,6 +2664,7 @@
         window.MapContextMenu.show({
             lat: lat,
             lng: lng,
+            zoom: map.getZoom(),
             clientX: e.originalEvent.clientX,
             clientY: e.originalEvent.clientY,
             extraItems: [{
@@ -2805,6 +2807,7 @@
             const menu = window.MapContextMenu.show({
                 lat: lat,
                 lng: lng,
+                zoom: map.getZoom(),
                 clientX: anchor.x,
                 clientY: anchor.y,
                 header: place.name,
@@ -4650,6 +4653,7 @@
                     window.MapContextMenu.show({
                         lat: mlat,
                         lng: mlng,
+                        zoom: map.getZoom(),
                         clientX: anchor.x,
                         clientY: anchor.y,
                         extraItems: [

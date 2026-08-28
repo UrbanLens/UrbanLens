@@ -157,6 +157,12 @@
             line-height: 1.55;
         }
 
+        .wiki-meta-facts {
+            display: flex;
+            flex-direction: column;
+            gap: .55rem;
+        }
+
         // Links row (_pin_links_row.html, shared with the pin details page) -
         // its .field-label/.field-value/.detail-item styling normally only
         // exists scoped to the pin page's own flex-wrap grid layout, which

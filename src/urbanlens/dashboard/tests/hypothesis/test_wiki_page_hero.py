@@ -77,6 +77,31 @@ class WikiPageHeroTests(TestCase):
         self.assertNotIn("wiki-address", content)
 
 
+class WikiActionsFabVisibilityTests(TestCase):
+    """The wiki page's Actions button follows the same hide-when-empty rule."""
+
+    def setUp(self) -> None:
+        baker.make("auth.User")
+        self.user: User = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.location = baker.make(Location, latitude="41.4", longitude="-73.4")
+        self.wiki: Wiki = baker.make("dashboard.Wiki", location=self.location, name="Old Mill")
+        baker.make(Pin, profile=self.profile, location=self.location)
+        self.client.force_login(self.user)
+
+    def test_hidden_when_the_wiki_has_no_children_and_no_parent(self) -> None:
+        content = self.client.get(reverse("location.wiki", args=[self.location.slug])).content.decode()
+        self.assertNotIn("pin-actions-fab", content)
+        self.assertNotIn("Child pin details", content)
+
+    def test_toggle_shown_when_the_wiki_has_child_wikis(self) -> None:
+        child_loc = baker.make(Location, latitude="41.41", longitude="-73.41")
+        baker.make("dashboard.Wiki", location=child_loc, name="Boiler Room", parent_wiki=self.wiki)
+        content = self.client.get(reverse("location.wiki", args=[self.location.slug])).content.decode()
+        self.assertIn("pin-actions-fab", content)
+        self.assertIn("Child pin details", content)
+
+
 class WikiAboutCardLinkStylingTests(TestCase):
     """The About card's links row (_pin_links_row.html, shared with the pin
     details page) used to rely on CSS scoped to body.page-location-details

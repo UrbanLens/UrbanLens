@@ -776,68 +776,12 @@
     </div>
 </section>
 
-{% if has_child_pins or parent_pin %}
 {# -- Floating actions menu (bottom-right, follows scroll) ----------------- #}
 {# Holds the uncommon pin-hierarchy actions so they never clutter the page:  #}
-{# the page-wide "child pin details" toggle, jump-to-parent, and detach.       #}
-<div class="pin-actions-fab" id="pin-actions-fab">
-    <div class="pin-actions-menu" id="pin-actions-menu" hidden>
-        {% if has_child_pins %}
-        {# Both directions are explicit: a parcel pin defaults the toggle ON      #}
-        {# (its children are the content), so a bare URL would no longer mean     #}
-        {# "off" and the toggle could never be turned off. See PinController.details. #}
-        <a class="pin-actions-item{% if include_children %} is-active{% endif %}"
-           href="{% url 'pin.details' pin.slug %}?children={% if include_children %}0{% else %}1{% endif %}"
-           title="Show everything from this pin's child pins on this page - map details, photos, and visit history">
-            <i class="material-symbols-outlined">{% if include_children %}toggle_on{% else %}toggle_off{% endif %}</i>
-            <span>Child pin details</span>
-            <span class="pin-actions-state">{% if include_children %}On{% else %}Off{% endif %}</span>
-        </a>
-        {% endif %}
-        {% if parent_pin %}
-        <a class="pin-actions-item" href="{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid %}">
-            <i class="material-symbols-outlined">arrow_upward</i>
-            <span>Open parent pin</span>
-        </a>
-        <button type="button" class="pin-actions-item pin-actions-item--danger"
-                hx-post="{% url 'pin.detach_parent' pin.slug %}"
-                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                hx-confirm="Detach this pin from {{ parent_pin.effective_name }}? It becomes a top-level pin on your main map again."
-                hx-swap="none">
-            <i class="material-symbols-outlined">link_off</i>
-            <span>Detach from parent</span>
-        </button>
-        {% endif %}
-    </div>
-    <button type="button" class="pin-actions-fab-btn" id="pin-actions-fab-btn"
-            aria-haspopup="true" aria-expanded="false" title="Pin actions">
-        <i class="material-symbols-outlined">account_tree</i>
-        <span class="pin-actions-fab-label">Actions</span>
-        {% if include_children %}<span class="pin-actions-fab-dot" title="Child pin details are on"></span>{% endif %}
-    </button>
-</div>
-<script>
-(function () {
-    var fab = document.getElementById('pin-actions-fab');
-    var btn = document.getElementById('pin-actions-fab-btn');
-    var menu = document.getElementById('pin-actions-menu');
-    if (!fab || !btn || !menu) return;
-    btn.addEventListener('click', function () {
-        var open = menu.hidden;
-        menu.hidden = !open;
-        btn.setAttribute('aria-expanded', String(open));
-        fab.classList.toggle('is-open', open);
-    });
-    document.addEventListener('click', function (e) {
-        if (!fab.contains(e.target) && !menu.hidden) {
-            menu.hidden = true;
-            btn.setAttribute('aria-expanded', 'false');
-            fab.classList.remove('is-open');
-        }
-    });
-}());
-</script>
-{% endif %}
+{# the page-wide "child pin details" toggle, jump-to-parent, and detach.     #}
+{# Hidden entirely when there is nothing to show (no children, no parent).  #}
+{% if parent_pin %}{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid as pin_parent_url %}{% url 'pin.detach_parent' pin.slug as pin_detach_url %}{% endif %}
+{% include "dashboard/partials/ui/_hierarchy_actions_fab.html" with has_children=has_child_pins include_children=include_children parent_url=pin_parent_url parent_name=parent_pin.effective_name detach_url=pin_detach_url csrf_token=csrf_token request=request only %}
 
 {# -- Media gallery multi-select floating toolbar --------------------------- #}
 {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="media" actions=media_bulk_actions %}

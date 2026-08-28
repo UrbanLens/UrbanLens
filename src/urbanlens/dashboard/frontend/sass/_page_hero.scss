@@ -78,6 +78,16 @@
         text-shadow: 0 1px 12px rgba(0, 0, 0, .45);
     }
 
+    &--cover .pin-detail-hero-parent-link {
+        color: rgba(255, 255, 255, .88);
+        text-shadow: 0 1px 12px rgba(0, 0, 0, .45);
+
+        &:hover,
+        &:focus-visible {
+            color: #fff;
+        }
+    }
+
     &__adjust {
         position: absolute;
         top: .7rem;
@@ -417,32 +427,39 @@
     }
 }
 
-// Child/detail pin hero: the parent pin's name is the primary heading (it's
-// the recognizable "place"), styled as a link back to the parent's own detail
-// page; this pin's own editable name reads as a subtitle below it.
+// Child/detail pin hero: this pin's own name is the primary heading; the
+// parent is a smaller breadcrumb-style link so the page being viewed is
+// visually the one on screen.
+.pin-detail-hero-parent {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: .15rem 0 .2rem;
+}
+
 .pin-detail-hero-parent-link {
     display: inline-flex;
     align-items: center;
     gap: .35rem;
-    color: inherit;
+    color: var(--ul-grey-6);
+    font-size: .92rem;
+    font-weight: 500;
     text-decoration: none;
     border-radius: 10px;
     padding: .1rem .5rem;
-    transition: background .15s;
+    transition: background .15s, color .15s;
 
     &:hover,
     &:focus-visible {
         background: var(--ul-grey-0a);
+        color: var(--ul-grey-8);
         outline: none;
         text-decoration: underline;
     }
-}
 
-.pin-detail-hero-child-name {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: .3rem;
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+    }
 }
 
 .pin-name-input {

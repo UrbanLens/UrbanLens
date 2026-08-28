@@ -277,7 +277,7 @@
                     {# cover photo / delete), lazy-loaded when "Manage" is first  #}
                     {# opened - the wiki equivalent of the pin page's "Mine" tab. #}
                     <div id="wiki-gallery-panel"
-                         hx-get="{% url 'location.wiki.gallery' location.slug %}"
+                         hx-get="{% url 'location.wiki.gallery' location.slug %}{% if include_children %}?children=1{% endif %}"
                          hx-trigger="ul:load-manage"
                          hx-swap="outerHTML">
                         <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
@@ -349,7 +349,7 @@
     <section class="page-tab-panel" data-tab-panel="photos" hidden>
         {# ?album= is carried through so a deep link (or a Back navigation) loads that album directly. #}
         <div id="albums-panel"
-             hx-get="{% url 'location.wiki.albums' location.slug %}{% if request.GET.album %}?album={{ request.GET.album|urlencode }}{% endif %}"
+             hx-get="{% url 'location.wiki.albums' location.slug %}?{% if include_children %}children=1{% endif %}{% if include_children and request.GET.album %}&{% endif %}{% if request.GET.album %}album={{ request.GET.album|urlencode }}{% endif %}"
              hx-trigger="load"
              hx-swap="outerHTML"
              class="albums-panel card wiki-card">
@@ -363,7 +363,7 @@
 
     <section class="page-tab-panel" data-tab-panel="comments" hidden>
         <div id="comment-panel"
-             hx-get="{% url 'location.wiki.comments' location.slug %}"
+             hx-get="{% url 'location.wiki.comments' location.slug %}{% if include_children %}?children=1{% endif %}"
              hx-trigger="load"
              hx-swap="outerHTML"
              class="card wiki-card">
@@ -469,6 +469,11 @@
     {# -- Boundary-vote dialog (renders nothing without 2+ candidates) ------- #}
     {% include "dashboard/partials/wiki/_boundary_vote_dialog.html" with location=location boundary_vote=boundary_vote %}
 
+    {# Floating actions: child-pin-details toggle and jump-to-parent wiki.    #}
+    {# Hidden entirely when this wiki has no children and no visible parent.  #}
+    {% if parent_wiki %}{% url 'location.wiki' parent_wiki.location.slug as wiki_parent_url %}{% endif %}
+    {% include "dashboard/partials/ui/_hierarchy_actions_fab.html" with has_children=has_child_wikis include_children=include_children parent_url=wiki_parent_url parent_name=parent_wiki.name parent_item_label="Open parent wiki" csrf_token=csrf_token request=request only %}
+
 </div>
 
 {% endblock %}
@@ -486,15 +491,15 @@
      data-map-center-lat="{{ location.latitude }}"
      data-map-center-lng="{{ location.longitude }}"
      data-location-slug="{{ location.slug }}"
-     data-markup-json-url="{{ markup_json_url }}"
+     data-markup-json-url="{{ markup_json_url }}{% if include_children %}?children=1{% endif %}"
      data-markup-create-url="{{ markup_create_url }}"
      data-markup-edit-url-template="{{ markup_edit_url_template }}"
-     data-detail-pins-json-url="{{ detail_pins_json_url }}"
+     data-detail-pins-json-url="{{ detail_pins_json_url }}{% if include_children %}?children=1{% endif %}"
      data-detail-pin-create-url="{{ detail_pin_create_url }}"
      data-detail-pin-edit-url-template="{{ detail_pin_edit_url_template }}"
      data-overlay-corners-url-template="{{ overlay_corners_url_template }}"
      data-boundary-url="{{ boundary_url }}"
-     data-photo-gallery-json-url="{{ photo_gallery_json_url }}"
+     data-photo-gallery-json-url="{{ photo_gallery_json_url }}{% if include_children %}?children=1{% endif %}"
      data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
      data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
      data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"

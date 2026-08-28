@@ -307,10 +307,11 @@ class DetailPinJsonView(LoginRequiredMixin, View):
 class LocationDetailPinJsonView(LoginRequiredMixin, View):
     """Return a wiki's child wikis as JSON for Leaflet rendering (map overlay).
 
-    Child wikis are community sub-markers - buildings, entrances, points of
-    interest, hazards - nested under a location's wiki via ``Wiki.parent_wiki``.
-    Unlike the old Pin-backed community detail pins, a Wiki has no owning
-    profile, so there is no per-viewer "added_by"/"is_mine" attribution.
+    Child wikis are community sub-markers nested under a location's wiki via
+    ``Wiki.parent_wiki``. By default only direct children are returned. With
+    ``?children=1`` (the page-wide "show child pin details" toggle) the full
+    descendant subtree is returned instead, each nested wiki annotated with
+    the name of the child wiki it belongs to so the map can label it.
     """
 
     def get(self, request, location_slug):
@@ -338,8 +339,16 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
         # account, which is the one thing this feature must never tell them.
         from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
-        child_wikis = visible_rows(wiki.child_wikis.all(), wiki, profile).order_by("pin_type", "name")
-        return JsonResponse({"detail_pins": [cw.to_detail_json() for cw in child_wikis]})
+        include_children = request.GET.get("children") == "1"
+        child_qs = wiki.descendants().select_related("location", "parent_wiki") if include_children else wiki.child_wikis.select_related("location")
+        child_wikis = visible_rows(child_qs, wiki, profile).order_by("pin_type", "name")
+        payload = []
+        for cw in child_wikis:
+            entry = cw.to_detail_json()
+            if include_children and cw.parent_wiki_id != wiki.pk and cw.parent_wiki is not None:
+                entry["owner_name"] = cw.parent_wiki.name
+            payload.append(entry)
+        return JsonResponse({"detail_pins": payload})
 
 
 class LocationWikiDetailPinView(LoginRequiredMixin, View):
