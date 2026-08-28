@@ -12,7 +12,7 @@ Expects:
 <li class="album-card" data-album-slug="{{ row.album.slug }}" data-add-url="{{ row.add_url }}" data-album-drop>
   <a class="album-card-link" href="{{ row.list_url }}?album={{ row.album.slug }}"
      data-album-open="{{ row.album.slug }}"
-     hx-get="{{ row.detail_url }}" hx-target="#albums-panel" hx-swap="outerHTML">
+     hx-get="{{ row.detail_url }}{% if row.detail_query %}?{{ row.detail_query }}{% endif %}" hx-target="#albums-panel" hx-swap="outerHTML">
     <span class="album-card-cover">
       {% if row.cover %}
       <img src="{{ row.cover.thumb_url }}" alt="" class="album-card-cover-img" loading="lazy" decoding="async">
@@ -31,6 +31,9 @@ Expects:
     <span class="album-card-body">
       <span class="album-card-name">{{ row.album.name }}</span>
       <span class="album-card-meta">
+        {% if row.owner_pin_name %}
+        <span class="album-card-pin">{{ row.owner_pin_name }}</span>
+        {% endif %}
         <span class="album-card-count">{{ row.photo_count }} photo{{ row.photo_count|pluralize }}</span>
         {% include "dashboard/partials/albums/_album_date_range.html" with date_start=row.date_start date_end=row.date_end %}
       </span>
@@ -42,8 +45,13 @@ Expects:
       <i class="material-symbols-outlined">more_vert</i>
     </summary>
     <div class="album-menu-list">
+      {% if row.move_url %}
+      <button type="button" class="album-menu-item" data-album-move data-move-url="{{ row.move_url }}" data-current-pin="{{ row.album.parent_pin.slug }}">
+        <i class="material-symbols-outlined">drive_file_move</i> Move to another pin
+      </button>
+      {% endif %}
       <button type="button" class="album-menu-item album-menu-item--danger"
-              hx-post="{{ row.delete_url }}" hx-target="#albums-panel" hx-swap="outerHTML"
+              hx-post="{{ row.delete_url }}{% if row.detail_query %}?{{ row.detail_query }}{% endif %}" hx-target="#albums-panel" hx-swap="outerHTML"
               hx-confirm="Delete the album &quot;{{ row.album.name }}&quot;? The photos themselves are kept.">
         <i class="material-symbols-outlined">delete</i> Delete album
       </button>

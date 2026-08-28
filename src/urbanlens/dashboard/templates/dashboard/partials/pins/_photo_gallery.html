@@ -66,6 +66,7 @@ Context:
         data-taken-at="{{ img.taken_at|date:'c'|default:'' }}"
         data-on-wiki="{% if img.wiki_id %}true{% else %}false{% endif %}"
         data-uploaded="{% if img.source == 'upload' %}true{% else %}false{% endif %}"
+        data-map-hidden="{% if img.map_hidden %}true{% else %}false{% endif %}"
         onmouseenter="galleryHover({{ img.pk }}, true)"
         onmouseleave="galleryHover({{ img.pk }}, false)">
       {% if img.profile == profile %}
@@ -194,6 +195,7 @@ Context:
       copyright: el.dataset.copyright || '',
       sourceUrl: el.dataset.sourceUrl || '',
       takenAt: el.dataset.takenAt || '',
+      mapHidden: el.dataset.mapHidden === 'true',
     };
   });
 
@@ -385,6 +387,7 @@ Context:
     _items.push({
       id: img.id, uuid: img.uuid || '', url: img.url, thumbUrl: img.thumb_url || img.url, lat: img.latitude, lng: img.longitude, mine: true,
       author: img.author || '', copyright: img.copyright || '', sourceUrl: img.source_url || '', takenAt: img.taken_at || '',
+      mapHidden: !!img.map_hidden,
     });
     _updateGalleryCountLabel(1);
   }
@@ -444,7 +447,7 @@ Context:
         url: i.url, thumbUrl: i.thumbUrl, caption: '', author: i.author, copyright: i.copyright,
         sourceUrl: i.sourceUrl, sourceName: '', takenAt: i.takenAt,
         imageId: i.id, uuid: i.uuid, isMine: i.mine, canRelevance: false, relevant: null,
-        latitude: i.lat, longitude: i.lng,
+        latitude: i.lat, longitude: i.lng, mapHidden: !!i.mapHidden,
       };
     });
     var idx = _items.findIndex(function (i) { return i.id === imgId; });
@@ -491,9 +494,38 @@ Context:
         }
       }
       var item = _items.find(function (i) { return i.id === imgId; });
-      if (item) { item.lat = data.latitude; item.lng = data.longitude; }
+      if (item) { item.lat = data.latitude; item.lng = data.longitude; item.mapHidden = false; }
     }).catch(function (err) {
       if (window.toastr) toastr.error('Failed to reposition photo: ' + (err.message || 'unknown error'));
+      if (typeof onError === 'function') onError();
+    });
+  };
+
+  window.gallerySetPhotoMapHidden = function (imgId, hidden, onError) {
+    fetch(REPOSITION_BASE + imgId + '/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify({ map_hidden: hidden }),
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+        return data;
+      });
+    }).then(function (data) {
+      var el = document.getElementById('gallery-item-' + imgId);
+      if (el) el.dataset.mapHidden = data.map_hidden ? 'true' : 'false';
+      var item = _items.find(function (i) { return i.id === imgId; });
+      if (item) item.mapHidden = !!data.map_hidden;
+      if (data.map_hidden) {
+        if (window._galleryRemoveMarker) window._galleryRemoveMarker(imgId);
+        if (window.toastr) toastr.success('Photo hidden from the map. GPS is still saved.');
+      } else if (window._galleryAddMarker && item && item.lat != null && item.lng != null) {
+        window._galleryAddMarker({ id: imgId, url: item.url, latitude: item.lat, longitude: item.lng });
+        if (window.toastr) toastr.success('Photo shown on the map.');
+      }
+      if (typeof window._albumSyncMapHidden === 'function') window._albumSyncMapHidden(imgId, !!data.map_hidden);
+    }).catch(function (err) {
+      if (window.toastr) toastr.error(err.message || 'Could not update map visibility.');
       if (typeof onError === 'function') onError();
     });
   };

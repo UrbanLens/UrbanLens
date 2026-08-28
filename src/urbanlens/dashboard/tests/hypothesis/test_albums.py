@@ -11,6 +11,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.album.model import ALBUM_KIND_SPECS, Album, AlbumItem, AlbumKind, album_kind_spec
+from urbanlens.dashboard.models.album.sort import ALBUM_SORT_SPECS, AlbumSort, album_sort_spec
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
 from urbanlens.dashboard.services.photos.albums import (
@@ -53,7 +54,7 @@ class AlbumSlugScopingTests(TestCase):
         pin = baker.make_recipe("dashboard.pin")
         album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin)
         self.assertEqual(album.kind, AlbumKind.PLAIN)
-        self.assertFalse(album.manual_order)
+        self.assertEqual(album.sort, AlbumSort.UPLOADED)
 
 
 class AlbumScopeTests(TestCase):
@@ -121,7 +122,7 @@ class AlbumMembershipTests(TestCase):
 
 
 class AlbumOrderingTests(TestCase):
-    """manual_order decides whether explicit item order is honoured."""
+    """Date/name sorts are live; custom order is only written on a drag."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -129,45 +130,79 @@ class AlbumOrderingTests(TestCase):
         self.album = Album.objects.create(name="Interior", profile=self.pin.profile, parent_pin=self.pin)
         add_images_to_album(self.album, self.images, self.pin.profile)
 
-    def _item_ids_in_order(self) -> list[int]:
-        return list(AlbumItem.objects.for_album(self.album).order_by("order", "created").values_list("pk", flat=True))
+    def _display_item_ids(self) -> list[int]:
+        return list(AlbumItem.objects.in_display_order(self.album).values_list("pk", flat=True))
 
-    def test_reorder_renumbers_to_the_given_order(self) -> None:
-        reversed_ids = list(reversed(self._item_ids_in_order()))
+    def test_default_sort_is_newest_uploaded_and_leaves_order_null(self) -> None:
+        self.assertEqual(self.album.sort, AlbumSort.UPLOADED)
+        self.assertFalse(AlbumItem.objects.for_album(self.album).exclude(order=None).exists())
+        ordered = album_images(self.album, self.pin.profile)
+        self.assertEqual([img.pk for img in ordered], list(reversed([img.pk for img in self.images])))
+
+    def test_reorder_stamps_every_item_and_switches_to_custom(self) -> None:
+        reversed_ids = list(reversed(self._display_item_ids()))
         self.assertEqual(reorder_album_items(self.album, reversed_ids), 3)
-        self.assertEqual(self._item_ids_in_order(), reversed_ids)
+        self.album.refresh_from_db()
+        self.assertEqual(self.album.sort, AlbumSort.CUSTOM)
+        self.assertEqual(self._display_item_ids(), reversed_ids)
+        self.assertEqual(list(AlbumItem.objects.in_display_order(self.album).values_list("order", flat=True)), [0, 1, 2])
 
     def test_reorder_ignores_ids_from_another_album(self) -> None:
         other = Album.objects.create(name="Exterior", profile=self.pin.profile, parent_pin=self.pin)
         add_images_to_album(other, [self.images[0]], self.pin.profile)
         foreign_id = AlbumItem.objects.for_album(other).first().pk
 
-        ids = self._item_ids_in_order()
+        ids = self._display_item_ids()
         self.assertEqual(reorder_album_items(self.album, [foreign_id, *ids]), 3)
 
-    def test_manual_order_off_falls_back_to_newest_first(self) -> None:
-        reorder_album_items(self.album, list(reversed(self._item_ids_in_order())))
-        self.album.manual_order = False
-        ordered = album_images(self.album, self.pin.profile)
-        self.assertEqual([img.pk for img in ordered], [img.pk for img in reversed(self.images)])
-
-    def test_manual_order_on_honours_the_saved_order(self) -> None:
-        reversed_ids = list(reversed(self._item_ids_in_order()))
-        reorder_album_items(self.album, reversed_ids)
-        self.album.manual_order = True
-        ordered = album_images(self.album, self.pin.profile)
-        self.assertEqual([img.album_item_id for img in ordered], reversed_ids)
-
-    def test_added_photos_append_rather_than_reshuffle(self) -> None:
-        self.album.manual_order = True
-        self.album.save(update_fields=["manual_order", "updated"])
-        before = [img.pk for img in album_images(self.album, self.pin.profile)]
-
+    def test_reorder_splices_a_partial_window_into_the_full_album(self) -> None:
         extra = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
         add_images_to_album(self.album, [extra], self.pin.profile)
+        display = self._display_item_ids()
+        window = [display[1], display[0], display[2]]
+        reorder_album_items(self.album, window)
+        self.assertEqual(self._display_item_ids(), [display[1], display[0], display[2], *display[3:]])
 
+    def test_new_photos_follow_the_live_sort_without_rewriting_order(self) -> None:
+        extra = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        add_images_to_album(self.album, [extra], self.pin.profile)
+        self.assertIsNone(AlbumItem.objects.membership(self.album, extra).order)
+        after = [img.pk for img in album_images(self.album, self.pin.profile)]
+        self.assertEqual(after[0], extra.pk)
+        self.assertEqual(after[1:], list(reversed([img.pk for img in self.images])))
+
+    def test_after_a_custom_order_new_photos_appear_at_the_end(self) -> None:
+        reorder_album_items(self.album, self._display_item_ids())
+        before = [img.pk for img in album_images(self.album, self.pin.profile)]
+        extra = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        add_images_to_album(self.album, [extra], self.pin.profile)
         after = [img.pk for img in album_images(self.album, self.pin.profile)]
         self.assertEqual(after, [*before, extra.pk])
+        self.assertIsNone(AlbumItem.objects.membership(self.album, extra).order)
+
+    def test_taken_sort_picks_up_metadata_edits_without_touching_order(self) -> None:
+        from django.utils import timezone
+
+        self.album.sort = AlbumSort.TAKEN
+        self.album.save(update_fields=["sort"])
+        oldest = self.images[0]
+        oldest.taken_at = timezone.now()
+        oldest.save(update_fields=["taken_at"])
+        self.assertFalse(AlbumItem.objects.for_album(self.album).exclude(order=None).exists())
+        ordered = album_images(self.album, self.pin.profile)
+        self.assertEqual(ordered[0].pk, oldest.pk)
+
+    def test_name_sort_picks_up_caption_edits_without_touching_order(self) -> None:
+        self.album.sort = AlbumSort.NAME
+        self.album.save(update_fields=["sort"])
+        self.images[0].caption = "zeta"
+        self.images[1].caption = "alpha"
+        self.images[2].caption = "mu"
+        for image in self.images:
+            image.save(update_fields=["caption"])
+        ordered = album_images(self.album, self.pin.profile)
+        self.assertEqual([img.caption for img in ordered], ["alpha", "mu", "zeta"])
+        self.assertFalse(AlbumItem.objects.for_album(self.album).exclude(order=None).exists())
 
 
 class AlbumCoverTests(TestCase):
@@ -206,10 +241,16 @@ class AlbumKindSpecTests(TestCase):
     def test_plain_albums_carry_no_badge(self) -> None:
         self.assertFalse(album_kind_spec(AlbumKind.PLAIN).badge)
 
-    def test_timelapse_prefers_manual_order(self) -> None:
-        """A timelapse is a sequence, so its order is the point."""
-        self.assertTrue(album_kind_spec(AlbumKind.TIMELAPSE).prefers_manual_order)
-        self.assertFalse(album_kind_spec(AlbumKind.PLAIN).prefers_manual_order)
+    def test_every_sort_has_a_spec(self) -> None:
+        for value in AlbumSort.values:
+            self.assertIn(value, ALBUM_SORT_SPECS)
+
+    def test_unknown_sort_falls_back_to_uploaded(self) -> None:
+        self.assertEqual(album_sort_spec("not-a-sort").sort, AlbumSort.UPLOADED)
+
+    def test_timelapse_defaults_to_date_taken(self) -> None:
+        self.assertEqual(album_kind_spec(AlbumKind.TIMELAPSE).default_sort, AlbumSort.TAKEN)
+        self.assertEqual(album_kind_spec(AlbumKind.PLAIN).default_sort, AlbumSort.UPLOADED)
 
     def test_album_exposes_its_own_spec(self) -> None:
         pin = baker.make_recipe("dashboard.pin")
@@ -246,9 +287,9 @@ class AlbumBatchingTests(TestCase):
 
     def test_batched_result_matches_the_single_album_path(self) -> None:
         pin, images = _pin_with_photos(3)
-        album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin, manual_order=True)
+        album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin)
         add_images_to_album(album, images, pin.profile)
-        reorder_album_items(album, list(reversed(list(AlbumItem.objects.for_album(album).values_list("pk", flat=True)))))
+        reorder_album_items(album, list(reversed(list(AlbumItem.objects.in_display_order(album).values_list("pk", flat=True)))))
         album.refresh_from_db()
 
         batched = {a.pk: imgs for a, imgs in albums_with_images(pin, pin.profile)}
@@ -269,7 +310,7 @@ class AlbumListingTests(TestCase):
 
     def test_listing_matches_albums_with_images_for_cover_and_count(self) -> None:
         pin, images = _pin_with_photos(3)
-        album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin, manual_order=True)
+        album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin)
         add_images_to_album(album, images, pin.profile)
 
         listing = {entry.album.pk: entry for entry in albums_listing(pin, pin.profile)}

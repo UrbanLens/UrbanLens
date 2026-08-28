@@ -803,6 +803,37 @@ def _process_document_upload(image: Image, image_id: int) -> _UploadProcessResul
     return _UploadProcessResult(update_fields, None, new_size)
 
 
+def _sync_deduped_siblings(image: Image) -> None:
+    """Copy processed file metadata onto this user's other rows of the same bytes.
+
+    Deduplicated copies skip ``process_image_upload`` so they don't rewrite the
+    shared file. Once the original has been processed, its thumbnail, GPS, and
+    EXIF need to land on those copies too.
+    """
+    from urbanlens.dashboard.models.images.model import Image as ImageModel, QuotaExemption
+
+    if not image.checksum or image.profile_id is None:
+        return
+    if image.quota_exempt_reason == QuotaExemption.DEDUPLICATED:
+        return
+    payload: dict[str, object] = {
+        "author": image.author,
+        "copyright": image.copyright,
+        "taken_at": image.taken_at,
+        "latitude": image.latitude,
+        "longitude": image.longitude,
+        "direction": image.direction,
+        "exif_data": image.exif_data,
+        "file_size": image.file_size,
+        "thumbnail": image.thumbnail.name if image.thumbnail else "",
+    }
+    ImageModel.objects.filter(
+        profile_id=image.profile_id,
+        checksum=image.checksum,
+        quota_exempt_reason=QuotaExemption.DEDUPLICATED,
+    ).exclude(pk=image.pk).update(**payload)
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def process_image_upload(self, image_id: int) -> bool:
     """Extract metadata after an upload and update the Image row.
@@ -886,6 +917,8 @@ def process_image_upload(self, image_id: int) -> bool:
 
     if update_fields:
         Image.objects.filter(pk=image_id).update(**update_fields)
+
+    _sync_deduped_siblings(image)
 
     if not strip_location:
         maybe_suggest_photo_visit(image)

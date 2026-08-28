@@ -446,17 +446,27 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   **Use as floorplan overlay**, which adds the photo as a georeferenced blueprint and opens the
   floorplan editor to warp it.
 - **Albums** (Photos tab on pin detail and wiki): named groupings of a place's photos (plain,
-  visit, area, timelapse). The album list shows covers plus photos not in any album; drag those
-  (including a multi-selection) onto an album card to file them. Multi-select uses the shared
-  floating bulk toolbar (add to album, and inside an album also move / remove). Clicking a photo
-  opens the shared lightbox; in select mode, click selects instead. Right-click on an uploaded
-  photo (albums, pin gallery, wiki gallery) offers open / download / add to album / remove /
-  send to wiki / share with a friend / delete. Dropping a file that's already been uploaded into
-  an album files the existing photo rather than erroring. Removing a photo from an album updates
-  the grid immediately. Small grid thumbnails are generated in the background after
-  upload (and backfilled on a schedule for photos that predate that); album grids
-  load further pages as you scroll, unloading off-screen bitmaps so large albums
-  stay usable on a phone.
+  visit, area, timelapse). Photos default to newest-uploaded; dragging one
+  freezes a custom order for that album (later uploads stay at the end). Date
+  and name sorts follow live metadata, so a caption or EXIF edit does not
+  rewrite anyone else's position. Photos are always drag-reorderable. The album list shows covers plus
+  photos not in any album; drag those (including a multi-selection) onto an album card to file
+  them. Multi-select uses the shared floating bulk toolbar (add to album, and inside an album also
+  set cover / move / remove). Clicking a photo opens the shared lightbox; in select mode, click
+  selects instead. Right-click on an uploaded photo (albums, pin gallery, wiki gallery) offers
+  open / download / add to album / set as album cover / remove / send to wiki / share with a friend
+  / delete. Set-as-cover is also in the lightbox and the photo-options menu. An album can be moved
+  between a parent pin and a child pin from album options. When "show child pin details" is on,
+  the Photos tab lists albums and unfiled photos from descendant pins as well. Dropping a file
+  that's already been uploaded into an album files the existing photo rather than erroring.
+  Uploading the same bytes to a different pin of yours reuses the stored file (no second quota
+  charge); caption/GPS conflicts surface on Memories → Photos to pick. Failed or broken uploads
+  toast and can be retried from Memories. Removing a photo from an album updates the grid
+  immediately. Small grid thumbnails are generated in the background after upload (and backfilled
+  on a schedule for photos that predate that); album grids load further pages as you scroll,
+  unloading off-screen bitmaps so large albums stay usable on a phone. Photo map markers can be
+  right-clicked to hide a photo from the map without clearing its stored GPS; the lightbox offers
+  "show this photo on the map" to put it back.
 - The lightbox lets you browse, search, and create+apply a media label in one step.
 - Site-wide photo library (Memories → Photos) that matches unfiled photos (by GPS + timestamp) to
   existing pins and proposes **visit suggestions** for confirmation

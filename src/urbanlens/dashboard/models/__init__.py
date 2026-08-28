@@ -3,7 +3,7 @@ from urbanlens.dashboard.models.abstract import DashboardManager, DashboardModel
 from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, SecurityLevel
 from urbanlens.dashboard.models.account import AccountKdf, EmailVerification
 from urbanlens.dashboard.models.achievements import Achievement, ActivityKind, ProfileActivityDay, ProfileStreak, UserAchievement
-from urbanlens.dashboard.models.album import Album, AlbumItem, AlbumKind
+from urbanlens.dashboard.models.album import Album, AlbumItem, AlbumKind, AlbumSort
 from urbanlens.dashboard.models.aliases import PinAlias, WikiAlias
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
@@ -81,7 +81,7 @@ from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.google_photos import GooglePhotosAccount
 from urbanlens.dashboard.models.google_place import GooglePlace
 from urbanlens.dashboard.models.group_chats import GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
-from urbanlens.dashboard.models.images import Image, ImageAttachment, ImageKeyword, ImageSource, MediaKind, MediaRelevance
+from urbanlens.dashboard.models.images import Image, ImageAttachment, ImageKeyword, ImageSource, MediaKind, MediaRelevance, PhotoIssueStatus, PhotoMetadataConflict, PhotoUploadFailure, QuotaExemption
 from urbanlens.dashboard.models.immich import ImmichAccount
 from urbanlens.dashboard.models.labels import COLOR_CHOICES, ICON_CHOICES, Label, LabelCustomization, LabelSerializer
 from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment

@@ -22,6 +22,7 @@ export interface PhotoTile {
     onWiki: boolean;
     itemId: number | null;
     albumSlug: string | null;
+    mapHidden: boolean;
 }
 
 export interface LightboxItem {
@@ -40,6 +41,7 @@ export interface LightboxItem {
     relevant: null;
     latitude: number | null;
     longitude: number | null;
+    mapHidden: boolean;
 }
 
 /** Parse a gallery tile's data attributes into a PhotoTile. */
@@ -64,6 +66,7 @@ export function tileFromElement(el: HTMLElement): PhotoTile | null {
         onWiki: el.dataset.onWiki === "true",
         itemId: el.dataset.itemId ? Number.parseInt(el.dataset.itemId, 10) : null,
         albumSlug: el.dataset.albumSlug || null,
+        mapHidden: el.dataset.mapHidden === "true",
     };
 }
 
@@ -89,6 +92,7 @@ export function tileFromJson(raw: Record<string, unknown>): PhotoTile | null {
         onWiki: Boolean(raw.on_wiki),
         itemId: raw.item_id == null ? null : Number(raw.item_id),
         albumSlug: raw.album_slug ? String(raw.album_slug) : null,
+        mapHidden: Boolean(raw.map_hidden),
     };
 }
 
@@ -109,6 +113,7 @@ export function lightboxItemFromTile(tile: PhotoTile): LightboxItem {
         relevant: null,
         latitude: tile.lat,
         longitude: tile.lng,
+        mapHidden: tile.mapHidden,
     };
 }
 
@@ -142,6 +147,7 @@ export function applyTileDataset(el: HTMLElement, tile: PhotoTile): void {
     el.dataset.onWiki = tile.onWiki ? "true" : "false";
     if (tile.itemId != null) el.dataset.itemId = String(tile.itemId);
     if (tile.albumSlug) el.dataset.albumSlug = tile.albumSlug;
+    el.dataset.mapHidden = tile.mapHidden ? "true" : "false";
 }
 
 export function renderPhotoTile(tile: PhotoTile, opts: { inAlbum: boolean; albumSlug?: string }): HTMLLIElement {
@@ -165,6 +171,11 @@ export function renderPhotoTile(tile: PhotoTile, opts: { inAlbum: boolean; album
     const img = li.querySelector("img");
     if (img) img.alt = tile.caption || "Photo";
     return li;
+}
+
+/** Skip a tile with no file to show rather than rendering a broken image. */
+export function tileHasImage(tile: PhotoTile): boolean {
+    return Boolean(tile.thumbUrl || tile.url);
 }
 
 export function parsePhotoIds(data: DataTransfer | null): number[] {

@@ -18,11 +18,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, ForeignKey, Index, IntegerField, TextChoices, TextField
+from django.db.models import CASCADE, SET_NULL, CharField, ForeignKey, IntegerField, TextChoices, TextField
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.album.queryset import AlbumItemManager, AlbumManager
+from urbanlens.dashboard.models.album.sort import AlbumSort, AlbumSortSpec, album_sort_spec
 from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
@@ -47,9 +48,10 @@ class AlbumKindSpec:
         help_text: One-line explanation shown beside the type picker.
         badge: Whether the tile shows a kind badge. Plain albums don't - a
             badge on every album would carry no information.
-        prefers_manual_order: Whether new albums of this kind start in
-            manual-order mode. A timelapse is a sequence, so its order is the
-            point; a plain album is a grouping and defaults to newest-first.
+        default_sort: The :class:`AlbumSort` a new album of this kind starts
+            with. A timelapse is a capture sequence, so it defaults to date
+            taken; a plain album matches every other gallery (newest uploaded).
+            Dragging a photo switches that album to custom order regardless.
     """
 
     kind: str
@@ -57,7 +59,7 @@ class AlbumKindSpec:
     label: str
     help_text: str
     badge: bool
-    prefers_manual_order: bool
+    default_sort: str
 
 
 ALBUM_KIND_SPECS: dict[str, AlbumKindSpec] = {
@@ -67,7 +69,7 @@ ALBUM_KIND_SPECS: dict[str, AlbumKindSpec] = {
         label="Album",
         help_text="A plain grouping of photos.",
         badge=False,
-        prefers_manual_order=False,
+        default_sort=AlbumSort.UPLOADED,
     ),
     AlbumKind.TIMELAPSE: AlbumKindSpec(
         kind=AlbumKind.TIMELAPSE,
@@ -75,7 +77,7 @@ ALBUM_KIND_SPECS: dict[str, AlbumKindSpec] = {
         label="Timelapse",
         help_text="Shots of the same scene from the same angle, in sequence, so they can be rendered to video later.",
         badge=True,
-        prefers_manual_order=True,
+        default_sort=AlbumSort.TAKEN,
     ),
 }
 
@@ -100,11 +102,9 @@ class Album(abstract.PublicDashboardModel):
         description: Optional free-text blurb shown on the album's own page.
         kind: Plain grouping, or a special kind carrying extra behaviour
             (see :class:`AlbumKind`).
-        manual_order: When True the album's items are shown in the explicit
-            order users have dragged them into; when False they fall back to
-            newest-photo-first, like every other gallery in the app. Ordering
-            is opt-in so an album doesn't silently freeze at whatever order
-            photos happened to be added in.
+        sort: How photos in this album are ordered (see :class:`AlbumSort`).
+            Date and name sorts read live metadata; custom order is only
+            written when the user drags a photo.
         parent_pin: The Pin this album belongs to, if personal.
         parent_wiki: The Wiki this album belongs to, if community.
         profile: The profile that created the album.
@@ -114,7 +114,7 @@ class Album(abstract.PublicDashboardModel):
     name = CharField(max_length=100)
     description = TextField(blank=True, default="", max_length=MAX_ALBUM_DESCRIPTION_LENGTH)
     kind = CharField(max_length=20, choices=AlbumKind.choices, default=AlbumKind.PLAIN, db_index=True)
-    manual_order = BooleanField(default=False)
+    sort = CharField(max_length=20, choices=AlbumSort.choices, default=AlbumSort.UPLOADED)
 
     parent_pin = ForeignKey("dashboard.Pin", on_delete=CASCADE, null=True, blank=True, related_name="albums")
     parent_wiki = ForeignKey("dashboard.Wiki", on_delete=CASCADE, null=True, blank=True, related_name="albums")
@@ -137,6 +137,11 @@ class Album(abstract.PublicDashboardModel):
     def spec(self) -> AlbumKindSpec:
         """This album's kind spec, so templates don't branch on ``kind`` by hand."""
         return album_kind_spec(self.kind)
+
+    @property
+    def sort_spec(self) -> AlbumSortSpec:
+        """This album's photo-order spec, so callers don't branch on ``sort``."""
+        return album_sort_spec(self.sort)
 
     @property
     def photo_count(self) -> int:
@@ -186,14 +191,16 @@ class AlbumItem(abstract.DashboardModel):
     Attributes:
         album: The album the photo belongs to.
         image: The photo.
-        order: Display position when the album has ``manual_order`` set.
+        order: Explicit position when the album's sort is custom. Null
+            until the user reorders; new photos added after that stay null
+            and sort after the numbered ones. Ignored for every other sort.
         added_by: Who put this photo in the album. Kept for community wiki
             albums, where several people curate the same album.
     """
 
     album = ForeignKey(Album, on_delete=CASCADE, related_name="items")
     image = ForeignKey("dashboard.Image", on_delete=CASCADE, related_name="album_memberships")
-    order = IntegerField(default=0)
+    order = IntegerField(null=True, blank=True, default=None)
     added_by = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="album_items_added")
 
     if TYPE_CHECKING:
@@ -208,6 +215,6 @@ class AlbumItem(abstract.DashboardModel):
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_album_items"
-        ordering = ["order", "created"]
+        ordering = ["pk"]
         constraints = [UniqueConstraint(fields=["album", "image"], name="uq_album_item")]
         indexes = []

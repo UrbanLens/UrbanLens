@@ -1,0 +1,25 @@
+{% comment %}
+Move this album onto another pin in the same parent/child tree.
+Expects move_targets: list of {slug, name}.
+{% endcomment %}
+{% if move_targets %}
+<dialog id="album-move-dialog" class="ul-dialog album-move-dialog" aria-label="Move album to another pin">
+  <form method="dialog" class="album-picker-head">
+    <h4>Move album to another pin</h4>
+    <button type="submit" class="album-picker-close" aria-label="Close">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+  </form>
+  <p class="settings-help">The album and its photos move with it. Pick a parent or child pin of this place.</p>
+  <ul class="album-move-list">
+    {% for target in move_targets %}
+    <li>
+      <button type="button" class="album-menu-item" data-album-move-target="{{ target.slug }}">
+        <i class="material-symbols-outlined">location_on</i>
+        <span>{{ target.name }}</span>
+      </button>
+    </li>
+    {% endfor %}
+  </ul>
+</dialog>
+{% endif %}

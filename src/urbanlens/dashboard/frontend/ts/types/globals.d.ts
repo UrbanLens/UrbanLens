@@ -74,6 +74,9 @@ declare global {
         // tiles, which that module doesn't own.
         albumAddExternalMedia?: (addUrl: string, media: { source: string; url: string; page_url?: string; caption?: string }) => Promise<void>;
         galleryOpenLightboxItem?: (list: unknown[], idx: number) => void;
+        gallerySetPhotoMapHidden?: (imgId: number, hidden: boolean, onRejected?: () => void) => void;
+        _galleryRemoveMarker?: (imgId: number) => void;
+        _albumSyncMapHidden?: (imgId: number, hidden: boolean) => void;
         // Georeferenced map image overlays. Defined by shared/map-image-overlays.ts's
         // wireManageOverlaysDialog(), called from both the pin/wiki map entry and
         // the floorplan editor, and invoked by name from the server-rendered

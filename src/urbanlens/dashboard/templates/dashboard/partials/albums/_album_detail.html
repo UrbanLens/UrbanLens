@@ -16,16 +16,20 @@ Expects (from controllers.albums._album_detail_context):
 {% endcomment %}
 <div id="albums-panel" class="albums-panel album-detail"
      data-album-slug="{{ album.slug }}"
+     data-album-pin-slug="{% if pin %}{{ pin.slug }}{% endif %}"
      data-refresh-url="{{ detail_url }}"
      data-list-url="{{ list_url }}"
      data-reorder-url="{{ reorder_url }}"
      data-remove-url="{{ remove_url }}"
      data-add-url="{{ add_url }}"
      data-upload-url="{{ upload_url }}"
+     data-edit-url="{{ edit_url }}"
+     data-move-url="{{ move_url|default:'' }}"
      data-items-url="{{ items_url }}"
      data-reposition-base="{{ reposition_base }}"
      data-gallery-bulk-url="{{ gallery_bulk_url|default:'' }}"
      data-pin-share-dialog-url="{{ pin_share_dialog_url|default:'' }}"
+     data-failure-url="{{ failure_url|default:'' }}"
      data-grid-page-size="{{ grid_page_size|default:48 }}">
 
   <header class="albums-toolbar album-detail-toolbar">
@@ -74,18 +78,11 @@ Expects (from controllers.albums._album_detail_context):
                   aria-controls="album-map-section" aria-expanded="false">
             <i class="material-symbols-outlined">map</i> Show photo map
           </button>
-
-          <form class="album-menu-form" hx-post="{{ edit_url }}" hx-target="#albums-panel" hx-swap="outerHTML"
-                hx-trigger="change from:find input">
-            {% csrf_token %}
-            <label class="album-menu-item album-menu-item--toggle">
-              <input type="checkbox" name="manual_order" value="1" {% if album.manual_order %}checked{% endif %}>
-              <span>
-                <strong>Custom order</strong>
-                <small>Drag photos to arrange them. Off shows newest first.</small>
-              </span>
-            </label>
-          </form>
+          {% if move_url %}
+          <button type="button" class="album-menu-item" data-album-move data-move-url="{{ move_url }}" data-current-pin="{{ pin.slug }}">
+            <i class="material-symbols-outlined">drive_file_move</i> Move to another pin
+          </button>
+          {% endif %}
 
           <button type="button" class="album-menu-item album-menu-item--danger"
                   hx-post="{{ delete_url }}" hx-target="#albums-panel" hx-swap="outerHTML"
@@ -134,7 +131,7 @@ Expects (from controllers.albums._album_detail_context):
       data-items-url="{{ items_url }}"
       data-photo-count="{{ photo_count }}"
       data-grid-page-size="{{ grid_page_size|default:48 }}"
-      {% if album.manual_order %}data-album-sortable="1"{% endif %}>
+      data-album-sortable="1">
     {% for img in grid_images %}
     {% include "dashboard/partials/albums/_photo_tile.html" with img=img profile=profile in_album=True album_slug=album.slug %}
     {% endfor %}
@@ -202,5 +199,6 @@ Expects (from controllers.albums._album_detail_context):
 
   {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="albums" actions=album_bulk_actions %}
   {% include "dashboard/partials/albums/_add_to_album_dialog.html" with picker_albums=picker_albums %}
+  {% include "dashboard/partials/albums/_move_album_dialog.html" %}
 </div>
 <script src="{% static 'js/bulk-toolbar.js' %}"></script>

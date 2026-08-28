@@ -18,6 +18,7 @@ Expects (from controllers.albums._photos_context):
      data-list-url="{{ list_url }}"
      data-gallery-bulk-url="{{ gallery_bulk_url|default:'' }}"
      data-pin-share-dialog-url="{{ pin_share_dialog_url|default:'' }}"
+     data-failure-url="{{ failure_url|default:'' }}"
      data-loose-items-url="{{ list_url }}?loose=1"
      data-loose-count="{{ loose_count|default:0 }}"
      data-grid-page-size="{{ grid_page_size|default:48 }}">
@@ -42,6 +43,7 @@ Expects (from controllers.albums._photos_context):
   <form id="album-create-form" class="album-create-form" hidden
         hx-post="{{ create_url }}" hx-target="#albums-panel" hx-swap="outerHTML">
     {% csrf_token %}
+    {% if include_children %}<input type="hidden" name="children" value="1">{% endif %}
     <div class="album-create-fields">
       <label class="album-create-field album-create-field--name">
         <span class="album-create-label">Album name</span>
@@ -106,5 +108,6 @@ Expects (from controllers.albums._photos_context):
 
   {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="albums" actions=album_bulk_actions %}
   {% include "dashboard/partials/albums/_add_to_album_dialog.html" with picker_albums=picker_albums %}
+  {% include "dashboard/partials/albums/_move_album_dialog.html" %}
 </div>
 <script src="{% static 'js/bulk-toolbar.js' %}"></script>

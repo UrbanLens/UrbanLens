@@ -14,6 +14,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from urbanlens.dashboard.models.images.issues import PhotoIssueStatus, PhotoMetadataConflict, PhotoUploadFailure
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -76,6 +77,21 @@ def _attention_cards(profile: Profile) -> list[dict]:
             state = "needs_location"
         cards.append({"image": image, "state": state, "suggestion": suggestion})
     return cards
+
+
+def _photo_issues(profile: Profile) -> dict:
+    """Pending upload failures and metadata conflicts for Memories → Photos."""
+    failures = list(
+        PhotoUploadFailure.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING)
+        .select_related("pin", "album")
+        .order_by("-created")[:40]
+    )
+    conflicts = list(
+        PhotoMetadataConflict.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING)
+        .select_related("existing_image", "new_image")
+        .order_by("-created")[:40]
+    )
+    return {"upload_failures": failures, "metadata_conflicts": conflicts}
 
 
 def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False) -> HttpResponse:
@@ -151,6 +167,7 @@ class MemoriesPhotosView(LoginRequiredMixin, View):
             {
                 "page_name": "memories",
                 "attention_cards": _attention_cards(profile),
+                **_photo_issues(profile),
                 "images": page_obj.object_list,
                 "page_obj": page_obj,
                 "profile": profile,
@@ -183,7 +200,7 @@ class PhotoQueueView(LoginRequiredMixin, View):
         return render(
             request,
             "dashboard/partials/memories/_photo_attention.html",
-            {"attention_cards": _attention_cards(profile), "profile": profile},
+            {"attention_cards": _attention_cards(profile), "profile": profile, **_photo_issues(profile)},
         )
 
 
@@ -417,3 +434,86 @@ class PhotoPinConfirmView(LoginRequiredMixin, View):
         if image.profile_id != profile.pk or image.effective_latitude is None or image.effective_longitude is None:
             raise Http404
         return render(request, "dashboard/partials/memories/_photo_pin_confirm.html", {"image": image})
+
+
+class PhotoUploadFailureCreateView(LoginRequiredMixin, View):
+    """Record a client-side load/processing failure so it can be retried later.
+
+    POST /memories/photos/failures/
+    """
+
+    def post(self, request: HttpRequest) -> JsonResponse:
+        """Store filename + error for the current profile."""
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        try:
+            body = json.loads(request.body or b"{}")
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "Invalid request data."}, status=400)
+        filename = str(body.get("filename") or "photo")[:255]
+        error = str(body.get("error") or "This photo couldn't be shown.")
+        from urbanlens.dashboard.services.photos.uploads import record_photo_upload_failure
+
+        pin = None
+        pin_slug = str(body.get("pin_slug") or "").strip()
+        if pin_slug:
+            pin = Pin.objects.filter(slug=pin_slug, profile=profile).first()
+        record_photo_upload_failure(profile, filename, error, pin=pin)
+        return JsonResponse({"ok": True})
+
+
+class PhotoUploadFailureDismissView(LoginRequiredMixin, View):
+    """Dismiss a recorded upload failure from Memories."""
+
+    def post(self, request: HttpRequest, failure_id: int) -> HttpResponse:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        failure = get_object_or_404(PhotoUploadFailure, pk=failure_id, profile=profile)
+        failure.status = PhotoIssueStatus.DISMISSED
+        failure.save(update_fields=["status", "updated"])
+        return _toast("Dismissed.", refresh_queue=True)
+
+
+class PhotoMetadataConflictResolveView(LoginRequiredMixin, View):
+    """Apply the owner's metadata picks to every copy of that photo."""
+
+    def post(self, request: HttpRequest, conflict_id: int) -> HttpResponse:
+        from urbanlens.dashboard.services.photos.uploads import resolve_photo_metadata_conflict
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        conflict = get_object_or_404(
+            PhotoMetadataConflict.objects.select_related("existing_image"),
+            pk=conflict_id,
+            profile=profile,
+            status=PhotoIssueStatus.PENDING,
+        )
+        try:
+            body = json.loads(request.body or b"{}")
+        except (TypeError, ValueError):
+            body = request.POST
+        choices: dict[str, int] = {}
+        raw_choices = body.get("choices") if isinstance(body, dict) else None
+        if isinstance(raw_choices, dict):
+            for key, value in raw_choices.items():
+                try:
+                    choices[str(key)] = int(value)
+                except (TypeError, ValueError):
+                    continue
+        else:
+            for key, value in request.POST.items():
+                if key.startswith("field_"):
+                    try:
+                        choices[key.removeprefix("field_")] = int(value)
+                    except (TypeError, ValueError):
+                        continue
+        resolve_photo_metadata_conflict(conflict, choices)
+        return _toast("Photo details updated.", refresh_queue=True)
+
+
+class PhotoMetadataConflictDismissView(LoginRequiredMixin, View):
+    """Dismiss a metadata conflict without changing any photo."""
+
+    def post(self, request: HttpRequest, conflict_id: int) -> HttpResponse:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        conflict = get_object_or_404(PhotoMetadataConflict, pk=conflict_id, profile=profile)
+        conflict.status = PhotoIssueStatus.DISMISSED
+        conflict.save(update_fields=["status", "updated"])
+        return _toast("Dismissed.", refresh_queue=True)

@@ -39,7 +39,10 @@ from urbanlens.dashboard.services.photos.albums import (
     cover_from_images,
     eligible_images_for,
     loose_images_for,
+    move_album_targets,
+    move_album_to_pin,
     owner_kwargs,
+    pin_tree,
     remove_images_from_album,
     reorder_album_items,
     visible_album_item_pairs,
@@ -59,6 +62,52 @@ logger = logging.getLogger(__name__)
 #: truncated to fit, so a widened column would otherwise keep being clipped at
 #: the old width with nothing to show why.
 _MAX_ALBUM_NAME_LENGTH = column_max_length(Album, "name")
+
+
+def _panel_owner(request: HttpRequest, owner: Pin | Wiki) -> Pin | Wiki:
+    """The pin whose Photos tab we should re-render after a mutation.
+
+    Album action URLs use the album's own pin slug. When the user is viewing
+    a parent with child albums listed, ``from_pin`` names that parent so a
+    delete/edit doesn't swap the panel into the child's own album list.
+    """
+    slug = request.GET.get("from_pin") or request.POST.get("from_pin")
+    if slug and isinstance(owner, Pin) and slug != owner.slug:
+        viewing = Pin.objects.filter(slug=slug, profile_id=owner.profile_id).first()
+        if viewing is not None and Pin.objects.filter(pk=viewing.pk).with_descendants().filter(pk=owner.pk).exists():
+            return viewing
+    return owner
+
+
+def _include_children(request: HttpRequest, owner: Pin | Wiki) -> bool:
+    """Whether this request should list descendant pins' albums and photos."""
+    flag = request.GET.get("children") or request.POST.get("children")
+    if flag == "1" and isinstance(owner, Pin):
+        return True
+    return bool(request.GET.get("from_pin") or request.POST.get("from_pin")) and isinstance(owner, Pin)
+
+
+def _listing_owners(owner: Pin | Wiki, include_children: bool) -> list[Pin | Wiki]:
+    """The pin/wiki set whose albums appear on this Photos tab."""
+    if include_children and isinstance(owner, Pin):
+        return list(Pin.objects.filter(pk=owner.pk).with_descendants().select_related("location"))
+    return [owner]
+
+
+def _safe_back_url(raw: str | None) -> str | None:
+    """Return *raw* if it is a same-origin path, else None."""
+    from urllib.parse import urlparse
+
+    if not raw:
+        return None
+    parsed = urlparse(raw)
+    if parsed.scheme or parsed.netloc or not parsed.path.startswith("/"):
+        return None
+    return raw
+
+
+def _children_query(include_children: bool) -> str:
+    return "?children=1" if include_children else ""
 
 
 def _resolve_album_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None) -> tuple[Pin | Wiki, QuerySet[Album]]:
@@ -202,6 +251,9 @@ def _album_row(
         "reorder_url": reverse(f"{prefix}.reorder", args=[slug, album.slug]),
         "upload_url": reverse(f"{prefix}.upload", args=[slug, album.slug]),
         "items_url": reverse(f"{prefix}.items", args=[slug, album.slug]),
+        "move_url": reverse(f"{prefix}.move", args=[slug, album.slug]) if isinstance(owner, Pin) else "",
+        "owner_pin_name": "",
+        "detail_query": "",
     }
 
 
@@ -223,7 +275,7 @@ def _photo_map_payload(images: list, viewer: Profile | None) -> list[dict]:
     payload = []
     for image in images:
         latitude, longitude = image.effective_latitude, image.effective_longitude
-        if latitude is None or longitude is None:
+        if latitude is None or longitude is None or getattr(image, "map_hidden", False):
             continue
         payload.append(
             {
@@ -276,6 +328,11 @@ def _album_detail_context(owner: Pin | Wiki, album: Album, viewer: Profile) -> d
     row["album_bulk_actions"] = _album_bulk_actions(inside_album=True)
     row["profile"] = viewer
     row["grid_page_size"] = ALBUM_GRID_PAGE_SIZE
+    row["move_targets"] = (
+        [{"slug": pin.slug, "name": pin.effective_name} for pin in move_album_targets(album)] if isinstance(owner, Pin) else []
+    )
+    row["failure_url"] = reverse("memories.photos.failures")
+    row["pin"] = owner if isinstance(owner, Pin) else None
     # Fallback centre for an album whose photos carry no coordinates at all;
     # the map fits to the photos themselves whenever there are any.
     location = owner.location
@@ -284,36 +341,47 @@ def _album_detail_context(owner: Pin | Wiki, album: Album, viewer: Profile) -> d
     return row
 
 
-def _photos_context(owner: Pin | Wiki, viewer: Profile | None) -> dict:
+def _photos_context(owner: Pin | Wiki, viewer: Profile | None, *, include_children: bool = False) -> dict:
     """Assemble the Photos subpage context: albums first, then loose photos.
 
     Args:
         owner: The Pin or Wiki whose photos to show.
         viewer: The browsing profile, for the photo-visibility gate.
+        include_children: When True on a pin, also list descendant albums and
+            unfiled photos.
 
     Returns:
         Template context for ``_albums_panel.html``.
     """
+    from urllib.parse import urlencode
+
     is_pin = isinstance(owner, Pin)
-    rows = [
-        _album_row(
-            owner,
+    listing = _listing_owners(owner, include_children)
+    children_q = _children_query(include_children)
+    list_url = reverse(_url_prefix(owner), args=[_owner_slug(owner)]) + children_q
+    rows = []
+    for entry in albums_listing(listing, viewer):
+        album_owner = entry.album.parent_pin or entry.album.parent_wiki or owner
+        row = _album_row(
+            album_owner,
             entry.album,
             cover=entry.cover,
             photo_count=entry.photo_count,
             date_start=entry.date_start,
             date_end=entry.date_end,
         )
-        for entry in albums_listing(owner, viewer)
-    ]
-    loose_qs = loose_images_for(owner, viewer)
+        if include_children and isinstance(album_owner, Pin) and album_owner.pk != owner.pk:
+            row["owner_pin_name"] = album_owner.effective_name
+            row["detail_query"] = urlencode({"back": list_url, "from_pin": _owner_slug(owner), "children": "1"})
+        rows.append(row)
+    loose_qs = loose_images_for(listing, viewer)
     loose_count = loose_qs.count()
     ctx = {
         "album_rows": rows,
         "loose_images": list(loose_qs[:ALBUM_GRID_PAGE_SIZE]),
         "loose_count": loose_count,
         "create_url": reverse(_url_prefix(owner), args=[_owner_slug(owner)]),
-        "list_url": reverse(_url_prefix(owner), args=[_owner_slug(owner)]),
+        "list_url": list_url,
         "context_type": "pin" if is_pin else "wiki",
         "pin": owner if is_pin else None,
         "wiki": None if is_pin else owner,
@@ -331,6 +399,9 @@ def _photos_context(owner: Pin | Wiki, viewer: Profile | None) -> dict:
         "album_bulk_actions": _album_bulk_actions(inside_album=False),
         "profile": viewer,
         "grid_page_size": ALBUM_GRID_PAGE_SIZE,
+        "include_children": include_children,
+        "failure_url": reverse("memories.photos.failures"),
+        "move_targets": [{"slug": pin.slug, "name": pin.effective_name} for pin in pin_tree(owner)] if is_pin else [],
     }
     _attach_owner_action_urls(ctx, owner)
     return ctx
@@ -338,7 +409,12 @@ def _photos_context(owner: Pin | Wiki, viewer: Profile | None) -> dict:
 
 def _render_photos_panel(request: HttpRequest, owner: Pin | Wiki, viewer: Profile | None) -> HttpResponse:
     """Re-render the whole Photos panel, for HTMX swaps after any mutation."""
-    return render(request, "dashboard/partials/albums/_albums_panel.html", _photos_context(owner, viewer))
+    viewing = _panel_owner(request, owner)
+    return render(
+        request,
+        "dashboard/partials/albums/_albums_panel.html",
+        _photos_context(viewing, viewer, include_children=_include_children(request, viewing)),
+    )
 
 
 def _parse_body(request: HttpRequest) -> dict:
@@ -426,6 +502,7 @@ def _album_bulk_actions(*, inside_album: bool) -> list[dict]:
     if inside_album:
         actions.extend(
             [
+                {"action": "set_cover", "icon": "wallpaper", "label": "Set as album cover"},
                 {"action": "move_to_album", "icon": "drive_file_move", "label": "Move to album"},
                 {"action": "remove", "icon": "remove_circle", "label": "Remove from album"},
             ]
@@ -469,6 +546,8 @@ class AlbumPhotosView(LoginRequiredMixin, View):
         """
         owner, qs = _resolve_album_owner(request, pin_slug, location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        include_children = _include_children(request, owner)
+        listing = _listing_owners(owner, include_children)
 
         if request.GET.get("picker"):
             albums = _picker_album_payload(owner, profile)
@@ -476,7 +555,7 @@ class AlbumPhotosView(LoginRequiredMixin, View):
 
         if request.GET.get("loose"):
             offset, limit = _page_args(request)
-            qs_images = loose_images_for(owner, profile)
+            qs_images = loose_images_for(listing, profile)
             total = qs_images.count()
             images = list(qs_images[offset : offset + limit])
             return JsonResponse(
@@ -489,9 +568,22 @@ class AlbumPhotosView(LoginRequiredMixin, View):
             )
 
         if album_slug := request.GET.get("album"):
-            album = qs.filter(slug=album_slug).first()
+            album = None
+            album_pin_slug = request.GET.get("album_pin")
+            if album_pin_slug and include_children and isinstance(owner, Pin):
+                child = next((pin for pin in listing if isinstance(pin, Pin) and pin.slug == album_pin_slug), None)
+                if child is not None:
+                    album = Album.objects.for_pin(child).filter(slug=album_slug).first()
+            if album is None:
+                album = qs.filter(slug=album_slug).first()
             if album is not None:
-                return render(request, "dashboard/partials/albums/_album_detail.html", _album_detail_context(owner, album, profile))
+                album_owner = album.parent_pin or album.parent_wiki or owner
+                ctx = _album_detail_context(album_owner, album, profile)
+                back = _safe_back_url(request.GET.get("back"))
+                if back:
+                    ctx["back_url"] = back
+                    ctx["list_url"] = back
+                return render(request, "dashboard/partials/albums/_album_detail.html", ctx)
         return _render_photos_panel(request, owner, profile)
 
     def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
@@ -522,9 +614,7 @@ class AlbumPhotosView(LoginRequiredMixin, View):
             name=name,
             description=description,
             kind=kind,
-            # A timelapse is a sequence, so it starts manually ordered; a plain
-            # grouping doesn't. See AlbumKindSpec.prefers_manual_order.
-            manual_order=album_kind_spec(kind).prefers_manual_order,
+            sort=album_kind_spec(kind).default_sort,
             profile=profile,
             **owner_kwargs(owner),
         )
@@ -552,11 +642,22 @@ class AlbumDetailView(LoginRequiredMixin, View):
         """
         owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        return render(request, "dashboard/partials/albums/_album_detail.html", _album_detail_context(owner, album, profile))
+        ctx = _album_detail_context(owner, album, profile)
+        back = _safe_back_url(request.GET.get("back"))
+        if back:
+            ctx["back_url"] = back
+            ctx["list_url"] = back
+        from_pin = request.GET.get("from_pin")
+        if from_pin and isinstance(owner, Pin):
+            from urllib.parse import urlencode
+
+            q = urlencode({"from_pin": from_pin, "children": "1"})
+            ctx["delete_url"] = f"{ctx['delete_url']}?{q}"
+        return render(request, "dashboard/partials/albums/_album_detail.html", ctx)
 
 
 class AlbumEditView(LoginRequiredMixin, View):
-    """Rename an album / change its blurb, kind, or manual-order flag.
+    """Rename an album / change its blurb, kind, or cover photo.
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/edit/
     POST /location/<location_slug>/wiki/albums/<album_slug>/edit/
@@ -565,8 +666,9 @@ class AlbumEditView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
         """Apply an album edit.
 
-        Only fields actually present in the POST are touched, so a partial
-        form (e.g. just the manual-order toggle) can't blank out the rest.
+        Only fields actually present in the POST (or JSON body) are touched,
+        so a partial form can't blank out the rest. JSON requests (cover
+        changes from the lightbox/context menu) get a JSON response.
 
         Args:
             request: HttpRequest.
@@ -575,42 +677,42 @@ class AlbumEditView(LoginRequiredMixin, View):
             location_slug: Slug of the parent location (community route).
 
         Returns:
-            The re-rendered Photos panel, or a 400 for invalid input.
+            The re-rendered Photos panel, JSON for a JSON request, or a 400.
         """
         owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        wants_json = "application/json" in (request.content_type or "")
+        data = _parse_body(request) if wants_json else request.POST
 
         fields: list[str] = []
-        if "name" in request.POST:
-            name = (request.POST.get("name") or "").strip()[:_MAX_ALBUM_NAME_LENGTH]
+        if "name" in data:
+            name = str(data.get("name") or "").strip()[:_MAX_ALBUM_NAME_LENGTH]
             if not name:
-                return HttpResponse("Album name is required.", status=400)
+                return JsonResponse({"error": "Album name is required."}, status=400) if wants_json else HttpResponse("Album name is required.", status=400)
             album.name = name
             fields.append("name")
-        if "description" in request.POST:
-            description = (request.POST.get("description") or "").strip()
+        if "description" in data:
+            description = str(data.get("description") or "").strip()
             if (error := text_length_error(description, MAX_ALBUM_DESCRIPTION_LENGTH, "Description")) is not None:
-                return HttpResponse(error, status=400)
+                return JsonResponse({"error": error}, status=400) if wants_json else HttpResponse(error, status=400)
             album.description = description
             fields.append("description")
-        if "kind" in request.POST:
-            kind = request.POST.get("kind") or AlbumKind.PLAIN
+        if "kind" in data:
+            kind = data.get("kind") or AlbumKind.PLAIN
             if kind in AlbumKind.values:
                 album.kind = kind
                 fields.append("kind")
-        if "manual_order" in request.POST:
-            album.manual_order = request.POST.get("manual_order") in ("1", "true", "on", "True")
-            fields.append("manual_order")
-        if "cover_image_id" in request.POST:
-            raw = request.POST.get("cover_image_id") or ""
-            # Re-scope through the album's own contents so a foreign image id
-            # can't be pinned as a cover.
+        if "cover_image_id" in data:
+            raw = data.get("cover_image_id")
+            raw_s = "" if raw is None else str(raw)
             allowed = {image.pk for image in album_images(album, profile, owner=owner)}
-            album.cover_image_id = int(raw) if raw.isdigit() and int(raw) in allowed else None
+            album.cover_image_id = int(raw_s) if raw_s.isdigit() and int(raw_s) in allowed else None
             fields.append("cover_image")
 
         if fields:
             album.save(update_fields=[*fields, "updated"])
+        if wants_json:
+            return JsonResponse({"ok": True, "cover_image_id": album.cover_image_id})
         return _render_photos_panel(request, owner, profile)
 
 
@@ -779,15 +881,25 @@ class AlbumUploadView(LoginRequiredMixin, View):
         owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        image, response = create_uploaded_photo(request, owner, profile)
+        image, response = create_uploaded_photo(request, owner, profile, album=album)
         if image is not None:
             add_images_to_album(album, [image], profile)
-            return response
+            payload = json.loads(response.content)
+            item = album.items.filter(image_id=image.pk).first()
+            if item is not None:
+                payload["item_id"] = item.pk
+            payload["album_slug"] = album.slug
+            return JsonResponse(payload, status=response.status_code)
         if response.status_code == 409:
             existing = existing_photo_for_upload(owner, profile, request.FILES.get("image"))
             if existing is not None:
                 add_images_to_album(album, [existing], profile)
-                return JsonResponse(image_to_gallery_json(existing, request, profile))
+                payload = image_to_gallery_json(existing, request, profile)
+                item = album.items.filter(image_id=existing.pk).first()
+                if item is not None:
+                    payload["item_id"] = item.pk
+                payload["album_slug"] = album.slug
+                return JsonResponse(payload)
         return response
 
 
@@ -855,9 +967,6 @@ class AlbumReorderView(LoginRequiredMixin, View):
     POST /location/<location_slug>/wiki/albums/<album_slug>/reorder/
 
     Body: ``{"items": [<AlbumItem id>, ...]}`` in the new display order.
-    Reordering implies the album is manually ordered, so this also flips
-    ``manual_order`` on - otherwise the new order would be saved and then
-    ignored at render time.
     """
 
     def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
@@ -875,7 +984,38 @@ class AlbumReorderView(LoginRequiredMixin, View):
         _owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
         item_ids = _int_ids(_parse_body(request).get("items"))
         reordered = reorder_album_items(album, item_ids)
-        if reordered and not album.manual_order:
-            album.manual_order = True
-            album.save(update_fields=["manual_order", "updated"])
-        return JsonResponse({"reordered": reordered, "manual_order": album.manual_order})
+        return JsonResponse({"reordered": reordered})
+
+
+class AlbumMoveView(LoginRequiredMixin, View):
+    """Move a pin album onto another pin in the same parent/child tree.
+
+    POST /map/pin/<pin_slug>/albums/<album_slug>/move/
+    Body: ``{"pin_slug": "<target>"}``.
+    """
+
+    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
+        """Re-parent the album and its photos onto the chosen pin.
+
+        Args:
+            request: HttpRequest with JSON ``pin_slug``.
+            album_slug: Slug of the album to move.
+            pin_slug: Slug of the album's current parent pin.
+            location_slug: Unused; wiki albums cannot move.
+
+        Returns:
+            JSON with the (possibly new) album slug and target pin slug.
+        """
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
+        if not isinstance(owner, Pin):
+            return JsonResponse({"error": "Community albums stay on their wiki."}, status=400)
+        target_slug = str(_parse_body(request).get("pin_slug") or "").strip()
+        target = Pin.objects.filter(slug=target_slug, profile_id=owner.profile_id).select_related("location").first()
+        if target is None:
+            return JsonResponse({"error": "That pin was not found."}, status=404)
+        try:
+            moved = move_album_to_pin(album, target)
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        return JsonResponse({"ok": True, "slug": moved.slug, "pin_slug": target.slug})
+

@@ -255,8 +255,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         return set(TripMembership.objects.trip_ids_for(profile_id))
 
     def with_coords(self) -> Self:
-        """Filter to images that have GPS coordinates (suitable for the map layer)."""
-        return self.filter(latitude__isnull=False, longitude__isnull=False)
+        """Filter to images that have GPS and the owner has not hidden from the map."""
+        return self.filter(latitude__isnull=False, longitude__isnull=False, map_hidden=False)
 
     def uploaded_by(self, profile: Profile) -> Self:
         """Filter to images uploaded by a given profile, newest first.

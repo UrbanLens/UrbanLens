@@ -337,6 +337,36 @@
         });
     };
 
+    document.addEventListener('change', function (e) {
+        var input = e.target;
+        if (!input || !input.getAttribute || !input.getAttribute('data-retry-failure')) return;
+        var file = input.files && input.files[0];
+        var url = input.getAttribute('data-retry-url') || UPLOAD_URL;
+        var dismissUrl = input.getAttribute('data-dismiss-url');
+        var card = input.closest('.photos-issue-card');
+        input.value = '';
+        if (!file) return;
+        var fd = new FormData();
+        fd.append('image', file);
+        fd.append('csrfmiddlewaretoken', CSRF);
+        fetch(url, { method: 'POST', body: fd, headers: { 'X-CSRFToken': CSRF } })
+            .then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (data) {
+                    if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+                    return data;
+                });
+            })
+            .then(function () {
+                if (window.toastr) toastr.success(file.name + ' uploaded.');
+                if (dismissUrl && window.htmx && card) {
+                    htmx.ajax('POST', dismissUrl, { target: card, swap: 'outerHTML' });
+                }
+            })
+            .catch(function (err) {
+                if (window.toastr) toastr.error(file.name + ': ' + (err.message || 'upload failed'));
+            });
+    });
+
     function _finishUpload(ok) {
         var progress = document.getElementById('photos-upload-progress');
         var bar = document.getElementById('photos-upload-bar');

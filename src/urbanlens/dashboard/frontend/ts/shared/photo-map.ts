@@ -77,6 +77,8 @@ export interface PhotoMarkerLayerOptions {
     onSelect?: (id: number) => void;
     /** Called when the pointer enters/leaves a marker, to sync an external grid. */
     onHover?: (id: number, on: boolean) => void;
+    /** Right-click on a photo thumbnail (e.g. hide from map). */
+    onContextMenu?: (id: number, event: L.LeafletMouseEvent) => void;
 }
 
 export interface PhotoMarkerLayer {
@@ -155,6 +157,12 @@ export function createPhotoMarkerLayer(map: L.Map, options: PhotoMarkerLayerOpti
         if (options.onHover) {
             marker.on("mouseover", () => options.onHover?.(item.id, true));
             marker.on("mouseout", () => options.onHover?.(item.id, false));
+        }
+        if (options.onContextMenu) {
+            marker.on("contextmenu", (event: L.LeafletMouseEvent) => {
+                L.DomEvent.stop(event);
+                options.onContextMenu?.(item.id, event);
+            });
         }
 
         marker.addTo(layer);

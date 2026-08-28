@@ -4,7 +4,7 @@
  * buffer so a large album stays usable on a phone.
  */
 
-import { renderPhotoTile, tileFromJson, type PhotoTile } from "./photo-tile";
+import { renderPhotoTile, tileFromJson, tileHasImage, type PhotoTile } from "./photo-tile";
 
 export const DEFAULT_PAGE_SIZE = 48;
 export const UNLOAD_BUFFER_PX = 1200;
@@ -86,7 +86,7 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
             const tiles: PhotoTile[] = [];
             for (const raw of body.items ?? []) {
                 const tile = tileFromJson(raw);
-                if (tile) tiles.push(tile);
+                if (tile && tileHasImage(tile)) tiles.push(tile);
             }
             const fragment = document.createDocumentFragment();
             for (const tile of tiles) {

@@ -893,6 +893,11 @@ urlpatterns = [
                                 name="pin.albums.items",
                             ),
                             path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/move/",
+                                albums.AlbumMoveView.as_view(),
+                                name="pin.albums.move",
+                            ),
+                            path(
                                 "<slug:pin_slug>/albums/<slug:album_slug>/",
                                 albums.AlbumDetailView.as_view(),
                                 name="pin.albums.detail",
@@ -1965,6 +1970,10 @@ urlpatterns = [
                 path("photos/queue/", photos.PhotoQueueView.as_view(), name="memories.photos.queue"),
                 path("photos/page/", photos.PhotoGridPageView.as_view(), name="memories.photos.page"),
                 path("photos/upload/", photos.PhotoUploadView.as_view(), name="memories.photos.upload"),
+                path("photos/failures/", photos.PhotoUploadFailureCreateView.as_view(), name="memories.photos.failures"),
+                path("photos/failures/<int:failure_id>/dismiss/", photos.PhotoUploadFailureDismissView.as_view(), name="memories.photos.failures.dismiss"),
+                path("photos/conflicts/<int:conflict_id>/resolve/", photos.PhotoMetadataConflictResolveView.as_view(), name="memories.photos.conflicts.resolve"),
+                path("photos/conflicts/<int:conflict_id>/dismiss/", photos.PhotoMetadataConflictDismissView.as_view(), name="memories.photos.conflicts.dismiss"),
                 path("photos/pin-search/", photos.PhotoPinSearchView.as_view(), name="memories.photos.pin_search"),
                 path("photos/<int:image_id>/confirm-pin/", photos.PhotoPinConfirmView.as_view(), name="memories.photos.pin_confirm"),
                 path("photos/<int:image_id>/<str:action>/", photos.PhotoActionView.as_view(), name="memories.photos.action"),

@@ -290,6 +290,11 @@ $album-gutter: 1rem;
     color: var(--ul-grey-6);
 }
 
+.album-card-pin {
+    color: var(--ul-grey-5);
+    font-size: .7rem;
+}
+
 .album-date-range {
     display: inline-flex;
     align-items: center;
@@ -713,6 +718,17 @@ $album-gutter: 1rem;
 }
 
 // -- Drag-to-upload ---------------------------------------------------------
+
+.album-move-list {
+    list-style: none;
+    margin: 0;
+    padding: .5rem .75rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    max-height: 20rem;
+    overflow-y: auto;
+}
 
 .album-drop-overlay {
     position: fixed;

@@ -125,11 +125,16 @@ class QuotaExemption(TextChoices):
     (``services.sharing.pin_sharing.create_pin_from_share``) rather than a
     second copy of the bytes, so it occupies no storage of the recipient's
     own to charge them for.
+
+    ``DEDUPLICATED`` is the same person's second row for bytes they already
+    stored (uploaded the same file to another pin). Same storage key, no
+    second quota charge.
     """
 
     EXTERNAL_MEDIA = "external_media", "Cached external media"
     COMMUNITY_CONTRIBUTION = "community", "Community-valued contribution"
     SHARED_COPY = "shared_copy", "Copy of a shared photo"
+    DEDUPLICATED = "deduplicated", "Same file already stored for this user"
 
 
 class Image(abstract.FrontendDashboardModel):
@@ -310,7 +315,8 @@ class Image(abstract.FrontendDashboardModel):
     # (empty = they do). Set at creation by whichever path produced a row that
     # owns no exclusive storage of its own - services.media.media_materialize
     # (EXTERNAL_MEDIA), services.media.quota_rewards (COMMUNITY_CONTRIBUTION),
-    # services.sharing.pin_sharing (SHARED_COPY) - see QuotaExemption for what
+    # services.sharing.pin_sharing (SHARED_COPY), services.photos.uploads
+    # (DEDUPLICATED) - see QuotaExemption for what
     # each value means. Materialized rather than recomputed because the community-contribution
     # case is a one-way reward: a photo that earned its exemption keeps it
     # even if voters later change their minds, so a user's stored photos can
@@ -338,6 +344,11 @@ class Image(abstract.FrontendDashboardModel):
     # GPS they don't want to tie to a visit). Keeps that queue finite; the photo
     # still appears in the full gallery.
     organize_dismissed = BooleanField(default=False)
+    # When True, the photo keeps its stored GPS but is omitted from map layers.
+    # Used for shots that have coordinates (paperwork, indoor details) the user
+    # does not want plotted. Dragging it onto a map, or "show on map" in the
+    # lightbox, clears this without inventing a new position.
+    map_hidden = BooleanField(default=False)
     # Media (kind='media') labels help the user find this photo/video/document
     # via the main site search; unlike Pin/Wiki labels, media labels have no
     # effect on map icons or filtering.

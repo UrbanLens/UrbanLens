@@ -126,6 +126,53 @@ def parse_reposition_payload(body: bytes) -> tuple[Decimal, Decimal]:
     return coerce_coordinates(data)
 
 
+def apply_image_map_update(image: Image, body: bytes) -> dict[str, Any]:
+    """Apply a map-visibility or reposition POST to *image*.
+
+    ``{"map_hidden": true}`` hides the photo on maps without clearing GPS.
+    ``{"map_hidden": false}`` puts it back. A latitude/longitude payload is
+    a drag onto the map: the new position is stored and ``map_hidden`` is
+    cleared so the photo shows at the drop point.
+
+    Args:
+        image: The photo being updated.
+        body: Raw JSON request body.
+
+    Returns:
+        JSON-serialisable lat/lng/map_hidden of the saved row.
+
+    Raises:
+        ValueError: Malformed JSON, or a reposition payload that fails
+            :func:`coerce_coordinates`.
+    """
+    import json
+
+    try:
+        data = json.loads(body or b"{}")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid request data.") from exc
+    if not isinstance(data, dict):
+        raise ValueError("Invalid request data.")  # noqa: TRY004
+
+    fields: list[str] = []
+    if "latitude" in data or "longitude" in data:
+        image.latitude, image.longitude = coerce_coordinates(data)
+        image.map_hidden = False
+        fields.extend(["latitude", "longitude", "map_hidden"])
+    elif "map_hidden" in data:
+        image.map_hidden = bool(data["map_hidden"])
+        fields.append("map_hidden")
+    else:
+        raise ValueError("Invalid request data.")
+    image.save(update_fields=[*fields, "updated"])
+    return {
+        "latitude": float(image.latitude) if image.latitude is not None else None,
+        "longitude": float(image.longitude) if image.longitude is not None else None,
+        "map_hidden": bool(image.map_hidden),
+    }
+
+
+
 def _get_gps_ifd(image_file: IO[bytes]) -> dict[int, Any] | None:
     """Return the raw EXIF GPS IFD for an image file, if present."""
     image_file.seek(0)
@@ -842,6 +889,7 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         # whether withdrawing it from there is even the owner's to do.
         "on_wiki": img.wiki_id is not None,
         "uploaded": img.source == ImageSource.UPLOAD,
+        "map_hidden": bool(getattr(img, "map_hidden", False)),
     }
 
 

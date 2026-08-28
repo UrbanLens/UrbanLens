@@ -71,7 +71,6 @@ Context:
     <div class="lightbox-side-panel">
       <div class="lightbox-side-header">
         <p id="lightbox-caption" class="lightbox-caption"></p>
-        {% if show_floorplan_overlay_action %}
         <div id="lightbox-actions-menu" class="lightbox-actions-menu" hidden>
           <button type="button" class="lightbox-actions-toggle" id="lightbox-actions-toggle"
                   aria-haspopup="true" aria-expanded="false" aria-label="More actions"
@@ -79,13 +78,22 @@ Context:
             <i class="material-symbols-outlined">more_vert</i>
           </button>
           <div class="lightbox-actions-list" id="lightbox-actions-list" hidden>
+            <button type="button" id="lightbox-album-cover-action" class="lightbox-actions-item" hidden
+                    onclick="window._lightboxSetAlbumCover()">
+              <i class="material-symbols-outlined">wallpaper</i> Set as album cover
+            </button>
+            <button type="button" id="lightbox-map-show-action" class="lightbox-actions-item" hidden
+                    onclick="window._lightboxShowOnMap()">
+              <i class="material-symbols-outlined">map</i> Show this photo on the map
+            </button>
+            {% if show_floorplan_overlay_action %}
             <button type="button" id="lightbox-floorplan-overlay-btn" class="lightbox-actions-item"
                     onclick="window._lightboxUseAsFloorplanOverlay()">
               <i class="material-symbols-outlined">architecture</i> Use as floorplan overlay
             </button>
+            {% endif %}
           </div>
         </div>
-        {% endif %}
       </div>
       <div id="lightbox-meta" class="lightbox-meta">
         <p id="lightbox-source-name" class="lightbox-meta-line" hidden></p>
@@ -117,6 +125,16 @@ Context:
         </button>
       </div>
       {% endif %}
+      <div id="lightbox-album-cover-actions" class="lightbox-relevance-actions" hidden>
+        <button type="button" id="lightbox-album-cover-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetAlbumCover()">
+          <i class="material-symbols-outlined">wallpaper</i> Set as album cover
+        </button>
+      </div>
+      <div id="lightbox-map-visibility-actions" class="lightbox-relevance-actions" hidden>
+        <button type="button" id="lightbox-map-show-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxShowOnMap()">
+          <i class="material-symbols-outlined">map</i> Show this photo on the map
+        </button>
+      </div>
       {# Custom fields (viewer's own photo fields; loads empty for photos that aren't theirs) #}
       <div id="lightbox-custom-fields" class="lightbox-custom-fields"></div>
       <div id="lightbox-media-labels" class="lightbox-media-labels"></div>
@@ -314,8 +332,21 @@ Context:
       }
     }
     var actionsMenu = document.getElementById('lightbox-actions-menu');
+    var albumPanel = document.getElementById('albums-panel');
+    var canAlbumCover = !!(item.imageId && albumPanel && albumPanel.dataset.editUrl && albumPanel.dataset.albumSlug);
+    var canShowOnMap = !!(item.imageId && item.mapHidden && typeof window.gallerySetPhotoMapHidden === 'function');
+    var albumCoverEl = document.getElementById('lightbox-album-cover-actions');
+    if (albumCoverEl) albumCoverEl.hidden = !canAlbumCover;
+    var mapVisEl = document.getElementById('lightbox-map-visibility-actions');
+    if (mapVisEl) mapVisEl.hidden = !canShowOnMap;
+    var albumCoverAction = document.getElementById('lightbox-album-cover-action');
+    if (albumCoverAction) albumCoverAction.hidden = !canAlbumCover;
+    var mapShowAction = document.getElementById('lightbox-map-show-action');
+    if (mapShowAction) mapShowAction.hidden = !canShowOnMap;
+    var floorplanBtn = document.getElementById('lightbox-floorplan-overlay-btn');
+    var canFloorplan = !!(item.imageId && FLOORPLAN_OVERLAY_URL && floorplanBtn);
     if (actionsMenu) {
-      actionsMenu.hidden = !(item.imageId && FLOORPLAN_OVERLAY_URL);
+      actionsMenu.hidden = !(canAlbumCover || canShowOnMap || canFloorplan);
       window._lightboxCloseActions();
     }
   }
@@ -405,6 +436,37 @@ Context:
     if (!item || !item.imageId) return;
     var isCover = !!(CURRENT_COVER_ID && item.imageId === CURRENT_COVER_ID);
     window._setCoverPhoto(isCover ? null : item.imageId);
+  };
+
+  window._lightboxSetAlbumCover = function () {
+    var item = _lightboxList[_lightboxIdx];
+    var panel = document.getElementById('albums-panel');
+    var url = panel && panel.dataset.editUrl;
+    if (!item || !item.imageId || !url) return;
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify({ cover_image_id: item.imageId }),
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+        return data;
+      });
+    }).then(function () {
+      if (window.toastr) toastr.success('Album cover updated.');
+    }).catch(function (err) {
+      if (window.toastr) toastr.error(err.message || 'Could not set album cover.');
+    });
+  };
+
+  window._lightboxShowOnMap = function () {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item || !item.imageId || typeof window.gallerySetPhotoMapHidden !== 'function') return;
+    window.gallerySetPhotoMapHidden(item.imageId, false, function () {
+      if (window.toastr) toastr.error('Could not show this photo on the map.');
+    });
+    item.mapHidden = false;
+    _setLightboxMeta(item);
   };
 
   window._lightboxCloseActions = function () {

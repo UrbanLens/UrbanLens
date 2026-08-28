@@ -14,13 +14,13 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.images.attachment import ImageAttachment
-from urbanlens.dashboard.models.images.model import Image, ImageSource
+from urbanlens.dashboard.models.images.model import Image, ImageSource, QuotaExemption
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.media.images import delete_stored_file, detach_image_from_wiki, image_to_gallery_json, parse_reposition_payload
-from urbanlens.dashboard.services.photos.uploads import UploadRejection, upload_photo_for_owner
+from urbanlens.dashboard.services.media.images import apply_image_map_update, delete_stored_file, detach_image_from_wiki, image_to_gallery_json
+from urbanlens.dashboard.services.photos.uploads import UploadRejection, record_photo_upload_failure, upload_photo_for_owner
 from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
@@ -39,7 +39,13 @@ def _wiki_for_location(location: Location | None) -> Wiki | None:
     return Wiki.objects.get_for_location(location)
 
 
-def create_uploaded_photo(request: HttpRequest, owner: Pin | Wiki, profile: Profile) -> tuple[Image | None, JsonResponse]:
+def create_uploaded_photo(
+    request: HttpRequest,
+    owner: Pin | Wiki,
+    profile: Profile,
+    *,
+    album=None,
+) -> tuple[Image | None, JsonResponse]:
     """Store the request's uploaded photo against *owner*.
 
     Shared by the pin gallery, the wiki gallery, and an album's upload button so
@@ -63,6 +69,9 @@ def create_uploaded_photo(request: HttpRequest, owner: Pin | Wiki, profile: Prof
 
     result = upload_photo_for_owner(owner, profile, image_file, request.POST.get("caption", ""))
     if isinstance(result, UploadRejection):
+        if result.status != 409:
+            pin = owner if isinstance(owner, Pin) else None
+            record_photo_upload_failure(profile, image_file.name or "photo", result.message, pin=pin, album=album)
         return None, JsonResponse({"error": result.message}, status=result.status)
 
     # Imported here rather than at module scope: dashboard.tasks pulls in the
@@ -70,7 +79,11 @@ def create_uploaded_photo(request: HttpRequest, owner: Pin | Wiki, profile: Prof
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import process_image_upload
 
-    safely_enqueue_task(process_image_upload, result.pk)
+    # Deduplicated copies reuse a file that is already (or will be) processed
+    # on the original row. Re-running the pipeline would rewrite the shared
+    # bytes and double-charge work; skip it.
+    if result.quota_exempt_reason != QuotaExemption.DEDUPLICATED:
+        safely_enqueue_task(process_image_upload, result.pk)
     return result, JsonResponse(image_to_gallery_json(result, request, profile), status=201)
 
 
@@ -288,21 +301,28 @@ class PinImageView(LoginRequiredMixin, View):
     """Reposition or delete a single image on a pin."""
 
     def _get_image(self, image_id: int, pin_slug: str) -> Image:
-        return get_object_or_404(Image, pk=image_id, pin__slug=pin_slug)
+        img = Image.objects.select_related("pin").filter(pk=image_id).first()
+        if img is None:
+            raise Http404
+        if img.pin is not None and img.pin.slug == pin_slug:
+            return img
+        pin = Pin.objects.filter(slug=pin_slug).first()
+        if pin is not None and img.pin_id and Pin.objects.filter(pk=pin.pk).with_descendants().filter(pk=img.pin_id).exists():
+            return img
+        raise Http404
 
     def post(self, request: HttpRequest, pin_slug: str, image_id: int) -> JsonResponse:
-        """Update lat/lng when the user drags the photo marker on the map."""
+        """Update lat/lng, or hide/show the photo on the map without clearing GPS."""
         img = self._get_image(image_id, pin_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404
         try:
-            img.latitude, img.longitude = parse_reposition_payload(request.body)
+            payload = apply_image_map_update(img, request.body)
         except ValueError as exc:
             logger.warning("Failed to update image %s on pin %s: %s", image_id, pin_slug, exc)
             return JsonResponse({"error": "Invalid request data."}, status=400)
-        img.save(update_fields=["latitude", "longitude", "updated"])
-        return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
+        return JsonResponse(payload)
 
     def delete(self, request: HttpRequest, pin_slug: str, image_id: int) -> HttpResponse:
         """Take a photo off this pin, and off the wiki only if asked.
@@ -460,12 +480,11 @@ class WikiImageView(LoginRequiredMixin, View):
         if img.profile != profile:
             raise Http404
         try:
-            img.latitude, img.longitude = parse_reposition_payload(request.body)
+            payload = apply_image_map_update(img, request.body)
         except ValueError as exc:
             logger.warning("Failed to update image %s on location %s: %s", image_id, location_slug, exc)
             return JsonResponse({"error": "Invalid request data."}, status=400)
-        img.save(update_fields=["latitude", "longitude", "updated"])
-        return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
+        return JsonResponse(payload)
 
     def delete(self, request: HttpRequest, location_slug: str, image_id: int) -> HttpResponse:
         img, profile = self._get_image(request, image_id, location_slug)

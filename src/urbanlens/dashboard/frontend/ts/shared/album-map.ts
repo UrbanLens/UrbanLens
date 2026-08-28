@@ -18,6 +18,7 @@ declare const L: typeof import("leaflet");
 
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
+import { showMapContextMenu } from "./map-context-menu";
 import { createMapLayers } from "./map-layers";
 import { createPhotoMarkerLayer, type PhotoMapItem, type PhotoMarkerLayer } from "./photo-map";
 
@@ -69,6 +70,46 @@ async function savePosition(imageId: number, lat: number, lng: number): Promise<
         const data = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error || `HTTP ${response.status}`);
     }
+    setTileMapHidden(imageId, false);
+}
+
+function setTileMapHidden(imageId: number, hidden: boolean): void {
+    const tile = document.getElementById(`gallery-item-${imageId}`);
+    if (tile) tile.dataset.mapHidden = hidden ? "true" : "false";
+}
+
+/** Keep album-map markers in sync when hide/show is driven from the pin map or lightbox. */
+function syncAlbumMapHidden(imageId: number, hidden: boolean): void {
+    setTileMapHidden(imageId, hidden);
+    if (hidden) {
+        current?.markers.remove(imageId);
+        return;
+    }
+    const photo = readPhotos().find((item) => item.id === imageId);
+    const tile = document.getElementById(`gallery-item-${imageId}`);
+    const lat = photo?.lat ?? (tile?.dataset.lat ? Number.parseFloat(tile.dataset.lat) : Number.NaN);
+    const lng = photo?.lng ?? (tile?.dataset.lng ? Number.parseFloat(tile.dataset.lng) : Number.NaN);
+    const url = photo?.url || tile?.dataset.url || "";
+    if (current && url && Number.isFinite(lat) && Number.isFinite(lng)) {
+        current.markers.set({ id: imageId, url, lat, lng, movable: true });
+    }
+}
+
+async function hideFromMap(imageId: number): Promise<void> {
+    const base = panel()?.dataset.repositionBase;
+    if (!base) throw new Error("No map endpoint for this album.");
+    const response = await fetch(`${base}${imageId}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify({ map_hidden: true }),
+    });
+    if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || `HTTP ${response.status}`);
+    }
+    syncAlbumMapHidden(imageId, true);
+    window._galleryRemoveMarker?.(imageId);
+    toast.success("Photo hidden from the map. GPS is still saved.");
 }
 
 /** Tear down any existing album map, so a panel swap can't leave one orphaned. */
@@ -77,6 +118,7 @@ export function destroyAlbumMap(): void {
     current.markers.destroy();
     current.map.remove();
     current = null;
+    if (window._albumSyncMapHidden === syncAlbumMapHidden) delete window._albumSyncMapHidden;
 }
 
 /**
@@ -125,6 +167,23 @@ export function initAlbumMap(): void {
                 el.classList.toggle("is-highlighted", on);
             });
         },
+        onContextMenu: (id, event) => {
+            showMapContextMenu({
+                lat: event.latlng.lat,
+                lng: event.latlng.lng,
+                clientX: event.originalEvent.clientX,
+                clientY: event.originalEvent.clientY,
+                extraItems: [
+                    {
+                        icon: "visibility_off",
+                        label: "Hide from map",
+                        onClick: () => {
+                            void hideFromMap(id).catch((err: Error) => toast.error(err.message || "Could not hide photo."));
+                        },
+                    },
+                ],
+            });
+        },
     });
     markers.replaceAll(photos);
 
@@ -136,6 +195,7 @@ export function initAlbumMap(): void {
     }
 
     current = { map, markers };
+    window._albumSyncMapHidden = syncAlbumMapHidden;
     // The section was hidden until the moment this ran; Leaflet measured a
     // zero-height container, so re-measure once the browser has laid it out.
     window.setTimeout(() => map.invalidateSize(), 0);

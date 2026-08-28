@@ -1855,6 +1855,26 @@ function init(): void {
         // fallback because the gallery grid is paginated - this photo may not
         // be on the currently rendered gallery page.
         marker.on("click", () => window.galleryOpenLightbox?.(imgId, { url }));
+        marker.on("contextmenu", (event: L.LeafletMouseEvent) => {
+            L.DomEvent.stop(event);
+            showMapContextMenu({
+                lat: event.latlng.lat,
+                lng: event.latlng.lng,
+                clientX: event.originalEvent.clientX,
+                clientY: event.originalEvent.clientY,
+                extraItems: [
+                    {
+                        icon: "visibility_off",
+                        label: "Hide from map",
+                        onClick: () => {
+                            if (typeof window.gallerySetPhotoMapHidden === "function") {
+                                window.gallerySetPhotoMapHidden(imgId, true);
+                            }
+                        },
+                    },
+                ],
+            });
+        });
         marker.addTo(photoLayer);
         photoMarkers[imgId] = { marker, url, lat, lng, highlighted: false };
     }
@@ -3058,6 +3078,7 @@ declare global {
         // this migration) - this page calls out to them and also implements the
         // three the gallery calls back into.
         galleryRepositionImage?: (imgId: number, lat: number, lng: number, onRejected: () => void) => void;
+        gallerySetPhotoMapHidden?: (imgId: number, hidden: boolean, onRejected?: () => void) => void;
         galleryOpenLightbox?: (imgId: number, opts: { url: string }) => void;
         _galleryAddMarker: (img: GalleryImage) => void;
         _galleryRemoveMarker: (imgId: number) => void;

@@ -145,6 +145,18 @@
   border-radius: 4px;
 }
 
+.gallery-thumb--failed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ul-surface-2, #1c1c1c);
+  color: var(--ul-grey-5);
+
+  .material-symbols-outlined {
+    font-size: 2rem;
+  }
+}
+
 .gallery-has-coords {
   position: absolute;
   bottom: 4px;

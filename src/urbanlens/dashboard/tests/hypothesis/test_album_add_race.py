@@ -81,9 +81,9 @@ class AlbumAddRaceTests(TestCase):
         self.assertEqual(add_images_to_album(self.album, [self.image], self.profile), 1)
         self.assertEqual(add_images_to_album(self.album, [self.image], self.profile), 0)
 
-    def test_new_items_are_appended_after_existing_ones(self):
+    def test_new_items_are_stored_with_null_order(self):
         add_images_to_album(self.album, [self.image], self.profile)
         add_images_to_album(self.album, [self.other], self.profile)
 
-        orders = list(AlbumItem.objects.filter(album=self.album).order_by("order").values_list("image_id", "order"))
-        self.assertEqual([image_id for image_id, _ in orders], [self.image.pk, self.other.pk])
+        orders = list(AlbumItem.objects.filter(album=self.album).values_list("image_id", "order"))
+        self.assertCountEqual(orders, [(self.image.pk, None), (self.other.pk, None)])

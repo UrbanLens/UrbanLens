@@ -14,7 +14,7 @@ import { bindAlbumPicker, openAlbumPicker } from "./album-picker";
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
 import { bindPhotoContextMenu } from "./photo-context-menu";
-import { lightboxListFromGrid, parsePhotoIds, writePhotoIds } from "./photo-tile";
+import { lightboxListFromGrid, parsePhotoIds, renderPhotoTile, tileFromJson, tileHasImage, writePhotoIds } from "./photo-tile";
 import { bindPhotoGrid } from "./photo-virtual-grid";
 
 /**
@@ -29,6 +29,7 @@ const QUEUED_REFRESH_DELAY_MS = 4000;
 const ALBUM_PARAM = "album";
 
 let albumSortable: Sortable | null = null;
+let pendingMoveUrl = "";
 /**
  * Set while a swap is being performed *because* of a history navigation, so the
  * resulting render doesn't push the entry we just came from back onto the stack.
@@ -78,8 +79,14 @@ function albumFromUrl(): string | null {
 /** Build a URL for the given album (or the list, when null), keeping the tab hash. */
 function urlForAlbum(slug: string | null): string {
     const params = new URLSearchParams(window.location.search);
-    if (slug) params.set(ALBUM_PARAM, slug);
-    else params.delete(ALBUM_PARAM);
+    const pinSlug = albumPanel()?.dataset.albumPinSlug;
+    if (slug) {
+        params.set(ALBUM_PARAM, slug);
+        if (pinSlug) params.set("album_pin", pinSlug);
+    } else {
+        params.delete(ALBUM_PARAM);
+        params.delete("album_pin");
+    }
     const query = params.toString();
     return `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
 }
@@ -141,7 +148,7 @@ async function saveAlbumOrder(grid: HTMLElement, previousOrder: HTMLElement[]): 
     }
 }
 
-/** Bind Sortable to the album's grid, but only when the album is in custom-order mode. */
+/** Bind Sortable to the album's grid. Photos are always reorderable. */
 export function initAlbumSortable(): void {
     albumSortable?.destroy();
     albumSortable = null;
@@ -169,12 +176,17 @@ export function initAlbumSortable(): void {
 
 // -- Uploading into the album --------------------------------------------------
 
+let uploadGeneration = 0;
+let uploadsInFlight = 0;
+
 function setUploadProgress(done: number, total: number): void {
     const wrap = document.querySelector<HTMLElement>("[data-album-upload-progress]");
     const bar = document.querySelector<HTMLElement>("[data-album-upload-bar]");
     if (!wrap || !bar) return;
+    const generation = uploadGeneration;
     if (done >= total) {
         window.setTimeout(() => {
+            if (uploadGeneration !== generation || uploadsInFlight > 0) return;
             wrap.hidden = true;
             bar.style.width = "0";
         }, 800);
@@ -184,20 +196,103 @@ function setUploadProgress(done: number, total: number): void {
     bar.style.width = `${Math.round((done / total) * 100)}%`;
 }
 
+window.addEventListener("beforeunload", (event) => {
+    if (uploadsInFlight <= 0) return;
+    event.preventDefault();
+    event.returnValue = "";
+});
+
+/**
+ * Lightbox "show on the map" talks to window.gallerySetPhotoMapHidden. Pin/wiki
+ * gallery pages already define it; albums-only views (or a gallery that hasn't
+ * rendered yet) get this fallback, which posts to the album panel's reposition
+ * endpoint.
+ */
+function ensureMapHiddenHandler(): void {
+    if (typeof window.gallerySetPhotoMapHidden === "function") return;
+    window.gallerySetPhotoMapHidden = (imgId, hidden, onError) => {
+        const base = albumPanel()?.dataset.repositionBase;
+        if (!base) {
+            onError?.();
+            return;
+        }
+        void postJson(`${base}${imgId}/`, { map_hidden: hidden })
+            .then((data) => {
+                const tile = document.getElementById(`gallery-item-${imgId}`);
+                if (tile) tile.dataset.mapHidden = data.map_hidden ? "true" : "false";
+                window._albumSyncMapHidden?.(imgId, Boolean(data.map_hidden));
+                if (data.map_hidden) {
+                    window._galleryRemoveMarker?.(imgId);
+                    toast.success("Photo hidden from the map. GPS is still saved.");
+                } else {
+                    toast.success("Photo shown on the map.");
+                }
+            })
+            .catch((err: Error) => {
+                toast.error(err.message || "Could not update map visibility.");
+                onError?.();
+            });
+    };
+}
+
+function reportUploadFailure(filename: string, error: string): void {
+    const url = albumPanel()?.dataset.failureUrl;
+    if (!url) return;
+    void fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify({ filename, error }),
+    });
+}
+
+function markThumbFailed(img: HTMLImageElement, filename: string, error: string): void {
+    const btn = img.closest(".gallery-thumb-btn");
+    const placeholder = document.createElement("span");
+    placeholder.className = "gallery-thumb gallery-thumb--failed";
+    placeholder.innerHTML = `<i class="material-symbols-outlined">broken_image</i>`;
+    img.replaceWith(placeholder);
+    if (btn) btn.setAttribute("aria-label", "Photo failed to load");
+    toast.error(`${filename}: ${error}`);
+    reportUploadFailure(filename, error);
+}
+
+function bindThumbLoadGuard(root: ParentNode): void {
+    root.querySelectorAll<HTMLImageElement>(".gallery-thumb").forEach((img) => {
+        if (img.dataset.guarded === "1") return;
+        img.dataset.guarded = "1";
+        img.addEventListener("error", () => {
+            const tile = img.closest<HTMLElement>(".gallery-item");
+            const fallback = tile?.dataset.url || "";
+            if (img.dataset.retried !== "1" && fallback && img.getAttribute("src") !== fallback) {
+                img.dataset.retried = "1";
+                img.src = fallback;
+                return;
+            }
+            const name = tile?.dataset.caption || fallback.split("/").pop() || "photo";
+            markThumbFailed(img, name, "This photo couldn't be shown.");
+        });
+    });
+}
+
 /**
  * Upload files straight into the open album.
  *
  * Each file is one request, matching the pin/wiki gallery upload contract, so a
  * single rejected file (duplicate, over quota, wrong type) doesn't discard the
- * rest of the batch.
+ * rest of the batch. Tiles are appended in place so a second drop isn't lost
+ * behind an HTMX swap of the first batch.
  */
 async function uploadFilesToAlbum(files: FileList | File[]): Promise<void> {
-    const url = albumPanel()?.dataset.uploadUrl;
+    const panel = albumPanel();
+    const url = panel?.dataset.uploadUrl;
     const list = Array.from(files).filter((file) => file.type.startsWith("image/"));
     if (!url || !list.length) return;
 
+    uploadsInFlight += 1;
+    uploadGeneration += 1;
     let done = 0;
     let failed = 0;
+    let appended = 0;
     setUploadProgress(0, list.length);
 
     for (const file of list) {
@@ -205,9 +300,24 @@ async function uploadFilesToAlbum(files: FileList | File[]): Promise<void> {
         body.append("image", file);
         try {
             const response = await fetch(url, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body });
+            const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
             if (!response.ok) {
-                const data = (await response.json().catch(() => ({}))) as { error?: string };
-                throw new Error(data.error || `HTTP ${response.status}`);
+                const message = String(data.error || `HTTP ${response.status}`);
+                reportUploadFailure(file.name, message);
+                throw new Error(message);
+            }
+            const tile = tileFromJson(data);
+            const grid = document.getElementById("album-items-grid");
+            if (tile && tileHasImage(tile) && grid) {
+                if (!tile.albumSlug) tile.albumSlug = panel?.dataset.albumSlug ?? null;
+                const li = renderPhotoTile(tile, { inAlbum: true, albumSlug: panel?.dataset.albumSlug });
+                const sentinel = grid.querySelector(".photo-grid-sentinel");
+                if (sentinel) grid.insertBefore(li, sentinel);
+                else grid.appendChild(li);
+                bindThumbLoadGuard(li);
+                appended += 1;
+                const count = Number.parseInt(grid.dataset.photoCount ?? "0", 10) + 1;
+                grid.dataset.photoCount = String(count);
             }
         } catch (err) {
             failed += 1;
@@ -217,10 +327,12 @@ async function uploadFilesToAlbum(files: FileList | File[]): Promise<void> {
         setUploadProgress(done, list.length);
     }
 
+    uploadsInFlight -= 1;
     const added = list.length - failed;
     if (added > 0) {
         toast.success(`Added ${added} photo${added === 1 ? "" : "s"} to this album.`);
-        refreshPanel();
+        if (appended === 0) refreshPanel();
+        else initAlbumSortable();
     }
 }
 
@@ -260,6 +372,7 @@ function syncAlbumToolbar(): void {
                       })
                 : null,
         remove: inAlbum && count ? () => bulkRemove(ids) : null,
+        set_cover: inAlbum && count === 1 ? () => setAlbumCoverFromToolbar(ids[0]) : null,
         wiki: bulkUrl && count ? () => bulkWiki(ids, bulkUrl) : null,
         delete: bulkUrl && count ? () => bulkDelete(ids, bulkUrl) : null,
         deselect: () => clearSelect(),
@@ -289,6 +402,18 @@ function toggleSelected(item: HTMLElement): void {
         // Stay in select mode with an empty bar, matching the pin gallery.
     }
     syncAlbumToolbar();
+}
+
+async function setAlbumCoverFromToolbar(imageId: number): Promise<void> {
+    const url = albumPanel()?.dataset.editUrl;
+    if (!url || !imageId) return;
+    try {
+        await postJson(url, { cover_image_id: imageId });
+        toast.success("Album cover updated.");
+        clearSelect();
+    } catch (err) {
+        toast.error((err as Error).message || "Could not set album cover.");
+    }
 }
 
 async function bulkRemove(ids: number[]): Promise<void> {
@@ -527,6 +652,40 @@ document.addEventListener("click", (event) => {
         return;
     }
 
+    const moveBtn = target.closest<HTMLElement>("[data-album-move]");
+    if (moveBtn) {
+        event.preventDefault();
+        closeMenus();
+        pendingMoveUrl = moveBtn.dataset.moveUrl || albumPanel()?.dataset.moveUrl || "";
+        const currentPin = moveBtn.dataset.currentPin || albumPanel()?.dataset.albumPinSlug || "";
+        const dialog = document.getElementById("album-move-dialog") as HTMLDialogElement | null;
+        if (!pendingMoveUrl || !dialog) {
+            toast.info("This album can only move between a parent pin and its children.");
+            return;
+        }
+        dialog.querySelectorAll<HTMLElement>("[data-album-move-target]").forEach((btn) => {
+            btn.hidden = btn.dataset.albumMoveTarget === currentPin;
+        });
+        dialog.showModal();
+        return;
+    }
+
+    const moveTarget = target.closest<HTMLElement>("[data-album-move-target]");
+    if (moveTarget) {
+        event.preventDefault();
+        const slug = moveTarget.dataset.albumMoveTarget;
+        const url = pendingMoveUrl;
+        (document.getElementById("album-move-dialog") as HTMLDialogElement | null)?.close();
+        if (!url || !slug) return;
+        void postJson(url, { pin_slug: slug })
+            .then(() => {
+                toast.success("Album moved.");
+                refreshPanel();
+            })
+            .catch((err: Error) => toast.error(err.message || "Could not move album."));
+        return;
+    }
+
     if (target.closest("[data-album-picker-open]")) {
         closeMenus();
         (document.getElementById("album-picker-dialog") as HTMLDialogElement | null)?.showModal();
@@ -637,11 +796,13 @@ function onPanelRendered(): void {
     // detached node. Rebuild only if the new render still shows the section.
     destroyAlbumMap();
     if (document.getElementById("album-map-section")?.hasAttribute("hidden") === false) initAlbumMap();
+    ensureMapHiddenHandler();
 
     clearSelect();
     bindAlbumPicker();
     initPhotoGrids();
     initAlbumSortable();
+    bindThumbLoadGuard(panel);
     syncHistoryToPanel();
     restoringFromHistory = false;
 }
@@ -665,3 +826,5 @@ lastPanel = albumPanel();
 bindPhotoContextMenu();
 initPhotoGrids();
 initAlbumSortable();
+ensureMapHiddenHandler();
+if (lastPanel) bindThumbLoadGuard(lastPanel);

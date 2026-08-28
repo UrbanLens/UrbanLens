@@ -107,6 +107,13 @@ function actionsFor(el: HTMLElement): MenuAction[] {
             label: "Add to album",
             onClick: () => openAlbumPicker({ imageIds: [tile.id], onDone: refreshAlbums }),
         });
+        if (inAlbum && panel.dataset.editUrl && tile.mine) {
+            actions.push({
+                icon: "wallpaper",
+                label: "Set as album cover",
+                onClick: () => setAlbumCover(tile.id),
+            });
+        }
         if (inAlbum && panel.dataset.removeUrl) {
             actions.push({
                 icon: "remove_circle",
@@ -159,6 +166,14 @@ function actionsFor(el: HTMLElement): MenuAction[] {
 function refreshAlbums(): void {
     const url = albumPanel()?.dataset.refreshUrl;
     if (url) window.htmx?.ajax("GET", url, { target: "#albums-panel", swap: "outerHTML" });
+}
+
+function setAlbumCover(imageId: number): void {
+    const url = albumPanel()?.dataset.editUrl;
+    if (!url) return;
+    void postJson(url, { cover_image_id: imageId })
+        .then(() => toast.success("Album cover updated."))
+        .catch((err: Error) => toast.error(err.message || "Could not set album cover."));
 }
 
 function positionMenu(menu: HTMLElement, clientX: number, clientY: number): void {

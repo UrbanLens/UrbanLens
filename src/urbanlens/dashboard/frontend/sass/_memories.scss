@@ -457,6 +457,61 @@ $memories-type-colors: (
     gap: .85rem;
     overflow-x: auto;
     padding-bottom: .5rem;
+}
+
+.photos-issue-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+}
+
+.photos-issue-card {
+    background: var(--ul-surface-1, var(--ul-grey-1));
+    border: 1px solid var(--ul-surface-border);
+    border-radius: 8px;
+    padding: .85rem 1rem;
+}
+
+.photos-issue-title {
+    margin: 0 0 .25rem;
+    font-weight: 600;
+}
+
+.photos-issue-error,
+.photos-issue-meta {
+    margin: 0 0 .35rem;
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+}
+
+.photos-issue-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    align-items: center;
+}
+
+.photos-conflict-field {
+    border: 0;
+    margin: 0 0 .75rem;
+    padding: 0;
+
+    legend {
+        font-weight: 600;
+        margin-bottom: .35rem;
+    }
+
+    label {
+        display: flex;
+        gap: .4rem;
+        align-items: flex-start;
+        margin-bottom: .25rem;
+        font-size: .9rem;
+    }
+}
     scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
 }

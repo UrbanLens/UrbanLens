@@ -23,6 +23,7 @@ Expects:
     data-lng="{{ img.longitude|default:'' }}"
     data-mine="{% if profile and img.profile_id == profile.pk %}true{% else %}false{% endif %}"
     data-on-wiki="{% if img.wiki_id %}true{% else %}false{% endif %}"
+    data-map-hidden="{% if img.map_hidden %}true{% else %}false{% endif %}"
     {% if in_album %}data-item-id="{{ img.album_item_id }}" data-album-slug="{{ album_slug }}"{% endif %}>
   {% if profile and img.profile_id == profile.pk %}
   <button type="button" class="gallery-select-check" title="Select photo" hidden>

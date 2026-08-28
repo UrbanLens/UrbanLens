@@ -52,9 +52,26 @@ class AlbumItemQuerySet(abstract.DashboardQuerySet):
             album: The album (accepts an Album instance or a raw pk).
 
         Returns:
-            Matching items, in the model's default (order, created) order.
+            Matching items. Display order is :meth:`in_display_order`, not this.
         """
         return self.filter(album=album)
+
+    def in_display_order(self, album: Album) -> AlbumItemQuerySet:
+        """This album's items in its current sort method.
+
+        Date and name sorts join ``image`` and read live metadata. Custom
+        order puts numbered items first and null ``order`` (photos added
+        after the last drag) at the end.
+
+        Args:
+            album: The album whose ``sort`` to apply.
+
+        Returns:
+            Matching items, ordered for display.
+        """
+        from urbanlens.dashboard.models.album.sort import album_sort_spec
+
+        return album_sort_spec(album.sort).apply(self.for_album(album))
 
     def membership(self, album: Album | int, image):
         """This image's membership row in this album, if any.

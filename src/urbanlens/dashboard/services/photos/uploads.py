@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.models.images.model import Image, MediaKind
+from urbanlens.dashboard.models.images.model import Image, MediaKind, QuotaExemption
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
@@ -95,6 +95,176 @@ def existing_photo_for_upload(
     return Image.objects.filter(profile=profile, checksum=checksum, **scope).first()
 
 
+def existing_photo_for_profile(profile: Profile, checksum: str) -> Image | None:
+    """Return this uploader's existing row of the same file, on any pin or wiki.
+
+    Same bytes and the same person: a second upload should reuse the stored
+    file rather than charge quota twice. Different bytes (an edited export
+    with the same filename) hash differently and are a new photo.
+
+    Args:
+        profile: The uploading profile.
+        checksum: SHA-256 hex digest of the file.
+
+    Returns:
+        An existing :class:`Image` with a stored file, or None.
+    """
+    return Image.objects.filter(profile=profile, checksum=checksum).exclude(image="").order_by("pk").first()
+
+
+_METADATA_FIELDS = ("caption", "author", "copyright", "taken_at", "latitude", "longitude")
+
+
+def _serialize_meta(value) -> str:
+    """JSON-safe string for a metadata conflict choice."""
+    if value is None:
+        return ""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _queue_metadata_conflict(existing: Image, new_row: Image, incoming_caption: str) -> None:
+    """Record fields that both copies set and that disagree, for Memories review."""
+    from urbanlens.dashboard.models.images.issues import PhotoIssueStatus, PhotoMetadataConflict
+
+    conflicts: dict[str, list[str]] = {}
+    incoming = incoming_caption.strip()
+    existing_caption = (existing.caption or "").strip()
+    if incoming and existing_caption and incoming != existing_caption:
+        conflicts["caption"] = [existing_caption, incoming]
+    for field in _METADATA_FIELDS:
+        if field == "caption":
+            continue
+        left, right = getattr(existing, field), getattr(new_row, field)
+        if left in (None, "") or right in (None, ""):
+            continue
+        if left != right:
+            conflicts[field] = [_serialize_meta(left), _serialize_meta(right)]
+    if not conflicts:
+        return
+    PhotoMetadataConflict.objects.create(
+        profile=existing.profile,
+        existing_image=existing,
+        new_image=new_row,
+        fields=conflicts,
+        status=PhotoIssueStatus.PENDING,
+    )
+
+
+def attach_deduped_copy(existing: Image, owner: Pin | Wiki, profile: Profile, caption: str) -> Image:
+    """Create a new Image row that reuses *existing*'s stored file.
+
+    Does not copy the bytes, does not charge quota, and does not re-run
+    ``process_image_upload`` (that would rewrite the shared file). Metadata
+    is copied from *existing*; an incoming caption that disagrees is kept on
+    the new row and queued for the owner to pick.
+
+    Args:
+        existing: The earlier row with the same checksum.
+        owner: The Pin or Wiki this upload is aimed at.
+        profile: The uploading profile.
+        caption: Caption from this upload, if any.
+
+    Returns:
+        The new :class:`Image` row.
+    """
+    incoming = caption.strip()
+    row = Image(
+        image=existing.image.name,
+        thumbnail=existing.thumbnail.name if existing.thumbnail and existing.thumbnail.name else None,
+        profile=profile,
+        caption=incoming or existing.caption,
+        checksum=existing.checksum,
+        file_size=existing.file_size,
+        quota_exempt_reason=QuotaExemption.DEDUPLICATED,
+        author=existing.author,
+        source_url=existing.source_url,
+        copyright=existing.copyright,
+        taken_at=existing.taken_at,
+        latitude=existing.latitude,
+        longitude=existing.longitude,
+        direction=existing.direction,
+        exif_data=existing.exif_data,
+        source=existing.source,
+        media_type=existing.media_type,
+        map_hidden=existing.map_hidden,
+        **_owner_fields(owner),
+    )
+    row.save()
+    _queue_metadata_conflict(existing, row, incoming)
+    return row
+
+
+def record_photo_upload_failure(
+    profile: Profile,
+    filename: str,
+    error: str,
+    *,
+    pin: Pin | None = None,
+    album=None,
+) -> None:
+    """Persist a failed upload so Memories can show it for retry.
+
+    Args:
+        profile: The uploader.
+        filename: Original file name.
+        error: User-facing explanation.
+        pin: Pin they were uploading to, if any.
+        album: Album they were uploading into, if any.
+    """
+    from urbanlens.dashboard.models.images.issues import PhotoUploadFailure
+
+    PhotoUploadFailure.objects.create(profile=profile, filename=filename[:255], error=error, pin=pin, album=album)
+
+
+def resolve_photo_metadata_conflict(conflict, choices: dict[str, int]) -> int:
+    """Apply the owner's field picks to every copy of this file.
+
+    Args:
+        conflict: A pending :class:`PhotoMetadataConflict`.
+        choices: Mapping of field name to ``0`` (keep the earlier value) or
+            ``1`` (use the later upload's value).
+
+    Returns:
+        How many ``Image`` rows were updated.
+    """
+    from decimal import Decimal
+
+    from django.utils.dateparse import parse_datetime
+
+    from urbanlens.dashboard.models.images.issues import PhotoIssueStatus
+    from urbanlens.dashboard.models.images.model import Image
+
+    updates: dict = {}
+    for field, pair in (conflict.fields or {}).items():
+        if field not in choices or not isinstance(pair, list) or len(pair) < 2:
+            continue
+        try:
+            idx = int(choices[field])
+        except (TypeError, ValueError):
+            continue
+        if idx not in (0, 1):
+            continue
+        raw = pair[idx]
+        if field in ("latitude", "longitude"):
+            updates[field] = Decimal(str(raw)) if raw not in ("", None) else None
+        elif field == "taken_at":
+            updates[field] = parse_datetime(str(raw)) if raw else None
+        else:
+            updates[field] = raw or None
+    checksum = conflict.existing_image.checksum
+    qs = Image.objects.filter(profile_id=conflict.profile_id)
+    if checksum:
+        qs = qs.filter(checksum=checksum)
+    else:
+        qs = qs.filter(pk__in=[conflict.existing_image_id, conflict.new_image_id])
+    count = qs.update(**updates) if updates else 0
+    conflict.status = PhotoIssueStatus.RESOLVED
+    conflict.save(update_fields=["status", "updated"])
+    return count
+
+
 def _duplicate_scope(owner: Pin | Wiki) -> tuple[dict, str]:
     """Return the filter isolating *owner*'s photos, and the noun for the error.
 
@@ -113,7 +283,9 @@ def upload_photo_for_owner(owner: Pin | Wiki, profile: Profile, image_file: Uplo
 
     The duplicate check is per (owner, uploader, checksum): two people may each
     upload the same photo to a shared wiki, but one person can't upload it to
-    the same place twice.
+    the same place twice. The same person uploading the same bytes to a
+    *different* pin reuses the stored file (``QuotaExemption.DEDUPLICATED``)
+    instead of charging quota twice.
 
     The quota check and the row insert are taken under ``per_profile_upload_lock``
     so two concurrent uploads can't both read the same pre-upload usage figure
@@ -131,14 +303,11 @@ def upload_photo_for_owner(owner: Pin | Wiki, profile: Profile, image_file: Uplo
         than assume success.
 
 
-    **The caller must enqueue ``tasks.process_image_upload`` for the returned
-    row.** This function stores the file as uploaded - EXIF (including GPS)
-    stripping, downscaling and format conversion all happen in that task, so
-    a caller that skips it leaves a user's camera GPS in a stored, servable
-    file. Enforced by a test rather than by this function because the task
-    dispatch belongs to the request cycle (it is the controller that knows
-    whether to respond before or after enqueueing); see
-    ``test_photo_upload_dispatches_processing.py``.
+    **The caller must enqueue ``tasks.process_image_upload`` for a newly stored
+    row.** Deduplicated copies skip that task: they point at a file that is
+    already (or will be) processed on the original row. Enforced by a test
+    rather than by this function because the task dispatch belongs to the
+    request cycle; see ``test_photo_upload_dispatches_processing.py``.
     """
     if (upload_error := image_upload_error(image_file, MediaKind.PHOTO)) is not None:
         message, status = upload_error
@@ -148,6 +317,13 @@ def upload_photo_for_owner(owner: Pin | Wiki, profile: Profile, image_file: Uplo
     if existing_photo_for_upload(owner, profile, checksum=checksum) is not None:
         _scope, noun = _duplicate_scope(owner)
         return UploadRejection(f"You already uploaded this photo to this {noun}.", 409)
+
+    elsewhere = existing_photo_for_profile(profile, checksum)
+    if elsewhere is not None:
+        caption_error = column_length_error(Image, "caption", caption, "Caption")
+        if caption_error:
+            return UploadRejection(caption_error, 400)
+        return attach_deduped_copy(elsewhere, owner, profile, caption)
 
     with per_profile_upload_lock(profile):
         if (quota_error := quota_error_for_upload(profile, image_file.size)) is not None:

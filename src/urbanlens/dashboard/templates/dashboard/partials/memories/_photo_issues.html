@@ -1,0 +1,75 @@
+{% comment %}
+Upload failures and metadata conflicts on Memories → Photos.
+Expects upload_failures and metadata_conflicts querysets.
+{% endcomment %}
+{% if upload_failures %}
+<section class="photos-attention photos-issues" aria-label="Photos that failed to upload">
+  <div class="photos-attention-head">
+    <h2><i class="material-symbols-outlined">error</i> Couldn't upload</h2>
+    <span class="badge">{{ upload_failures|length }}</span>
+  </div>
+  <ul class="photos-issue-list">
+    {% for failure in upload_failures %}
+    <li class="photos-issue-card" id="photo-failure-{{ failure.pk }}">
+      <p class="photos-issue-title">{{ failure.filename }}</p>
+      <p class="photos-issue-error">{{ failure.error }}</p>
+      {% if failure.pin %}<p class="photos-issue-meta">{{ failure.pin.effective_name }}</p>{% endif %}
+      <div class="photos-issue-actions">
+        <label class="btn btn--primary btn--sm">
+          <i class="material-symbols-outlined">upload</i> Retry
+          <input type="file" accept="image/*" hidden data-retry-failure="{{ failure.pk }}"
+                 data-retry-url="{% if failure.pin %}{% url 'pin.gallery' failure.pin.slug %}{% endif %}"
+                 data-dismiss-url="{% url 'memories.photos.failures.dismiss' failure.pk %}">
+        </label>
+        <button type="button" class="btn btn--ghost btn--sm"
+                hx-post="{% url 'memories.photos.failures.dismiss' failure.pk %}"
+                hx-target="#photo-failure-{{ failure.pk }}"
+                hx-swap="outerHTML">
+          Dismiss
+        </button>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if metadata_conflicts %}
+<section class="photos-attention photos-issues" aria-label="Photo details to confirm">
+  <div class="photos-attention-head">
+    <h2><i class="material-symbols-outlined">compare</i> Same photo, different details</h2>
+    <span class="badge">{{ metadata_conflicts|length }}</span>
+  </div>
+  <p class="settings-help">You uploaded this file again. Pick which caption, date, or location to keep — it applies everywhere this photo appears.</p>
+  {% for conflict in metadata_conflicts %}
+  <form class="photos-issue-card photos-conflict-card" id="photo-conflict-{{ conflict.pk }}"
+        hx-post="{% url 'memories.photos.conflicts.resolve' conflict.pk %}"
+        hx-target="#photo-conflict-{{ conflict.pk }}"
+        hx-swap="outerHTML">
+    {% csrf_token %}
+    {% for field, pair in conflict.fields.items %}
+    <fieldset class="photos-conflict-field">
+      <legend>{{ field|title }}</legend>
+      <label>
+        <input type="radio" name="field_{{ field }}" value="0" checked>
+        <span>{{ pair.0|default:"(empty)" }}</span>
+      </label>
+      <label>
+        <input type="radio" name="field_{{ field }}" value="1">
+        <span>{{ pair.1|default:"(empty)" }}</span>
+      </label>
+    </fieldset>
+    {% endfor %}
+    <div class="photos-issue-actions">
+      <button type="submit" class="btn btn--primary btn--sm">Apply to all copies</button>
+      <button type="button" class="btn btn--ghost btn--sm"
+              hx-post="{% url 'memories.photos.conflicts.dismiss' conflict.pk %}"
+              hx-target="#photo-conflict-{{ conflict.pk }}"
+              hx-swap="outerHTML">
+        Dismiss
+      </button>
+    </div>
+  </form>
+  {% endfor %}
+</section>
+{% endif %}

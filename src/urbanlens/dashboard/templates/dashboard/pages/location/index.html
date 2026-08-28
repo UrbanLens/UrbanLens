@@ -670,7 +670,7 @@
     {# ?album= is carried through so a deep link (or a Back navigation) loads #}
     {# that album directly instead of the list. See controllers.albums.       #}
     <div id="albums-panel"
-        hx-get="{% url 'pin.albums' pin.slug %}{% if request.GET.album %}?album={{ request.GET.album|urlencode }}{% endif %}"
+        hx-get="{% url 'pin.albums' pin.slug %}?{% if include_children %}children=1{% endif %}{% if include_children and request.GET.album %}&{% endif %}{% if request.GET.album %}album={{ request.GET.album|urlencode }}{% endif %}{% if request.GET.album_pin %}&album_pin={{ request.GET.album_pin|urlencode }}{% endif %}"
         hx-trigger="load"
         hx-swap="outerHTML"
         class="albums-panel card">
