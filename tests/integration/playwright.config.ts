@@ -87,6 +87,16 @@ const projects: Project[] = [
         dependencies: ["setup"],
         use: { ...devices["Desktop Chrome"], ...signedIn },
     },
+    {
+        // Authorisation, isolation, CSRF, disclosure and input handling against
+        // the real deployment. Depends on setup because several specs render
+        // HTML as the signed-in user; API-only cases still authenticate with
+        // keys via fixtures.
+        name: "security",
+        testDir: "./specs/security",
+        dependencies: ["setup"],
+        use: { ...devices["Desktop Chrome"], ...signedIn },
+    },
 ];
 
 if (env.runLocationData) {

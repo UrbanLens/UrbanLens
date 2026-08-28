@@ -11,6 +11,7 @@
         "test:api": "playwright test --project=api",
         "test:ui": "playwright test --project=ui",
         "test:a11y": "playwright test --project=a11y",
+        "test:security": "playwright test --project=security",
         "_comment:visual": "Needs UL_E2E_VISUAL=1 in the environment - the project is not registered without it. Set as a variable rather than inline here, because an inline VAR=value prefix is not portable to Windows shells.",
         "test:visual": "playwright test --project=visual",
         "_comment:crossbrowser": "Needs UL_E2E_CROSS_BROWSER=1 in the environment, for the same reason.",

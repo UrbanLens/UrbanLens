@@ -30,6 +30,7 @@ specs/
   services/   Valkey, Celery, Channels, static pipeline, CDNs, headers
   api/        the published external API contract
   ui/         real journeys in a real browser
+  security/   authorisation, isolation, CSRF, disclosure, input handling
   a11y/       axe scans
   visual/     screenshot comparison (opt-in: UL_E2E_VISUAL=1)
 ```

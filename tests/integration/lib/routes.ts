@@ -73,6 +73,33 @@ export const contentRoutes = {
 /** Staff-only surfaces. */
 export const staffRoutes = {
     siteAdmin: "/dashboard/site-admin/",
+    siteAdminUsers: "/dashboard/site-admin/users/",
+    siteAdminSettings: "/dashboard/site-admin/settings/",
+    siteAdminStats: "/dashboard/site-admin/stats/",
+    djangoAdmin: "/admin/",
+    djangoAdminLogin: "/admin/login/",
+} as const;
+
+/** Internal session-authenticated REST. Not the published external API. */
+export const restRoutes = {
+    pins: "/dashboard/rest/pins/",
+    pin: (uuid: string) => `/dashboard/rest/pins/${uuid}/`,
+    review: (pinPk: number | string) => `/dashboard/rest/reviews/create_or_update/${pinPk}/`,
+} as const;
+
+export const toolsRoutes = {
+    exportStart: "/dashboard/tools/export/start/",
+    exportStatus: (jobId: string) => `/dashboard/tools/export/status/${jobId}/`,
+    exportDownload: (jobId: string) => `/dashboard/tools/export/download/${jobId}/`,
+    adminTools: "/dashboard/tools/admin/",
+} as const;
+
+export const mediaRoute = (path: string): string => `/media/${path.replace(/^\/+/, "")}`;
+
+export const oauthRoutes = {
+    authorize: "/oauth/authorize/",
+    token: "/oauth/token/",
+    introspect: "/oauth/introspect/",
 } as const;
 
 /**

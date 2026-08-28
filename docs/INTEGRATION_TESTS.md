@@ -70,6 +70,7 @@ they tell you when they fail.
 | `api` | Does the published external API still honour its contract? |
 | `ui` | Do the real user journeys work in a real browser? |
 | `a11y` | Does anything on the main pages fail a WCAG AA check at serious or above? |
+| `security` | Do private rows stay private, do sessions stay bound, does user input stay data? |
 | `visual` | Opt-in screenshot comparison (`UL_E2E_VISUAL=1`). |
 | `location` | Opt-in live location-data specs for one real place (`UL_E2E_LOCATION_DATA=1`). Slow, and they spend real money at REData, EPA ECHO and Wikipedia - see `docs/LOCATION_DATA_TESTS.md`. |
 
@@ -91,6 +92,14 @@ Domains covered, and the question each spec file is really asking:
 | `services/*` | Valkey, Celery, Channels, the static pipeline, headers, third-party origins. |
 | `ui/trips` | Does a trip page render the join, including the empty case? |
 | `ui/*` | Sign-in, the map, navigation, pin detail. |
+| `security/assumptions` | Are the two accounts two people, and can each still read their own rows? (If this is red, ignore the rest of `security/`.) |
+| `security/authorization` | Does another account's pin, list, trip, label, filter, photo, check-in or undo entry look like it never existed - and can they not write it either? |
+| `security/isolation` | Do search, the map JSON, HTML, photo bytes and unearned wikis stay scoped to the caller? |
+| `security/session` | Are session cookies HttpOnly, is CSRF bound to origin, and does `next=` stay on-site? |
+| `security/disclosure` | Do 404s, `.git`, `.env`, whoami, settings and staff surfaces keep secrets and stack traces to themselves? |
+| `security/input` | Do stored descriptions/comments/notes stay text, and do search/link/path inputs refuse to become HTML, SQL or files? |
+| `security/transport` | Do CORS, Host and method-override stay conservative through the real proxy? |
+| `security/surfaces` | Is `/dashboard/rest/` session-only, are API keys Bearer-only, is `/media/` gated, and are exports/webhooks/password-reset not oracles? |
 | `location/hrsh-boundary` | Does a parcel boundary ever arrive for a real place, and reach the map? |
 | `location/hrsh-boundary-provenance` | Did that boundary come from a *provider*, or did we invent it? Presence and provenance are separate questions, and the first spec passes while the second fails - see `docs/LOCATION_DATA_TESTS.md`. |
 | `location/*` | Live third-party data for one real place: place identity, buildings, wiki, media, property records, panels. Opt-in. |
@@ -155,7 +164,12 @@ Some things it deliberately does **not** do:
 - **Throttling.** Proving the rate limiter works means tripping it, and tripping
   it on a shared staging box locks the next person out.
 - **Payments.** Stripe is not exercised; a test that charges anything is not a
-  test worth having on a schedule.
+  test worth having on a schedule. The security project does hit the webhook
+  path unsigned, and asserts it is refused.
+- **Attack scanners.** The `security` project is assertions about refusals,
+  identical 404s, cookie flags, and markup that must not become DOM. It does
+  not currently run SQLMap, ZAP active scan, Nuclei, or any other exploit-oriented
+  toolchain against the deployment, but these should be assessed in the future to expand coverage.
 - **External providers.** Provisioned accounts have `external_apis_enabled` and
   `ai_enabled` set to False, so no provider is billed by a test run. Pass
   `--external-apis` when provisioning if you specifically want to exercise the

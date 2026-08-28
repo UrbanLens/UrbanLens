@@ -39,7 +39,7 @@ usage() {
 
 		  --url URL                 The deployment to test (or set UL_E2E_BASE_URL).
 		  --project NAME            Restrict to one project; repeatable.
-		                            smoke | services | api | ui | a11y | visual
+		                            smoke | services | api | ui | a11y | security | visual
 		  --docker                  Run in the official Playwright image; needs no
 		                            local Node or browsers.
 		  --skip-browser-install    Do not check for a matching browser build.
