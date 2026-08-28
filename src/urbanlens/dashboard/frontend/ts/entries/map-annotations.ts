@@ -17,8 +17,9 @@ import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers, tileLayer } from "../shared/map-layers";
 import { bindMapContextMenu, showMapContextMenu, type ContextMenuItem } from "../shared/map-context-menu";
+import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick, reclusterOnDrag, returnToCluster } from "../shared/map-clusters";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
-import { makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize } from "../shared/photo-map";
+import { createPhotoClusterGroup, makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize, tagPhotoMarker } from "../shared/photo-map";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
@@ -623,12 +624,28 @@ function init(): void {
     // -- Detail pins layer ---------------------------------------------------
     const detailPinColors: Record<string, string> = { parcel: "#0f766e", building: "#6b7280", entrance: "#16a34a", poi: "#d97706", danger: "#dc2626", stair: "#6b7280", elevator: "#6b7280", other: "#7c3aed", location: "#2563eb" };
     const detailPinIcons: Record<string, string> = { parcel: "crop_free", building: "business", entrance: "door_front", poi: "star", danger: "warning", stair: "stairs", elevator: "elevator", other: "info", location: "place" };
-    // Both sub-layers live inside detailsLayer so one toggle shows/hides everything.
-    const detailPinLayer = L.layerGroup();
+    // Cluster group is added to the map directly (not nested in a LayerGroup) -
+    // MarkerClusterGroup misses zoom events when it is only a child of another
+    // group. Markup stays a sibling; the Details toggle shows/hides both.
+    const detailPinLayer = createPinClusterGroup();
     const markupLayer = L.layerGroup();
-    const detailsLayer = L.layerGroup([detailPinLayer, markupLayer]).addTo(map);
+    detailPinLayer.addTo(map);
+    markupLayer.addTo(map);
 
-    const photoLayer = L.layerGroup().addTo(map);
+    const photoLayer = createPhotoClusterGroup(map).addTo(map);
+
+    function detailsVisible(): boolean {
+        return map.hasLayer(detailPinLayer);
+    }
+    function toggleDetails(): void {
+        if (detailsVisible()) {
+            map.removeLayer(detailPinLayer);
+            map.removeLayer(markupLayer);
+        } else {
+            detailPinLayer.addTo(map);
+            markupLayer.addTo(map);
+        }
+    }
 
     // -- Nearby pins layer -----------------------------------------------------
     // This profile's other pins near the one being viewed. Off by default and
@@ -721,8 +738,8 @@ function init(): void {
         },
         custom: {
             details: {
-                isActive: () => map.hasLayer(detailsLayer),
-                toggle: () => (map.hasLayer(detailsLayer) ? map.removeLayer(detailsLayer) : detailsLayer.addTo(map)),
+                isActive: () => detailsVisible(),
+                toggle: toggleDetails,
             },
             photos: {
                 isActive: () => map.hasLayer(photoLayer),
@@ -1429,7 +1446,7 @@ function init(): void {
                     // No hover tooltip - the click popup below already covers name/
                     // owner/actions, and a separate hover tooltip here renders
                     // unreadably in dark mode (dark text on a dark background).
-                    const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: !entry.owner_name });
+                    const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: !entry.owner_name && !detailSelectMode });
                     if (entry.url) {
                         marker.bindPopup(detailPinPopupContent(entry));
                     } else {
@@ -1438,14 +1455,16 @@ function init(): void {
                         marker.on("click", () => openDetailPinEditDialog(entry));
                     }
                     // Select-mode click toggles selection instead of opening the popup
-                    // or the editor - mirrors the main map's marker click handling.
+                    // or the editor. Ctrl/cmd-click on a second pin of this type
+                    // *enters* select mode with both selected, matching the main map.
                     marker.on("click", (e) => {
-                        if (!detailSelectMode || entry.owner_name) return;
-                        marker.closePopup();
-                        L.DomEvent.stop(e);
-                        toggleDpSelection(entry.uuid);
+                        handleDetailPinSelectClick(entry, marker, e);
                     });
+                    if (!entry.owner_name) {
+                        reclusterOnDrag(marker, detailPinLayer, map, () => detailSelectMode);
+                    }
                     marker.on("dragend", () => {
+                        returnToCluster(marker, detailPinLayer, map);
                         const pos = marker.getLatLng();
                         fetch(`${dpEditBase}${dp.uuid}/`, {
                             method: "POST",
@@ -1465,6 +1484,7 @@ function init(): void {
                             .catch(() => {
                                 toast.error("Failed to save new position.");
                                 marker.setLatLng([entry.latitude, entry.longitude]);
+                                returnToCluster(marker, detailPinLayer, map);
                             });
                     });
                     marker.addTo(detailPinLayer);
@@ -1472,6 +1492,7 @@ function init(): void {
                     detailPins.push(entry);
                 });
                 buildDetailList();
+                syncDpSelectionClasses();
             })
             .catch((err) => {
                 console.warn("Could not load detail pins:", err);
@@ -1486,6 +1507,59 @@ function init(): void {
     // never selectable, matching their existing non-draggable/non-editable state.
     let detailSelectMode = false;
     const selectedDpUuids = new Set<string>();
+    const dpSelectMemory = new AdditiveSelectMemory();
+
+    function canDetailMultiSelect(): boolean {
+        return !!cfg.pinSlug && detailSelectableEntries().length > 0;
+    }
+
+    function setDetailPinDragging(enabled: boolean): void {
+        detailSelectableEntries().forEach((dp) => {
+            if (enabled) dp.marker?.dragging?.enable();
+            else dp.marker?.dragging?.disable();
+        });
+    }
+
+    function syncDpSelectionClasses(): void {
+        if (!selectedDpUuids.size) return;
+        selectedDpUuids.forEach((uuid) => {
+            detailPins.find((d) => d.uuid === uuid)?.marker?.getElement()?.classList.add("is-selected");
+        });
+    }
+    detailPinLayer.on("animationend spiderfied unspiderfied layeradd", syncDpSelectionClasses);
+    map.on("zoomend moveend", () => {
+        requestAnimationFrame(syncDpSelectionClasses);
+    });
+
+    /**
+     * Consume a marker click for multi-select when appropriate.
+     *
+     * Returns true when the click should not also open a popup / editor:
+     * already in select mode, or a ctrl/cmd-click that just entered it.
+     */
+    function handleDetailPinSelectClick(entry: DetailPinEntry, marker: L.Marker, event: L.LeafletMouseEvent): boolean {
+        if (entry.owner_name || !canDetailMultiSelect()) return false;
+        const additive = isAdditiveClick(event);
+        if (detailSelectMode) {
+            marker.closePopup();
+            L.DomEvent.stop(event);
+            toggleDpSelection(entry.uuid);
+            return true;
+        }
+        if (additive) {
+            marker.closePopup();
+            L.DomEvent.stop(event);
+            map.closePopup();
+            enterDetailPinSelectMode();
+            dpSelectMemory.idsForAdditiveStart(entry.uuid).forEach((uuid) => {
+                if (!selectedDpUuids.has(uuid) && detailPins.some((d) => d.uuid === uuid && !d.owner_name)) toggleDpSelection(uuid);
+            });
+            dpSelectMemory.clear();
+            return true;
+        }
+        dpSelectMemory.remember(entry.uuid);
+        return false;
+    }
 
     function detailSelectableEntries(): DetailPinEntry[] {
         return detailPins.filter((d) => !d.owner_name);
@@ -1500,7 +1574,7 @@ function init(): void {
         }
         const hasSelectable = detailSelectableEntries().length > 0;
         btn.disabled = !hasSelectable;
-        btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple child pins" : "This pin has no child pins to select");
+        btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple child pins. Ctrl+click a second pin to start." : "This pin has no child pins to select");
         if (!hasSelectable && detailSelectMode) exitDetailPinSelectMode();
     }
 
@@ -1511,11 +1585,12 @@ function init(): void {
     window.toggleDetailPinSelectMode = toggleDetailPinSelectMode;
 
     function enterDetailPinSelectMode(): void {
-        if (detailSelectMode || !detailSelectableEntries().length) return;
+        if (detailSelectMode || !canDetailMultiSelect()) return;
         detailSelectMode = true;
         document.getElementById("select-detail-pins-button")?.classList.add("active");
         document.getElementById("map")?.classList.add("select-mode");
         map.dragging.disable();
+        setDetailPinDragging(false);
         // Disabling dragging makes Leaflet hand touch panning back to the
         // browser, which would scroll the page instead of letting the rubber
         // band consume the gesture.
@@ -1528,7 +1603,9 @@ function init(): void {
         document.getElementById("select-detail-pins-button")?.classList.remove("active");
         document.getElementById("map")?.classList.remove("select-mode");
         map.dragging.enable();
+        setDetailPinDragging(true);
         map.getContainer().style.touchAction = "";
+        dpSelectMemory.clear();
         clearDpSelection();
     }
 
@@ -1822,8 +1899,11 @@ function init(): void {
         // Photos belonging to a child pin (ownerName) are display-only on this
         // map - they're repositioned from their own pin's page.
         const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, photoMarkerSize(false), false), draggable: !ownerName });
+        tagPhotoMarker(marker, url, imgId);
         if (ownerName) marker.bindTooltip(`Photo from ${ownerName}`, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+        if (!ownerName) reclusterOnDrag(marker, photoLayer, map);
         marker.on("dragend", () => {
+            returnToCluster(marker, photoLayer, map);
             const pos = marker.getLatLng();
             const prevLat = photoMarkers[imgId]!.lat;
             const prevLng = photoMarkers[imgId]!.lng;
@@ -1844,6 +1924,7 @@ function init(): void {
                         item.lat = prevLat;
                         item.lng = prevLng;
                     }
+                    returnToCluster(marker, photoLayer, map);
                     buildPhotoPanel();
                 });
             }
@@ -1963,7 +2044,13 @@ function init(): void {
     }
 
     document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") disarmPlacement();
+        if (event.key !== "Escape") return;
+        if (document.querySelector("dialog[open]")) return;
+        if (detailSelectMode) {
+            exitDetailPinSelectMode();
+            return;
+        }
+        disarmPlacement();
     });
 
     // Media tiles are server-rendered (partials/pins/pin_media_items.html), so

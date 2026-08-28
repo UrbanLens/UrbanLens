@@ -1,6 +1,6 @@
 /**
  * Photo markers on a Leaflet map: the thumbnail icon, its zoom-dependent size,
- * and the drag-to-reposition behaviour.
+ * drag-to-reposition, and nearby-photo clustering.
  *
  * Extracted from the pin detail map (entries/map-annotations.ts), which remains
  * the canonical surface - it still owns its own marker bookkeeping because its
@@ -9,6 +9,11 @@
  * photo appears on a map, so a second surface (an album's map) can't drift into
  * a differently-sized icon or a differently-shaped save call.
  *
+ * Nearby photos cluster into a stacked-polaroid badge rather than a numbered
+ * circle - the top image sits on the second, and hover fans them slightly
+ * apart. Same-spot GPS hits stay stacked at every zoom so a burst of photos
+ * from one building is never a pile of overlapping thumbnails.
+ *
  * Leaflet is a CDN global on every map page, so it is declared rather than
  * imported - importing would bundle a second copy and clobber the plugins hung
  * off `window.L`.
@@ -16,12 +21,35 @@
 
 declare const L: typeof import("leaflet");
 
+import { hasMarkerCluster, reclusterOnDrag, returnToCluster } from "./map-clusters";
+
+/** The subset of leaflet.markercluster's cluster object this file reads. */
+interface PhotoClusterLike {
+    getAllChildMarkers(): L.Marker[];
+}
+
+type PhotoClusterFactory = (options: {
+    maxClusterRadius?: number | ((zoom: number) => number);
+    showCoverageOnHover?: boolean;
+    spiderfyOnMaxZoom?: boolean;
+    zoomToBoundsOnClick?: boolean;
+    animate?: boolean;
+    animateAddingMarkers?: boolean;
+    iconCreateFunction?: (cluster: PhotoClusterLike) => L.DivIcon;
+}) => L.LayerGroup;
+
 /** Base thumbnail size at zoom 16 and above. */
 export const PHOTO_MARKER_BASE_SIZE = 44;
 /** Floor for the zoomed-far-out case, below which a thumbnail is unreadable. */
 export const PHOTO_MARKER_MIN_SIZE = 14;
 /** How much a hovered/highlighted marker grows. */
 export const PHOTO_MARKER_HOVER_SCALE = 56 / 44;
+/** Resting offset of the back photo in a cluster, in pixels. Must match _gallery.scss. */
+export const PHOTO_CLUSTER_PEEK = 7;
+
+function escHtml(value: string): string {
+    return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
+}
 
 /**
  * Edge length for a photo marker at the given zoom.
@@ -40,6 +68,16 @@ export function photoMarkerSize(zoom: number, highlighted?: boolean): number {
 }
 
 /**
+ * Cluster radius for photo markers: group them when their thumbnails would
+ * overlap, so the stacked badge replaces a pile of unreadable squares.
+ *
+ * @param zoom - The map's current zoom level.
+ */
+export function photoClusterRadius(zoom: number): number {
+    return Math.max(PHOTO_MARKER_MIN_SIZE, Math.round(photoMarkerSize(zoom) * 0.9));
+}
+
+/**
  * The square thumbnail icon used for a photo on any map.
  *
  * @param url - Image URL to show in the marker.
@@ -50,9 +88,91 @@ export function makePhotoIcon(url: string, size: number, highlighted?: boolean):
     const shadow = highlighted ? "0 0 0 3px #2563eb, 0 3px 10px rgba(0,0,0,.45)" : "0 2px 6px rgba(0,0,0,.35)";
     return L.divIcon({
         className: "",
-        html: `<img src="${url}" class="photo-marker-img" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:5px;border:2px solid #fff;box-shadow:${shadow};display:block;transition:transform .15s,box-shadow .15s;">`,
+        html: `<img src="${escHtml(url)}" class="photo-marker-img" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:5px;border:2px solid #fff;box-shadow:${shadow};display:block;transition:transform .15s,box-shadow .15s;">`,
         iconSize: [size, size],
         iconAnchor: [size / 2, size / 2],
+    });
+}
+
+/**
+ * Markup for a stacked-photo cluster badge. Two images, the front fully
+ * visible, the back peeking out as a border; a count pill for the collection.
+ *
+ * Pure HTML so tests can assert on the stack without constructing a DivIcon.
+ *
+ * @param frontUrl - The top photo (highest id / most recent).
+ * @param backUrl - The photo immediately behind it; falls back to frontUrl.
+ * @param count - Total photos in the cluster (shown in the pill).
+ * @param size - Edge length of each thumbnail, matching photoMarkerSize.
+ */
+export function photoClusterMarkup(frontUrl: string, backUrl: string, count: number, size: number): string {
+    const front = escHtml(frontUrl);
+    const back = escHtml(backUrl || frontUrl);
+    return `<div class="photo-cluster" style="--pcs:${size}px" aria-label="${count} photos">
+        <img class="photo-cluster__img photo-cluster__img--back" src="${back}" alt="" draggable="false">
+        <img class="photo-cluster__img photo-cluster__img--front" src="${front}" alt="" draggable="false">
+        <span class="photo-cluster__count">${count}</span>
+    </div>`;
+}
+
+/**
+ * Leaflet icon wrapping {@link photoClusterMarkup}. Sized to include the back
+ * photo's peek so the cluster doesn't clip at rest; hover fans further via
+ * overflow:visible.
+ *
+ * @param frontUrl - The top photo.
+ * @param backUrl - The photo behind it.
+ * @param count - Total photos in the cluster.
+ * @param size - Thumbnail edge length.
+ */
+export function makePhotoClusterIcon(frontUrl: string, backUrl: string, count: number, size: number): L.DivIcon {
+    const peek = PHOTO_CLUSTER_PEEK;
+    const iconSize = size + peek + 4;
+    return L.divIcon({
+        className: "photo-cluster-icon",
+        html: photoClusterMarkup(frontUrl, backUrl, count, size),
+        iconSize: [iconSize, iconSize],
+        iconAnchor: [size / 2, size / 2],
+    });
+}
+
+/** Marker tagged with the photo it represents, so cluster icons can read URLs. */
+export interface TaggedPhotoMarker extends L.Marker {
+    _ulPhotoUrl?: string;
+    _ulPhotoId?: number;
+}
+
+/** Stash the photo identity on a marker for {@link createPhotoClusterGroup}. */
+export function tagPhotoMarker(marker: L.Marker, url: string, id: number): void {
+    const tagged = marker as TaggedPhotoMarker;
+    tagged._ulPhotoUrl = url;
+    tagged._ulPhotoId = id;
+}
+
+/**
+ * A MarkerClusterGroup whose clusters render as a stacked pair of thumbnails.
+ *
+ * Falls back to a plain LayerGroup when leaflet.markercluster is not loaded.
+ *
+ * @param map - Used to size cluster icons at the current zoom.
+ */
+export function createPhotoClusterGroup(map: L.Map): L.LayerGroup {
+    if (!hasMarkerCluster()) return L.layerGroup();
+    const factory = (L as unknown as { markerClusterGroup: PhotoClusterFactory }).markerClusterGroup;
+    return factory({
+        maxClusterRadius: photoClusterRadius,
+        showCoverageOnHover: false,
+        spiderfyOnMaxZoom: true,
+        zoomToBoundsOnClick: true,
+        animate: true,
+        animateAddingMarkers: false,
+        iconCreateFunction(cluster) {
+            const markers = (cluster.getAllChildMarkers() as TaggedPhotoMarker[]).slice();
+            markers.sort((a, b) => (b._ulPhotoId ?? 0) - (a._ulPhotoId ?? 0));
+            const front = markers[0]?._ulPhotoUrl ?? "";
+            const back = markers[1]?._ulPhotoUrl ?? front;
+            return makePhotoClusterIcon(front, back, markers.length, photoMarkerSize(map.getZoom()));
+        },
     });
 }
 
@@ -112,12 +232,15 @@ interface MarkerEntry {
  * handler was supplied - the server refuses to move another profile's photo, so
  * offering the drag would produce a move that always snaps back.
  *
+ * Nearby photos cluster into a stacked badge when leaflet.markercluster is on
+ * the page (pin detail, wiki, albums on those pages).
+ *
  * @param map - The Leaflet map to attach to.
  * @param options - Reposition/selection callbacks; see PhotoMarkerLayerOptions.
  * @returns Handle for adding, removing, and highlighting markers.
  */
 export function createPhotoMarkerLayer(map: L.Map, options: PhotoMarkerLayerOptions = {}): PhotoMarkerLayer {
-    const layer = L.layerGroup().addTo(map);
+    const layer = createPhotoClusterGroup(map).addTo(map);
     const markers = new Map<number, MarkerEntry>();
 
     function iconFor(entry: MarkerEntry): L.DivIcon {
@@ -133,23 +256,27 @@ export function createPhotoMarkerLayer(map: L.Map, options: PhotoMarkerLayerOpti
             icon: makePhotoIcon(item.url, photoMarkerSize(map.getZoom(), false), false),
             draggable,
         });
+        tagPhotoMarker(marker, item.url, item.id);
         if (item.caption) marker.bindTooltip(item.caption, { direction: "top", className: "detail-pin-tooltip" });
 
         const entry: MarkerEntry = { marker, url: item.url, lat: item.lat, lng: item.lng, highlighted: false };
 
         if (draggable && options.onMove) {
+            reclusterOnDrag(marker, layer, map);
             marker.on("dragend", () => {
                 const pos = marker.getLatLng();
                 const prevLat = entry.lat;
                 const prevLng = entry.lng;
                 entry.lat = pos.lat;
                 entry.lng = pos.lng;
+                returnToCluster(marker, layer, map);
                 options.onMove?.(item.id, pos.lat, pos.lng).catch(() => {
                     // Server refused the move - put the marker back where it was
                     // rather than leaving the map disagreeing with the database.
                     marker.setLatLng([prevLat, prevLng]);
                     entry.lat = prevLat;
                     entry.lng = prevLng;
+                    returnToCluster(marker, layer, map);
                 });
             });
         }

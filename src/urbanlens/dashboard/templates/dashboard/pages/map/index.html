@@ -700,6 +700,37 @@
     let   _selectMode      = false;   // true while the select tool is active
     const _selectedPinUuids = new Set();
     let   _dragSelectRect   = null;   // Leaflet rectangle preview during an active drag-select gesture
+    // Last plain-clicked pin, so a subsequent ctrl/cmd-click can enter select
+    // mode with both that pin and the new one selected.
+    let   _lastClickedPinUuid = null;
+
+    function _isAdditiveClick(e) {
+        const orig = e && e.originalEvent;
+        return !!(orig && (orig.ctrlKey || orig.metaKey));
+    }
+
+    function _handleSelectablePinClick(e, uuid, marker) {
+        const additive = _isAdditiveClick(e);
+        if (_selectMode) {
+            marker.closePopup();
+            L.DomEvent.stop(e);
+            _togglePinSelection(uuid);
+            return;
+        }
+        if (additive) {
+            marker.closePopup();
+            L.DomEvent.stop(e);
+            map.closePopup();
+            enterSelectMode();
+            if (_lastClickedPinUuid && _lastClickedPinUuid !== uuid && !_selectedPinUuids.has(_lastClickedPinUuid) && _anyMarker(_lastClickedPinUuid)) {
+                _togglePinSelection(_lastClickedPinUuid);
+            }
+            if (!_selectedPinUuids.has(uuid)) _togglePinSelection(uuid);
+            _lastClickedPinUuid = null;
+            return;
+        }
+        _lastClickedPinUuid = uuid;
+    }
 
     // -- Map -------------------------------------------------------------------
     const _MAP_CENTER_MODE   = '{{ map_center_mode|default:"gps" }}';
@@ -1589,12 +1620,10 @@
 
         // Select-mode click toggles selection instead of opening the popup. The
         // popup already opened by the time this runs (Leaflet's own popup-click
-        // handler fires first), so close it back out immediately.
+        // handler fires first), so close it back out immediately. Ctrl/cmd-click
+        // on a second pin enters select mode with both selected.
         marker.on('click', function (e) {
-            if (!_selectMode) return;
-            marker.closePopup();
-            L.DomEvent.stop(e);
-            _togglePinSelection(pin.uuid);
+            _handleSelectablePinClick(e, pin.uuid, marker);
         });
 
         // Right-clicking an existing pin should behave exactly like left-
@@ -2128,12 +2157,10 @@
             </div>`);
 
         // Select-mode click toggles selection instead of opening the popup,
-        // matching the root-marker behavior in _buildMarker.
+        // matching the root-marker behavior in _buildMarker. Ctrl/cmd-click
+        // on a second pin enters select mode with both selected.
         marker.on('click', function (e) {
-            if (!_selectMode) return;
-            marker.closePopup();
-            L.DomEvent.stop(e);
-            _togglePinSelection(pin.uuid);
+            _handleSelectablePinClick(e, pin.uuid, marker);
         });
 
         // Right-click behaves like left-click, matching _buildMarker - see its
@@ -3033,6 +3060,7 @@
         // (see _initSelectDragRectangle); this covers one that never finished.
         map.dragging.enable();
         _markerMap.forEach(function (m) { if (m.dragging) m.dragging.enable(); });
+        _lastClickedPinUuid = null;
         _clearSelection();
         document.getElementById('bulk-select-toolbar').hidden = true;
     }

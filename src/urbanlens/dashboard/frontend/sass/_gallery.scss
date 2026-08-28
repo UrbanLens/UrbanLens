@@ -923,6 +923,89 @@
   }
 }
 
+// Stacked-photo cluster: the top image sits on the second, which peeks as a
+// border. Hover fans them apart so the collection is obvious before a click.
+.leaflet-div-icon.photo-cluster-icon {
+  background: transparent;
+  border: none;
+  overflow: visible !important;
+
+  &:hover {
+    z-index: 1000 !important;
+  }
+}
+
+.photo-cluster {
+  --pcs: 44px;
+  position: relative;
+  width: calc(var(--pcs) + 11px);
+  height: calc(var(--pcs) + 11px);
+  cursor: pointer;
+}
+
+.photo-cluster__img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--pcs);
+  height: var(--pcs);
+  object-fit: cover;
+  border-radius: 6px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .38), 0 0 0 1px rgba(15, 23, 42, .08);
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  transition: transform .22s cubic-bezier(.22, 1, .36, 1), box-shadow .22s ease, filter .22s ease;
+  transform-origin: 50% 80%;
+}
+
+.photo-cluster__img--back {
+  z-index: 1;
+  transform: translate(7px, 6px) rotate(7deg);
+  filter: brightness(.92);
+}
+
+.photo-cluster__img--front {
+  z-index: 2;
+  transform: rotate(-1.5deg);
+}
+
+.photo-cluster:hover .photo-cluster__img--back {
+  transform: translate(14px, 11px) rotate(12deg);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, .42);
+  filter: brightness(.97);
+}
+
+.photo-cluster:hover .photo-cluster__img--front {
+  transform: translate(-5px, -4px) rotate(-5deg);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, .42);
+}
+
+.photo-cluster__count {
+  position: absolute;
+  z-index: 3;
+  left: calc(var(--pcs) - 1.2rem);
+  top: calc(var(--pcs) - 1.2rem);
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 .28rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .9);
+  color: #fff;
+  font-size: .62rem;
+  font-weight: 700;
+  line-height: 1.15rem;
+  text-align: center;
+  letter-spacing: .02em;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+  pointer-events: none;
+}
+
+[data-theme="dark"] .photo-cluster__img {
+  border-color: rgba(255, 255, 255, .92);
+}
+
 // Comment image blur
 .comment-image-blurred {
   position: relative;
