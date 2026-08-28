@@ -27,15 +27,17 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Q
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.map_overlay.model import CORNERS, MapImageOverlay
 from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
@@ -103,6 +105,82 @@ def _owner_location(owner: Pin | Wiki):
     return owner.location
 
 
+def _wants_json(request: HttpRequest) -> bool:
+    """True when the caller asked for JSON rather than the HTMX list partial.
+
+    The manage-overlays dialog is HTMX (``HX-Request``) and always wants the
+    swapped HTML. The pin-detail lightbox's "use as floorplan overlay" action
+    fetches this same POST as JSON so it can redirect to the editor.
+
+    Args:
+        request: The current request.
+
+    Returns:
+        True when the response should be a JSON body instead of the list partial.
+    """
+    if request.headers.get("HX-Request"):
+        return False
+    return "application/json" in (request.headers.get("Accept") or "")
+
+
+def _default_corners(owner: Pin | Wiki) -> list[list[float]] | None:
+    """A small box around the pin/wiki, used when the client did not seed corners.
+
+    The manage dialog normally fills the hidden ``corners`` field from the
+    current map viewport just before submit. Keyboard-submit, a missed hook,
+    or the lightbox (which has no live map) used to fail with nothing on the
+    map - this lands the overlay on the property instead, where dragging the
+    corners is a small adjustment.
+
+    Args:
+        owner: The Pin or Wiki the overlay will belong to.
+
+    Returns:
+        Four ``[lat, lng]`` pairs around the location, or None when the
+        owner has no coordinates to seed from.
+    """
+    location = _owner_location(owner)
+    if location is None or location.latitude is None or location.longitude is None:
+        return None
+    latitude = float(location.latitude)
+    longitude = float(location.longitude)
+    # ~60 m north/south. Longitude degrees shrink toward the poles, so the
+    # east/west span is scaled to keep the box roughly square in metres.
+    dlat = 0.00055
+    dlng = dlat / max(0.2, math.cos(math.radians(latitude)))
+    return [
+        [latitude + dlat, longitude - dlng],
+        [latitude + dlat, longitude + dlng],
+        [latitude - dlat, longitude + dlng],
+        [latitude - dlat, longitude - dlng],
+    ]
+
+
+def _overlay_picker_images(owner: Pin | Wiki, viewer: Profile):
+    """Photos the manage-overlays picker (and ``image_id`` POST) may offer.
+
+    Matches the pin/wiki gallery's notion of "this page's photos", including
+    a pin's child-pin uploads and visit-attached photos, without the gallery's
+    page size or the old 60-row cap that hid older uploads behind newer ones.
+
+    Videos and documents are excluded: an overlay is drawn as an ``<img>``.
+
+    Args:
+        owner: The Pin or Wiki whose photos to list.
+        viewer: The profile looking at the picker (visibility filtering).
+
+    Returns:
+        Photos newest first, including a pin's child-pin and visit-attached
+        uploads.
+    """
+    if isinstance(owner, Pin):
+        subtree = Pin.objects.filter(pk=owner.pk).with_descendants()
+        images = Image.objects.filter(Q(pin__in=subtree) | Q(visit__pin__in=subtree))
+    else:
+        images = Image.objects.filter(wiki=owner)
+    return images.filter(media_type=MediaKind.PHOTO).exclude(image="").visible_to(viewer).distinct().order_by("-created")
+
+
 def _parse_corners(raw: str | None) -> list[list[float]] | None:
     """Parse a posted ``corners`` JSON array into four ``[lat, lng]`` pairs.
 
@@ -165,16 +243,18 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
     # An existing photo already on this pin/wiki, picked from the dialog's own
     # media grid - reused directly rather than re-downloaded/materialized like
     # a transient provider item below, since it is already a real, owned Image.
+    # Scoped to the same queryset the picker lists, so a child-pin photo the
+    # picker offered is actually usable, not a silent "could not be found".
     image_id = (request.POST.get("image_id") or "").strip()
     if image_id:
-        owner_filter = {"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}
-        image = Image.objects.filter(pk=image_id, **owner_filter).first()
+        image = _overlay_picker_images(owner, profile).filter(pk=image_id).first()
         if image is None:
             return None, "", "That photo could not be found."
         return image, "", None
 
     upload = request.FILES.get("image")
     if upload is not None:
+        from urbanlens.dashboard.services.media.images import compute_checksum
         from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
 
         # The canonical upload service, not a raw Image.objects.create: it
@@ -190,7 +270,17 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
                 **({"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}),
             )
         except PhotoUploadError as exc:
-            return None, "", exc.message
+            # Re-uploading a file already in the gallery used to fail with a
+            # toast event nothing listened for, so the dialog just reset and
+            # looked like a no-op. Reuse the existing row instead - the user
+            # asked to overlay this image, not to store a second copy.
+            if exc.status != 409:
+                return None, "", exc.message
+            existing = Image.objects.filter(profile=profile, checksum=compute_checksum(upload)).exclude(image="")
+            image = _overlay_picker_images(owner, profile).filter(pk__in=existing).first() or existing.first()
+            if image is None:
+                return None, "", exc.message
+            return image, "", None
         return image, "", None
 
     # A Media-gallery pick. The gallery renders provider results live and
@@ -305,7 +395,14 @@ def _visible_layer_ids(owner: Pin | Wiki, request: HttpRequest) -> set[int] | No
     return set(visible_rows(CustomLayer.objects.filter(**_owner_kwargs(owner)), owner, profile).values_list("pk", flat=True))
 
 
-def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: MapImageOverlayQuerySet, error: str | None = None) -> HttpResponse:
+def _render_overlay_list(
+    request: HttpRequest,
+    owner: Pin | Wiki,
+    qs: MapImageOverlayQuerySet,
+    error: str | None = None,
+    toast: tuple[str, str] | None = None,
+    align: str | None = None,
+) -> HttpResponse:
     """Render the manage-overlays list, with an ``HX-Trigger`` for the map JS.
 
     Action URLs are built here by positional ``args`` (rather than reversed
@@ -316,7 +413,12 @@ def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: MapImageOv
         request: The current request.
         owner: The Pin or Wiki the overlays belong to.
         qs: That owner's overlay queryset.
-        error: Message to surface as a toast, if the last action failed.
+        error: Message to surface as a toast and inline, if the last action failed.
+        toast: Optional ``(message, level)`` for a non-error toast (e.g. a
+            successful add). Ignored when ``error`` is set.
+        align: Overlay uuid the map should immediately show corner handles for
+            - a newly added sheet, so the user can warp it without hunting
+            for the Align button.
 
     Returns:
         The rendered partial, carrying ``ul:map-overlays-changed`` with the
@@ -357,10 +459,38 @@ def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: MapImageOv
             "layers": layers_qs,
             "at_limit": len(overlays) >= MAX_OVERLAYS_PER_MAP,
             "max_overlays": MAX_OVERLAYS_PER_MAP,
+            "error": error,
         },
     )
-    response["HX-Trigger"] = json.dumps({"ul:map-overlays-changed": {"overlays": overlay_payload(qs, visible_layer_ids)}, **({"ul:toast": {"message": error, "level": "error"}} if error else {})})
+    changed: dict = {"overlays": overlay_payload(qs, visible_layer_ids)}
+    if align:
+        changed["align"] = align
+    triggers: dict = {"ul:map-overlays-changed": changed}
+    notice = (error, "error") if error else toast
+    if notice:
+        # showToast is the site-wide HX-Trigger the base template listens for.
+        # ul:toast was a private name nobody handled, so add failures looked
+        # like a silent no-op.
+        triggers["showToast"] = {"message": notice[0], "level": notice[1]}
+    response["HX-Trigger"] = json.dumps(triggers)
     return response
+
+
+def _created_overlay_json(owner: Pin | Wiki, overlay: MapImageOverlay) -> JsonResponse:
+    """JSON body for the lightbox's "use as floorplan overlay" fetch.
+
+    Args:
+        owner: The Pin or Wiki the overlay belongs to.
+        overlay: The overlay that was created or already existed.
+
+    Returns:
+        ``ok``, the overlay uuid, and (for a pin) the floorplan editor URL
+        with ``?align=`` so the editor opens already in warp mode.
+    """
+    payload: dict = {"ok": True, "uuid": str(overlay.uuid), "floorplan_url": ""}
+    if isinstance(owner, Pin):
+        payload["floorplan_url"] = f"{reverse('pin.floorplan', args=[owner.slug])}?align={overlay.uuid}"
+    return JsonResponse(payload)
 
 
 class OverlayMediaPickerView(LoginRequiredMixin, View):
@@ -377,7 +507,6 @@ class OverlayMediaPickerView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
         """List this owner's images, most recent first."""
         owner, _qs = _resolve_owner(request, pin_slug, location_slug)
-        owner_filter = {"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}
         # visible_to for the same reason the wiki gallery uses it: contributing a
         # photo to a wiki does not withdraw what its uploader said about who may
         # see their photos, and this picker was the one wiki photo surface that
@@ -389,7 +518,7 @@ class OverlayMediaPickerView(LoginRequiredMixin, View):
         # and it is typed against an anonymous user this LoginRequired view can
         # never actually receive. Same resolution every other view uses.
         viewer, _ = Profile.objects.get_or_create(user=request.user)
-        images = Image.objects.filter(**owner_filter).exclude(image="").visible_to(viewer).order_by("-created")[:60]
+        images = _overlay_picker_images(owner, viewer)
         return JsonResponse({"images": [{"id": image.pk, "url": request.build_absolute_uri(image.image.url), "caption": image.caption or ""} for image in images]})
 
 
@@ -409,16 +538,45 @@ class MapOverlayListView(LoginRequiredMixin, View):
         owner, qs = _resolve_owner(request, pin_slug, location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        if qs.count() >= MAX_OVERLAYS_PER_MAP:
-            return _render_overlay_list(request, owner, qs, error=f"A map can hold at most {MAX_OVERLAYS_PER_MAP} image overlays.")
+        def fail(message: str) -> HttpResponse:
+            if _wants_json(request):
+                return JsonResponse({"error": message}, status=400)
+            return _render_overlay_list(request, owner, qs, error=message)
 
-        corners = _parse_corners(request.POST.get("corners"))
+        if qs.count() >= MAX_OVERLAYS_PER_MAP:
+            return fail(f"A map can hold at most {MAX_OVERLAYS_PER_MAP} image overlays.")
+
+        posted_corners = request.POST.get("corners")
+        corners = _parse_corners(posted_corners)
         if corners is None:
-            return _render_overlay_list(request, owner, qs, error="Could not read where to place the overlay on the map.")
+            # Empty/missing is a client that skipped the viewport hook (Enter
+            # in the name field, the lightbox). Garbage is not: placing a
+            # half-parsed sheet somewhere the user didn't choose is worse than
+            # refusing.
+            if posted_corners:
+                return fail("Could not read where to place the overlay on the map.")
+            corners = _default_corners(owner)
+            if corners is None:
+                return fail("Could not read where to place the overlay on the map.")
 
         image, image_url, error = _image_from_request(request, owner, profile)
         if error is not None:
-            return _render_overlay_list(request, owner, qs, error=error)
+            return fail(error)
+
+        # Re-adding a photo that is already an overlay is a place-this-sheet
+        # request, not a duplicate row - send the user to warp the existing one.
+        if image is not None:
+            existing_overlay = qs.filter(image=image).first()
+            if existing_overlay is not None:
+                if _wants_json(request):
+                    return _created_overlay_json(owner, existing_overlay)
+                return _render_overlay_list(
+                    request,
+                    owner,
+                    qs,
+                    toast=("This photo is already an overlay. Drag its corners to line it up.", "info"),
+                    align=str(existing_overlay.uuid),
+                )
 
         overlay = MapImageOverlay(
             name=(request.POST.get("name") or "").strip()[:_MAX_NAME_LENGTH],
@@ -431,7 +589,15 @@ class MapOverlayListView(LoginRequiredMixin, View):
         )
         overlay.set_corners(corners)
         overlay.save()
-        return _render_overlay_list(request, owner, qs)
+        if _wants_json(request):
+            return _created_overlay_json(owner, overlay)
+        return _render_overlay_list(
+            request,
+            owner,
+            qs,
+            toast=("Overlay added. Drag its four corners to line it up with the map.", "success"),
+            align=str(overlay.uuid),
+        )
 
 
 class MapOverlayEditView(LoginRequiredMixin, View):

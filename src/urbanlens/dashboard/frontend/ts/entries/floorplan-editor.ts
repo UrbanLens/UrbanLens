@@ -352,22 +352,29 @@ function boot(): void {
      * *writing* to an image, and nothing here writes to one.
      */
     const pinPhotos = readJson<Array<{ uuid: string; url: string; caption: string }>>("floorplan-photos") || [];
+    const overlayCornersTemplate = mapEl.dataset.overlayCornersUrlTemplate || "";
     // Always created, even with zero overlays at load time: the manage-overlays
     // dialog can add the pin's first one later, and without a live control to
     // sync() against, it would need a full page reload to actually appear.
-    // Forced locked - overlays here are a traced-reference backdrop, and their
-    // own drag handles would compete with the wall/marker tools' map gestures.
-    const overlayControl = createMapImageOverlays(L, map, { cornersUrl: () => "", csrfToken: getCsrfToken() });
-    const withForcedLock = (entries: MapOverlayEntry[]): MapOverlayEntry[] => entries.map((entry) => ({ ...entry, locked: true }));
-    overlayControl.sync(withForcedLock(readJson<MapOverlayEntry[]>("floorplan-overlays") || []));
+    const overlayControl = createMapImageOverlays(L, map, {
+        cornersUrl: (uuid) => overlayCornersTemplate.replace("00000000-0000-0000-0000-000000000000", uuid),
+        csrfToken: getCsrfToken(),
+        onError: (message) => toast.error(message),
+    });
+    overlayControl.sync(readJson<MapOverlayEntry[]>("floorplan-overlays") || []);
     document.body.addEventListener("ul:map-overlays-changed", (e) => {
-        overlayControl.sync(withForcedLock((e as CustomEvent).detail?.overlays || []));
+        overlayControl.sync((e as CustomEvent).detail?.overlays || []);
     });
     wireManageOverlaysDialog({
         map,
         control: overlayControl,
         onAlignStart: () => (document.getElementById("map-overlays-dialog") as HTMLDialogElement | null)?.close(),
     });
+    const alignOnLoad = new URLSearchParams(window.location.search).get("align");
+    if (alignOnLoad) {
+        overlayControl.setVisible(alignOnLoad, true);
+        window.ulMapOverlayStartAlign?.(alignOnLoad);
+    }
 
     let projection = new PlanProjection({ lat, lng });
     // First, so it always paints beneath everything else - it depends only

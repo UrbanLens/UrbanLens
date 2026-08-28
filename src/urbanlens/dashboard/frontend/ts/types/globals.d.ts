@@ -83,6 +83,8 @@ declare global {
         ulMapOverlayPickFromMedia?: (galleryJsonUrl?: string) => void;
         ulMapOverlayChooseImage?: (id: number, caption: string) => void;
         ulMapOverlaySyncSubmitState?: () => void;
+        ulMapOverlayChooseFile?: () => void;
+        ulMapOverlayChooseUrl?: () => void;
         ulMapOverlayHandleDrop?: (event: DragEvent, zone: HTMLElement) => void;
     }
 

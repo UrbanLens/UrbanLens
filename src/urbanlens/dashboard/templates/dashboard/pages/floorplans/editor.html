@@ -169,7 +169,8 @@
                  data-save-url="{% url 'pin.floorplan.save' pin.slug %}"
                  data-publish-url="{% url 'pin.floorplan.publish' pin.slug %}"
                  data-lat="{{ pin.effective_latitude }}"
-                 data-lng="{{ pin.effective_longitude }}"></div>
+                 data-lng="{{ pin.effective_longitude }}"
+                 data-overlay-corners-url-template="{{ overlay_corners_url_template }}"></div>
 
             {# Same shared layers component/engine as every other map on the #}
             {# site - backdrop, weather/borders, and "Image Overlays" (browse #}

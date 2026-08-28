@@ -188,8 +188,10 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   old streets sit on the real ones. Four free corners means a full projective transform, so a scan
   that is rotated, sheared, or trapezoidal (as flatbed scans of century-old paper usually are)
   still lines up — an axis-aligned bounding box cannot express that. The image comes from an
-  upload, a pick from that page's own Media gallery (materialized to a real `Image` first, so it
-  survives the provider rotating its URL), or an external image URL. Per-overlay opacity, a lock
+  upload (reusing a file you already uploaded to this pin, rather than failing as a duplicate), a
+  pick from that page's own uploaded photos (the full gallery, including child-pin photos - not a
+  short preview of recent ones), or an external image URL. After adding, the overlay appears on
+  the map with corner handles so it can be pinned and warped immediately. Per-overlay opacity, a lock
   to stop a placed sheet drifting, and either its own layers-panel toggle or membership in a
   custom layer (`models.map_overlay`, `controllers/map_overlays.py`,
   `frontend/ts/shared/map-image-overlays.ts`)
@@ -440,7 +442,9 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 ## Photos & Memories
 
 - Photo galleries on pins and wikis: drag-drop upload, reordering, lightbox, EXIF/GPS extraction,
-  checksum-based duplicate detection
+  checksum-based duplicate detection. On a private pin, the lightbox's more-actions menu offers
+  **Use as floorplan overlay**, which adds the photo as a georeferenced blueprint and opens the
+  floorplan editor to warp it.
 - Site-wide photo library (Memories → Photos) that matches unfiled photos (by GPS + timestamp) to
   existing pins and proposes **visit suggestions** for confirmation
 - **Memories** page — aggregated timeline/map view of routes, trips, visits, and photos, including

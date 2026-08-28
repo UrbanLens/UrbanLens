@@ -88,15 +88,22 @@ dialog only owns the presentation settings.
     {% endfor %}
 </ul>
 
+{% if error %}
+<p class="map-overlay-add-error" role="alert">{{ error }}</p>
+{% endif %}
+
 {% if at_limit %}
 <p class="map-overlay-manage-empty">This map already has the maximum of {{ max_overlays }} overlays.</p>
 {% else %}
 <form class="map-overlay-add-form" id="map-overlay-add-form"
       hx-post="{{ create_url }}"
       hx-encoding="multipart/form-data"
-      hx-target="#map-overlays-dialog-body" hx-swap="innerHTML">
+      hx-target="#map-overlays-dialog-body" hx-swap="innerHTML"
+      hx-disabled-elt="#map-overlay-add-submit">
     {% csrf_token %}
-    <input type="text" name="name" class="map-overlay-add-name" placeholder="Name (e.g. Sanborn 1897, sheet 12)" maxlength="100">
+    <p class="map-overlay-add-heading">Add an overlay</p>
+    <input type="text" name="name" class="map-overlay-add-name" placeholder="Name (e.g. Sanborn 1897, basement blueprint)" maxlength="100"
+           aria-label="Overlay name">
 
     <div class="map-overlay-add-sources">
         <label class="map-overlay-dropzone" id="map-overlay-dropzone"
@@ -104,19 +111,19 @@ dialog only owns the presentation settings.
                ondragleave="this.classList.remove('is-dragover')"
                ondrop="window.ulMapOverlayHandleDrop && window.ulMapOverlayHandleDrop(event, this)">
             <i class="material-symbols-outlined map-overlay-dropzone-icon">cloud_upload</i>
-            <span class="map-overlay-dropzone-text">Drop an image here, or choose a file</span>
+            <span class="map-overlay-dropzone-text" id="map-overlay-dropzone-text">Drop an image here, or choose a file</span>
             <input type="file" name="image" accept="image/*" class="map-overlay-dropzone-input"
-                   onchange="window.ulMapOverlaySyncSubmitState && window.ulMapOverlaySyncSubmitState()">
+                   onchange="window.ulMapOverlayChooseFile && window.ulMapOverlayChooseFile()">
         </label>
         <label class="map-overlay-add-source">
             <span>...or paste an image URL</span>
             <input type="url" name="image_url" placeholder="https://..." maxlength="1000"
-                   oninput="window.ulMapOverlaySyncSubmitState && window.ulMapOverlaySyncSubmitState()">
+                   oninput="window.ulMapOverlayChooseUrl && window.ulMapOverlayChooseUrl()">
         </label>
         <div class="map-overlay-media-pick">
-            <button type="button" class="btn btn--primary" id="map-overlay-pick-media-btn"
+            <button type="button" class="btn btn--ghost" id="map-overlay-pick-media-btn"
                     onclick="window.ulMapOverlayPickFromMedia && window.ulMapOverlayPickFromMedia('{{ gallery_json_url }}')">
-                <i class="material-symbols-outlined">photo_library</i> Pick from this page's Media
+                <i class="material-symbols-outlined">photo_library</i> Choose from uploaded photos
             </button>
             <div id="map-overlay-media-picker" class="map-overlay-media-picker" hidden></div>
         </div>
@@ -128,14 +135,15 @@ dialog only owns the presentation settings.
     Filled in by map-image-overlays.ts from the map's current viewport just
     before submit - a new overlay lands covering roughly what the user is
     looking at, which is the only placement that makes dragging the corners a
-    small adjustment rather than a hunt.
+    small adjustment rather than a hunt. The server also seeds a fallback from
+    the pin's coordinates if this stays empty (keyboard submit, missed hook).
     {% endcomment %}
     <input type="hidden" name="corners" id="map-overlay-initial-corners">
 
     {# Starts disabled - nothing is picked yet on a freshly (re)rendered form. #}
     {# window.ulMapOverlaySyncSubmitState re-derives this from the fields     #}
     {# above on every change, so it never stays clickable with nothing to add. #}
-    <button type="submit" class="btn btn--primary" id="map-overlay-add-submit" disabled
+    <button type="submit" class="btn btn--primary btn--submit" id="map-overlay-add-submit" disabled
             onclick="window.ulMapOverlaySeedCorners && window.ulMapOverlaySeedCorners()">
         <i class="material-symbols-outlined">add_photo_alternate</i> Add overlay
     </button>

@@ -44,6 +44,11 @@ Context:
                             photo strip sets this; every other lightbox use
                             leaves it off so it doesn't fire a needless
                             request per photo.
+  show_floorplan_overlay_action - whether to offer "Use as floorplan overlay"
+                            in the more-actions menu. Private pin details
+                            only; hidden for wiki/memories/profile lightboxes.
+  floorplan_overlay_url   - POST endpoint that creates (or reuses) a map
+                            overlay from this photo (`pin.overlays`).
 {% endcomment %}
 {% with lightbox_id=lightbox_id|default:"gallery-lightbox" %}
 <dialog id="{{ lightbox_id }}" class="gallery-lightbox ul-dialog" aria-label="Photo viewer">
@@ -64,7 +69,24 @@ Context:
       </button>
     </div>
     <div class="lightbox-side-panel">
-      <p id="lightbox-caption" class="lightbox-caption"></p>
+      <div class="lightbox-side-header">
+        <p id="lightbox-caption" class="lightbox-caption"></p>
+        {% if show_floorplan_overlay_action %}
+        <div id="lightbox-actions-menu" class="lightbox-actions-menu" hidden>
+          <button type="button" class="lightbox-actions-toggle" id="lightbox-actions-toggle"
+                  aria-haspopup="true" aria-expanded="false" aria-label="More actions"
+                  onclick="window._lightboxToggleActions(event)">
+            <i class="material-symbols-outlined">more_vert</i>
+          </button>
+          <div class="lightbox-actions-list" id="lightbox-actions-list" hidden>
+            <button type="button" id="lightbox-floorplan-overlay-btn" class="lightbox-actions-item"
+                    onclick="window._lightboxUseAsFloorplanOverlay()">
+              <i class="material-symbols-outlined">architecture</i> Use as floorplan overlay
+            </button>
+          </div>
+        </div>
+        {% endif %}
+      </div>
       <div id="lightbox-meta" class="lightbox-meta">
         <p id="lightbox-source-name" class="lightbox-meta-line" hidden></p>
         <p id="lightbox-author" class="lightbox-meta-line" hidden></p>
@@ -110,6 +132,7 @@ Context:
   var CSRF_TOKEN = '{{ csrf_token }}';
   var PIN_MEDIA_RELEVANCE_URL = '{{ pin_media_relevance_url|default:"" }}';
   var COVER_PHOTO_URL = '{{ cover_photo_url|default:"" }}';
+  var FLOORPLAN_OVERLAY_URL = '{{ floorplan_overlay_url|default:"" }}';
   var CF_PHOTO_URL_TEMPLATE = '{% url "custom_fields.photo" 0 %}';
   var SHOW_ATTACHMENT_POINTS = {% if show_attachment_points %}true{% else %}false{% endif %};
   var ATTACHMENT_POINTS_URL_TEMPLATE = SHOW_ATTACHMENT_POINTS ? '{% url "profile.photo.attachments" 0 %}' : '';
@@ -141,7 +164,10 @@ Context:
   if (_lightboxDlg && _lightboxDlg.parentElement !== document.body) {
     document.body.appendChild(_lightboxDlg);
   }
-  if (_lightboxDlg) _lightboxDlg.addEventListener('close', function () { if (_lightboxMap) { _lightboxMap.remove(); _lightboxMap = null; } });
+  if (_lightboxDlg) _lightboxDlg.addEventListener('close', function () {
+    if (_lightboxMap) { _lightboxMap.remove(); _lightboxMap = null; }
+    if (window._lightboxCloseActions) window._lightboxCloseActions();
+  });
 
   // Generalized opener: `list` is an array of normalized items (see the file
   // header), `idx` the one to show first. This is the single entry point
@@ -275,6 +301,11 @@ Context:
           : '<i class="material-symbols-outlined">wallpaper</i> Set as cover photo';
       }
     }
+    var actionsMenu = document.getElementById('lightbox-actions-menu');
+    if (actionsMenu) {
+      actionsMenu.hidden = !(item.imageId && FLOORPLAN_OVERLAY_URL);
+      window._lightboxCloseActions();
+    }
   }
 
   // Small "where was this taken" map in the side panel. Torn down and
@@ -363,6 +394,61 @@ Context:
     var isCover = !!(CURRENT_COVER_ID && item.imageId === CURRENT_COVER_ID);
     window._setCoverPhoto(isCover ? null : item.imageId);
   };
+
+  window._lightboxCloseActions = function () {
+    var list = document.getElementById('lightbox-actions-list');
+    var toggle = document.getElementById('lightbox-actions-toggle');
+    if (list) list.hidden = true;
+    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  };
+
+  window._lightboxToggleActions = function (event) {
+    if (event) event.stopPropagation();
+    var list = document.getElementById('lightbox-actions-list');
+    var toggle = document.getElementById('lightbox-actions-toggle');
+    if (!list || !toggle) return;
+    var open = list.hidden;
+    list.hidden = !open;
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+
+  window._lightboxUseAsFloorplanOverlay = function () {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item || !item.imageId || !FLOORPLAN_OVERLAY_URL) return;
+    var btn = document.getElementById('lightbox-floorplan-overlay-btn');
+    if (btn) { btn.disabled = true; }
+    var body = new FormData();
+    body.append('csrfmiddlewaretoken', CSRF_TOKEN);
+    body.append('image_id', String(item.imageId));
+    if (item.caption) body.append('name', item.caption);
+    fetch(FLOORPLAN_OVERLAY_URL, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: body,
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+        return data;
+      });
+    }).then(function (data) {
+      if (data.floorplan_url) {
+        window.location.href = data.floorplan_url;
+        return;
+      }
+      if (window.toastr) toastr.success('Added as a map overlay.');
+      window._lightboxCloseActions();
+    }).catch(function (err) {
+      if (window.toastr) toastr.error(err.message || 'Could not add this photo as an overlay.');
+    }).finally(function () {
+      if (btn) btn.disabled = false;
+    });
+  };
+
+  document.addEventListener('click', function (event) {
+    var menu = document.getElementById('lightbox-actions-menu');
+    if (!menu || menu.hidden || menu.contains(event.target)) return;
+    window._lightboxCloseActions();
+  });
 
   // Anchor element each page's cover-hero banner is inserted directly before
   // when created for the first time (mirrors the server-side markup's fixed

@@ -426,7 +426,7 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
             slug=kwargs["pin_slug"],
             profile__user=self.request.user,
         )
-        from urbanlens.dashboard.controllers.map_overlays import overlay_payload
+        from urbanlens.dashboard.controllers.map_overlays import OVERLAY_UUID_PLACEHOLDER, overlay_payload
         from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES
         from urbanlens.dashboard.models.labels.model import Label
 
@@ -448,6 +448,7 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
         # browsing this pin's own photos for a blueprint/site plan to pin and
         # skew onto the floorplan map, not a bespoke picker.
         context["manage_overlays_url"] = reverse("pin.overlays", args=[pin.slug])
+        context["overlay_corners_url_template"] = reverse("pin.overlays.corners", args=[pin.slug, OVERLAY_UUID_PLACEHOLDER])
         # attributionControl is off on this map; required attribution renders
         # in the page footer instead (see createMapLayers' onAttribution).
         context["show_map_footer"] = True

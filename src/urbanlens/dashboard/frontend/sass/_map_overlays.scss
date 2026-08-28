@@ -113,12 +113,27 @@
   margin: 0;
 }
 
+.map-overlay-add-error {
+  background: color-mix(in srgb, var(--ul-danger, #dc2626) 12%, transparent);
+  border-radius: .4rem;
+  color: var(--ul-danger, #dc2626);
+  font-size: .85rem;
+  margin: 0 0 .6rem;
+  padding: .5rem .65rem;
+}
+
 .map-overlay-add-form {
   border-top: 1px solid var(--ul-grey-2);
   display: flex;
   flex-direction: column;
   gap: .5rem;
   padding-top: .7rem;
+}
+
+.map-overlay-add-heading {
+  font-size: .85rem;
+  font-weight: 600;
+  margin: 0;
 }
 
 .map-overlay-add-sources {
@@ -193,7 +208,7 @@
   display: grid;
   gap: .35rem;
   grid-template-columns: repeat(auto-fill, minmax(3.5rem, 1fr));
-  max-height: 10rem;
+  max-height: 18rem;
   overflow-y: auto;
 }
 
@@ -208,6 +223,11 @@
 
   &:hover {
     border-color: var(--ul-primary-color, var(--primary-color));
+  }
+
+  &.is-selected {
+    border-color: var(--ul-primary-color, var(--primary-color));
+    box-shadow: 0 0 0 1px var(--ul-primary-color, var(--primary-color));
   }
 
   img {
@@ -311,4 +331,31 @@
 .map-overlay-historical-meta {
   color: var(--ul-grey-5);
   font-size: .78rem;
+}
+
+.map-overlay-add-form.htmx-request #map-overlay-add-submit {
+  opacity: .7;
+}
+
+.map-overlay-align-banner {
+  align-items: center;
+  background: color-mix(in srgb, var(--ul-surface-raised, #fff) 92%, transparent);
+  border: 1px solid var(--ul-surface-raised-border, rgba(0, 0, 0, .12));
+  border-radius: .5rem;
+  bottom: .75rem;
+  box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .18);
+  display: flex;
+  gap: .75rem;
+  left: 50%;
+  padding: .45rem .55rem .45rem .85rem;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 700;
+
+  &[hidden] { display: none; }
+
+  span {
+    font-size: .85rem;
+    white-space: nowrap;
+  }
 }

@@ -451,18 +451,39 @@ export interface ManageOverlaysDialogOptions {
  * The dialog is server-rendered HTML that HTMX swaps in and out wholesale on
  * every add/edit/delete, so it cannot import this module - it calls these by
  * name instead (see `_map_overlays_list.html`). Shared by the pin/wiki map
- * entry and the floorplan editor so both get the same behavior: the
- * pick-from-media picker used to be duplicated, inline, directly in two page
- * templates - and never wired up at all on the floorplan editor, where
- * `window.ulMapOverlaySeedCorners` was also missing, silently breaking every
- * attempt to add an overlay there (the corners field stayed empty, so the
- * server had nowhere to place it).
+ * entry and the floorplan editor so both get the same behavior.
  */
 export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): void {
     const { map, control, onAlignStart } = options;
 
+    function showAlignBanner(): void {
+        const host = map.getContainer();
+        if (!host) return;
+        let banner = document.getElementById("map-overlay-align-banner");
+        if (!banner) {
+            banner = document.createElement("div");
+            banner.id = "map-overlay-align-banner";
+            banner.className = "map-overlay-align-banner";
+            const text = document.createElement("span");
+            text.textContent = "Drag the four corners until the overlay lines up.";
+            const done = document.createElement("button");
+            done.type = "button";
+            done.className = "btn btn--sm btn--primary";
+            done.textContent = "Done";
+            done.addEventListener("click", () => {
+                control.stopAlign();
+                banner?.setAttribute("hidden", "");
+            });
+            banner.append(text, done);
+            host.appendChild(banner);
+        }
+        banner.removeAttribute("hidden");
+    }
+
     window.ulMapOverlayStartAlign = (uuid: string) => {
+        control.setVisible(uuid, true);
         control.startAlign(uuid);
+        showAlignBanner();
         onAlignStart?.();
     };
     window.ulMapOverlayPreviewOpacity = (uuid: string, value: string) => control.previewOpacity(uuid, Number(value));
@@ -484,6 +505,29 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
         ]);
     };
 
+    function clearFileInput(): void {
+        const input = document.querySelector<HTMLInputElement>("#map-overlay-add-form input[type='file']");
+        if (input) input.value = "";
+        const dropText = document.getElementById("map-overlay-dropzone-text");
+        if (dropText) dropText.textContent = "Drop an image here, or choose a file";
+    }
+
+    function clearPickedMedia(): void {
+        const idField = document.getElementById("map-overlay-image-id") as HTMLInputElement | null;
+        const picked = document.getElementById("map-overlay-picked-media");
+        if (idField) idField.value = "";
+        if (picked) {
+            picked.textContent = "";
+            picked.hidden = true;
+        }
+        document.querySelectorAll(".map-overlay-media-picker-thumb.is-selected").forEach((el) => el.classList.remove("is-selected"));
+    }
+
+    function clearUrlInput(): void {
+        const urlInput = document.querySelector<HTMLInputElement>('#map-overlay-add-form input[name="image_url"]');
+        if (urlInput) urlInput.value = "";
+    }
+
     // Re-derives the Add-overlay button's disabled state from the form's
     // current fields - called on every input/drop/pick so it never stays
     // clickable with nothing chosen, and turns on the instant something is.
@@ -491,10 +535,15 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
         const form = document.getElementById("map-overlay-add-form") as HTMLFormElement | null;
         const submit = document.getElementById("map-overlay-add-submit") as HTMLButtonElement | null;
         if (!form || !submit) return;
-        const hasFile = !!form.querySelector<HTMLInputElement>('input[type="file"]')?.files?.length;
+        const fileInput = form.querySelector<HTMLInputElement>('input[type="file"]');
+        const hasFile = !!fileInput?.files?.length;
         const urlValue = form.querySelector<HTMLInputElement>('input[name="image_url"]')?.value ?? "";
         const imageIdValue = (document.getElementById("map-overlay-image-id") as HTMLInputElement | null)?.value ?? "";
         submit.disabled = !overlaySubmitEnabled({ hasFile, urlValue, imageIdValue });
+        const dropText = document.getElementById("map-overlay-dropzone-text");
+        if (dropText) {
+            dropText.textContent = fileInput?.files?.[0]?.name || "Drop an image here, or choose a file";
+        }
     };
 
     window.ulMapOverlayHandleDrop = (event: DragEvent, zone: HTMLElement) => {
@@ -504,6 +553,8 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
         const input = zone.querySelector<HTMLInputElement>('input[type="file"]');
         if (!files?.length || !input) return;
         input.files = files;
+        clearPickedMedia();
+        clearUrlInput();
         window.ulMapOverlaySyncSubmitState?.();
     };
 
@@ -516,17 +567,29 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
             picked.textContent = `Using: ${caption || "this photo"}`;
             picked.hidden = false;
         }
-        if (picker) picker.hidden = true;
+        picker?.querySelectorAll(".map-overlay-media-picker-thumb").forEach((btn) => {
+            btn.classList.toggle("is-selected", btn.getAttribute("data-image-id") === String(id));
+        });
+        clearFileInput();
+        clearUrlInput();
         window.ulMapOverlaySyncSubmitState?.();
     };
 
-    // Replaces the previous "grab whatever tile happens to be selected or
-    // relevant in the page's separate Media section, or just the first one if
-    // not" hack (duplicated inline in two page templates) - which had no
-    // affordance to actually choose a photo, and had nothing to grab at all on
-    // the floorplan editor page, which has no Media section. This fetches the
-    // pin's/wiki's own already-uploaded photos directly and shows them to pick
-    // from right here.
+    window.ulMapOverlayChooseUrl = () => {
+        const urlInput = document.querySelector<HTMLInputElement>('#map-overlay-add-form input[name="image_url"]');
+        if (urlInput?.value.trim()) {
+            clearFileInput();
+            clearPickedMedia();
+        }
+        window.ulMapOverlaySyncSubmitState?.();
+    };
+
+    window.ulMapOverlayChooseFile = () => {
+        clearPickedMedia();
+        clearUrlInput();
+        window.ulMapOverlaySyncSubmitState?.();
+    };
+
     window.ulMapOverlayPickFromMedia = (galleryJsonUrl?: string) => {
         const picker = document.getElementById("map-overlay-media-picker");
         if (!picker) return;
@@ -535,7 +598,7 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
             return;
         }
         picker.hidden = false;
-        if (picker.dataset.loaded === "1" || !galleryJsonUrl) return;
+        if (!galleryJsonUrl) return;
 
         const setMessage = (text: string): void => {
             picker.textContent = "";
@@ -549,7 +612,6 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
         fetch(galleryJsonUrl, { credentials: "same-origin" })
             .then((response) => response.json())
             .then((data: { images?: GalleryImage[] }) => {
-                picker.dataset.loaded = "1";
                 const images = data.images || [];
                 if (!images.length) {
                     setMessage("No photos uploaded here yet.");
@@ -558,11 +620,14 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
                 picker.textContent = "";
                 const grid = document.createElement("div");
                 grid.className = "map-overlay-media-picker-grid";
+                const selectedId = (document.getElementById("map-overlay-image-id") as HTMLInputElement | null)?.value ?? "";
                 for (const image of images) {
                     const thumbButton = document.createElement("button");
                     thumbButton.type = "button";
                     thumbButton.className = "map-overlay-media-picker-thumb";
+                    thumbButton.dataset.imageId = String(image.id);
                     thumbButton.title = image.caption || "Untitled photo";
+                    if (selectedId === String(image.id)) thumbButton.classList.add("is-selected");
                     const thumbImg = document.createElement("img");
                     thumbImg.src = image.url;
                     thumbImg.alt = "";
@@ -575,4 +640,24 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
             })
             .catch(() => setMessage("Couldn't load this page's photos."));
     };
+
+    // Keyboard submit (Enter in the name field) skips the button's onclick,
+    // which used to leave the corners field empty. Seed them on every HTMX
+    // serialize of this form instead.
+    document.body.addEventListener("htmx:configRequest", (event: Event) => {
+        const detail = (event as CustomEvent).detail as { elt?: Element; parameters?: Record<string, string> } | undefined;
+        const elt = detail?.elt;
+        if (!elt) return;
+        const form = elt.id === "map-overlay-add-form" ? elt : elt.closest?.("#map-overlay-add-form");
+        if (!form) return;
+        window.ulMapOverlaySeedCorners?.();
+        const corners = document.getElementById("map-overlay-initial-corners") as HTMLInputElement | null;
+        if (corners && detail.parameters) detail.parameters.corners = corners.value;
+    });
+
+    document.body.addEventListener("ul:map-overlays-changed", (event: Event) => {
+        const align = (event as CustomEvent).detail?.align as string | undefined;
+        if (!align) return;
+        window.ulMapOverlayStartAlign?.(align);
+    });
 }
