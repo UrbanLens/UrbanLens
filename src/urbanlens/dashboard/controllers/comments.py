@@ -16,7 +16,7 @@ from django.views import View
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, CommentValidationError, toggle_reaction, top_level_comment_queryset, visible_comment_tree
+from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, CommentValidationError, comment_is_visible, toggle_reaction, top_level_comment_queryset, visible_comment_tree
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
 from urbanlens.dashboard.services.map.map_snapshot import (
@@ -370,7 +370,15 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 
 
 def _visible_wiki_comments(wiki: Wiki, profile: Profile, *, include_children: bool = False) -> QuerySet[Comment]:
-    """The wiki's comments as *profile* is entitled to see them.
+    """The wiki's comments as *profile* is entitled to see them at page scope.
+
+    Applies wiki concealment only. Per-comment gates (the author's
+    ``comment_visibility``, a pending malware scan, an ``@loc`` mention the
+    viewer has not pinned) are not expressible as a queryset filter; listing
+    applies them in :func:`visible_comment_tree` via ``_build_context``, and
+    by-id paths (reply parent, delete) must go through
+    :func:`_wiki_comment_addressable_by` so a sequential id is not an
+    existence oracle for a comment the listing withholds.
 
     One function rather than the same two lines at each of the three call sites:
     the GET had them and the POST and DELETE re-renders did not, so posting a
@@ -421,6 +429,39 @@ def _visible_wiki_reply_prefetch(wiki: Wiki, profile: Profile) -> QuerySet[Comme
     return conceal_rows(Comment.objects.filter(wiki__in=wiki_ids), profile)
 
 
+def _wiki_comment_addressable_by(wiki: Wiki, profile: Profile, comment_id: int | str) -> Comment:
+    """Return one wiki comment *profile* may address by id, or 404.
+
+    ``_visible_wiki_comments`` only applies wiki-concealment. Addressing a
+    sequential id also needs the per-comment gates (author
+    ``comment_visibility``, pending malware scan, ``@loc`` mention) or a
+    guessed id is an existence oracle for comments the listing withholds -
+    and a reply would notify an author whose comments this caller is not
+    permitted to read. Matches the external API's ``comment_is_visible``
+    check on the same paths.
+
+    Args:
+        wiki: The wiki (or ancestor, when child comments are aggregated)
+            whose thread is being addressed.
+        profile: The viewer.
+        comment_id: The sequential id from the URL or ``parent_id`` field.
+
+    Returns:
+        The comment, with ``profile`` selected.
+
+    Raises:
+        Http404: Unknown id, a comment on a concealed row, or a comment
+            this caller was never shown - all indistinguishable.
+    """
+    comment = get_object_or_404(
+        _visible_wiki_comments(wiki, profile, include_children=True).select_related("profile"),
+        id=comment_id,
+    )
+    if not comment_is_visible(comment, profile):
+        raise Http404
+    return comment
+
+
 class WikiCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a wiki."""
 
@@ -461,7 +502,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
-            parent = get_object_or_404(_visible_wiki_comments(wiki, profile, include_children=True), id=parent_id)
+            parent = _wiki_comment_addressable_by(wiki, profile, parent_id)
         comment = Comment.objects.create(
             wiki=wiki,
             profile=profile,
@@ -500,7 +541,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import concealment_active
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        comment = get_object_or_404(_visible_wiki_comments(wiki, profile, include_children=True), id=comment_id)
+        comment = _wiki_comment_addressable_by(wiki, profile, comment_id)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map
@@ -551,10 +592,12 @@ class CommentReactionView(LoginRequiredMixin, View):
         )
         if comment.wiki_id and not location_visible_to(comment.wiki.location, profile):
             raise Http404
-        # Page-level visibility isn't enough on its own - the comment's own
-        # author may further restrict who can see (and react to) it via their
-        # comment_visibility privacy setting.
-        if not profile.can_view_comments_from(comment.profile):
+        # Page-level visibility isn't enough on its own. comment_is_visible
+        # applies the same per-comment gates the listing does: the author's
+        # comment_visibility, a pending malware scan, and an @loc mention the
+        # caller has not pinned. Checking only comment_visibility left the
+        # other two reachable by sequential id.
+        if not comment_is_visible(comment, profile):
             raise Http404
         # The add/remove/notify sequence lives in the service, not here. It used
         # to be hand-rolled in this view as well, and the two copies agreeing was

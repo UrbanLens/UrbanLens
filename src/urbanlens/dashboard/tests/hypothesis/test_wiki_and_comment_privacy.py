@@ -173,3 +173,72 @@ class CommentAuthorPrivacyTests(TestCase):
         own_comment = baker.make(Comment, pin=None, wiki=self.wiki, profile=self.user.profile)
         response = self.client.post(reverse("comment.react", args=[own_comment.id]), data={"emoji": "👍"})
         self.assertEqual(response.status_code, 200)
+
+    def test_cannot_reply_when_author_restricts_to_no_one(self) -> None:
+        """Replying by guessed sequential id must not confirm a hidden comment exists."""
+        comment = self._comment(visibility=VisibilityChoice.NO_ONE)
+        response = self.client.post(
+            reverse("location.wiki.comments", args=[self.wiki.location.slug]),
+            {"text": "a reply", "parent_id": comment.id},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Comment.objects.filter(parent=comment).exists())
+
+    def test_can_reply_when_author_allows_anyone(self) -> None:
+        comment = self._comment(visibility=VisibilityChoice.ANYONE)
+        response = self.client.post(
+            reverse("location.wiki.comments", args=[self.wiki.location.slug]),
+            {"text": "a reply", "parent_id": comment.id},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Comment.objects.filter(parent=comment, text="a reply").exists())
+
+    def test_cannot_reply_to_a_comment_mentioning_an_unpinned_location(self) -> None:
+        """``is_visible_to`` drops the whole comment; a parent_id must not bypass that."""
+        comment = self._mention_hidden_comment()
+        response = self.client.post(
+            reverse("location.wiki.comments", args=[self.wiki.location.slug]),
+            {"text": "a reply", "parent_id": comment.id},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Comment.objects.filter(parent=comment).exists())
+
+    def test_mention_of_unpinned_location_is_excluded_from_wiki_comment_listing(self) -> None:
+        comment = self._mention_hidden_comment()
+        response = self.client.get(reverse("location.wiki.comments", args=[self.wiki.location.slug]))
+        self.assertEqual(response.status_code, 200)
+        rendered_comment_ids = {row["comment"].id for row in response.context["rendered_comments"]}
+        self.assertNotIn(comment.id, rendered_comment_ids)
+        self.assertNotIn(str(self._secret_location.uuid), response.content.decode())
+
+    def test_cannot_react_to_a_comment_mentioning_an_unpinned_location(self) -> None:
+        comment = self._mention_hidden_comment()
+        response = self.client.post(reverse("comment.react", args=[comment.id]), data={"emoji": "👍"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_cannot_react_to_a_pending_scan_comment(self) -> None:
+        comment = self._comment(visibility=VisibilityChoice.ANYONE)
+        comment.pending_scan = True
+        comment.save(update_fields=["pending_scan"])
+        response = self.client.post(reverse("comment.react", args=[comment.id]), data={"emoji": "👍"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_deleting_a_hidden_comment_is_not_found(self) -> None:
+        """A 403 would confirm the sequential id exists, which the listing withholds."""
+        comment = self._comment(visibility=VisibilityChoice.NO_ONE)
+        response = self.client.delete(reverse("location.wiki.comment.delete", args=[self.wiki.location.slug, comment.id]))
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Comment.objects.filter(pk=comment.id).exists())
+
+    def _mention_hidden_comment(self) -> Comment:
+        """A comment the listing drops solely because of an ``@loc`` mention the viewer has not pinned."""
+        self._secret_location = baker.make("dashboard.Location")
+        self.author.profile.comment_visibility = VisibilityChoice.ANYONE
+        self.author.profile.save(update_fields=["comment_visibility"])
+        return baker.make(
+            Comment,
+            pin=None,
+            wiki=self.wiki,
+            profile=self.author.profile,
+            text=f"Pairs well with @[Secret Spot](loc:{self._secret_location.uuid})",
+        )
