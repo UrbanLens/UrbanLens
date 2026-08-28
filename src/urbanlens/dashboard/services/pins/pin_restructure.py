@@ -412,6 +412,24 @@ def select_buildings(buildings: list[dict[str, Any]], selection_keys: list[str])
     return [building for building in buildings if building_selection_key(building) in selected]
 
 
+def _provisionable_buildings(pin: Pin, selected: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Cached parcel buildings safe to materialize as Places.
+
+    The UI imports a filtered subset of the parcel cache, but provisioning is
+    deliberately broader than the selected rows so the property has a complete
+    building tree. That broader set still has to be scoped to the property:
+    REData can include off-property survey-zone records in the same cache.
+    """
+    from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_within_boundary, buildings_on_property
+
+    known = site_scope.parcel_buildings(pin.location) or selected
+    buildings = buildings_on_property(known)
+    boundary = property_polygon(pin)
+    if boundary is not None:
+        buildings = [building for building in buildings if building_within_boundary(building, boundary)]
+    return buildings
+
+
 def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
     """Create a child pin for each given building, in one transaction.
 
@@ -448,7 +466,7 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
     # is a fact about the property; which of them somebody pinned is a fact
     # about that person. Conflating the two would make a campus stop reading as
     # a campus because one user only imported one of its structures.
-    known = site_scope.parcel_buildings(pin.location) or selected
+    known = _provisionable_buildings(pin, selected)
     places = provisioning.ensure_building_places(parcel, known, provider="redata")
     place_by_key = {building_selection_key(record): places[index] for index, record in enumerate(known) if index in places}
 
@@ -566,7 +584,7 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
     selected = building_tree_order(buildings[:MAX_RESTRUCTURE_ITEMS])
     wiki_place = wiki.place if wiki.place_id else None
     parcel = wiki_place.parcel if wiki_place is not None else None
-    known = site_scope.parcel_buildings(pin.location) or selected
+    known = _provisionable_buildings(pin, selected)
     places = provisioning.ensure_building_places(parcel, known, provider="redata")
     place_by_key = {building_selection_key(record): places[index] for index, record in enumerate(known) if index in places}
 
