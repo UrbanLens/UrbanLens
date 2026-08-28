@@ -596,6 +596,42 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
 #: 400px is sharp on a 2x 110-200px tile without approaching the stored original.
 THUMBNAIL_MAX_DIMENSION = 400
 
+#: Photos the periodic backfill hands to a worker per tick. Pillow work is
+#: CPU-heavy and shares the default queue with live uploads, so a large
+#: library drains across hours rather than in one stampede.
+THUMBNAIL_BACKFILL_BATCH = 50
+
+
+def photos_missing_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKFILL_BATCH) -> list[int]:
+    """Primary keys of photos that still need a grid thumbnail.
+
+    New uploads get a thumbnail inside ``process_image_upload``. This queryset
+    is for the periodic backfill of rows that predate that, or whose original
+    processing skipped it - not for page views, which must not do CPU work.
+
+    Args:
+        after_pk: Exclusive lower bound, so a sweep can walk the table in
+            batches without retrying the same unprocessable rows every tick.
+        limit: Maximum ids to return.
+
+    Returns:
+        Image primary keys, ascending.
+    """
+    from django.db.models import Q
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+    qs = (
+        Image.objects.filter(media_type=MediaKind.PHOTO)
+        .exclude(image="")
+        .exclude(image__isnull=True)
+        .filter(Q(thumbnail="") | Q(thumbnail__isnull=True))
+        .order_by("pk")
+    )
+    if after_pk:
+        qs = qs.filter(pk__gt=after_pk)
+    return list(qs.values_list("pk", flat=True)[:limit])
+
 
 def write_image_thumbnail(image: Image, *, max_dimension: int = THUMBNAIL_MAX_DIMENSION, force: bool = False) -> bool:
     """Write a small WebP preview into ``image.thumbnail`` for grid display.
@@ -616,6 +652,10 @@ def write_image_thumbnail(image: Image, *, max_dimension: int = THUMBNAIL_MAX_DI
         OSError: When the original cannot be read from or the thumbnail
             written to storage.
     """
+    from urbanlens.dashboard.models.images.model import MediaKind
+
+    if image.media_type != MediaKind.PHOTO:
+        return False
     if image.thumbnail and not force:
         return False
     old_name = image.image.name if image.image else ""

@@ -756,6 +756,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         if write_image_thumbnail(image):
             update_fields["thumbnail"] = image.thumbnail.name
     except (OSError, ValueError, PILDecompressionBombError) as exc:
+        # A miss here is retried by the hourly backfill_image_thumbnails sweep
         logger.warning("Thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
 
     return _UploadProcessResult(update_fields, coords, new_stored_size)
@@ -913,10 +914,11 @@ def process_image_upload(self, image_id: int) -> bool:
 def generate_image_thumbnails(image_ids: list[int]) -> int:
     """Fill in missing grid thumbnails for already-stored photos.
 
-    Album and gallery pages enqueue this for any page of photos that still
-    lack a thumbnail (rows created before thumbnails existed, or whose
-    original processing skipped it). Each id is independent: a failure on
-    one does not skip the rest.
+    Called from :func:`backfill_image_thumbnails` (and nowhere on a request
+    path). New uploads are thumbnailed inside :func:`process_image_upload`;
+    this exists so a failure there, or a row created before thumbnails
+    existed, still gets a preview. Each id is independent: a failure on one
+    does not skip the rest.
 
     Args:
         image_ids: Primary keys of :class:`~urbanlens.dashboard.models.images.model.Image` rows.
@@ -926,11 +928,11 @@ def generate_image_thumbnails(image_ids: list[int]) -> int:
     """
     from PIL.Image import DecompressionBombError as PILDecompressionBombError
 
-    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
     from urbanlens.dashboard.services.media.images import write_image_thumbnail
 
     written = 0
-    for image in Image.objects.filter(pk__in=image_ids):
+    for image in Image.objects.filter(pk__in=image_ids, media_type=MediaKind.PHOTO):
         try:
             if write_image_thumbnail(image):
                 image.save(update_fields=["thumbnail", "updated"])
@@ -938,6 +940,51 @@ def generate_image_thumbnails(image_ids: list[int]) -> int:
         except (OSError, ValueError, PILDecompressionBombError) as exc:
             logger.warning("Thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
     return written
+
+
+#: Cache key for the exclusive pk cursor :func:`backfill_image_thumbnails` walks.
+_THUMBNAIL_BACKFILL_CURSOR_KEY = "image-thumbnail-backfill-cursor"
+#: Long enough that a beat outage does not restart a half-finished walk at pk 0.
+_THUMBNAIL_BACKFILL_CURSOR_TTL = 7 * 24 * 60 * 60
+
+
+@shared_task
+def backfill_image_thumbnails(limit: int | None = None) -> int:
+    """Enqueue a bounded batch of photos that still lack a grid thumbnail.
+
+    Scheduled hourly (see ``CELERY_BEAT_SCHEDULE``). Walks the table by
+    primary key so a handful of unreadable files cannot stall the rest of
+    the library: this tick's last id is the next tick's exclusive floor,
+    and an exhausted cursor resets on a later tick rather than re-queueing
+    the same in-flight batch immediately.
+
+    Args:
+        limit: Override the default batch size. Beat does not pass this;
+            tests do, so a small library can exercise wrapping without
+            inserting fifty rows.
+
+    Returns:
+        How many image ids were queued (0 when the library is caught up,
+        or this tick only reset the cursor).
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.media.images import THUMBNAIL_BACKFILL_BATCH, photos_missing_thumbnails
+
+    batch = THUMBNAIL_BACKFILL_BATCH if limit is None else max(1, limit)
+    cursor = int(cache.get(_THUMBNAIL_BACKFILL_CURSOR_KEY) or 0)
+    ids = photos_missing_thumbnails(after_pk=cursor, limit=batch)
+    if not ids:
+        if cursor:
+            cache.delete(_THUMBNAIL_BACKFILL_CURSOR_KEY)
+            logger.info("Thumbnail backfill wrapped; next tick resumes from the start")
+        return 0
+
+    cache.set(_THUMBNAIL_BACKFILL_CURSOR_KEY, ids[-1], _THUMBNAIL_BACKFILL_CURSOR_TTL)
+    safely_enqueue_task(generate_image_thumbnails, ids)
+    logger.info("Thumbnail backfill queued %d photo(s) after pk %s", len(ids), cursor)
+    return len(ids)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

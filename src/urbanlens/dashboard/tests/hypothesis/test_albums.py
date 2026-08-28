@@ -17,6 +17,7 @@ from urbanlens.dashboard.services.photos.albums import (
     add_images_to_album,
     album_cover,
     album_images,
+    albums_listing,
     albums_with_images,
     eligible_images_for,
     loose_images_for,
@@ -261,6 +262,39 @@ class AlbumBatchingTests(TestCase):
         pin = baker.make_recipe("dashboard.pin")
         with self.assertNumQueries(1):
             self.assertEqual(albums_with_images(pin, pin.profile), [])
+
+
+class AlbumListingTests(TestCase):
+    """The Photos tab listing does not hydrate every member photo."""
+
+    def test_listing_matches_albums_with_images_for_cover_and_count(self) -> None:
+        pin, images = _pin_with_photos(3)
+        album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin, manual_order=True)
+        add_images_to_album(album, images, pin.profile)
+
+        listing = {entry.album.pk: entry for entry in albums_listing(pin, pin.profile)}
+        full = {album.pk: imgs for album, imgs in albums_with_images(pin, pin.profile)}
+
+        self.assertEqual(listing[album.pk].photo_count, len(full[album.pk]))
+        self.assertEqual(listing[album.pk].cover.pk, full[album.pk][0].pk)
+
+    def test_listing_query_count_does_not_grow_with_album_count(self) -> None:
+        pin, images = _pin_with_photos(4)
+        for index in range(2):
+            album = Album.objects.create(name=f"A{index}", profile=pin.profile, parent_pin=pin)
+            add_images_to_album(album, images, pin.profile)
+
+        with CaptureQueriesContext(connection) as two_albums:
+            self.assertEqual(len(albums_listing(pin, pin.profile)), 2)
+
+        for index in range(2, 8):
+            album = Album.objects.create(name=f"A{index}", profile=pin.profile, parent_pin=pin)
+            add_images_to_album(album, images, pin.profile)
+
+        with CaptureQueriesContext(connection) as eight_albums:
+            self.assertEqual(len(albums_listing(pin, pin.profile)), 8)
+
+        self.assertEqual(len(eight_albums), len(two_albums))
 
 
 class CacheMediaItemIntoAlbumTaskTests(TestCase):

@@ -382,6 +382,17 @@ class AlbumItemsPageTests(TestCase):
         self.assertIn("thumb_url", item)
         self.assertIn("url", item)
 
+    def test_paging_does_not_enqueue_thumbnail_generation(self) -> None:
+        """Thumbnails are written after upload (and backfilled on a schedule), not on view."""
+        image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        AlbumItem.objects.create(album=self.album, image=image, order=0)
+
+        with patch("urbanlens.dashboard.controllers.albums.safely_enqueue_task") as enqueue:
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        enqueue.assert_not_called()
+
     def test_offset_skips_earlier_photos(self) -> None:
         photos = [baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile) for _ in range(3)]
         for i, photo in enumerate(photos):

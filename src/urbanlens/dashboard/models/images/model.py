@@ -137,7 +137,8 @@ class Image(abstract.FrontendDashboardModel):
 
     image = ImageField(upload_to=pin_image_upload_path, max_length=255)
     # Small WebP preview generated after upload for photo grids (albums, galleries).
-    # Empty until processing finishes; :attr:`thumb_url` falls back to the original.
+    # Written by process_image_upload; older rows are backfilled by a beat task.
+    # Empty until then; :attr:`thumb_url` falls back to the original.
     thumbnail = ImageField(upload_to=pin_image_thumbnail_path, max_length=255, null=True, blank=True)
     media_type = CharField(max_length=10, choices=MediaKind.choices, default=MediaKind.PHOTO, db_index=True)
     # Provenance for the Media gallery's per-source tabs (see ImageSource). Only
@@ -414,8 +415,8 @@ class Image(abstract.FrontendDashboardModel):
         Grids (albums, galleries) should load this instead of
         :attr:`display_url` so a page of dozens of photos does not decode
         full-resolution files. Falls back to the original when no thumbnail
-        has been generated yet (processing still running, or a row created
-        before thumbnails existed).
+        has been generated yet (upload processing still running, or a row
+        the periodic backfill has not reached).
 
         Returns:
             The thumbnail URL, the original's URL, or "".

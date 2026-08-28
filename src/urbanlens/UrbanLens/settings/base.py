@@ -448,6 +448,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.upgrade_placeholder_pin_names",
         "schedule": crontab(minute=52),
     },
+    # Bounded batch of photos that predate grid thumbnails (or whose original
+    # processing skipped them). New uploads are thumbnailed inside
+    # process_image_upload.
+    "image-thumbnail-backfill": {
+        "task": "urbanlens.dashboard.tasks.backfill_image_thumbnails",
+        "schedule": crontab(minute=4),
+    },
     # Daily is plenty: retention is measured in hundreds of days
     # (services.pins.pin_sync.TOMBSTONE_RETENTION), and the pins/deleted/ feed's 410
     # full-resync signal guards clients against any pruning-induced gap.

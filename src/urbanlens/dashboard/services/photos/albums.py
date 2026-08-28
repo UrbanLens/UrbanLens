@@ -11,6 +11,7 @@ validation.
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models.album.model import Album, AlbumItem
@@ -31,6 +32,22 @@ if TYPE_CHECKING:
 #: viewport plus a small scroll buffer is one request, without dumping a
 #: thousand full ``Image`` rows into the first HTML response.
 ALBUM_GRID_PAGE_SIZE = 48
+
+
+@dataclass(frozen=True, slots=True)
+class AlbumListEntry:
+    """One album on the Photos tab, without hydrating every member photo.
+
+    The list only needs a cover, a count, and a date range. Loading every
+    ``Image`` row (and its file field) just to derive those is what made the
+    tab expensive on a pin with a large library.
+    """
+
+    album: Album
+    photo_count: int
+    cover: Image | None
+    date_start: datetime | None
+    date_end: datetime | None
 
 
 def owner_kwargs(owner: Pin | Wiki) -> dict:
@@ -179,6 +196,69 @@ def albums_with_images(owner: Pin | Wiki, viewer: Profile | None) -> list[tuple[
     return [(album, _order_for_display(album, by_album.get(album.pk, []))) for album in albums]
 
 
+def albums_listing(owner: Pin | Wiki, viewer: Profile | None) -> list[AlbumListEntry]:
+    """Every album of *owner* with cover, count, and date range.
+
+    Same visibility rules as :func:`albums_with_images`, but the only
+    ``Image`` rows loaded are the covers. Timestamps for the date range and
+    newest-first ordering come from a values query, not hydrated models.
+
+    Args:
+        owner: The Pin or Wiki whose albums to list.
+        viewer: The browsing profile, for the photo-visibility gate.
+
+    Returns:
+        One :class:`AlbumListEntry` per album, in album order.
+    """
+    from urbanlens.dashboard.models.images.model import Image
+
+    conceal = _owner_conceal(owner, viewer)
+    albums_qs = albums_for_owner(owner)
+    if conceal:
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        albums_qs = conceal_rows(albums_qs, viewer)
+    albums = list(albums_qs)
+    if not albums:
+        return []
+
+    items = list(
+        AlbumItem.objects.filter(album_id__in=[album.pk for album in albums])
+        .order_by("order", "created")
+        .values_list("album_id", "image_id")
+    )
+    visible_ids = _visible_image_ids({image_id for _album_id, image_id in items}, viewer, conceal=conceal)
+    by_album: dict[int, list[int]] = defaultdict(list)
+    for album_id, image_id in items:
+        if image_id in visible_ids:
+            by_album[album_id].append(image_id)
+
+    meta = {
+        pk: (taken_at, created)
+        for pk, taken_at, created in Image.objects.filter(pk__in=visible_ids).values_list("pk", "taken_at", "created")
+    }
+
+    cover_ids: list[int] = []
+    prepared: list[tuple[Album, int, int | None, datetime | None, datetime | None]] = []
+    for album in albums:
+        ids = by_album.get(album.pk, [])
+        if not album.manual_order:
+            ids = [image_id for image_id in ids if image_id in meta]
+            ids = sorted(ids, key=lambda image_id: meta[image_id][1], reverse=True)
+        stamps = [meta[image_id][0] or meta[image_id][1] for image_id in ids if image_id in meta]
+        date_start, date_end = (min(stamps), max(stamps)) if stamps else (None, None)
+        cover_id = album.cover_image_id if album.cover_image_id in set(ids) else (ids[0] if ids else None)
+        if cover_id is not None:
+            cover_ids.append(cover_id)
+        prepared.append((album, len(ids), cover_id, date_start, date_end))
+
+    covers = {image.pk: image for image in Image.objects.filter(pk__in=cover_ids)} if cover_ids else {}
+    return [
+        AlbumListEntry(album=album, photo_count=count, cover=covers.get(cover_id) if cover_id else None, date_start=date_start, date_end=date_end)
+        for album, count, cover_id, date_start, date_end in prepared
+    ]
+
+
 def eligible_images_for(owner: Pin | Wiki, viewer: Profile | None) -> QuerySet[Image]:
     """Photos that may be placed in one of *owner*'s albums.
 
@@ -225,17 +305,45 @@ def album_images(album: Album, viewer: Profile | None, owner: Pin | Wiki | None 
         an ``album_item_id`` attribute so templates can address the membership
         row (for removal/reordering) without a second lookup.
     """
-    items = list(AlbumItem.objects.for_album(album).select_related("image").order_by("order", "created"))
-    visible_ids = _visible_image_ids({item.image_id for item in items}, viewer, conceal=_owner_conceal(owner if owner is not None else album_owner(album), viewer))
+    pairs = visible_album_item_pairs(album, viewer, owner)
+    return _hydrate_album_items(pairs)
 
+
+def visible_album_item_pairs(
+    album: Album,
+    viewer: Profile | None,
+    owner: Pin | Wiki | None = None,
+) -> list[tuple[int, int]]:
+    """``(item_id, image_id)`` pairs the viewer may see, in display order."""
+    resolved_owner = owner if owner is not None else album_owner(album)
+    conceal = _owner_conceal(resolved_owner, viewer)
+    items_qs = AlbumItem.objects.for_album(album)
+    if album.manual_order:
+        items_qs = items_qs.order_by("order", "created")
+    else:
+        items_qs = items_qs.order_by("-image__created")
+
+    pairs = list(items_qs.values_list("pk", "image_id"))
+    visible_ids = _visible_image_ids({image_id for _item_id, image_id in pairs}, viewer, conceal=conceal)
+    return [(item_id, image_id) for item_id, image_id in pairs if image_id in visible_ids]
+
+
+def _hydrate_album_items(pairs: Sequence[tuple[int, int]]) -> list[Image]:
+    """Load ``Image`` rows for *pairs*, attaching ``album_item_id`` in that order."""
+    if not pairs:
+        return []
+    page_item_ids = [item_id for item_id, _image_id in pairs]
+    items_by_pk = {
+        item.pk: item
+        for item in AlbumItem.objects.filter(pk__in=page_item_ids).select_related("image")
+    }
     images = []
-    for item in items:
-        if item.image_id not in visible_ids:
-            continue
+    for item_id, _image_id in pairs:
+        item = items_by_pk[item_id]
         image = item.image
         image.album_item_id = item.pk
         images.append(image)
-    return _order_for_display(album, images)
+    return images
 
 
 def album_images_page(
@@ -263,34 +371,45 @@ def album_images_page(
     Returns:
         ``(page, total)`` where *page* items each carry ``album_item_id``.
     """
-    resolved_owner = owner if owner is not None else album_owner(album)
-    conceal = _owner_conceal(resolved_owner, viewer)
-    items_qs = AlbumItem.objects.for_album(album)
-    if album.manual_order:
-        items_qs = items_qs.order_by("order", "created")
-    else:
-        items_qs = items_qs.order_by("-image__created")
+    pairs = visible_album_item_pairs(album, viewer, owner)
+    return _hydrate_album_items(pairs[offset : offset + limit]), len(pairs)
 
-    pairs = list(items_qs.values_list("pk", "image_id"))
-    visible_ids = _visible_image_ids({image_id for _item_id, image_id in pairs}, viewer, conceal=conceal)
-    visible_pairs = [(item_id, image_id) for item_id, image_id in pairs if image_id in visible_ids]
-    total = len(visible_pairs)
-    page_pairs = visible_pairs[offset : offset + limit]
-    if not page_pairs:
-        return [], total
 
-    page_item_ids = [item_id for item_id, _image_id in page_pairs]
-    items_by_pk = {
-        item.pk: item
-        for item in AlbumItem.objects.filter(pk__in=page_item_ids).select_related("image")
-    }
-    images = []
-    for item_id, _image_id in page_pairs:
-        item = items_by_pk[item_id]
-        image = item.image
-        image.album_item_id = item.pk
-        images.append(image)
-    return images, total
+def album_date_range_for_ids(image_ids: Collection[int]) -> tuple[datetime | None, datetime | None]:
+    """Earliest and latest capture date across *image_ids*, without hydrating rows.
+
+    Args:
+        image_ids: Primary keys of the album's viewer-visible photos.
+
+    Returns:
+        ``(first, last)``, or ``(None, None)`` when *image_ids* is empty.
+    """
+    from urbanlens.dashboard.models.images.model import Image
+
+    if not image_ids:
+        return None, None
+    stamps = [taken_at or created for taken_at, created in Image.objects.filter(pk__in=list(image_ids)).values_list("taken_at", "created")]
+    if not stamps:
+        return None, None
+    return min(stamps), max(stamps)
+
+
+def cover_from_ids(album: Album, visible_ids: Sequence[int]) -> Image | None:
+    """Pick *album*'s cover from already-resolved visible image ids.
+
+    Args:
+        album: The album to pick a cover for.
+        visible_ids: Viewer-visible image primary keys, in display order.
+
+    Returns:
+        The cover photo, or None for an empty album.
+    """
+    from urbanlens.dashboard.models.images.model import Image
+
+    if not visible_ids:
+        return None
+    wanted = album.cover_image_id if album.cover_image_id in set(visible_ids) else visible_ids[0]
+    return Image.objects.filter(pk=wanted).first()
 
 
 def loose_images_for(owner: Pin | Wiki, viewer: Profile | None) -> QuerySet[Image]:

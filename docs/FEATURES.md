@@ -453,8 +453,10 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   photo (albums, pin gallery, wiki gallery) offers open / download / add to album / remove /
   send to wiki / share with a friend / delete. Dropping a file that's already been uploaded into
   an album files the existing photo rather than erroring. Removing a photo from an album updates
-  the grid immediately. Grids use small generated thumbnails and load further pages as you
-  scroll, unloading off-screen bitmaps so large albums stay usable on a phone.
+  the grid immediately. Small grid thumbnails are generated in the background after
+  upload (and backfilled on a schedule for photos that predate that); album grids
+  load further pages as you scroll, unloading off-screen bitmaps so large albums
+  stay usable on a phone.
 - The lightbox lets you browse, search, and create+apply a media label in one step.
 - Site-wide photo library (Memories → Photos) that matches unfiled photos (by GPS + timestamp) to
   existing pins and proposes **visit suggestions** for confirmation

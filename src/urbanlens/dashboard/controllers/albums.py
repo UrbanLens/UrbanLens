@@ -31,15 +31,18 @@ from urbanlens.dashboard.services.photos.albums import (
     ALBUM_GRID_PAGE_SIZE,
     add_images_to_album,
     album_date_range,
+    album_date_range_for_ids,
     album_images,
     album_images_page,
-    albums_with_images,
+    albums_listing,
+    cover_from_ids,
     cover_from_images,
     eligible_images_for,
     loose_images_for,
     owner_kwargs,
     remove_images_from_album,
     reorder_album_items,
+    visible_album_item_pairs,
 )
 from urbanlens.dashboard.services.photos.uploads import existing_photo_for_upload
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
@@ -139,33 +142,53 @@ def _url_prefix(owner: Pin | Wiki) -> str:
     return "pin.albums" if isinstance(owner, Pin) else "location.wiki.albums"
 
 
-def _album_row(owner: Pin | Wiki, album: Album, images: list) -> dict:
+def _album_row(
+    owner: Pin | Wiki,
+    album: Album,
+    images: list | None = None,
+    *,
+    cover=None,
+    photo_count: int | None = None,
+    date_start=None,
+    date_end=None,
+) -> dict:
     """Build one album's template payload, with its action URLs pre-reversed.
 
     URLs are built here (by positional ``args``) rather than in-template
     because ``{% url %}`` can't take a dynamic view name plus dynamic kwargs -
     same reasoning as ``custom_layers._render_layer_list``.
 
-    Takes *images* already resolved so batched callers don't re-query per
-    album; the cover, count, and date range are all derived from it, which also
-    keeps them honest for a viewer who can't see every photo in the album.
+    Cover, count, and date range can be passed in (the Photos tab listing
+    already computed them without hydrating every photo) or derived from
+    *images* when the caller has that list.
 
     Args:
         owner: The Pin or Wiki the album belongs to.
         album: The album to describe.
-        images: The album's viewer-visible photos, in display order.
+        images: The album's viewer-visible photos, in display order, when
+            the caller already has them. Omitted on the listing path.
+        cover: Precomputed cover photo.
+        photo_count: Precomputed visible-photo count.
+        date_start: Precomputed earliest capture time.
+        date_end: Precomputed latest capture time.
 
     Returns:
         Dict consumed by ``_album_card.html``/``_album_detail.html``.
     """
+    if images is not None:
+        if photo_count is None:
+            photo_count = len(images)
+        if cover is None:
+            cover = cover_from_images(album, images)
+        if date_start is None and date_end is None:
+            date_start, date_end = album_date_range(images)
     prefix = _url_prefix(owner)
     slug = _owner_slug(owner)
-    date_start, date_end = album_date_range(images)
     return {
         "album": album,
-        "images": images,
-        "cover": cover_from_images(album, images),
-        "photo_count": len(images),
+        "images": images or [],
+        "cover": cover,
+        "photo_count": photo_count or 0,
         "date_start": date_start,
         "date_end": date_end,
         # The card's own href, so an album tile is a real link (middle-click,
@@ -205,7 +228,7 @@ def _photo_map_payload(images: list, viewer: Profile | None) -> list[dict]:
         payload.append(
             {
                 "id": image.pk,
-                "url": image.display_url,
+                "url": image.thumb_url,
                 "lat": float(latitude),
                 "lng": float(longitude),
                 "placed": image.latitude is not None and image.longitude is not None,
@@ -227,18 +250,25 @@ def _album_detail_context(owner: Pin | Wiki, album: Album, viewer: Profile) -> d
     Returns:
         Template context for ``_album_detail.html``.
     """
-    row = _album_row(owner, album, album_images(album, viewer, owner=owner))
-    filed_ids = {image.pk for image in row["images"]}
+    from urbanlens.dashboard.models.images.model import Image
+
+    pairs = visible_album_item_pairs(album, viewer, owner)
+    visible_ids = [image_id for _item_id, image_id in pairs]
     page, total = album_images_page(album, viewer, owner, offset=0, limit=ALBUM_GRID_PAGE_SIZE)
+    date_start, date_end = album_date_range_for_ids(visible_ids)
+    cover = cover_from_ids(album, visible_ids)
+    row = _album_row(owner, album, page, cover=cover, photo_count=total, date_start=date_start, date_end=date_end)
     row["grid_images"] = page
-    row["photo_count"] = total
-    row["available_images"] = [image for image in eligible_images_for(owner, viewer) if image.pk not in filed_ids]
+    row["available_images"] = list(
+        eligible_images_for(owner, viewer).exclude(pk__in=visible_ids).only("id", "uuid", "image", "thumbnail", "caption", "source_url")
+    )
     row["back_url"] = reverse(_url_prefix(owner), args=[_owner_slug(owner)])
     row["list_url"] = row["back_url"]
     # The gallery's own per-image endpoint owns repositioning; the album map
     # posts to it rather than growing a second writer for Image coordinates.
     row["reposition_base"] = reverse("pin.gallery" if isinstance(owner, Pin) else "location.wiki.gallery", args=[_owner_slug(owner)])
-    row["map_photos"] = _photo_map_payload(row["images"], viewer)
+    map_images = list(Image.objects.filter(pk__in=visible_ids).select_related("location")) if visible_ids else []
+    row["map_photos"] = _photo_map_payload(map_images, viewer)
     row["placed_count"] = len(row["map_photos"])
     row["context_type"] = "pin" if isinstance(owner, Pin) else "wiki"
     row["picker_albums"] = _picker_album_payload(owner, viewer, exclude_slug=album.slug)
@@ -265,7 +295,17 @@ def _photos_context(owner: Pin | Wiki, viewer: Profile | None) -> dict:
         Template context for ``_albums_panel.html``.
     """
     is_pin = isinstance(owner, Pin)
-    rows = [_album_row(owner, album, images) for album, images in albums_with_images(owner, viewer)]
+    rows = [
+        _album_row(
+            owner,
+            entry.album,
+            cover=entry.cover,
+            photo_count=entry.photo_count,
+            date_start=entry.date_start,
+            date_end=entry.date_end,
+        )
+        for entry in albums_listing(owner, viewer)
+    ]
     loose_qs = loose_images_for(owner, viewer)
     loose_count = loose_qs.count()
     ctx = {
@@ -341,32 +381,21 @@ def _photo_tile(image, request: HttpRequest, viewer: Profile) -> dict:
     return payload
 
 
-def _enqueue_missing_thumbnails(images: list) -> None:
-    """Kick off thumbnail generation for any photo on this page still missing one."""
-    missing = [image.pk for image in images if image.image and not image.thumbnail]
-    if not missing:
-        return
-    from urbanlens.dashboard.tasks import generate_image_thumbnails
-
-    safely_enqueue_task(generate_image_thumbnails, missing)
-
-
 def _picker_album_payload(owner: Pin | Wiki, viewer: Profile, *, exclude_slug: str | None = None) -> list[dict]:
     """Albums the add/move dialog can target, without dumping every photo URL."""
     rows = []
-    for album, images in albums_with_images(owner, viewer):
-        if exclude_slug and album.slug == exclude_slug:
+    prefix = _url_prefix(owner)
+    slug = _owner_slug(owner)
+    for entry in albums_listing(owner, viewer):
+        if exclude_slug and entry.album.slug == exclude_slug:
             continue
-        cover = cover_from_images(album, images)
-        prefix = _url_prefix(owner)
-        slug = _owner_slug(owner)
         rows.append(
             {
-                "slug": album.slug,
-                "name": album.name,
-                "photo_count": len(images),
-                "cover_url": cover.thumb_url if cover else "",
-                "add_url": reverse(f"{prefix}.add", args=[slug, album.slug]),
+                "slug": entry.album.slug,
+                "name": entry.album.name,
+                "photo_count": entry.photo_count,
+                "cover_url": entry.cover.thumb_url if entry.cover else "",
+                "add_url": reverse(f"{prefix}.add", args=[slug, entry.album.slug]),
             }
         )
     return rows
@@ -450,7 +479,6 @@ class AlbumPhotosView(LoginRequiredMixin, View):
             qs_images = loose_images_for(owner, profile)
             total = qs_images.count()
             images = list(qs_images[offset : offset + limit])
-            _enqueue_missing_thumbnails(images)
             return JsonResponse(
                 {
                     "items": [_photo_tile(image, request, profile) for image in images],
@@ -810,7 +838,6 @@ class AlbumItemsView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         offset, limit = _page_args(request)
         images, total = album_images_page(album, profile, owner, offset=offset, limit=limit)
-        _enqueue_missing_thumbnails(images)
         return JsonResponse(
             {
                 "items": [_photo_tile(image, request, profile) for image in images],
