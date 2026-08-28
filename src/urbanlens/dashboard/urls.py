@@ -1895,6 +1895,7 @@ urlpatterns = [
         "notifications/",
         include(
             [
+                path("", notifications.NotificationHistoryView.as_view(), name="notifications.view"),
                 path("dropdown/", notifications.NotificationDropdownView.as_view(), name="notifications.dropdown"),
                 path("read-all/", notifications.NotificationMarkAllReadView.as_view(), name="notifications.read_all"),
                 path(

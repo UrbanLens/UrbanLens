@@ -11,7 +11,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from rest_framework.viewsets import GenericViewSet
 
-from urbanlens.dashboard.controllers.notifications import _trigger_label_refresh
+from urbanlens.dashboard.controllers.notifications import _trigger_label_refresh, action_taken_response
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
@@ -46,6 +46,8 @@ logger = logging.getLogger(__name__)
 # Re-exported for callers that imported these from this module before the
 # transitions moved to ``services.social.friendship`` (the notification signal handlers
 # and several tests do). New code should import from the service directly.
+# ``_mark_friend_request_notifications_read`` is an alias of
+# ``_dismiss_friend_request_notifications`` (answered requests leave the inbox).
 __all__ = [
     "FriendController",
     "_mark_friend_request_notifications_read",
@@ -510,25 +512,25 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         else:
             friendship.decline()
 
-        # Mark any pending friend_request notifications from this source as read
+        # Mark any pending friend_request notifications from this source as dismissed
+        # (retired from the bell inbox; still visible on the history page).
         NotificationLog.objects.filter(
             profile=viewer_profile,
             notification_type=NotificationType.FRIEND_REQUEST,
             source_profile_id=from_profile_id,
-        ).update(status=Status.READ)
+        ).mark_dismissed()
 
-        # Return refreshed notification dropdown
-        notifications = NotificationLog.objects.for_profile(viewer_profile).for_display().order_by("-created")[:20]
-        unread_count = NotificationLog.objects.for_profile(viewer_profile).unread().count()
-        response = render(
-            request,
-            "dashboard/partials/notifications/notification_dropdown.html",
-            {
-                "notifications": notifications,
-                "unread_count": unread_count,
-            },
+        notification = (
+            NotificationLog.objects.for_display()
+            .filter(
+                profile=viewer_profile,
+                notification_type=NotificationType.FRIEND_REQUEST,
+                source_profile_id=from_profile_id,
+            )
+            .order_by("-created")
+            .first()
         )
-        return _trigger_label_refresh(response)
+        return action_taken_response(request, viewer_profile, notification=notification)
 
     def invite_by_email(self, request: HttpRequest):
         """Invite a friend by email address.

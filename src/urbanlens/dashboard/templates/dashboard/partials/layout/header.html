@@ -275,6 +275,20 @@
                 (t.classList && t.classList.contains('notif-item'))) {
                 htmx.trigger(document.body, 'notifCountRefresh');
             }
+            // After an actionable row animates out of the bell, refresh the
+            // dropdown if the list is now empty so the empty-state copy appears.
+            if (t.classList && t.classList.contains('notif-item')) {
+                var list = document.querySelector('#notif-dropdown .notif-list');
+                if (list && !list.querySelector('.notif-item')) {
+                    var wrap = document.getElementById('notif-dropdown-wrap');
+                    if (wrap) {
+                        htmx.ajax('GET', wrap.getAttribute('hx-get') || '{% url "notifications.dropdown" %}', {
+                            target: '#notif-dropdown-wrap',
+                            swap: 'innerHTML'
+                        });
+                    }
+                }
+            }
         });
 
         // data-notif-url carries NotificationLog.url, the same unvalidated

@@ -40,11 +40,28 @@ class NotificationQuerySet(abstract.DashboardQuerySet):
         """
         return self.select_related("source_profile", "pin_share", "visit_suggestion")
 
+    def for_inbox(self) -> Self:
+        """Exclude notifications the user has already acted on.
+
+        Actionable rows (visit suggestions, friend requests, pin shares) are
+        marked ``dismissed`` when answered, so they leave the bell dropdown but
+        remain available on the full notifications history page.
+        """
+        from urbanlens.dashboard.models.notifications.meta import Status
+
+        return self.exclude(status=Status.DISMISSED)
+
     def mark_read(self) -> int:
         """Mark all matching notifications as read. Returns updated count."""
         from urbanlens.dashboard.models.notifications.meta import Status
 
         return self.update(status=Status.READ)
+
+    def mark_dismissed(self) -> int:
+        """Mark matching notifications dismissed. Returns updated count."""
+        from urbanlens.dashboard.models.notifications.meta import Status
+
+        return self.update(status=Status.DISMISSED)
 
 
 class NotificationManager(abstract.DashboardManager.from_queryset(NotificationQuerySet)):

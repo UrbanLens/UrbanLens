@@ -249,7 +249,7 @@ class PinShareDetailView(LoginRequiredMixin, View):
 
 class PinShareRespondView(LoginRequiredMixin, View):
     def post(self, request, share_id):
-        share = get_object_or_404(PinShare.objects.select_related("pin"), pk=share_id, to_profile=request.user.profile)
+        share = get_object_or_404(PinShare.objects.select_related("pin", "notification"), pk=share_id, to_profile=request.user.profile)
         action = request.POST.get("action")
         if share.status != PinShareStatus.PENDING:
             messages.info(request, "This shared pin has already been handled.")
@@ -260,11 +260,9 @@ class PinShareRespondView(LoginRequiredMixin, View):
         elif action == "reject":
             messages.info(request, status_message)
         if request.headers.get("HX-Request"):
-            from urbanlens.dashboard.controllers.notifications import _trigger_label_refresh
+            from urbanlens.dashboard.controllers.notifications import action_taken_response
 
-            notifications = NotificationLog.objects.for_profile(request.user.profile).for_display().order_by("-created")[:20]
-            response = render(request, "dashboard/partials/notifications/notification_dropdown.html", {"notifications": notifications, "unread_count": NotificationLog.objects.for_profile(request.user.profile).unread().count()})
-            return _trigger_label_refresh(response)
+            return action_taken_response(request, request.user.profile, notification=share.notification)
         if action == "accept" and target_pin is not None:
             return redirect("pin.details", pin_slug=target_pin.slug)
         return redirect("pin.share.detail", share_id=share.id)

@@ -465,5 +465,7 @@ def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, 
     else:
         message = "Unknown action."
     if share.notification_id:
-        NotificationLog.objects.filter(pk=share.notification_id).update(status=Status.READ)
+        from urbanlens.dashboard.services.notifications.notification_center import dismiss_notification
+
+        dismiss_notification(share.notification_id)
     return target_pin, message

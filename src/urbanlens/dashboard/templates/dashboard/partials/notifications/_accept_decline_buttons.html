@@ -1,12 +1,18 @@
 <div class="notif-actions">
   <button type="button" class="btn btn--primary btn--yes" onclick="event.stopPropagation()"
-          hx-post="{% url respond_url_name respond_arg %}" hx-vals='{"action": "{{ accept_action|default:"accept" }}"}'
-          hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+          hx-post="{% url respond_url_name respond_arg %}"
+          hx-vals='{"action": "{{ accept_action|default:"accept" }}", "surface": "{{ notif_surface|default:"inbox" }}"}'
+          hx-target="closest .notif-item"
+          hx-swap="outerHTML{% if notif_surface != 'history' %} swap:250ms{% endif %}"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
     <i class="material-symbols-outlined">check</i> Accept
   </button>
   <button type="button" class="btn btn--primary btn--no" onclick="event.stopPropagation()"
-          hx-post="{% url respond_url_name respond_arg %}" hx-vals='{"action": "{{ reject_action|default:"reject" }}"}'
-          hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+          hx-post="{% url respond_url_name respond_arg %}"
+          hx-vals='{"action": "{{ reject_action|default:"reject" }}", "surface": "{{ notif_surface|default:"inbox" }}"}'
+          hx-target="closest .notif-item"
+          hx-swap="outerHTML{% if notif_surface != 'history' %} swap:250ms{% endif %}"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
     <i class="material-symbols-outlined">close</i> {{ reject_label|default:"Reject" }}
   </button>
 </div>

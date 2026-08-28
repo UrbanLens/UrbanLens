@@ -1,21 +1,24 @@
 <div class="notif-dropdown" id="notif-dropdown">
   <div class="notif-dropdown__header">
     <span class="notif-dropdown__title">Notifications</span>
-    {% if unread_count %}
-    <button type="button" class="notif-mark-all-btn"
-            hx-post="{% url 'notifications.read_all' %}"
-            hx-target="#notif-dropdown"
-            hx-swap="outerHTML"
-            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-      Mark all read
-    </button>
-    {% endif %}
+    <div class="notif-dropdown__actions">
+      {% if unread_count %}
+      <button type="button" class="notif-mark-all-btn"
+              hx-post="{% url 'notifications.read_all' %}"
+              hx-target="#notif-dropdown"
+              hx-swap="outerHTML"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        Mark all read
+      </button>
+      {% endif %}
+      <a href="{% url 'notifications.view' %}" class="notif-dropdown__all-link">View all</a>
+    </div>
   </div>
 
   {% if notifications %}
   <ul class="notif-list" role="list">
     {% for n in notifications %}
-    {% include "dashboard/partials/notifications/notification_item.html" %}
+    {% include "dashboard/partials/notifications/notification_item.html" with notif_surface="inbox" %}
     {% endfor %}
   </ul>
   {% else %}

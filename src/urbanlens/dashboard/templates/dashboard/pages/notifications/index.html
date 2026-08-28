@@ -1,0 +1,16 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block title %}Notifications{% endblock %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="notifications" title="Notifications" subtitle="Current and past activity on your account." modifier="top" %}
+{% endblock %}
+
+{% block content %}
+<div id="notifications-page" class="notifications-page">
+  <div class="page-inner">
+    {% include "dashboard/partials/notifications/notification_history_card.html" %}
+  </div>
+</div>
+{% endblock %}

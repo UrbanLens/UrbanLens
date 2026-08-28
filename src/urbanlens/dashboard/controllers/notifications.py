@@ -1,21 +1,28 @@
-"""Notification bell dropdown and preferences controllers."""
+"""Notification bell dropdown, history page, and preferences controllers."""
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
-from urbanlens.dashboard.services.notifications.notification_center import get_preferences, mark_all_read, unread_count
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.notifications.notification_center import (
+    get_preferences,
+    inbox_notifications,
+    mark_all_read,
+    unread_count,
+)
 
 if TYPE_CHECKING:
-    from django.http import HttpResponse
+    from django.http import HttpRequest
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -36,6 +43,8 @@ _PREF_FIELDS = [
     ("safety_checkin_partner_invite", "Safety Check-in Partner Invitation"),
     ("achievement_earned", "Achievement Unlocked"),
 ]
+
+_HISTORY_PAGE_SIZE = 30
 
 
 def _get_or_create_prefs(profile: Profile) -> NotificationPreference:
@@ -59,6 +68,92 @@ def _trigger_label_refresh(response: HttpResponse) -> HttpResponse:
     return response
 
 
+def _merge_triggers(response: HttpResponse, triggers: dict[str, Any]) -> HttpResponse:
+    """Merge ``triggers`` into any existing ``HX-Trigger`` header on ``response``."""
+    existing_raw = response.get("HX-Trigger")
+    merged: dict[str, Any] = {}
+    if existing_raw:
+        try:
+            parsed = json.loads(existing_raw)
+            if isinstance(parsed, dict):
+                merged.update(parsed)
+            elif isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, str):
+                        merged[item] = True
+        except (TypeError, ValueError, json.JSONDecodeError):
+            merged[existing_raw] = True
+    merged.update(triggers)
+    response["HX-Trigger"] = json.dumps(merged)
+    return response
+
+
+def action_taken_response(
+    request: HttpRequest,
+    profile: Profile,
+    *,
+    notification: NotificationLog | None = None,
+    extra_triggers: dict[str, Any] | None = None,
+) -> HttpResponse:
+    """HTMX response after the user answers an actionable notification.
+
+    From the bell dropdown (``surface=inbox``, the default), returns an empty
+    body so HTMX can animate the row out. From the history page
+    (``surface=history``), re-renders the settled notification row in place.
+
+    Args:
+        request: Incoming request (reads ``surface`` from POST).
+        profile: Acting profile.
+        notification: The notification that was answered, when known (required
+            for history-page re-render).
+        extra_triggers: Additional ``HX-Trigger`` events to merge in.
+
+    Returns:
+        An HTMX-friendly response with a label-refresh trigger.
+    """
+    surface = request.POST.get("surface", "inbox")
+    triggers: dict[str, Any] = {"notifCountRefresh": {"target": "body"}}
+    if extra_triggers:
+        triggers.update(extra_triggers)
+
+    if surface == "history" and notification is not None:
+        n = get_object_or_404(
+            NotificationLog.objects.for_display(),
+            pk=notification.pk,
+            profile=profile,
+        )
+        response = render(
+            request,
+            "dashboard/partials/notifications/notification_item.html",
+            {"n": n, "notif_surface": "history"},
+        )
+        return _merge_triggers(response, triggers)
+
+    response = HttpResponse("")
+    return _merge_triggers(response, triggers)
+
+
+def _render_dropdown(request: HttpRequest, profile: Profile) -> HttpResponse:
+    """Render the bell dropdown partial for ``profile``."""
+    notifications = inbox_notifications(profile)
+    unread_ids = [n.id for n in notifications if n.is_unread]
+    if unread_ids:
+        NotificationLog.objects.filter(id__in=unread_ids).mark_read()
+        for n in notifications:
+            if n.id in unread_ids:
+                n.status = Status.READ
+    response = render(
+        request,
+        "dashboard/partials/notifications/notification_dropdown.html",
+        {
+            "notifications": notifications,
+            "unread_count": unread_count(profile),
+            "notif_surface": "inbox",
+        },
+    )
+    return _trigger_label_refresh(response) if unread_ids else response
+
+
 class NotificationDropdownView(LoginRequiredMixin, View):
     """GET /notifications/dropdown/ - renders the bell dropdown partial.
 
@@ -66,31 +161,30 @@ class NotificationDropdownView(LoginRequiredMixin, View):
     one individually. Action buttons (accept/decline friend request, pin share,
     visit suggestion) are gated on the underlying request's own pending state, not
     on notification read/unread, so this doesn't hide anything still actionable.
+    Dismissed (already-answered) rows are excluded; see the history page for those.
     """
 
     def get(self, request):
+        return _render_dropdown(request, request.user.profile)
+
+
+class NotificationHistoryView(LoginRequiredMixin, View):
+    """GET /notifications/ - full notification history (current + acted-on)."""
+
+    def get(self, request):
         profile = request.user.profile
-        # pin_share/visit_suggestion are reverse OneToOne accessors the item
-        # template reads to decide whether to offer Accept/Decline (and the
-        # visit merge choice). Without them here each of the 20 rows costs two
-        # extra queries - and the miss is invisible, because a missing reverse
-        # OneToOne raises ObjectDoesNotExist, which Django templates swallow.
-        notifications = list(NotificationLog.objects.for_profile(profile).for_display().order_by("-created")[:20])
-        unread_ids = [n.id for n in notifications if n.is_unread]
-        if unread_ids:
-            NotificationLog.objects.filter(id__in=unread_ids).mark_read()
-            for n in notifications:
-                if n.id in unread_ids:
-                    n.status = Status.READ
-        response = render(
-            request,
-            "dashboard/partials/notifications/notification_dropdown.html",
-            {
-                "notifications": notifications,
-                "unread_count": unread_count(profile),
-            },
-        )
-        return _trigger_label_refresh(response) if unread_ids else response
+        qs = NotificationLog.objects.for_profile(profile).for_display().order_by("-created")
+        page_obj = get_page(request, qs, _HISTORY_PAGE_SIZE)
+        context = {
+            "page_name": "notifications",
+            "notifications": page_obj.object_list,
+            "page_obj": page_obj,
+            "notif_surface": "history",
+            "unread_count": unread_count(profile),
+        }
+        if request.headers.get("HX-Request"):
+            return render(request, "dashboard/partials/notifications/notification_history_card.html", context)
+        return render(request, "dashboard/pages/notifications/index.html", context)
 
 
 class NotificationMarkReadView(LoginRequiredMixin, View):
@@ -103,13 +197,13 @@ class NotificationMarkReadView(LoginRequiredMixin, View):
             id=notification_id,
             profile=profile,
         )
-        if notification.status != Status.READ:
+        if notification.status == Status.UNREAD:
             notification.status = Status.READ
             notification.save(update_fields=["status", "updated"])
         response = render(
             request,
             "dashboard/partials/notifications/notification_item.html",
-            {"n": notification},
+            {"n": notification, "notif_surface": request.POST.get("surface", "inbox")},
         )
         return _trigger_label_refresh(response)
 
@@ -124,8 +218,9 @@ class NotificationMarkAllReadView(LoginRequiredMixin, View):
             request,
             "dashboard/partials/notifications/notification_dropdown.html",
             {
-                "notifications": NotificationLog.objects.for_profile(profile).for_display().order_by("-created")[:20],
+                "notifications": inbox_notifications(profile),
                 "unread_count": 0,
+                "notif_surface": "inbox",
             },
         )
         return _trigger_label_refresh(response)

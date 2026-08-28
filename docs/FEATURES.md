@@ -554,6 +554,9 @@ code comment ("underline style, not pill buttons").
 ## Notifications
 
 - In-app notification center (bell dropdown), mark read/unread, per-type delivery preferences
+- Actionable notifications (visit suggestions, friend requests, pin shares) leave the bell
+  inbox when answered - with a short removal transition when acted on from the dropdown -
+  and remain available on **Notifications → View all** (`/notifications/`) as history
 - Real-time push over WebSockets (`ws/notifications/`) with desktop `Notification` API support and
   a 60s polling fallback
 - Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls

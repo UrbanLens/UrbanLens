@@ -1,15 +1,21 @@
 {% load humanize %}
-{% if n.notification_type == 'pin_shared' and n.pin_share.is_actionable %}
-<li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %} notif-item--friend-req" id="notif-{{ n.id }}" role="menuitem">
+{% if n.notification_type == 'pin_shared' %}
+<li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %}{% if n.pin_share.is_actionable %} notif-item--friend-req{% endif %}" id="notif-{{ n.id }}" role="menuitem">
   <div class="notif-item__icon-wrap notif-item__icon-wrap--pin_shared"><i class="material-symbols-outlined">ios_share</i></div>
   <div class="notif-item__body">
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
     {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
     <p class="notif-item__time">{{ n.created|naturaltime }}</p>
+    {% if n.pin_share.is_actionable %}
     <div class="notif-actions">
       <a class="btn btn--primary" href="{{ n.url }}" onclick="event.stopPropagation()"><i class="material-symbols-outlined">visibility</i> View details</a>
     </div>
     {% include "dashboard/partials/notifications/_accept_decline_buttons.html" with respond_url_name="pin.share.respond" respond_arg=n.pin_share.id %}
+    {% elif n.pin_share.status == 'accepted' %}
+    <p class="notif-item__resolution notif-item__resolution--accepted"><i class="material-symbols-outlined">check_circle</i> You accepted this share.</p>
+    {% elif n.pin_share.status == 'rejected' %}
+    <p class="notif-item__resolution notif-item__resolution--declined"><i class="material-symbols-outlined">cancel</i> You rejected this share.</p>
+    {% endif %}
   </div>
   {% if n.is_unread %}<div class="notif-item__dot" aria-hidden="true"></div>{% endif %}
 </li>
@@ -22,6 +28,7 @@
     role="menuitem"
     {% if n.is_unread %}
     hx-post="{% url 'notifications.read' n.id %}"
+    hx-vals='{"surface": "{{ notif_surface|default:"inbox" }}"}'
     hx-target="this"
     hx-swap="outerHTML"
     hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
@@ -47,6 +54,7 @@
 <li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %} notif-item--friend-req" id="notif-{{ n.id }}" role="menuitem"
     {% if n.is_unread %}
     hx-post="{% url 'notifications.read' n.id %}"
+    hx-vals='{"surface": "{{ notif_surface|default:"inbox" }}"}'
     hx-target="this"
     hx-swap="outerHTML"
     hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
@@ -67,33 +75,48 @@
   </div>
   {% if n.is_unread %}<div class="notif-item__dot" aria-hidden="true"></div>{% endif %}
 </li>
-{% elif n.notification_type == 'visit_suggested' and n.visit_suggestion.is_actionable %}
-<li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %} notif-item--friend-req" id="notif-{{ n.id }}" role="menuitem">
+{% elif n.notification_type == 'visit_suggested' %}
+<li class="notif-item{% if n.is_unread %} notif-item--unread{% endif %}{% if n.visit_suggestion.is_actionable %} notif-item--friend-req{% endif %}" id="notif-{{ n.id }}" role="menuitem">
   <div class="notif-item__icon-wrap notif-item__icon-wrap--visit_suggested"><i class="material-symbols-outlined">event_available</i></div>
   <div class="notif-item__body">
     {% if n.title %}<p class="notif-item__title">{{ n.title }}</p>{% endif %}
     {% if n.message %}<p class="notif-item__msg">{{ n.message }}</p>{% endif %}
     <p class="notif-item__time">{{ n.created|naturaltime }}</p>
+    {% if n.visit_suggestion.is_actionable %}
     {% if n.visit_suggestion.offers_merge %}
     <div class="notif-actions notif-actions--triple">
       <button type="button" class="btn btn--primary btn--yes" onclick="event.stopPropagation()"
-              hx-post="{% url 'visit_suggestion.respond' n.visit_suggestion.id %}" hx-vals='{"action": "add_participants"}'
-              hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+              hx-post="{% url 'visit_suggestion.respond' n.visit_suggestion.id %}"
+              hx-vals='{"action": "add_participants", "surface": "{{ notif_surface|default:"inbox" }}"}'
+              hx-target="closest .notif-item"
+              hx-swap="outerHTML{% if notif_surface != 'history' %} swap:250ms{% endif %}"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
         <i class="material-symbols-outlined">group_add</i> Add to my visit
       </button>
       <button type="button" class="btn btn--primary" onclick="event.stopPropagation()"
-              hx-post="{% url 'visit_suggestion.respond' n.visit_suggestion.id %}" hx-vals='{"action": "new_entry"}'
-              hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+              hx-post="{% url 'visit_suggestion.respond' n.visit_suggestion.id %}"
+              hx-vals='{"action": "new_entry", "surface": "{{ notif_surface|default:"inbox" }}"}'
+              hx-target="closest .notif-item"
+              hx-swap="outerHTML{% if notif_surface != 'history' %} swap:250ms{% endif %}"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
         <i class="material-symbols-outlined">note_add</i> Log separately
       </button>
       <button type="button" class="btn btn--primary btn--no" onclick="event.stopPropagation()"
-              hx-post="{% url 'visit_suggestion.respond' n.visit_suggestion.id %}" hx-vals='{"action": "reject"}'
-              hx-target="#notif-dropdown-wrap" hx-swap="innerHTML" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+              hx-post="{% url 'visit_suggestion.respond' n.visit_suggestion.id %}"
+              hx-vals='{"action": "reject", "surface": "{{ notif_surface|default:"inbox" }}"}'
+              hx-target="closest .notif-item"
+              hx-swap="outerHTML{% if notif_surface != 'history' %} swap:250ms{% endif %}"
+              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
         <i class="material-symbols-outlined">close</i> Reject
       </button>
     </div>
     {% else %}
     {% include "dashboard/partials/notifications/_accept_decline_buttons.html" with respond_url_name="visit_suggestion.respond" respond_arg=n.visit_suggestion.id %}
+    {% endif %}
+    {% elif n.visit_suggestion.status == 'accepted' %}
+    <p class="notif-item__resolution notif-item__resolution--accepted"><i class="material-symbols-outlined">check_circle</i> You confirmed this visit.</p>
+    {% elif n.visit_suggestion.status == 'rejected' %}
+    <p class="notif-item__resolution notif-item__resolution--declined"><i class="material-symbols-outlined">cancel</i> You dismissed this suggestion.</p>
     {% endif %}
   </div>
   {% if n.is_unread %}<div class="notif-item__dot" aria-hidden="true"></div>{% endif %}
@@ -104,6 +127,7 @@
     role="menuitem"
     {% if n.is_unread %}
     hx-post="{% url 'notifications.read' n.id %}"
+    hx-vals='{"surface": "{{ notif_surface|default:"inbox" }}"}'
     hx-target="this"
     hx-swap="outerHTML"
     hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'

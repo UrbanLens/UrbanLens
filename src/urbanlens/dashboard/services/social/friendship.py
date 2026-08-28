@@ -254,13 +254,12 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, mes
     return friendship
 
 
-def _mark_friend_request_notifications_read(viewer_profile: Profile, source_profile_id: int) -> None:
-    """Mark the viewer's pending "new friend request" notification(s) from a source as read.
+def _dismiss_friend_request_notifications(viewer_profile: Profile, source_profile_id: int) -> None:
+    """Dismiss the viewer's friend-request notification(s) from a source.
 
-    Accepting/declining/ignoring a request on the profile page (rather than via the
-    notification dropdown's own accept/decline buttons) must also mark the originating
-    notification read, or it stays unread indefinitely and inflates the bell label count
-    forever.
+    Accepting/declining/ignoring a request (from the bell, profile page, or API)
+    retires the originating notification from the inbox. Historic rows remain on
+    the full notifications page.
 
     Args:
         viewer_profile: Profile who just acted on the request.
@@ -270,7 +269,11 @@ def _mark_friend_request_notifications_read(viewer_profile: Profile, source_prof
         profile=viewer_profile,
         notification_type=NotificationType.FRIEND_REQUEST,
         source_profile_id=source_profile_id,
-    ).update(status=Status.READ)
+    ).mark_dismissed()
+
+
+# Retained name for older imports; prefer ``_dismiss_friend_request_notifications``.
+_mark_friend_request_notifications_read = _dismiss_friend_request_notifications
 
 
 def _existing_friendship(actor: Profile, target: Profile) -> Friendship:
@@ -378,15 +381,15 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
         accepted_pref = DeliveryPreference.SITE
     if accepted_pref != DeliveryPreference.NONE:
         _notify_friend_accepted(requester, actor)
-    _mark_friend_request_notifications_read(actor, target.pk)
+    _dismiss_friend_request_notifications(actor, target.pk)
     return friendship
 
 
 def _notify_friend_accepted(requester: Profile, actor: Profile) -> None:
     """Raise the FRIEND_ACCEPTED notification for *requester*.
 
-    Split out so the acceptance flow's post-notification steps (marking the
-    request notification read, returning the friendship) run whether or not
+    Split out so the acceptance flow's post-notification steps (dismissing the
+    request notification, returning the friendship) run whether or not
     the recipient has silenced this type.
     """
     NotificationLog.objects.notify(
@@ -422,7 +425,7 @@ def reject_friend_request(actor: Profile, target: Profile) -> Friendship:
     """
     friendship = _incoming_pending_request(actor, target)
     friendship.decline()
-    _mark_friend_request_notifications_read(actor, target.pk)
+    _dismiss_friend_request_notifications(actor, target.pk)
     return friendship
 
 
@@ -447,7 +450,7 @@ def ignore_friend_request(actor: Profile, target: Profile) -> Friendship:
     """
     friendship = _incoming_pending_request(actor, target)
     friendship.ignore()
-    _mark_friend_request_notifications_read(actor, target.pk)
+    _dismiss_friend_request_notifications(actor, target.pk)
     return friendship
 
 

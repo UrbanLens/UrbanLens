@@ -6,11 +6,10 @@ import json
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404
 from django.views import View
 
-from urbanlens.dashboard.models.notifications.meta import Status
-from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.controllers.notifications import action_taken_response
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.services.visits.visits import accept_visit_suggestion, merge_visit_suggestion, reject_visit_suggestion
@@ -29,17 +28,22 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, suggestion_id: int) -> HttpResponse:
-        """Handle an accept/reject response and return the refreshed notification dropdown.
+        """Handle an accept/reject response and return an HTMX swap payload.
 
         Args:
             request: Incoming HTTP request.
             suggestion_id: Primary key of the VisitSuggestion being responded to.
 
         Returns:
-            Rendered notification dropdown partial, with the label-refresh trigger set.
+            Empty body (inbox row removal), re-rendered history row, or pin
+            visit-history partial - depending on ``surface`` / ``context``.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        suggestion = get_object_or_404(VisitSuggestion, pk=suggestion_id, suggested_to=profile)
+        suggestion = get_object_or_404(
+            VisitSuggestion.objects.select_related("notification"),
+            pk=suggestion_id,
+            suggested_to=profile,
+        )
         action = request.POST.get("action")
         blocked = False
         if suggestion.status == VisitSuggestionStatus.PENDING:
@@ -55,34 +59,31 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
             elif action == "reject":
                 reject_visit_suggestion(suggestion)
 
-        if suggestion.notification_id:
-            NotificationLog.objects.filter(pk=suggestion.notification_id).update(status=Status.READ)
-
         # Built once and applied to whichever response is returned: the pin-context
         # branch below used to return before the `blocked` toast was attached, so a
         # response the user had explicitly asked for silently did nothing when visit
         # logging was off.
-        def _with_triggers(response: HttpResponse) -> HttpResponse:
-            triggers: dict[str, object] = {"notifCountRefresh": {"target": "body"}}
-            if blocked:
-                triggers["showToast"] = {
-                    "message": "Visit logging is turned off - enable it in Settings to add this to your visit history.",
-                    "level": "info",
-                }
-            response["HX-Trigger"] = json.dumps(triggers)
-            return response
+        extra_triggers: dict = {}
+        if blocked:
+            extra_triggers["showToast"] = {
+                "message": "Visit logging is turned off - enable it in Settings to add this to your visit history.",
+                "level": "info",
+            }
 
         if request.POST.get("context") == "pin" and request.POST.get("pin_slug"):
             from urbanlens.dashboard.controllers.visits import _render_visit_history
             from urbanlens.dashboard.models.pin.model import Pin
 
             pin = get_object_or_404(Pin, slug=request.POST["pin_slug"], profile__user=request.user)
-            return _with_triggers(_render_visit_history(request, pin))
+            response = _render_visit_history(request, pin)
+            triggers: dict = {"notifCountRefresh": {"target": "body"}}
+            triggers.update(extra_triggers)
+            response["HX-Trigger"] = json.dumps(triggers)
+            return response
 
-        notifications = NotificationLog.objects.for_profile(profile).for_display().order_by("-created")[:20]
-        response = render(
+        return action_taken_response(
             request,
-            "dashboard/partials/notifications/notification_dropdown.html",
-            {"notifications": notifications, "unread_count": NotificationLog.objects.for_profile(profile).unread().count()},
+            profile,
+            notification=suggestion.notification,
+            extra_triggers=extra_triggers or None,
         )
-        return _with_triggers(response)

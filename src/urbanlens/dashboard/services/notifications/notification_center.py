@@ -158,6 +158,37 @@ def unread_count(profile: Profile) -> int:
     return NotificationLog.objects.for_profile(profile).unread().count()
 
 
+def dismiss_notification(notification_id: int | None) -> bool:
+    """Mark a notification dismissed so it leaves the bell inbox.
+
+    Used when the user answers an actionable notification (accept/reject a
+    visit suggestion, friend request, or pin share). Safe to call with
+    ``None`` or an already-dismissed id - both are no-ops.
+
+    Args:
+        notification_id: Primary key of the ``NotificationLog`` to dismiss.
+
+    Returns:
+        True when a row was updated.
+    """
+    if not notification_id:
+        return False
+    return NotificationLog.objects.filter(pk=notification_id).exclude(status=Status.DISMISSED).mark_dismissed() > 0
+
+
+def inbox_notifications(profile: Profile, *, limit: int = 20) -> list[NotificationLog]:
+    """Newest non-dismissed notifications for the bell dropdown.
+
+    Args:
+        profile: The owner whose inbox to read.
+        limit: Maximum rows to return.
+
+    Returns:
+        Up to ``limit`` notifications, newest first, with display relations loaded.
+    """
+    return list(NotificationLog.objects.for_profile(profile).for_inbox().for_display().order_by("-created")[:limit])
+
+
 def preference_field_names() -> tuple[str, ...]:
     """The notification-preference stems that actually exist on the model.
 
