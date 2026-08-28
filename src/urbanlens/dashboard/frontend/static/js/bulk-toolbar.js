@@ -23,9 +23,9 @@
 (function () {
     var bars = {};
 
-    function ensureBar(namespace) {
-        if (bars[namespace]) return bars[namespace];
+        function ensureBar(namespace) {
         var barEl = document.getElementById('ul-bulk-bar-' + namespace);
+        if (bars[namespace] && bars[namespace].barEl === barEl && barEl) return bars[namespace];
         if (!barEl) return null;
 
         var entry = { barEl: barEl, countEl: barEl.querySelector('.ul-bulk-count'), buttons: {}, actions: {} };

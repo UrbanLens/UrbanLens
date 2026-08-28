@@ -1443,56 +1443,78 @@ class LabelImageMembershipView(LoginRequiredMixin, View):
     Unlike pin/location membership, this is scoped to the owner's own media
     labels (kind='media') only - media labels help find the item in search,
     they never apply to pins or wikis.
+
+    ``?embed=lightbox`` (or POST ``embed=lightbox``) renders the inline picker
+    used in the photo lightbox rather than the gallery's add-label dialog.
+    ``action=create_and_add`` creates a media label from ``name`` (or reuses
+    an existing one of that name) and applies it in one step.
     """
+
+    _LIGHTBOX = "dashboard/partials/labels/_lightbox_media_labels.html"
 
     def _get_owned_image(self, request: HttpRequest, image_uuid: str) -> Image:
         return get_object_or_404(Image, uuid=image_uuid, profile__user=request.user)
 
+    def _template(self, request: HttpRequest) -> str:
+        embed = request.POST.get("embed") or request.GET.get("embed")
+        return self._LIGHTBOX if embed == "lightbox" else _MEMBERSHIP_PANEL
+
+    def _ctx(self, profile, image: Image) -> dict:
+        return _membership_panel_ctx(
+            profile,
+            _image_member_ids(image),
+            panel_id="media-label-panel",
+            dialog_id_prefix="media-label-dialog-",
+            dialog_id_suffix=str(image.uuid),
+            membership_route="image",
+            obj_uuid=str(image.uuid),
+            collapse_scope="image",
+            empty_text="No media labels. Click + to add one.",
+            labels_override=Label.objects.visible_to(profile).media().ordered(),
+            dialog_only=True,
+        )
+
+    def _render(self, request: HttpRequest, profile, image: Image) -> HttpResponse:
+        return render(request, self._template(request), self._ctx(profile, image))
+
+    def _label_from_create(self, request: HttpRequest, profile) -> Label | HttpResponse:
+        """Create a media label from ``name``, or return the existing one of that name."""
+        name = (request.POST.get("name") or "").strip()
+        if not name:
+            return HttpResponse("Name is required.", status=400)
+        name_error = column_length_error(Label, "name", name, "Media label")
+        if name_error:
+            return HttpResponse(name_error, status=400)
+        conflict = find_conflicting_label(profile=profile, name=name, kind=KIND_MEDIA)
+        if conflict is not None:
+            return conflict
+        return Label.objects.create(
+            kind=KIND_MEDIA,
+            profile=profile,
+            name=name,
+            color=clean_color(None, default=DEFAULT_LABEL_COLOR),
+        )
+
     def get(self, request: HttpRequest, image_uuid: str, *args, **kwargs) -> HttpResponse:
         image = self._get_owned_image(request, image_uuid)
         profile = _request_profile(request)
-        return render(
-            request,
-            _MEMBERSHIP_PANEL,
-            _membership_panel_ctx(
-                profile,
-                _image_member_ids(image),
-                panel_id="media-label-panel",
-                dialog_id_prefix="media-label-dialog-",
-                dialog_id_suffix=image_uuid,
-                membership_route="image",
-                obj_uuid=image_uuid,
-                collapse_scope="image",
-                empty_text="No media labels. Click + to add one.",
-                labels_override=Label.objects.visible_to(profile).media().ordered(),
-                dialog_only=True,
-            ),
-        )
+        return self._render(request, profile, image)
 
     def post(self, request: HttpRequest, image_uuid: str, *args, **kwargs) -> HttpResponse:
         image = self._get_owned_image(request, image_uuid)
         profile = _request_profile(request)
-        label_id = _membership_label_id(request)
         action = request.POST.get("action")
+        if action == "create_and_add":
+            label = self._label_from_create(request, profile)
+            if isinstance(label, HttpResponse):
+                return label
+            image.labels.add(label)
+            return self._render(request, profile, image)
+
+        label_id = _membership_label_id(request)
         label = get_object_or_404(Label.objects.visible_to(profile), id=label_id, kind=KIND_MEDIA)
         if action == "add":
             image.labels.add(label)
         elif action == "remove":
             image.labels.remove(label)
-        return render(
-            request,
-            _MEMBERSHIP_PANEL,
-            _membership_panel_ctx(
-                profile,
-                _image_member_ids(image),
-                panel_id="media-label-panel",
-                dialog_id_prefix="media-label-dialog-",
-                dialog_id_suffix=image_uuid,
-                membership_route="image",
-                obj_uuid=image_uuid,
-                collapse_scope="image",
-                empty_text="No media labels. Click + to add one.",
-                labels_override=Label.objects.visible_to(profile).media().ordered(),
-                dialog_only=True,
-            ),
-        )
+        return self._render(request, profile, image)

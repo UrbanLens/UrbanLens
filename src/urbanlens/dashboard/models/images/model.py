@@ -44,6 +44,17 @@ def pin_image_upload_path(instance: Image, filename: str) -> str:
     return f"pin_images/{stem[:_UPLOAD_STEM_LIMIT]}{ext[:_UPLOAD_EXT_LIMIT]}"
 
 
+def pin_image_thumbnail_path(instance: Image, filename: str) -> str:
+    """Storage path for an Image's small grid thumbnail.
+
+    Same stem-trimming rules as :func:`pin_image_upload_path`, under a
+    ``thumbs/`` prefix so a thumbnail can never collide with the original file
+    when both are derived from the same upload name.
+    """
+    stem, ext = posixpath.splitext(filename)
+    return f"pin_images/thumbs/{stem[:_UPLOAD_STEM_LIMIT]}{ext[:_UPLOAD_EXT_LIMIT]}"
+
+
 class ImageSource(TextChoices):
     """Where a photo originated - drives the Media section's per-source tabs.
 
@@ -125,6 +136,9 @@ class Image(abstract.FrontendDashboardModel):
     """A photo, video, or document uploaded by a user, attached to a pin, community wiki, or safety check-in."""
 
     image = ImageField(upload_to=pin_image_upload_path, max_length=255)
+    # Small WebP preview generated after upload for photo grids (albums, galleries).
+    # Empty until processing finishes; :attr:`thumb_url` falls back to the original.
+    thumbnail = ImageField(upload_to=pin_image_thumbnail_path, max_length=255, null=True, blank=True)
     media_type = CharField(max_length=10, choices=MediaKind.choices, default=MediaKind.PHOTO, db_index=True)
     # Provenance for the Media gallery's per-source tabs (see ImageSource). Only
     # meaningful once a row exists; almost every Image row is a plain upload.
@@ -392,6 +406,23 @@ class Image(abstract.FrontendDashboardModel):
         if self.image:
             return self.image.url
         return self.source_url or ""
+
+    @property
+    def thumb_url(self) -> str:
+        """The URL to render this photo from in a grid of many.
+
+        Grids (albums, galleries) should load this instead of
+        :attr:`display_url` so a page of dozens of photos does not decode
+        full-resolution files. Falls back to the original when no thumbnail
+        has been generated yet (processing still running, or a row created
+        before thumbnails existed).
+
+        Returns:
+            The thumbnail URL, the original's URL, or "".
+        """
+        if self.thumbnail:
+            return self.thumbnail.url
+        return self.display_url
 
     @property
     def effective_latitude(self) -> Decimal | None:

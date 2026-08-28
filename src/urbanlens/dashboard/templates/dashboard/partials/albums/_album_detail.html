@@ -1,4 +1,4 @@
-{% load map_components %}
+{% load map_components static %}
 {% comment %}
 One album's own view, swapped into #albums-panel in place of the album list.
 Carries the same root id so the "All albums" link can swap back.
@@ -9,10 +9,10 @@ and the two large secondary surfaces - the map and the "add existing photos"
 picker - are opt-in panels rather than always-rendered page content.
 
 Expects (from controllers.albums._album_detail_context):
-  album, images, available_images, photo_count, cover, date_start, date_end
+  album, grid_images, available_images, photo_count, cover, date_start, date_end
   map_photos, placed_count
   back_url, list_url, add_url, remove_url, reorder_url, edit_url, upload_url,
-  reposition_base
+  items_url, reposition_base
 {% endcomment %}
 <div id="albums-panel" class="albums-panel album-detail"
      data-album-slug="{{ album.slug }}"
@@ -22,7 +22,11 @@ Expects (from controllers.albums._album_detail_context):
      data-remove-url="{{ remove_url }}"
      data-add-url="{{ add_url }}"
      data-upload-url="{{ upload_url }}"
-     data-reposition-base="{{ reposition_base }}">
+     data-items-url="{{ items_url }}"
+     data-reposition-base="{{ reposition_base }}"
+     data-gallery-bulk-url="{{ gallery_bulk_url|default:'' }}"
+     data-pin-share-dialog-url="{{ pin_share_dialog_url|default:'' }}"
+     data-grid-page-size="{{ grid_page_size|default:48 }}">
 
   <header class="albums-toolbar album-detail-toolbar">
     <button type="button" class="btn btn--ghost album-back-btn" data-album-back
@@ -46,6 +50,10 @@ Expects (from controllers.albums._album_detail_context):
     </div>
 
     <div class="album-detail-actions">
+      <button type="button" class="gallery-import-photos-btn" id="albums-select-btn"
+              data-album-select-toggle title="Select photos">
+        <i class="material-symbols-outlined">checklist</i>
+      </button>
       <input type="file" id="album-file-input" accept="image/*" multiple hidden aria-label="Choose photos to add">
       <button type="button" class="btn btn--primary" data-album-upload-btn>
         <i class="material-symbols-outlined">upload</i>
@@ -120,18 +128,15 @@ Expects (from controllers.albums._album_detail_context):
     </div>
   </section>
 
-  {% if images %}
+  {% if photo_count %}
   <ul class="gallery-grid album-items-grid" id="album-items-grid"
+      data-photo-grid
+      data-items-url="{{ items_url }}"
+      data-photo-count="{{ photo_count }}"
+      data-grid-page-size="{{ grid_page_size|default:48 }}"
       {% if album.manual_order %}data-album-sortable="1"{% endif %}>
-    {% for img in images %}
-    <li class="gallery-item album-item" data-item-id="{{ img.album_item_id }}" data-id="{{ img.pk }}">
-      <img src="{{ img.display_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
-      <button type="button" class="album-item-remove" title="Remove from this album"
-              aria-label="Remove from this album" data-image-id="{{ img.pk }}">
-        <i class="material-symbols-outlined">close</i>
-      </button>
-      {% if img.caption %}<p class="album-item-caption">{{ img.caption }}</p>{% endif %}
-    </li>
+    {% for img in grid_images %}
+    {% include "dashboard/partials/albums/_photo_tile.html" with img=img profile=profile in_album=True album_slug=album.slug %}
     {% endfor %}
   </ul>
   {% else %}
@@ -173,7 +178,7 @@ Expects (from controllers.albums._album_detail_context):
       <li class="gallery-item album-add-item" data-id="{{ img.pk }}">
         <button type="button" class="album-item-add" title="Add to this album"
                 aria-label="Add to this album" data-image-id="{{ img.pk }}">
-          <img src="{{ img.display_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
+          <img src="{{ img.thumb_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy" decoding="async">
           <span class="album-add-tick"><i class="material-symbols-outlined">add</i></span>
         </button>
       </li>
@@ -194,4 +199,8 @@ Expects (from controllers.albums._album_detail_context):
   </div>
 
   {{ map_photos|json_script:"album-map-photos" }}
+
+  {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="albums" actions=album_bulk_actions %}
+  {% include "dashboard/partials/albums/_add_to_album_dialog.html" with picker_albums=picker_albums %}
 </div>
+<script src="{% static 'js/bulk-toolbar.js' %}"></script>

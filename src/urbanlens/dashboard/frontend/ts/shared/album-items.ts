@@ -10,8 +10,12 @@
 
 import Sortable from "sortablejs";
 import { destroyAlbumMap, highlightAlbumPhoto, initAlbumMap } from "./album-map";
+import { bindAlbumPicker, openAlbumPicker } from "./album-picker";
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
+import { bindPhotoContextMenu } from "./photo-context-menu";
+import { lightboxListFromGrid, parsePhotoIds, writePhotoIds } from "./photo-tile";
+import { bindPhotoGrid } from "./photo-virtual-grid";
 
 /**
  * How long to wait before re-rendering after the server queues a download.
@@ -220,6 +224,131 @@ async function uploadFilesToAlbum(files: FileList | File[]): Promise<void> {
     }
 }
 
+// -- Multi-select --------------------------------------------------------------
+
+let selecting = false;
+const selected = new Set<number>();
+
+function clearSelect(): void {
+    selecting = false;
+    selected.clear();
+    const panel = albumPanel();
+    panel?.classList.remove("albums-panel--selecting");
+    document.getElementById("albums-select-btn")?.classList.remove("is-active");
+    panel?.querySelectorAll(".gallery-item.is-selected").forEach((el) => el.classList.remove("is-selected"));
+    window.ulBulkToolbar?.clear("albums");
+    initAlbumSortable();
+}
+
+function syncAlbumToolbar(): void {
+    const panel = albumPanel();
+    const count = selected.size;
+    const ids = Array.from(selected);
+    const inAlbum = Boolean(panel?.dataset.albumSlug);
+    const bulkUrl = panel?.dataset.galleryBulkUrl || "";
+    window.ulBulkToolbar?.sync("albums", count, {
+        add_to_album: count
+            ? () => openAlbumPicker({ imageIds: ids, onDone: () => { clearSelect(); refreshPanel(); } })
+            : null,
+        move_to_album:
+            inAlbum && count
+                ? () =>
+                      openAlbumPicker({
+                          imageIds: ids,
+                          moveFrom: panel?.dataset.albumSlug,
+                          onDone: () => { clearSelect(); refreshPanel(); },
+                      })
+                : null,
+        remove: inAlbum && count ? () => bulkRemove(ids) : null,
+        wiki: bulkUrl && count ? () => bulkWiki(ids, bulkUrl) : null,
+        delete: bulkUrl && count ? () => bulkDelete(ids, bulkUrl) : null,
+        deselect: () => clearSelect(),
+    });
+}
+
+function toggleSelecting(): void {
+    if (selecting) {
+        clearSelect();
+        return;
+    }
+    selecting = true;
+    albumPanel()?.classList.add("albums-panel--selecting");
+    document.getElementById("albums-select-btn")?.classList.add("is-active");
+    albumSortable?.destroy();
+    albumSortable = null;
+}
+
+function toggleSelected(item: HTMLElement): void {
+    const id = Number.parseInt(item.dataset.id ?? "", 10);
+    if (!id) return;
+    const now = !item.classList.contains("is-selected");
+    item.classList.toggle("is-selected", now);
+    if (now) selected.add(id);
+    else selected.delete(id);
+    if (selected.size === 0) {
+        // Stay in select mode with an empty bar, matching the pin gallery.
+    }
+    syncAlbumToolbar();
+}
+
+async function bulkRemove(ids: number[]): Promise<void> {
+    const url = albumPanel()?.dataset.removeUrl;
+    if (!url || !ids.length) return;
+    ids.forEach((id) => document.getElementById(`gallery-item-${id}`)?.remove());
+    try {
+        await postJson(url, { image_ids: ids });
+        clearSelect();
+    } catch (err) {
+        toast.error(`Could not remove: ${(err as Error).message}`);
+        refreshPanel();
+    }
+}
+
+async function bulkWiki(ids: number[], bulkUrl: string): Promise<void> {
+    if (!ids.length) return;
+    if (!window.confirm(`Send ${ids.length} photo${ids.length === 1 ? "" : "s"} to the community wiki?`)) return;
+    try {
+        await postJson(bulkUrl, { action: "send_to_wiki", image_ids: ids });
+        toast.success(`Sent ${ids.length} photo${ids.length === 1 ? "" : "s"} to the wiki.`);
+        clearSelect();
+    } catch (err) {
+        toast.error((err as Error).message || "Could not send photos to the wiki.");
+    }
+}
+
+async function bulkDelete(ids: number[], bulkUrl: string): Promise<void> {
+    if (!ids.length) return;
+    if (!window.confirm(`Delete ${ids.length} photo${ids.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    try {
+        await postJson(bulkUrl, { action: "delete", image_ids: ids });
+        ids.forEach((id) => document.getElementById(`gallery-item-${id}`)?.remove());
+        toast.success(`Deleted ${ids.length} photo${ids.length === 1 ? "" : "s"}.`);
+        clearSelect();
+    } catch (err) {
+        toast.error((err as Error).message || "Failed to delete photos.");
+    }
+}
+
+function openAlbumLightbox(tile: HTMLElement): void {
+    const grid = tile.closest<HTMLElement>(".gallery-grid");
+    if (!grid || !window.galleryOpenLightboxItem) return;
+    const { list, idx } = lightboxListFromGrid(grid, tile);
+    window.galleryOpenLightboxItem(list, idx);
+}
+
+let unbindGrids: Array<() => void> = [];
+
+function initPhotoGrids(): void {
+    unbindGrids.forEach((unbind) => unbind());
+    unbindGrids = [];
+    const panel = albumPanel();
+    if (!panel) return;
+    const inAlbum = Boolean(panel.dataset.albumSlug);
+    panel.querySelectorAll<HTMLElement>("[data-photo-grid]").forEach((grid) => {
+        unbindGrids.push(bindPhotoGrid(grid, { inAlbum, albumSlug: panel.dataset.albumSlug }));
+    });
+}
+
 /**
  * Show the drop overlay only for a real file drag from outside the page.
  *
@@ -244,8 +373,14 @@ function setOverlayVisible(visible: boolean): void {
     if (overlay) overlay.hidden = !visible;
 }
 
-document.addEventListener("dragstart", () => {
+document.addEventListener("dragstart", (event) => {
     internalDrag = true;
+    const tile = (event.target as HTMLElement | null)?.closest?.<HTMLElement>(".gallery-item[data-id]");
+    const panel = albumPanel();
+    if (!tile || !panel?.contains(tile) || !event.dataTransfer) return;
+    const id = Number.parseInt(tile.dataset.id ?? "", 10);
+    const ids = selected.has(id) && selected.size ? Array.from(selected) : id ? [id] : [];
+    if (ids.length) writePhotoIds(event.dataTransfer, ids);
 });
 document.addEventListener("dragend", () => {
     internalDrag = false;
@@ -267,19 +402,47 @@ document.addEventListener("dragenter", (event) => {
     });
 });
 
-document.addEventListener("dragleave", () => {
-    if (dragDepth === 0) return;
-    dragDepth = Math.max(0, dragDepth - 1);
-    if (dragDepth === 0) setOverlayVisible(false);
-});
-
 document.addEventListener("dragover", (event) => {
+    const card = (event.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-album-drop]");
+    if (card && internalDrag) {
+        event.preventDefault();
+        card.classList.add("album-card--drop");
+        return;
+    }
     if (!dropOverlay() || dropOverlay()?.hidden) return;
     // Without this the browser navigates to the dropped file instead.
     event.preventDefault();
 });
 
+document.addEventListener("dragleave", (event) => {
+    const card = (event.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-album-drop]");
+    if (card) card.classList.remove("album-card--drop");
+    if (dragDepth === 0) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) setOverlayVisible(false);
+});
+
 document.addEventListener("drop", (event) => {
+    const card = (event.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-album-drop]");
+    document.querySelectorAll(".album-card--drop").forEach((el) => el.classList.remove("album-card--drop"));
+    if (card && internalDrag) {
+        event.preventDefault();
+        const ids = parsePhotoIds(event.dataTransfer);
+        const addUrl = card.dataset.addUrl;
+        internalDrag = false;
+        dragDepth = 0;
+        setOverlayVisible(false);
+        if (addUrl && ids.length) {
+            void postJson(addUrl, { image_ids: ids })
+                .then(() => {
+                    toast.success(`Added ${ids.length} photo${ids.length === 1 ? "" : "s"} to the album.`);
+                    clearSelect();
+                    refreshPanel();
+                })
+                .catch((err: Error) => toast.error(`Could not add: ${err.message}`));
+        }
+        return;
+    }
     const overlayShowing = !!dropOverlay() && !dropOverlay()?.hidden;
     dragDepth = 0;
     setOverlayVisible(false);
@@ -310,7 +473,36 @@ document.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
     if (!target?.closest) return;
 
-    // -- Album list: show/hide the create form ---------------------------------
+    if (target.closest("[data-album-select-toggle]")) {
+        toggleSelecting();
+        return;
+    }
+
+    const selectCheck = target.closest<HTMLElement>(".gallery-select-check");
+    if (selectCheck && albumPanel()?.contains(selectCheck)) {
+        event.preventDefault();
+        event.stopPropagation();
+        const item = selectCheck.closest<HTMLElement>(".gallery-item");
+        if (item) {
+            if (!selecting) toggleSelecting();
+            toggleSelected(item);
+        }
+        return;
+    }
+
+    const photoOpen = target.closest<HTMLElement>("[data-photo-open], .gallery-thumb-btn");
+    if (photoOpen && albumPanel()?.contains(photoOpen)) {
+        event.preventDefault();
+        const tile = photoOpen.closest<HTMLElement>(".gallery-item");
+        if (!tile) return;
+        if (selecting) {
+            toggleSelected(tile);
+            return;
+        }
+        openAlbumLightbox(tile);
+        return;
+    }
+
     const createToggle = target.closest<HTMLElement>("[data-album-create-toggle]");
     if (createToggle) {
         const form = document.getElementById("album-create-form");
@@ -363,12 +555,12 @@ document.addEventListener("click", (event) => {
         const url = albumPanel()?.dataset.removeUrl;
         const imageId = Number.parseInt(removeBtn.dataset.imageId ?? "0", 10);
         if (!url || !imageId) return;
-        postJson(url, { image_ids: [imageId] })
-            .then(() => {
-                toast.success("Removed from album.");
-                refreshPanel();
-            })
-            .catch((err: Error) => toast.error(`Could not remove: ${err.message}`));
+        const tile = removeBtn.closest<HTMLElement>(".album-item, .gallery-item");
+        tile?.remove();
+        postJson(url, { image_ids: [imageId] }).catch((err: Error) => {
+            toast.error(`Could not remove: ${err.message}`);
+            refreshPanel();
+        });
         return;
     }
 
@@ -446,6 +638,9 @@ function onPanelRendered(): void {
     destroyAlbumMap();
     if (document.getElementById("album-map-section")?.hasAttribute("hidden") === false) initAlbumMap();
 
+    clearSelect();
+    bindAlbumPicker();
+    initPhotoGrids();
     initAlbumSortable();
     syncHistoryToPanel();
     restoringFromHistory = false;
@@ -467,4 +662,6 @@ document.body.addEventListener("htmx:afterSwap", () => {
 });
 
 lastPanel = albumPanel();
+bindPhotoContextMenu();
+initPhotoGrids();
 initAlbumSortable();

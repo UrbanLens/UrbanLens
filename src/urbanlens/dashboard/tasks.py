@@ -664,6 +664,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         extract_source_url,
         extract_taken_at,
         is_camera_generated_filename,
+        write_image_thumbnail,
     )
     from urbanlens.dashboard.services.media.storage import get_downscale_policy
 
@@ -750,6 +751,12 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
             if new_size is not None:
                 update_fields["image"] = image.image.name
                 new_stored_size = new_size
+
+    try:
+        if write_image_thumbnail(image):
+            update_fields["thumbnail"] = image.thumbnail.name
+    except (OSError, ValueError, PILDecompressionBombError) as exc:
+        logger.warning("Thumbnail generation failed for image %s: %s", image_id, exc, exc_info=True)
 
     return _UploadProcessResult(update_fields, coords, new_stored_size)
 
@@ -900,6 +907,37 @@ def process_image_upload(self, image_id: int) -> bool:
 
     update_task_progress(self, current=1, total=1, message="Upload metadata processed")
     return True
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def generate_image_thumbnails(image_ids: list[int]) -> int:
+    """Fill in missing grid thumbnails for already-stored photos.
+
+    Album and gallery pages enqueue this for any page of photos that still
+    lack a thumbnail (rows created before thumbnails existed, or whose
+    original processing skipped it). Each id is independent: a failure on
+    one does not skip the rest.
+
+    Args:
+        image_ids: Primary keys of :class:`~urbanlens.dashboard.models.images.model.Image` rows.
+
+    Returns:
+        How many thumbnails were written.
+    """
+    from PIL.Image import DecompressionBombError as PILDecompressionBombError
+
+    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.services.media.images import write_image_thumbnail
+
+    written = 0
+    for image in Image.objects.filter(pk__in=image_ids):
+        try:
+            if write_image_thumbnail(image):
+                image.save(update_fields=["thumbnail", "updated"])
+                written += 1
+        except (OSError, ValueError, PILDecompressionBombError) as exc:
+            logger.warning("Thumbnail generation failed for image %s: %s", image.pk, exc, exc_info=True)
+    return written
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

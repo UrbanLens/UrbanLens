@@ -12,7 +12,7 @@ Context:
 {% endcomment %}
 <div class="photo-gallery card" id="photo-gallery"
      data-collapse-scope="{{ context_type }}" data-collapse-section="gallery"
-     {% if context_type == "pin" %}hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}" hx-trigger="refreshGallery from:body" hx-swap="outerHTML"{% endif %}>
+     {% if context_type == "pin" %}data-gallery-bulk-url="{% url 'pin.gallery.bulk' pin.slug %}" hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}" hx-trigger="refreshGallery from:body" hx-swap="outerHTML"{% endif %}>
   <div class="card-header">
     <i class="material-symbols-outlined">photo_library</i>
     <span>Photos</span>
@@ -54,7 +54,9 @@ Context:
     {% for img in images %}
     <li class="gallery-item" id="gallery-item-{{ img.pk }}"
         data-id="{{ img.pk }}"
-        data-url="{{ img.image.url }}"
+        data-uuid="{{ img.uuid }}"
+        data-url="{{ img.display_url }}"
+        data-thumb-url="{{ img.thumb_url }}"
         data-lat="{{ img.latitude|default:'' }}"
         data-lng="{{ img.longitude|default:'' }}"
         data-mine="{% if img.profile == profile %}true{% else %}false{% endif %}"
@@ -72,7 +74,7 @@ Context:
       </button>
       {% endif %}
       <button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox({{ img.pk }})">
-        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb">
+        <img src="{{ img.thumb_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy" decoding="async">
         {% if include_children and img.pin_id != pin.id %}
         <span class="gallery-child-ribbon" title="Photo from the child pin {{ img.pin.effective_name }}">{{ img.pin.effective_name }}</span>
         {% endif %}
@@ -179,10 +181,12 @@ Context:
   var CONTEXT_TYPE = '{{ context_type }}';
 
   // Build an ordered list of image ids for lightbox navigation.
-  var _items = Array.from(document.querySelectorAll('.gallery-item')).map(function (el) {
+  var _items = Array.from(document.querySelectorAll('#gallery-grid .gallery-item')).map(function (el) {
     return {
       id: parseInt(el.dataset.id, 10),
+      uuid: el.dataset.uuid || '',
       url: el.dataset.url,
+      thumbUrl: el.dataset.thumbUrl || el.dataset.url,
       lat: el.dataset.lat ? parseFloat(el.dataset.lat) : null,
       lng: el.dataset.lng ? parseFloat(el.dataset.lng) : null,
       mine: el.dataset.mine === 'true',
@@ -339,7 +343,9 @@ Context:
     li.className = 'gallery-item';
     li.id = 'gallery-item-' + img.id;
     li.dataset.id = img.id;
+    li.dataset.uuid = img.uuid || '';
     li.dataset.url = img.url;
+    li.dataset.thumbUrl = img.thumb_url || img.url;
     li.dataset.lat = img.latitude !== null ? img.latitude : '';
     li.dataset.lng = img.longitude !== null ? img.longitude : '';
     li.dataset.mine = 'true';
@@ -357,7 +363,7 @@ Context:
       : '';
     li.innerHTML =
       '<button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox(' + img.id + ')">' +
-      '<img src="' + img.url + '" alt="" class="gallery-thumb">' + coordIcon + '</button>' +
+      '<img src="' + (img.thumb_url || img.url) + '" alt="" class="gallery-thumb" loading="lazy" decoding="async">' + coordIcon + '</button>' +
       '<button type="button" class="gallery-delete-btn" title="Delete photo" onclick="galleryDelete(' + img.id + ')">' +
       '<i class="material-symbols-outlined">delete</i></button>';
 
@@ -377,7 +383,7 @@ Context:
 
     // Keep internal list in sync.
     _items.push({
-      id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true,
+      id: img.id, uuid: img.uuid || '', url: img.url, thumbUrl: img.thumb_url || img.url, lat: img.latitude, lng: img.longitude, mine: true,
       author: img.author || '', copyright: img.copyright || '', sourceUrl: img.source_url || '', takenAt: img.taken_at || '',
     });
     _updateGalleryCountLabel(1);
@@ -435,9 +441,9 @@ Context:
   window.galleryOpenLightbox = function (imgId, fallback) {
     var list = _items.map(function (i) {
       return {
-        url: i.url, caption: '', author: i.author, copyright: i.copyright,
+        url: i.url, thumbUrl: i.thumbUrl, caption: '', author: i.author, copyright: i.copyright,
         sourceUrl: i.sourceUrl, sourceName: '', takenAt: i.takenAt,
-        imageId: i.id, canRelevance: false, relevant: null,
+        imageId: i.id, uuid: i.uuid, isMine: i.mine, canRelevance: false, relevant: null,
         latitude: i.lat, longitude: i.lng,
       };
     });

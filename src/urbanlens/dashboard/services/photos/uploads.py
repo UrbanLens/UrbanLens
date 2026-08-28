@@ -65,6 +65,36 @@ def _owner_fields(owner: Pin | Wiki) -> dict:
     return {"wiki": owner, "location": owner.location}
 
 
+def existing_photo_for_upload(
+    owner: Pin | Wiki,
+    profile: Profile,
+    image_file: UploadedFile | None = None,
+    *,
+    checksum: str | None = None,
+) -> Image | None:
+    """Return this uploader's existing photo of the same file on *owner*, if any.
+
+    The duplicate gate is per (owner, uploader, checksum): the same bytes on
+    this pin/wiki by this person. Album upload uses this to file the existing
+    row instead of treating a 409 as a hard failure.
+
+    Args:
+        owner: The Pin or Wiki the upload was aimed at.
+        profile: The uploading profile.
+        image_file: The uploaded file, hashed when *checksum* is omitted.
+        checksum: Pre-computed SHA-256 hex digest of *image_file*.
+
+    Returns:
+        The existing :class:`Image`, or None when this file is new here.
+    """
+    if checksum is None:
+        if image_file is None:
+            return None
+        checksum = compute_checksum(image_file)
+    scope, _noun = _duplicate_scope(owner)
+    return Image.objects.filter(profile=profile, checksum=checksum, **scope).first()
+
+
 def _duplicate_scope(owner: Pin | Wiki) -> tuple[dict, str]:
     """Return the filter isolating *owner*'s photos, and the noun for the error.
 
@@ -115,8 +145,8 @@ def upload_photo_for_owner(owner: Pin | Wiki, profile: Profile, image_file: Uplo
         return UploadRejection(message, status)
 
     checksum = compute_checksum(image_file)
-    scope, noun = _duplicate_scope(owner)
-    if Image.objects.filter(profile=profile, checksum=checksum, **scope).exists():
+    if existing_photo_for_upload(owner, profile, checksum=checksum) is not None:
+        _scope, noun = _duplicate_scope(owner)
         return UploadRejection(f"You already uploaded this photo to this {noun}.", 409)
 
     with per_profile_upload_lock(profile):

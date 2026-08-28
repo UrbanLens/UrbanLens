@@ -1,0 +1,43 @@
+{% comment %}
+One photo tile in an album grid (list loose-photos, or an album's own grid).
+
+Expects:
+  img          - Image (optional album_item_id)
+  profile      - viewing profile, for `data-mine`
+  in_album     - when true, this tile is inside an album (remove button, item id)
+  album_slug   - current album slug when in_album
+{% endcomment %}
+<li class="gallery-item{% if in_album %} album-item{% endif %}"
+    id="gallery-item-{{ img.pk }}"
+    draggable="true"
+    data-id="{{ img.pk }}"
+    data-uuid="{{ img.uuid }}"
+    data-url="{{ img.display_url }}"
+    data-thumb-url="{{ img.thumb_url }}"
+    data-caption="{{ img.caption|default:'' }}"
+    data-author="{{ img.author|default:'' }}"
+    data-copyright="{{ img.copyright|default:'' }}"
+    data-source-url="{{ img.source_url|default:'' }}"
+    data-taken-at="{{ img.taken_at|date:'c'|default:'' }}"
+    data-lat="{{ img.latitude|default:'' }}"
+    data-lng="{{ img.longitude|default:'' }}"
+    data-mine="{% if profile and img.profile_id == profile.pk %}true{% else %}false{% endif %}"
+    data-on-wiki="{% if img.wiki_id %}true{% else %}false{% endif %}"
+    {% if in_album %}data-item-id="{{ img.album_item_id }}" data-album-slug="{{ album_slug }}"{% endif %}>
+  {% if profile and img.profile_id == profile.pk %}
+  <button type="button" class="gallery-select-check" title="Select photo" hidden>
+    <i class="material-symbols-outlined">check_circle</i>
+  </button>
+  {% endif %}
+  <button type="button" class="gallery-thumb-btn" data-photo-open>
+    <img src="{{ img.thumb_url }}" alt="{{ img.caption|default:'Photo' }}"
+         class="gallery-thumb" loading="lazy" decoding="async">
+  </button>
+  {% if in_album %}
+  <button type="button" class="album-item-remove" title="Remove from this album"
+          aria-label="Remove from this album" data-image-id="{{ img.pk }}">
+    <i class="material-symbols-outlined">close</i>
+  </button>
+  {% endif %}
+  {% if img.caption %}<p class="album-item-caption">{{ img.caption }}</p>{% endif %}
+</li>

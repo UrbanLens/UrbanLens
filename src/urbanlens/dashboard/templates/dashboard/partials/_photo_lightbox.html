@@ -119,6 +119,7 @@ Context:
       {% endif %}
       {# Custom fields (viewer's own photo fields; loads empty for photos that aren't theirs) #}
       <div id="lightbox-custom-fields" class="lightbox-custom-fields"></div>
+      <div id="lightbox-media-labels" class="lightbox-media-labels"></div>
       {% if show_attachment_points %}
       <div id="lightbox-attachment-points"></div>
       {% endif %}
@@ -134,6 +135,7 @@ Context:
   var COVER_PHOTO_URL = '{{ cover_photo_url|default:"" }}';
   var FLOORPLAN_OVERLAY_URL = '{{ floorplan_overlay_url|default:"" }}';
   var CF_PHOTO_URL_TEMPLATE = '{% url "custom_fields.photo" 0 %}';
+  var LABEL_IMAGE_URL_TEMPLATE = '{% url "label.image" image_uuid="00000000-0000-0000-0000-000000000000" %}';
   var SHOW_ATTACHMENT_POINTS = {% if show_attachment_points %}true{% else %}false{% endif %};
   var ATTACHMENT_POINTS_URL_TEMPLATE = SHOW_ATTACHMENT_POINTS ? '{% url "profile.photo.attachments" 0 %}' : '';
   // Mutated in place as the cover photo is changed live (see _setCoverPhoto).
@@ -206,6 +208,7 @@ Context:
     _setLightboxMeta(item);
     _setLightboxLocation(item);
     _loadLightboxCustomFields(item.imageId);
+    _loadLightboxMediaLabels(item);
     _loadLightboxAttachmentPoints(item.imageId);
 
     // Nav arrows are pointless (and misleading - they'd just reopen the same
@@ -249,6 +252,15 @@ Context:
     el.innerHTML = '';
     if (!imgId || !window.htmx) return;
     htmx.ajax('GET', CF_PHOTO_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#lightbox-custom-fields', swap: 'innerHTML' });
+  }
+
+  function _loadLightboxMediaLabels(item) {
+    var el = document.getElementById('lightbox-media-labels');
+    if (!el) return;
+    el.innerHTML = '';
+    if (!item || !item.uuid || item.isMine === false || !window.htmx) return;
+    var url = LABEL_IMAGE_URL_TEMPLATE.replace('00000000-0000-0000-0000-000000000000', item.uuid) + '?embed=lightbox';
+    htmx.ajax('GET', url, { target: '#lightbox-media-labels', swap: 'innerHTML' });
   }
 
   // Load "Shared via" attachment points for the current photo (profile photo

@@ -445,6 +445,17 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   checksum-based duplicate detection. On a private pin, the lightbox's more-actions menu offers
   **Use as floorplan overlay**, which adds the photo as a georeferenced blueprint and opens the
   floorplan editor to warp it.
+- **Albums** (Photos tab on pin detail and wiki): named groupings of a place's photos (plain,
+  visit, area, timelapse). The album list shows covers plus photos not in any album; drag those
+  (including a multi-selection) onto an album card to file them. Multi-select uses the shared
+  floating bulk toolbar (add to album, and inside an album also move / remove). Clicking a photo
+  opens the shared lightbox; in select mode, click selects instead. Right-click on an uploaded
+  photo (albums, pin gallery, wiki gallery) offers open / download / add to album / remove /
+  send to wiki / share with a friend / delete. Dropping a file that's already been uploaded into
+  an album files the existing photo rather than erroring. Removing a photo from an album updates
+  the grid immediately. Grids use small generated thumbnails and load further pages as you
+  scroll, unloading off-screen bitmaps so large albums stay usable on a phone.
+- The lightbox lets you browse, search, and create+apply a media label in one step.
 - Site-wide photo library (Memories → Photos) that matches unfiled photos (by GPS + timestamp) to
   existing pins and proposes **visit suggestions** for confirmation
 - **Memories** page — aggregated timeline/map view of routes, trips, visits, and photos, including

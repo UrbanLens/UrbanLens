@@ -1,0 +1,102 @@
+{% load dashboard_tags %}
+{% comment %}
+Inline media-label picker for the photo lightbox. Browse existing labels,
+filter as you type, and create+apply a new media label in one step.
+
+Expects the same context as label_membership_panel.html (membership_route=image).
+{% endcomment %}
+<div class="lightbox-labels" id="media-label-panel" data-image-uuid="{{ obj_uuid }}">
+  <h4 class="lightbox-labels-title">
+    <i class="material-symbols-outlined">sell</i>
+    Labels
+  </h4>
+
+  <div class="lightbox-labels-chips">
+    {% for label in all_labels %}
+    {% if label.id in member_ids %}
+    <span class="tag-chip tag-chip--{{ label.kind }}" {% if label.color %}style="--tag-color:{{ label.color }}"{% endif %}>
+      <span class="tag-chip-name">{{ label.name }}</span>
+      <form hx-post="{% url 'label.image' image_uuid=obj_uuid %}"
+            hx-target="#lightbox-media-labels" hx-swap="innerHTML" style="display:inline">
+        {% csrf_token %}
+        <input type="hidden" name="embed" value="lightbox">
+        <input type="hidden" name="label_id" value="{{ label.id }}">
+        <input type="hidden" name="action" value="remove">
+        <button type="submit" class="tag-chip-remove" title="Remove">x</button>
+      </form>
+    </span>
+    {% endif %}
+    {% endfor %}
+    {% if not member_ids %}
+    <span class="tag-chips-empty">No labels yet</span>
+    {% endif %}
+  </div>
+
+  <input type="search" class="dialog-search lightbox-labels-search"
+         placeholder="Search or create a label..." autocomplete="off">
+
+  <ul class="tag-dialog-list lightbox-labels-list">
+    {% for label in all_labels %}
+    {% if label.id not in member_ids %}
+    <li class="tag-dialog-item" data-name="{{ label.name|lower }}">
+      <form hx-post="{% url 'label.image' image_uuid=obj_uuid %}"
+            hx-target="#lightbox-media-labels" hx-swap="innerHTML">
+        {% csrf_token %}
+        <input type="hidden" name="embed" value="lightbox">
+        <input type="hidden" name="label_id" value="{{ label.id }}">
+        <input type="hidden" name="action" value="add">
+        <button type="submit" class="tag-dialog-btn">
+          <span class="tag-dialog-icon">
+            {% if label.icon %}
+            {% if label.icon|is_material_icon %}<i class="material-icons" style="font-size:16px{% if label.color %};color:{{ label.color }}{% endif %}">{{ label.icon }}</i>
+            {% else %}<span>{{ label.icon }}</span>{% endif %}
+            {% else %}<i class="material-icons" style="font-size:16px;opacity:.3">label</i>{% endif %}
+          </span>
+          <span class="tag-dialog-name">{{ label.name }}</span>
+        </button>
+      </form>
+    </li>
+    {% endif %}
+    {% endfor %}
+  </ul>
+
+  <form class="lightbox-labels-create" hidden
+        hx-post="{% url 'label.image' image_uuid=obj_uuid %}"
+        hx-target="#lightbox-media-labels" hx-swap="innerHTML">
+    {% csrf_token %}
+    <input type="hidden" name="embed" value="lightbox">
+    <input type="hidden" name="action" value="create_and_add">
+    <input type="hidden" name="name" class="lightbox-labels-create-name" value="">
+    <button type="submit" class="btn btn--primary btn--sm lightbox-labels-create-btn">
+      <i class="material-symbols-outlined">add</i>
+      Create “<span class="lightbox-labels-create-label"></span>” and apply
+    </button>
+  </form>
+</div>
+<script>
+(function () {
+  var root = document.getElementById('media-label-panel');
+  if (!root) return;
+  var search = root.querySelector('.lightbox-labels-search');
+  var items = root.querySelectorAll('.tag-dialog-item');
+  var create = root.querySelector('.lightbox-labels-create');
+  var createName = root.querySelector('.lightbox-labels-create-name');
+  var createLabel = root.querySelector('.lightbox-labels-create-label');
+  function apply() {
+    var q = search ? search.value.toLowerCase().trim() : '';
+    var exact = false;
+    items.forEach(function (el) {
+      var match = !q || (el.dataset.name || '').indexOf(q) !== -1;
+      el.hidden = !match;
+      if (q && el.dataset.name === q) exact = true;
+    });
+    if (create) {
+      create.hidden = !q || exact;
+      if (createName) createName.value = search ? search.value.trim() : '';
+      if (createLabel) createLabel.textContent = search ? search.value.trim() : '';
+    }
+  }
+  if (search) search.addEventListener('input', apply);
+  apply();
+})();
+</script>

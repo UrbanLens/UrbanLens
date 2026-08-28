@@ -55,6 +55,20 @@
             {% endfor %}
         </ul>
 
+        {% if membership_route == "image" %}
+        <form class="tad-create-row" hidden
+              hx-post="{% url 'label.image' image_uuid=obj_uuid %}"
+              hx-target="#{{ panel_id }}" hx-swap="outerHTML">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_and_add">
+            <input type="hidden" name="name" class="tad-create-name" value="">
+            <button type="submit" class="tag-dialog-btn tad-create-btn">
+                <span class="tag-dialog-icon"><i class="material-icons" style="font-size:16px">add</i></span>
+                <span>Create “<span class="tad-create-label"></span>” and apply</span>
+            </button>
+        </form>
+        {% endif %}
+
         <div class="dialog-footer">
             <a href="{% url 'organize.index' %}?tab=tags" class="dialog-manage-link">
                 <i class="material-symbols-outlined">settings</i> Manage labels

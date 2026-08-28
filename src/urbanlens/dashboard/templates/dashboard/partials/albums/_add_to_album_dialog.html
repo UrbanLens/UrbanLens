@@ -1,0 +1,41 @@
+{% comment %}
+Add / move photos to an album. Search filters the list as you type; click an
+album below to confirm. Included on the album list and the album detail so the
+bulk toolbar and photo context menu share one picker.
+
+Expects `picker_albums` - list of {slug, name, photo_count, cover_url, add_url}.
+{% endcomment %}
+<dialog id="album-target-dialog" class="ul-dialog album-target-dialog" aria-label="Choose an album">
+  <form method="dialog" class="album-target-head">
+    <h4 class="album-target-title">Add to album</h4>
+    <button type="submit" class="album-picker-close" aria-label="Close">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+  </form>
+  <input type="search" class="dialog-search album-target-search"
+         placeholder="Search albums..." autocomplete="off"
+         aria-label="Search albums by name">
+  <p class="album-target-empty settings-help" hidden>No albums match that name.</p>
+  <ul class="album-target-list">
+    {% for album in picker_albums %}
+    <li class="album-target-item" data-name="{{ album.name|lower }}" data-slug="{{ album.slug }}" data-add-url="{{ album.add_url }}">
+      <button type="button" class="album-target-btn" data-album-target="{{ album.slug }}">
+        <span class="album-target-cover">
+          {% if album.cover_url %}
+          <img src="{{ album.cover_url }}" alt="" loading="lazy" decoding="async">
+          {% else %}
+          <i class="material-symbols-outlined">photo_library</i>
+          {% endif %}
+        </span>
+        <span class="album-target-meta">
+          <span class="album-target-name">{{ album.name }}</span>
+          <span class="album-target-count">{{ album.photo_count }} photo{{ album.photo_count|pluralize }}</span>
+        </span>
+      </button>
+    </li>
+    {% empty %}
+    <li class="album-target-none settings-help">Create an album first, then you can file photos into it.</li>
+    {% endfor %}
+  </ul>
+</dialog>
+{{ picker_albums|json_script:"album-picker-data" }}

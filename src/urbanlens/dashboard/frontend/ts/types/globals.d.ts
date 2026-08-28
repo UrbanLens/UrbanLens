@@ -73,6 +73,7 @@ declare global {
         // shared/album-items.ts; called from the server-rendered Media gallery
         // tiles, which that module doesn't own.
         albumAddExternalMedia?: (addUrl: string, media: { source: string; url: string; page_url?: string; caption?: string }) => Promise<void>;
+        galleryOpenLightboxItem?: (list: unknown[], idx: number) => void;
         // Georeferenced map image overlays. Defined by shared/map-image-overlays.ts's
         // wireManageOverlaysDialog(), called from both the pin/wiki map entry and
         // the floorplan editor, and invoked by name from the server-rendered

@@ -27,6 +27,12 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
+#: How many photo tiles a grid page carries. Sized so a typical desktop
+#: viewport plus a small scroll buffer is one request, without dumping a
+#: thousand full ``Image`` rows into the first HTML response.
+ALBUM_GRID_PAGE_SIZE = 48
+
+
 def owner_kwargs(owner: Pin | Wiki) -> dict:
     """Return the Album FK kwargs (``parent_pin``/``parent_wiki``) for *owner*.
 
@@ -230,6 +236,61 @@ def album_images(album: Album, viewer: Profile | None, owner: Pin | Wiki | None 
         image.album_item_id = item.pk
         images.append(image)
     return _order_for_display(album, images)
+
+
+def album_images_page(
+    album: Album,
+    viewer: Profile | None,
+    owner: Pin | Wiki | None = None,
+    *,
+    offset: int = 0,
+    limit: int = ALBUM_GRID_PAGE_SIZE,
+) -> tuple[list[Image], int]:
+    """One page of *album*'s photos, plus the un-paged total.
+
+    Resolves visibility against the full membership list (so a page isn't
+    padded with photos the viewer can't see), then instantiates only the
+    ``Image`` rows on this page - album grids used to dump every file URL
+    into the first HTML response.
+
+    Args:
+        album: The album to read.
+        viewer: The profile browsing, for the photo-visibility gate.
+        owner: The album's owner, if already resolved.
+        offset: How many visible photos to skip.
+        limit: Maximum photos to return.
+
+    Returns:
+        ``(page, total)`` where *page* items each carry ``album_item_id``.
+    """
+    resolved_owner = owner if owner is not None else album_owner(album)
+    conceal = _owner_conceal(resolved_owner, viewer)
+    items_qs = AlbumItem.objects.for_album(album)
+    if album.manual_order:
+        items_qs = items_qs.order_by("order", "created")
+    else:
+        items_qs = items_qs.order_by("-image__created")
+
+    pairs = list(items_qs.values_list("pk", "image_id"))
+    visible_ids = _visible_image_ids({image_id for _item_id, image_id in pairs}, viewer, conceal=conceal)
+    visible_pairs = [(item_id, image_id) for item_id, image_id in pairs if image_id in visible_ids]
+    total = len(visible_pairs)
+    page_pairs = visible_pairs[offset : offset + limit]
+    if not page_pairs:
+        return [], total
+
+    page_item_ids = [item_id for item_id, _image_id in page_pairs]
+    items_by_pk = {
+        item.pk: item
+        for item in AlbumItem.objects.filter(pk__in=page_item_ids).select_related("image")
+    }
+    images = []
+    for item_id, _image_id in page_pairs:
+        item = items_by_pk[item_id]
+        image = item.image
+        image.album_item_id = item.pk
+        images.append(image)
+    return images, total
 
 
 def loose_images_for(owner: Pin | Wiki, viewer: Profile | None) -> QuerySet[Image]:

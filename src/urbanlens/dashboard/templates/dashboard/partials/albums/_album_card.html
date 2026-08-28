@@ -9,13 +9,13 @@ Expects:
   row - a dict from controllers.albums._album_row (album, cover, photo_count,
         date_start, date_end, detail_url, delete_url, ...)
 {% endcomment %}
-<li class="album-card" data-album-slug="{{ row.album.slug }}">
+<li class="album-card" data-album-slug="{{ row.album.slug }}" data-add-url="{{ row.add_url }}" data-album-drop>
   <a class="album-card-link" href="{{ row.list_url }}?album={{ row.album.slug }}"
      data-album-open="{{ row.album.slug }}"
      hx-get="{{ row.detail_url }}" hx-target="#albums-panel" hx-swap="outerHTML">
     <span class="album-card-cover">
       {% if row.cover %}
-      <img src="{{ row.cover.display_url }}" alt="" class="album-card-cover-img" loading="lazy">
+      <img src="{{ row.cover.thumb_url }}" alt="" class="album-card-cover-img" loading="lazy" decoding="async">
       {% else %}
       <span class="album-card-cover-empty">
         <i class="material-symbols-outlined">photo_library</i>

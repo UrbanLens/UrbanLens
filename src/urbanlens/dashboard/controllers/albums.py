@@ -25,11 +25,14 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_LENGTH, column_max_length, text_length_error
+from urbanlens.dashboard.services.media.images import image_to_gallery_json
 from urbanlens.dashboard.services.media.media_relevance import MATERIALIZE_ERROR_MESSAGE
 from urbanlens.dashboard.services.photos.albums import (
+    ALBUM_GRID_PAGE_SIZE,
     add_images_to_album,
     album_date_range,
     album_images,
+    album_images_page,
     albums_with_images,
     cover_from_images,
     eligible_images_for,
@@ -38,6 +41,7 @@ from urbanlens.dashboard.services.photos.albums import (
     remove_images_from_album,
     reorder_album_items,
 )
+from urbanlens.dashboard.services.photos.uploads import existing_photo_for_upload
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -174,6 +178,7 @@ def _album_row(owner: Pin | Wiki, album: Album, images: list) -> dict:
         "remove_url": reverse(f"{prefix}.remove", args=[slug, album.slug]),
         "reorder_url": reverse(f"{prefix}.reorder", args=[slug, album.slug]),
         "upload_url": reverse(f"{prefix}.upload", args=[slug, album.slug]),
+        "items_url": reverse(f"{prefix}.items", args=[slug, album.slug]),
     }
 
 
@@ -224,6 +229,9 @@ def _album_detail_context(owner: Pin | Wiki, album: Album, viewer: Profile) -> d
     """
     row = _album_row(owner, album, album_images(album, viewer, owner=owner))
     filed_ids = {image.pk for image in row["images"]}
+    page, total = album_images_page(album, viewer, owner, offset=0, limit=ALBUM_GRID_PAGE_SIZE)
+    row["grid_images"] = page
+    row["photo_count"] = total
     row["available_images"] = [image for image in eligible_images_for(owner, viewer) if image.pk not in filed_ids]
     row["back_url"] = reverse(_url_prefix(owner), args=[_owner_slug(owner)])
     row["list_url"] = row["back_url"]
@@ -233,6 +241,11 @@ def _album_detail_context(owner: Pin | Wiki, album: Album, viewer: Profile) -> d
     row["map_photos"] = _photo_map_payload(row["images"], viewer)
     row["placed_count"] = len(row["map_photos"])
     row["context_type"] = "pin" if isinstance(owner, Pin) else "wiki"
+    row["picker_albums"] = _picker_album_payload(owner, viewer, exclude_slug=album.slug)
+    _attach_owner_action_urls(row, owner)
+    row["album_bulk_actions"] = _album_bulk_actions(inside_album=True)
+    row["profile"] = viewer
+    row["grid_page_size"] = ALBUM_GRID_PAGE_SIZE
     # Fallback centre for an album whose photos carry no coordinates at all;
     # the map fits to the photos themselves whenever there are any.
     location = owner.location
@@ -253,16 +266,34 @@ def _photos_context(owner: Pin | Wiki, viewer: Profile | None) -> dict:
     """
     is_pin = isinstance(owner, Pin)
     rows = [_album_row(owner, album, images) for album, images in albums_with_images(owner, viewer)]
-    return {
+    loose_qs = loose_images_for(owner, viewer)
+    loose_count = loose_qs.count()
+    ctx = {
         "album_rows": rows,
-        "loose_images": list(loose_images_for(owner, viewer)),
+        "loose_images": list(loose_qs[:ALBUM_GRID_PAGE_SIZE]),
+        "loose_count": loose_count,
         "create_url": reverse(_url_prefix(owner), args=[_owner_slug(owner)]),
         "list_url": reverse(_url_prefix(owner), args=[_owner_slug(owner)]),
         "context_type": "pin" if is_pin else "wiki",
         "pin": owner if is_pin else None,
         "wiki": None if is_pin else owner,
         "album_kind_specs": list(ALBUM_KIND_SPECS.values()),
+        "picker_albums": [
+            {
+                "slug": row["album"].slug,
+                "name": row["album"].name,
+                "photo_count": row["photo_count"],
+                "cover_url": row["cover"].thumb_url if row["cover"] else "",
+                "add_url": row["add_url"],
+            }
+            for row in rows
+        ],
+        "album_bulk_actions": _album_bulk_actions(inside_album=False),
+        "profile": viewer,
+        "grid_page_size": ALBUM_GRID_PAGE_SIZE,
     }
+    _attach_owner_action_urls(ctx, owner)
+    return ctx
 
 
 def _render_photos_panel(request: HttpRequest, owner: Pin | Wiki, viewer: Profile | None) -> HttpResponse:
@@ -287,6 +318,96 @@ def _int_ids(raw) -> list[int]:
     if not isinstance(raw, list):
         return []
     return [int(value) for value in raw if str(value).lstrip("-").isdigit()]
+
+
+def _page_args(request: HttpRequest) -> tuple[int, int]:
+    """Read ``offset``/``limit`` query params for a photo-grid page."""
+    try:
+        offset = max(0, int(request.GET.get("offset") or 0))
+    except (TypeError, ValueError):
+        offset = 0
+    try:
+        limit = int(request.GET.get("limit") or ALBUM_GRID_PAGE_SIZE)
+    except (TypeError, ValueError):
+        limit = ALBUM_GRID_PAGE_SIZE
+    return offset, min(max(1, limit), 100)
+
+
+def _photo_tile(image, request: HttpRequest, viewer: Profile) -> dict:
+    """One photo's client payload for album grids, lightboxes, and drag/drop."""
+    payload = image_to_gallery_json(image, request, viewer)
+    payload["item_id"] = getattr(image, "album_item_id", None)
+    payload["thumb_url"] = request.build_absolute_uri(image.thumb_url) if image.thumb_url else payload.get("url", "")
+    return payload
+
+
+def _enqueue_missing_thumbnails(images: list) -> None:
+    """Kick off thumbnail generation for any photo on this page still missing one."""
+    missing = [image.pk for image in images if image.image and not image.thumbnail]
+    if not missing:
+        return
+    from urbanlens.dashboard.tasks import generate_image_thumbnails
+
+    safely_enqueue_task(generate_image_thumbnails, missing)
+
+
+def _picker_album_payload(owner: Pin | Wiki, viewer: Profile, *, exclude_slug: str | None = None) -> list[dict]:
+    """Albums the add/move dialog can target, without dumping every photo URL."""
+    rows = []
+    for album, images in albums_with_images(owner, viewer):
+        if exclude_slug and album.slug == exclude_slug:
+            continue
+        cover = cover_from_images(album, images)
+        prefix = _url_prefix(owner)
+        slug = _owner_slug(owner)
+        rows.append(
+            {
+                "slug": album.slug,
+                "name": album.name,
+                "photo_count": len(images),
+                "cover_url": cover.thumb_url if cover else "",
+                "add_url": reverse(f"{prefix}.add", args=[slug, album.slug]),
+            }
+        )
+    return rows
+
+
+def _attach_owner_action_urls(ctx: dict, owner: Pin | Wiki) -> None:
+    """URLs the album UI needs for delete / send-to-wiki / share, when they exist."""
+    slug = _owner_slug(owner)
+    if isinstance(owner, Pin):
+        ctx["gallery_bulk_url"] = reverse("pin.gallery.bulk", args=[slug])
+        ctx["pin_share_dialog_url"] = reverse("pin.share.dialog", args=[slug])
+    else:
+        ctx["gallery_bulk_url"] = ""
+        ctx["pin_share_dialog_url"] = ""
+    ctx["label_image_url_template"] = reverse("label.image", args=["00000000-0000-0000-0000-000000000000"])
+
+
+def _album_bulk_actions(*, inside_album: bool) -> list[dict]:
+    """Buttons for the shared ``ul-bulk-bar`` on the Photos tab.
+
+    The bar only shows a button when the client supplies a callback for its
+    ``action`` key, so list and detail can share this list and hide move/remove
+    on the album list by omitting those callbacks.
+    """
+    actions = [
+        {"action": "add_to_album", "icon": "photo_library", "label": "Add to album"},
+    ]
+    if inside_album:
+        actions.extend(
+            [
+                {"action": "move_to_album", "icon": "drive_file_move", "label": "Move to album"},
+                {"action": "remove", "icon": "remove_circle", "label": "Remove from album"},
+            ]
+        )
+    actions.extend(
+        [
+            {"action": "wiki", "icon": "public", "label": "Send to wiki"},
+            {"action": "delete", "icon": "delete", "label": "Delete"},
+        ]
+    )
+    return actions
 
 
 class AlbumPhotosView(LoginRequiredMixin, View):
@@ -319,6 +440,25 @@ class AlbumPhotosView(LoginRequiredMixin, View):
         """
         owner, qs = _resolve_album_owner(request, pin_slug, location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        if request.GET.get("picker"):
+            albums = _picker_album_payload(owner, profile)
+            return JsonResponse({"albums": albums})
+
+        if request.GET.get("loose"):
+            offset, limit = _page_args(request)
+            qs_images = loose_images_for(owner, profile)
+            total = qs_images.count()
+            images = list(qs_images[offset : offset + limit])
+            _enqueue_missing_thumbnails(images)
+            return JsonResponse(
+                {
+                    "items": [_photo_tile(image, request, profile) for image in images],
+                    "total": total,
+                    "offset": offset,
+                    "limit": limit,
+                }
+            )
 
         if album_slug := request.GET.get("album"):
             album = qs.filter(slug=album_slug).first()
@@ -508,6 +648,11 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
             # (or one this viewer can't see) can't be filed into this album.
             images = list(eligible_images_for(owner, profile).filter(pk__in=image_ids))
             response["added"] += add_images_to_album(album, images, profile)
+            move_from = (body.get("move_from") or "").strip()
+            if move_from and move_from != album.slug:
+                source = _qs.filter(slug=move_from).first()
+                if source is not None:
+                    response["removed"] = remove_images_from_album(source, image_ids)
 
         media = body.get("media")
         if isinstance(media, dict) and media.get("url"):
@@ -609,6 +754,12 @@ class AlbumUploadView(LoginRequiredMixin, View):
         image, response = create_uploaded_photo(request, owner, profile)
         if image is not None:
             add_images_to_album(album, [image], profile)
+            return response
+        if response.status_code == 409:
+            existing = existing_photo_for_upload(owner, profile, request.FILES.get("image"))
+            if existing is not None:
+                add_images_to_album(album, [existing], profile)
+                return JsonResponse(image_to_gallery_json(existing, request, profile))
         return response
 
 
@@ -634,6 +785,40 @@ class AlbumRemovePhotosView(LoginRequiredMixin, View):
         _owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
         image_ids = _int_ids(_parse_body(request).get("image_ids"))
         return JsonResponse({"removed": remove_images_from_album(album, image_ids)})
+
+
+class AlbumItemsView(LoginRequiredMixin, View):
+    """Paginated JSON of one album's photos, for the virtualized grid.
+
+    GET /map/pin/<pin_slug>/albums/<album_slug>/items/
+    GET /location/<location_slug>/wiki/albums/<album_slug>/items/
+    """
+
+    def get(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
+        """Return one page of this album's viewer-visible photos.
+
+        Args:
+            request: HttpRequest with ``offset``/``limit`` query params.
+            album_slug: Slug of the album to page.
+            pin_slug: Slug of the parent pin (personal route).
+            location_slug: Slug of the parent location (community route).
+
+        Returns:
+            JSON ``{items, total, offset, limit}``.
+        """
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        offset, limit = _page_args(request)
+        images, total = album_images_page(album, profile, owner, offset=offset, limit=limit)
+        _enqueue_missing_thumbnails(images)
+        return JsonResponse(
+            {
+                "items": [_photo_tile(image, request, profile) for image in images],
+                "total": total,
+                "offset": offset,
+                "limit": limit,
+            }
+        )
 
 
 class AlbumReorderView(LoginRequiredMixin, View):

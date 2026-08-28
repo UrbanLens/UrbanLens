@@ -592,6 +592,58 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
     return new_size
 
 
+#: Longest edge of the grid thumbnail written by :func:`write_image_thumbnail`.
+#: 400px is sharp on a 2x 110-200px tile without approaching the stored original.
+THUMBNAIL_MAX_DIMENSION = 400
+
+
+def write_image_thumbnail(image: Image, *, max_dimension: int = THUMBNAIL_MAX_DIMENSION, force: bool = False) -> bool:
+    """Write a small WebP preview into ``image.thumbnail`` for grid display.
+
+    Leaves the stored original alone - unlike :func:`downscale_stored_image`,
+    which replaces ``image.image``. The caller persists the row.
+
+    Args:
+        image: The Image row whose original to preview.
+        max_dimension: Longest-edge cap in pixels.
+        force: Replace an existing thumbnail. Default skips rows that already
+            have one, so a retry of the upload-processing task is a no-op.
+
+    Returns:
+        True when a thumbnail was written.
+
+    Raises:
+        OSError: When the original cannot be read from or the thumbnail
+            written to storage.
+    """
+    if image.thumbnail and not force:
+        return False
+    old_name = image.image.name if image.image else ""
+    if not old_name:
+        return False
+    with image.image.open("rb") as stored_file:
+        img: PILImage.Image = PILImage.open(stored_file)
+        img.load()
+        img = ImageOps.exif_transpose(img) or img
+
+    img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGBA" if "A" in img.mode or img.mode == "P" else "RGB")
+
+    buffer = io.BytesIO()
+    img.save(buffer, format="WEBP", quality=75, method=4)
+
+    from django.core.files.base import ContentFile
+
+    stem = posixpath.splitext(posixpath.basename(old_name))[0]
+    previous = image.thumbnail.name if image.thumbnail else ""
+    image.thumbnail.save(f"{stem}.webp", ContentFile(buffer.getvalue()), save=False)
+    if previous and previous != image.thumbnail.name:
+        with contextlib.suppress(OSError):
+            image.thumbnail.storage.delete(previous)
+    return True
+
+
 def compute_checksum(image_file: IO[bytes]) -> str:
     """Compute the SHA-256 hex digest of an uploaded image file.
 
@@ -730,9 +782,12 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
     """
     from urbanlens.dashboard.models.images.model import ImageSource
 
+    thumb = img.thumb_url
     return {
         "id": img.pk,
-        "url": request.build_absolute_uri(img.image.url),
+        "uuid": str(img.uuid),
+        "url": request.build_absolute_uri(img.image.url) if img.image else (img.source_url or ""),
+        "thumb_url": request.build_absolute_uri(thumb) if thumb else "",
         "caption": img.caption or "",
         "latitude": float(img.latitude) if img.latitude is not None else None,
         "longitude": float(img.longitude) if img.longitude is not None else None,
@@ -784,6 +839,10 @@ def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bo
         return False
 
     image.image.delete(save=False)
+    thumbnail = getattr(image, "thumbnail", None)
+    if thumbnail and thumbnail.name:
+        with contextlib.suppress(OSError):
+            thumbnail.delete(save=False)
     return True
 
 

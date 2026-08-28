@@ -30,12 +30,22 @@ if (!window._initLabelDialog) {
 
         function applyFilter() {
             var q = search ? search.value.toLowerCase().trim() : '';
+            var exact = false;
             items().forEach(function (el) {
                 var nameOk = !q || el.dataset.name.includes(q);
                 var kindOk = active === 'all' || el.dataset.kind === active;
                 el.hidden = !(nameOk && kindOk);
+                if (q && el.dataset.name === q) exact = true;
             });
             pills().forEach(function (p) { p.hidden = (active !== 'all'); });
+            var createRow = dlg.querySelector('.tad-create-row');
+            if (createRow) {
+                createRow.hidden = !q || exact;
+                var nameField = createRow.querySelector('.tad-create-name');
+                var labelEl = createRow.querySelector('.tad-create-label');
+                if (nameField) nameField.value = search ? search.value.trim() : '';
+                if (labelEl) labelEl.textContent = search ? search.value.trim() : '';
+            }
         }
 
         tabs.forEach(function (tab) {

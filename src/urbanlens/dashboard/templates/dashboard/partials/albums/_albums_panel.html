@@ -1,3 +1,4 @@
+{% load static %}
 {% comment %}
 Photos subpage body for a pin or wiki: albums first, then photos not filed in
 any album. Swapped wholesale by every album mutation, so it carries its own
@@ -5,13 +6,21 @@ root id.
 
 Expects (from controllers.albums._photos_context):
   album_rows   - one dict per album (album, cover, photo_count, date_*, *_url)
-  loose_images - photos not in any of this owner's albums
+  loose_images - first page of photos not in any of this owner's albums
+  loose_count  - total unfiled photos (may exceed loose_images|length)
   create_url   - POST target for creating a new album
   list_url     - GET target for this view, used for browser history restore
   context_type - "pin" or "wiki", for text that differs between the two
   album_kind_specs - AlbumKindSpec list, for the create form's kind select
 {% endcomment %}
-<div id="albums-panel" class="albums-panel" data-refresh-url="{{ create_url }}" data-list-url="{{ list_url }}">
+<div id="albums-panel" class="albums-panel"
+     data-refresh-url="{{ create_url }}"
+     data-list-url="{{ list_url }}"
+     data-gallery-bulk-url="{{ gallery_bulk_url|default:'' }}"
+     data-pin-share-dialog-url="{{ pin_share_dialog_url|default:'' }}"
+     data-loose-items-url="{{ list_url }}?loose=1"
+     data-loose-count="{{ loose_count|default:0 }}"
+     data-grid-page-size="{{ grid_page_size|default:48 }}">
 
   <header class="albums-toolbar">
     <h3 class="albums-toolbar-title">
@@ -19,6 +28,10 @@ Expects (from controllers.albums._photos_context):
       <span>Albums</span>
       {% if album_rows %}<span class="albums-count">{{ album_rows|length }}</span>{% endif %}
     </h3>
+    <button type="button" class="gallery-import-photos-btn" id="albums-select-btn"
+            data-album-select-toggle title="Select photos">
+      <i class="material-symbols-outlined">checklist</i>
+    </button>
     <button type="button" class="btn btn--primary albums-create-btn"
             data-album-create-toggle aria-expanded="false" aria-controls="album-create-form">
       <i class="material-symbols-outlined">add</i>
@@ -57,7 +70,7 @@ Expects (from controllers.albums._photos_context):
     {% include "dashboard/partials/albums/_album_card.html" with row=row %}
     {% endfor %}
   </ul>
-  {% elif loose_images %}
+  {% elif loose_count %}
   <p class="albums-empty settings-help">
     No albums yet. Create one to group these photos - by area, by visit, or as a timelapse series.
   </p>
@@ -68,18 +81,20 @@ Expects (from controllers.albums._photos_context):
   heading once something is in it. With no albums at all it is simply the
   photo list, and says so.
   {% endcomment %}
-  {% if loose_images %}
+  {% if loose_count %}
   <section class="albums-loose">
     <h3 class="albums-toolbar-title">
       <i class="material-symbols-outlined">photo</i>
       <span>{% if album_rows %}Not in an album{% else %}Photos{% endif %}</span>
-      <span class="albums-count">{{ loose_images|length }}</span>
+      <span class="albums-count">{{ loose_count }}</span>
     </h3>
-    <ul class="gallery-grid albums-loose-grid">
+    <ul class="gallery-grid albums-loose-grid" id="albums-loose-grid"
+        data-photo-grid
+        data-items-url="{{ list_url }}?loose=1"
+        data-photo-count="{{ loose_count }}"
+        data-grid-page-size="{{ grid_page_size|default:48 }}">
       {% for img in loose_images %}
-      <li class="gallery-item" data-id="{{ img.pk }}">
-        <img src="{{ img.display_url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
-      </li>
+      {% include "dashboard/partials/albums/_photo_tile.html" with img=img profile=profile in_album=False %}
       {% endfor %}
     </ul>
   </section>
@@ -88,4 +103,8 @@ Expects (from controllers.albums._photos_context):
     No photos on this {{ context_type }} yet. Upload some from the Photos panel, then group them into albums here.
   </p>
   {% endif %}
+
+  {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="albums" actions=album_bulk_actions %}
+  {% include "dashboard/partials/albums/_add_to_album_dialog.html" with picker_albums=picker_albums %}
 </div>
+<script src="{% static 'js/bulk-toolbar.js' %}"></script>

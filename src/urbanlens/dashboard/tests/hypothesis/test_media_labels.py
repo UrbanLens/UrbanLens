@@ -181,6 +181,35 @@ class LabelImageMembershipViewTests(TestCase):
         response = self.client.get(reverse("label.image", kwargs={"image_uuid": self.image.uuid}))
         self.assertIn(self.label.name, response.content.decode())
 
+    def test_create_and_add_makes_a_media_label_and_applies_it(self) -> None:
+        response = self.client.post(
+            reverse("label.image", kwargs={"image_uuid": self.image.uuid}),
+            data={"action": "create_and_add", "name": "Golden hour"},
+        )
+        self.assertEqual(response.status_code, 200)
+        created = Label.objects.get(profile=self.profile, kind=KIND_MEDIA, name="Golden hour")
+        self.assertIn(created.id, set(self.image.labels.values_list("id", flat=True)))
+
+    def test_create_and_add_reuses_an_existing_label_of_that_name(self) -> None:
+        response = self.client.post(
+            reverse("label.image", kwargs={"image_uuid": self.image.uuid}),
+            data={"action": "create_and_add", "name": "Interior"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Label.objects.filter(profile=self.profile, kind=KIND_MEDIA, name="Interior").count(), 1)
+        self.assertIn(self.label.id, set(self.image.labels.values_list("id", flat=True)))
+
+    def test_lightbox_embed_renders_the_inline_picker(self) -> None:
+        response = self.client.get(
+            reverse("label.image", kwargs={"image_uuid": self.image.uuid}),
+            {"embed": "lightbox"},
+        )
+        content = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("lightbox-labels", content)
+        self.assertIn("Create", content)
+        self.assertNotIn("tag-panel--dialog-only", content)
+
 
 class MediaLabelMultiMergeTests(TestCase):
     """Multi-merge correctly transfers image associations for media labels."""

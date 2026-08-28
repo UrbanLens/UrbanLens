@@ -15,7 +15,7 @@ from __future__ import annotations
 import base64
 from datetime import UTC, datetime
 from http import HTTPStatus
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
@@ -171,6 +171,14 @@ class AlbumPanelSectionsTests(TestCase):
         self.assertContains(response, "data-album-create-toggle")
         self.assertRegex(response.content.decode(), r'id="album-create-form"[^>]*\shidden')
 
+    def test_the_list_offers_drop_targets_and_a_bulk_toolbar(self) -> None:
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "data-album-drop")
+        self.assertContains(response, 'id="ul-bulk-bar-albums"')
+        self.assertContains(response, "data-album-select-toggle")
+        self.assertContains(response, "album-target-dialog")
+
     def test_the_type_explainer_is_collapsible(self) -> None:
         response = self.client.get(self.url)
 
@@ -186,6 +194,7 @@ class AlbumUploadViewTests(TestCase):
         self.pin, self.album = _pin_with_album()
         self.client.force_login(self.pin.profile.user)
         self.url = reverse("pin.albums.upload", args=[self.pin.slug, self.album.slug])
+        self.enterContext(patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"))
 
     def _upload(self, name: str = "shot.png", content: bytes = _PNG_BYTES):
         return self.client.post(self.url, {"image": SimpleUploadedFile(name, content, content_type="image/png")})
@@ -196,8 +205,7 @@ class AlbumUploadViewTests(TestCase):
         self.assertEqual(response.status_code, HTTPStatus.BAD_REQUEST)
         self.assertEqual(response.json()["error"], "No image provided.")
 
-    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
-    def test_a_valid_upload_lands_in_the_album(self, _mock_enqueue) -> None:
+    def test_a_valid_upload_lands_in_the_album(self) -> None:
         response = self._upload()
 
         self.assertEqual(response.status_code, HTTPStatus.CREATED, response.content)
@@ -205,8 +213,7 @@ class AlbumUploadViewTests(TestCase):
         self.assertEqual(image.pin, self.pin)
         self.assertTrue(AlbumItem.objects.filter(album=self.album, image=image).exists())
 
-    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
-    def test_the_response_is_the_shared_gallery_json(self, _mock_enqueue) -> None:
+    def test_the_response_is_the_shared_gallery_json(self) -> None:
         """The client renders the new tile with the same code the galleries use."""
         response = self._upload()
 
@@ -214,18 +221,34 @@ class AlbumUploadViewTests(TestCase):
         self.assertEqual(body["id"], Image.objects.get(profile=self.pin.profile).pk)
         self.assertIn("url", body)
 
-    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
-    def test_a_duplicate_is_refused_and_not_filed_twice(self, _mock_enqueue) -> None:
+    def test_a_duplicate_is_filed_in_the_album_instead_of_refused(self) -> None:
+        """Dropping a file that's already on the pin adds the existing photo, as success."""
+        first = self._upload()
+        self.assertEqual(first.status_code, HTTPStatus.CREATED, first.content)
+        image = Image.objects.get(profile=self.pin.profile)
+        AlbumItem.objects.filter(album=self.album, image=image).delete()
+
+        response = self._upload(name="same-bytes.png")
+
+        self.assertEqual(response.status_code, HTTPStatus.OK, response.content)
+        self.assertEqual(Image.objects.filter(profile=self.pin.profile).count(), 1)
+        self.assertTrue(AlbumItem.objects.filter(album=self.album, image=image).exists())
+        self.assertEqual(response.json()["id"], image.pk)
+
+    def test_reuploading_a_photo_already_in_the_album_is_still_success(self) -> None:
         self._upload()
 
         response = self._upload(name="same-bytes.png")
 
-        self.assertEqual(response.status_code, HTTPStatus.CONFLICT)
+        self.assertEqual(response.status_code, HTTPStatus.OK, response.content)
         self.assertEqual(Image.objects.filter(profile=self.pin.profile).count(), 1)
         self.assertEqual(AlbumItem.objects.filter(album=self.album).count(), 1)
 
-    @patch("urbanlens.dashboard.services.photos.uploads.image_upload_error", return_value=("Not an image.", 415))
-    def test_a_rejected_file_creates_nothing(self, _mock_check) -> None:
+    @patch(
+        "urbanlens.dashboard.services.photos.uploads.image_upload_error",
+        new=MagicMock(return_value=("Not an image.", 415)),
+    )
+    def test_a_rejected_file_creates_nothing(self) -> None:
         """The album upload goes through the same gate as the galleries.
 
         Patched rather than fed a bad file so this asserts the wiring - that a
@@ -328,3 +351,90 @@ class AlbumMapRenderTests(TestCase):
         self.assertContains(response, 'id="album-map-photos"')
         self.assertContains(response, '"movable": true')
         self.assertContains(response, 'data-reposition-base="/dashboard/map/pin/')
+
+
+class AlbumItemsPageTests(TestCase):
+    """The album grid is paged so a large album does not dump every file URL at once."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin, self.album = _pin_with_album()
+        self.client.force_login(self.pin.profile.user)
+        self.url = reverse("pin.albums.items", args=[self.pin.slug, self.album.slug])
+
+    def test_an_empty_album_returns_an_empty_page(self) -> None:
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        body = response.json()
+        self.assertEqual(body["items"], [])
+        self.assertEqual(body["total"], 0)
+
+    def test_the_page_carries_thumb_and_lightbox_fields(self) -> None:
+        image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        AlbumItem.objects.create(album=self.album, image=image, order=0)
+
+        response = self.client.get(self.url)
+
+        item = response.json()["items"][0]
+        self.assertEqual(item["id"], image.pk)
+        self.assertEqual(item["uuid"], str(image.uuid))
+        self.assertIn("thumb_url", item)
+        self.assertIn("url", item)
+
+    def test_offset_skips_earlier_photos(self) -> None:
+        photos = [baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile) for _ in range(3)]
+        for i, photo in enumerate(photos):
+            AlbumItem.objects.create(album=self.album, image=photo, order=i)
+
+        response = self.client.get(self.url, {"offset": 1, "limit": 1})
+
+        body = response.json()
+        self.assertEqual(body["total"], 3)
+        self.assertEqual(len(body["items"]), 1)
+
+
+class AlbumMoveTests(TestCase):
+    """Adding with move_from removes the photos from the source album."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin, self.source = _pin_with_album("Interior")
+        self.target = Album.objects.create(name="Exterior", profile=self.pin.profile, parent_pin=self.pin)
+        self.client.force_login(self.pin.profile.user)
+        self.photo = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        AlbumItem.objects.create(album=self.source, image=self.photo, order=0)
+        self.url = reverse("pin.albums.add", args=[self.pin.slug, self.target.slug])
+
+    def test_move_files_the_photo_in_the_target_and_clears_the_source(self) -> None:
+        response = self.client.post(
+            self.url,
+            data={"image_ids": [self.photo.pk], "move_from": self.source.slug},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        self.assertEqual(response.json()["added"], 1)
+        self.assertEqual(response.json()["removed"], 1)
+        self.assertTrue(AlbumItem.objects.filter(album=self.target, image=self.photo).exists())
+        self.assertFalse(AlbumItem.objects.filter(album=self.source, image=self.photo).exists())
+
+
+class AlbumPickerJsonTests(TestCase):
+    """The add-to-album dialog lists this owner's albums as JSON."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin, self.album = _pin_with_album()
+        self.client.force_login(self.pin.profile.user)
+        self.url = reverse("pin.albums", args=[self.pin.slug])
+
+    def test_picker_lists_the_album_name_and_add_url(self) -> None:
+        response = self.client.get(self.url, {"picker": "1"})
+
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        albums = response.json()["albums"]
+        self.assertEqual(len(albums), 1)
+        self.assertEqual(albums[0]["name"], self.album.name)
+        self.assertEqual(albums[0]["slug"], self.album.slug)
+        self.assertIn("/add/", albums[0]["add_url"])
