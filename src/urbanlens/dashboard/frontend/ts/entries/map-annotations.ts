@@ -2,7 +2,10 @@
  * Shared map annotations page: markup drawing/editing, the unified detail-pin
  * side panel, the typed boundary editor (+ its context menu), the photo
  * layer, and the Details/Photos layers list panel. Used identically by the
- * pin detail page and the Location wiki page.
+ * pin detail page and the Location wiki page. The map's right-click menu is
+ * the shared base (copy coordinates, Street View, directions) plus "Create
+ * child pin here"; boundary polygons extend that same menu with Edit /
+ * Convert / Delete.
  *
  * Config comes from data-* attributes on `#map` rather than being baked into
  * the script by the template (see templates/dashboard/pages/location/index.html
@@ -13,6 +16,7 @@ import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers, tileLayer } from "../shared/map-layers";
+import { bindMapContextMenu, showMapContextMenu, type ContextMenuItem } from "../shared/map-context-menu";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
 import { makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize } from "../shared/photo-map";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
@@ -709,6 +713,8 @@ function init(): void {
         // makes defaultBase "remember" degrade to street rather than sharing one
         // unscoped bucket between accounts on a shared browser.
         storageKey: cfg.profileUuid ? `ul_layers_v1_${cfg.profileUuid}` : null,
+        // Bound below with "Create child pin here" once those helpers exist.
+        contextMenu: false,
         onAttribution: (text) => {
             const el = document.getElementById("page-footer-attribution-text");
             if (el) el.textContent = text;
@@ -1883,7 +1889,6 @@ function init(): void {
         if (entry) {
             entry.highlighted = !!on;
             entry.marker.setIcon(makePhotoIcon(entry.url, photoMarkerSize(entry.highlighted), entry.highlighted));
-            if (on) map.panTo([entry.lat, entry.lng]);
         }
         document.querySelectorAll<HTMLElement>(".photo-panel-item").forEach((li) => {
             li.classList.toggle("is-highlighted", +(li.dataset.id ?? "") === imgId && !!on);
@@ -2411,28 +2416,34 @@ function init(): void {
         return null;
     }
 
-    function saveBoundary(options: { type?: BoundaryType; exitEdit?: boolean; quiet?: boolean } = {}): void {
-        const type = options.type || editingBoundaryType;
-        if (!type) return;
-        const layers = boundaryGroups[type].getLayers() as Array<L.Layer & { toGeoJSON: () => any }>;
-        const geometry = layers.length === 0 ? null : { type: "MultiPolygon", coordinates: layers.map((l) => l.toGeoJSON().geometry.coordinates) };
-        fetch(boundaryApiUrl, {
+    function boundaryGeometryOf(type: BoundaryType): { type: string; coordinates: unknown[] } | null {
+        const layers = boundaryGroups[type].getLayers() as Array<L.Layer & { toGeoJSON: () => { geometry: { coordinates: unknown[] } } }>;
+        return layers.length === 0 ? null : { type: "MultiPolygon", coordinates: layers.map((l) => l.toGeoJSON().geometry.coordinates) };
+    }
+
+    async function postBoundary(type: BoundaryType, geometry: { type: string; coordinates: unknown[] } | null): Promise<any> {
+        const response = await fetch(boundaryApiUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
             body: JSON.stringify({ boundary_type: type, polygon: geometry }),
-        })
-            .then(async (r) => {
-                if (!r.ok) {
-                    let msg = `HTTP ${r.status}`;
-                    try {
-                        msg = (await r.json()).error || msg;
-                    } catch {
-                        /* keep default */
-                    }
-                    throw new Error(msg);
-                }
-                return r.json();
-            })
+        });
+        if (!response.ok) {
+            let msg = `HTTP ${response.status}`;
+            try {
+                msg = (await response.json()).error || msg;
+            } catch {
+                /* keep default */
+            }
+            throw new Error(msg);
+        }
+        return response.json();
+    }
+
+    function saveBoundary(options: { type?: BoundaryType; exitEdit?: boolean; quiet?: boolean } = {}): void {
+        const type = options.type || editingBoundaryType;
+        if (!type) return;
+        const geometry = boundaryGeometryOf(type);
+        postBoundary(type, geometry)
             .then((data) => {
                 const exiting = options.exitEdit !== false;
                 if (exiting) exitBoundaryEdit();
@@ -2445,6 +2456,31 @@ function init(): void {
                 if (!options.quiet) toast.success(geometry ? "Boundary saved." : "Boundary reset to the default.");
             })
             .catch((err) => toast.error(`Failed to save boundary: ${err.message}`));
+    }
+
+    async function convertBoundary(layer: L.Layer, from: BoundaryType): Promise<void> {
+        const to: BoundaryType = from === "property" ? "building" : "property";
+        boundaryGroups[from].removeLayer(layer);
+        const path = layer as L.Path;
+        path.setStyle(BOUNDARY_STYLES[to]);
+        layer.unbindTooltip();
+        layer.bindTooltip(to === "property" ? "Property boundary" : "Building boundary", {
+            sticky: true,
+            direction: "top",
+            className: "boundary-tooltip",
+        });
+        boundaryGroups[to].addLayer(layer);
+        attachBoundaryClickHandlers();
+        try {
+            await postBoundary(to, boundaryGeometryOf(to));
+            const data = await postBoundary(from, boundaryGeometryOf(from));
+            applyBoundaryPayload(data);
+            if (data.pending || data.refreshing) fetchBoundaries(0);
+            toast.success(to === "building" ? "Converted to a building boundary." : "Converted to a parcel boundary.");
+        } catch (err) {
+            toast.error(`Failed to convert boundary: ${err instanceof Error ? err.message : String(err)}`);
+            fetchBoundaries(0);
+        }
     }
 
     async function clearBoundary(): Promise<void> {
@@ -2678,7 +2714,7 @@ function init(): void {
         buildCircleSwatches("dp-border-swatches", "dp-border-color", "", updateDpMarkerIcon);
     }
 
-    function openAddPinDialog(): void {
+    function openAddPinDialog(lat?: number, lng?: number): void {
         // Only one map side-panel open at a time - closing markup autosaves first.
         toolbar.closeMarkupPanel();
         // These modes claim the next map click too.
@@ -2697,6 +2733,9 @@ function init(): void {
         document.getElementById("detail-pin-place-hint-text")!.textContent = "Click anywhere on the map to place the pin.";
         (document.getElementById("detail-pin-panel") as HTMLElement).style.display = "";
         map.on("click", onMainMapClickForDp);
+        if (lat != null && lng != null) {
+            onMainMapClickForDp({ latlng: L.latLng(lat, lng) } as L.LeafletMouseEvent);
+        }
     }
 
     function openDetailPinEditDialog(dp: DetailPinEntry): void {
@@ -2858,7 +2897,7 @@ function init(): void {
             .catch(() => toast.error("Failed to delete detail pin."));
     });
 
-    // -- Boundaries: click a polygon for an Edit/Delete context menu ------------
+    // -- Boundaries: click or right-click a polygon for Edit / Convert / Delete --
     // Leaflet's event system has no jQuery-style dot-namespacing - a listener
     // registered for the literal string 'click.openEditor' never matches a real
     // click, which Leaflet always fires as plain 'click'. Bind/unbind a named
@@ -2873,70 +2912,79 @@ function init(): void {
         // own click handler (the draw session / detail-pin placement listener).
         if (toolbar.isDrawBusy() || dpMode === "add") return;
         L.DomEvent.stopPropagation(e);
-        openBoundaryCtxMenu(e.target as L.Layer, e.latlng);
+        openBoundaryCtxMenu(e.target as L.Layer, e);
+    }
+    function onBoundaryLayerContextMenu(e: L.LeafletMouseEvent): void {
+        if (boundaryDrawControl || toolbar.isDrawBusy() || dpMode === "add") return;
+        L.DomEvent.stopPropagation(e);
+        openBoundaryCtxMenu(e.target as L.Layer, e);
     }
     function attachBoundaryClickHandlers(): void {
         (["property", "building"] as BoundaryType[]).forEach((type) => {
             boundaryGroups[type].eachLayer((layer) => {
                 layer.off("click", onBoundaryLayerClick);
                 layer.on("click", onBoundaryLayerClick);
+                layer.off("contextmenu", onBoundaryLayerContextMenu);
+                layer.on("contextmenu", onBoundaryLayerContextMenu);
             });
         });
     }
 
-    // Outside-click handler for the currently-open boundary context menu, so it
-    // behaves like a normal context menu: any interaction elsewhere on the page
-    // (another shape, a toolbar button, a plain map click) dismisses it. Tracked
-    // so a re-opened menu doesn't pile up duplicate listeners.
-    let boundaryCtxOutsideHandler: ((e: MouseEvent) => void) | null = null;
-
-    function openBoundaryCtxMenu(layer: L.Layer, latlng: L.LatLng): void {
-        if (boundaryCtxOutsideHandler) {
-            document.removeEventListener("click", boundaryCtxOutsideHandler, true);
-            boundaryCtxOutsideHandler = null;
-        }
-
-        const content = document.createElement("div");
-        content.className = "boundary-ctx-menu";
-
-        const layerType = boundaryTypeOfLayer(layer);
-
-        const editBtn = document.createElement("button");
-        editBtn.type = "button";
-        editBtn.className = "boundary-ctx-menu__item";
-        editBtn.innerHTML = '<i class="material-symbols-outlined">edit</i> Edit';
-        editBtn.addEventListener("click", () => {
-            map.closePopup();
-            if (layerType) startEditBoundary(layerType);
-        });
-
-        const delBtn = document.createElement("button");
-        delBtn.type = "button";
-        delBtn.className = "boundary-ctx-menu__item boundary-ctx-menu__item--danger";
-        delBtn.innerHTML = '<i class="material-symbols-outlined">delete_outline</i> Delete';
-        delBtn.addEventListener("click", async () => {
-            map.closePopup();
-            if (!layerType) return;
-            if (!(await confirmAction({ title: "Delete Boundary", message: "Delete this boundary polygon?", confirmLabel: "Delete" }))) return;
-            boundaryGroups[layerType].removeLayer(layer);
-            if (layerType === "property" && boundaryGroups.property.getLayers().length === 0) setMainMarkerVisible(true);
-            saveBoundary({ exitEdit: false, type: layerType });
-        });
-
-        content.append(editBtn, delBtn);
-        L.popup({ closeButton: false, className: "boundary-ctx-menu-popup", offset: [0, -2] }).setLatLng(latlng).setContent(content).openOn(map);
-
-        // The click that opened this menu already had propagation stopped (see
-        // onBoundaryLayerClick), so it's safe to attach this immediately - it
-        // only fires on the *next* click anywhere in the document.
-        boundaryCtxOutsideHandler = (e: MouseEvent) => {
-            document.removeEventListener("click", boundaryCtxOutsideHandler!, true);
-            boundaryCtxOutsideHandler = null;
-            if (content.contains(e.target as Node)) return; // the button's own handler drives this close
-            map.closePopup();
-        };
-        document.addEventListener("click", boundaryCtxOutsideHandler, true);
+    function childPinMenuItems(lat: number, lng: number): ContextMenuItem[] {
+        return [
+            {
+                icon: "add_location",
+                label: "Create child pin here",
+                onClick: () => openAddPinDialog(lat, lng),
+            },
+        ];
     }
+
+    function openBoundaryCtxMenu(layer: L.Layer, event: L.LeafletMouseEvent): void {
+        const layerType = boundaryTypeOfLayer(layer);
+        const extraItems: ContextMenuItem[] = [...childPinMenuItems(event.latlng.lat, event.latlng.lng)];
+        if (layerType) {
+            extraItems.push({
+                icon: "edit",
+                label: "Edit boundary",
+                onClick: () => startEditBoundary(layerType),
+            });
+            if (boundarySources[layerType] !== "circle") {
+                extraItems.push({
+                    icon: "swap_horiz",
+                    label: layerType === "property" ? "Convert to building boundary" : "Convert to parcel boundary",
+                    onClick: () => {
+                        void convertBoundary(layer, layerType);
+                    },
+                });
+            }
+            extraItems.push({
+                icon: "delete_outline",
+                label: "Delete boundary",
+                className: "map-context-menu__item--danger",
+                onClick: () => {
+                    void (async () => {
+                        if (!(await confirmAction({ title: "Delete Boundary", message: "Delete this boundary polygon?", confirmLabel: "Delete" }))) return;
+                        boundaryGroups[layerType].removeLayer(layer);
+                        if (layerType === "property" && boundaryGroups.property.getLayers().length === 0) setMainMarkerVisible(true);
+                        saveBoundary({ exitEdit: false, type: layerType });
+                    })();
+                },
+            });
+        }
+        showMapContextMenu({
+            lat: event.latlng.lat,
+            lng: event.latlng.lng,
+            clientX: event.originalEvent.clientX,
+            clientY: event.originalEvent.clientY,
+            extraItems,
+        });
+    }
+
+    bindMapContextMenu(map, {
+        extraItems: (lat, lng) => childPinMenuItems(lat, lng),
+        shouldOpen: () => !toolbar.isDrawBusy() && dpMode !== "add" && !boundaryDrawControl && !pendingPlacement,
+    });
 }
 
 if (document.readyState === "loading") {
@@ -2983,7 +3031,7 @@ declare global {
         // Detail-pin/boundary functions, exposed for this page's own template onclick= attributes.
         _toggleDetailPinListPanel: () => void;
         toggleDetailPinSelectMode: () => void;
-        openAddPinDialog: () => void;
+        openAddPinDialog: (lat?: number, lng?: number) => void;
         closeDetailPinPanel: () => void;
         startEditBoundary: (type: "property" | "building") => void;
         saveBoundary: (options?: { type?: "property" | "building"; exitEdit?: boolean; quiet?: boolean }) => void;

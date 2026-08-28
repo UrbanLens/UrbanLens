@@ -9,6 +9,11 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Interactive Leaflet map with 9 configurable layers (Street, Terrain, Satellite, Weather, Dark,
   Borders, Places, Pins, Child pins), HTMX-driven panels, and a filter sidebar (labels, rating,
   visited status, date pinned, scores, saved filter configurations)
+- **Map right-click menu** — every map shares the same base actions (copy coordinates, Street View
+  when Google has coverage, directions to that point). The main map adds "Add Pin Here"; pin detail
+  and wiki maps add "Create child pin here". Clicking or right-clicking a parcel or building
+  boundary on those pages also offers Edit, Convert to the other type, and Delete. The floorplan
+  editor keeps its own specialised menu.
 - **Pin** — a user's personal record for a place (custom name, private notes, icon, priority,
   status, last-visited date, marker coordinates), separate from the shared **Location** record
   it points to (canonical name, address, coordinates, Google CID). See `docs/NOTES.md` for why

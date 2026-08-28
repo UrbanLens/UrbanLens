@@ -695,7 +695,6 @@
     let   _searchMarker      = null;    // temporary Leaflet marker placed on search-result jump
     let   _userLocationMarker = null;   // persistent "you are here" dot from the most recent GPS fix
     let   _contextMenuMarker = null;    // temporary marker while the map right-click menu is open
-    let   _contextMenuDismiss = null;   // document click handler for the active context menu
 
     // -- Multi-select tool -------------------------------------------------------
     let   _selectMode      = false;   // true while the select tool is active
@@ -1391,38 +1390,11 @@
         _contextMenuMarker.addTo(map);
     }
 
-    function _closeMapContextMenu(menu, opts = {}) {
-        const { keepMarker = false } = opts;
-        if (_contextMenuDismiss) {
-            document.removeEventListener('click', _contextMenuDismiss);
-            _contextMenuDismiss = null;
-        }
-        menu.remove();
-        if (!keepMarker) _clearContextMenuMarker();
-    }
-
     // Context menus are position:fixed, so they take viewport coordinates and
     // have to be kept inside it - a long-press near the right or bottom edge
     // opens the menu where nothing can scroll it back into view otherwise.
     function _placeFloatingMenu(menu, clientX, clientY) {
-        const margin = 8;
-        menu.style.maxWidth = `${window.innerWidth - margin * 2}px`;
-        menu.style.maxHeight = `${window.innerHeight - margin * 2}px`;
-        menu.style.overflowY = 'auto';
-        // Measure from the origin - shrink-to-fit width depends on where the menu
-        // sits, so measuring it in place reports a squeezed, taller box.
-        menu.style.left = '0px';
-        menu.style.top = '0px';
-        if (!menu.isConnected) document.body.appendChild(menu);
-        const { width, height } = menu.getBoundingClientRect();
-        // Flip to the other side of the press point when the menu does not fit
-        // below/right of it; the clamp then covers menus that fit neither way.
-        const left = clientX + width + margin > window.innerWidth ? clientX - width : clientX;
-        const top = clientY + height + margin > window.innerHeight ? clientY - height : clientY;
-        const maxLeft = Math.max(margin, window.innerWidth - width - margin);
-        const maxTop = Math.max(margin, window.innerHeight - height - margin);
-        menu.style.left = `${Math.min(Math.max(left, margin), maxLeft)}px`;
-        menu.style.top = `${Math.min(Math.max(top, margin), maxTop)}px`;
+        window.MapContextMenu.place(menu, clientX, clientY);
     }
 
     // Marker menus open at the point that was clicked, in viewport coordinates;
@@ -1450,44 +1422,17 @@
         _searchMarker = _createTempPlaceMarker(lat, lng, title || '', true /* isSearch */);
         _searchMarker.on('click', function(e) {
             map.closePopup();
-            document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
-            const latFmt = lat.toFixed(6), lngFmt = lng.toFixed(6);
             const anchor = _markerMenuAnchor(e, lat, lng);
-            const menu = document.createElement('div');
-            menu.className = 'map-context-menu';
-
-            const coordItem = document.createElement('button');
-            coordItem.className = 'map-context-menu__item map-context-menu__coords';
-            coordItem.title = 'Click to copy coordinates';
-            coordItem.innerHTML = `<i class="material-symbols-outlined">gps_fixed</i><span>${latFmt}, ${lngFmt}</span>`;
-            coordItem.addEventListener('click', () => {
-                navigator.clipboard.writeText(`${latFmt}, ${lngFmt}`)
-                    .then(() => toastr.success('Coordinates copied to clipboard'), () => toastr.error('Could not copy coordinates'));
-                menu.remove();
+            window.MapContextMenu.show({
+                lat: lat,
+                lng: lng,
+                clientX: anchor.x,
+                clientY: anchor.y,
+                extraItems: [
+                    { icon: 'add_location', label: 'Create pin', onClick: function () { _clearSearchMarker(); openAddPinDialog(lat, lng, { defaultName: title || '' }); } },
+                    { icon: 'close', label: 'Dismiss marker', onClick: function () { _clearSearchMarker(); } },
+                ],
             });
-            menu.appendChild(coordItem);
-
-            const sep = document.createElement('div');
-            sep.className = 'map-context-menu__sep';
-            menu.appendChild(sep);
-
-            const addPinItem = document.createElement('button');
-            addPinItem.className = 'map-context-menu__item';
-            addPinItem.innerHTML = '<i class="material-symbols-outlined">add_location</i>Create pin';
-            addPinItem.addEventListener('click', () => { menu.remove(); _clearSearchMarker(); openAddPinDialog(lat, lng, { defaultName: title || '' }); });
-            menu.appendChild(addPinItem);
-
-            const dismissItem = document.createElement('button');
-            dismissItem.className = 'map-context-menu__item';
-            dismissItem.innerHTML = '<i class="material-symbols-outlined">close</i>Dismiss marker';
-            dismissItem.addEventListener('click', () => { menu.remove(); _clearSearchMarker(); });
-            menu.appendChild(dismissItem);
-
-            _placeFloatingMenu(menu, anchor.x, anchor.y);
-            const dismiss = (ev) => {
-                if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); }
-            };
-            setTimeout(() => document.addEventListener('click', dismiss), 0);
         });
         _searchMarker.addTo(map);
     }
@@ -2413,6 +2358,7 @@
         darkMode: _MAP_DARK_MODE,
         defaultBase: _DEFAULT_MAP_VIEW,
         storageKey: _LAYER_CACHE_KEY,
+        contextMenu: false, // this page binds extra "Add Pin Here" items itself
         loadingTarget: document.getElementById('map'),
         // Footer attribution replaces Leaflet's on-map control (see the shared
         // partials/layout/footer.html, rendered via show_map_footer=True).
@@ -2683,95 +2629,26 @@
 
     map.on('contextmenu', function(e) {
         map.closePopup();
-        if (_contextMenuDismiss) {
-            document.removeEventListener('click', _contextMenuDismiss);
-            _contextMenuDismiss = null;
-        }
-        document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
         const lat = e.latlng.lat;
         const lng = e.latlng.lng;
         _showContextMenuMarker(lat, lng);
-
-        const menu = document.createElement('div');
-        menu.className = 'map-context-menu';
-        const anchorX = e.originalEvent.clientX;
-        const anchorY = e.originalEvent.clientY;
-
-        // -- Coordinates row -------------------------------------------------
-        const latFmt = lat.toFixed(6);
-        const lngFmt = lng.toFixed(6);
-        const coordItem = document.createElement('button');
-        coordItem.className = 'map-context-menu__item map-context-menu__coords';
-        coordItem.title = 'Click to copy coordinates';
-        coordItem.innerHTML = `<i class="material-symbols-outlined">gps_fixed</i><span>${latFmt}, ${lngFmt}</span>`;
-        coordItem.addEventListener('click', function() {
-            navigator.clipboard.writeText(`${latFmt}, ${lngFmt}`).then(function() {
-                toastr.success('Coordinates copied to clipboard');
-            }).catch(function() {
-                toastr.error('Could not copy coordinates');
-            });
-            _closeMapContextMenu(menu);
+        window.MapContextMenu.show({
+            lat: lat,
+            lng: lng,
+            clientX: e.originalEvent.clientX,
+            clientY: e.originalEvent.clientY,
+            extraItems: [{
+                icon: 'add_location',
+                label: 'Add Pin Here',
+                onClick: function () {
+                    const transferred = _contextMenuMarker;
+                    _contextMenuMarker = null;
+                    if (transferred) _addPinMarker = transferred;
+                    openAddPinDialog(lat, lng, { keepMarker: !!transferred });
+                },
+            }],
+            onClose: function () { _clearContextMenuMarker(); },
         });
-        menu.appendChild(coordItem);
-
-        // -- Separator --------------------------------------------------------
-        const sep1 = document.createElement('div');
-        sep1.className = 'map-context-menu__sep';
-        menu.appendChild(sep1);
-
-        // -- Street View (async check) ----------------------------------------
-        const svItem = document.createElement('a');
-        svItem.className = 'map-context-menu__item map-context-menu__item--link map-context-menu__streetview';
-        svItem.target = '_blank';
-        svItem.rel = 'noopener noreferrer';
-        svItem.href = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
-        svItem.innerHTML = '<i class="material-symbols-outlined">streetview</i>Street View';
-        svItem.style.display = 'none';
-        menu.appendChild(svItem);
-
-        fetch(`{% url 'map.streetview_check' %}?lat=${lat}&lng=${lng}`)
-            .then(r => r.json())
-            .then(data => {
-                if (!data.available || !menu.isConnected) return;
-                svItem.style.display = '';
-                // The extra row can push the menu past the bottom of the screen.
-                _placeFloatingMenu(menu, anchorX, anchorY);
-            })
-            .catch(() => {});
-
-        // -- Directions -------------------------------------------------------
-        const dirItem = document.createElement('a');
-        dirItem.className = 'map-context-menu__item map-context-menu__item--link';
-        dirItem.target = '_blank';
-        dirItem.rel = 'noopener noreferrer';
-        dirItem.href = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-        dirItem.innerHTML = '<i class="material-symbols-outlined">directions</i>Directions here';
-        menu.appendChild(dirItem);
-
-        // -- Separator --------------------------------------------------------
-        const sep2 = document.createElement('div');
-        sep2.className = 'map-context-menu__sep';
-        menu.appendChild(sep2);
-
-        // -- Add Pin ----------------------------------------------------------
-        const addPinItem = document.createElement('button');
-        addPinItem.className = 'map-context-menu__item';
-        addPinItem.innerHTML = '<i class="material-symbols-outlined">add_location</i>Add Pin Here';
-        addPinItem.addEventListener('click', function() {
-            const transferred = _contextMenuMarker;
-            _contextMenuMarker = null;
-            _closeMapContextMenu(menu, { keepMarker: true });
-            if (transferred) _addPinMarker = transferred;
-            openAddPinDialog(lat, lng, { keepMarker: !!transferred });
-        });
-        menu.appendChild(addPinItem);
-
-        _placeFloatingMenu(menu, anchorX, anchorY);
-
-        _contextMenuDismiss = (ev) => {
-            if (!menu.contains(ev.target)) _closeMapContextMenu(menu);
-        };
-        setTimeout(() => document.addEventListener('click', _contextMenuDismiss), 0);
     });
     map.invalidateSize();
 
@@ -2893,26 +2770,22 @@
         });
         marker.on('click', function (e) {
             map.closePopup();
-            document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
-            const latFmt = lat.toFixed(6), lngFmt = lng.toFixed(6);
             const anchor = _markerMenuAnchor(e, lat, lng);
-            const menu = document.createElement('div');
-            menu.className = 'map-context-menu';
-
-            // Header: place name
-            const nameRow = document.createElement('div');
-            nameRow.className = 'map-context-menu__header';
-            nameRow.textContent = place.name;
-            menu.appendChild(nameRow);
-            const sep0 = document.createElement('div'); sep0.className = 'map-context-menu__sep'; menu.appendChild(sep0);
-
-            // Service-provided details. Google markers are enhanced below with
-            // Places Details data once it arrives, but the popup always includes
-            // a useful outbound link immediately.
             const detailsWrap = document.createElement('div');
             detailsWrap.className = 'places-popup-details';
             detailsWrap.innerHTML = _buildPlaceDetailRows(place);
-            menu.appendChild(detailsWrap);
+            const menu = window.MapContextMenu.show({
+                lat: lat,
+                lng: lng,
+                clientX: anchor.x,
+                clientY: anchor.y,
+                header: place.name,
+                preamble: detailsWrap,
+                extraItems: [
+                    { icon: 'add_location', label: 'Add to my map', onClick: function () { openAddPinDialog(lat, lng, { defaultName: place.name, placeId: place.place_id }); } },
+                    { icon: 'info', label: 'More information', onClick: function () { _showPlaceInfoPanel(place); } },
+                ],
+            });
             if (place.source === 'google' && place.place_id) {
                 fetch(`{% url "map.places.details" %}?place_id=${encodeURIComponent(place.place_id)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                     .then(resp => resp.ok ? resp.json() : null)
@@ -2943,44 +2816,6 @@
                 })
                 .catch(() => {});
             }
-            const sepDetails = document.createElement('div'); sepDetails.className = 'map-context-menu__sep'; menu.appendChild(sepDetails);
-
-            // Copy coordinates
-            const coordItem = document.createElement('button');
-            coordItem.className = 'map-context-menu__item map-context-menu__coords';
-            coordItem.title = 'Click to copy coordinates';
-            coordItem.innerHTML = `<i class="material-symbols-outlined">gps_fixed</i><span>${latFmt}, ${lngFmt}</span>`;
-            coordItem.addEventListener('click', () => {
-                navigator.clipboard.writeText(`${latFmt}, ${lngFmt}`)
-                    .then(() => toastr.success('Coordinates copied'), () => toastr.error('Could not copy'));
-                menu.remove();
-            });
-            menu.appendChild(coordItem);
-            const sep1 = document.createElement('div'); sep1.className = 'map-context-menu__sep'; menu.appendChild(sep1);
-
-            // Add to my map
-            const addItem = document.createElement('button');
-            addItem.className = 'map-context-menu__item';
-            addItem.innerHTML = '<i class="material-symbols-outlined">add_location</i>Add to my map';
-            addItem.addEventListener('click', () => {
-                menu.remove();
-                openAddPinDialog(lat, lng, { defaultName: place.name, placeId: place.place_id });
-            });
-            menu.appendChild(addItem);
-
-            // More information
-            const infoItem = document.createElement('button');
-            infoItem.className = 'map-context-menu__item';
-            infoItem.innerHTML = '<i class="material-symbols-outlined">info</i>More information';
-            infoItem.addEventListener('click', () => {
-                menu.remove();
-                _showPlaceInfoPanel(place);
-            });
-            menu.appendChild(infoItem);
-
-            _placeFloatingMenu(menu, anchor.x, anchor.y);
-            const dismiss = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); } };
-            setTimeout(() => document.addEventListener('click', dismiss), 0);
         });
         return marker;
     }
@@ -4782,34 +4617,17 @@
             marker.on('click', (function (mlat, mlng, mname) {
                 return function (e) {
                     map.closePopup();
-                    document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
                     const anchor = _markerMenuAnchor(e, mlat, mlng);
-                    const menu = document.createElement('div');
-                    menu.className = 'map-context-menu';
-                    const coordItem = document.createElement('button');
-                    coordItem.className = 'map-context-menu__item map-context-menu__coords';
-                    coordItem.title = 'Click to copy coordinates';
-                    coordItem.innerHTML = `<i class="material-symbols-outlined">gps_fixed</i><span>${mlat.toFixed(6)}, ${mlng.toFixed(6)}</span>`;
-                    coordItem.addEventListener('click', () => {
-                        navigator.clipboard.writeText(`${mlat.toFixed(6)}, ${mlng.toFixed(6)}`)
-                            .then(() => toastr.success('Coordinates copied to clipboard'), () => toastr.error('Could not copy coordinates'));
-                        menu.remove();
+                    window.MapContextMenu.show({
+                        lat: mlat,
+                        lng: mlng,
+                        clientX: anchor.x,
+                        clientY: anchor.y,
+                        extraItems: [
+                            { icon: 'add_location', label: 'Create pin', onClick: function () { openAddPinDialog(mlat, mlng, { defaultName: mname }); } },
+                            { icon: 'close', label: 'Dismiss marker', onClick: function () { marker.remove(); } },
+                        ],
                     });
-                    menu.appendChild(coordItem);
-                    const sep = document.createElement('div'); sep.className = 'map-context-menu__sep'; menu.appendChild(sep);
-                    const addPinItem = document.createElement('button');
-                    addPinItem.className = 'map-context-menu__item';
-                    addPinItem.innerHTML = '<i class="material-symbols-outlined">add_location</i>Create pin';
-                    addPinItem.addEventListener('click', () => { menu.remove(); openAddPinDialog(mlat, mlng, { defaultName: mname }); });
-                    menu.appendChild(addPinItem);
-                    const dismissItem = document.createElement('button');
-                    dismissItem.className = 'map-context-menu__item';
-                    dismissItem.innerHTML = '<i class="material-symbols-outlined">close</i>Dismiss marker';
-                    dismissItem.addEventListener('click', () => { menu.remove(); marker.remove(); });
-                    menu.appendChild(dismissItem);
-                    _placeFloatingMenu(menu, anchor.x, anchor.y);
-                    const dismiss = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); } };
-                    setTimeout(() => document.addEventListener('click', dismiss), 0);
                 };
             })(r.lat, r.lng, r.title || searchTerm));
             marker.addTo(map);

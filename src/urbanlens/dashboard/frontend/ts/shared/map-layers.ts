@@ -2,7 +2,9 @@
  * Shared map layers component - the single source of truth for every Leaflet
  * map on the site: tile sources (street / dark / topographic / satellite),
  * overlays (weather, geopolitical borders), the Google-Maps-style layers
- * flyout panel, dark map mode, layer persistence, and footer attribution.
+ * flyout panel, dark map mode, layer persistence, footer attribution, and
+ * the shared right-click context menu (copy coordinates, Street View,
+ * directions).
  *
  * Extracted verbatim from the main map (pages/map/index.html), which defines
  * the canonical UI and behavior. Every other map (pin detail, Location wiki,
@@ -26,6 +28,8 @@
 // as an ambient global rather than imported (importing would bundle a second
 // copy and clobber CDN plugins hung off window.L).
 declare const L: typeof import("leaflet");
+
+import { bindMapContextMenu, type BindMapContextMenuOptions } from "./map-context-menu";
 
 export type BaseLayerKey = "street" | "topographic" | "satellite";
 export type MapDarkMode = "light" | "dark" | "system";
@@ -243,6 +247,13 @@ export interface MapLayersOptions {
     onDarkModeChange?: ((mode: MapDarkMode) => void) | null;
     /** Page-specific toggles keyed by their button's data-map-layer value (pins, places, details, photos, ...). */
     custom?: Record<string, CustomLayerToggle>;
+    /**
+     * Right-click menu. Default is the shared base (copy coordinates, Street
+     * View, directions). Pass false to opt out (a page that already draws its
+     * own menu, or one whose right-click is a specialised editor). Pass an
+     * options object to add page-specific items on top of the base.
+     */
+    contextMenu?: boolean | BindMapContextMenuOptions;
 }
 
 export interface MapLayersInstance {
@@ -670,6 +681,12 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         if (bordersOn) bordersLayer.addTo(map);
         syncButtons();
     })();
+
+    // Every map that uses this engine gets the same right-click menu unless
+    // the page has already claimed contextmenu for something else.
+    if (opts.contextMenu !== false) {
+        bindMapContextMenu(map, typeof opts.contextMenu === "object" ? opts.contextMenu : {});
+    }
 
     return {
         setBase,

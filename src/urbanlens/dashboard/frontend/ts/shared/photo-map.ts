@@ -181,6 +181,8 @@ export function createPhotoMarkerLayer(map: L.Map, options: PhotoMarkerLayerOpti
         if (!entry) return false;
         entry.highlighted = on;
         entry.marker.setIcon(iconFor(entry));
+        // Highlight only changes the icon. Panning to the photo on hover would
+        // jump the view under a marker that is already at these coordinates.
         return true;
     }
 

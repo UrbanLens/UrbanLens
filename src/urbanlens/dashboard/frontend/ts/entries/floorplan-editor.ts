@@ -319,6 +319,7 @@ function boot(): void {
     createMapLayers(map, {
         root: document.getElementById("floorplan-layers"),
         defaultBase: "satellite",
+        contextMenu: false, // this editor has its own specialised right-click menu
         onAttribution: (text) => {
             const el = document.getElementById("page-footer-attribution-text");
             if (el) el.textContent = text;

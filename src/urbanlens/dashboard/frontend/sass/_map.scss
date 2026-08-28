@@ -1576,6 +1576,25 @@ img.leaflet-marker-icon.is-selected {
         &--link {
             text-decoration: none;
         }
+
+        &--danger {
+            color: rgba(255, 100, 100, .85);
+
+            .material-symbols-outlined,
+            .material-icons {
+                color: rgba(255, 100, 100, .7);
+            }
+
+            &:hover {
+                background: rgba(255, 70, 70, .12);
+                color: $color-red-500;
+
+                .material-symbols-outlined,
+                .material-icons {
+                    color: $color-red-500;
+                }
+            }
+        }
     }
 
     &__coords {
