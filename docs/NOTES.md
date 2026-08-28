@@ -135,6 +135,23 @@ There's also `UniqueConstraint(fields=["location", "profile"], condition=Q(paren
 — a user can only have one top-level pin per Location (sub-pins via `parent_pin` are exempt).
 TODO NOTE From Jess: I could be mistaken, but I think there shouldn't be an exception for sub-pins. Sub-pins will be nearby, of course, but the coordinates won't be exactly, precisely the same. This exception allows for two pins to precisely overlap on a map, which surely not very helpful.
 
+## Child pin and child wiki slugs carry a parent prefix
+
+A child pin or child wiki slug is `{parent-prefix}-{name}`, not a bare slugify of the child's
+name. The prefix is the shortest existing alias that is already compact (3–8 characters after
+slugify), or — when every alias is still too long — one derived from the parent's canonical name:
+initials of significant words (`Hudson River State Hospital` → `hrsh`), the first word when the
+initials are too short (`Ford Motors` → `ford`), or a truncation of that word when even the first
+word is too long (`Switzerland` → `switz`).
+
+Truncation drops whole trailing words rather than clipping mid-word. Hyphenated compounds
+(`non-contributing`) are one word, so `Staff/Tenant House 1900 (non-contributing)` under HRSH
+becomes `hrsh-stafftenant-house-1900`, not `…-non-contributi`. Dropped words are added back only
+to make a collision unique or a too-short result long enough. Existing slugs are not rewritten.
+
+Wiki pages are routed by `Location.slug`. A child wiki whose location still has a UUID fallback
+slug copies the wiki's prefixed slug onto the location so the URL matches.
+
 ## Matching reads `Place.geometry`, and nothing else
 
 Official geometry lives on `Place`, written only by the provider chain and boundary voting. The

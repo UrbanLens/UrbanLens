@@ -67,6 +67,11 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   names are unique per pin/wiki case-insensitively. Deleting an auto-added alias, link, label, or
   property owner is permanent - automatic sources (external name lookups, AI extraction,
   keyword/AI auto-tagging) won't silently recreate something you removed
+- **Child pin and child wiki slugs** start with a short parent prefix (the shortest compact alias,
+  or one derived from the parent's long name — `HRSH` for Hudson River State Hospital, `ford` for
+  Ford Motors, `switz` for Switzerland). Trailing words that would overflow a readable length are
+  dropped as a unit, including hyphenated compounds (`non-contributing`), rather than clipped
+  mid-word; dropped words are added back only when the ideal slug is not unique or is too short
 - Private per-pin notes (`PinNote`), independent of public comments
 - **Articles** — Wikipedia-style long-form write-ups (sections, links, references) with full
   **revision history** (every saved version stored, restorable from the Edit History tab); private

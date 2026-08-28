@@ -946,6 +946,28 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     def _slugify_base(self) -> str:
         return self.effective_name or "pin"
 
+    def _slug_parent_prefix(self) -> str:
+        """Short alias of ``parent_pin``, when this pin is nested under one."""
+        from urbanlens.dashboard.services.core.slugs import parent_slug_prefix
+
+        parent = self.parent_pin
+        if parent is None:
+            return ""
+        names: list[str] = []
+        for value in (parent.effective_name, parent.effective_official_name, parent.slug):
+            if value:
+                names.append(value)
+        if parent.pk:
+            names.extend(parent.aliases.values_list("name", flat=True))
+        return parent_slug_prefix(names)
+
+    def _slug_preferred_length(self) -> int:
+        from urbanlens.dashboard.services.core.slugs import PREFERRED_CHILD_SLUG_LENGTH
+
+        if self.parent_pin_id:
+            return min(PREFERRED_CHILD_SLUG_LENGTH, self._slug_max_length())
+        return self._slug_max_length()
+
     def slug_is_placeholder(self) -> bool:
         """Whether this pin's slug was derived from a placeholder rather than a name.
 

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import random
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -12,7 +11,6 @@ from django.core.exceptions import FieldDoesNotExist
 from django.db import IntegrityError, models as django_models, transaction
 from django.db.models import UUIDField
 from django.db.models.fields import SlugField
-from django.utils.text import slugify
 
 # App Imports
 from urbanlens.dashboard.models.abstract.queryset import DashboardManager, FrontendDashboardManager, PublicDashboardManager
@@ -128,29 +126,44 @@ class PublicDashboardModel(FrontendDashboardModel):
             f"{type(self).__name__} must implement _slugify_base().",
         )
 
+    def _slug_parent_prefix(self) -> str:
+        """Short parent-derived prefix for a child entity's slug, or empty.
+
+        Child pins and child wikis override this so a building at Hudson River
+        State Hospital is addressed as ``hrsh-powerhouse`` rather than a
+        disconnected clip of the building name. Root entities leave it empty.
+        """
+        return ""
+
+    def _slug_preferred_length(self) -> int:
+        """Soft cap for the ideal slug; uniqueness may grow toward ``max_length``.
+
+        Child pins and child wikis use a shorter preferred length so trailing
+        words (including hyphenated compounds) drop as a unit instead of being
+        clipped mid-word. Everyone else prefers the full column width.
+        """
+        return self._slug_max_length()
+
     def _generate_slug(self) -> str:
         """Derive a unique slug for this instance.
 
-        Runs inside an atomic block so concurrent writers see each other's
-        reservations and cannot claim the same candidate simultaneously.
-        Automatically truncates the base so appending a numeric suffix never
-        exceeds the field's declared ``max_length``.
+        Truncates at a word boundary so a too-long name loses whole trailing
+        tokens (``non-contributing`` as a unit) rather than a mid-word clip.
+        Child entities may prefix a short parent alias; see
+        :meth:`_slug_parent_prefix`. Numeric suffixes are a last resort when
+        leftover words cannot make the candidate unique.
         """
+        from urbanlens.dashboard.services.core.slugs import unique_slug
+
         max_len = self._slug_max_length()
-        raw_base = slugify(self._slugify_base()) or "item"
-
         qs = self._slugify_qs()
-        # Reserve room for the longest suffix we might need.
-        # Start with the full (possibly truncated) base and walk up.
-        base = raw_base[:max_len]
-        candidate = base
-        while qs.filter(slug=candidate).exists():
-            # Not used for cryptographic purposes
-            n = random.randint(2, 90_000)  # noqa: S311 # nosec: B311 - Used for slug generation
-            suffix = f"-{n}"
-            candidate = raw_base[: max_len - len(suffix)] + suffix
-
-        return candidate
+        return unique_slug(
+            self._slugify_base(),
+            is_taken=lambda candidate: qs.filter(slug=candidate).exists(),
+            prefix=self._slug_parent_prefix(),
+            max_length=max_len,
+            preferred_length=self._slug_preferred_length(),
+        )
 
     def ensure_slug(self) -> str:
         """Ensure this instance has a URL slug, generating one if needed.
