@@ -47,6 +47,23 @@ class HostIsLocalhostTests(TestCase):
     def test_external_hostname_is_not_localhost(self) -> None:
         self.assertFalse(_host_is_localhost("example.com"))
 
+    def test_hostname_containing_localhost_substring_is_not_localhost(self) -> None:
+        # Guards against a substring/prefix/suffix check standing in for exact
+        # matching, which would let an attacker-controlled hostname like
+        # "localhost.evil.com" slip through the guard as if it were local.
+        for name in ("localhost.evil.com", "notlocalhost", "evil-localhost.com"):
+            with self.subTest(name=name):
+                self.assertFalse(_host_is_localhost(name))
+
+    def test_private_non_loopback_ip_is_not_localhost(self) -> None:
+        # RFC1918/link-local/unique-local ranges are private but routable over a
+        # real network - conflating `is_loopback` with `is_private` would let the
+        # guard wave through connections to another machine on the LAN or a
+        # Docker bridge network, not just this process.
+        for host in ("10.0.0.1", "192.168.1.1", "172.16.0.5", "169.254.1.1", "fc00::1", "fe80::1"):
+            with self.subTest(host=host):
+                self.assertFalse(_host_is_localhost(host))
+
 
 class AddressHostTests(TestCase):
     """``_address_host`` extracts hosts from socket address tuples."""
