@@ -26,7 +26,7 @@ on:
         default: false
         type: boolean
       authenticated:
-        description: "Scan as the primary account, when the staging environment has one provisioned"
+        description: "Also scan as the primary account (all four auth tiers), when the staging environment has one provisioned"
         required: false
         default: true
         type: boolean
@@ -86,6 +86,16 @@ jobs:
           umask 077
           printf '%s' "$ACCOUNTS_JSON" > "${RUNNER_TEMP}/e2e-accounts.json"
 
+      # The session tier signs in through a real browser (reusing
+      # tests/integration/setup/auth.setup.ts), which needs Node - the
+      # script itself runs `npm install`/`playwright install` on demand, but
+      # the runner needs a modern enough `node` on PATH first.
+      - name: Set up Node
+        if: inputs.authenticated
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
       - name: Run the scan
         run: |
           args=(--url "${{ inputs.base_url }}" --severity "${{ inputs.severity }}" --docker)
@@ -93,13 +103,47 @@ jobs:
             args+=(--fail-on-findings)
           fi
           if [ -f "${RUNNER_TEMP}/e2e-accounts.json" ]; then
-            args+=(--accounts-file "${RUNNER_TEMP}/e2e-accounts.json")
+            args+=(--accounts-file "${RUNNER_TEMP}/e2e-accounts.json" --all-tiers)
           fi
           bash bin/run_nuclei_scan.sh "${args[@]}"
 
-      - name: Upload Code Scanning results
+      # One category per tier so Code Scanning doesn't conflate an
+      # unauthenticated finding with the same template matching again under
+      # a different credential - each `if` is independent, so a tier that
+      # was skipped (no restricted key provisioned, sign-in unavailable)
+      # just has nothing to upload rather than failing the job.
+      - name: Upload Code Scanning results (unauthenticated)
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() && hashFiles('tests/integration/reports/nuclei/unauthenticated/results.sarif') != ''
+        with:
+          sarif_file: tests/integration/reports/nuclei/unauthenticated/results.sarif
+          category: nuclei-unauthenticated
+
+      - name: Upload Code Scanning results (API key, restricted)
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('tests/integration/reports/nuclei/apikey-restricted/results.sarif') != ''
+        with:
+          sarif_file: tests/integration/reports/nuclei/apikey-restricted/results.sarif
+          category: nuclei-apikey-restricted
+
+      - name: Upload Code Scanning results (API key, full)
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('tests/integration/reports/nuclei/apikey-full/results.sarif') != ''
+        with:
+          sarif_file: tests/integration/reports/nuclei/apikey-full/results.sarif
+          category: nuclei-apikey-full
+
+      - name: Upload Code Scanning results (session)
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('tests/integration/reports/nuclei/session/results.sarif') != ''
+        with:
+          sarif_file: tests/integration/reports/nuclei/session/results.sarif
+          category: nuclei-session
+
+      # The flat (non-multi-tier) path: no accounts secret was configured.
+      - name: Upload Code Scanning results (unauthenticated only)
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('tests/integration/reports/nuclei/results.sarif') != ''
         with:
           sarif_file: tests/integration/reports/nuclei/results.sarif
           category: nuclei

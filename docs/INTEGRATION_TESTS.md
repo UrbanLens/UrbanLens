@@ -87,30 +87,82 @@ error" symptom for a different reason.
 
 `--accounts-file` points at the same manifest `manage.py
 provision_integration_env` writes for the Playwright suite (`--accounts-file
-/tmp/e2e.json` after the Quick start above). The script turns the primary
-account's API key into a Nuclei
-[secret-file](https://docs.projectdiscovery.io/opensource/nuclei/authenticated-scans)
-(`bearertoken`, scoped to the target's own hostname) so every request goes out
-`Authorization: Bearer <api_key>` - the same scheme `docs/EXTERNAL_API.md`
-documents for the whole external API. That unlocks templates that need a
-signed-in request to reach past the login wall for that surface.
+/tmp/e2e.json` after the Quick start above). On its own it authenticates
+every request as the primary account's full-scope API key. Add `--all-tiers`
+to scan **four times** instead of once:
 
-It does not attempt session-cookie auth for the HTML/dashboard surface: Django
-login needs a CSRF token, a form POST and a redirect chain, which
-`tests/integration/setup/auth.setup.ts` already does correctly through a real
-browser. Reusing that (a Playwright run producing a `storageState`, its
-`sessionid` cookie folded into the same secret-file) is a documented gap
-rather than a bash reimplementation of a login flow.
+```bash
+bin/run_nuclei_scan.sh --url https://s1.dev.urbanlens.org --accounts-file /tmp/e2e.json --all-tiers
+```
+
+| Tier | Credential | What it reaches |
+| --- | --- | --- |
+| `unauthenticated` | none | The public perimeter |
+| `apikey-restricted` | the `profile:read`-only key | The external API surface, at the narrowest scope a real integration would use |
+| `apikey-full` | the full-scope key | The external API surface, every endpoint |
+| `session` | a real signed-in cookie | The HTML/HTMX dashboard - maps, wiki, trips, admin |
+
+These are not four passes over the same ground. `ExternalApiView` - the base
+class every external API endpoint inherits - declares
+`authentication_classes = [ApiKeyAuthentication, OAuth2Authentication]` with
+no `SessionAuthentication`, so a session cookie cannot reach `/api/...` at
+all; conversely the HTML/HTMX surface only recognises a session, so an API
+key reaches none of it. `apikey-restricted` versus `apikey-full` is
+redundant on generic infra-level templates (headers, TLS, tech fingerprints
+show up identically at every scope) but not on anything scope-sensitive.
+Each tier writes to its own `reports/nuclei/<tier>/` subdirectory rather than
+one merged report, so a finding is traceable to the privilege level that
+produced it.
+
+A tier that cannot be set up - no restricted key provisioned, no Node
+available for the session login - is skipped with a warning rather than
+failing the run.
+
+**The session tier signs in for real** rather than crafting a cookie by
+hand: Django's CSRF-protected login (token, form POST, redirect chain) is not
+worth reimplementing in bash when
+`tests/integration/setup/auth.setup.ts` already does it correctly through a
+real browser. The script runs that Playwright project itself (installing
+Node dependencies and Chromium on demand), then lifts the `sessionid` /
+`csrftoken` cookies out of the resulting `storageState` into a `cookie`-type
+secret-file. Getting this working live against staging found two more real
+bugs, neither specific to Nuclei:
+
+- **Staging's `UL_SITE_URL` was wrong** (`http://localhost:21080` instead of
+  `https://staging.urbanlens.org`), which meant `auth.setup.ts`'s own CSRF
+  preflight - and therefore *every* Playwright project against staging, not
+  just this one - was refusing to sign in at all. Fixed on the deployment.
+- **A fresh account's first sign-in never completed.** `provision_integration_env`
+  regenerates keys on every run (see its own docstring), so every freshly
+  provisioned account hits `e2ee-client.ts`'s "save your recovery key" modal
+  on first login - a blocking overlay `runLoginFlow` awaits before it ever
+  navigates anywhere. `LoginPage.submitCredentials()` (test code, not
+  application code) now dismisses it via the same "Remind me later" button a
+  real user has, alongside the existing click+navigation race.
+
+**A secret-file holds a live credential, and cleanup has to actually run.**
+`--all-tiers --docker` originally shared one template-cache directory across
+all four container runs to avoid re-downloading the catalogue four times.
+Nuclei runs as root inside the container, so anything it wrote there came out
+root-owned on the host - and because the EXIT trap's cleanup loop was a bare
+`for` loop under `set -e`, the first path that failed to `rm -rf` (that
+root-owned directory) aborted the loop before it reached the three queued
+secret-files, leaving live API keys and a session cookie behind in `/tmp`.
+Fixed two ways: cleanup swallows a failure per-path instead of aborting on
+the first one (`rm -rf "$p" 2>/dev/null || true`), and the shared
+template-cache mount is gone entirely - each tier re-downloads the catalogue,
+slower but with no host-writable-by-root path for anything to leave behind.
 
 In CI it is `.github/workflows/nuclei.yml`, dispatchable on its own or (the
 default) alongside `integration.yml` via `run_nuclei: true` - set that input
 to `false` on a dispatch to skip it. It reads the same `UL_E2E_ACCOUNTS_JSON`
-secret on the `staging` environment that `integration.yml` uses, and scans
-authenticated whenever that secret exists (`authenticated: false` on a
-dispatch to force an unauthenticated scan). Findings upload as SARIF to
-GitHub Code Scanning and as a JSON Lines artifact; a finding is a lead to
-triage, not automatically a broken build, so the job does not fail on one
-unless `fail_on_findings`/`--fail-on-findings` is set.
+secret on the `staging` environment that `integration.yml` uses, and runs all
+four tiers whenever that secret exists (`authenticated: false` on a dispatch
+to force an unauthenticated-only scan). Each tier's findings upload as their
+own SARIF category to GitHub Code Scanning, plus one JSON Lines artifact
+covering all of them; a finding is a lead to triage, not automatically a
+broken build, so the job does not fail on one unless
+`fail_on_findings`/`--fail-on-findings` is set.
 
 ## Why Playwright
 
