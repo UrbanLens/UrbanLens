@@ -253,10 +253,7 @@ def albums_listing(owner: Pin | Wiki | Sequence[Pin | Wiki], viewer: Profile | N
         prepared.append((album, len(ids), cover_id, date_start, date_end))
 
     covers = {image.pk: image for image in Image.objects.filter(pk__in=cover_ids)} if cover_ids else {}
-    return [
-        AlbumListEntry(album=album, photo_count=count, cover=covers.get(cover_id) if cover_id else None, date_start=date_start, date_end=date_end)
-        for album, count, cover_id, date_start, date_end in prepared
-    ]
+    return [AlbumListEntry(album=album, photo_count=count, cover=covers.get(cover_id) if cover_id else None, date_start=date_start, date_end=date_end) for album, count, cover_id, date_start, date_end in prepared]
 
 
 def eligible_images_for(owner: Pin | Wiki, viewer: Profile | None) -> QuerySet[Image]:
@@ -329,10 +326,7 @@ def _hydrate_album_items(pairs: Sequence[tuple[int, int]]) -> list[Image]:
     if not pairs:
         return []
     page_item_ids = [item_id for item_id, _image_id in pairs]
-    items_by_pk = {
-        item.pk: item
-        for item in AlbumItem.objects.filter(pk__in=page_item_ids).select_related("image")
-    }
+    items_by_pk = {item.pk: item for item in AlbumItem.objects.filter(pk__in=page_item_ids).select_related("image")}
     images = []
     for item_id, _image_id in pairs:
         item = items_by_pk[item_id]
@@ -674,4 +668,3 @@ def move_album_to_pin(album: Album, target: Pin) -> Album:
             location=target.location,
         )
     return album
-

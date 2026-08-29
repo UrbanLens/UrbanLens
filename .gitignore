@@ -61,3 +61,4 @@ sample_data/Google Takeout.csv
 # mutmut copies the tree here to mutate it.
 mutants/
 
+docs/audits/codeql-findings.md

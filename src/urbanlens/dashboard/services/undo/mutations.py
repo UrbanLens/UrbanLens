@@ -206,7 +206,7 @@ def stash_photo_fields(profile: Profile, image: Image, *, before: dict[str, Any]
     changed = {key: after[key] for key in after if before.get(key) != after.get(key)}
     if not changed:
         return
-    caption = (after.get("caption") or before.get("caption") or "photo")
+    caption = after.get("caption") or before.get("caption") or "photo"
     stash_mutation(
         _photos.MODEL_LABEL,
         profile,

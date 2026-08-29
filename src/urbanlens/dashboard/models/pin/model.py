@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 class PinType(TextChoices):
     """What a pin/wiki marker physically represents.
 

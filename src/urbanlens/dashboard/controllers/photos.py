@@ -81,16 +81,8 @@ def _attention_cards(profile: Profile) -> list[dict]:
 
 def _photo_issues(profile: Profile) -> dict:
     """Pending upload failures and metadata conflicts for Memories → Photos."""
-    failures = list(
-        PhotoUploadFailure.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING)
-        .select_related("pin", "album")
-        .order_by("-created")[:40]
-    )
-    conflicts = list(
-        PhotoMetadataConflict.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING)
-        .select_related("existing_image", "new_image")
-        .order_by("-created")[:40]
-    )
+    failures = list(PhotoUploadFailure.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING).select_related("pin", "album").order_by("-created")[:40])
+    conflicts = list(PhotoMetadataConflict.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING).select_related("existing_image", "new_image").order_by("-created")[:40])
     return {"upload_failures": failures, "metadata_conflicts": conflicts}
 
 

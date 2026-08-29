@@ -186,7 +186,6 @@ def apply_image_map_update(image: Image, body: bytes) -> dict[str, Any]:
     }
 
 
-
 def _get_gps_ifd(image_file: IO[bytes]) -> dict[int, Any] | None:
     """Return the raw EXIF GPS IFD for an image file, if present."""
     image_file.seek(0)
@@ -682,13 +681,7 @@ def photos_missing_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKF
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
 
-    qs = (
-        Image.objects.filter(media_type=MediaKind.PHOTO)
-        .exclude(image="")
-        .exclude(image__isnull=True)
-        .filter(Q(thumbnail="") | Q(thumbnail__isnull=True))
-        .order_by("pk")
-    )
+    qs = Image.objects.filter(media_type=MediaKind.PHOTO).exclude(image="").exclude(image__isnull=True).filter(Q(thumbnail="") | Q(thumbnail__isnull=True)).order_by("pk")
     if after_pk:
         qs = qs.filter(pk__gt=after_pk)
     return list(qs.values_list("pk", flat=True)[:limit])

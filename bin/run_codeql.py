@@ -641,9 +641,7 @@ def create_databases(codeql: Path, languages: tuple[str, ...], config: Path, *, 
     node_dir = _node_bindir()
     if node_dir is None and any(lang in _JS_EXTRACTOR_LANGUAGES for lang in languages):
         print(
-            "Node.js is not on PATH. CodeQL's JavaScript/TypeScript extractor (and the "
-            "Actions extractor, which uses it) need `node`. Install a Node LTS and re-run, "
-            "or analyse Python only with: python bin/run_codeql.py --languages python",
+            "Node.js is not on PATH. CodeQL's JavaScript/TypeScript extractor (and the Actions extractor, which uses it) need `node`. Install a Node LTS and re-run, or analyse Python only with: python bin/run_codeql.py --languages python",
             file=sys.stderr,
         )
     for language in languages:

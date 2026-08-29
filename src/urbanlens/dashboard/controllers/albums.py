@@ -312,9 +312,7 @@ def _album_detail_context(owner: Pin | Wiki, album: Album, viewer: Profile) -> d
     cover = cover_from_ids(album, visible_ids)
     row = _album_row(owner, album, page, cover=cover, photo_count=total, date_start=date_start, date_end=date_end)
     row["grid_images"] = page
-    row["available_images"] = list(
-        eligible_images_for(owner, viewer).exclude(pk__in=visible_ids).only("id", "uuid", "image", "thumbnail", "caption", "source_url")
-    )
+    row["available_images"] = list(eligible_images_for(owner, viewer).exclude(pk__in=visible_ids).only("id", "uuid", "image", "thumbnail", "caption", "source_url"))
     row["back_url"] = reverse(_url_prefix(owner), args=[_owner_slug(owner)])
     row["list_url"] = row["back_url"]
     # The gallery's own per-image endpoint owns repositioning; the album map
@@ -329,9 +327,7 @@ def _album_detail_context(owner: Pin | Wiki, album: Album, viewer: Profile) -> d
     row["album_bulk_actions"] = _album_bulk_actions(inside_album=True)
     row["profile"] = viewer
     row["grid_page_size"] = ALBUM_GRID_PAGE_SIZE
-    row["move_targets"] = (
-        [{"slug": pin.slug, "name": pin.effective_name} for pin in move_album_targets(album)] if isinstance(owner, Pin) else []
-    )
+    row["move_targets"] = [{"slug": pin.slug, "name": pin.effective_name} for pin in move_album_targets(album)] if isinstance(owner, Pin) else []
     row["failure_url"] = reverse("memories.photos.failures")
     row["pin"] = owner if isinstance(owner, Pin) else None
     # Fallback centre for an album whose photos carry no coordinates at all;
@@ -1041,4 +1037,3 @@ class AlbumMoveView(LoginRequiredMixin, View):
         except ValueError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
         return JsonResponse({"ok": True, "slug": moved.slug, "pin_slug": target.slug})
-
