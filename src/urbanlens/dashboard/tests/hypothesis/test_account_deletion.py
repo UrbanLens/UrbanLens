@@ -258,6 +258,7 @@ class HardDeleteProfileTests(TestCase):
         self.profile.user.save(update_fields=["email"])
         user_pk = self.user.pk
         self.assertEqual(len(mail.outbox), 0, "Test assumptions fail")
+        self.assertTrue(User.objects.filter(pk=user_pk).exists(), "Test assumptions fail")
         hard_delete_profile(self.profile)
         self.assertEqual(len(mail.outbox), 0)
         self.assertFalse(User.objects.filter(pk=user_pk).exists())
@@ -266,6 +267,7 @@ class HardDeleteProfileTests(TestCase):
         """A raised SMTPException while sending the "account deleted" email must not
         abort the hard delete - a broken mail relay must never leave the account undeleted."""
         user_pk = self.user.pk
+        self.assertTrue(User.objects.filter(pk=user_pk).exists(), "Test assumptions fail")
         with mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPException("nope")):
             hard_delete_profile(self.profile)
         self.assertFalse(User.objects.filter(pk=user_pk).exists())

@@ -9,6 +9,8 @@ and revocation is immediate and scoped to the owning user.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
 from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from model_bakery import baker
@@ -78,6 +80,18 @@ class GenerateApiKeyTests(TestCase):
         first, _ = generate_api_key(user, "One")
         second, _ = generate_api_key(user, "Two")
         self.assertNotEqual(first.prefix, second.prefix)
+
+    def test_exhausting_prefix_collision_retries_raises(self) -> None:
+        """Every retry hitting an existing prefix must surface, not loop forever
+        or silently proceed with a duplicate (which would violate the unique
+        column and raise the wrong exception type to the caller)."""
+        user = baker.make(User)
+        baker.make(ApiKey, prefix="collide123")
+        with (
+            patch("urbanlens.dashboard.services.auth.api_keys.secrets.token_urlsafe", return_value="collide123456"),
+            self.assertRaises(RuntimeError),
+        ):
+            generate_api_key(user, "Zapier")
 
 
 class AuthenticateApiKeyTests(TestCase):

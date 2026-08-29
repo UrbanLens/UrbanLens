@@ -140,6 +140,18 @@ class SiteAdminApiUsageIncludesPluginsTests(TestCase):
         self.assertContains(response, "not")
         self.assertContains(response, "priced")
 
+    def test_requires_site_admin_permission_before_and_after_promotion(self) -> None:
+        """Gated by ``dashboard.view_site_admin`` - not automatic for any logged-in user."""
+        user = baker.make(User)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("site_admin_stats_api"))
+        self.assertEqual(response.status_code, 403)
+
+        add_user_to_site_admin_group(user)
+        response = self.client.get(reverse("site_admin_stats_api"))
+        self.assertEqual(response.status_code, 200)
+
 
 class CostsPageTests(TestCase):
     """The public costs page.
@@ -209,3 +221,19 @@ class ApiSpendSummaryTests(TestCase):
 
         self.assertEqual(summary["unpriced_service_count"], 2)
         self.assertNotIn("Free Svc 1", [row["display_name"] for row in summary["priced_services"]])
+
+    def test_a_service_with_no_flat_rate_but_recorded_cost_still_counts_as_priced(self) -> None:
+        """Per-call AI pricing writes ``cost_estimate`` directly with no ``ServiceDefaults.cost_per_call``
+        ever set - the exact regression this function's docstring documents: keying "priced" off the
+        flat rate instead of whether cost was actually recorded silently dropped this spend entirely."""
+        from urbanlens.dashboard.services.admin.cost_tracking import api_spend_summary_30d
+
+        defaults = {"ai_vision": ServiceDefaults(display_name="AI Vision")}  # no cost_per_call configured
+        ApiCallLog.objects.create(service="ai_vision", success=True, cost_estimate=Decimal("1.23"))
+
+        with patch("urbanlens.dashboard.services.core.rate_limiter.all_service_defaults", return_value=defaults):
+            summary = api_spend_summary_30d()
+
+        self.assertEqual(summary["total_cost_30d"], Decimal("1.23"))
+        self.assertEqual(summary["unpriced_service_count"], 0)
+        self.assertIn("AI Vision", [row["display_name"] for row in summary["priced_services"]])
