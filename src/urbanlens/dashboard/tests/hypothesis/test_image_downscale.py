@@ -122,6 +122,36 @@ class DownscaleStoredImageTests(TestCase):
             self.assertLessEqual(max(stored.size), 800)
             self.assertIsNone(stored.getexif().get(0x0110), "the camera model rode along into the stored file")
 
+    def test_a_file_another_row_shares_is_not_deleted_when_replaced(self):
+        """Pin sharing points two rows at one storage key; re-encoding one must not blank the other.
+
+        ``services.sharing.pin_sharing`` copies a shared pin's photos by reusing
+        the same ``image`` name rather than duplicating bytes, and the
+        ``strip_exif_from_stored_photos`` command re-encodes every stored photo
+        in turn. Deleting the old name unconditionally destroyed the other
+        profile's copy, with only a broken image to show for it.
+        """
+        row = _make_image_row(_jpeg_bytes(1600, 1200))
+        shared_name = row.image.name
+        storage = row.image.storage
+
+        sibling = _make_image_row(_jpeg_bytes(64, 64, with_exif=False))
+        sibling.image.name = shared_name
+        sibling.save(update_fields=["image"])
+
+        self.assertIsNotNone(downscale_stored_image(row, max_dimension=800, convert_webp=False))
+        self.assertNotEqual(row.image.name, shared_name)
+        self.assertTrue(storage.exists(shared_name), "the row that still points at this file lost it")
+
+        # Once nothing else references the old name, replacing it does clean up -
+        # the guard must not turn every re-encode into a leaked file.
+        sibling.delete()
+        row.save(update_fields=["image"])
+        stale = row.image.name
+        self.assertIsNotNone(downscale_stored_image(row, max_dimension=400, convert_webp=False))
+        self.assertNotEqual(row.image.name, stale)
+        self.assertFalse(storage.exists(stale), "an unshared replaced file should not be left behind")
+
     def test_small_file_without_exif_is_left_untouched(self):
         """Nothing to shrink, nothing to convert, nothing to strip."""
         row = _make_image_row(_jpeg_bytes(400, 300, with_exif=False))

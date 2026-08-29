@@ -425,6 +425,28 @@ connections. The project's linter (ruff) has previously stripped "redundant-look
 guards out of signal handlers — if a guard is load-bearing, make the code redundant enough that
 the linter can't tell, rather than relying on the guard alone.
 
+## One stored file can back several `Image` rows
+
+Two independent features point more than one row at the same storage key rather than duplicating
+bytes: sharing a pin copies its photos by reusing the name
+(`services/sharing/pin_sharing.py`), and a deduplicated upload reuses both the original *and* its
+thumbnail (`services/photos/uploads.attach_deduped_copy`, which also deliberately does not charge
+quota a second time).
+
+The consequence is easy to miss and expensive to get wrong: **anything that deletes or replaces a
+stored file must first ask whether another row still needs it**, via
+`services.media.images.file_still_referenced`. Deleting unconditionally does not error - it leaves
+some other profile's photo pointing at nothing, with a broken image and no trace of why.
+
+Three places do this today, and they are the three that touch stored bytes: `delete_stored_file`
+(row deletion, which also takes the pks being removed in the same batch, or a bulk delete would
+never remove anything), `downscale_stored_image` (re-encode / EXIF strip), and
+`write_image_thumbnail` (preview regeneration). A new one belongs on that list.
+
+Note this defers rather than skips cleanup: `strip_exif_from_stored_photos` walks every row, so the
+last row referencing an old file is the one that removes it. The file still goes; it just goes when
+nothing needs it.
+
 ## Rate limiting and cost tracking
 
 Every external API call should go through a `Gateway` subclass so it's covered by

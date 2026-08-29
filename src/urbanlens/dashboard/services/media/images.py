@@ -543,6 +543,31 @@ def stored_file_needs_transcode(name: str) -> bool:
     return posixpath.splitext(name or "")[1].lower() in _MUST_TRANSCODE_EXTENSIONS
 
 
+def file_still_referenced(field: str, name: str, *, exclude_pks: Collection[int] = ()) -> bool:
+    """Whether any *other* Image row stores *name* in *field*.
+
+    One stored file can back several rows. Pin sharing copies a pin's photos by
+    reusing the same storage key rather than duplicating bytes
+    (``services.sharing.pin_sharing``), and a deduplicated upload reuses both the
+    file and its thumbnail (``services.photos.uploads.attach_deduped_copy``).
+    Anything that deletes or replaces a stored file therefore has to ask this
+    first - otherwise one row's edit silently empties every row that shared it,
+    with nothing anywhere to explain the broken image.
+
+    Args:
+        field: Model field holding the storage name - ``image`` or ``thumbnail``.
+        name: The storage name about to be deleted.
+        exclude_pks: Rows that do not count as references, because they are the
+            one doing the replacing or are being deleted in the same operation.
+
+    Returns:
+        True when some other row still needs *name*.
+    """
+    from urbanlens.dashboard.models.images.model import Image as ImageModel
+
+    return ImageModel.objects.filter(**{field: name}).exclude(pk__in=list(exclude_pks)).exists()
+
+
 def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool) -> int | None:
     """Downscale, re-encode, and strip EXIF from an Image's stored file in place.
 
@@ -645,7 +670,7 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
 
     stem = posixpath.splitext(posixpath.basename(old_name))[0]
     image.image.save(f"{stem}{_FORMAT_EXTENSIONS[target_format]}", ContentFile(buffer.getvalue()), save=False)
-    if image.image.name != old_name:
+    if image.image.name != old_name and not file_still_referenced("image", old_name, exclude_pks=[image.pk]):
         with contextlib.suppress(OSError):
             image.image.storage.delete(old_name)
     logger.info("Downscaled image %s: %s -> %s bytes (%s)", image.pk, old_size, new_size, target_format)
@@ -732,7 +757,7 @@ def write_image_thumbnail(image: Image, *, max_dimension: int = THUMBNAIL_MAX_DI
     stem = posixpath.splitext(posixpath.basename(old_name))[0]
     previous = image.thumbnail.name if image.thumbnail else ""
     image.thumbnail.save(f"{stem}.webp", ContentFile(buffer.getvalue()), save=False)
-    if previous and previous != image.thumbnail.name:
+    if previous and previous != image.thumbnail.name and not file_still_referenced("thumbnail", previous, exclude_pks=[image.pk]):
         with contextlib.suppress(OSError):
             image.thumbnail.storage.delete(previous)
     return True
@@ -922,20 +947,19 @@ def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bo
         True when the file was deleted, False when another row still needs it (or
         there was no file).
     """
-    from urbanlens.dashboard.models.images.model import Image as ImageModel
-
     name = image.image.name if image.image else ""
     if not name:
         return False
 
-    still_referenced = ImageModel.objects.filter(image=name).exclude(pk__in=[image.pk, *also_deleting]).exists()
-    if still_referenced:
+    if file_still_referenced("image", name, exclude_pks=[image.pk, *also_deleting]):
         logger.debug("Keeping stored file %s: another image row still references it", name)
         return False
 
     image.image.delete(save=False)
     thumbnail = getattr(image, "thumbnail", None)
-    if thumbnail and thumbnail.name:
+    # Checked separately from the original: they are shared together today, but
+    # nothing enforces that, and a thumbnail is just as easy to orphan.
+    if thumbnail and thumbnail.name and not file_still_referenced("thumbnail", thumbnail.name, exclude_pks=[image.pk, *also_deleting]):
         with contextlib.suppress(OSError):
             thumbnail.delete(save=False)
     return True

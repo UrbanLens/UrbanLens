@@ -804,18 +804,26 @@ def _process_document_upload(image: Image, image_id: int) -> _UploadProcessResul
 
 
 def _sync_deduped_siblings(image: Image) -> None:
-    """Copy processed file metadata onto this user's other rows of the same bytes.
+    """Copy the processed file and its metadata onto this user's other rows of the same bytes.
 
     Deduplicated copies skip ``process_image_upload`` so they don't rewrite the
-    shared file. Once the original has been processed, its thumbnail, GPS, and
-    EXIF need to land on those copies too.
+    shared file. A copy made while the original was still queued points at the
+    raw upload, so ``image`` is synced along with the metadata: without it the
+    sibling keeps serving the un-stripped file, GPS block and all, and nothing
+    else ever revisits it (the thumbnail backfill only looks at rows that have
+    no thumbnail, and this function has just given it one).
+
+    ``checksum`` is deliberately not synced. It identifies the *uploaded* bytes
+    and is what dedup matches on; it is not recomputed after processing.
     """
     from urbanlens.dashboard.models.images.model import Image as ImageModel, QuotaExemption
+    from urbanlens.dashboard.services.media.images import file_still_referenced
 
     if not image.checksum or image.profile_id is None:
         return
     if image.quota_exempt_reason == QuotaExemption.DEDUPLICATED:
         return
+    processed_name = image.image.name if image.image else ""
     payload: dict[str, object] = {
         "author": image.author,
         "copyright": image.copyright,
@@ -827,11 +835,23 @@ def _sync_deduped_siblings(image: Image) -> None:
         "file_size": image.file_size,
         "thumbnail": image.thumbnail.name if image.thumbnail else "",
     }
-    ImageModel.objects.filter(
+    if processed_name:
+        payload["image"] = processed_name
+
+    siblings = ImageModel.objects.filter(
         profile_id=image.profile_id,
         checksum=image.checksum,
         quota_exempt_reason=QuotaExemption.DEDUPLICATED,
-    ).exclude(pk=image.pk).update(**payload)
+    ).exclude(pk=image.pk)
+    stale_names = {name for name in siblings.values_list("image", flat=True) if name and name != processed_name}
+    siblings.update(**payload)
+
+    # Those siblings were the only reason downscale_stored_image kept the raw
+    # upload; once they point at the processed file it is unreferenced.
+    for name in stale_names:
+        if not file_still_referenced("image", name):
+            with contextlib.suppress(OSError):
+                image.image.storage.delete(name)
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

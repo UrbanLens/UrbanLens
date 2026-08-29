@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
 from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.social.friendship import (
+    FriendLimitExceededError,
     FriendshipActionError,
     FriendshipNotFoundError,
     InviteRateLimitedError,
@@ -487,38 +488,28 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         action = request.POST.get("action", "accept")
         viewer_profile = request.user.profile
 
-        try:
-            friendship = Friendship.objects.all().between(from_profile_id, viewer_profile)
-        except Friendship.DoesNotExist:
-            friendship = None
-
-        if not friendship:
+        from_profile = Profile.objects.filter(pk=from_profile_id).first()
+        if from_profile is None:
             return HttpResponse("Friend request not found.", status=404)
 
-        if action == "accept":
-            friendship.accept()
-            from_profile = Profile.objects.filter(pk=from_profile_id).first()
-            if from_profile:
-                NotificationLog.objects.notify(
-                    profile=from_profile,
-                    status=Status.UNREAD,
-                    importance=Importance.MEDIUM,
-                    notification_type=NotificationType.FRIEND_ACCEPTED,
-                    title="Friend request accepted",
-                    message=f"{viewer_profile.username} accepted your friend request.",
-                    url=reverse("profile.view_user", kwargs={"profile_slug": viewer_profile.slug or str(viewer_profile.uuid)}),
-                    source_profile=viewer_profile,
-                )
-        else:
-            friendship.decline()
-
-        # Mark any pending friend_request notifications from this source as dismissed
-        # (retired from the bell inbox; still visible on the history page).
-        NotificationLog.objects.filter(
-            profile=viewer_profile,
-            notification_type=NotificationType.FRIEND_REQUEST,
-            source_profile_id=from_profile_id,
-        ).mark_dismissed()
+        # Through the service, not Friendship.between() + accept()/decline().
+        # between() resolves the pair's row in either direction and reports
+        # nothing about its status, while accept()/decline() overwrite status
+        # unconditionally - so answering "a request" that way also answers your
+        # own outgoing request, and turns a Blocked row into Declined. The
+        # service's _incoming_pending_request establishes the premise every one
+        # of these actions needs: the other party has a request pending to you.
+        try:
+            if action == "accept":
+                accept_friend_request(viewer_profile, from_profile)
+            else:
+                reject_friend_request(viewer_profile, from_profile)
+        except FriendshipNotFoundError:
+            return HttpResponse("Friend request not found.", status=404)
+        except FriendLimitExceededError:
+            return HttpResponse("You've reached the maximum number of friends.", status=403)
+        except FriendshipActionError as exc:
+            return HttpResponse(str(exc) or "Could not answer that friend request.", status=403)
 
         notification = (
             NotificationLog.objects.for_display()

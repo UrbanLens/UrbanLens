@@ -474,6 +474,9 @@ $memories-type-colors: (
     gap: .85rem;
     overflow-x: auto;
     padding-bottom: .5rem;
+    // Pairs with .photo-card's scroll-snap-align below - without a
+    // scroll-snap-type on the scroll container, that align is inert.
+    scroll-snap-type: x mandatory;
 }
 
 .photos-issue-list {
