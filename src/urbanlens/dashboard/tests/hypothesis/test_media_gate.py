@@ -8,6 +8,8 @@ Covers:
 - Direct-message attachments are participant-only.
 - Path traversal outside MEDIA_ROOT is a 404, as is a missing file.
 - Avatars and orphan files are authenticated-only.
+- Export/import job artifacts are denied here and must go through their
+  owner-checked controllers.
 - Production mode (MEDIA_X_ACCEL=True) answers with an X-Accel-Redirect header
   and no body instead of streaming the file.
 """
@@ -203,6 +205,21 @@ class MediaGateTests(TestCase):
         response = self.client.get("/media/pin_images/orphan.png")
         self.assertEqual(response.status_code, 200, "a file with no owning row falls back to authenticated-only access")
         self._get_bytes(response)
+
+    def test_export_and_import_artifacts_are_not_media_bearer_urls(self):
+        """Job UUIDs must not be enough to bypass the owner-checked controllers."""
+        self._write_media("exports/00000000-0000-0000-0000-000000000001/export.zip", b"private export")
+        self._write_media("imports/00000000-0000-0000-0000-000000000002/upload.zip", b"private import")
+        viewer = _new_user()
+        self.client.force_login(viewer)
+
+        for path in (
+            "/media/exports/00000000-0000-0000-0000-000000000001/export.zip",
+            "/media/imports/00000000-0000-0000-0000-000000000002/upload.zip",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 404)
 
     # -- Path safety ------------------------------------------------------------
 

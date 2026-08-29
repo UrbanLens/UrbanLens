@@ -43,6 +43,9 @@ of the owning model's file field):
 - ``pin_custom_icons/`` / ``label_icons/`` - map/label icon decorations;
   authenticated-only (see the TODOs inline, and "Authenticated media gate -
   residual per-family risk" in docs/PROBLEMS.md).
+- ``exports/`` / ``imports/`` - data portability job artifacts; denied here
+  because their dedicated controllers check the cache-backed job owner before
+  streaming them.
 
 Unknown prefixes and files with no surviving owner row fall back to
 authenticated-only access rather than 404, since the file may legitimately
@@ -187,6 +190,11 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
             # member maps). See docs/PROBLEMS.md "Authenticated media gate -
             # residual per-family risk".
             return True
+        if family in {"exports", "imports"}:
+            # Data exports/import uploads can contain a user's complete private
+            # dataset. Their controllers enforce job ownership; the generic
+            # media gate must not turn the job UUID into a bearer URL.
+            return False
         # TODO(media-auth): unknown path family - no owning model identified.
         # Authenticated-only fallback; see "Authenticated media gate - residual per-family risk" in docs/PROBLEMS.md.
         logger.info("Media request for unrecognized path family %r served authenticated-only", family)
