@@ -160,7 +160,7 @@ class RequestDeletionTests(TestCase):
         """`_send_email` logs and swallows delivery failures - a raised SMTPException must not abort the request."""
         self.assertFalse(self.profile.is_pending_deletion, "User started with pending deletion, possible unsanitary test db")
         self.assertFalse(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED).exists(), "Possible unsanitary test db")
-        
+
         with mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPException("nope")):
             request_deletion(self.profile)
         self.assertTrue(self.profile.is_pending_deletion)
@@ -211,7 +211,7 @@ class SendDeletionReminderTests(TestCase):
         self.profile.user.save(update_fields=["email"])
         self.assertEqual(len(mail.outbox), 0, "Test assumptions fail")
         self.assertIsNone(self.profile.deletion_reminder_sent_at, "Test assumptions fail")
-        
+
         send_deletion_reminder(self.profile)
         self.assertEqual(len(mail.outbox), 0)
         self.assertIsNotNone(self.profile.deletion_reminder_sent_at)
@@ -258,7 +258,6 @@ class HardDeleteProfileTests(TestCase):
         self.profile.user.save(update_fields=["email"])
         user_pk = self.user.pk
         self.assertEqual(len(mail.outbox), 0, "Test assumptions fail")
-        self.assertFalse(User.objects.filter(pk=user_pk).exists(), "Test assumptions fail")
         hard_delete_profile(self.profile)
         self.assertEqual(len(mail.outbox), 0)
         self.assertFalse(User.objects.filter(pk=user_pk).exists())
@@ -267,7 +266,6 @@ class HardDeleteProfileTests(TestCase):
         """A raised SMTPException while sending the "account deleted" email must not
         abort the hard delete - a broken mail relay must never leave the account undeleted."""
         user_pk = self.user.pk
-        self.assertFalse(User.objects.filter(pk=user_pk).exists(), "Test assumptions fail")
         with mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPException("nope")):
             hard_delete_profile(self.profile)
         self.assertFalse(User.objects.filter(pk=user_pk).exists())
