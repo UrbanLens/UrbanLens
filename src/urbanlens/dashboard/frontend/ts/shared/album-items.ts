@@ -358,6 +358,8 @@ function syncAlbumToolbar(): void {
     const ids = Array.from(selected);
     const inAlbum = Boolean(panel?.dataset.albumSlug);
     const bulkUrl = panel?.dataset.galleryBulkUrl || "";
+    // Bound outside the action map so its narrowing survives into the closure.
+    const soleId = count === 1 ? ids[0] : undefined;
     window.ulBulkToolbar?.sync("albums", count, {
         add_to_album: count
             ? () => openAlbumPicker({ imageIds: ids, onDone: () => { clearSelect(); refreshPanel(); } })
@@ -372,7 +374,7 @@ function syncAlbumToolbar(): void {
                       })
                 : null,
         remove: inAlbum && count ? () => bulkRemove(ids) : null,
-        set_cover: inAlbum && count === 1 ? () => setAlbumCoverFromToolbar(ids[0]) : null,
+        set_cover: inAlbum && soleId !== undefined ? () => setAlbumCoverFromToolbar(soleId) : null,
         wiki: bulkUrl && count ? () => bulkWiki(ids, bulkUrl) : null,
         delete: bulkUrl && count ? () => bulkDelete(ids, bulkUrl) : null,
         deselect: () => clearSelect(),
@@ -790,8 +792,12 @@ window.albumAddExternalMedia = async (addUrl, media) => {
     }
 };
 
-/** Re-bind everything that a panel swap replaced. */
-function onPanelRendered(): void {
+/**
+ * Re-bind everything that a panel swap replaced.
+ *
+ * @param panel - The freshly rendered album panel.
+ */
+function onPanelRendered(panel: HTMLElement): void {
     // The swap replaced the map's container, so any live map now points at a
     // detached node. Rebuild only if the new render still shows the section.
     destroyAlbumMap();
@@ -819,7 +825,7 @@ document.body.addEventListener("htmx:afterSwap", () => {
     const panel = albumPanel();
     if (panel === lastPanel) return;
     lastPanel = panel;
-    if (panel) onPanelRendered();
+    if (panel) onPanelRendered(panel);
 });
 
 lastPanel = albumPanel();

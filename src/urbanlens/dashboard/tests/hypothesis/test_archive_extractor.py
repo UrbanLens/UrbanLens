@@ -15,6 +15,7 @@ import io
 import json
 import struct
 import tarfile
+from unittest import mock
 import zipfile
 
 from hypothesis import given, settings as hyp_settings, strategies as st
@@ -217,6 +218,12 @@ class ValidateContentTypeTests(SimpleTestCase):
         data = b"name,latitude\nMy Place,42.3601"
         self.assertIsNone(validate_content_type("export.csv", data))
 
+    def test_csv_with_only_longitude_column_returns_none(self):
+        # Symmetric to the latitude-only case above: both columns are required,
+        # not just one or the other.
+        data = b"name,longitude\nMy Place,-71.0589"
+        self.assertIsNone(validate_content_type("export.csv", data))
+
     def test_too_small_file_returns_none(self):
         self.assertIsNone(validate_content_type("tiny.json", b"{}"))
 
@@ -345,6 +352,19 @@ class ExtractZipTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             extract_archive(b"PK\x03\x04this is not a valid zip file")
 
+    def test_entry_over_the_per_file_cap_is_skipped_but_a_small_one_still_extracts(self):
+        # _MAX_SINGLE_FILE_BYTES is 1 GB in production; patch it down so the
+        # cap can actually be exercised in a test.
+        data = _make_zip({"small.csv": b"x" * 5, "big.csv": b"y" * 20})
+        with mock.patch(
+            "urbanlens.dashboard.services.import_export.archive_extractor._MAX_SINGLE_FILE_BYTES",
+            10,
+        ):
+            result = extract_archive(data)
+        names = [r.name for r in result]
+        self.assertIn("small.csv", names)
+        self.assertNotIn("big.csv", names)
+
     def test_mixed_supported_and_unsupported_skips_unsupported(self):
         data = _make_zip({
             "places.json": json.dumps({"features": []}).encode(),
@@ -387,6 +407,20 @@ class ExtractZipTests(SimpleTestCase):
         result = extract_archive(data)
         names = {r.name for r in result}
         self.assertEqual(names, {"track.gpx", "geom.wkt", "export.osm"})
+
+    def test_symlink_entries_skipped_in_zip(self):
+        # _extract_zip's symlink check is separate from tarfile's (it reads the
+        # Unix mode bits out of external_attr), and was previously only
+        # exercised on the TGZ path - this covers the ZIP branch directly.
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("real.json", '{"features":[]}')
+            link_info = zipfile.ZipInfo("link.json")
+            link_info.external_attr = 0o120777 << 16  # S_IFLNK mode bits
+            zf.writestr(link_info, "/etc/passwd")
+        result = extract_archive(buf.getvalue())
+        names = [r.name for r in result]
+        self.assertEqual(names, ["real.json"])
 
     def test_extracts_nested_my_activity_html_from_takeout_zip(self):
         # Real Takeout exports nest MyActivity.html several folders deep -
@@ -433,6 +467,17 @@ class ExtractTgzTests(SimpleTestCase):
     def test_raises_on_corrupted_tgz(self):
         with self.assertRaises(ValueError):
             extract_archive(b"\x1f\x8bthis is not a valid gzip")
+
+    def test_member_over_the_per_file_cap_is_skipped_but_a_small_one_still_extracts(self):
+        data = _make_tgz({"small.csv": b"x" * 5, "big.csv": b"y" * 20})
+        with mock.patch(
+            "urbanlens.dashboard.services.import_export.archive_extractor._MAX_SINGLE_FILE_BYTES",
+            10,
+        ):
+            result = extract_archive(data)
+        names = [r.name for r in result]
+        self.assertIn("small.csv", names)
+        self.assertNotIn("big.csv", names)
 
     def test_symlink_members_skipped(self):
         buf = io.BytesIO()

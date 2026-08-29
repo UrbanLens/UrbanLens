@@ -165,11 +165,17 @@ export function renderPhotoTile(tile: PhotoTile, opts: { inAlbum: boolean; album
         ? `<button type="button" class="album-item-remove" title="Remove from this album" aria-label="Remove from this album" data-image-id="${tile.id}"><i class="material-symbols-outlined">close</i></button>`
         : "";
     const caption = tile.caption ? `<p class="album-item-caption"></p>` : "";
-    li.innerHTML = `${check}<button type="button" class="gallery-thumb-btn" data-photo-open><img src="${tile.thumbUrl}" alt="" class="gallery-thumb" loading="lazy" decoding="async"></button>${remove}${caption}`;
+    // src and the caption text are set as properties, not interpolated: both
+    // are user-controlled, and a quote in either would close the attribute it
+    // sat in. See inner-html-escaping.test.ts.
+    li.innerHTML = `${check}<button type="button" class="gallery-thumb-btn" data-photo-open><img alt="" class="gallery-thumb" loading="lazy" decoding="async"></button>${remove}${caption}`;
     const captionEl = li.querySelector(".album-item-caption");
     if (captionEl) captionEl.textContent = tile.caption;
     const img = li.querySelector("img");
-    if (img) img.alt = tile.caption || "Photo";
+    if (img) {
+        img.src = tile.thumbUrl;
+        img.alt = tile.caption || "Photo";
+    }
     return li;
 }
 

@@ -100,14 +100,61 @@ excludes DoS-tagged templates unconditionally.
 
 ```bash
 bin/run_nuclei_scan.sh --url https://s1.dev.urbanlens.org
-bin/run_nuclei_scan.sh --url ... --docker            # needs only Docker
-bin/run_nuclei_scan.sh --url ... --fail-on-findings  # gate a run on it
+bin/run_nuclei_scan.sh --url ... --docker              # needs only Docker
+bin/run_nuclei_scan.sh --url ... --fail-on-findings    # gate a run on it
+bin/run_nuclei_scan.sh --url ... --accounts-file /tmp/e2e.json --all-tiers
 ```
+
+Preflights the target with `curl` before scanning, and never combines
+`-update-templates` with a scan in one Nuclei invocation - that combination
+updates the template catalogue, exits 0, and silently scans nothing, which is
+how the first live run against staging reported "0 findings" that turned out
+to be a broken invocation rather than a hardened deployment. `--accounts-file`
+takes the same manifest `provision_integration_env` writes for
+`run_integration_tests.sh`; `--all-tiers` scans four times - unauthenticated,
+restricted-scope API key, full-scope API key, and a real signed-in session -
+since the API key and a session reach genuinely disjoint route surfaces
+rather than overlapping ones. The session tier signs in for real through
+`tests/integration/setup/auth.setup.ts` rather than crafting a cookie by
+hand. Full story, including two live deployment bugs and a credential-cleanup
+bug this found along the way, in `docs/INTEGRATION_TESTS.md`.
 
 Runs by default alongside `.github/workflows/integration.yml` (skip with
 `run_nuclei: false` on dispatch) and is separately dispatchable as
-`.github/workflows/nuclei.yml`. Findings upload as SARIF to GitHub Code
+`.github/workflows/nuclei.yml`, which runs all four tiers automatically
+whenever the `staging` environment's `UL_E2E_ACCOUNTS_JSON` secret is set.
+Each tier's findings upload as their own SARIF category to GitHub Code
 Scanning. Full documentation is `docs/INTEGRATION_TESTS.md`.
+
+### `bin/run_sqlmap_scan.sh`
+
+[sqlmap](https://github.com/sqlmapproject/sqlmap) against a deployed
+instance's own published OpenAPI schema, plus a crawl of the HTML/HTMX
+dashboard under a real session. Nuclei detects known patterns; this actively
+exploits an injection if one exists, which is why it is stricter than every
+other tool here: it only runs against an **allowlist** of disposable
+dev-container hosts (`UL_SQLMAP_ALLOWED_HOSTS`) rather than a denylist of
+production ones, `staging.urbanlens.org` included, and a fixed set of flags
+that go past confirming an injection into OS/filesystem access are refused
+unconditionally, with no opt-in inside this wrapper.
+
+```bash
+bin/run_sqlmap_scan.sh --url https://s1.dev.urbanlens.org
+bin/run_sqlmap_scan.sh --url ... --accounts-file /tmp/e2e.json --all-tiers
+bin/run_sqlmap_scan.sh --url ... --fail-on-findings
+```
+
+sqlmap itself is not a project dependency - `bin/install_sqlmap.py` installs a
+version- and hash-pinned copy (`bin/sqlmap-requirements.txt`, verified via
+`pip install --require-hashes`) into its own throwaway `.sqlmap/venv`, since
+sqlmap publishes no checksums of its own and this is not something every
+contributor running `ruff`/`pytest` should have installed. Full documentation,
+including why sqlmap's own `--openapi` flag replaced a hand-built target
+generator, is `docs/INTEGRATION_TESTS.md`.
+
+Dispatchable on its own as `.github/workflows/sqlmap.yml`; unlike Nuclei it is
+**not** bundled into `integration.yml`'s dispatch, so running the integration
+suite never fires this as a side effect.
 
 ### `bin/run_contract_tests.sh`
 
@@ -329,8 +376,20 @@ A failed JavaScript or Actions extract leaves a database with `finalised:
 false`. The wrapper does not reuse that; it rebuilds. Those extractors need
 **Node.js** on PATH - bun is not a substitute.
 
-Database creation plus analysis is minutes, so pre-commit runs it as a
-**pre-push** hook (`--gate`) rather than on every commit. `UL_SKIP_CODEQL=1` skips it.
+CodeQL does **not** run from a git hook. It was wired as a pre-push hook and
+had to be removed: the analysis is minutes long, `--gate` exits non-zero on the
+repo's known-and-triaged findings, and a GUI git client shows none of a hook's
+output - so `git push` from VS Code simply failed with no explanation. CI still
+runs CodeQL on every PR (`.github/workflows/security.yml`).
+
+Run it on demand instead - the hook is still defined, at the `manual` stage:
+
+```bash
+bun run codeql:gate                                  # the suites CI runs
+pre-commit run --hook-stage manual --all-files codeql # same thing, via pre-commit
+```
+
+`UL_SKIP_CODEQL=1` short-circuits the wrapper wherever it is invoked.
 
 Install uses the official CodeQL Action *bundle*.
 The standalone CLI zip does not ship query packs.

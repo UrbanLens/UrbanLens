@@ -3987,3 +3987,79 @@ pin-owned photo at that location.~~ **Fixed 2026-08-25** (`8bd766a3`): the looku
 `wiki=wiki` instead of `location=location`. Guarded by
 `test_voting_with_a_pin_owned_image_id_at_the_same_location_is_ignored`. The main entry above
 (Consensus photo rounds ignoring uploader visibility) is unrelated and still open.
+
+## Nuclei scan follow-ups (2026-08-28)
+
+**`Cross-Origin-Embedder-Policy` is not set.** `require-corp` would block every third-party image
+and script that doesn't send its own CORP/CORS header - the Street View iframe, the OSM/ArcGIS/
+OpenTopoMap tile hosts, Gravatar, any operator-pasted map-overlay image: needs a report-only-shape. Revisit once there's a real inventory of which third-party hosts
+do and don't send CORP.
+
+`cross-origin-embedder-policy` is the fourth thing this template flagged and
+is not fixe
+
+## Test-quality audit follow-ups (2026-08-29)
+
+Found while auditing existing unit tests for real positive/negative coverage (see
+`docs/notes/ai/test-quality-audit.md`); out of scope for a test-file-only pass, noted here per
+convention rather than fixed inline.
+
+**`LocalhostOnlyNetwork` (`core/testing_network.py`) doesn't patch `socket.socket.connect_ex`.**
+It patches `.connect` and `.create_connection`, but `connect_ex` is a separate C-level method that
+doesn't delegate through the patched `connect()`. Empirically confirmed: with the guard active,
+`sock.connect_ex(('8.8.8.8', 53))` returned 0 - a real successful outbound connection. Any test or
+third-party library code using `connect_ex` (some non-blocking-connect patterns in DB drivers do)
+bypasses the guard entirely and can make genuine external network calls during the test suite,
+undetected.
+
+**`make_cache_key` (`core/cache_keys.py`) joins parts with a bare colon before hashing**
+(`':'.join(str(part) for part in parts)`), so a part that itself contains a colon can collide with
+a differently-shaped call - `make_cache_key('ns', 'a:b')` and `make_cache_key('ns', 'a', 'b')` hash
+the same raw string and produce an identical key despite representing different logical arguments.
+No current call site (pin lat/lng, location formatting, github repo slugs) passes a colon-bearing
+part, so this is latent, not live - worth a length-prefixed encoding if this utility gains more
+callers.
+
+**`tasks.hard_delete_expired_accounts()` has no overlap lock, unlike its sibling
+`send_account_deletion_reminders()`.** The reminder sweep acquires
+`_DELETION_REMINDER_LOCK_CACHE_KEY` specifically because two overlapping Celery beat runs could
+both select and email the same profile - the hard-delete sweep is on the same hourly beat
+(`settings/base.py`) and has the identical hazard: two overlapping runs can both select the same
+due profile and both call `hard_delete_profile` on it, sending a duplicate "your account has been
+deleted" email (the second `User.delete()` just affects 0 rows, not a crash - but the duplicate
+final email is a real, avoidable user-facing defect). Worth the same lock treatment as its sibling.
+
+**`PinAliasView.post` did not sanitize before its emptiness check** (`controllers/aliases.py`),
+unlike its wiki-side sibling `LocationAliasView.post`. A name that sanitizes to nothing (emoji-only,
+`"<>"`) passed the raw non-empty check, then `create_pin_alias` raised an uncaught `ValueError`,
+producing a 500 instead of the intended 400. **Fixed same day** while reviewing the audit finding:
+`PinAliasView.post` now sanitizes first, mirroring the wiki view. Guarded by
+`test_create_alias_that_sanitizes_to_empty_is_rejected` in `test_alias_views.py`.
+
+**`models/achievements/signals.py`'s `on_achievement_saved` re-queues a full profile-table backfill
+sweep on every save of an already-active achievement**, not just on creation or reactivation - e.g.
+an admin renaming an award or tweaking its icon/color/order re-triggers the same site-wide backfill
+task. The docstring frames this as intentional for re-activation, but firing on unrelated field
+edits looks unintended. Negligible at current beta scale (~2 users); worth confirming intent before
+it matters.
+
+**`Location.address` / `Location.address_extended` leave a dangling trailing comma** when the last
+populated component has nothing following it - e.g. a route-only address renders as exactly
+`"Elm Ave,"`. The existing tests correctly pin down this behavior as current, so it reads as
+intentional, but the trailing comma looks like a real address-formatting defect worth a look by
+whoever owns Location/address display.
+
+**`services/ai/assistant.py`'s `_tool_create_trip` / `_tool_add_trip_activity` reimplement the
+`SiteSettings` quota checks** (`max_upcoming_trips_per_user`, `max_trip_activities`) and their
+`select_for_update` locking inline, rather than calling the existing
+`services.trips.trip_crud` / `services.trips.trip_activities` helpers the regular trip views use
+(which enforce the identical caps). Duplicated business logic with no shared implementation - the
+two enforcement paths can silently drift out of sync over time. Worth consolidating onto the
+shared service functions.
+
+**Wiki-owned albums are untested across the entire album test suite.** `test_albums.py`,
+`test_album_cover_move_dedupe.py`, `test_album_view_ux.py`, and `test_album_add_race.py` all only
+ever construct Pin-owned albums - the community/wiki half of the Album model (`parent_wiki`,
+`owner_kwargs`, the concealment-aware `_owner_conceal`/`conceal_rows` path) has zero coverage.
+Building that out correctly needs the wiki-access/concealment rules understood well enough to avoid
+a shallow test - flagged for a dedicated pass rather than folded into this audit.

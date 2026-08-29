@@ -57,21 +57,313 @@ headers. Neither replaces the other.
 bin/run_nuclei_scan.sh --url https://s1.dev.urbanlens.org
 bin/run_nuclei_scan.sh --url ... --docker              # no local install needed
 bin/run_nuclei_scan.sh --url ... --fail-on-findings    # nonzero exit if anything matched
+bin/run_nuclei_scan.sh --url ... --accounts-file /tmp/e2e.json  # authenticated
 ```
 
 Same rules as the Playwright suite: manual only, and it refuses to run
 against a production hostname (`UL_NUCLEI_PRODUCTION_HOSTS`,
 `UL_NUCLEI_ALLOW_PRODUCTION`) for the same reason - this fires real requests,
 some from templates tagged intrusive, at whatever it is pointed at. DoS-tagged
-templates are excluded unconditionally, matching the project-wide rule against
-destructive techniques.
+templates are excluded unconditionally, since it would impact other services on
+the same machine.
+
+The script preflights the target with a plain `curl` before handing anything
+to Nuclei. Reason it exists: `-update-templates` is a one-shot maintenance
+action in Nuclei - passed alongside `-u` (as the CI/CD guide's own examples
+do) it updates the template catalogue, exits 0, and never scans anything. No
+error, no warning, just a report with nothing in it, indistinguishable from a
+hardened deployment genuinely tripping nothing. That is exactly what the
+first live run against staging did: 0 findings, silently. Confirmed by
+re-running the identical flags minus `-update-templates`, which found 22 -
+mostly `info`-severity header and cookie hygiene, plus the already-tracked
+missing-SRI finding from the integration suite's own first run (see "What the
+first run found" above). The script now updates the template catalogue as a
+separate step before scanning rather than combining the two, and the
+reachability preflight exists so that a *genuinely* unreachable target (wrong
+URL, no VPN, DNS) fails loudly instead of producing the same "0 findings, no
+error" symptom for a different reason.
+
+### Authenticated scanning
+
+`--accounts-file` points at the same manifest `manage.py
+provision_integration_env` writes for the Playwright suite (`--accounts-file
+/tmp/e2e.json` after the Quick start above). On its own it authenticates
+every request as the primary account's full-scope API key. Add `--all-tiers`
+to scan **four times** instead of once:
+
+```bash
+bin/run_nuclei_scan.sh --url https://s1.dev.urbanlens.org --accounts-file /tmp/e2e.json --all-tiers
+```
+
+| Tier | Credential | What it reaches |
+| --- | --- | --- |
+| `unauthenticated` | none | The public perimeter |
+| `apikey-restricted` | the `profile:read`-only key | The external API surface, at the narrowest scope a real integration would use |
+| `apikey-full` | the full-scope key | The external API surface, every endpoint |
+| `session` | a real signed-in cookie | The HTML/HTMX dashboard - maps, wiki, trips, admin |
+
+These are not four passes over the same ground. `ExternalApiView` - the base
+class every external API endpoint inherits - declares
+`authentication_classes = [ApiKeyAuthentication, OAuth2Authentication]` with
+no `SessionAuthentication`, so a session cookie cannot reach `/api/...` at
+all; conversely the HTML/HTMX surface only recognises a session, so an API
+key reaches none of it. `apikey-restricted` versus `apikey-full` is
+redundant on generic infra-level templates (headers, TLS, tech fingerprints
+show up identically at every scope) but not on anything scope-sensitive.
+Each tier writes to its own `reports/nuclei/<tier>/` subdirectory rather than
+one merged report, so a finding is traceable to the privilege level that
+produced it.
+
+A tier that cannot be set up - no restricted key provisioned, no Node
+available for the session login - is skipped with a warning rather than
+failing the run.
+
+**The session tier signs in for real** rather than crafting a cookie by
+hand: Django's CSRF-protected login (token, form POST, redirect chain) is not
+worth reimplementing in bash when
+`tests/integration/setup/auth.setup.ts` already does it correctly through a
+real browser. The script runs that Playwright project itself (installing
+Node dependencies and Chromium on demand), then lifts the `sessionid` /
+`csrftoken` cookies out of the resulting `storageState` into a `cookie`-type
+secret-file. Getting this working live against staging found two more real
+bugs, neither specific to Nuclei:
+
+- **Staging's `UL_SITE_URL` was wrong** (`http://localhost:21080` instead of
+  `https://staging.urbanlens.org`), which meant `auth.setup.ts`'s own CSRF
+  preflight - and therefore *every* Playwright project against staging, not
+  just this one - was refusing to sign in at all. Fixed on the deployment.
+- **A fresh account's first sign-in never completed.** `provision_integration_env`
+  regenerates keys on every run (see its own docstring), so every freshly
+  provisioned account hits `e2ee-client.ts`'s "save your recovery key" modal
+  on first login - a blocking overlay `runLoginFlow` awaits before it ever
+  navigates anywhere. `LoginPage.submitCredentials()` (test code, not
+  application code) now dismisses it via the same "Remind me later" button a
+  real user has, alongside the existing click+navigation race.
+
+**A secret-file holds a live credential, and cleanup has to actually run.**
+`--all-tiers --docker` originally shared one template-cache directory across
+all four container runs to avoid re-downloading the catalogue four times.
+Nuclei runs as root inside the container, so anything it wrote there came out
+root-owned on the host - and because the EXIT trap's cleanup loop was a bare
+`for` loop under `set -e`, the first path that failed to `rm -rf` (that
+root-owned directory) aborted the loop before it reached the three queued
+secret-files, leaving live API keys and a session cookie behind in `/tmp`.
+Fixed two ways: cleanup swallows a failure per-path instead of aborting on
+the first one (`rm -rf "$p" 2>/dev/null || true`), and the shared
+template-cache mount is gone entirely - each tier re-downloads the catalogue,
+slower but with no host-writable-by-root path for anything to leave behind.
 
 In CI it is `.github/workflows/nuclei.yml`, dispatchable on its own or (the
 default) alongside `integration.yml` via `run_nuclei: true` - set that input
-to `false` on a dispatch to skip it. Findings upload as SARIF to GitHub Code
-Scanning and as a JSON Lines artifact; a finding is a lead to triage, not
-automatically a broken build, so the job does not fail on one unless
+to `false` on a dispatch to skip it. It reads the same `UL_E2E_ACCOUNTS_JSON`
+secret on the `staging` environment that `integration.yml` uses, and runs all
+four tiers whenever that secret exists (`authenticated: false` on a dispatch
+to force an unauthenticated-only scan). Each tier's findings upload as their
+own SARIF category to GitHub Code Scanning, plus one JSON Lines artifact
+covering all of them; a finding is a lead to triage, not automatically a
+broken build, so the job does not fail on one unless
 `fail_on_findings`/`--fail-on-findings` is set.
+
+The first full `--all-tiers` run's findings are triaged in docs/PROBLEMS-ARCHIVE.md,
+2026-08-28.
+
+## sqlmap
+
+[sqlmap](https://github.com/sqlmapproject/sqlmap) against the same deployment,
+run by `bin/run_sqlmap_scan.sh`. It answers a question Nuclei, the contract
+suite, and `specs/security/` all leave open: **is there an actual SQL
+injection anywhere behind this API or these forms?** Nuclei matches known
+patterns; the security specs assert that authorization holds; sqlmap sends
+real payloads through real parameters into the real database and reports
+whether one of them changed the query's behaviour. "What it deliberately does
+not do" above already named the gap: `security/` does not run an active
+scanner as a Playwright spec, and Nuclei and sqlmap are the two separate
+on-demand tools that do instead. This section is the second one; a ZAP active
+scan remains unassessed.
+
+```bash
+bin/run_sqlmap_scan.sh --url https://s1.dev.urbanlens.org
+bin/run_sqlmap_scan.sh --url ... --accounts-file /tmp/e2e.json
+bin/run_sqlmap_scan.sh --url ... --accounts-file /tmp/e2e.json --all-tiers
+bin/run_sqlmap_scan.sh --url ... --fail-on-findings
+bin/run_sqlmap_scan.sh --url ... -- --skip-waf --random-agent   # pass through
+```
+
+### Why this is stricter than Nuclei
+
+Nuclei's templates are overwhelmingly detection: a fingerprint match, a header
+check, a known-CVE probe. sqlmap's job is to prove an injection exists by
+**exploiting** it - at `--risk=3` (this wrapper's default) that includes
+OR-based payloads that can rewrite an `UPDATE`/`DELETE` statement's `WHERE`
+clause to match every row, and the default `--technique` includes stacked
+queries, which can run arbitrary follow-up SQL if the DBMS/driver stack
+permits it. That is a different order of consequence than a scanner noticing a
+missing security header, and it changes what "safe to point this at" means:
+
+- **Target scope is an allowlist, not a denylist.** Every other tool here
+  (`run_integration_tests.sh`, `run_nuclei_scan.sh`, `run_contract_tests.sh`)
+  refuses a short list of production hostnames and otherwise trusts whatever
+  URL it is given, including `staging.urbanlens.org`. `run_sqlmap_scan.sh`
+  inverts that: it only runs against `UL_SQLMAP_ALLOWED_HOSTS` (default
+  `.dev.urbanlens.org,localhost,127.0.0.1`) and refuses everything else,
+  staging included, unless `UL_SQLMAP_ALLOW_ANY_HOST=1` is set. Dev containers
+  on chiron are disposable - rebuildable from nothing - which is what makes
+  `--risk=3` and stacked queries an acceptable default in the first place;
+  staging is not disposable in the same way, and this wrapper does not trust
+  an operator to remember that on a bad day.
+- **A fixed set of flags is refused unconditionally**, regardless of how they
+  are passed - not even behind an opt-in inside this wrapper: `--os-shell`,
+  `--os-pwn`, `--os-cmd`, `--os-smbrelay`, `--os-bof`, `--priv-esc`,
+  `--file-read`, `--file-write`, `--file-dest`, `--sql-shell`, `--udf-inject`,
+  and the `--reg-*` Windows-registry family. All of them go past confirming an
+  injection into operating-system command execution, arbitrary filesystem
+  access on the database host, or an interactive shell that bypasses `--batch`
+  entirely. Confirming the injection exists is this suite's job; going further
+  is a deliberate, individually-run sqlmap command outside it, on a target you
+  control. This mirrors Nuclei's unconditional exclusion of DoS-tagged
+  templates - the same posture, applied to the flags that matter for this tool.
+
+Everything else is deliberately permissive by default - full `--risk=3
+--level=5`, sqlmap's own default `--technique=BEUSTQ` - matching Nuclei's
+"exclude only what is unconditionally unsafe" posture, because the allowlist
+above is what makes that safe here.
+
+### sqlmap is not a project dependency
+
+sqlmap publishes no checksums, signatures, or attestation for any release -
+confirmed against every GitHub Release (`assets: []` on all of them) and the
+repository history. It does, however, publish the *same* tagged release to
+PyPI itself, so `bin/install_sqlmap.py` pins an exact version and both of
+PyPI's own per-file SHA256 digests in `bin/sqlmap-requirements.txt`, and
+installs with `pip install --require-hashes` - a supply-chain guarantee at
+least as strong as vendoring a git commit SHA, with none of the custom
+download-and-verify code that would otherwise need writing and trusting.
+
+It installs into its own throwaway `.sqlmap/venv` (gitignored), never the
+project's own `.venv`/`.venv_windows` - every contributor who runs `ruff` or
+`pytest` installs the main dependency set, and sqlmap is an external scanner
+this wrapper shells out to, the same relationship Nuclei has as a separately
+installed (or dockerized) binary. Bumping the pin means updating the version
+and both hashes in `bin/sqlmap-requirements.txt` together;
+`--require-hashes` fails closed on a partial update.
+
+### Target derivation: sqlmap's own `--openapi`, not a hand-built generator
+
+The first draft of this wrapper generated targets by running the contract
+suite (`tests/contract`) against the deployment with request/response capture
+turned on, then converting the capture into raw requests for sqlmap's `-r`.
+That duplicated work sqlmap already does better: `--openapi=<url>` parses a
+schema directly (confirmed against sqlmap 1.10.8's own source,
+`lib/parse/openapi.py`), synthesizes realistic values from each parameter's
+declared example, fills path/query/header/cookie parameters and JSON/form
+bodies, and marks every value it derives as a candidate injection point - one
+flag instead of a bridge between two test suites. `run_sqlmap_scan.sh` points
+it at `${BASE_URL}/dashboard/api/external/v1/schema/?format=json` - the exact
+document `tests/contract/schema_source.py` fetches for the same reason: it is
+what third parties (the Flutter app included) actually generate clients from.
+
+**Known limitation, shared with the contract suite** (see "Detail operations
+mostly exercise the 404 path" in docs/CONTRACT_TESTS.md): neither tool seeds a
+*real* object identifier into a detail-view path parameter, so
+`pins/{pin_slug}/`-shaped operations are tested against a slug that does not
+exist. A slug-lookup injection on a genuinely matched row is not exercised by
+either suite yet. Recorded here rather than solved here, for the same reason
+the contract suite left it recorded rather than solved.
+
+### The four tiers
+
+`--all-tiers` (needs `--accounts-file`) runs sqlmap four times, mirroring
+Nuclei's tiers because the underlying reachability split is identical - see
+"Authenticated scanning" above for the full explanation of why an API key and
+a session reach disjoint route surfaces rather than overlapping ones:
+
+| Tier | Mechanism | What it reaches |
+| --- | --- | --- |
+| `unauthenticated` | `--openapi`, no credential | The public perimeter of the external API |
+| `apikey-restricted` | `--openapi` + the `profile:read`-only key | The external API at the narrowest scope a real integration would use |
+| `apikey-full` | `--openapi` + the full-scope key | The external API, every documented operation |
+| `session` | `--crawl`/`--forms` + a real signed-in cookie | The HTML/HTMX dashboard - maps, wiki, trips, admin |
+
+The `session` tier does not use `--openapi` at all: `ExternalApiView`
+declares `authentication_classes = [ApiKeyAuthentication, OAuth2Authentication]`
+with no `SessionAuthentication` (see "Authenticated scanning" above), so a
+session cookie cannot reach `/api/...`, and the API-key tiers' schema has
+nothing to say about the HTML surface. It crawls the dashboard instead
+(`--crawl`, `--forms`, `--csrf-token=csrfmiddlewaretoken` for Django's
+CSRF-protected forms) and signs in through the same real browser flow
+(`tests/integration/setup/auth.setup.ts`) Nuclei's session tier already
+established as the only correct way to get a Django session outside a test
+client.
+
+**No credential ever reaches argv.** Bearer tokens and session cookies are
+written into a minimal sqlmap config file (`-c`, `[Request]` section only -
+`authtype`/`authcred` or `cookie`) rather than passed as `--auth-cred`/
+`--cookie` CLI flags, cleaned up in the same `trap cleanup EXIT` pattern
+Nuclei's secret-files use, and for the identical reason: a live key or
+cookie in a CLI argument is visible to anything else that can list processes
+on the same box.
+
+### Reading a finding
+
+sqlmap's own exit code is not a findings signal - confirmed against its
+source (`sqlmap.py`'s `os._exitcode`): it stays `0` on a completed scan that
+found nothing, and is only ever `1` on sqlmap's own runtime error. Every run
+instead carries `--report-json`, whose `data` array holds a `TARGET`- or
+`TECHNIQUES`-typed entry only when sqlmap actually confirmed an injection
+point; `run_sqlmap_scan.sh` counts those and prints a per-tier summary the
+same way `run_nuclei_scan.sh` counts JSONL lines. `--fail-on-findings` turns a
+nonzero count into a nonzero exit; off by default, since a finding here is a
+lead to triage rather than automatically a broken build.
+
+Reports land in `tests/integration/reports/sqlmap/` (sqlmap's own
+`--output-dir` tree, including its full transcript log and, for anything
+actually dumped, the row data itself - handle those the way `docs/PROBLEMS.md`
+handles any other confirmed vulnerability), the same tree Nuclei and the
+Playwright suite use, so all three are picked up by one CI artifact upload.
+
+### What the first live calibration run found
+
+Calibrated against a real dev container on chiron (`--all-tiers`, scoped to
+the `pins`-tagged operations for a tractable run rather than all ~200). It
+found three real bugs - none of them findings about UrbanLens's own SQL
+safety, all of them things a fake local target could not have surfaced:
+
+- **Every `--openapi` tier crashed, unconditionally, on first contact with a
+  real deployment.** sqlmap's own `_setStdinPipeTargets()`
+  (`lib/parse/cmdline.py`) treats *any* non-tty stdin as a potential piped
+  target list - true for literally every way this wrapper is ever run
+  (`</dev/null`, backgrounded, cron, CI) - and unconditionally overwrites
+  `kb.targets` with its own lazy reader before `_setOpenApiTargets()` ever
+  runs, crashing with `TypeError: object of type '_' has no len()` and never
+  reaching `--report-json`. Worse than a loud crash: `count_findings()`'s own
+  "no report.json yet" fallback reads as a clean 0-finding scan unless the log
+  itself is read - exactly the "0 findings, no error" trap
+  `run_nuclei_scan.sh`'s own history warns about, confirmed here to also catch
+  sqlmap. Fixed with `--ignore-stdin`, sqlmap's own documented escape hatch for
+  this, added to every invocation in the script.
+- **The session tier refused to start at all**: sqlmap refuses to combine
+  `--csrf-token` with `--threads` greater than 1
+  (`lib/core/option.py: if conf.csrfToken and conf.threads > 1`). Fixed by
+  hardcoding `--threads=1` for that tier specifically, regardless of `--threads`.
+- **A real, reproducible information-disclosure bug in the application
+  itself**, found because sqlmap's WAF-bypass mode sends browser-like headers
+  (`Accept: text/html,...`) that a normal API client wouldn't: any request to
+  the external API that content-negotiates to HTML crashed with
+  `TemplateDoesNotExist: rest_framework/api.html` - `rest_framework` was never
+  added to `INSTALLED_APPS`, so DRF's default `BrowsableAPIRenderer` (on by
+  default alongside `JSONRenderer` whenever `DEFAULT_RENDERER_CLASSES` isn't
+  overridden) can never find its own template. In an environment where `DEBUG`
+  resolves true, that 500 came with a full Django debug page in the body -
+  settings values (internal Valkey/Redis hostnames, CSP configuration),
+  traceback, the works. Fixed in `REST_FRAMEWORK` (`settings/base.py`) by
+  setting `DEFAULT_RENDERER_CLASSES` to `JSONRenderer` only - correct
+  independent of the crash, since this is a machine-consumed API with no
+  working browsable UI to begin with (the working interactive explorer is the
+  separate Swagger UI view). Verified live: `Accept: text/html` now answers a
+  clean `406` instead of a 500.
+
+No confirmed SQL injection in the scope calibrated so far - the ~200
+operations outside `pins` remain unexercised at the time of writing.
 
 ## Why Playwright
 
@@ -198,8 +490,9 @@ Some things it deliberately does **not** do:
   path unsigned, and asserts it is refused.
 - **Attack scanners**, mostly. The `security` project is assertions about
   refusals, identical 404s, cookie flags, and markup that must not become DOM.
-  It does not run SQLMap or a ZAP active scan against the deployment; those
-  remain unassessed. **Nuclei is the one exception** - see below.
+  It does not run an active scanner against the deployment itself - **Nuclei
+  and sqlmap are the two exceptions**, both separate on-demand tools rather
+  than Playwright specs, see below. A ZAP active scan remains unassessed.
 - **External providers.** Provisioned accounts have `external_apis_enabled` and
   `ai_enabled` set to False, so no provider is billed by a test run. Pass
   `--external-apis` when provisioning if you specifically want to exercise the

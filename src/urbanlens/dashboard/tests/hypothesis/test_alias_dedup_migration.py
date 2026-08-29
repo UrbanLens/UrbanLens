@@ -155,3 +155,43 @@ class WikiAliasDedupMigrationTests(TestCase):
             cursor.execute(self.sql)
         remaining = WikiAlias.objects.get(wiki=self.wiki, name__iexact="Main Street")
         self.assertEqual(remaining.kind, "official")
+
+    def test_distinct_names_are_left_alone(self) -> None:
+        # Scoped to these two names, not the wiki's total - see setUp's
+        # auto-synced-name comment on test_case_insensitive_duplicates_...
+        self._drop_constraint()
+        self._insert_raw("Aloha Stadium")
+        self._insert_raw("Old Mill")
+        with connection.cursor() as cursor:
+            cursor.execute(self.sql)
+        self.assertEqual(WikiAlias.objects.filter(wiki=self.wiki, name="Aloha Stadium").count(), 1)
+        self.assertEqual(WikiAlias.objects.filter(wiki=self.wiki, name="Old Mill").count(), 1)
+
+    def test_duplicates_on_different_wikis_are_both_kept(self) -> None:
+        """Guards PARTITION BY wiki_id - without it, same-name aliases on
+        different wikis would collapse into one, deleting another wiki's row."""
+        self._drop_constraint()
+        other_location = baker.make(Location, latitude=44.4, longitude=-76.4)
+        other_wiki = baker.make(Wiki, location=other_location)
+        self._insert_raw("Shared Name")
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO dashboard_wiki_aliases (name, kind, source, wiki_id, created, updated) "
+                "VALUES ('shared name', 'alternate', 'user', %s, now(), now())",
+                [other_wiki.pk],
+            )
+            cursor.execute(self.sql)
+        self.assertEqual(WikiAlias.objects.filter(wiki=self.wiki, name__iexact="Shared Name").count(), 1)
+        self.assertEqual(WikiAlias.objects.filter(wiki=other_wiki, name__iexact="Shared Name").count(), 1)
+
+    def test_constraint_can_be_recreated_after_dedup(self) -> None:
+        """The actual point of the cleanup - confirms the migration's own
+        AddConstraint step (case-insensitive) would succeed afterward."""
+        self._drop_constraint()
+        self._insert_raw("Main Street")
+        self._insert_raw("main street")
+        with connection.cursor() as cursor:
+            cursor.execute(self.sql)
+            cursor.execute(
+                "CREATE UNIQUE INDEX db_walias_unique ON dashboard_wiki_aliases (LOWER(name), wiki_id)",
+            )  # raises if a duplicate survived

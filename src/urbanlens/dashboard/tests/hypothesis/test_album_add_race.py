@@ -56,11 +56,19 @@ class AlbumAddRaceTests(TestCase):
         self.assertEqual(added, 0)
 
     def test_the_membership_is_not_duplicated(self):
-        AlbumItem.objects.create(album=self.album, image=self.image, order=0)
+        # Attribute the pre-existing row to a different profile than the one racing
+        # in, so an ignore_conflicts regression that overwrites instead of skipping
+        # (e.g. an accidental update_conflicts=True, or update_or_create) shows up as
+        # a changed owner/order rather than passing on row count alone.
+        original_adder, _ = Profile.objects.get_or_create(user=User.objects.create_user(username="original-adder"))
+        original = AlbumItem.objects.create(album=self.album, image=self.image, added_by=original_adder, order=3)
 
         self._add_with_stale_read([self.image])
 
-        self.assertEqual(AlbumItem.objects.filter(album=self.album, image=self.image).count(), 1)
+        survivor = AlbumItem.objects.get(album=self.album, image=self.image)
+        self.assertEqual(survivor.pk, original.pk)
+        self.assertEqual(survivor.order, 3)
+        self.assertEqual(survivor.added_by_id, original_adder.pk)
 
     def test_the_photos_that_are_new_still_get_added(self):
         # Losing the race on one photo must not discard the rest of the batch.
@@ -69,7 +77,11 @@ class AlbumAddRaceTests(TestCase):
         added = self._add_with_stale_read([self.image, self.other])
 
         self.assertEqual(added, 1)
-        self.assertTrue(AlbumItem.objects.filter(album=self.album, image=self.other).exists())
+        # Not just presence: the row the race-safe insert actually wrote must still
+        # carry attribution, so a "simplify the bulk_create" edit that drops added_by
+        # doesn't slip past an exists()-only check.
+        new_item = AlbumItem.objects.get(album=self.album, image=self.other)
+        self.assertEqual(new_item.added_by_id, self.profile.pk)
 
     def test_the_ordinary_path_is_unaffected(self):
         added = add_images_to_album(self.album, [self.image, self.other], self.profile)

@@ -42,3 +42,22 @@ class SignedOutHomepageTests(TestCase):
         response = self.client.get(reverse("index"))
 
         self.assertEqual(response.status_code, 302)
+
+    def test_signed_out_visitors_get_no_file_upload_markup(self) -> None:
+        """The comment-photo dialog is unusable while signed out, so it shouldn't render either."""
+        response = self.client.get(reverse("index"))
+
+        self.assertNotContains(response, 'id="comment-image-composer"')
+        self.assertNotContains(response, 'id="cip-file-input"')
+
+
+class SignedInHomepageTests(TestCase):
+    def test_signed_in_visitors_still_get_the_photo_dialog(self) -> None:
+        """The gate in `themes/base.html` must not take the feature away from who can use it."""
+        user = baker.make(User)
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("home.view"))
+
+        self.assertContains(response, 'id="comment-image-composer"')
+        self.assertContains(response, 'id="cip-file-input"')

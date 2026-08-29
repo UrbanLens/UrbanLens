@@ -170,6 +170,23 @@ class MessageQueueAddMessageTests(SimpleTestCase):
             q.add_message(long_words)
         self.assertIn(str(SHORTEST_MESSAGE), str(ctx.exception))
 
+    def test_add_message_enforces_cumulative_token_limit_at_exact_boundary(self) -> None:
+        # A message that lands exactly on the limit (tokens + SHORTEST_MESSAGE == max_tokens)
+        # must be accepted - the check is a strict ">", not ">=".
+        n = 5
+        q = MessageQueue(max_tokens=SHORTEST_MESSAGE + n)
+        message = " ".join(["word"] * n)
+        q.add_message(message)
+        self.assertEqual(len(q), 1)
+
+        # The limit is on the *cumulative* total across all stored messages, not just the
+        # size of the incoming one: the queue is already exactly full, so even a single
+        # extra token must now be rejected.
+        with self.assertRaises(ValueError):
+            q.add_message("one")
+        # And the rejected message must not have been appended.
+        self.assertEqual(len(q), 1)
+
     @given(st.sampled_from(["user", "system", "assistant"]))
     @_hyp
     def test_any_valid_role_is_accepted(self, role: str) -> None:

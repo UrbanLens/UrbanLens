@@ -18,7 +18,7 @@ metrics, not profiles.
 from __future__ import annotations
 
 import math
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -27,7 +27,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
-from urbanlens.dashboard.models.achievements.model import Achievement, UserAchievement
+from urbanlens.dashboard.models.achievements.model import UserAchievement
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.achievements.evaluate import evaluate_profiles_in_range
@@ -63,13 +63,19 @@ class SweepDispatchTests(TestCase):
         ]
         return dispatched, ranges
 
-    @given(chunk_size=st.integers(min_value=1, max_value=8))
-    @hypothesis_settings(max_examples=10, deadline=None)
+    @given(chunk_size=st.integers(min_value=-5, max_value=8))
+    @hypothesis_settings(max_examples=15, deadline=None)
     def test_dispatch_partitions_every_profile_into_exactly_one_chunk(self, chunk_size: int) -> None:
-        """No profile may be swept twice or - the original bug - not at all."""
-        dispatched, ranges = self._dispatched_ranges(chunk_size)
+        """No profile may be swept twice or - the original bug - not at all.
 
-        self.assertEqual(dispatched, math.ceil(len(self.pks) / chunk_size))
+        Includes non-positive ``chunk_size`` values: the implementation clamps
+        these to 1 rather than handing a zero step to ``range()``, and that
+        clamp is only exercised if a test actually passes one through.
+        """
+        dispatched, ranges = self._dispatched_ranges(chunk_size)
+        effective_chunk_size = max(1, chunk_size)
+
+        self.assertEqual(dispatched, math.ceil(len(self.pks) / effective_chunk_size))
         self.assertEqual(len(ranges), dispatched)
         for pk in self.pks:
             covering = [r for r in ranges if r[0] <= pk <= r[1]]
@@ -82,14 +88,44 @@ class SweepDispatchTests(TestCase):
             covered = [pk for pk in self.pks if start_pk <= pk <= end_pk]
             self.assertLessEqual(len(covered), 4)
 
-    def test_no_active_achievement_dispatches_nothing(self) -> None:
-        """The signals' gate, applied here too: no award defined, no fan-out."""
-        Achievement.objects.all().delete()
+    def test_dispatch_gate_keys_off_is_active_not_row_existence(self) -> None:
+        """The signals' gate, applied here too: no active award, no fan-out.
+
+        Deactivating (not deleting) the achievement, then reactivating the
+        same row, proves the gate reads ``is_active`` rather than merely
+        whether the table has any rows - a check like
+        ``Achievement.objects.exists()`` would pass the first half by
+        accident since the row is still there.
+        """
+        self.achievement.is_active = False
+        self.achievement.save(update_fields=["is_active"])
 
         dispatched, ranges = self._dispatched_ranges(chunk_size=2)
-
         self.assertEqual(dispatched, 0)
         self.assertEqual(ranges, [])
+
+        self.achievement.is_active = True
+        self.achievement.save(update_fields=["is_active"])
+
+        dispatched, ranges = self._dispatched_ranges(chunk_size=2)
+        self.assertEqual(dispatched, math.ceil(len(self.pks) / 2))
+        for pk in self.pks:
+            covering = [r for r in ranges if r[0] <= pk <= r[1]]
+            self.assertEqual(len(covering), 1, f"profile {pk} must fall in exactly one chunk, got {covering}")
+
+    def test_broker_failure_on_one_chunk_does_not_inflate_count_or_abort_the_rest(self) -> None:
+        """A None return (broker unreachable for that enqueue) must not count as dispatched.
+
+        Also proves the dispatch loop keeps going after one failure - a
+        crashed/unreachable chunk must cost only itself, not the rest of the
+        night's sweep.
+        """
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            enqueue.side_effect = [None, MagicMock(), MagicMock()]
+            dispatched = tasks.sweep_achievements(chunk_size=2)  # 6 profiles -> 3 chunks
+
+        self.assertEqual(enqueue.call_count, 3)
+        self.assertEqual(dispatched, 2)
 
     def test_running_every_dispatched_chunk_awards_every_qualifying_profile(self) -> None:
         """End to end: dispatch, run each range subtask, everyone is granted."""

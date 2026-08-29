@@ -120,6 +120,15 @@ class AlbumMembershipTests(TestCase):
         self.album.refresh_from_db()
         self.assertIsNone(self.album.cover_image_id)
 
+    def test_removing_a_photo_that_belongs_to_a_different_album_is_a_no_op(self) -> None:
+        other = Album.objects.create(name="Exterior", profile=self.pin.profile, parent_pin=self.pin)
+        add_images_to_album(other, [self.images[0]], self.pin.profile)
+
+        removed = remove_images_from_album(self.album, [self.images[0].pk])
+
+        self.assertEqual(removed, 0)
+        self.assertTrue(AlbumItem.objects.filter(album=other, image=self.images[0]).exists())
+
 
 class AlbumOrderingTests(TestCase):
     """Date/name sorts are live; custom order is only written on a drag."""
@@ -154,6 +163,14 @@ class AlbumOrderingTests(TestCase):
 
         ids = self._display_item_ids()
         self.assertEqual(reorder_album_items(self.album, [foreign_id, *ids]), 3)
+
+    def test_reorder_with_no_recognized_ids_is_a_no_op(self) -> None:
+        """An empty (or all-foreign) drop must not stamp orders or flip the sort."""
+        reordered = reorder_album_items(self.album, [])
+        self.assertEqual(reordered, 0)
+        self.album.refresh_from_db()
+        self.assertEqual(self.album.sort, AlbumSort.UPLOADED)
+        self.assertFalse(AlbumItem.objects.for_album(self.album).exclude(order=None).exists())
 
     def test_reorder_splices_a_partial_window_into_the_full_album(self) -> None:
         extra = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
@@ -226,6 +243,59 @@ class AlbumCoverTests(TestCase):
         ordered = album_images(self.album, self.pin.profile)
         self.album.cover_image = ordered[-1]
         self.assertEqual(album_cover(self.album, self.pin.profile).pk, ordered[-1].pk)
+
+
+class AlbumVisibilityTests(TestCase):
+    """Every read here must chain ``Image.visible_to`` - an album can't widen who sees a photo.
+
+    A stranger profile shares no friendship, trip, or wiki with the pin's
+    owner, so ``visible_to`` denies them regardless of the default visibility
+    settings (see ``ImageQuerySet._shared_within_reach_of``: filing a photo
+    under a pin is not itself sharing it). That makes "the owner sees the
+    photos, a stranger sees none of them" a deterministic check that a future
+    refactor didn't quietly drop the visibility filter from one of these
+    helpers.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin, self.images = _pin_with_photos(2)
+        self.album = Album.objects.create(name="Interior", profile=self.pin.profile, parent_pin=self.pin)
+        add_images_to_album(self.album, self.images, self.pin.profile)
+        self.album.cover_image = self.images[0]
+        self.album.save(update_fields=["cover_image", "updated"])
+        self.stranger = baker.make_recipe("dashboard.user").profile
+
+    def test_album_images_hides_everything_from_a_stranger(self) -> None:
+        self.assertEqual(len(album_images(self.album, self.pin.profile)), 2)
+        self.assertEqual(album_images(self.album, self.stranger), [])
+
+    def test_eligible_images_hides_everything_from_a_stranger(self) -> None:
+        self.assertEqual(eligible_images_for(self.pin, self.pin.profile).count(), 2)
+        self.assertEqual(eligible_images_for(self.pin, self.stranger).count(), 0)
+
+    def test_loose_images_hides_everything_from_a_stranger(self) -> None:
+        loose_pin, _images = _pin_with_photos(1)
+        self.assertEqual(loose_images_for(loose_pin, loose_pin.profile).count(), 1)
+        self.assertEqual(loose_images_for(loose_pin, self.stranger).count(), 0)
+
+    def test_album_cover_hides_from_a_stranger(self) -> None:
+        self.assertIsNotNone(album_cover(self.album, self.pin.profile))
+        self.assertIsNone(album_cover(self.album, self.stranger))
+
+    def test_albums_with_images_hides_from_a_stranger(self) -> None:
+        [(_, owner_images)] = albums_with_images(self.pin, self.pin.profile)
+        self.assertEqual(len(owner_images), 2)
+        [(_, stranger_images)] = albums_with_images(self.pin, self.stranger)
+        self.assertEqual(stranger_images, [])
+
+    def test_albums_listing_hides_from_a_stranger(self) -> None:
+        owner_entry = albums_listing(self.pin, self.pin.profile)[0]
+        self.assertEqual(owner_entry.photo_count, 2)
+        self.assertIsNotNone(owner_entry.cover)
+        stranger_entry = albums_listing(self.pin, self.stranger)[0]
+        self.assertEqual(stranger_entry.photo_count, 0)
+        self.assertIsNone(stranger_entry.cover)
 
 
 class AlbumKindSpecTests(TestCase):

@@ -29,3 +29,36 @@ def post_fork(server, worker):
     from psycogreen.gevent import patch_psycopg
 
     patch_psycopg()
+    _warm_urlconf(worker)
+
+
+def _warm_urlconf(worker):
+    """Import the URLconf now, so no request has to wait for it.
+
+    Django resolves the URLconf lazily, on a worker's first request, and that
+    import reaches every controller (and through them GeoPandas/Shapely).
+    Measured on staging: 12.3s for the first request against a fresh process,
+    9.5s of it this import. The gevent worker makes that worse than slow - the
+    import is CPU that never yields, so the worker serves nothing else for its
+    duration, and nginx's proxy_read_timeout is being spent on a page that has
+    not started rendering. Doing it here spends it during boot instead, before
+    the arbiter routes anything to this process.
+
+    Args:
+        worker: The freshly forked worker, used for its logger.
+    """
+    try:
+        import django
+
+        django.setup()
+        from django.urls import get_resolver
+
+        # Reading url_patterns is what forces the ROOT_URLCONF import. Logging
+        # the count both uses the value (so it cannot be optimised away or read
+        # as a mistake) and puts proof in the boot log that this ran.
+        patterns = get_resolver().url_patterns
+        worker.log.info("URLconf warmed: %d root patterns", len(patterns))
+    except Exception:
+        # A warm-up is an optimisation. If it fails, the request path will do
+        # the same work (and raise the same error) where it can be handled.
+        worker.log.exception("URLconf warm-up failed; continuing without it")

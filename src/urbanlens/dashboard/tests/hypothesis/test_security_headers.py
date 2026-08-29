@@ -141,6 +141,56 @@ class HstsGateTests(SimpleTestCase):
         self.assertIn("includeSubDomains", response.headers.get("Strict-Transport-Security", ""))
 
 
+class SecurityHeadersMiddlewareTests(SimpleTestCase):
+    """The three headers Django has no built-in setting for."""
+
+    def test_middleware_is_installed_directly_below_securitymiddleware(self) -> None:
+        self.assertIn("urbanlens.dashboard.middleware.SecurityHeadersMiddleware", settings.MIDDLEWARE)
+        self.assertEqual(
+            settings.MIDDLEWARE.index("urbanlens.dashboard.middleware.SecurityHeadersMiddleware"),
+            settings.MIDDLEWARE.index("django.middleware.security.SecurityMiddleware") + 1,
+        )
+
+    def test_permissions_policy_reaches_the_response(self) -> None:
+        response = self.client.get("/health/")
+
+        self.assertEqual(response.headers.get("Permissions-Policy"), settings.PERMISSIONS_POLICY)
+
+    def test_permissions_policy_denies_features_the_app_does_not_use(self) -> None:
+        """Camera/microphone/payment/usb have no caller anywhere in the frontend."""
+        for feature in ("camera", "microphone", "payment", "usb"):
+            with self.subTest(feature=feature):
+                self.assertIn(f"{feature}=()", settings.PERMISSIONS_POLICY)
+
+    def test_permissions_policy_scopes_the_features_actually_used_to_self(self) -> None:
+        """Geolocation (safety-live-location.ts) and clipboard-write (map-context-menu.ts)."""
+        for feature in ("geolocation", "clipboard-write"):
+            with self.subTest(feature=feature):
+                self.assertIn(f"{feature}=(self)", settings.PERMISSIONS_POLICY)
+
+    def test_cross_origin_resource_policy_reaches_the_response(self) -> None:
+        response = self.client.get("/health/")
+
+        self.assertEqual(response.headers.get("Cross-Origin-Resource-Policy"), settings.CROSS_ORIGIN_RESOURCE_POLICY)
+
+    def test_cross_origin_resource_policy_is_not_the_maximally_strict_value(self) -> None:
+        """`same-origin` would also cut off REData and the staging/dev subdomains."""
+        self.assertEqual(settings.CROSS_ORIGIN_RESOURCE_POLICY, "same-site")
+
+    def test_x_permitted_cross_domain_policies_reaches_the_response(self) -> None:
+        response = self.client.get("/health/")
+
+        self.assertEqual(response.headers.get("X-Permitted-Cross-Domain-Policies"), "none")
+
+    def test_cross_origin_opener_policy_is_djangos_secure_default(self) -> None:
+        """Refutes the scan's claim it's missing - SecurityMiddleware has sent this since Django 4.0."""
+        self.assertEqual(settings.SECURE_CROSS_ORIGIN_OPENER_POLICY, "same-origin")
+
+        response = self.client.get("/health/")
+
+        self.assertEqual(response.headers.get("Cross-Origin-Opener-Policy"), "same-origin")
+
+
 ENFORCE_HEADER = "Content-Security-Policy"
 REPORT_ONLY_HEADER = "Content-Security-Policy-Report-Only"
 
@@ -153,12 +203,16 @@ class CspHeaderTests(SimpleTestCase):
     nothing by design.
     """
 
-    def test_middleware_is_installed_directly_below_securitymiddleware(self) -> None:
-        """Order matters: the nonce must exist before any view can read it."""
+    def test_middleware_is_installed_directly_below_securityheadersmiddleware(self) -> None:
+        """Order matters: the nonce must exist before any view can read it.
+
+        SecurityHeadersMiddleware sits between the two - both must stay above
+        everything that can short-circuit a response.
+        """
         self.assertIn("csp.middleware.CSPMiddleware", settings.MIDDLEWARE)
         self.assertEqual(
             settings.MIDDLEWARE.index("csp.middleware.CSPMiddleware"),
-            settings.MIDDLEWARE.index("django.middleware.security.SecurityMiddleware") + 1,
+            settings.MIDDLEWARE.index("urbanlens.dashboard.middleware.SecurityHeadersMiddleware") + 1,
         )
 
     def test_report_only_is_the_default(self) -> None:

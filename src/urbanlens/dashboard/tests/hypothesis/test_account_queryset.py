@@ -52,6 +52,26 @@ class AccountKdfSetAuthSaltTests(TestCase):
         self.assertEqual(kdf.auth_salt, "bmV3")
         self.assertEqual(AccountKdf.objects.for_user(user).count(), 1)
 
+    def test_does_not_touch_another_users_row(self) -> None:
+        # Guards the exact bug this queryset method was written to prevent:
+        # `update_or_create(defaults={"user": user, ...})` (lookup kwargs empty)
+        # would silently match and reassign whichever row happens to exist,
+        # rather than creating a new one scoped to `user`.
+        user = baker.make(User)
+        other = baker.make(User)
+        other_kdf = AccountKdf.objects.create(user=other, auth_salt="b3RoZXI=")
+
+        kdf, created = AccountKdf.objects.set_auth_salt(user, "bmV3")
+
+        self.assertTrue(created)
+        self.assertEqual(kdf.user, user)
+        self.assertEqual(kdf.auth_salt, "bmV3")
+        other_kdf.refresh_from_db()
+        self.assertEqual(other_kdf.user_id, other.pk)
+        self.assertEqual(other_kdf.auth_salt, "b3RoZXI=")
+        self.assertEqual(AccountKdf.objects.for_user(other).count(), 1)
+        self.assertEqual(AccountKdf.objects.for_user(user).count(), 1)
+
 
 class WebAuthnCredentialForUserTests(TestCase):
     def test_returns_only_this_users_credentials(self) -> None:
@@ -74,6 +94,12 @@ class TOTPDeviceForUserTests(TestCase):
 
     def test_empty_for_a_user_with_no_device(self) -> None:
         user = baker.make(User)
+        self.assertFalse(TOTPDevice.objects.for_user(user).exists())
+
+    def test_does_not_match_another_users_device(self) -> None:
+        user = baker.make(User)
+        other = baker.make(User)
+        baker.make(TOTPDevice, user=other)
         self.assertFalse(TOTPDevice.objects.for_user(user).exists())
 
 

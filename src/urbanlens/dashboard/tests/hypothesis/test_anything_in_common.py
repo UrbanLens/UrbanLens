@@ -238,6 +238,20 @@ class ImageVisibilityFriendTests(TestCase):
         _share_trip(self.uploader, self.viewer)
         self.assertIn(self.image, Image.objects.visible_to(self.viewer))
 
+    def test_shared_pin_qualifies_for_anything_in_common(self) -> None:
+        # Image visibility resolves common-pin/common-friend/common-trip itself
+        # (queryset._relationship_allows), rather than delegating to
+        # Profile.visibility_permits, so this needs its own coverage per
+        # relationship kind rather than trusting the shared-trip case above.
+        self._set_upload_visibility(VisibilityChoice.ANYTHING_IN_COMMON)
+        _share_pin(self.uploader, self.viewer)
+        self.assertIn(self.image, Image.objects.visible_to(self.viewer))
+
+    def test_shared_friend_qualifies_for_anything_in_common(self) -> None:
+        self._set_upload_visibility(VisibilityChoice.ANYTHING_IN_COMMON)
+        _share_friend(self.uploader, self.viewer)
+        self.assertIn(self.image, Image.objects.visible_to(self.viewer))
+
     def test_viewer_filter_anything_in_common_respects_friendship(self) -> None:
         self._set_upload_visibility(VisibilityChoice.ANYONE)
         self.viewer.viewer_photo_filter = VisibilityChoice.ANYTHING_IN_COMMON
@@ -331,6 +345,18 @@ class FriendRequestVisibilityTests(TestCase):
 
     def test_common_pin_still_blocks_stranger(self) -> None:
         self._set_visibility(VisibilityChoice.COMMON_PIN)
+        self.assertEqual(self._request_friend().status_code, 403)
+
+    def test_no_one_blocks_even_an_existing_friend(self) -> None:
+        # request_friend special-cases NO_ONE with its own early return, ahead
+        # of visibility_permits (which every other option here goes through) -
+        # so, unlike every other choice in this file, not even the
+        # friends-always-qualify rule reaches it. Covered on a friend rather
+        # than a stranger so a regression that reordered the check behind the
+        # friendship test - reintroducing the friends-bypass this option
+        # exists to deny - would actually be caught.
+        self._set_visibility(VisibilityChoice.NO_ONE)
+        _befriend(self.requester, self.target)
         self.assertEqual(self._request_friend().status_code, 403)
 
 

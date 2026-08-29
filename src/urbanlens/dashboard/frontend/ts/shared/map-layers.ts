@@ -40,6 +40,18 @@ interface TileDef {
 }
 
 /**
+ * Zoom range every map on the site uses.
+ *
+ * `L.map` must be given `maxZoom` explicitly, not left to be inferred from
+ * whichever tile layer happens to be added first: leaflet.markercluster reads
+ * `map.getMaxZoom()` in its `onAdd` and *throws a bare string* ("Map has no
+ * maxZoom specified") when it is Infinity. A cluster group added before the
+ * first tile layer therefore takes down the whole entry script.
+ */
+export const MAP_MAX_ZOOM = 21;
+export const MAP_MIN_ZOOM = 2;
+
+/**
  * Canonical tile sources. maxNativeZoom caps tile requests at each provider's
  * real depth while maxZoom lets Leaflet upscale beyond it (Google-like) so a
  * layer never drops out when the user zooms past the native depth.
@@ -50,7 +62,7 @@ const TILE_DEFS: Record<string, TileDef> = {
         options: {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxNativeZoom: 19,
-            maxZoom: 21,
+            maxZoom: MAP_MAX_ZOOM,
         },
     },
     dark: {
@@ -58,7 +70,7 @@ const TILE_DEFS: Record<string, TileDef> = {
         options: {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
             maxNativeZoom: 20,
-            maxZoom: 21,
+            maxZoom: MAP_MAX_ZOOM,
         },
     },
     topographic: {
@@ -67,7 +79,7 @@ const TILE_DEFS: Record<string, TileDef> = {
             attribution: "&copy; OpenTopoMap contributors",
             // OpenTopoMap only renders tiles up to zoom 17; upscale beyond that.
             maxNativeZoom: 17,
-            maxZoom: 21,
+            maxZoom: MAP_MAX_ZOOM,
         },
     },
     satellite: {
@@ -75,7 +87,7 @@ const TILE_DEFS: Record<string, TileDef> = {
         options: {
             attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community",
             maxNativeZoom: 19,
-            maxZoom: 21,
+            maxZoom: MAP_MAX_ZOOM,
         },
     },
     borders: {
@@ -83,7 +95,7 @@ const TILE_DEFS: Record<string, TileDef> = {
         options: {
             attribution: "Boundaries &copy; Esri",
             maxNativeZoom: 19,
-            maxZoom: 21,
+            maxZoom: MAP_MAX_ZOOM,
             opacity: 0.6,
             pane: "overlayPane",
         },
@@ -157,7 +169,7 @@ export async function registerRedataLayers(): Promise<string[]> {
                 // Leaflet upscales past the vendor's real depth rather than
                 // dropping the layer out, matching the built-in defs above.
                 maxNativeZoom: layer.max_zoom ?? 19,
-                maxZoom: 21,
+                maxZoom: MAP_MAX_ZOOM,
                 minZoom: layer.min_zoom ?? 0,
             },
         };
@@ -184,7 +196,7 @@ export function bordersOverlay(): L.TileLayer {
 export function weatherLayers(apiKey: string): { rain: L.TileLayer; clouds: L.TileLayer } {
     const attribution = 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>';
     const make = (layer: string, opacity: number) =>
-        L.tileLayer(`https://tile.openweathermap.org/map/${layer}/{z}/{x}/{y}.png?appid=${apiKey}`, { attribution, opacity, maxZoom: 21 });
+        L.tileLayer(`https://tile.openweathermap.org/map/${layer}/{z}/{x}/{y}.png?appid=${apiKey}`, { attribution, opacity, maxZoom: MAP_MAX_ZOOM });
     return { rain: make("precipitation_new", 0.7), clouds: make("clouds_new", 0.5) };
 }
 

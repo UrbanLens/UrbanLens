@@ -115,6 +115,24 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         self.assertNotIn(f"Friendship #{friendship.pk}", output)
         self.assertIn("Nothing to review", output)
 
+    def test_the_cutoff_date_itself_is_excluded_the_day_before_is_included(self) -> None:
+        """`--before` is documented exclusive on the DATE: `created__date__lt=cutoff_date`.
+        An off-by-one to `__date__lte` would silently start including the cutoff day itself -
+        this pins both sides of that exact boundary against the same cutoff."""
+        on_cutoff = Friendship.objects.create(from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.BLOCKED)
+        cutoff_dt = datetime.datetime(2026, 7, 30, 23, 59, tzinfo=datetime.UTC)
+        self._stamp(on_cutoff, created=cutoff_dt, updated=cutoff_dt)
+
+        carol = baker.make(User, username="carol").profile
+        day_before = Friendship.objects.create(from_profile=self.alice, to_profile=carol, status=FriendshipStatus.BLOCKED)
+        before_dt = datetime.datetime(2026, 7, 29, 0, 1, tzinfo=datetime.UTC)
+        self._stamp(day_before, created=before_dt, updated=before_dt)
+
+        output = self._run("--before=2026-07-30")
+
+        self.assertNotIn(f"Friendship #{on_cutoff.pk}", output)
+        self.assertIn(f"Friendship #{day_before.pk}", output)
+
     def test_a_non_blocked_row_is_never_reported(self) -> None:
         friendship = Friendship.objects.create(from_profile=self.alice, to_profile=self.bob, status=FriendshipStatus.ACCEPTED)
         old = timezone.now() - datetime.timedelta(days=90)

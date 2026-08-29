@@ -124,6 +124,8 @@ ASGI_APPLICATION = "urbanlens.UrbanLens.asgi.application"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Headers SecurityMiddleware has no setting for; sits right below it.
+    "urbanlens.dashboard.middleware.SecurityHeadersMiddleware",
     # Emits the Content-Security-Policy header built from CONTENT_SECURITY_POLICY
     # (or ..._REPORT_ONLY) below. Sits directly under SecurityMiddleware so the
     # header is attached to every response that leaves the stack, including ones
@@ -577,20 +579,31 @@ SECURE_REDIRECT_EXEMPT = [r"^health"]
 SECURE_HSTS_SECONDS = int(os.getenv("UL_HSTS_SECONDS", "31536000")) if SECURE_SSL_REDIRECT else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("UL_HSTS_INCLUDE_SUBDOMAINS", SECURE_HSTS_SECONDS > 0)
 
-# Content-Security-Policy (django-csp >= 4, which takes the CONTENT_SECURITY_POLICY
-# dict rather than the pre-4.0 flat `CSP_*` settings - those are silently ignored,
-# and csp.E001 flags them if they reappear).
+# Consumed by SecurityHeadersMiddleware - Django has no setting for any of
+# these three.
 #
-# Every host below was read out of a template or a frontend module rather than
-# assumed; the inventory, and which file each host came from, is in docs/NOTES.md.
+# geolocation/clipboard-write are the only permissions the frontend actually
+# uses (safety-live-location.ts, map-context-menu.ts); everything else denied.
+PERMISSIONS_POLICY = "geolocation=(self), clipboard-write=(self), camera=(), microphone=(), payment=(), usb=(), interest-cohort=(), browsing-topics=()"
+# same-site, not same-origin: REData and the dev/staging slots are separate
+# origins under the same parent domain.
+CROSS_ORIGIN_RESOURCE_POLICY = "same-site"
+# Legacy Flash/Adobe cross-domain policy discovery, unused - free to deny.
+X_PERMITTED_CROSS_DOMAIN_POLICIES = "none"
+
+# Cross-Origin-Embedder-Policy is not set - see docs/PROBLEMS.md, "Nuclei scan
+# follow-ups".
+
+# Content-Security-Policy (django-csp >= 4).
+#
 # Leaflet expands the `{s}` placeholder in its tile templates to a/b/c subdomains,
 # so the tile hosts need both the wildcard and the bare form.
 #
 # 'unsafe-inline' in script-src is load-bearing, not laziness: the frontend has
-# ~99 inline <script> blocks (starting with the anti-FOUC block in themes/base.html),
+# ~99 inline <script> blocks,
 # HTMX `hx-on:` attributes, and json_script payloads. Removing it requires threading
-# a nonce through every one of those - tracked as the inline-JS extraction roadmap
-# item. Until that lands, script-src buys host restriction (an injected
+# a nonce through every one - tracked as the inline-JS extraction roadmap
+# item. Until then, script-src buys host restriction (an injected
 # `<script src=//evil>` is blocked) but not injected-inline-script protection.
 # Note also that a nonce and 'unsafe-inline' cannot coexist: browsers ignore
 # 'unsafe-inline' as soon as a nonce is present, so the migration has to convert
@@ -642,8 +655,9 @@ _CSP_DIRECTIVES: dict[str, object] = {
         "https://server.arcgisonline.com",
         "https://services.arcgisonline.com",
         "https://tile.openweathermap.org",
-        # Leaflet's default marker/shadow PNGs (frontend/ts/entries/map-annotations.ts).
-        "https://cdnjs.cloudflare.com",
+        # No longer needed for Leaflet's marker PNGs (see docs/PROBLEMS-ARCHIVE.md,
+        # "Nuclei scan audit") - nothing else here loads an image from cdnjs.
+        # img-src's blanket https: below covers it if that changes again.
         # Result favicons on the web-search page and the Gravatar avatar preview.
         "https://www.google.com",
         "https://www.gravatar.com",
@@ -1023,6 +1037,18 @@ REST_FRAMEWORK = {
     # Only consulted by views whose schema is actually generated - the
     # preprocessing hook in external_api.schema limits that to the external API.
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # JSON only. DRF's own default renderer pair also includes
+    # BrowsableAPIRenderer, which content-negotiates in for any request whose
+    # Accept header prefers text/html (a plain browser visiting an API URL,
+    # or a scanner sending browser-like headers) - and "rest_framework" is not
+    # in INSTALLED_APPS, so its template is never discoverable. The result was
+    # a 500 on every such request, and in an environment where DEBUG resolves
+    # true, a full Django debug page (settings values, stack frames) in the
+    # response body. This is a machine-consumed API (see SPECTACULAR_SETTINGS
+    # below); the working interactive explorer is the separate Swagger UI view.
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
 }
 
 # OpenAPI schema for the external API only - the internal HTMX/REST surface has

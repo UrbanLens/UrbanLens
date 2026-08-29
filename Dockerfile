@@ -13,8 +13,13 @@ ARG UL_ENVIRONMENT=production
 RUN mkdir -p /var/log/urbanlens
 
 # Environment variables
+# PYTHONDONTWRITEBYTECODE stops a *container* writing __pycache__ at runtime;
+# the bytecode is baked in at build time instead - UV_COMPILE_BYTECODE for the
+# venv, compileall for the source tree further down. Without that, every
+# gunicorn worker recompiles the whole tree on its first request.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    UV_COMPILE_BYTECODE=1 \
     PYTHONPATH=/app/src
 
 # Install system dependencies and PostgreSQL 17 client from PGDG.
@@ -107,6 +112,17 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     else \
         uv sync --frozen; \
     fi
+
+# Precompile the source tree. Django resolves its URLconf on a worker's first
+# request, and that import reaches every controller; on staging it measured
+# 12.3s, 5.2s of which was `builtins.compile` turning .py into bytecode that
+# PYTHONDONTWRITEBYTECODE then refused to keep. Each of the WEB_CONCURRENCY
+# workers paid it separately, and under `-k gevent` that is CPU which never
+# yields, so the worker answers nothing else while it runs.
+#
+# Not fatal on error: a file that will not compile is worth seeing in the
+# build log, but this is an optimisation, not a correctness requirement.
+RUN python -m compileall -q -j 0 /app/src || echo "compileall reported errors; continuing"
 
 # Pre-create every directory appuser writes to at runtime, so it never needs
 # write access to root-owned parent dirs (volume mounts are handled separately

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from unittest import mock
 
+from django.contrib.auth.models import Permission
 from django.test import RequestFactory
+from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.controllers.tools import BackupStartView, ToolsIndexView
+from urbanlens.dashboard.controllers.tools import ToolsIndexView
 
 
 def _user(allowed: bool = True):
@@ -37,29 +39,48 @@ class ToolsIndexViewTests(TestCase):
 
 
 class BackupStartViewTests(TestCase):
-    """BackupStartView queues the Celery backup task and reports failures."""
+    """BackupStartView requires the site-admin permission and queues the Celery backup task.
 
-    def test_returns_accepted_with_task_id(self) -> None:
-        request = RequestFactory().post("/tools/backup/start/")
-        request.user = _user(allowed=True)
+    Routed through ``self.client`` (not the view's ``post()`` called directly)
+    so ``PermissionRequiredMixin.dispatch()`` actually runs - calling ``post()``
+    on a bare instance skips ``dispatch()`` entirely and would let a
+    permission regression (e.g. the check always passing) through unnoticed.
+    """
+
+    def test_permission_gate_denies_then_admits_the_same_user(self) -> None:
+        baker.make("auth.User")  # absorbs the bootstrap site-admin promotion
+        user = baker.make("auth.User")
+        self.client.force_login(user)
+        url = reverse("tools.backup.start")
+
+        # Real pre-condition: this user holds no permission yet.
+        self.assertEqual(self.client.post(url).status_code, 403)
+
+        # Real state-changing call, on the same user, granting the permission.
+        user.user_permissions.add(Permission.objects.get(codename="view_site_admin"))
+
         async_result = mock.Mock(id="task-123")
-
-        with (
-            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=async_result) as enqueue,
-            mock.patch("urbanlens.dashboard.controllers.tools.reverse", return_value="/tasks/task-123/status/"),
-        ):
-            response = BackupStartView().post(request)
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=async_result) as enqueue:
+            response = self.client.post(url)
 
         self.assertEqual(response.status_code, 202)
-        self.assertIn(b"task-123", response.content)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["task_id"], "task-123")
+        self.assertEqual(payload["status_url"], reverse("celery_task_status", kwargs={"task_id": "task-123"}))
         enqueue.assert_called_once()
 
     def test_returns_unavailable_when_enqueue_fails(self) -> None:
-        request = RequestFactory().post("/tools/backup/start/")
-        request.user = _user(allowed=True)
+        baker.make("auth.User")  # absorbs the bootstrap site-admin promotion
+        user = baker.make("auth.User")
+        user.user_permissions.add(Permission.objects.get(codename="view_site_admin"))
+        self.client.force_login(user)
+        url = reverse("tools.backup.start")
 
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=None):
-            response = BackupStartView().post(request)
+            response = self.client.post(url)
 
         self.assertEqual(response.status_code, 503)
-        self.assertIn(b"Unable to enqueue", response.content)
+        payload = response.json()
+        self.assertFalse(payload["ok"])
+        self.assertIn("Unable to enqueue", payload["message"])

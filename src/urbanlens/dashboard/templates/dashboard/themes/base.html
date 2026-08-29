@@ -368,11 +368,8 @@
       </div>
     </dialog>
 
-    {# -- Attach-a-photo dialog for comments/Notes (pin, wiki, and trip #}
-    {# comments all share _comment_compose.html) - "Upload New" (a plain file #}
-    {# picker) or "Choose Existing" (one of the poster's own already-uploaded #}
-    {# photos, via CommentImagePickerView). Reuses the .cmc-tabs/.cmc-tab #}
-    {# strip styling from the map composer above for a consistent look. #}
+    {# -- Attach-a-photo dialog for comments/Notes. #}
+    {% if request.user.is_authenticated %}
     <dialog id="comment-image-composer" class="comment-image-composer-dialog ul-dialog" aria-labelledby="comment-image-composer-title">
       <div class="dialog-header">
         <span id="comment-image-composer-title">Attach a Photo</span>
@@ -407,6 +404,7 @@
         <button type="button" class="btn btn--primary" id="comment-image-composer-save" disabled>Attach photo</button>
       </div>
     </dialog>
+    {% endif %}
 
     {# -- Global confirm dialog (replaces browser confirm()) -------------------- #}
     <dialog id="confirm-dialog" class="confirm-dialog ul-dialog" aria-labelledby="confirm-dialog-title">

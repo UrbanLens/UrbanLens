@@ -111,6 +111,13 @@ class PinAliasDeleteGuardTests(PinAliasViewTestsBase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "alias-chip--current")
 
+    def test_delete_requires_pin_ownership(self) -> None:
+        other_pin = baker.make(Pin, profile=baker.make("auth.User").profile, name="Not Yours")
+        alias = other_pin.aliases.get(name="Not Yours")
+        response = self.client.delete(reverse("pin.alias.delete", args=[other_pin.slug, alias.id]))
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(other_pin.aliases.filter(name="Not Yours").exists())
+
 
 class PinAliasNicknameTests(PinAliasViewTestsBase):
     """Creating and toggling nickname-only pin aliases."""
@@ -149,6 +156,30 @@ class PinAliasNicknameTests(PinAliasViewTestsBase):
         alias = other_pin.aliases.get(name="Not Yours")
         response = self.client.post(reverse("pin.alias.toggle_nickname", args=[other_pin.slug, alias.id]))
         self.assertEqual(response.status_code, 404)
+
+    def test_create_alias_with_duplicate_name_is_rejected(self) -> None:
+        baker.make(PinAlias, pin=self.pin, name="Existing Name")
+        response = self.client.post(
+            reverse("pin.aliases", args=[self.pin.slug]),
+            {"name": "existing name"},
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(self.pin.aliases.filter(name__iexact="existing name").count(), 1)
+
+    def test_create_alias_that_sanitizes_to_empty_is_rejected(self) -> None:
+        """A name made only of stripped characters must be rejected with 400, not crash.
+
+        ``create_pin_alias`` sanitizes the name internally and raises
+        ``ValueError`` when nothing survives (see ``test_alias_name_validation.py``),
+        but this view's own pre-check only catches an *already*-empty submission
+        and does not catch that ``ValueError`` - unlike the wiki alias view's
+        equivalent branch, which sanitizes before checking for emptiness for
+        exactly this reason (see ``LocationAliasNicknameTests`` in this file).
+        Currently reproduces a real bug: see audit concerns.
+        """
+        response = self.client.post(reverse("pin.aliases", args=[self.pin.slug]), {"name": "<>"})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(self.pin.aliases.filter(name="").exists())
 
 
 class LocationAliasUseViewTests(TestCase):
@@ -216,6 +247,26 @@ class LocationAliasNicknameTests(TestCase):
         self.assertEqual(response.status_code, 200)
         alias = self.wiki.aliases.get(name="Formal Name")
         self.assertEqual(alias.kind, AliasType.ALTERNATE)
+
+    def test_create_alias_with_duplicate_name_is_rejected(self) -> None:
+        baker.make(WikiAlias, wiki=self.wiki, name="Existing Name")
+        response = self.client.post(
+            reverse("location.wiki.aliases", args=[self.location.slug]),
+            {"name": "existing name"},
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(self.wiki.aliases.filter(name__iexact="existing name").count(), 1)
+
+    def test_create_alias_that_sanitizes_to_empty_is_rejected(self) -> None:
+        """A name made only of stripped characters must not silently become a blank alias.
+
+        Contrast with ``PinAliasNicknameTests.test_create_alias_that_sanitizes_to_empty_is_rejected``:
+        this view sanitizes *before* checking for emptiness, precisely to avoid
+        the bug that check reproduces on the pin side.
+        """
+        response = self.client.post(reverse("location.wiki.aliases", args=[self.location.slug]), {"name": "<>"})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(self.wiki.aliases.filter(name="").exists())
 
     def test_toggle_nickname_flips_kind(self) -> None:
         alias = baker.make(WikiAlias, wiki=self.wiki, name="Toggle Me", kind=AliasType.OFFICIAL, source="google_places")

@@ -161,6 +161,15 @@ class SaveArticleTests(TestCase):
         with self.assertRaises(ValueError):
             save_article(editor=self.profile, content="x")
 
+    def test_rejects_both_hosts_at_once(self) -> None:
+        """The neither- and both-hosts branches share one condition (`(pin is None) == (wiki
+        is None)`) - a regression that only checked for "neither" would still pass the test
+        above while silently accepting a pin+wiki call it should reject."""
+        location = baker.make(Location)
+        wiki = baker.make(Wiki, location=location, name="Both Mill")
+        with self.assertRaises(ValueError):
+            save_article(editor=self.profile, content="x", pin=self.pin, wiki=wiki)
+
     def test_wiki_article_save(self) -> None:
         location = baker.make(Location)
         wiki = baker.make(Wiki, location=location, name="Mill Wiki")
@@ -207,6 +216,10 @@ class PinArticleViewTests(TestCase):
 
     def test_other_users_cannot_see_pin_article(self) -> None:
         save_article(editor=self.profile, content="secret notes", pin=self.pin)
+        response = self.client.get(reverse("pin.article", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200, "the owner must still be able to see it")
+        self.assertContains(response, "secret notes")
+
         self.client.force_login(self.other_user)
         response = self.client.get(reverse("pin.article", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 404)
@@ -298,6 +311,9 @@ class WikiArticleViewTests(TestCase):
         self.assertTrue(Article.objects.filter(wiki=self.wiki).exists())
 
     def test_unpinned_user_gets_404(self) -> None:
+        response = self.client.get(reverse("location.wiki.article", args=[self.location.slug]))
+        self.assertEqual(response.status_code, 200, "a pinned user must still be able to see it")
+
         self.client.force_login(self.outsider)
         response = self.client.get(reverse("location.wiki.article", args=[self.location.slug]))
         self.assertEqual(response.status_code, 404)

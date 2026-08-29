@@ -272,10 +272,17 @@ export function showMapContextMenu(options: ShowMapContextMenuOptions): HTMLElem
 
     placeFloatingMenu(menu, options.clientX, options.clientY);
 
-    dismissHandler = (event: MouseEvent) => {
+    const dismiss = (event: MouseEvent): void => {
         if (!menu.contains(event.target as Node)) close();
     };
-    setTimeout(() => document.addEventListener("click", dismissHandler!), 0);
+    dismissHandler = dismiss;
+    // Deferred so the click that opened the menu doesn't immediately dismiss
+    // it. closeMapContextMenus() can run first (a second right-click, an item
+    // click, a route change), and it nulls dismissHandler - so re-check that
+    // this menu is still the open one instead of registering a stale handler.
+    setTimeout(() => {
+        if (dismissHandler === dismiss) document.addEventListener("click", dismiss);
+    }, 0);
 
     return menu;
 }

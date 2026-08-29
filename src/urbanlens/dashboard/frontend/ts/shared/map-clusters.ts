@@ -71,12 +71,37 @@ export function hasMarkerCluster(): boolean {
 }
 
 /**
+ * Whether *map* can host a cluster group at all.
+ *
+ * leaflet.markercluster's `onAdd` does `throw "Map has no maxZoom specified"` -
+ * a bare string, so it is not even an Error - when `map.getMaxZoom()` is
+ * Infinity, which is the case for a map built without an explicit `maxZoom`
+ * until its first tile layer lands. That throw propagates out of `.addTo(map)`
+ * and aborts whatever entry script was mid-initialisation, leaving a blank map
+ * container and every later binding in that function unregistered.
+ *
+ * Callers pass their map so a misconfigured one costs clustering rather than
+ * the whole page. Set `maxZoom` on the map (see MAP_MAX_ZOOM) to fix it
+ * properly.
+ *
+ * @param map - Map the group is about to be added to.
+ */
+export function canCluster(map?: L.Map): boolean {
+    if (!hasMarkerCluster()) return false;
+    if (!map) return true;
+    if (isFinite(map.getMaxZoom())) return true;
+    console.warn("Clustering disabled: this map has no maxZoom, and leaflet.markercluster requires one.");
+    return false;
+}
+
+/**
  * A MarkerClusterGroup that uses the same numbered badge as the main map.
  *
  * Falls back to a plain LayerGroup when the plugin is not on the page, so
  * callers can add/remove markers identically either way.
  *
  * @param options - Extra cluster-group options (merged over the defaults).
+ * @param map - Map the group will be added to, checked for a usable maxZoom.
  */
 export function createPinClusterGroup(
     options: {
@@ -88,9 +113,10 @@ export function createPinClusterGroup(
         animateAddingMarkers?: boolean;
         iconCreateFunction?: (cluster: ClusterLike) => L.DivIcon;
     } = {},
+    map?: L.Map,
 ): L.LayerGroup {
     const factory = markerClusterFactory();
-    if (!factory) return L.layerGroup();
+    if (!factory || !canCluster(map)) return L.layerGroup();
     return factory({
         maxClusterRadius: detailPinClusterRadius,
         spiderfyOnMaxZoom: true,

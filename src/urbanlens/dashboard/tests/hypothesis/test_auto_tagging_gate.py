@@ -43,10 +43,17 @@ class AutoTagAvailabilityTests(TestCase):
 
     def test_without_the_feature_there_is_nothing_to_offer(self) -> None:
         self.assertFalse(self._available(KIND_TAG, has_feature=False))
+        # Same user/kind, capability granted - an "always gated off" implementation
+        # would still pass the assertion above.
+        self.assertTrue(self._available(KIND_TAG, has_feature=True))
 
     def test_the_user_can_switch_it_off_wholesale(self) -> None:
         self.assertFalse(self._available(KIND_TAG, disabled=True))
         self.assertFalse(self._available(KIND_CATEGORY, disabled=True))
+        # Same user/kinds, switched back on - an "always disabled" implementation
+        # would still pass the assertions above.
+        self.assertTrue(self._available(KIND_TAG, disabled=False))
+        self.assertTrue(self._available(KIND_CATEGORY, disabled=False))
 
     def test_statuses_people_and_media_are_out_of_scope(self) -> None:
         """"Visited" and a person's name are not "what is this place"."""

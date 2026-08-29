@@ -173,7 +173,12 @@ class PinAliasView(LoginRequiredMixin, View):
 
     def post(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        name = (request.POST.get("name") or "").strip()
+        # Sanitized before the emptiness check: PinAlias.save() applies
+        # sanitize_name, so a name of only dropped characters (e.g. "<>", an
+        # emoji) would otherwise pass this check and raise an uncaught
+        # ValueError out of create_pin_alias below (see the wiki-side
+        # LocationAliasView.post, which has the same comment).
+        name = sanitize_name((request.POST.get("name") or "").strip()) or ""
         if not name:
             return HttpResponse("Name is required.", status=400)
         name_error = column_length_error(PinAlias, "name", name, "Alias")

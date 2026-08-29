@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -13,14 +14,17 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.ai.assistant import (
+    MAX_TOOL_CALLS,
     AssistantUnavailableError,
     _parse_step,
     _tool_add_trip_activity,
     _tool_create_trip,
     _tool_find_unvisited_pins,
+    _tool_list_trips,
     _tool_search_pins,
     run_assistant_turn,
 )
@@ -67,6 +71,24 @@ class AssistantToolTests(TestCase):
         self.assertIn("Steel Mill", names)
         self.assertNotIn("Visited Works", names)
 
+    def test_list_trips_only_sees_own(self) -> None:
+        mine = _tool_create_trip(self.profile, {"name": "My Trip"})
+        my_trip = Trip.objects.get(slug=mine["created"]["slug"])
+        my_trip.start_date = date.today() + timedelta(days=3)
+        my_trip.save(update_fields=["start_date"])
+
+        theirs = _tool_create_trip(self.other, {"name": "Not Mine"})
+        their_trip = Trip.objects.get(slug=theirs["created"]["slug"])
+        their_trip.start_date = date.today() + timedelta(days=3)
+        their_trip.save(update_fields=["start_date"])
+
+        result = _tool_list_trips(self.profile, {})
+        self.assertEqual([row["name"] for row in result["trips"]], ["My Trip"])
+        row = result["trips"][0]
+        self.assertEqual(row["slug"], my_trip.slug)
+        self.assertEqual(row["start_date"], my_trip.start_date.isoformat())
+        self.assertEqual(row["activities"], 0)
+
     def test_create_trip_and_membership(self) -> None:
         result = _tool_create_trip(self.profile, {"name": "Assistant Run"})
         trip = Trip.objects.get(slug=result["created"]["slug"])
@@ -76,6 +98,30 @@ class AssistantToolTests(TestCase):
     def test_create_trip_blank_name_generates_one(self) -> None:
         result = _tool_create_trip(self.profile, {})
         self.assertTrue(result["created"]["name"].strip())
+
+    def test_create_trip_respects_upcoming_trip_limit(self) -> None:
+        settings = SiteSettings.get_current()
+        settings.max_upcoming_trips_per_user = 1
+        settings.save()
+
+        # Under the cap: succeeds. Move it into the "upcoming" bucket the quota
+        # counts (an undated trip with no activities doesn't count as upcoming).
+        first = _tool_create_trip(self.profile, {"name": "First Trip"})
+        first_trip = Trip.objects.get(slug=first["created"]["slug"])
+        first_trip.start_date = date.today() + timedelta(days=3)
+        first_trip.save(update_fields=["start_date"])
+
+        # At the cap: rejected, and nothing is created.
+        blocked = _tool_create_trip(self.profile, {"name": "Second Trip"})
+        self.assertIn("error", blocked)
+        self.assertFalse(Trip.objects.filter(name="Second Trip").exists())
+
+        # Raise the cap (real state transition): the same request now succeeds.
+        settings.max_upcoming_trips_per_user = 2
+        settings.save()
+        allowed = _tool_create_trip(self.profile, {"name": "Second Trip"})
+        self.assertNotIn("error", allowed)
+        self.assertTrue(Trip.objects.filter(name="Second Trip", creator=self.profile).exists())
 
     def test_add_trip_activity_scoping(self) -> None:
         trip_result = _tool_create_trip(self.profile, {"name": "Scoped Trip"})
@@ -92,6 +138,32 @@ class AssistantToolTests(TestCase):
         self.assertEqual(activity.status, TripActivity.STATUS_PROPOSED)
         self.assertEqual(activity.pin_id, self.pin.id)
         self.assertIsNotNone(activity.scheduled_at)
+
+    def test_add_trip_activity_respects_activity_limit(self) -> None:
+        settings = SiteSettings.get_current()
+        settings.max_trip_activities = 1
+        settings.save()
+
+        trip_result = _tool_create_trip(self.profile, {"name": "Capped Trip"})
+        trip_slug = trip_result["created"]["slug"]
+        second_location = baker.make(Location, latitude="42.700000", longitude="-73.700000", administrative_area_level_1="NY")
+        second_pin = baker.make(Pin, profile=self.profile, location=second_location, name="Second Pin", name_is_user_provided=True)
+
+        # Under the cap: succeeds.
+        first = _tool_add_trip_activity(self.profile, {"trip_slug": trip_slug, "pin_slug": self.pin.slug})
+        self.assertNotIn("error", first)
+
+        # At the cap: rejected, and no second activity is created.
+        blocked = _tool_add_trip_activity(self.profile, {"trip_slug": trip_slug, "pin_slug": second_pin.slug})
+        self.assertIn("error", blocked)
+        self.assertEqual(TripActivity.objects.filter(trip__slug=trip_slug).count(), 1)
+
+        # Raise the cap (real state transition): the same request now succeeds.
+        settings.max_trip_activities = 2
+        settings.save()
+        allowed = _tool_add_trip_activity(self.profile, {"trip_slug": trip_slug, "pin_slug": second_pin.slug})
+        self.assertNotIn("error", allowed)
+        self.assertEqual(TripActivity.objects.filter(trip__slug=trip_slug).count(), 2)
 
 
 class _StubGateway:
@@ -147,7 +219,10 @@ class AssistantLoopTests(TestCase):
         with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
             turn = run_assistant_turn(self.profile, [], "loop forever")
         self.assertIn("action limit", turn.reply)
-        self.assertLessEqual(len(gateway.prompts), 8)
+        # Exactly the budget, not merely "some small number": a bug that widened
+        # MAX_TOOL_CALLS (or dropped the cap) must fail this.
+        self.assertEqual(len(gateway.prompts), MAX_TOOL_CALLS)
+        self.assertEqual(turn.actions, ["Checked your trips"] * MAX_TOOL_CALLS)
 
     def test_unparseable_answer_is_surfaced_as_text(self) -> None:
         gateway = _StubGateway(["Here are some thoughts without JSON."])
@@ -165,11 +240,21 @@ class AssistantViewTests(TestCase):
         self.profile = Profile.objects.get(user=self.user)
         self.client.force_login(self.user)
 
-    def test_page_renders_disabled_state_without_ai(self) -> None:
+    def test_page_reflects_ai_availability(self) -> None:
+        # Without a gateway: the disabled notice, no chat form.
         with patch("urbanlens.dashboard.controllers.assistant.get_gateway", return_value=None):
             response = self.client.get(reverse("assistant"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "AI features are turned off")
+        self.assertNotContains(response, 'name="message"')
+
+        # With a gateway: the chat form, no disabled notice. Same profile/client -
+        # this is the same gate, just the other branch of it.
+        with patch("urbanlens.dashboard.controllers.assistant.get_gateway", return_value=object()):
+            response = self.client.get(reverse("assistant"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "AI features are turned off")
+        self.assertContains(response, 'name="message"')
 
     def test_message_round_trip_persists_in_session(self) -> None:
         from urbanlens.dashboard.services.ai.assistant import AssistantTurn
@@ -184,3 +269,23 @@ class AssistantViewTests(TestCase):
         # Reset clears the log.
         response = self.client.post(reverse("assistant.reset"))
         self.assertNotContains(response, "Found 3 pins.")
+
+    def test_message_when_ai_unavailable_shows_notice_and_saves_history(self) -> None:
+        with patch("urbanlens.dashboard.controllers.assistant.run_assistant_turn", side_effect=AssistantUnavailableError("off")):
+            response = self.client.post(reverse("assistant.message"), {"message": "find pins"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "find pins")
+        self.assertContains(response, "AI features are currently turned off")
+
+        # It's really saved (not just rendered once): reloading the page still shows
+        # it in the log (the log only renders when AI is currently available).
+        with patch("urbanlens.dashboard.controllers.assistant.get_gateway", return_value=object()):
+            response = self.client.get(reverse("assistant"))
+        self.assertContains(response, "AI features are currently turned off")
+
+    def test_blank_message_is_a_no_op(self) -> None:
+        with patch("urbanlens.dashboard.controllers.assistant.run_assistant_turn") as mock_turn:
+            response = self.client.post(reverse("assistant.message"), {"message": "   "})
+        self.assertEqual(response.status_code, 200)
+        mock_turn.assert_not_called()
+        self.assertFalse(self.client.session.get("assistant_chat"))

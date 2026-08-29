@@ -49,6 +49,21 @@ class VendorAssetTableTests(SimpleTestCase):
         for key in ("leaflet_marker_icon", "leaflet_marker_shadow"):
             self.assertEqual(VENDOR_ASSETS[key].path.split("/")[1], library, f"{key} is from a different Leaflet release")
 
+    def test_every_script_and_style_pins_an_integrity_hash(self) -> None:
+        """Every ``<script>``/``<link>`` this table can render must be checkable.
+
+        Only ``image`` assets are exempt - they have no tag of their own
+        (`vendor_asset_tag` raises for one), so nothing renders `integrity=`
+        for them regardless. Nine of these were unpinned until a Nuclei
+        `missing-sri` scan flagged the gap; asserted over the whole table so
+        the next asset someone adds without a hash fails here instead.
+        """
+        for key, asset in VENDOR_ASSETS.items():
+            if asset.kind == "image":
+                continue
+            self.assertTrue(asset.integrity, f"{key} ({asset.kind}) has no integrity hash")
+            self.assertRegex(asset.integrity, r"^sha(256|384|512)-", f"{key}'s integrity value {asset.integrity!r} is not a valid SRI hash")
+
 
 class VendorAssetResolutionTests(SimpleTestCase):
     """Where a given asset is loaded from, and what the tag says about it."""

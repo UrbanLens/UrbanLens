@@ -1,0 +1,19 @@
+# Hash-pinned per docs/INTEGRATION_TESTS.md's "sqlmap" section.
+#
+# sqlmap (https://github.com/sqlmapproject/sqlmap) publishes no checksums,
+# signatures, or attestation of its own for any release - verified against
+# every GitHub Release asset list and the repo history. The maintainers do,
+# however, publish the *same* tagged release to PyPI themselves (via their own
+# extra/shutils/pypi.sh), so PyPI's own per-file SHA256 digests are the best
+# integrity anchor available: `pip install --require-hashes -r` this file
+# fails closed if either artifact PyPI serves ever differs from what was
+# pinned here, rather than trusting whatever a `pip install sqlmap` resolves
+# to on the day the scan happens.
+#
+# To bump the pin: pick a new tag at https://github.com/sqlmapproject/sqlmap/releases,
+# fetch https://pypi.org/pypi/sqlmap/<version>/json, and update the version and
+# BOTH hashes below together - a partial update (version without hashes, or
+# vice versa) is exactly the mistake --require-hashes exists to catch.
+sqlmap==1.10.8 \
+    --hash=sha256:e4725e27d4d53b1be4a35c8c4d28aee7033230a245c281995eabd5ba2199eea3 \
+    --hash=sha256:5fb241ca5359a1e5be23bc8f5c2827bb1e60501b147b989c3bf3dac57aec9db6

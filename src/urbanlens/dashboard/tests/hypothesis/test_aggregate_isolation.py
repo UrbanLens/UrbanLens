@@ -18,6 +18,7 @@ from __future__ import annotations
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -25,6 +26,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.services.memories import journal
+from urbanlens.dashboard.services.memories.journal import JournalEntry
 from urbanlens.dashboard.services.pins.external_data import PanelSource, panel_readiness
 
 
@@ -50,6 +52,30 @@ class JournalSourceIsolationTests(TestCase):
             entries = journal.get_journal_entries(self.profile)
 
         self.assertIn("review", {entry.kind for entry in entries}, "a healthy source must still contribute")
+
+    def test_a_source_that_fails_midway_keeps_what_it_already_yielded(self) -> None:
+        """Sources are generators - ``get_journal_entries`` extends its result list
+        incrementally, so a failure partway through a source must not discard the
+        entries that source had already produced, nor the other sources' entries."""
+
+        def half_boom(profile):
+            yield JournalEntry(
+                kind="comment",
+                occurred_at=timezone.now(),
+                icon="forum",
+                title="salvaged before the crash",
+                subtitle="Comment",
+                body="",
+                url="/",
+            )
+            raise ValueError("corrupt row after the first")
+
+        with mock.patch.dict(journal.JOURNAL_SOURCES, {"comments": half_boom}):
+            entries = journal.get_journal_entries(self.profile)
+
+        titles = {entry.title for entry in entries}
+        self.assertIn("salvaged before the crash", titles, "entries yielded before the failure must survive")
+        self.assertIn("review", {entry.kind for entry in entries}, "other sources must still contribute")
 
     def test_every_source_failing_yields_an_empty_journal_rather_than_an_error(self) -> None:
         def boom(profile):

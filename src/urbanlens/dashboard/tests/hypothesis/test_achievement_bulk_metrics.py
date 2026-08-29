@@ -193,6 +193,10 @@ class BulkAgreementExhaustiveTests(TestCase):
         missing = [key for key in SEEDERS if (metric := get_metric(key)) and metric.compute_bulk is None]
         self.assertEqual(missing, [], "builtin metrics must all carry a bulk form for the sweep")
 
+    def test_seeders_cover_every_registered_metric(self) -> None:
+        """A metric registered without a SEEDERS entry would silently skip every check below."""
+        self.assertEqual(set(SEEDERS), {metric.key for metric in all_metrics()}, "SEEDERS has drifted from the metric registry")
+
     def test_bulk_agrees_with_per_profile_for_every_builtin_metric(self) -> None:
         counts = (0, 1, 3)
         for key, seed in SEEDERS.items():
@@ -243,6 +247,153 @@ class BulkEdgeCaseTests(TestCase):
                 continue
             with self.subTest(metric=metric.key):
                 self.assertEqual(metric.values_for_many([profile]), {profile.pk: 0})
+
+
+class BulkExclusionFilterTests(TestCase):
+    """Every metric with a disqualifying state must exclude it in bulk, not just per-profile.
+
+    ``SEEDERS`` above only ever creates *qualifying* rows, so a bulk form that
+    silently drops its ``WHERE`` clause (counting reverted edits, tentative
+    visits, declined RSVPs, ...) would agree with ``compute`` on every existing
+    test - both sides would just overcount together. Each test here creates a
+    disqualifying row first, asserts both forms read 0 for it, then flips the
+    same row into the qualifying state and asserts both read 1.
+    """
+
+    def test_reverted_wiki_edit_does_not_count_until_unreverted(self) -> None:
+        profile = _profile()
+        wiki = baker.make("dashboard.Wiki", location=_location())
+        edit = baker.make("dashboard.WikiEdit", editor=profile, wiki=wiki, reverted=True)
+        metric = get_metric("wiki_edits")
+
+        self.assertEqual(metric.value_for(profile), 0)
+        self.assertEqual(metric.values_for_many([profile]), {profile.pk: 0})
+
+        edit.reverted = False
+        edit.save(update_fields=["reverted"])
+
+        self.assertEqual(metric.value_for(profile), 1)
+        self.assertEqual(metric.values_for_many([profile]), {profile.pk: 1})
+
+    def test_tentative_visit_does_not_count_until_confirmed(self) -> None:
+        profile = _profile()
+        pin = baker.make(Pin, profile=profile)
+        visit = baker.make("dashboard.PinVisit", pin=pin, tentative=True)
+        metric = get_metric("places_visited")
+
+        self.assertEqual(metric.value_for(profile), 0)
+        self.assertEqual(metric.values_for_many([profile]), {profile.pk: 0})
+
+        visit.tentative = False
+        visit.save(update_fields=["tentative"])
+
+        self.assertEqual(metric.value_for(profile), 1)
+        self.assertEqual(metric.values_for_many([profile]), {profile.pk: 1})
+
+    def test_unrated_pin_does_not_count_for_vulnerability_or_danger_until_rated(self) -> None:
+        profile = _profile()
+        pin = baker.make(Pin, profile=profile, vulnerability=0, danger=0)
+        vulnerability_metric = get_metric("places_vulnerability_rated")
+        danger_metric = get_metric("places_danger_rated")
+
+        self.assertEqual(vulnerability_metric.values_for_many([profile]), {profile.pk: 0})
+        self.assertEqual(danger_metric.values_for_many([profile]), {profile.pk: 0})
+
+        pin.vulnerability = 3
+        pin.danger = 2
+        pin.save(update_fields=["vulnerability", "danger"])
+
+        self.assertEqual(vulnerability_metric.value_for(profile), 1)
+        self.assertEqual(vulnerability_metric.values_for_many([profile]), {profile.pk: 1})
+        self.assertEqual(danger_metric.value_for(profile), 1)
+        self.assertEqual(danger_metric.values_for_many([profile]), {profile.pk: 1})
+
+    def test_unaccepted_invitation_does_not_count_until_accepted(self) -> None:
+        profile = _profile()
+        invitation = baker.make("dashboard.FriendInvitation", inviter=profile)
+        metric = get_metric("people_invited")
+
+        self.assertEqual(metric.value_for(profile), 0)
+        self.assertEqual(metric.values_for_many([profile]), {profile.pk: 0})
+
+        self.assertTrue(invitation.mark_accepted())
+
+        self.assertEqual(metric.value_for(profile), 1)
+        self.assertEqual(metric.values_for_many([profile]), {profile.pk: 1})
+
+    def test_non_accepted_friendship_does_not_count_until_accepted(self) -> None:
+        profile, other = _profile(), _profile()
+        friendship = Friendship.objects.create(
+            from_profile=profile,
+            to_profile=other,
+            status=FriendshipStatus.REQUESTED,
+            relationship_type=FriendshipType.FRIEND,
+        )
+        metric = get_metric("friends")
+
+        self.assertEqual(metric.value_for(profile), 0)
+        self.assertEqual(metric.values_for_many([profile, other]), {profile.pk: 0, other.pk: 0})
+
+        friendship.status = FriendshipStatus.ACCEPTED
+        friendship.save(update_fields=["status"])
+
+        self.assertEqual(metric.value_for(profile), 1)
+        self.assertEqual(metric.values_for_many([profile, other]), {profile.pk: 1, other.pk: 1})
+
+    def test_trip_attendance_requires_finished_joined_and_not_declined(self) -> None:
+        """Three independent gates: the trip must be over, joined, and not declined."""
+        host = _profile()
+        today = timezone.localdate()
+        metric = get_metric("trips_attended")
+
+        profile = _profile()
+        trip = baker.make(
+            "dashboard.Trip",
+            creator=host,
+            start_date=today + datetime.timedelta(days=5),
+            end_date=today + datetime.timedelta(days=6),
+        )
+        baker.make(
+            "dashboard.TripMembership",
+            trip=trip,
+            profile=profile,
+            status=TripMembership.STATUS_JOINED,
+            rsvp=TripMembership.RSVP_YES,
+        )
+
+        # Not yet finished: must not count even though joined with a yes RSVP.
+        self.assertEqual(metric.value_for(profile), 0)
+        self.assertEqual(metric.values_for_many([profile]), {profile.pk: 0})
+
+        trip.end_date = today - datetime.timedelta(days=1)
+        trip.save(update_fields=["end_date"])
+
+        self.assertEqual(metric.value_for(profile), 1)
+        self.assertEqual(metric.values_for_many([profile]), {profile.pk: 1})
+
+        # Declining a finished trip must not count, even for the same trip.
+        declined = _profile()
+        baker.make(
+            "dashboard.TripMembership",
+            trip=trip,
+            profile=declined,
+            status=TripMembership.STATUS_JOINED,
+            rsvp=TripMembership.RSVP_NO,
+        )
+        self.assertEqual(metric.value_for(declined), 0)
+        self.assertEqual(metric.values_for_many([declined]), {declined.pk: 0})
+
+        # Merely invited (never joined) must not count either.
+        invited = _profile()
+        baker.make(
+            "dashboard.TripMembership",
+            trip=trip,
+            profile=invited,
+            status=TripMembership.STATUS_INVITED,
+            rsvp=TripMembership.RSVP_YES,
+        )
+        self.assertEqual(metric.value_for(invited), 0)
+        self.assertEqual(metric.values_for_many([invited]), {invited.pk: 0})
 
 
 class BulkAgreementPropertyTests(TestCase):
