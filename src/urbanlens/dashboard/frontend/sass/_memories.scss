@@ -403,13 +403,25 @@ $memories-type-colors: (
 
     &:focus,
     &:active,
-    &:hover { border-color: $color-deep-purple-500; background: var(--ul-grey-0b); }
+    &:hover {
+        border-color: $color-deep-purple-500;
+        background: var(--ul-grey-0b);
+    }
 
-    .material-symbols-outlined { font-size: 2rem; color: $color-deep-purple-500; }
+    .material-symbols-outlined {
+        font-size: 2rem;
+        color: $color-deep-purple-500;
+    }
 }
 
-.photos-dropzone-title { font-weight: 600; color: var(--ul-grey-8); }
-.photos-dropzone-sub { font-size: .82rem; }
+.photos-dropzone-title {
+    font-weight: 600;
+    color: var(--ul-grey-8);
+}
+
+.photos-dropzone-sub {
+    font-size: .82rem;
+}
 
 .photos-upload-progress {
     width: 100%;
@@ -430,7 +442,9 @@ $memories-type-colors: (
 
 // -- Needs-attention band --------------------------------------------------
 
-.photos-attention { margin-bottom: 1.75rem; }
+.photos-attention {
+    margin-bottom: 1.75rem;
+}
 
 .photos-attention-head,
 .photos-gallery-head {
@@ -449,7 +463,10 @@ $memories-type-colors: (
         color: var(--ul-grey-8);
     }
 
-    .material-symbols-outlined { font-size: 1.3rem; color: $color-deep-purple-500; }
+    .material-symbols-outlined {
+        font-size: 1.3rem;
+        color: $color-deep-purple-500;
+    }
 }
 
 .photos-attention-scroll {
@@ -512,9 +529,6 @@ $memories-type-colors: (
         font-size: .9rem;
     }
 }
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-}
 
 .photos-attention--empty .photos-attention-clear {
     display: flex;
@@ -526,7 +540,9 @@ $memories-type-colors: (
     font-size: .9rem;
     margin: 0;
 
-    .material-symbols-outlined { color: $color-green-500; }
+    .material-symbols-outlined {
+        color: $color-green-500;
+    }
 }
 
 // -- Actionable photo card -------------------------------------------------
@@ -546,7 +562,12 @@ $memories-type-colors: (
     aspect-ratio: 16 / 10;
     background: var(--ul-surface-raised);
 
-    img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
 }
 
 // Swapped in for `<img>` via urbanlensMediaThumbFallback() when the stored
@@ -559,7 +580,9 @@ $memories-type-colors: (
     height: 100%;
     color: var(--ul-grey-4);
 
-    .material-icons { font-size: 2rem; }
+    .material-icons {
+        font-size: 2rem;
+    }
 }
 
 .photo-card-body {
@@ -569,14 +592,19 @@ $memories-type-colors: (
     gap: .55rem;
 }
 
-.photo-card-meta { font-size: .78rem; color: var(--ul-grey-6); }
+.photo-card-meta {
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+}
 
 .photo-card-date {
     display: inline-flex;
     align-items: center;
     gap: .3rem;
 
-    .material-symbols-outlined { font-size: 1rem; }
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
 }
 
 .photo-card-prompt {
@@ -634,13 +662,28 @@ $memories-type-colors: (
     font-size: .85rem;
     color: var(--ul-grey-8);
 
-    &:hover { background: rgba(156, 39, 176, .06); border-color: $color-deep-purple-500; }
+    &:hover {
+        background: rgba(156, 39, 176, .06);
+        border-color: $color-deep-purple-500;
+    }
 
-    .material-symbols-outlined { font-size: 1.1rem; color: $color-deep-purple-500; }
-    .photo-pin-result-sub { color: var(--ul-grey-6); font-size: .75rem; margin-left: auto; }
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+        color: $color-deep-purple-500;
+    }
+
+    .photo-pin-result-sub {
+        color: var(--ul-grey-6);
+        font-size: .75rem;
+        margin-left: auto;
+    }
 }
 
-.photo-pin-empty { font-size: .8rem; color: var(--ul-grey-6); margin: .3rem 0 0; }
+.photo-pin-empty {
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+    margin: .3rem 0 0;
+}
 
 // -- Confirm-pin dialog (preview / move / name before creating) ------------
 
@@ -649,9 +692,16 @@ $memories-type-colors: (
     max-width: 94vw;
 }
 
-.photo-pin-confirm-body { padding: 1rem 1.1rem 1.2rem; }
+.photo-pin-confirm-body {
+    padding: 1rem 1.1rem 1.2rem;
+}
 
-.photo-pin-confirm-loading { color: var(--ul-grey-6); font-size: .9rem; text-align: center; padding: 2rem 0; }
+.photo-pin-confirm-loading {
+    color: var(--ul-grey-6);
+    font-size: .9rem;
+    text-align: center;
+    padding: 2rem 0;
+}
 
 .photo-pin-confirm-intro {
     margin: 0 0 .75rem;
@@ -685,13 +735,24 @@ $memories-type-colors: (
     gap: .4rem;
     font-size: .85rem;
 
-    strong { color: var(--ul-grey-8); }
+    strong {
+        color: var(--ul-grey-8);
+    }
 }
 
 .photo-pin-confirm-form {
-    .form-row { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .85rem; }
+    .form-row {
+        display: flex;
+        flex-direction: column;
+        gap: .3rem;
+        margin-bottom: .85rem;
+    }
 
-    label { font-size: .82rem; font-weight: 600; color: var(--ul-grey-7); }
+    label {
+        font-size: .82rem;
+        font-weight: 600;
+        color: var(--ul-grey-7);
+    }
 
     input[type="text"] {
         padding: .5rem .6rem;
@@ -702,12 +763,18 @@ $memories-type-colors: (
         color: var(--ul-grey-8);
     }
 
-    .form-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+    .form-actions {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+    }
 }
 
 // -- Full gallery grid -----------------------------------------------------
 
-.photos-gallery { margin-bottom: 2rem; }
+.photos-gallery {
+    margin-bottom: 2rem;
+}
 
 .photos-grid {
     list-style: none;
@@ -725,7 +792,9 @@ $memories-type-colors: (
     overflow: hidden;
     background: var(--ul-surface-raised);
 
-    &:hover .photo-tile-del { opacity: 1; }
+    &:hover .photo-tile-del {
+        opacity: 1;
+    }
 }
 
 // Swapped in for `<img>` via urbanlensMediaThumbFallback() when the stored
@@ -738,7 +807,9 @@ $memories-type-colors: (
     height: 100%;
     color: var(--ul-grey-4);
 
-    .material-icons { font-size: 1.6rem; }
+    .material-icons {
+        font-size: 1.6rem;
+    }
 }
 
 .photo-tile-btn {
@@ -750,7 +821,12 @@ $memories-type-colors: (
     background: none;
     cursor: pointer;
 
-    img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
 }
 
 .photo-tile-badge {
@@ -763,7 +839,9 @@ $memories-type-colors: (
     background: rgba(0, 0, 0, .55);
     color: #fff;
 
-    .material-symbols-outlined { font-size: .95rem; }
+    .material-symbols-outlined {
+        font-size: .95rem;
+    }
 }
 
 .photo-tile-del {
@@ -780,12 +858,16 @@ $memories-type-colors: (
     opacity: 0;
     transition: opacity .15s ease;
 
-    .material-symbols-outlined { font-size: 1.05rem; }
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+    }
 }
 
 // Touch devices can't hover: keep the delete affordance visible.
 @media (hover: none) {
-    .photo-tile-del { opacity: .85; }
+    .photo-tile-del {
+        opacity: .85;
+    }
 }
 
 .photos-empty {
@@ -796,8 +878,14 @@ $memories-type-colors: (
     border-radius: .9rem;
     background: var(--ul-surface-1);
 
-    .material-symbols-outlined { font-size: 2.4rem; opacity: .6; }
-    p { margin: .5rem 0 0; }
+    .material-symbols-outlined {
+        font-size: 2.4rem;
+        opacity: .6;
+    }
+
+    p {
+        margin: .5rem 0 0;
+    }
 }
 
 // -- Unlogged-visits list ("Log your visits" subpage) -----------------------
@@ -815,7 +903,9 @@ $memories-type-colors: (
     color: var(--ul-grey-7);
     font-size: .9rem;
 
-    .material-symbols-outlined { color: $color-green-500; }
+    .material-symbols-outlined {
+        color: $color-green-500;
+    }
 }
 
 .memories-unlogged-head {
@@ -866,9 +956,14 @@ $memories-type-colors: (
     cursor: pointer;
     transition: background .15s ease, color .15s ease;
 
-    .material-symbols-outlined { font-size: 1.1rem; }
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+    }
 
-    &:hover { background: var(--ul-hover-bg); color: var(--ul-grey-8); }
+    &:hover {
+        background: var(--ul-hover-bg);
+        color: var(--ul-grey-8);
+    }
 }
 
 .unlogged-card-icon {
@@ -881,7 +976,10 @@ $memories-type-colors: (
     border-radius: 50%;
     background: rgba($color-green-500, .14);
 
-    .material-symbols-outlined { color: $color-green-500; font-size: 1.4rem; }
+    .material-symbols-outlined {
+        color: $color-green-500;
+        font-size: 1.4rem;
+    }
 }
 
 .unlogged-card-body {
@@ -910,7 +1008,9 @@ $memories-type-colors: (
     font-size: .78rem;
     color: var(--ul-grey-6);
 
-    .material-symbols-outlined { font-size: 1rem; }
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
 }
 
 // Mobile-first: the quick-log form, "Add details", and "Not visited" each get
@@ -979,7 +1079,10 @@ $memories-type-colors: (
     border-radius: 50%;
     background: rgba($color-green-500, .14);
 
-    .material-symbols-outlined { color: $color-green-500; font-size: 1.3rem; }
+    .material-symbols-outlined {
+        color: $color-green-500;
+        font-size: 1.3rem;
+    }
 }
 
 .memories-unlogged-teaser-text {
@@ -989,9 +1092,15 @@ $memories-type-colors: (
     min-width: 0;
     flex: 1 1 auto;
 
-    strong { font-size: .92rem; color: var(--ul-grey-8); }
+    strong {
+        font-size: .92rem;
+        color: var(--ul-grey-8);
+    }
 
-    span { font-size: .8rem; color: var(--ul-grey-6); }
+    span {
+        font-size: .8rem;
+        color: var(--ul-grey-6);
+    }
 }
 
 .memories-unlogged-teaser-arrow {
@@ -1001,7 +1110,9 @@ $memories-type-colors: (
 
 // -- Add-details button on a timeline visit card ---------------------------
 
-.memories-card { position: relative; }
+.memories-card {
+    position: relative;
+}
 
 .memories-card-details-btn {
     position: absolute;
@@ -1020,24 +1131,39 @@ $memories-type-colors: (
     opacity: 0;
     transition: opacity .15s ease, background .15s ease;
 
-    .material-symbols-outlined { font-size: 1.1rem; }
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+    }
 
-    &:hover { background: $color-deep-purple-500; }
+    &:hover {
+        background: $color-deep-purple-500;
+    }
 }
 
 .memories-card:hover .memories-card-details-btn,
-.memories-card:focus-within .memories-card-details-btn { opacity: 1; }
+.memories-card:focus-within .memories-card-details-btn {
+    opacity: 1;
+}
 
 // -- Wider viewports -------------------------------------------------------
 
 @media (min-width: 640px) {
-    .photo-card { flex-basis: 320px; }
+    .photo-card {
+        flex-basis: 320px;
+    }
 
-    .photos-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: .5rem; }
+    .photos-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: .5rem;
+    }
 
-    .photos-dropzone { padding: 2rem 1rem; }
+    .photos-dropzone {
+        padding: 2rem 1rem;
+    }
 
-    .memories-unlogged-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+    .memories-unlogged-grid {
+        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    }
 
     // Enough width now for the quick-log form, "Add details", and "Not visited"
     // to share a single row instead of stacking.
@@ -1047,7 +1173,9 @@ $memories-type-colors: (
         align-items: center;
     }
 
-    .unlogged-card-quick { flex: 1 1 auto; }
+    .unlogged-card-quick {
+        flex: 1 1 auto;
+    }
 }
 
 .visits-empty-state {
@@ -1063,9 +1191,8 @@ $memories-type-colors: (
         radial-gradient(circle at top left, rgba(156, 39, 176, .16), transparent 34%),
         radial-gradient(circle at bottom right, rgba(76, 175, 80, .14), transparent 30%),
         var(--ul-grey-0);
-    box-shadow: 0px 6px 34px rgba(0, 0, 0, 0.32)
 
-    h2 {
+    box-shadow: 0px 6px 34px rgba(0, 0, 0, 0.32) h2 {
         margin: .35rem 0 .75rem;
         color: var(--ul-grey-8);
         font-size: clamp(1.45rem, 3vw, 2rem);
@@ -1101,7 +1228,9 @@ $memories-type-colors: (
     color: $color-green-500;
     background: rgba(76, 175, 80, .14);
 
-    .material-symbols-outlined { font-size: 3.4rem; }
+    .material-symbols-outlined {
+        font-size: 3.4rem;
+    }
 }
 
 .visits-empty-sparkle {
@@ -1113,7 +1242,9 @@ $memories-type-colors: (
     background: #fff;
     box-shadow: 0 8px 24px rgba(31, 41, 55, .12);
 
-    .material-symbols-outlined { font-size: 1.35rem; }
+    .material-symbols-outlined {
+        font-size: 1.35rem;
+    }
 }
 
 .visits-empty-kicker {
@@ -1207,7 +1338,9 @@ $memories-type-colors: (
         align-items: center;
         gap: .3rem;
 
-        .material-symbols-outlined { font-size: .95rem; }
+        .material-symbols-outlined {
+            font-size: .95rem;
+        }
     }
 }
 
@@ -1220,9 +1353,13 @@ $memories-type-colors: (
     color: $color-indigo-500;
     text-decoration: none;
 
-    .material-symbols-outlined { font-size: .95rem; }
+    .material-symbols-outlined {
+        font-size: .95rem;
+    }
 
-    &:hover { text-decoration: underline; }
+    &:hover {
+        text-decoration: underline;
+    }
 }
 
 .memories-map-card-attachments {
@@ -1276,9 +1413,14 @@ $memories-type-colors: (
     color: var(--ul-grey-8);
     text-decoration: none;
 
-    .material-symbols-outlined { font-size: 1.1rem; color: $color-indigo-500; }
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+        color: $color-indigo-500;
+    }
 
-    &:hover { text-decoration: underline; }
+    &:hover {
+        text-decoration: underline;
+    }
 }
 
 .memories-sharing-chain {
@@ -1290,7 +1432,9 @@ $memories-type-colors: (
     color: var(--ul-grey-6);
     cursor: help;
 
-    .material-symbols-outlined { font-size: 1rem; }
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
 }
 
 .memories-sharing-recipients {
@@ -1311,7 +1455,10 @@ $memories-type-colors: (
     font-size: .85rem;
     color: var(--ul-grey-7);
 
-    .material-symbols-outlined { font-size: 1rem; vertical-align: -3px; }
+    .material-symbols-outlined {
+        font-size: 1rem;
+        vertical-align: -3px;
+    }
 }
 
 .memories-sharing-recipient-name {
@@ -1329,10 +1476,21 @@ $memories-type-colors: (
 .memories-sharing-status {
     font-weight: 600;
 
-    &--accepted { color: $color-green-600; }
-    &--rejected { color: var(--ul-grey-5); }
-    &--pending { color: $color-amber-600; }
-    &--already_pinned { color: $color-indigo-500; }
+    &--accepted {
+        color: $color-green-600;
+    }
+
+    &--rejected {
+        color: var(--ul-grey-5);
+    }
+
+    &--pending {
+        color: $color-amber-600;
+    }
+
+    &--already_pinned {
+        color: $color-indigo-500;
+    }
 }
 
 .memories-sharing-section-title {
@@ -1340,7 +1498,9 @@ $memories-type-colors: (
     font-size: 1rem;
     font-weight: 600;
 
-    &:first-of-type { margin-top: .75rem; }
+    &:first-of-type {
+        margin-top: .75rem;
+    }
 }
 
 .memories-sharing-section-empty {
@@ -1393,10 +1553,21 @@ $memories-type-colors: (
         font-size: 1.1rem;
     }
 
-    &--visit { background: $color-green-500; }
-    &--review { background: $color-amber-600; }
-    &--comment { background: $color-indigo-500; }
-    &--article { background: $color-blue-500; }
+    &--visit {
+        background: $color-green-500;
+    }
+
+    &--review {
+        background: $color-amber-600;
+    }
+
+    &--comment {
+        background: $color-indigo-500;
+    }
+
+    &--article {
+        background: $color-blue-500;
+    }
 }
 
 .memories-journal-body {
@@ -1449,4 +1620,3 @@ $memories-type-colors: (
         color: $color-amber-600;
     }
 }
-
