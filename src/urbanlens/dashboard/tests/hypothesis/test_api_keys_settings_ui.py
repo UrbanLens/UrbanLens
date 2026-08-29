@@ -52,6 +52,20 @@ class ApiKeyCreateViewTests(TestCase):
         # The first key's identifying prefix must not leak into a later render's body.
         self.assertNotContains(second_response, api_key.prefix)
 
+    def test_non_htmx_create_reveals_the_key_once_on_the_redirected_settings_page(self) -> None:
+        """The default (non-htmx) flow redirects to the settings page, which does
+        the actual reveal - the session flash must survive that redirect and
+        still be gone by the next render."""
+        create_response = self.client.post(reverse("settings.security.api_keys.create"), {"name": "Zapier"})
+        self.assertEqual(create_response.status_code, 302)
+        api_key = ApiKey.objects.get(user=self.user)
+
+        first_view = self.client.get(reverse("settings.view"))
+        self.assertContains(first_view, api_key.prefix)
+
+        second_view = self.client.get(reverse("settings.view"))
+        self.assertNotContains(second_view, api_key.prefix)
+
 
 class ApiKeyRevokeViewTests(TestCase):
     def setUp(self) -> None:
@@ -76,12 +90,16 @@ class ApiKeyRevokeViewTests(TestCase):
         self.assertFalse(other_key.is_revoked)
 
     def test_htmx_revoke_response_no_longer_shows_a_revoke_button_for_that_key(self) -> None:
-        response = self.client.post(
-            reverse("settings.security.api_keys.revoke", args=[self.api_key.pk]),
-            HTTP_HX_REQUEST="true",
-        )
+        revoke_url = reverse("settings.security.api_keys.revoke", args=[self.api_key.pk])
+        # Confirm the button is really there beforehand - otherwise a template
+        # regression that never renders a revoke button at all would still
+        # pass the post-revoke assertion below for the wrong reason.
+        before = self.client.get(reverse("settings.view"))
+        self.assertContains(before, revoke_url)
+
+        response = self.client.post(revoke_url, HTTP_HX_REQUEST="true")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, reverse("settings.security.api_keys.revoke", args=[self.api_key.pk]), count=0)
+        self.assertContains(response, revoke_url, count=0)
 
 
 class ApiKeysSettingsPageContentTests(TestCase):
@@ -98,13 +116,22 @@ class ApiKeysSettingsPageContentTests(TestCase):
         self.assertContains(response, reverse("external_api:whoami"))
         self.assertContains(response, reverse("external_api:pins"))
 
-    def test_page_shows_recent_activity_for_a_key_with_usage(self) -> None:
+    def test_page_shows_recent_activity_only_after_the_key_is_used(self) -> None:
+        # A whoami/pins path would be a false-positive match here: the usage
+        # docs example above always renders those same URLs regardless of
+        # this key's actual activity. Use a distinctive endpoint so the
+        # assertion can only be satisfied by the real per-key activity block.
+        endpoint = "/dashboard/api/external/v1/distinctive-test-endpoint/"
         api_key, _raw_key = generate_api_key(self.user, "Zapier")
-        record_api_key_usage(api_key, "/dashboard/api/external/v1/whoami/")
 
-        response = self.client.get(reverse("settings.view"))
+        before = self.client.get(reverse("settings.view"))
+        self.assertNotContains(before, "Recent activity")
+        self.assertNotContains(before, endpoint)
 
-        self.assertContains(response, "/dashboard/api/external/v1/whoami/")
+        record_api_key_usage(api_key, endpoint)
+        after = self.client.get(reverse("settings.view"))
+        self.assertContains(after, "Recent activity")
+        self.assertContains(after, endpoint)
 
     def test_page_omits_activity_block_for_a_key_with_no_usage(self) -> None:
         generate_api_key(self.user, "Unused App")

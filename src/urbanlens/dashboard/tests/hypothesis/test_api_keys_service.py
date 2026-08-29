@@ -123,6 +123,12 @@ class AuthenticateApiKeyTests(TestCase):
     def test_revoked_key_is_rejected(self) -> None:
         user = baker.make(User)
         api_key, raw_key = generate_api_key(user, "Zapier")
+        # Same key must authenticate before the real revoke transition, and stop
+        # right after it - otherwise an "always deny" authenticator would pass
+        # this test for the wrong reason.
+        resolved = authenticate_api_key(raw_key)
+        self.assertIsNotNone(resolved)
+        self.assertEqual(resolved.pk, api_key.pk)
         revoke_api_key(user, api_key.pk)
         self.assertIsNone(authenticate_api_key(raw_key))
 
@@ -138,7 +144,13 @@ class AuthenticateApiKeyTests(TestCase):
         """revoke_api_key() only fires on explicit user action - an admin disabling
         a compromised account (User.is_active=False) must also cut off its keys."""
         user = baker.make(User)
-        _api_key, raw_key = generate_api_key(user, "Zapier")
+        api_key, raw_key = generate_api_key(user, "Zapier")
+        # Same key must authenticate while the account is active, and stop right
+        # after the real deactivation - otherwise an "always deny" authenticator
+        # would pass this test for the wrong reason.
+        resolved = authenticate_api_key(raw_key)
+        self.assertIsNotNone(resolved)
+        self.assertEqual(resolved.pk, api_key.pk)
         User.objects.filter(pk=user.pk).update(is_active=False)
         self.assertIsNone(authenticate_api_key(raw_key))
 
