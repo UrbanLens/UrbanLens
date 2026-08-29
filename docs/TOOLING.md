@@ -100,13 +100,26 @@ excludes DoS-tagged templates unconditionally.
 
 ```bash
 bin/run_nuclei_scan.sh --url https://s1.dev.urbanlens.org
-bin/run_nuclei_scan.sh --url ... --docker            # needs only Docker
-bin/run_nuclei_scan.sh --url ... --fail-on-findings  # gate a run on it
+bin/run_nuclei_scan.sh --url ... --docker              # needs only Docker
+bin/run_nuclei_scan.sh --url ... --fail-on-findings    # gate a run on it
+bin/run_nuclei_scan.sh --url ... --accounts-file /tmp/e2e.json  # authenticated
 ```
+
+Preflights the target with `curl` before scanning, and never combines
+`-update-templates` with a scan in one Nuclei invocation - that combination
+updates the template catalogue, exits 0, and silently scans nothing, which is
+how the first live run against staging reported "0 findings" that turned out
+to be a broken invocation rather than a hardened deployment. `--accounts-file`
+takes the same manifest `provision_integration_env` writes for
+`run_integration_tests.sh` and turns the primary account's API key into a
+Nuclei secret-file, so authenticated-only surfaces get scanned too. Full story
+in `docs/INTEGRATION_TESTS.md`.
 
 Runs by default alongside `.github/workflows/integration.yml` (skip with
 `run_nuclei: false` on dispatch) and is separately dispatchable as
-`.github/workflows/nuclei.yml`. Findings upload as SARIF to GitHub Code
+`.github/workflows/nuclei.yml`, which authenticates automatically whenever the
+`staging` environment's `UL_E2E_ACCOUNTS_JSON` secret is set. Findings upload
+as SARIF to GitHub Code
 Scanning. Full documentation is `docs/INTEGRATION_TESTS.md`.
 
 ### `bin/run_contract_tests.sh`

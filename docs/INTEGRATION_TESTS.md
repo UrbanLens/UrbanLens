@@ -57,6 +57,7 @@ headers. Neither replaces the other.
 bin/run_nuclei_scan.sh --url https://s1.dev.urbanlens.org
 bin/run_nuclei_scan.sh --url ... --docker              # no local install needed
 bin/run_nuclei_scan.sh --url ... --fail-on-findings    # nonzero exit if anything matched
+bin/run_nuclei_scan.sh --url ... --accounts-file /tmp/e2e.json  # authenticated
 ```
 
 Same rules as the Playwright suite: manual only, and it refuses to run
@@ -66,12 +67,50 @@ some from templates tagged intrusive, at whatever it is pointed at. DoS-tagged
 templates are excluded unconditionally, since it would impact other services on
 the same machine.
 
+The script preflights the target with a plain `curl` before handing anything
+to Nuclei. Reason it exists: `-update-templates` is a one-shot maintenance
+action in Nuclei - passed alongside `-u` (as the CI/CD guide's own examples
+do) it updates the template catalogue, exits 0, and never scans anything. No
+error, no warning, just a report with nothing in it, indistinguishable from a
+hardened deployment genuinely tripping nothing. That is exactly what the
+first live run against staging did: 0 findings, silently. Confirmed by
+re-running the identical flags minus `-update-templates`, which found 22 -
+mostly `info`-severity header and cookie hygiene, plus the already-tracked
+missing-SRI finding from the integration suite's own first run (see "What the
+first run found" above). The script now updates the template catalogue as a
+separate step before scanning rather than combining the two, and the
+reachability preflight exists so that a *genuinely* unreachable target (wrong
+URL, no VPN, DNS) fails loudly instead of producing the same "0 findings, no
+error" symptom for a different reason.
+
+### Authenticated scanning
+
+`--accounts-file` points at the same manifest `manage.py
+provision_integration_env` writes for the Playwright suite (`--accounts-file
+/tmp/e2e.json` after the Quick start above). The script turns the primary
+account's API key into a Nuclei
+[secret-file](https://docs.projectdiscovery.io/opensource/nuclei/authenticated-scans)
+(`bearertoken`, scoped to the target's own hostname) so every request goes out
+`Authorization: Bearer <api_key>` - the same scheme `docs/EXTERNAL_API.md`
+documents for the whole external API. That unlocks templates that need a
+signed-in request to reach past the login wall for that surface.
+
+It does not attempt session-cookie auth for the HTML/dashboard surface: Django
+login needs a CSRF token, a form POST and a redirect chain, which
+`tests/integration/setup/auth.setup.ts` already does correctly through a real
+browser. Reusing that (a Playwright run producing a `storageState`, its
+`sessionid` cookie folded into the same secret-file) is a documented gap
+rather than a bash reimplementation of a login flow.
+
 In CI it is `.github/workflows/nuclei.yml`, dispatchable on its own or (the
 default) alongside `integration.yml` via `run_nuclei: true` - set that input
-to `false` on a dispatch to skip it. Findings upload as SARIF to GitHub Code
-Scanning and as a JSON Lines artifact; a finding is a lead to triage, not
-automatically a broken build, so the job does not fail on one unless
-`fail_on_findings`/`--fail-on-findings` is set.
+to `false` on a dispatch to skip it. It reads the same `UL_E2E_ACCOUNTS_JSON`
+secret on the `staging` environment that `integration.yml` uses, and scans
+authenticated whenever that secret exists (`authenticated: false` on a
+dispatch to force an unauthenticated scan). Findings upload as SARIF to
+GitHub Code Scanning and as a JSON Lines artifact; a finding is a lead to
+triage, not automatically a broken build, so the job does not fail on one
+unless `fail_on_findings`/`--fail-on-findings` is set.
 
 ## Why Playwright
 

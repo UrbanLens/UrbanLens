@@ -25,6 +25,11 @@ on:
         required: false
         default: false
         type: boolean
+      authenticated:
+        description: "Scan as the primary account, when the staging environment has one provisioned"
+        required: false
+        default: true
+        type: boolean
   workflow_call:
     inputs:
       base_url:
@@ -37,6 +42,10 @@ on:
       fail_on_findings:
         required: false
         default: false
+        type: boolean
+      authenticated:
+        required: false
+        default: true
         type: boolean
 
 permissions:
@@ -54,17 +63,37 @@ jobs:
   nuclei:
     name: Nuclei scan
     runs-on: ubuntu-latest
+    # Same secret integration.yml uses (UL_E2E_ACCOUNTS_JSON): the manifest
+    # `manage.py provision_integration_env` writes. Reused rather than
+    # duplicated, since it is exactly the throwaway account this already
+    # exists to provide - see docs/INTEGRATION_TESTS.md's "The accounts".
+    environment: staging
     timeout-minutes: 60
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Write the accounts manifest
+        if: inputs.authenticated
+        env:
+          ACCOUNTS_JSON: ${{ secrets.UL_E2E_ACCOUNTS_JSON }}
+        run: |
+          if [ -z "$ACCOUNTS_JSON" ]; then
+            echo "No UL_E2E_ACCOUNTS_JSON secret on the staging environment - scanning unauthenticated."
+            exit 0
+          fi
+          umask 077
+          printf '%s' "$ACCOUNTS_JSON" > "${RUNNER_TEMP}/e2e-accounts.json"
+
       - name: Run the scan
         run: |
           args=(--url "${{ inputs.base_url }}" --severity "${{ inputs.severity }}" --docker)
           if [ "${{ inputs.fail_on_findings }}" = "true" ]; then
             args+=(--fail-on-findings)
+          fi
+          if [ -f "${RUNNER_TEMP}/e2e-accounts.json" ]; then
+            args+=(--accounts-file "${RUNNER_TEMP}/e2e-accounts.json")
           fi
           bash bin/run_nuclei_scan.sh "${args[@]}"
 
