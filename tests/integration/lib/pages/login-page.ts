@@ -46,7 +46,24 @@ export class LoginPage {
         await Promise.all([
             this.page.waitForURL((url) => !url.pathname.startsWith("/accounts/login"), { waitUntil: "domcontentloaded" }),
             this.submit.click(),
+            this.dismissRecoveryKeyDialog(),
         ]);
+    }
+
+    /**
+     * A first login after `provision_integration_env` regenerates an
+     * account's keys shows a blocking "save your recovery key" overlay
+     * before the app navigates anywhere - `e2ee-client.ts`'s
+     * `showRecoveryDialog` is awaited before `window.location.assign`.
+     * "Remind me later" unblocks it; the suite has no use for the key
+     * itself. Swallowed on timeout, so an already-enrolled account (the
+     * overlay never appears) costs only the timeout, not a failure.
+     */
+    private async dismissRecoveryKeyDialog(): Promise<void> {
+        await this.page
+            .locator(".e2ee-recovery-later")
+            .click({ timeout: 3000 })
+            .catch(() => {});
     }
 
     /**
