@@ -321,14 +321,49 @@ actually dumped, the row data itself - handle those the way `docs/PROBLEMS.md`
 handles any other confirmed vulnerability), the same tree Nuclei and the
 Playwright suite use, so all three are picked up by one CI artifact upload.
 
-**Not yet calibrated against a live deployment.** Every other tool on this
-page earned its documented defaults and caveats from a first real run - see
-"What the first run found" above, and the Nuclei section's own postmortem.
-This one has been validated against a fake local target (confirms the
-plumbing: `--openapi` derivation, config-file auth, `--report-json` parsing,
-the allowlist and hard-blocked-flag guards) but not yet against a real
-dev-container deployment. Expect the first live `--all-tiers` run to correct
-at least one assumption here, the same way every other tool's first run did.
+### What the first live calibration run found
+
+Calibrated against a real dev container on chiron (`--all-tiers`, scoped to
+the `pins`-tagged operations for a tractable run rather than all ~200). It
+found three real bugs - none of them findings about UrbanLens's own SQL
+safety, all of them things a fake local target could not have surfaced:
+
+- **Every `--openapi` tier crashed, unconditionally, on first contact with a
+  real deployment.** sqlmap's own `_setStdinPipeTargets()`
+  (`lib/parse/cmdline.py`) treats *any* non-tty stdin as a potential piped
+  target list - true for literally every way this wrapper is ever run
+  (`</dev/null`, backgrounded, cron, CI) - and unconditionally overwrites
+  `kb.targets` with its own lazy reader before `_setOpenApiTargets()` ever
+  runs, crashing with `TypeError: object of type '_' has no len()` and never
+  reaching `--report-json`. Worse than a loud crash: `count_findings()`'s own
+  "no report.json yet" fallback reads as a clean 0-finding scan unless the log
+  itself is read - exactly the "0 findings, no error" trap
+  `run_nuclei_scan.sh`'s own history warns about, confirmed here to also catch
+  sqlmap. Fixed with `--ignore-stdin`, sqlmap's own documented escape hatch for
+  this, added to every invocation in the script.
+- **The session tier refused to start at all**: sqlmap refuses to combine
+  `--csrf-token` with `--threads` greater than 1
+  (`lib/core/option.py: if conf.csrfToken and conf.threads > 1`). Fixed by
+  hardcoding `--threads=1` for that tier specifically, regardless of `--threads`.
+- **A real, reproducible information-disclosure bug in the application
+  itself**, found because sqlmap's WAF-bypass mode sends browser-like headers
+  (`Accept: text/html,...`) that a normal API client wouldn't: any request to
+  the external API that content-negotiates to HTML crashed with
+  `TemplateDoesNotExist: rest_framework/api.html` - `rest_framework` was never
+  added to `INSTALLED_APPS`, so DRF's default `BrowsableAPIRenderer` (on by
+  default alongside `JSONRenderer` whenever `DEFAULT_RENDERER_CLASSES` isn't
+  overridden) can never find its own template. In an environment where `DEBUG`
+  resolves true, that 500 came with a full Django debug page in the body -
+  settings values (internal Valkey/Redis hostnames, CSP configuration),
+  traceback, the works. Fixed in `REST_FRAMEWORK` (`settings/base.py`) by
+  setting `DEFAULT_RENDERER_CLASSES` to `JSONRenderer` only - correct
+  independent of the crash, since this is a machine-consumed API with no
+  working browsable UI to begin with (the working interactive explorer is the
+  separate Swagger UI view). Verified live: `Accept: text/html` now answers a
+  clean `406` instead of a 500.
+
+No confirmed SQL injection in the scope calibrated so far - the ~200
+operations outside `pins` remain unexercised at the time of writing.
 
 ## Why Playwright
 

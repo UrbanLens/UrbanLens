@@ -11,6 +11,25 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-08-29: the external API leaks a full Django debug page on any `Accept: text/html` request
+
+Found calibrating the new sqlmap integration (`bin/run_sqlmap_scan.sh`) against a real dev container -
+sqlmap's WAF-bypass mode sends browser-like headers, including `Accept: text/html,...`, which a normal
+API client wouldn't. Any external API request that content-negotiated to HTML crashed with
+`TemplateDoesNotExist: rest_framework/api.html`: `rest_framework` was never added to `INSTALLED_APPS`,
+so DRF's default `BrowsableAPIRenderer` - on by default alongside `JSONRenderer` whenever
+`DEFAULT_RENDERER_CLASSES` isn't overridden - can never find its own template. In an environment where
+`DEBUG` resolves true, that 500 shipped with a full Django debug page in the response body: settings
+values (internal Valkey/Redis hostnames, CSP configuration), the traceback, the works.
+
+**Resolved 2026-08-29.** `REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"]` (`settings/base.py`) is now
+`JSONRenderer` only, correct independent of the crash - this is a machine-consumed API
+(`docs/EXTERNAL_API.md`) with no working browsable UI to begin with; the actual interactive explorer is
+the separate Swagger UI view. Verified live against the dev container: `Accept: text/html` now answers
+a clean `406` instead of a 500. See `docs/INTEGRATION_TESTS.md`'s sqlmap section, "What the first live
+calibration run found," for the other two (sqlmap-side, not application-side) bugs the same run found.
+
+
 ## RESOLVED 2026-08-25: two views read `request.user.profile` on a possibly-anonymous user
 
 `controllers/map_overlays.py` (then :320, now :329) and `controllers/safety.py:1228` both called
