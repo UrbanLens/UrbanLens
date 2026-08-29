@@ -63,8 +63,8 @@ Same rules as the Playwright suite: manual only, and it refuses to run
 against a production hostname (`UL_NUCLEI_PRODUCTION_HOSTS`,
 `UL_NUCLEI_ALLOW_PRODUCTION`) for the same reason - this fires real requests,
 some from templates tagged intrusive, at whatever it is pointed at. DoS-tagged
-templates are excluded unconditionally, matching the project-wide rule against
-destructive techniques.
+templates are excluded unconditionally, since it would impact other services on
+the same machine.
 
 In CI it is `.github/workflows/nuclei.yml`, dispatchable on its own or (the
 default) alongside `integration.yml` via `run_nuclei: true` - set that input
