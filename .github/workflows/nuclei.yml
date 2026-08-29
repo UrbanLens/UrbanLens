@@ -1,0 +1,85 @@
+name: Nuclei scan
+
+# Manual only, on purpose - same reasoning as integration.yml. This fires real
+# HTTP requests, some from templates tagged intrusive, at a live deployment;
+# nothing here should ever be triggered by a push or a PR.
+#
+# Two ways in:
+#   - `workflow_dispatch`, to run it on its own.
+#   - `workflow_call`, so integration.yml can run it as part of an integration
+#     pass without duplicating the job.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Deployment to scan, e.g. https://s1.dev.urbanlens.org"
+        required: true
+        type: string
+      severity:
+        description: "Comma-separated severities"
+        required: false
+        default: "info,low,medium,high,critical"
+        type: string
+      fail_on_findings:
+        description: "Fail the job if anything matched"
+        required: false
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      base_url:
+        required: true
+        type: string
+      severity:
+        required: false
+        default: "info,low,medium,high,critical"
+        type: string
+      fail_on_findings:
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  # Independent of integration.yml's own `integration-${{ base_url }}` group:
+  # a scan reads and probes rather than writing rows, so it doesn't need to
+  # queue behind (or block) a Playwright run against the same target.
+  group: nuclei-${{ inputs.base_url }}
+  cancel-in-progress: false
+
+jobs:
+  nuclei:
+    name: Nuclei scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Run the scan
+        run: |
+          args=(--url "${{ inputs.base_url }}" --severity "${{ inputs.severity }}" --docker)
+          if [ "${{ inputs.fail_on_findings }}" = "true" ]; then
+            args+=(--fail-on-findings)
+          fi
+          bash bin/run_nuclei_scan.sh "${args[@]}"
+
+      - name: Upload Code Scanning results
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: tests/integration/reports/nuclei/results.sarif
+          category: nuclei
+
+      - name: Upload raw results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: nuclei-report-${{ github.run_id }}
+          path: tests/integration/reports/nuclei
+          retention-days: 14
+          if-no-files-found: warn

@@ -30,9 +30,15 @@ on:
         required: false
         default: "4"
         type: string
+      run_nuclei:
+        description: "Also run a Nuclei scan against the same deployment"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
+  security-events: write
 
 concurrency:
   # One run at a time per target. Two concurrent runs share the staging
@@ -136,3 +142,16 @@ jobs:
           path: tests/integration/reports/artifacts
           retention-days: 7
           if-no-files-found: ignore
+
+  nuclei:
+    name: Nuclei scan
+    if: inputs.run_nuclei
+    # Independent of the `integration` job above rather than chained after it -
+    # a template-driven scan of the same deployment doesn't need Playwright to
+    # have finished, or to have passed, first.
+    uses: ./.github/workflows/nuclei.yml
+    permissions:
+      contents: read
+      security-events: write
+    with:
+      base_url: ${{ inputs.base_url }}

@@ -90,6 +90,25 @@ regenerated. Six selectable projects - `smoke`, `services`, `api`, `ui`,
 Full documentation, including how to write a test and what it deliberately does
 not cover, is `docs/INTEGRATION_TESTS.md`.
 
+### `bin/run_nuclei_scan.sh`
+
+Template-driven vulnerability scan of a deployed instance - CVEs, exposed
+panels and files, default credentials, misconfigured headers - via
+[Nuclei](https://docs.projectdiscovery.io/opensource/nuclei/ci-cd). Manual
+only, refuses production the same way `run_integration_tests.sh` does, and
+excludes DoS-tagged templates unconditionally.
+
+```bash
+bin/run_nuclei_scan.sh --url https://s1.dev.urbanlens.org
+bin/run_nuclei_scan.sh --url ... --docker            # needs only Docker
+bin/run_nuclei_scan.sh --url ... --fail-on-findings  # gate a run on it
+```
+
+Runs by default alongside `.github/workflows/integration.yml` (skip with
+`run_nuclei: false` on dispatch) and is separately dispatchable as
+`.github/workflows/nuclei.yml`. Findings upload as SARIF to GitHub Code
+Scanning. Full documentation is `docs/INTEGRATION_TESTS.md`.
+
 ### `bin/run_contract_tests.sh`
 
 Property-based conformance testing of the external API against its own published

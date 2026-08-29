@@ -43,6 +43,36 @@ Afterwards, on a shared instance:
 python src/urbanlens/manage.py provision_integration_env --purge --execute
 ```
 
+## Nuclei
+
+A template-driven vulnerability scanner, run against the same deployment as a
+separate tool rather than a Playwright project - it answers a different
+question than anything in `specs/security/`. Those specs assert specific
+application behaviour (does another account's pin look like it never
+existed); Nuclei checks the deployment against a catalogue of thousands of
+known CVEs, exposed panels and files, default credentials, and misconfigured
+headers. Neither replaces the other.
+
+```bash
+bin/run_nuclei_scan.sh --url https://s1.dev.urbanlens.org
+bin/run_nuclei_scan.sh --url ... --docker              # no local install needed
+bin/run_nuclei_scan.sh --url ... --fail-on-findings    # nonzero exit if anything matched
+```
+
+Same rules as the Playwright suite: manual only, and it refuses to run
+against a production hostname (`UL_NUCLEI_PRODUCTION_HOSTS`,
+`UL_NUCLEI_ALLOW_PRODUCTION`) for the same reason - this fires real requests,
+some from templates tagged intrusive, at whatever it is pointed at. DoS-tagged
+templates are excluded unconditionally, matching the project-wide rule against
+destructive techniques.
+
+In CI it is `.github/workflows/nuclei.yml`, dispatchable on its own or (the
+default) alongside `integration.yml` via `run_nuclei: true` - set that input
+to `false` on a dispatch to skip it. Findings upload as SARIF to GitHub Code
+Scanning and as a JSON Lines artifact; a finding is a lead to triage, not
+automatically a broken build, so the job does not fail on one unless
+`fail_on_findings`/`--fail-on-findings` is set.
+
 ## Why Playwright
 
 The alternative considered was `pytest-playwright`, which would have kept
@@ -166,10 +196,10 @@ Some things it deliberately does **not** do:
 - **Payments.** Stripe is not exercised; a test that charges anything is not a
   test worth having on a schedule. The security project does hit the webhook
   path unsigned, and asserts it is refused.
-- **Attack scanners.** The `security` project is assertions about refusals,
-  identical 404s, cookie flags, and markup that must not become DOM. It does
-  not currently run SQLMap, ZAP active scan, Nuclei, or any other exploit-oriented
-  toolchain against the deployment, but these should be assessed in the future to expand coverage.
+- **Attack scanners**, mostly. The `security` project is assertions about
+  refusals, identical 404s, cookie flags, and markup that must not become DOM.
+  It does not run SQLMap or a ZAP active scan against the deployment; those
+  remain unassessed. **Nuclei is the one exception** - see below.
 - **External providers.** Provisioned accounts have `external_apis_enabled` and
   `ai_enabled` set to False, so no provider is billed by a test run. Pass
   `--external-apis` when provisioning if you specifically want to exercise the
