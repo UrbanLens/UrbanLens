@@ -158,7 +158,7 @@ hostname_of() {
 	printf '%s' "${url,,}"
 }
 
-DEFAULT_PRODUCTION_HOSTS="urbanlens.org,www.urbanlens.org,app.urbanlens.org"
+DEFAULT_PRODUCTION_HOSTS="urbanlens.org,www.urbanlens.org,app.urbanlens.org,urbanlens.com,www.urbanlens.com,app.urbanlens.com"
 PRODUCTION_HOSTS="${UL_NUCLEI_PRODUCTION_HOSTS:-${DEFAULT_PRODUCTION_HOSTS}}"
 ALLOW_PRODUCTION="${UL_NUCLEI_ALLOW_PRODUCTION:-0}"
 TARGET_HOST="$(hostname_of "${BASE_URL}")"
