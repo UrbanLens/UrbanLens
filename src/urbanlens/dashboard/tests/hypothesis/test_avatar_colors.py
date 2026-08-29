@@ -62,6 +62,15 @@ class AssignAvatarColorsTests(SimpleTestCase):
     def test_empty_list_is_a_no_op(self) -> None:
         assign_avatar_colors([], identity=lambda i: i.identity)  # must not raise
 
+    def test_more_items_than_the_palette_still_all_get_valid_classes(self) -> None:
+        """Past PALETTE_SIZE, colors must repeat rather than the collision-avoidance
+        loop crashing, hanging, or producing an out-of-range slot."""
+        items = [_Item(f"person-{n}") for n in range(PALETTE_SIZE + 3)]
+        assign_avatar_colors(items, identity=lambda i: i.identity)
+        valid = {f"avatar-color-{n}" for n in range(PALETTE_SIZE)}
+        for item in items:
+            self.assertIn(item.avatar_color_class, valid)
+
 
 class GroupMembersDialogAvatarColorTests(TestCase):
     """GET messages.group.members assigns distinct avatar_color_class per member."""

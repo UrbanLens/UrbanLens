@@ -58,7 +58,9 @@ class ConfidentBuildingsTests(SimpleTestCase):
 
         records = [_building(1, child_refs=["cris:2"]), _building(2, parent_ref="cris:1")]
 
-        self.assertEqual(len(confident_buildings(records)), 2)
+        # A count-only assertion would pass a bug that returned the same record twice
+        # instead of both distinct ones - check identity, not just length.
+        self.assertEqual({b["ref"] for b in confident_buildings(records)}, {"cris:1", "cris:2"})
 
     def test_off_property_records_are_never_confident(self) -> None:
         from urbanlens.dashboard.plugins.builtin.parcel_buildings import confident_buildings

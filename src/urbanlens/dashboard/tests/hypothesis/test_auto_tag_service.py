@@ -54,6 +54,11 @@ class AiKindEnabledForProfileTests(TestCase):
         self.profile.ai_label_categories = True
         self.assertFalse(AutoTagService._ai_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
 
+        # Same profile/kind, external APIs re-enabled - an "external_apis_enabled is ignored"
+        # implementation would still pass above.
+        self.profile.external_apis_enabled = True
+        self.assertTrue(AutoTagService._ai_kind_enabled_for_profile(KIND_CATEGORY, self.profile))
+
     def test_disabled_when_per_kind_flag_off(self) -> None:
         self.profile.ai_enabled = True
         self.profile.ai_label_categories = False
