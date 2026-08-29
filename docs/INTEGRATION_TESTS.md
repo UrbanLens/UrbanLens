@@ -167,6 +167,169 @@ broken build, so the job does not fail on one unless
 The first full `--all-tiers` run's findings are triaged in docs/PROBLEMS-ARCHIVE.md,
 2026-08-28.
 
+## sqlmap
+
+[sqlmap](https://github.com/sqlmapproject/sqlmap) against the same deployment,
+run by `bin/run_sqlmap_scan.sh`. It answers a question Nuclei, the contract
+suite, and `specs/security/` all leave open: **is there an actual SQL
+injection anywhere behind this API or these forms?** Nuclei matches known
+patterns; the security specs assert that authorization holds; sqlmap sends
+real payloads through real parameters into the real database and reports
+whether one of them changed the query's behaviour. "What it deliberately does
+not do" above already named the gap: `security/` does not run an active
+scanner as a Playwright spec, and Nuclei and sqlmap are the two separate
+on-demand tools that do instead. This section is the second one; a ZAP active
+scan remains unassessed.
+
+```bash
+bin/run_sqlmap_scan.sh --url https://s1.dev.urbanlens.org
+bin/run_sqlmap_scan.sh --url ... --accounts-file /tmp/e2e.json
+bin/run_sqlmap_scan.sh --url ... --accounts-file /tmp/e2e.json --all-tiers
+bin/run_sqlmap_scan.sh --url ... --fail-on-findings
+bin/run_sqlmap_scan.sh --url ... -- --skip-waf --random-agent   # pass through
+```
+
+### Why this is stricter than Nuclei
+
+Nuclei's templates are overwhelmingly detection: a fingerprint match, a header
+check, a known-CVE probe. sqlmap's job is to prove an injection exists by
+**exploiting** it - at `--risk=3` (this wrapper's default) that includes
+OR-based payloads that can rewrite an `UPDATE`/`DELETE` statement's `WHERE`
+clause to match every row, and the default `--technique` includes stacked
+queries, which can run arbitrary follow-up SQL if the DBMS/driver stack
+permits it. That is a different order of consequence than a scanner noticing a
+missing security header, and it changes what "safe to point this at" means:
+
+- **Target scope is an allowlist, not a denylist.** Every other tool here
+  (`run_integration_tests.sh`, `run_nuclei_scan.sh`, `run_contract_tests.sh`)
+  refuses a short list of production hostnames and otherwise trusts whatever
+  URL it is given, including `staging.urbanlens.org`. `run_sqlmap_scan.sh`
+  inverts that: it only runs against `UL_SQLMAP_ALLOWED_HOSTS` (default
+  `.dev.urbanlens.org,localhost,127.0.0.1`) and refuses everything else,
+  staging included, unless `UL_SQLMAP_ALLOW_ANY_HOST=1` is set. Dev containers
+  on chiron are disposable - rebuildable from nothing - which is what makes
+  `--risk=3` and stacked queries an acceptable default in the first place;
+  staging is not disposable in the same way, and this wrapper does not trust
+  an operator to remember that on a bad day.
+- **A fixed set of flags is refused unconditionally**, regardless of how they
+  are passed - not even behind an opt-in inside this wrapper: `--os-shell`,
+  `--os-pwn`, `--os-cmd`, `--os-smbrelay`, `--os-bof`, `--priv-esc`,
+  `--file-read`, `--file-write`, `--file-dest`, `--sql-shell`, `--udf-inject`,
+  and the `--reg-*` Windows-registry family. All of them go past confirming an
+  injection into operating-system command execution, arbitrary filesystem
+  access on the database host, or an interactive shell that bypasses `--batch`
+  entirely. Confirming the injection exists is this suite's job; going further
+  is a deliberate, individually-run sqlmap command outside it, on a target you
+  control. This mirrors Nuclei's unconditional exclusion of DoS-tagged
+  templates - the same posture, applied to the flags that matter for this tool.
+
+Everything else is deliberately permissive by default - full `--risk=3
+--level=5`, sqlmap's own default `--technique=BEUSTQ` - matching Nuclei's
+"exclude only what is unconditionally unsafe" posture, because the allowlist
+above is what makes that safe here.
+
+### sqlmap is not a project dependency
+
+sqlmap publishes no checksums, signatures, or attestation for any release -
+confirmed against every GitHub Release (`assets: []` on all of them) and the
+repository history. It does, however, publish the *same* tagged release to
+PyPI itself, so `bin/install_sqlmap.py` pins an exact version and both of
+PyPI's own per-file SHA256 digests in `bin/sqlmap-requirements.txt`, and
+installs with `pip install --require-hashes` - a supply-chain guarantee at
+least as strong as vendoring a git commit SHA, with none of the custom
+download-and-verify code that would otherwise need writing and trusting.
+
+It installs into its own throwaway `.sqlmap/venv` (gitignored), never the
+project's own `.venv`/`.venv_windows` - every contributor who runs `ruff` or
+`pytest` installs the main dependency set, and sqlmap is an external scanner
+this wrapper shells out to, the same relationship Nuclei has as a separately
+installed (or dockerized) binary. Bumping the pin means updating the version
+and both hashes in `bin/sqlmap-requirements.txt` together;
+`--require-hashes` fails closed on a partial update.
+
+### Target derivation: sqlmap's own `--openapi`, not a hand-built generator
+
+The first draft of this wrapper generated targets by running the contract
+suite (`tests/contract`) against the deployment with request/response capture
+turned on, then converting the capture into raw requests for sqlmap's `-r`.
+That duplicated work sqlmap already does better: `--openapi=<url>` parses a
+schema directly (confirmed against sqlmap 1.10.8's own source,
+`lib/parse/openapi.py`), synthesizes realistic values from each parameter's
+declared example, fills path/query/header/cookie parameters and JSON/form
+bodies, and marks every value it derives as a candidate injection point - one
+flag instead of a bridge between two test suites. `run_sqlmap_scan.sh` points
+it at `${BASE_URL}/dashboard/api/external/v1/schema/?format=json` - the exact
+document `tests/contract/schema_source.py` fetches for the same reason: it is
+what third parties (the Flutter app included) actually generate clients from.
+
+**Known limitation, shared with the contract suite** (see "Detail operations
+mostly exercise the 404 path" in docs/CONTRACT_TESTS.md): neither tool seeds a
+*real* object identifier into a detail-view path parameter, so
+`pins/{pin_slug}/`-shaped operations are tested against a slug that does not
+exist. A slug-lookup injection on a genuinely matched row is not exercised by
+either suite yet. Recorded here rather than solved here, for the same reason
+the contract suite left it recorded rather than solved.
+
+### The four tiers
+
+`--all-tiers` (needs `--accounts-file`) runs sqlmap four times, mirroring
+Nuclei's tiers because the underlying reachability split is identical - see
+"Authenticated scanning" above for the full explanation of why an API key and
+a session reach disjoint route surfaces rather than overlapping ones:
+
+| Tier | Mechanism | What it reaches |
+| --- | --- | --- |
+| `unauthenticated` | `--openapi`, no credential | The public perimeter of the external API |
+| `apikey-restricted` | `--openapi` + the `profile:read`-only key | The external API at the narrowest scope a real integration would use |
+| `apikey-full` | `--openapi` + the full-scope key | The external API, every documented operation |
+| `session` | `--crawl`/`--forms` + a real signed-in cookie | The HTML/HTMX dashboard - maps, wiki, trips, admin |
+
+The `session` tier does not use `--openapi` at all: `ExternalApiView`
+declares `authentication_classes = [ApiKeyAuthentication, OAuth2Authentication]`
+with no `SessionAuthentication` (see "Authenticated scanning" above), so a
+session cookie cannot reach `/api/...`, and the API-key tiers' schema has
+nothing to say about the HTML surface. It crawls the dashboard instead
+(`--crawl`, `--forms`, `--csrf-token=csrfmiddlewaretoken` for Django's
+CSRF-protected forms) and signs in through the same real browser flow
+(`tests/integration/setup/auth.setup.ts`) Nuclei's session tier already
+established as the only correct way to get a Django session outside a test
+client.
+
+**No credential ever reaches argv.** Bearer tokens and session cookies are
+written into a minimal sqlmap config file (`-c`, `[Request]` section only -
+`authtype`/`authcred` or `cookie`) rather than passed as `--auth-cred`/
+`--cookie` CLI flags, cleaned up in the same `trap cleanup EXIT` pattern
+Nuclei's secret-files use, and for the identical reason: a live key or
+cookie in a CLI argument is visible to anything else that can list processes
+on the same box.
+
+### Reading a finding
+
+sqlmap's own exit code is not a findings signal - confirmed against its
+source (`sqlmap.py`'s `os._exitcode`): it stays `0` on a completed scan that
+found nothing, and is only ever `1` on sqlmap's own runtime error. Every run
+instead carries `--report-json`, whose `data` array holds a `TARGET`- or
+`TECHNIQUES`-typed entry only when sqlmap actually confirmed an injection
+point; `run_sqlmap_scan.sh` counts those and prints a per-tier summary the
+same way `run_nuclei_scan.sh` counts JSONL lines. `--fail-on-findings` turns a
+nonzero count into a nonzero exit; off by default, since a finding here is a
+lead to triage rather than automatically a broken build.
+
+Reports land in `tests/integration/reports/sqlmap/` (sqlmap's own
+`--output-dir` tree, including its full transcript log and, for anything
+actually dumped, the row data itself - handle those the way `docs/PROBLEMS.md`
+handles any other confirmed vulnerability), the same tree Nuclei and the
+Playwright suite use, so all three are picked up by one CI artifact upload.
+
+**Not yet calibrated against a live deployment.** Every other tool on this
+page earned its documented defaults and caveats from a first real run - see
+"What the first run found" above, and the Nuclei section's own postmortem.
+This one has been validated against a fake local target (confirms the
+plumbing: `--openapi` derivation, config-file auth, `--report-json` parsing,
+the allowlist and hard-blocked-flag guards) but not yet against a real
+dev-container deployment. Expect the first live `--all-tiers` run to correct
+at least one assumption here, the same way every other tool's first run did.
+
 ## Why Playwright
 
 The alternative considered was `pytest-playwright`, which would have kept
@@ -292,8 +455,9 @@ Some things it deliberately does **not** do:
   path unsigned, and asserts it is refused.
 - **Attack scanners**, mostly. The `security` project is assertions about
   refusals, identical 404s, cookie flags, and markup that must not become DOM.
-  It does not run SQLMap or a ZAP active scan against the deployment; those
-  remain unassessed. **Nuclei is the one exception** - see below.
+  It does not run an active scanner against the deployment itself - **Nuclei
+  and sqlmap are the two exceptions**, both separate on-demand tools rather
+  than Playwright specs, see below. A ZAP active scan remains unassessed.
 - **External providers.** Provisioned accounts have `external_apis_enabled` and
   `ai_enabled` set to False, so no provider is billed by a test run. Pass
   `--external-apis` when provisioning if you specifically want to exercise the

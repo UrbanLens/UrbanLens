@@ -1,0 +1,115 @@
+name: sqlmap scan
+
+# Manual only, and deliberately NOT wired into integration.yml's bundle the way
+# nuclei.yml is (integration.yml's run_nuclei input has no run_sqlmap
+# equivalent). Nuclei detects; sqlmap exploits - a routine "run the integration
+# suite" dispatch should never fire something that actively sends SQL injection
+# payloads through a real deployment as a side effect of an unrelated checkbox.
+# This workflow exists only so `workflow_dispatch` can be used from CI instead
+# of a local/chiron shell when that is more convenient - it is exactly the same
+# manual trigger either way.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Dev-container deployment to scan, e.g. https://s1.dev.urbanlens.org. Refused unless it matches bin/run_sqlmap_scan.sh's allowlist."
+        required: true
+        type: string
+      risk:
+        description: "sqlmap --risk (1-3)"
+        required: false
+        default: "3"
+        type: string
+      level:
+        description: "sqlmap --level (1-5)"
+        required: false
+        default: "5"
+        type: string
+      technique:
+        description: "sqlmap --technique"
+        required: false
+        default: "BEUSTQ"
+        type: string
+      all_tiers:
+        description: "Scan all four auth tiers (needs the staging environment's UL_E2E_ACCOUNTS_JSON secret to name a dev-container account)"
+        required: false
+        default: false
+        type: boolean
+      fail_on_findings:
+        description: "Fail the job if sqlmap confirmed an injection"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  # Independent of integration.yml's/nuclei.yml's own groups - this never runs
+  # as part of either, so it cannot queue behind or block them.
+  group: sqlmap-${{ inputs.base_url }}
+  cancel-in-progress: false
+
+jobs:
+  sqlmap:
+    name: sqlmap scan
+    runs-on: ubuntu-latest
+    # Reuses the same GH Environment (and the same UL_E2E_ACCOUNTS_JSON secret)
+    # as integration.yml/nuclei.yml purely because that is where the
+    # provisioned-account manifest already lives - it says nothing about what
+    # base_url may be. bin/run_sqlmap_scan.sh's own allowlist is what actually
+    # keeps this off staging/production regardless of which environment's
+    # secrets this job can see.
+    environment: staging
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Write the accounts manifest
+        if: inputs.all_tiers
+        env:
+          ACCOUNTS_JSON: ${{ secrets.UL_E2E_ACCOUNTS_JSON }}
+        run: |
+          if [ -z "$ACCOUNTS_JSON" ]; then
+            echo "::error::all_tiers was requested but the staging environment has no UL_E2E_ACCOUNTS_JSON secret."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$ACCOUNTS_JSON" > "${RUNNER_TEMP}/e2e-accounts.json"
+
+      # The session tier (only reachable with all_tiers) signs in through a
+      # real browser via tests/integration/setup/auth.setup.ts, which needs
+      # Node - the script itself runs `npm install`/`playwright install` on
+      # demand, but the runner needs a modern enough `node` on PATH first.
+      - name: Set up Node
+        if: inputs.all_tiers
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Run the scan
+        run: |
+          args=(--url "${{ inputs.base_url }}" --risk "${{ inputs.risk }}" --level "${{ inputs.level }}" --technique "${{ inputs.technique }}")
+          if [ "${{ inputs.fail_on_findings }}" = "true" ]; then
+            args+=(--fail-on-findings)
+          fi
+          if [ -f "${RUNNER_TEMP}/e2e-accounts.json" ]; then
+            args+=(--accounts-file "${RUNNER_TEMP}/e2e-accounts.json" --all-tiers)
+          fi
+          bash bin/run_sqlmap_scan.sh "${args[@]}"
+
+      - name: Upload the report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: sqlmap-report-${{ github.run_id }}
+          path: tests/integration/reports/sqlmap
+          retention-days: 14
+          if-no-files-found: warn
