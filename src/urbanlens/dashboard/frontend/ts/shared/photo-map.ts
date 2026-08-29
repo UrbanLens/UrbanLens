@@ -21,7 +21,7 @@
 
 declare const L: typeof import("leaflet");
 
-import { hasMarkerCluster, reclusterOnDrag, returnToCluster } from "./map-clusters";
+import { canCluster, reclusterOnDrag, returnToCluster } from "./map-clusters";
 
 /** The subset of leaflet.markercluster's cluster object this file reads. */
 interface PhotoClusterLike {
@@ -157,7 +157,7 @@ export function tagPhotoMarker(marker: L.Marker, url: string, id: number): void 
  * @param map - Used to size cluster icons at the current zoom.
  */
 export function createPhotoClusterGroup(map: L.Map): L.LayerGroup {
-    if (!hasMarkerCluster()) return L.layerGroup();
+    if (!canCluster(map)) return L.layerGroup();
     const factory = (L as unknown as { markerClusterGroup: PhotoClusterFactory }).markerClusterGroup;
     return factory({
         maxClusterRadius: photoClusterRadius,

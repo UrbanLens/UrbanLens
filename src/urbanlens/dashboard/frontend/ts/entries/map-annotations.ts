@@ -15,7 +15,7 @@ import { getCsrfToken } from "../shared/csrf";
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
-import { createMapLayers, tileLayer } from "../shared/map-layers";
+import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, tileLayer } from "../shared/map-layers";
 import { bindMapContextMenu, showMapContextMenu, type ContextMenuItem } from "../shared/map-context-menu";
 import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick, reclusterOnDrag, returnToCluster } from "../shared/map-clusters";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
@@ -275,7 +275,13 @@ function init(): void {
 
     // attributionControl: false - required attribution renders in the page
     // footer instead (show_map_footer=True; see createMapLayers' onAttribution below).
-    const map = L.map("map", { scrollWheelZoom: false, attributionControl: false }).setView([mapCenterLat, mapCenterLng], 15);
+    // maxZoom is explicit because the cluster groups below are added before the
+    // first tile layer, and leaflet.markercluster throws on an infinite
+    // getMaxZoom() - see MAP_MAX_ZOOM.
+    const map = L.map("map", { scrollWheelZoom: false, attributionControl: false, maxZoom: MAP_MAX_ZOOM, minZoom: MAP_MIN_ZOOM }).setView(
+        [mapCenterLat, mapCenterLng],
+        15,
+    );
     window.map = map;
 
     // -- Selectable parcel-building import dialog ---------------------------
@@ -312,7 +318,7 @@ function init(): void {
         }
 
         buildingImportMap?.remove();
-        const previewMap = L.map(mapElement, { scrollWheelZoom: false, attributionControl: false }).setView([mapCenterLat, mapCenterLng], 16);
+        const previewMap = L.map(mapElement, { scrollWheelZoom: false, attributionControl: false, maxZoom: MAP_MAX_ZOOM, minZoom: MAP_MIN_ZOOM }).setView([mapCenterLat, mapCenterLng], 16);
         buildingImportMap = previewMap;
         tileLayer("street").addTo(previewMap);
 
@@ -629,7 +635,7 @@ function init(): void {
     // Cluster group is added to the map directly (not nested in a LayerGroup) -
     // MarkerClusterGroup misses zoom events when it is only a child of another
     // group. Markup stays a sibling; the Details toggle shows/hides both.
-    const detailPinLayer = createPinClusterGroup();
+    const detailPinLayer = createPinClusterGroup({}, map);
     const markupLayer = L.layerGroup();
     detailPinLayer.addTo(map);
     markupLayer.addTo(map);
@@ -3172,7 +3178,9 @@ declare global {
         gallerySetPhotoMapHidden?: (imgId: number, hidden: boolean, onRejected?: () => void) => void;
         galleryOpenLightbox?: (imgId: number, opts: { url: string }) => void;
         _galleryAddMarker: (img: GalleryImage) => void;
-        _galleryRemoveMarker: (imgId: number) => void;
+        // Optional to match the ambient declaration in types/globals.d.ts: the
+        // gallery partial calls it defensively on pages where this entry never ran.
+        _galleryRemoveMarker?: (imgId: number) => void;
         _galleryHighlightMarker: (imgId: number, on: boolean) => void;
 
         // Media-section drag-onto-map integration (pages/location/index.html).

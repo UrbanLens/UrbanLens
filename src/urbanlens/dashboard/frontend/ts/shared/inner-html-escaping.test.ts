@@ -37,6 +37,9 @@ const REVIEWED_SAFE = new Map<string, string>([
     ["item.label", "static slash-command definition"],
     // Static onboarding card list in entries/organize.ts.
     ["card.icon", "static onboarding card definition"],
+    // Material-symbol names from the action list built in photo-context-menu.ts
+    // itself - every icon there is a developer-authored literal.
+    ["action.icon", "static context-menu action definition"],
     // Literal branches - no external value reaches the markup.
     ['converting ? "Converting…" : "Saving…"', "string literals"],
     ['hasCoords ? "Has GPS" : "No GPS"', "string literals"],
@@ -64,6 +67,12 @@ const REVIEWED_SAFE = new Map<string, string>([
     ["faqLink", "pre-built markup"],
     ["subtitle", "pre-built markup"],
     ["prefix", "static namespace label"],
+    // photo-tile.ts fragments, each a literal or "" chosen by a boolean. The
+    // only value any of them interpolates is `tile.id`, which both tile parsers
+    // coerce with Number()/parseInt before it can reach markup.
+    ["check", "static markup or empty string"],
+    ["remove", "static markup around a numeric id"],
+    ["caption", "empty <p> or empty string; its text is set via textContent"],
     // FileReader data: URL of the user's own just-selected file; base64 payload
     // cannot contain a quote, and it never leaves this browser.
     ["e.target?.result", "FileReader data URL"],
