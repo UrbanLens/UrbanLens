@@ -45,9 +45,22 @@ class BasemapTileProxyTests(TestCase):
             second = self.client.get(self.url)
 
         self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
         self.assertEqual(first.content, b"PNGDATA")
         self.assertEqual(second.content, b"PNGDATA")
         self.assertEqual(download.call_count, 1, "a served tile must not be re-fetched on the next pan")
+
+    def test_the_vendor_content_type_is_preserved_through_the_cache(self) -> None:
+        """Not every layer is PNG; the cache stores ``(body, content_type)`` as
+        a pair. A cache-hit path that dropped the type (or hardcoded
+        image/png) would only surface once a non-PNG layer was already
+        cached - exactly the failure the controller's own comment warns about."""
+        with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"WEBPDATA", "image/webp")):
+            first = self.client.get(self.url)
+            second = self.client.get(self.url)
+
+        self.assertEqual(first["Content-Type"], "image/webp")
+        self.assertEqual(second["Content-Type"], "image/webp", "the cache-hit path must serve the same type as the fresh fetch")
 
     def test_a_definitive_miss_is_cached(self) -> None:
         """Most of a layer's pyramid is empty; re-asking on every pan is the cost."""
@@ -58,6 +71,18 @@ class BasemapTileProxyTests(TestCase):
         self.assertEqual(first.status_code, 404)
         self.assertEqual(second.status_code, 404)
         self.assertEqual(download.call_count, 1)
+
+    def test_a_400_is_also_a_definitive_miss(self) -> None:
+        """400 (invalid_parameter/unknown_layer) is as definitive as 404 - a
+        cache branch narrowed to ``status == 404`` would still pass every
+        other test in this file."""
+        with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.download_tile", return_value=(400, b"", "")) as download:
+            first = self.client.get(self.url)
+            second = self.client.get(self.url)
+
+        self.assertEqual(first.status_code, 404)
+        self.assertEqual(second.status_code, 404)
+        self.assertEqual(download.call_count, 1, "a 400 must be cached too, not just a 404")
 
     def test_a_vendor_outage_is_never_cached(self) -> None:
         """The whole point: an outage must not become a permanently blank map."""
@@ -71,6 +96,15 @@ class BasemapTileProxyTests(TestCase):
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
 
         with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.download_tile", side_effect=LocationContextUnavailableError("source_error", "down")):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 503)
+
+    def test_a_network_failure_answers_503_rather_than_500(self) -> None:
+        """OSError - a real ``requests`` connection failure, distinct from the
+        gateway's own structured error type - is the other member of the
+        except tuple; dropping it from the tuple would 500 on an outage."""
+        with mock.patch(_CONFIGURED, return_value=True), mock.patch(f"{_GATEWAY}.download_tile", side_effect=OSError("connection reset")):
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 503)
@@ -106,7 +140,14 @@ class BasemapCatalogueTests(TestCase):
 
         self.assertEqual(len(layers), 1)
         self.assertNotIn("redata.example", layers[0]["url_template"])
-        self.assertIn("/dashboard/map/basemap-tiles/usgs-topo/", layers[0]["url_template"])
+        # Filling the template in the way Leaflet would - and comparing against
+        # a URL this view is independently known to serve - pins the sentinel
+        # substitution itself, not just the fixed prefix around it. A broken
+        # replace() (wrong sentinel, or none at all) would still satisfy a
+        # bare substring check on the prefix while handing the browser
+        # "900001" instead of "{z}".
+        filled = layers[0]["url_template"].replace("{z}", "12").replace("{x}", "1204").replace("{y}", "1539")
+        self.assertEqual(filled, reverse("map.basemap_tiles", kwargs={"layer": "usgs-topo", "z": 12, "x": 1204, "y": 1539}))
 
     def test_a_layer_without_attribution_is_not_offered(self) -> None:
         """Every vendor here requires attribution on the rendered map."""
@@ -132,6 +173,10 @@ class BasemapCatalogueTests(TestCase):
             self.client.get(self.url)
 
         self.assertEqual(list_sources.call_count, 1, "documented as called once per session, not once per map load")
+
+    def test_unconfigured_redata_yields_no_layers(self) -> None:
+        with mock.patch(_CONFIGURED, return_value=False):
+            self.assertEqual(self.client.get(self.url).json()["layers"], [])
 
 
 class TileLogPrivacyTests(SimpleTestCase):

@@ -70,6 +70,30 @@ class PurgeStaleTempFilesTests(SimpleTestCase):
 
             self.assertTrue(live.exists())
 
+    def test_the_stale_cutoff_boundary_is_pinned_to_the_second(self) -> None:
+        """`> cutoff` (not `>=`) decides which side of STALE_TEMP_AGE_SECONDS a file falls
+        on - pin the exact cutoff instant and one second inside it, not just values
+        comfortably on either side, so a flipped comparison or an off-by-one survives no
+        longer than this test."""
+        with TemporaryDirectory() as tmp:
+            fixed_now = 10_000_000.0
+            cutoff = fixed_now - STALE_TEMP_AGE_SECONDS
+
+            at_cutoff = Path(tmp) / "backup_20260101_000000.sql.tmp"
+            at_cutoff.write_bytes(b"x")
+            os.utime(at_cutoff, (cutoff, cutoff))
+
+            one_second_short = Path(tmp) / "backup_20260102_000000.sql.tmp"
+            one_second_short.write_bytes(b"x")
+            os.utime(one_second_short, (cutoff + 1, cutoff + 1))
+
+            with mock.patch("urbanlens.core.controllers.backups.db.datetime") as mock_dt:
+                mock_dt.now.return_value.timestamp.return_value = fixed_now
+                self._backup(tmp).purge_stale_temp_files()
+
+            self.assertFalse(at_cutoff.exists(), "a file exactly at the cutoff must be reaped")
+            self.assertTrue(one_second_short.exists(), "a file one second inside the cutoff must survive")
+
     def test_completed_backups_are_untouched(self) -> None:
         with TemporaryDirectory() as tmp:
             done = Path(tmp) / "backup_20260101_000000.sql"
@@ -87,6 +111,29 @@ class PurgeStaleTempFilesTests(SimpleTestCase):
             self._backup(tmp).purge_stale_temp_files()
 
             self.assertTrue(stray.exists())
+
+    def test_a_removal_failure_does_not_abort_the_rest_of_the_sweep(self) -> None:
+        """The try/except around os.remove exists so one uncooperative file (a permission
+        error, a concurrent delete) can't abort the sweep before later stale files are
+        reaped - assert the loop actually continues rather than propagating."""
+        with TemporaryDirectory() as tmp:
+            unremovable = Path(tmp) / "backup_20260101_000000.sql.tmp"
+            removable = Path(tmp) / "backup_20260102_000000.sql.tmp"
+            _touch(unremovable, STALE_TEMP_AGE_SECONDS + 60)
+            _touch(removable, STALE_TEMP_AGE_SECONDS + 60)
+
+            real_remove = os.remove
+
+            def _flaky_remove(path, *args, **kwargs) -> None:
+                if os.fspath(path) == str(unremovable):
+                    raise OSError("permission denied")
+                real_remove(path, *args, **kwargs)
+
+            with mock.patch("os.remove", side_effect=_flaky_remove):
+                self._backup(tmp).purge_stale_temp_files()
+
+            self.assertTrue(unremovable.exists())
+            self.assertFalse(removable.exists())
 
     def test_purging_old_backups_also_reaps_temp_files(self) -> None:
         """The reaper has no scheduler of its own - it rides along with retention,
@@ -124,9 +171,14 @@ class BackupTimeoutTests(SimpleTestCase):
                 raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 1))
 
             # `db.py` does `from shutil import which`, so the name to patch is its own.
-            with mock.patch("subprocess.run", side_effect=_hang), mock.patch("urbanlens.core.controllers.backups.db.which", return_value="/usr/bin/pg_dump"):
+            with mock.patch("subprocess.run", side_effect=_hang) as mock_run, mock.patch("urbanlens.core.controllers.backups.db.which", return_value="/usr/bin/pg_dump"):
                 self.assertFalse(backup.run())
 
+            # A dropped `timeout=` kwarg would restore the original bug (the wedge running
+            # until Celery's own soft limit) while `_hang` above still raises regardless -
+            # pin that the argument is actually threaded through, not just that some
+            # TimeoutExpired gets raised somewhere.
+            self.assertEqual(mock_run.call_args.kwargs.get("timeout"), BACKUP_TIMEOUT_SECONDS)
             self.assertEqual(list(Path(tmp).iterdir()), [], "the partial dump was left on disk")
 
     def test_the_timeout_is_below_the_celery_soft_limit(self) -> None:

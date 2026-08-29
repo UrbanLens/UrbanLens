@@ -89,6 +89,33 @@ class ScheduledBackupDueTests(SimpleTestCase):
 
         self.assertEqual(due, elapsed_hours >= frequency_hours)
 
+    def test_due_exactly_at_frequency_boundary(self) -> None:
+        now = datetime(2026, 1, 10, tzinfo=UTC)
+        frequency_hours = 24
+        latest = now - timedelta(hours=frequency_hours)
+        fake_file = mock.Mock()
+        fake_file.stat.return_value.st_mtime = latest.timestamp()
+
+        with mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", return_value=[fake_file]):
+            due = scheduled_backup_due(_SiteSettings(backup_frequency_hours=frequency_hours), now=now)
+
+        # Equal-to-frequency elapsed time is exactly the ">=" cutoff. The property test
+        # above almost never lands on this exact instant, so a ">" mutation of the
+        # comparison would otherwise slip through - pin it explicitly.
+        self.assertTrue(due)
+
+    def test_not_due_one_second_before_frequency_boundary(self) -> None:
+        now = datetime(2026, 1, 10, tzinfo=UTC)
+        frequency_hours = 24
+        latest = now - timedelta(hours=frequency_hours) + timedelta(seconds=1)
+        fake_file = mock.Mock()
+        fake_file.stat.return_value.st_mtime = latest.timestamp()
+
+        with mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", return_value=[fake_file]):
+            due = scheduled_backup_due(_SiteSettings(backup_frequency_hours=frequency_hours), now=now)
+
+        self.assertFalse(due)
+
 
 class CollectBackupStatsTests(SimpleTestCase):
     """collect_backup_stats summarizes backup directory contents."""
@@ -102,7 +129,7 @@ class CollectBackupStatsTests(SimpleTestCase):
 
             with (
                 mock.patch("urbanlens.dashboard.services.admin.backups.app_settings.backups_dir", root),
-                mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", wraps=lambda backup_dir=None: backup_files(root)),
+                mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", wraps=lambda _backup_dir=None: backup_files(root)),
             ):
                 stats = collect_backup_stats(_SiteSettings(backup_frequency_hours=12, backup_retention=7))
 
@@ -111,4 +138,34 @@ class CollectBackupStatsTests(SimpleTestCase):
         self.assertEqual(stats.retention, 7)
         self.assertEqual(stats.count, 2)
         self.assertEqual(stats.latest_backup, base + timedelta(hours=2))
-        self.assertGreater(stats.total_size_mb, 0)
+        # Exact value, not just "> 0" - a wrong divisor or a size computed from the
+        # wrong files would still be positive and pass a mere greater-than check.
+        self.assertAlmostEqual(stats.total_size_mb, (1024 + 2048) / 1_048_576)
+
+    def test_collects_zero_count_and_none_latest_when_dir_is_empty(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            with (
+                mock.patch("urbanlens.dashboard.services.admin.backups.app_settings.backups_dir", root),
+                mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", wraps=lambda _backup_dir=None: backup_files(root)),
+            ):
+                stats = collect_backup_stats(_SiteSettings())
+
+        self.assertEqual(stats.count, 0)
+        self.assertIsNone(stats.latest_backup)
+        self.assertEqual(stats.total_size_mb, 0.0)
+
+    def test_enabled_reflects_disabled_site_settings(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            with (
+                mock.patch("urbanlens.dashboard.services.admin.backups.app_settings.backups_dir", root),
+                mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", wraps=lambda _backup_dir=None: backup_files(root)),
+            ):
+                stats = collect_backup_stats(_SiteSettings(backup_enabled=False))
+
+        # The prior test only exercises the (default) enabled=True case, which a
+        # hardcoded `enabled=True` would also satisfy - pin the False side too.
+        self.assertFalse(stats.enabled)

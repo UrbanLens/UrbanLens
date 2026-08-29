@@ -4063,3 +4063,25 @@ ever construct Pin-owned albums - the community/wiki half of the Album model (`p
 `owner_kwargs`, the concealment-aware `_owner_conceal`/`conceal_rows` path) has zero coverage.
 Building that out correctly needs the wiki-access/concealment rules understood well enough to avoid
 a shallow test - flagged for a dedicated pass rather than folded into this audit.
+
+**`purge_old_backups`'s count-based retention (deleting the oldest backups beyond
+`backup_retention`) has no dedicated test anywhere in the suite.** `test_backup_temp_purge.py` only
+exercises the `.tmp`-reaping side effect of `purge_old_backups()` with zero real `.sql` backups on
+disk, so the count-deletion loop (`backup_files[self.backup_retention:]`, sorted by mtime
+descending) never actually runs in any test - nor does `DatabaseBackup.run()`'s success path
+(pg_dump succeeding, `os.replace` to the final name, then `purge_old_backups()` firing). The
+existing "Database backups have no restore path" entry above describes retention as "implemented
+and tested", which overstates it for this specific branch. Worth a dedicated pass verifying that
+with N backups on disk and a lower retention, exactly the oldest excess files are removed (by
+identity, not just resulting count) and the newest `retention` survive.
+
+**`RedataBasemapTilesGateway.list_sources()` envelope parsing is untested at the unit level.**
+`test_basemap_tile_proxy.py` only ever mocks `RedataBasemapTilesGateway.list_sources`/
+`download_tile` at the controller boundary, so the gateway's own body-shape handling (bare list vs
+`{"sources": [...]}` vs `{"results": [...]}` dict envelopes, and the
+`if isinstance(row, dict) and row.get("id")` row filter) has no direct test anywhere in the
+codebase - a regression there (e.g. swapping the `sources`/`results` fallback order, or dropping
+the id-filter) would only be caught if it happened to also break one of the controller-level
+fixtures, which all use the `sources` key and well-formed rows. Worth a dedicated pass that
+instantiates the gateway directly (with `base_url`/`api_key` kwargs and a mocked `session`) rather
+than mocking the gateway's own methods.
