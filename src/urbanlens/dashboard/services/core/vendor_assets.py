@@ -56,22 +56,73 @@ class VendorAsset:
     integrity: str = ""
 
 
-#: Every third-party asset, keyed by the name templates ask for.
+#: Every third-party asset, keyed by the name templates ask for. Every
+#: script/style entry now carries an ``integrity`` hash - see
+#: docs/PROBLEMS-ARCHIVE.md, "Nuclei scan audit", for how these were computed.
 VENDOR_ASSETS: dict[str, VendorAsset] = {
-    "leaflet_css": VendorAsset("style", "leaflet/1.9.4/leaflet.css", "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"),
-    "leaflet_js": VendorAsset("script", "leaflet/1.9.4/leaflet.js", "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"),
+    "leaflet_css": VendorAsset(
+        "style",
+        "leaflet/1.9.4/leaflet.css",
+        "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
+        "sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H",
+    ),
+    "leaflet_js": VendorAsset(
+        "script",
+        "leaflet/1.9.4/leaflet.js",
+        "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+        "sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH",
+    ),
     # Leaflet's own default marker artwork. Previously requested from Leaflet
     # 1.7.1 while the library was 1.9.4.
     "leaflet_marker_icon": VendorAsset("image", "leaflet/1.9.4/images/marker-icon.png", "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png"),
-    "leaflet_marker_shadow": VendorAsset("image", "leaflet/1.9.4/images/marker-shadow.png", "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"),
-    "leaflet_rotate_js": VendorAsset("script", "leaflet-rotate/0.2.8/leaflet-rotate-src.js", "https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"),
+    "leaflet_marker_shadow": VendorAsset(
+        "image",
+        "leaflet/1.9.4/images/marker-shadow.png",
+        "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    ),
+    "leaflet_rotate_js": VendorAsset(
+        "script",
+        "leaflet-rotate/0.2.8/leaflet-rotate-src.js",
+        "https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js",
+        "sha384-WaInCl5qKhXVwIIJ/XMxRvjzCTIkZ1uH9Evm3mNtVtfXWhJGU3EkedDBaf/037Ew",
+    ),
     # Requested from cdnjs in some templates and unpkg in others; one source now.
-    "leaflet_draw_css": VendorAsset("style", "leaflet-draw/1.0.4/leaflet.draw.css", "https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"),
-    "leaflet_draw_js": VendorAsset("script", "leaflet-draw/1.0.4/leaflet.draw.js", "https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"),
-    "leaflet_markercluster_css": VendorAsset("style", "leaflet.markercluster/1.5.3/MarkerCluster.css", "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"),
-    "leaflet_markercluster_default_css": VendorAsset("style", "leaflet.markercluster/1.5.3/MarkerCluster.Default.css", "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"),
-    "leaflet_markercluster_js": VendorAsset("script", "leaflet.markercluster/1.5.3/leaflet.markercluster.js", "https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"),
-    "toastr_css": VendorAsset("style", "toastr/2.1.4/toastr.min.css", "https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.css"),
+    "leaflet_draw_css": VendorAsset(
+        "style",
+        "leaflet-draw/1.0.4/leaflet.draw.css",
+        "https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css",
+        "sha384-NZLkVuBRMEeB4VeZz27WwTRvlhec30biQ8Xx7zG7JJnkvEKRg5qi6BNbEXo9ydwv",
+    ),
+    "leaflet_draw_js": VendorAsset(
+        "script",
+        "leaflet-draw/1.0.4/leaflet.draw.js",
+        "https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js",
+        "sha384-JP5UPxIO2Tm2o79Fb0tGYMa44jkWar53aBoCbd8ah0+LcCDoohTIYr+zIXyfGIJN",
+    ),
+    "leaflet_markercluster_css": VendorAsset(
+        "style",
+        "leaflet.markercluster/1.5.3/MarkerCluster.css",
+        "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css",
+        "sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV",
+    ),
+    "leaflet_markercluster_default_css": VendorAsset(
+        "style",
+        "leaflet.markercluster/1.5.3/MarkerCluster.Default.css",
+        "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css",
+        "sha384-wgw+aLYNQ7dlhK47ZPK7FRACiq7ROZwgFNg0m04avm4CaXS+Z9Y7nMu8yNjBKYC+",
+    ),
+    "leaflet_markercluster_js": VendorAsset(
+        "script",
+        "leaflet.markercluster/1.5.3/leaflet.markercluster.js",
+        "https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js",
+        "sha384-eXVCORTRlv4FUUgS/xmOyr66XBVraen8ATNLMESp92FKXLAMiKkerixTiBvXriZr",
+    ),
+    "toastr_css": VendorAsset(
+        "style",
+        "toastr/2.1.4/toastr.min.css",
+        "https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.css",
+        "sha384-YzEqZ2pBV0i9OmlTyoz75PqwTR8If8GsXBv7HLQclEVqIC3VxIt98/U94ES6CJTR",
+    ),
     "toastr_js": VendorAsset(
         "script",
         "toastr/2.1.4/toastr.min.js",
@@ -96,9 +147,24 @@ VENDOR_ASSETS: dict[str, VendorAsset] = {
         "https://code.jquery.com/jquery-4.0.0-beta.min.js",
         "sha384-Cm3jMWwIyV0dazzpp3V+n5HmonAQ2uoNpQCYQzGrAK1ZBIKjGgaiHq2N8ItUlBcJ",
     ),
-    "chartjs_js": VendorAsset("script", "chart.js/4.4.0/chart.umd.min.js", "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"),
-    "sortable_js": VendorAsset("script", "sortablejs/1.15.0/Sortable.min.js", "https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"),
-    "fontawesome_css": VendorAsset("style", "font-awesome/6.6.0/css/all.min.css", "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"),
+    "chartjs_js": VendorAsset(
+        "script",
+        "chart.js/4.4.0/chart.umd.min.js",
+        "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js",
+        "sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g",
+    ),
+    "sortable_js": VendorAsset(
+        "script",
+        "sortablejs/1.15.0/Sortable.min.js",
+        "https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js",
+        "sha384-eeLEhtwdMwD3X9y+8P3Cn7Idl/M+w8H4uZqkgD/2eJVkWIN1yKzEj6XegJ9dL3q0",
+    ),
+    "fontawesome_css": VendorAsset(
+        "style",
+        "font-awesome/6.6.0/css/all.min.css",
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css",
+        "sha384-h/hnnw1Bi4nbpD6kE7nYfCXzovi622sY5WBxww8ARKwpdLj5kUWjRuyiXaD1U2JT",
+    ),
 }
 
 

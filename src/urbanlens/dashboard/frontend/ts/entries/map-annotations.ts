@@ -99,6 +99,8 @@ function readConfig(el: HTMLElement) {
     return {
         mapCenterLat: Number.parseFloat(d.mapCenterLat ?? "0"),
         mapCenterLng: Number.parseFloat(d.mapCenterLng ?? "0"),
+        markerIconUrl: d.markerIconUrl || "",
+        markerShadowUrl: d.markerShadowUrl || "",
         pinSlug: d.pinSlug || "",
         locationSlug: d.locationSlug || "",
         defaultMapView: d.defaultMapView || "satellite",
@@ -492,9 +494,12 @@ function init(): void {
         map.scrollWheelZoom.disable();
     });
 
+    // From VENDOR_ASSETS via #map-annotations-config, not hardcoded - this used
+    // to point at Leaflet 1.7.1's marker artwork while the library itself was
+    // 1.9.4 (see docs/PROBLEMS-ARCHIVE.md, "Nuclei scan audit").
     const markerIcon = L.icon({
-        iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+        iconUrl: cfg.markerIconUrl,
+        shadowUrl: cfg.markerShadowUrl,
         iconSize: [25, 41],
         shadowSize: [41, 41],
         iconAnchor: [12, 41],

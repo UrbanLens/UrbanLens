@@ -164,6 +164,9 @@ covering all of them; a finding is a lead to triage, not automatically a
 broken build, so the job does not fail on one unless
 `fail_on_findings`/`--fail-on-findings` is set.
 
+The first full `--all-tiers` run's findings are triaged in docs/PROBLEMS-ARCHIVE.md,
+2026-08-28.
+
 ## Why Playwright
 
 The alternative considered was `pytest-playwright`, which would have kept

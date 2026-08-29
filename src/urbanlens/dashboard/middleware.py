@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
+from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponse
 from django.utils.html import escape
@@ -19,6 +20,37 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
+
+
+class SecurityHeadersMiddleware:
+    """Attach the response headers ``SecurityMiddleware`` has no setting for.
+
+    ``SecurityMiddleware`` covers ``X-Content-Type-Options``,
+    ``Referrer-Policy`` and (since Django 4.0) ``Cross-Origin-Opener-Policy``
+    on its own. Django has no equivalent setting for ``Permissions-Policy``,
+    ``Cross-Origin-Resource-Policy`` or ``X-Permitted-Cross-Domain-Policies``,
+    so those three are attached here from
+    ``settings.PERMISSIONS_POLICY``/``settings.CROSS_ORIGIN_RESOURCE_POLICY``/
+    ``settings.X_PERMITTED_CROSS_DOMAIN_POLICIES``.
+    """
+
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        """Store the next handler in the chain."""
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        """Run the request, then attach the headers to whatever it returned."""
+        response = self.get_response(request)
+        policy = getattr(settings, "PERMISSIONS_POLICY", "")
+        if policy:
+            response.setdefault("Permissions-Policy", policy)
+        corp = getattr(settings, "CROSS_ORIGIN_RESOURCE_POLICY", "")
+        if corp:
+            response.setdefault("Cross-Origin-Resource-Policy", corp)
+        cross_domain = getattr(settings, "X_PERMITTED_CROSS_DOMAIN_POLICIES", "")
+        if cross_domain:
+            response.setdefault("X-Permitted-Cross-Domain-Policies", cross_domain)
+        return response
 
 
 class ProfilePreviewMiddleware:
@@ -119,7 +151,12 @@ class ProfilePreviewMiddleware:
         response = HttpResponse("Actions are disabled while previewing your profile.", status=403)
         if request.headers.get("HX-Request"):
             response["HX-Trigger"] = json.dumps(
-                {"showToast": {"level": "warning", "message": "You're previewing your profile - actions are disabled. Exit the preview first."}},
+                {
+                    "showToast": {
+                        "level": "warning",
+                        "message": "You're previewing your profile - actions are disabled. Exit the preview first.",
+                    }
+                },
             )
         return response
 

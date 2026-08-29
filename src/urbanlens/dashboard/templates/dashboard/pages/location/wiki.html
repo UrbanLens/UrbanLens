@@ -490,6 +490,8 @@
 <div id="map-annotations-config" hidden
      data-map-center-lat="{{ location.latitude }}"
      data-map-center-lng="{{ location.longitude }}"
+     data-marker-icon-url="{% vendor_asset_source "leaflet_marker_icon" %}"
+     data-marker-shadow-url="{% vendor_asset_source "leaflet_marker_shadow" %}"
      data-location-slug="{{ location.slug }}"
      data-markup-json-url="{{ markup_json_url }}{% if include_children %}?children=1{% endif %}"
      data-markup-create-url="{{ markup_create_url }}"
