@@ -124,9 +124,7 @@ ASGI_APPLICATION = "urbanlens.UrbanLens.asgi.application"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    # The two response headers SecurityMiddleware has no setting for. Sits
-    # below it: attach to every response, including ones short-circuited
-    # further down the chain.
+    # Headers SecurityMiddleware has no setting for; sits right below it.
     "urbanlens.dashboard.middleware.SecurityHeadersMiddleware",
     # Emits the Content-Security-Policy header built from CONTENT_SECURITY_POLICY
     # (or ..._REPORT_ONLY) below. Sits directly under SecurityMiddleware so the
@@ -581,32 +579,20 @@ SECURE_REDIRECT_EXEMPT = [r"^health"]
 SECURE_HSTS_SECONDS = int(os.getenv("UL_HSTS_SECONDS", "31536000")) if SECURE_SSL_REDIRECT else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("UL_HSTS_INCLUDE_SUBDOMAINS", SECURE_HSTS_SECONDS > 0)
 
-# Consumed by SecurityHeadersMiddleware (dashboard/middleware.py) - Django has
-# no built-in setting for any of the three below, unlike the headers above.
+# Consumed by SecurityHeadersMiddleware - Django has no setting for any of
+# these three.
 #
-# geolocation and clipboard-write are the only browser-permission features the
-# frontend actually calls (safety-live-location.ts/location-search-engine.ts's
-# geolocation prompt; map-context-menu.ts's "copy coordinates"), scoped to
-# same-origin top-level use since this page never embeds another origin's
-# content that would need to inherit either. Everything else is denied
-# outright rather than left to browser defaults.
+# geolocation/clipboard-write are the only permissions the frontend actually
+# uses (safety-live-location.ts, map-context-menu.ts); everything else denied.
 PERMISSIONS_POLICY = "geolocation=(self), clipboard-write=(self), camera=(), microphone=(), payment=(), usb=(), interest-cohort=(), browsing-topics=()"
-# same-site rather than same-origin: REData and the staging/dev slots (see
-# docs/NOTES.md) are separate origins under the same parent domain, and
-# nothing outside *.urbanlens.org has a legitimate reason to load this site's
-# images or scripts directly.
+# same-site, not same-origin: REData and the dev/staging slots are separate
+# origins under the same parent domain.
 CROSS_ORIGIN_RESOURCE_POLICY = "same-site"
-# Legacy Flash/Adobe Reader cross-domain policy discovery, unused by anything
-# this app serves - "none" costs nothing and forecloses it outright.
+# Legacy Flash/Adobe cross-domain policy discovery, unused - free to deny.
 X_PERMITTED_CROSS_DOMAIN_POLICIES = "none"
 
-# Cross-Origin-Embedder-Policy is deliberately not set here: `require-corp`
-# would block every third-party image and script this app loads that does not
-# send its own CORP/CORS headers - the Street View iframe, the OSM/ArcGIS/
-# OpenTopoMap tile hosts, Gravatar, and any operator-pasted map-overlay image
-# (see CSP's img-src comment below) - and none of those are under this
-# project's control to fix. Same posture CSP itself takes: report-only until
-# proven clean, not a same-day flag flip on an info-severity scan finding.
+# Cross-Origin-Embedder-Policy is not set - see docs/PROBLEMS.md, "Nuclei scan
+# follow-ups".
 
 # Content-Security-Policy (django-csp >= 4).
 #
@@ -669,14 +655,9 @@ _CSP_DIRECTIVES: dict[str, object] = {
         "https://server.arcgisonline.com",
         "https://services.arcgisonline.com",
         "https://tile.openweathermap.org",
-        # Leaflet's default marker/shadow PNGs used to be fetched from here
-        # (frontend/ts/entries/map-annotations.ts) at a different Leaflet
-        # release than the library itself - see docs/PROBLEMS-ARCHIVE.md,
-        # "Nuclei scan audit". Both now resolve through VENDOR_ASSETS like everything else, and nothing
-        # left in this app loads an *image* from cdnjs - style-src/script-src
-        # above still do, for Font Awesome and Toastr's CSS/JS - so this entry
-        # is gone rather than merely re-commented; img-src's blanket https:
-        # below covers it if that ever changes again.
+        # No longer needed for Leaflet's marker PNGs (see docs/PROBLEMS-ARCHIVE.md,
+        # "Nuclei scan audit") - nothing else here loads an image from cdnjs.
+        # img-src's blanket https: below covers it if that changes again.
         # Result favicons on the web-search page and the Gravatar avatar preview.
         "https://www.google.com",
         "https://www.gravatar.com",

@@ -142,10 +142,7 @@ class HstsGateTests(SimpleTestCase):
 
 
 class SecurityHeadersMiddlewareTests(SimpleTestCase):
-    """Permissions-Policy and Cross-Origin-Resource-Policy: Django has no
-    setting for either, so ``SecurityHeadersMiddleware`` attaches them from
-    ``settings.PERMISSIONS_POLICY``/``settings.CROSS_ORIGIN_RESOURCE_POLICY``.
-    """
+    """The three headers Django has no built-in setting for."""
 
     def test_middleware_is_installed_directly_below_securitymiddleware(self) -> None:
         self.assertIn("urbanlens.dashboard.middleware.SecurityHeadersMiddleware", settings.MIDDLEWARE)
@@ -186,12 +183,7 @@ class SecurityHeadersMiddlewareTests(SimpleTestCase):
         self.assertEqual(response.headers.get("X-Permitted-Cross-Domain-Policies"), "none")
 
     def test_cross_origin_opener_policy_is_djangos_secure_default(self) -> None:
-        """Not this middleware's job - SecurityMiddleware has sent this since Django 4.0.
-
-        Asserted here anyway: a Nuclei `http-missing-security-headers` scan
-        flagged its absence, and this is the fact that refutes it - the
-        setting was never overridden away from Django's own secure default.
-        """
+        """Refutes the scan's claim it's missing - SecurityMiddleware has sent this since Django 4.0."""
         self.assertEqual(settings.SECURE_CROSS_ORIGIN_OPENER_POLICY, "same-origin")
 
         response = self.client.get("/health/")

@@ -44,14 +44,7 @@ class SignedOutHomepageTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
     def test_signed_out_visitors_get_no_file_upload_markup(self) -> None:
-        """`CommentImagePickerView` and every comment endpoint it feeds are
-        ``LoginRequiredMixin``, so a signed-out visitor can never open
-        `themes/base.html`'s comment-photo dialog - a Nuclei
-        `exposed-file-upload-form` scan flagged its ``<input type="file">``
-        anyway, because the markup shipped on every page regardless of who
-        was looking at it. Gated so it stops appearing where it can do
-        nothing.
-        """
+        """The comment-photo dialog is unusable while signed out, so it shouldn't render either."""
         response = self.client.get(reverse("index"))
 
         self.assertNotContains(response, 'id="comment-image-composer"')

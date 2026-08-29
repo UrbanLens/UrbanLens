@@ -3987,3 +3987,10 @@ pin-owned photo at that location.~~ **Fixed 2026-08-25** (`8bd766a3`): the looku
 `wiki=wiki` instead of `location=location`. Guarded by
 `test_voting_with_a_pin_owned_image_id_at_the_same_location_is_ignored`. The main entry above
 (Consensus photo rounds ignoring uploader visibility) is unrelated and still open.
+
+## Nuclei scan follow-ups (2026-08-28)
+
+**`Cross-Origin-Embedder-Policy` is not set.** `require-corp` would block every third-party image
+and script that doesn't send its own CORP/CORS header - the Street View iframe, the OSM/ArcGIS/
+OpenTopoMap tile hosts, Gravatar, any operator-pasted map-overlay image: needs a report-only-shape. Revisit once there's a real inventory of which third-party hosts
+do and don't send CORP.

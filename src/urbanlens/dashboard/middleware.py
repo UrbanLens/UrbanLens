@@ -25,13 +25,11 @@ logger = logging.getLogger(__name__)
 class SecurityHeadersMiddleware:
     """Attach the response headers ``SecurityMiddleware`` has no setting for.
 
-    ``SecurityMiddleware`` covers ``X-Content-Type-Options``,
-    ``Referrer-Policy`` and (since Django 4.0) ``Cross-Origin-Opener-Policy``
-    on its own. Django has no equivalent setting for ``Permissions-Policy``,
-    ``Cross-Origin-Resource-Policy`` or ``X-Permitted-Cross-Domain-Policies``,
-    so those three are attached here from
-    ``settings.PERMISSIONS_POLICY``/``settings.CROSS_ORIGIN_RESOURCE_POLICY``/
-    ``settings.X_PERMITTED_CROSS_DOMAIN_POLICIES``.
+    Django has no built-in setting for ``Permissions-Policy``,
+    ``Cross-Origin-Resource-Policy`` or ``X-Permitted-Cross-Domain-Policies`` -
+    unlike ``X-Content-Type-Options``/``Referrer-Policy``/``Cross-Origin-Opener-Policy``,
+    which ``SecurityMiddleware`` already covers. Values come from
+    ``settings.PERMISSIONS_POLICY``/``CROSS_ORIGIN_RESOURCE_POLICY``/``X_PERMITTED_CROSS_DOMAIN_POLICIES``.
     """
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:

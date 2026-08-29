@@ -56,9 +56,7 @@ class VendorAsset:
     integrity: str = ""
 
 
-#: Every third-party asset, keyed by the name templates ask for. Every
-#: script/style entry now carries an ``integrity`` hash - see
-#: docs/PROBLEMS-ARCHIVE.md, "Nuclei scan audit", for how these were computed.
+#: Every third-party asset, keyed by the name templates ask for.
 VENDOR_ASSETS: dict[str, VendorAsset] = {
     "leaflet_css": VendorAsset(
         "style",

@@ -28,7 +28,7 @@ declare const L: typeof import("leaflet");
 // augmentation (L.Draw, L.Control.Draw, L.EditToolbar, ...) - erased at
 // build time, no runtime import (leaflet-draw is loaded via CDN like Leaflet
 // itself, only referenced here as an ambient global via `L`).
-import type {} from "leaflet-draw";
+import type { } from "leaflet-draw";
 
 interface DetailPinEntry {
     uuid: string;
@@ -494,9 +494,6 @@ function init(): void {
         map.scrollWheelZoom.disable();
     });
 
-    // From VENDOR_ASSETS via #map-annotations-config, not hardcoded - this used
-    // to point at Leaflet 1.7.1's marker artwork while the library itself was
-    // 1.9.4 (see docs/PROBLEMS-ARCHIVE.md, "Nuclei scan audit").
     const markerIcon = L.icon({
         iconUrl: cfg.markerIconUrl,
         shadowUrl: cfg.markerShadowUrl,
@@ -851,10 +848,10 @@ function init(): void {
     const overlayCornersTemplate = cfg.overlayCornersUrlTemplate || "";
     const imageOverlays = overlayCornersTemplate
         ? createMapImageOverlays(L, map, {
-              cornersUrl: (uuid) => overlayCornersTemplate.replace("00000000-0000-0000-0000-000000000000", uuid),
-              csrfToken: getCsrfToken(),
-              onError: (message) => toast.error?.(message),
-          })
+            cornersUrl: (uuid) => overlayCornersTemplate.replace("00000000-0000-0000-0000-000000000000", uuid),
+            csrfToken: getCsrfToken(),
+            onError: (message) => toast.error?.(message),
+        })
         : null;
 
     function overlayToggleKey(uuid: string): string {
@@ -1637,16 +1634,16 @@ function init(): void {
             n,
             n
                 ? {
-                      ...(cfg.detailPinsBulkEditUrl ? { edit: openSelectedDpBulkEditDialog } : {}),
-                      promote: doPromoteSelectedDp,
-                      // "Share" and "Send to wiki" are pin-only - the wiki page shares
-                      // this same module for its own (community) child-wiki toolbar,
-                      // which has neither concept.
-                      ...(cfg.pinShareDialogUrl ? { share: doShareSelectedDp } : {}),
-                      ...(cfg.detailPinsSendToWikiUrl ? { wiki: doSendSelectedDpToWiki } : {}),
-                      delete: doDeleteSelectedDp,
-                      deselect: clearDpSelection,
-                  }
+                    ...(cfg.detailPinsBulkEditUrl ? { edit: openSelectedDpBulkEditDialog } : {}),
+                    promote: doPromoteSelectedDp,
+                    // "Share" and "Send to wiki" are pin-only - the wiki page shares
+                    // this same module for its own (community) child-wiki toolbar,
+                    // which has neither concept.
+                    ...(cfg.pinShareDialogUrl ? { share: doShareSelectedDp } : {}),
+                    ...(cfg.detailPinsSendToWikiUrl ? { wiki: doSendSelectedDpToWiki } : {}),
+                    delete: doDeleteSelectedDp,
+                    deselect: clearDpSelection,
+                }
                 : {},
         );
     }

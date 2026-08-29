@@ -368,13 +368,7 @@
       </div>
     </dialog>
 
-    {# -- Attach-a-photo dialog for comments/Notes (pin, wiki, and trip #}
-    {# comments all share _comment_compose.html). Reuses the .cmc-tabs/.cmc-tab #}
-    {# strip styling from the map composer above for a consistent look. #}
-    {# Gated on sign-in: CommentImagePickerView and every comment endpoint #}
-    {# behind it are LoginRequiredMixin, so a signed-out visitor can never #}
-    {# open this - a Nuclei exposed-file-upload-form scan flagged the file #}
-    {# input anyway, since the markup shipped on every page regardless. #}
+    {# -- Attach-a-photo dialog for comments/Notes. #}
     {% if request.user.is_authenticated %}
     <dialog id="comment-image-composer" class="comment-image-composer-dialog ul-dialog" aria-labelledby="comment-image-composer-title">
       <div class="dialog-header">
