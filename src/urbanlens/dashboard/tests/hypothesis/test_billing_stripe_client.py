@@ -48,6 +48,17 @@ class EnsureCustomerTests(TestCase):
         _args, kwargs = mock_create.call_args
         self.assertEqual(kwargs["email"], "person@example.test")
         self.assertEqual(kwargs["metadata"], {"user_id": str(user.pk)})
+        # first/last name are blank, so this also pins the `or user.username` fallback half.
+        self.assertEqual(kwargs["name"], "person")
+
+    def test_uses_full_name_over_username_when_set(self) -> None:
+        user = baker.make(User, email="", first_name="Ann", last_name="Lee", username="annlee99")
+        with _configured(), mock.patch("stripe.Customer.create") as mock_create:
+            mock_create.return_value = mock.MagicMock(id="cus_123")
+            stripe_client.ensure_customer(user)
+
+        _args, kwargs = mock_create.call_args
+        self.assertEqual(kwargs["name"], "Ann Lee")
 
     def test_omits_email_kwarg_when_user_has_none(self) -> None:
         user = baker.make(User, email="", username="person")
@@ -78,6 +89,9 @@ class EnsureProductTests(TestCase):
         self.assertEqual(product_id, "prod_123")
         role.refresh_from_db()
         self.assertEqual(role.stripe_product_id, "prod_123")
+        _args, kwargs = mock_create.call_args
+        self.assertEqual(kwargs["name"], f"UrbanLens - {role.name}")
+        self.assertEqual(kwargs["metadata"], {"role_id": str(role.pk), "role_slug": role.slug})
 
     def test_reuses_an_existing_product_id(self) -> None:
         role = baker.make(SubscriptionRole, stripe_product_id="prod_existing")
@@ -113,6 +127,8 @@ class CreateCheckoutSessionTests(TestCase):
         self.assertEqual(kwargs["client_reference_id"], str(self.user.pk))
         self.assertEqual(kwargs["metadata"], {"user_id": str(self.user.pk), "role_id": str(self.role.pk)})
         self.assertEqual(kwargs["subscription_data"], {"metadata": kwargs["metadata"]})
+        self.assertEqual(kwargs["success_url"], "https://example.test/success")
+        self.assertEqual(kwargs["cancel_url"], "https://example.test/cancel")
         line_item = kwargs["line_items"][0]
         self.assertEqual(line_item["quantity"], 1)
         self.assertEqual(
@@ -127,10 +143,12 @@ class UpdatePledgeTests(TestCase):
         subscription = baker.make(RoleSubscription, role=role, stripe_subscription_id="sub_123")
         retrieved = mock.MagicMock()
         retrieved.to_dict.return_value = {"items": {"data": [{"id": "si_123"}]}}
-        with _configured(), mock.patch("stripe.Subscription.retrieve", return_value=retrieved), mock.patch("stripe.Subscription.modify") as mock_modify:
+        with _configured(), mock.patch("stripe.Subscription.retrieve", return_value=retrieved) as mock_retrieve, mock.patch("stripe.Subscription.modify") as mock_modify:
             stripe_client.update_pledge(subscription, 1200)
 
-        _args, kwargs = mock_modify.call_args
+        mock_retrieve.assert_called_once_with("sub_123")
+        args, kwargs = mock_modify.call_args
+        self.assertEqual(args[0], "sub_123")
         self.assertEqual(kwargs["proration_behavior"], "none")
         item = kwargs["items"][0]
         self.assertEqual(item["id"], "si_123")

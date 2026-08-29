@@ -193,6 +193,19 @@ class PinPropertyResolutionTests(TestCase):
         self.assertTrue(polygon.contains(Point(-74.01, 40.01, srid=4326)))
         self.assertFalse(polygon.intersects(_BIG))
 
+    def test_detail_pin_exactly_on_the_parent_boundary_edge_still_inherits(self) -> None:
+        """The containment gate is ``contains() or touches()`` - a point exactly on the
+        edge (not strictly inside) must still count, or a detail pin sitting right on its
+        parent's line would wrongly fall through to its own circle."""
+        baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_BIG)
+        # Exactly on the right edge of the ±0.003 property square.
+        child_location = baker.make("dashboard.Location", latitude="40.000000", longitude="-73.997000")
+        child = baker.make("dashboard.Pin", profile=self.pin.profile, location=child_location, parent_pin=self.pin)
+
+        polygon, source = Boundary.objects.resolve_for_pin(child, BoundaryType.PROPERTY)
+        self.assertEqual(source, "inherited")
+        self.assertEqual(polygon.wkt, _BIG.wkt)
+
 
 class ChildGeneratedPropertyBoundaryTests(TestCase):
     """A pin's child-fitted fallback follows children until the owner draws."""
@@ -253,6 +266,24 @@ class ChildGeneratedPropertyBoundaryTests(TestCase):
         self.assertEqual(official.generated_polygon.wkt, _BIG.wkt)
         self.assertFalse(Boundary.objects.filter(pin=self.pin, boundary_type=BoundaryType.PROPERTY).exists())
 
+    def test_place_outline_wins_over_the_child_generated_fallback(self) -> None:
+        """Regression: the child-fitted hull is a stand-in only until a real place answer
+        exists. Ranked ahead of it, a freshly-fetched place outline stayed invisible on the
+        very page that had just asked for it (see ``resolve_for_pin``'s docstring)."""
+        self._child("40.000000", "-73.999000")
+        row = Boundary.objects.get(pin=self.pin, boundary_type=BoundaryType.PROPERTY)
+        self.assertTrue(row.generated_from_children)
+        _polygon, source_before = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.PROPERTY)
+        self.assertEqual(source_before, "generated")
+
+        place = make_place(PlaceKind.PARCEL, _BIG)
+        resolution.resolve_location_place(self.location)
+        self.pin.refresh_from_db()
+
+        polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.PROPERTY)
+        self.assertEqual(source, "place")
+        self.assertEqual(polygon.wkt, place.geometry.wkt)
+
 
 class PinBuildingResolutionTests(TestCase):
     """Building boundaries: containment-gated inheritance, no circle fallback."""
@@ -297,6 +328,43 @@ class PinBuildingResolutionTests(TestCase):
         self.assertIsNone(source)
 
 
+class ScopeGateResolutionTests(TestCase):
+    """The scope gate stops a mismatched request from falling through to a shape.
+
+    A marker whose place says nothing about the requested boundary type (here: a
+    specific building on a multi-building campus, asked for the *property*
+    boundary - see ``services.places.scope.place_polygon``) must answer
+    (None, None), never fall through to the circle/wiki fallback further down
+    the chain - that fallback would silently hand back somebody else's shape.
+    """
+
+    def setUp(self):
+        self.parcel = make_place(PlaceKind.PARCEL, _square(-74.0, 40.0, 0.01))
+        self.building_a = make_place(PlaceKind.BUILDING, _square(-73.999, 40.0, 0.001), parent=self.parcel)
+        make_place(PlaceKind.BUILDING, _square(-73.997, 40.0, 0.001), parent=self.parcel)
+        # building_a.parent is a cached reference to this same object - refresh it in
+        # place so is_multi_building sees the count both make_place calls just wrote,
+        # rather than the stale 0 it had when first created (see test_places_campus.py).
+        self.parcel.refresh_from_db()
+        self.location = baker.make("dashboard.Location", latitude="40.000000", longitude="-73.999000")
+        resolution.attach_location(self.location, self.building_a)
+
+    def test_building_scoped_pin_gets_nothing_for_property_not_a_circle(self) -> None:
+        pin = baker.make("dashboard.Pin", location=self.location)
+        polygon, source = Boundary.objects.resolve_for_pin(pin, BoundaryType.PROPERTY)
+        self.assertIsNone(polygon)
+        self.assertIsNone(source)
+
+    def test_building_scoped_wikis_own_property_drawing_is_still_gated(self) -> None:
+        """Even a community-drawn PROPERTY boundary on a building-scoped wiki is suppressed."""
+        wiki = baker.make("dashboard.Wiki", location=self.location, place=self.building_a)
+        baker.make("dashboard.Boundary", wiki=wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_MEDIUM)
+
+        polygon, source = Boundary.objects.resolve_for_wiki(wiki, BoundaryType.PROPERTY)
+        self.assertIsNone(polygon)
+        self.assertIsNone(source)
+
+
 class WikiResolutionTests(TestCase):
     """resolve_for_wiki: wiki row → location generated → circle (property only)."""
 
@@ -323,6 +391,17 @@ class WikiResolutionTests(TestCase):
         polygon, source = Boundary.objects.resolve_for_wiki(self.wiki, BoundaryType.PROPERTY)
         self.assertEqual(source, "wiki")
         self.assertEqual(polygon.wkt, _MEDIUM.wkt)
+
+    def test_concealed_viewer_never_sees_the_wiki_drawing(self) -> None:
+        """A wiki-scoped Boundary row records no author, so concealment hides it outright
+        rather than risk showing a stranger's edit back as if it were automatic."""
+        baker.make("dashboard.Boundary", wiki=self.wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_MEDIUM)
+
+        with mock.patch("urbanlens.dashboard.services.wiki.concealment.is_concealed", return_value=True):
+            polygon, source = Boundary.objects.resolve_for_wiki(self.wiki, BoundaryType.PROPERTY)
+
+        self.assertEqual(source, "circle")
+        self.assertNotEqual(polygon.wkt, _MEDIUM.wkt)
 
 
 class LocationMatchingTests(TestCase):

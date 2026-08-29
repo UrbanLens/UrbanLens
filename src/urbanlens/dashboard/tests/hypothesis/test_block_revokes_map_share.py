@@ -77,6 +77,35 @@ class BlockRevokesMapShareTests(TestCase):
 
         self.assertTrue(MarkupMapShare.objects.filter(pk=share.pk).exists(), "blocking one profile revoked an unrelated share")
 
+    def test_an_unrelated_share_involving_the_blocked_profile_is_untouched(self) -> None:
+        """Scoping must hold from the blocked profile's side too, not just the blocker's.
+
+        A filter written as "wipe every share the blocked profile is party to"
+        (ignoring who the blocker is) would pass every other test in this file,
+        since none of them give the blocked profile a share with anyone but the
+        blocker - this pins that third-party case down.
+        """
+        bystander = _profile()
+        share = self._share(bystander, self.blocked)
+
+        block_profile(self.blocker, self.blocked)
+
+        self.assertTrue(MarkupMapShare.objects.filter(pk=share.pk).exists(), "blocking revoked a share between the blocked profile and someone else")
+
+    def test_all_shares_between_the_pair_are_revoked_not_just_one(self) -> None:
+        """The delete must be a bulk queryset delete, not "find one match and stop".
+
+        Both directions exist simultaneously here so a `.first()`-then-delete
+        regression - which every single-share test above would still pass -
+        gets caught: one of the two rows would survive.
+        """
+        outbound = self._share(self.blocker, self.blocked)
+        inbound = self._share(self.blocked, self.blocker)
+
+        block_profile(self.blocker, self.blocked)
+
+        self.assertFalse(MarkupMapShare.objects.filter(pk__in=[outbound.pk, inbound.pk]).exists(), "blocking left at least one of several shares between the pair in place")
+
     def test_the_map_itself_is_not_deleted(self) -> None:
         """Only the grant goes - the owner's own map is not collateral."""
         share = self._share(self.blocker, self.blocked)

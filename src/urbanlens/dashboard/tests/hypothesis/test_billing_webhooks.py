@@ -48,13 +48,18 @@ def _subscription_payload(
 class SyncFromStripeSubscriptionTests(TestCase):
     def test_copies_status_price_and_period_fields(self) -> None:
         subscription = baker.make(RoleSubscription, status=BillingSubscriptionStatus.INCOMPLETE, pledged_amount_cents=0)
-        webhooks.sync_from_stripe_subscription(subscription, _subscription_payload(status="active", unit_amount=750, price_id="price_9"))
+        webhooks.sync_from_stripe_subscription(
+            subscription,
+            _subscription_payload(status="active", unit_amount=750, price_id="price_9", cancel_at_period_end=True, canceled_at=1_650_000_000),
+        )
 
         subscription.refresh_from_db()
         self.assertEqual(subscription.status, "active")
         self.assertEqual(subscription.pledged_amount_cents, 750)
         self.assertEqual(subscription.stripe_price_id, "price_9")
         self.assertEqual(subscription.current_period_end, datetime.fromtimestamp(1_700_000_000, tz=UTC))
+        self.assertTrue(subscription.cancel_at_period_end)
+        self.assertEqual(subscription.canceled_at, datetime.fromtimestamp(1_650_000_000, tz=UTC))
 
     def test_recomputes_threshold_met_for_dynamic_roles(self) -> None:
         role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None)
@@ -64,6 +69,19 @@ class SyncFromStripeSubscriptionTests(TestCase):
 
         subscription.refresh_from_db()
         self.assertFalse(subscription.threshold_met)
+
+    def test_recompute_threshold_met_marks_a_cleared_pledge_true(self) -> None:
+        """Complement of the test above: a mutation that always resolves the recompute
+        as unmet (or skips it) would still pass a suite that only ever exercises the
+        below-threshold direction.
+        """
+        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None)
+        subscription = baker.make(RoleSubscription, role=role, threshold_met=False)
+        with mock.patch("urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("10.00")):
+            webhooks.sync_from_stripe_subscription(subscription, _subscription_payload(unit_amount=1500))
+
+        subscription.refresh_from_db()
+        self.assertTrue(subscription.threshold_met)
 
 
 class HandleCheckoutSessionCompletedTests(TestCase):
@@ -102,6 +120,21 @@ class HandleCheckoutSessionCompletedTests(TestCase):
     def test_missing_subscription_id_is_a_no_op(self) -> None:
         webhooks.handle_event(self._event(subscription=None))
         self.assertFalse(RoleSubscription.objects.exists())
+
+    def test_missing_client_reference_id_is_a_no_op(self) -> None:
+        """The other half of the ``not subscription_id or not user_id`` guard - only the
+        subscription_id side was previously exercised.
+        """
+        webhooks.handle_event(self._event(client_reference_id=None))
+        self.assertFalse(RoleSubscription.objects.exists())
+
+    def test_missing_customer_id_does_not_create_a_billing_customer(self) -> None:
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload()
+            webhooks.handle_event(self._event(customer=None))
+
+        self.assertFalse(BillingCustomer.objects.exists())
+        self.assertTrue(RoleSubscription.objects.filter(stripe_subscription_id="sub_123").exists())
 
     def test_unknown_user_is_a_no_op(self) -> None:
         webhooks.handle_event(self._event(client_reference_id="999999"))
@@ -145,6 +178,62 @@ class HandleCheckoutSessionCompletedTests(TestCase):
         self.assertEqual(subscription.total_paid_cents, 0)
         self.assertEqual(subscription.amount_used_cents, 0)
         self.assertIsNone(subscription.usage_covered_until)
+
+    def test_non_pwyw_role_does_not_carry_forward_a_prior_ledger(self) -> None:
+        """The carry-forward branch is gated on role.pay_what_you_want - a fixed-price
+        role must start fresh at zero even with a prior canceled row sitting around with
+        a nonzero ledger, since that ledger has no meaning for a non-PWYW role.
+        """
+        baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.CANCELED,
+            total_paid_cents=3000,
+            amount_used_cents=1500,
+        )
+
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload()
+            webhooks.handle_event(self._event())
+
+        subscription = RoleSubscription.objects.get(stripe_subscription_id="sub_123")
+        self.assertEqual(subscription.total_paid_cents, 0)
+        self.assertEqual(subscription.amount_used_cents, 0)
+
+    def test_carries_forward_the_usage_ledger_from_the_most_recent_prior_row(self) -> None:
+        """Two canceled rows exist for this (user, role) - the newer one's ledger must
+        win, not just "a" previous row, which pins the order_by("-created") direction.
+        """
+        from django.utils import timezone
+
+        pwyw_role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        older = baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=pwyw_role,
+            status=BillingSubscriptionStatus.CANCELED,
+            total_paid_cents=1000,
+            amount_used_cents=500,
+        )
+        RoleSubscription.objects.filter(pk=older.pk).update(created=timezone.now() - timezone.timedelta(days=10))
+        newer = baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=pwyw_role,
+            status=BillingSubscriptionStatus.CANCELED,
+            total_paid_cents=9000,
+            amount_used_cents=4500,
+        )
+        RoleSubscription.objects.filter(pk=newer.pk).update(created=timezone.now() - timezone.timedelta(days=1))
+
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(sub_id="sub_new")
+            webhooks.handle_event(self._event(subscription="sub_new", metadata={"role_id": str(pwyw_role.pk)}))
+
+        new_subscription = RoleSubscription.objects.get(stripe_subscription_id="sub_new")
+        self.assertEqual(new_subscription.total_paid_cents, 9000)
+        self.assertEqual(new_subscription.amount_used_cents, 4500)
 
 
 class HandleSubscriptionUpdatedTests(TestCase):
@@ -205,6 +294,21 @@ class HandleSubscriptionDeletedTests(TestCase):
     def test_unknown_subscription_is_a_no_op(self) -> None:
         event = {"type": "customer.subscription.deleted", "data": {"object": _subscription_payload(sub_id="sub_unknown")}}
         webhooks.handle_event(event)  # must not raise
+
+    def test_missing_canceled_at_falls_back_to_now(self) -> None:
+        from django.utils import timezone
+
+        subscription = baker.make(RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.ACTIVE)
+        before = timezone.now()
+        event = {"type": "customer.subscription.deleted", "data": {"object": _subscription_payload(canceled_at=None)}}
+        webhooks.handle_event(event)
+        after = timezone.now()
+
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.status, BillingSubscriptionStatus.CANCELED)
+        self.assertIsNotNone(subscription.canceled_at)
+        self.assertGreaterEqual(subscription.canceled_at, before)
+        self.assertLessEqual(subscription.canceled_at, after)
 
 
 class HandleInvoicePaymentSucceededTests(TestCase):
@@ -361,6 +465,16 @@ class HandleChargeRefundedTests(TestCase):
         self.sub.refresh_from_db()
         self.assertEqual(self.sub.total_paid_cents, 2000)
 
+    def test_paginated_refund_list_still_applies_the_embedded_refunds(self) -> None:
+        """``has_more`` only logs a warning about refunds beyond the page - it must not
+        skip applying the refunds that *are* embedded on this delivery.
+        """
+        self._mock_invoice()
+        webhooks.handle_event(_charge_refunded_event(refunds=[{"id": "re_1", "amount": 500}], has_more=True))
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 1500)
+
     def test_missing_refund_list_does_not_raise(self) -> None:
         self._mock_invoice()
         event = {"id": "evt_ref_1", "type": "charge.refunded", "data": {"object": {"id": "ch_1", "invoice": "in_1"}}}
@@ -420,6 +534,21 @@ class HandleChargeDisputeClosedTests(TestCase):
 
     def test_charge_without_an_invoice_is_a_no_op(self) -> None:
         self._mock_stripe(invoice=None)
+        webhooks.handle_event(self._event())
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+    def test_dispute_without_a_charge_is_a_no_op(self) -> None:
+        mock_charge, _mock_invoice = self._mock_stripe()
+        webhooks.handle_event(self._event(charge=None))
+
+        mock_charge.assert_not_called()
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+    def test_invoice_without_a_subscription_is_a_no_op(self) -> None:
+        self._mock_stripe(subscription=None)
         webhooks.handle_event(self._event())
 
         self.sub.refresh_from_db()

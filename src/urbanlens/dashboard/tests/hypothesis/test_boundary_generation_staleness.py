@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.utils import timezone
 from hypothesis import given, settings as hyp_settings, strategies as st
@@ -67,6 +68,10 @@ class BoundaryGenerationStaleTests(TestCase):
 
     def test_never_generated_is_not_stale(self):
         location = self._make_location_with_row(age_days=None)
+        # Both members of the (ran, stale) tuple come off the same early
+        # return - pin ran=False too, not just stale=False, so a mutant that
+        # only breaks the ran half can't hide behind this test.
+        self.assertFalse(boundary_generation_ran(location))
         self.assertFalse(boundary_generation_stale(location))
 
     def test_fresh_generation_is_not_stale(self):
@@ -86,6 +91,24 @@ class BoundaryGenerationStaleTests(TestCase):
 
         self.assertFalse(boundary_generation_stale(location))
 
+    def test_exact_cache_window_boundary_is_not_stale_but_one_microsecond_past_is(self):
+        """Pins the strict `>` comparison at the exact cutoff instant, both sides."""
+        site_settings = SiteSettings.get_current()
+        site_settings.boundary_cache_days = 60
+        site_settings.save()
+
+        frozen_now = timezone.now()
+        with patch("django.utils.timezone.now", return_value=frozen_now):
+            at_boundary = baker.make(Location, latitude=42.65, longitude=-73.75)
+            Location.objects.filter(pk=at_boundary.pk).update(place_resolved_at=frozen_now - timedelta(days=60))
+            at_boundary.refresh_from_db()
+            self.assertFalse(boundary_generation_stale(at_boundary))
+
+            just_past = baker.make(Location, latitude=42.6501, longitude=-73.7501)
+            Location.objects.filter(pk=just_past.pk).update(place_resolved_at=frozen_now - timedelta(days=60, microseconds=1))
+            just_past.refresh_from_db()
+            self.assertTrue(boundary_generation_stale(just_past))
+
     @given(configured_days=st.integers(min_value=1, max_value=365), age_days=st.floats(min_value=0, max_value=400, allow_nan=False))
     @_hyp
     def test_staleness_matches_configured_threshold(self, configured_days: int, age_days: float):
@@ -93,9 +116,14 @@ class BoundaryGenerationStaleTests(TestCase):
         site_settings.boundary_cache_days = configured_days
         site_settings.save()
 
-        location = self._make_location_with_row(age_days=age_days)
-
-        self.assertEqual(boundary_generation_stale(location), age_days > configured_days)
+        # Freeze the clock the implementation reads: unfrozen, a boundary-
+        # adjacent example (age_days == configured_days) drifts stale by
+        # however long the test body takes to run between stamping and
+        # checking, flaking the exact-equality case (see dashboard/tests/CLAUDE.md).
+        frozen_now = timezone.now()
+        with patch("django.utils.timezone.now", return_value=frozen_now):
+            location = self._make_location_with_row(age_days=age_days)
+            self.assertEqual(boundary_generation_stale(location), age_days > configured_days)
 
 
 class ScheduleLocationBoundaryGenerationGateTests(TestCase):
@@ -135,6 +163,27 @@ class ScheduleLocationBoundaryGenerationGateTests(TestCase):
         self.assertFalse(result)
         enqueue.assert_not_called()
 
+    def test_profile_with_external_apis_disabled_is_never_scheduled(self):
+        """The profile opt-out gate blocks scheduling even for a never-run location."""
+        location = baker.make(Location, latitude=42.65, longitude=-73.75)
+        profile = baker.make(User).profile  # baker.make(Profile) directly races the post_save signal on User.
+        profile.external_apis_enabled = False
+        profile.save()
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            result = schedule_location_boundary_generation(location, profile=profile)
+        self.assertFalse(result)
+        enqueue.assert_not_called()
+
+    def test_profile_with_external_apis_enabled_still_schedules(self):
+        """Same never-run location and an opted-in profile: the gate must not also block this side."""
+        location = baker.make(Location, latitude=42.65, longitude=-73.75)
+        profile = baker.make(User).profile
+        self.assertTrue(profile.external_apis_enabled)
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            result = schedule_location_boundary_generation(location, profile=profile)
+        self.assertTrue(result)
+        enqueue.assert_called_once()
+
 
 class GenerateLocationBoundariesRefreshTests(TestCase):
     """A refresh run overwrites generated_polygon with new geometry, but never with nothing."""
@@ -148,7 +197,8 @@ class GenerateLocationBoundariesRefreshTests(TestCase):
         with patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=resolved):
             place = generate_location_boundaries(location)
 
-        assert place is not None and place.geometry is not None
+        assert place is not None
+        assert place.geometry is not None
         self.assertEqual(place.geometry.wkb, new_polygon.wkb)
         location.refresh_from_db()
         self.assertFalse(boundary_generation_stale(location))

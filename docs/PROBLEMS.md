@@ -4085,3 +4085,81 @@ the id-filter) would only be caught if it happened to also break one of the cont
 fixtures, which all use the `sources` key and well-formed rows. Worth a dedicated pass that
 instantiates the gateway directly (with `base_url`/`api_key` kwargs and a mocked `session`) rather
 than mocking the gateway's own methods.
+
+**Sweep-path locking on `advance_usage_ledger` has no real-concurrency coverage.**
+`test_billing_ledger_lock.py` proves `_locked`'s `select_for_update` under real threads only via
+`banking.apply_payment`, whose internal `advance_usage_ledger` call is nested inside the already-
+held outer lock (so removing just that nested lock changes nothing observable). The one call site
+where `advance_usage_ledger`'s own lock is load-bearing - the daily sweep
+(`advance_pwyw_usage_ledgers`) calling it directly and unnested - is untested under real threads;
+the only test of a sweep racing a payment
+(`test_billing_ledger_concurrency.py::test_a_payment_is_not_rolled_back_by_the_daily_sweep`)
+deterministically sequences two in-memory snapshots and explicitly disclaims exercising the
+database's actual lock. A real-thread version is possible (worked through by inspection: under
+correct locking both thread orderings converge to the same final ledger state, so it wouldn't be
+flaky-when-correct) but needs an actual run to confirm it reliably catches a lock-removal mutant.
+
+**`SubscriptionRole.clean()` doesn't validate `pwyw_minimum_cents` requires `pay_what_you_want`.**
+`clean()` (`src/urbanlens/dashboard/models/subscriptions/model.py`) only ties
+`pwyw_dynamic_threshold` back to `pay_what_you_want`; it never checks that a nonzero
+`pwyw_minimum_cents` is meaningless when `pay_what_you_want=False`. An admin can save a role with a
+static minimum pledge set but pay-what-you-want turned off, and `clean()` raises nothing - the
+field is simply inert.
+
+**Webhook-event row lock has no real-concurrency proof.** `StripeWebhookView.post` takes
+`StripeWebhookEvent.objects.select_for_update()` specifically so two truly concurrent deliveries of
+the same event id serialize instead of both reading `processed_at` as null and both crediting the
+payment - but every existing test for this view (`test_billing_webhook_idempotency.py`,
+`test_billing_webhook_view.py`) drives it sequentially through Django's test client on one
+connection, where `select_for_update()` is a no-op. This is the same class of gap
+`test_billing_ledger_lock.py` was written to close for the ledger's row lock, after a mutation-
+testing run showed a dropped `select_for_update()` survived every non-threaded test. Closing it
+needs a `TransactionTestCase` + real-thread test (as `test_billing_ledger_lock.py` does via
+`core.tests.concurrency.run_concurrently`).
+
+**`WikiBoundaryView` has no test coverage at all.** `dashboard/controllers/boundary.py`'s
+`WikiBoundaryView` (GET/POST `/location/<slug>/wiki/boundary/`) - the community boundary-editor
+endpoint with its area-limit check against `SiteSettings.max_bbox_area_km2`, its `WikiEdit`
+audit-trail write, and the `just_drawn` concealment-bypass logic documented in
+`_wiki_boundary_payload` - is exercised by no test anywhere in the suite (only its sibling
+`BoundaryController`, the pin-scoped endpoint, is tested in `test_boundary.py`). Worth a dedicated
+test file/class.
+
+**Refuted: a fruitless boundary refresh does NOT leave staleness stuck.** An audit agent
+(2026-08-29) reasoned from reading `generate_location_boundaries` → `ensure_place_for_location` →
+`provision_places_for_coordinate` (`services/places/provisioning.py`) alone that a refresh whose
+provider chain comes back with no polygon might leave `Place.geometry_generated_at` /
+`Location.place_resolved_at` both unstamped, so `boundary_generation_stale()` would keep returning
+`True` forever for that Location - and flagged `test_a_fruitless_refresh_leaves_existing_geometry_alone`
+in `test_boundary_generation_staleness.py` as likely to fail on a real run. It doesn't: the
+consolidated verification pass for this batch ran the real suite against Postgres and the test
+passed cleanly (`2 failed, 277 passed` that run, neither failure this one - see the batch's commit).
+Recorded here so nobody re-derives the same false alarm from a source read alone: this is NOT a
+real problem, a plausible-sounding defect inferred from code reading turned out wrong once actually
+run.
+
+**Stale `update_or_create`/`auto_now` rationale in boundary voting docs.** Both
+`services/geo/boundary_voting.py`'s module docstring and `test_boundary_vote_recency.py`'s header
+explain the re-affirm-refreshes-`updated` behavior as depending on `cast_boundary_vote`'s
+`defaults={"boundary": choice}` explicitly including the field whose `auto_now` timestamp needs
+bumping ("Django only refreshes an `auto_now` field when that field is included [in
+update_fields]"). That's no longer how `update_or_create()` behaves: Django 6.0.6 (pinned in
+`.venv`) unconditionally folds every field with a custom `pre_save` - i.e. every
+`auto_now`/`auto_now_add` field - into `update_fields` for backward compatibility, regardless of
+what's in `defaults` (see `update_or_create` in `django/db/models/query.py`). The test's protective
+value is unaffected (it still catches a regression away from `update_or_create`, e.g. a raw
+`.filter().update()`), but the prose misdescribes the current mechanism and could mislead a future
+contributor into thinking they must hand-add `updated` to `defaults`.
+
+**Stale "draft wiki" language around the building-mirror path.**
+`pin_restructure.mirror_buildings_to_wiki`'s docstring/comments and `test_building_wiki_mirror.py`'s
+own module docstring describe the wiki a building import mirrors into as an "invisible draft...
+until claimed," citing `tasks.ensure_draft_wiki_for_location` and a
+`WikiManager.get_or_create_draft_for_location` - neither exists on disk (the real names are
+`ensure_wiki_for_location` and `get_or_create_for_location`), and `WikiManager`'s own docstring
+states plainly: "Wikis are published on creation now, and there is one question again" - there is
+no draft/official field left on `Wiki` found during this audit. `services/wiki/wiki_share.py`
+("Ignored when the wiki is already official... a still-unofficial draft is fair game") and
+`services/wiki/concealment.py` reference the same apparently-retired concept. Either a draft/
+official distinction exists somewhere this audit pass didn't locate, or this is stale documentation
+spanning at least three production files describing removed behavior - worth a follow-up look.

@@ -30,10 +30,16 @@ class RecordSourcesTests(SimpleTestCase):
         self.assertEqual(record_sources(record), ["cris", "osm"])
 
     def test_precedence_order_is_preserved(self) -> None:
-        """REData orders `sources[]` richest-first; re-sorting would lose that."""
-        record = {"sources": [{"source": "county_gis"}, {"source": "cris"}, {"source": "osm"}]}
+        """REData orders `sources[]` richest-first; re-sorting would lose that.
 
-        self.assertEqual(record_sources(record), ["county_gis", "cris", "osm"])
+        Keys are chosen so the expected result is neither the alphabetical nor
+        the reverse-alphabetical ordering of themselves - `county_gis, cris,
+        osm` (the previous data here) is already alphabetical, so a regression
+        that silently sorted the list would have passed it.
+        """
+        record = {"sources": [{"source": "cris"}, {"source": "assessor"}, {"source": "osm"}, {"source": "county_gis"}]}
+
+        self.assertEqual(record_sources(record), ["cris", "assessor", "osm", "county_gis"])
 
     def test_a_flat_record_still_works(self) -> None:
         """Overpass-shaped rows never had `sources[]`."""
@@ -44,8 +50,8 @@ class RecordSourcesTests(SimpleTestCase):
         self.assertEqual(record_sources({"source": ""}), [])
 
     def test_malformed_entries_are_skipped(self) -> None:
-        """A source entry without a `source` key must not become an empty chip."""
-        self.assertEqual(record_sources({"sources": [{"name": "x"}, {"source": "cris"}]}), ["cris"])
+        """A source entry without a `source` key, or that isn't even a dict, must not become an empty chip."""
+        self.assertEqual(record_sources({"sources": [{"name": "x"}, "not-a-dict", {"source": "cris"}]}), ["cris"])
 
     def test_an_empty_sources_array_falls_back(self) -> None:
         """`sources: []` alongside a flat key must not lose the flat key."""
@@ -176,6 +182,20 @@ class BuildingNestingTests(SimpleTestCase):
         rows = building_rows(_NESTED, [])
 
         self.assertEqual([r["depth"] for r in rows], [0, 1, 1])
+
+    def test_siblings_are_sorted_within_their_parent_too(self) -> None:
+        """Sorting isn't only applied at the root: `_NESTED`'s two children happen to
+        already be given in alphabetical order, so that test alone wouldn't catch a
+        `sorted()` dropped from the recursive per-parent walk."""
+        records = [
+            {"ref": "block", "name": "Block", "child_refs": ["b", "a"]},
+            {"ref": "b", "name": "Building B", "parent_ref": "block", "building_number": "20"},
+            {"ref": "a", "name": "Building A", "parent_ref": "block", "building_number": "5"},
+        ]
+
+        rows = building_rows(records, [])
+
+        self.assertEqual([r["name"] for r in rows], ["Block", "Building A", "Building B"])
 
     def test_nesting_can_be_more_than_one_level_deep(self) -> None:
         """A child links to its most specific parent, which may itself be a child."""

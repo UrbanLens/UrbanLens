@@ -85,6 +85,20 @@ class StripeWebhookReplayTests(TestCase):
         self.assertEqual(self.subscription.total_paid_cents, 1000)
 
     @mock.patch("stripe.Subscription.retrieve")
+    def test_two_distinct_events_are_each_credited(self, retrieve: mock.Mock) -> None:
+        """The guard keys off ``stripe_event_id``, not "has this subscription ever paid" -
+        a redelivery of the *same* event must be swallowed, but a genuinely new event must
+        not be. Only testing same-event replays could pass a guard that (wrongly) treats any
+        already-seen subscription as fully settled."""
+        retrieve.return_value = mock.Mock(to_dict=_stripe_subscription)
+
+        self.assertEqual(self._post(_event("evt_a", "sub_test", 400)).status_code, 200)
+        self.assertEqual(self._post(_event("evt_b", "sub_test", 700)).status_code, 200)
+
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.total_paid_cents, 1100)
+
+    @mock.patch("stripe.Subscription.retrieve")
     def test_a_delivery_that_fails_after_crediting_does_not_double_credit_on_retry(self, retrieve: mock.Mock) -> None:
         """The crash-after-side-effect case Stripe's retry policy guarantees will happen.
 

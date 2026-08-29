@@ -54,8 +54,8 @@ REVIEWED: dict[tuple[str, str, str], str] = {
         "photo-upload streak day. Not firing it is correct here: the recipient received these "
         "photos, they did not take them, and crediting an upload streak for accepting a share "
         "would be wrong. The recipient's photo-count metric is consequently not invalidated at "
-        "copy time; it self-heals on their next photo action. See \"A guard for the "
-        "bulk-write class, which immediately found a fifth site\" in docs/PROBLEMS-ARCHIVE.md."
+        'copy time; it self-heals on their next photo action. See "A guard for the '
+        'bulk-write class, which immediately found a fifth site" in docs/PROBLEMS-ARCHIVE.md.'
     ),
     (
         "dashboard/services/undo/handlers/markup_map.py",
@@ -125,7 +125,8 @@ def _receiver_root(node: ast.expr) -> str | None:
 
     ``Label.objects.bulk_update(...)`` and ``Label.bulk_update(...)`` both give
     ``"Label"``. Anything not starting with a capitalised bare name - a local queryset
-    variable, say - returns None and is reported separately, never silently dropped.
+    variable, or a chain rooted in a call such as ``super()`` - returns None, and the
+    call site is simply excluded from the scan; there is no separate report for it.
     """
     while isinstance(node, ast.Attribute):
         node = node.value
@@ -197,3 +198,37 @@ class BulkWriteSignalGuardTests(SimpleTestCase):
         """Also guards the guard: no receivers found means the app registry is not
         loaded, and every bulk site would be waved through."""
         self.assertNotEqual(_receivers_by_model_name(), {})
+
+    def test_receiver_root_extracts_the_model_from_a_manager_chain(self):
+        """The one thing this whole scan hinges on: telling ``Model.objects.bulk_x()``
+        apart from a local variable's ``.bulk_x()``. This discriminator is only
+        exercised indirectly by the whole-codebase tests above - a broken uppercase
+        check wouldn't reliably fail them, since a fabricated non-model "name" almost
+        never collides with a real model's ``__name__`` in the receiver registry."""
+        call = ast.parse("Label.objects.bulk_update(rows)").body[0].value
+        assert isinstance(call, ast.Call)
+        assert isinstance(call.func, ast.Attribute)
+        self.assertEqual(_receiver_root(call.func.value), "Label")
+
+    def test_receiver_root_extracts_the_model_from_a_bare_classmethod_call(self):
+        call = ast.parse("Label.bulk_update(rows)").body[0].value
+        assert isinstance(call, ast.Call)
+        assert isinstance(call.func, ast.Attribute)
+        self.assertEqual(_receiver_root(call.func.value), "Label")
+
+    def test_receiver_root_returns_none_for_a_lowercase_local_variable(self):
+        call = ast.parse("queryset.bulk_update(rows)").body[0].value
+        assert isinstance(call, ast.Call)
+        assert isinstance(call.func, ast.Attribute)
+        self.assertIsNone(_receiver_root(call.func.value))
+
+    def test_receiver_root_returns_none_for_a_super_call(self):
+        """``super().bulk_create(...)`` inside a QuerySet override (real examples:
+        ``VersionedQuerySet``, ``PinMarkupQuerySet``) can't be resolved to a model name
+        from the AST alone. That's safe only because the guard instead catches the
+        *caller's* ``Model.objects.bulk_create(...)`` line, which is what actually
+        decided to do the write - not this internal delegation."""
+        call = ast.parse("super().bulk_create(objs)").body[0].value
+        assert isinstance(call, ast.Call)
+        assert isinstance(call.func, ast.Attribute)
+        self.assertIsNone(_receiver_root(call.func.value))
