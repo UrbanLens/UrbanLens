@@ -147,7 +147,9 @@ usage() {
 		  --technique STR        sqlmap --technique (default "${TECHNIQUE}", sqlmap's own
 		                         default - includes stacked queries). Narrow this
 		                         (e.g. BEUQ) for a read-only-leaning run.
-		  --threads N            sqlmap --threads (default ${THREADS}).
+		  --threads N            sqlmap --threads (default ${THREADS}). Always 1 for the
+		                         session tier regardless of this value - sqlmap refuses
+		                         to combine --csrf-token with --threads > 1.
 		  --delay N              sqlmap --delay, seconds between requests (default ${DELAY}).
 		  --crawl-depth N        Session tier's --crawl depth (default ${CRAWL_DEPTH}).
 		  --fail-on-findings     Exit non-zero if sqlmap confirmed an injection in any
@@ -463,10 +465,19 @@ run_api_tier() {
 	local config_args=()
 	[[ -n "${config_file}" ]] && config_args=(-c "${config_file}")
 
+	# --ignore-stdin: without it, sqlmap treats this wrapper's redirected/closed
+	# stdin as a piped target list (lib/parse/cmdline.py's stdinPipe detection
+	# fires on any non-tty stdin, --openapi or not) and _setStdinPipeTargets()
+	# unconditionally overwrites kb.targets with its own lazy reader before
+	# _setOpenApiTargets() ever runs - confirmed against a real 1.10.8 install,
+	# where every --openapi run crashed with "TypeError: object of type '_' has
+	# no len()" and never even reached --report-json. Silent-looking too: the
+	# crash is loud on stderr, but count_findings()'s own "no report.json yet"
+	# fallback reads as a clean 0-finding scan unless the log is actually read.
 	"${SQLMAP_BIN}" ${config_args[@]+"${config_args[@]}"} \
 		--openapi="${SCHEMA_URL}" \
 		--openapi-base="${BASE_URL}" \
-		--batch \
+		--batch --ignore-stdin \
 		--risk="${RISK}" --level="${LEVEL}" --technique="${TECHNIQUE}" \
 		--threads="${THREADS}" --delay="${DELAY}" \
 		--output-dir="${tier_out_dir}" \
@@ -497,13 +508,24 @@ run_session_tier() {
 	echo ""
 	echo "=== session ==="
 
+	# --ignore-stdin isn't load-bearing here the way it is in run_api_tier - -u
+	# sets conf.url, which already short-circuits sqlmap's stdin-target
+	# detection - but it costs nothing to keep every invocation in this script
+	# identically defended against it.
+	#
+	# --threads is hardcoded to 1 rather than following $THREADS: sqlmap
+	# refuses outright ("option '--csrf-token' is incompatible with option
+	# '--threads'") whenever --csrf-token is combined with --threads greater
+	# than 1 (lib/core/option.py: `if conf.csrfToken and conf.threads > 1`),
+	# confirmed against a real 1.10.8 run - re-fetching a token+cookie pair per
+	# request isn't safe to parallelise anyway.
 	"${SQLMAP_BIN}" -c "${config_file}" \
 		-u "${BASE_URL}/" \
 		--crawl="${CRAWL_DEPTH}" --crawl-exclude="${CRAWL_EXCLUDE}" --forms \
 		--csrf-token=csrfmiddlewaretoken \
-		--batch \
+		--batch --ignore-stdin \
 		--risk="${RISK}" --level="${LEVEL}" --technique="${TECHNIQUE}" \
-		--threads="${THREADS}" --delay="${DELAY}" \
+		--threads=1 --delay="${DELAY}" \
 		--output-dir="${tier_out_dir}" \
 		--report-json="${report_json}" \
 		${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"} \
@@ -575,7 +597,7 @@ CONFIG_ARGS=()
 "${SQLMAP_BIN}" ${CONFIG_ARGS[@]+"${CONFIG_ARGS[@]}"} \
 	--openapi="${SCHEMA_URL}" \
 	--openapi-base="${BASE_URL}" \
-	--batch \
+	--batch --ignore-stdin \
 	--risk="${RISK}" --level="${LEVEL}" --technique="${TECHNIQUE}" \
 	--threads="${THREADS}" --delay="${DELAY}" \
 	--output-dir="${OUT_DIR}" \
