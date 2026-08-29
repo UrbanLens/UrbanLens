@@ -27,10 +27,14 @@ def _subscription_payload(
     current_period_end: int = 1_700_000_000,
     cancel_at_period_end: bool = False,
     canceled_at: int | None = None,
+    customer: str = "cus_123",
+    metadata: dict | None = None,
 ) -> dict:
     return {
         "id": sub_id,
         "status": status,
+        "customer": customer,
+        "metadata": metadata or {},
         "cancel_at_period_end": cancel_at_period_end,
         "canceled_at": canceled_at,
         "items": {
@@ -252,7 +256,34 @@ class HandleInvoicePaymentSucceededTests(TestCase):
         webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {}}})  # must not raise
 
     def test_unknown_subscription_is_a_no_op(self) -> None:
-        webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_unknown"}}})  # must not raise
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(sub_id="sub_unknown")
+            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_unknown"}}})  # must not raise
+
+    def test_out_of_order_invoice_creates_subscription_and_banks_payment(self) -> None:
+        """Stripe can deliver invoice.payment_succeeded before checkout.session.completed.
+
+        The receiver marks every successfully handled event processed. If the payment
+        event no-ops because the local RoleSubscription row does not exist yet, Stripe
+        will never replay that invoice and a pay-what-you-want subscriber permanently
+        loses the credit that funds banked access after cancellation.
+        """
+        user = baker.make(User)
+        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(
+                sub_id="sub_new",
+                unit_amount=1000,
+                metadata={"user_id": str(user.pk), "role_id": str(role.pk)},
+            )
+            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_new", "amount_paid": 1000}}})
+
+        subscription = RoleSubscription.objects.get(stripe_subscription_id="sub_new")
+        self.assertEqual(subscription.user, user)
+        self.assertEqual(subscription.role, role)
+        self.assertEqual(subscription.total_paid_cents, 1000)
+        self.assertTrue(subscription.has_banked_access)
+        self.assertTrue(BillingCustomer.objects.filter(user=user, stripe_customer_id="cus_123").exists())
 
 
 class HandleInvoicePaymentFailedTests(TestCase):

@@ -33,6 +33,49 @@ def _to_datetime(unix_timestamp: int | None) -> datetime | None:
     return datetime.fromtimestamp(unix_timestamp, tz=UTC) if unix_timestamp else None
 
 
+def _create_subscription_from_stripe_subscription(stripe_subscription: dict) -> RoleSubscription | None:
+    """Materialize a local subscription row from Stripe subscription metadata.
+
+    Stripe does not guarantee webhook ordering. ``invoice.payment_succeeded`` can
+    arrive before ``checkout.session.completed``, but the invoice still carries a
+    subscription id whose object has the metadata set in ``create_checkout_session``.
+    """
+    metadata = stripe_subscription.get("metadata") or {}
+    user_id = metadata.get("user_id")
+    role_id = metadata.get("role_id")
+    if not user_id or not role_id:
+        logger.info("Stripe subscription %s is unknown locally and has no user/role metadata", stripe_subscription.get("id"))
+        return None
+
+    from django.contrib.auth.models import User
+
+    from urbanlens.dashboard.models.billing import BillingCustomer, RoleSubscription
+    from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole
+
+    user = User.objects.filter(pk=user_id).first()
+    role = SubscriptionRole.objects.filter(pk=role_id).first()
+    if user is None or role is None:
+        logger.info("Stripe subscription %s metadata did not resolve to a local user/role", stripe_subscription.get("id"))
+        return None
+
+    customer_id = stripe_subscription.get("customer")
+    if customer_id:
+        BillingCustomer.objects.get_or_create(user=user, defaults={"stripe_customer_id": customer_id})
+
+    defaults = {"user": user, "role": role, "pledged_amount_cents": 0}
+    if role.pay_what_you_want:
+        previous = RoleSubscription.objects.filter(user=user, role=role).order_by("-created").first()
+        if previous is not None:
+            defaults["total_paid_cents"] = previous.total_paid_cents
+            defaults["amount_used_cents"] = previous.amount_used_cents
+            defaults["usage_covered_until"] = previous.usage_covered_until
+    role_subscription, _created = RoleSubscription.objects.get_or_create(
+        stripe_subscription_id=stripe_subscription["id"],
+        defaults=defaults,
+    )
+    return role_subscription
+
+
 def sync_from_stripe_subscription(role_subscription: RoleSubscription, stripe_subscription: dict) -> None:
     """Copy status/price/period fields from a live Stripe Subscription onto *role_subscription*.
 
@@ -174,13 +217,18 @@ def _handle_invoice_payment_succeeded(invoice: dict) -> None:
     from urbanlens.dashboard.models.billing import RoleSubscription
 
     role_subscription = RoleSubscription.objects.for_stripe_subscription(subscription_id)
+    stripe_subscription: dict | None = None
     if role_subscription is None:
-        logger.info("invoice.payment_succeeded for unknown subscription %s", subscription_id)
-        return
+        stripe_subscription = stripe.Subscription.retrieve(subscription_id).to_dict()
+        role_subscription = _create_subscription_from_stripe_subscription(stripe_subscription)
+        if role_subscription is None:
+            logger.info("invoice.payment_succeeded for unknown subscription %s", subscription_id)
+            return
     # Refetched rather than read off the invoice: this is the "did this charge clear the
     # bar" moment for dynamic-threshold roles, and the live Subscription is the single
     # source of truth for status/price/period that sync_from_stripe_subscription expects.
-    stripe_subscription = stripe.Subscription.retrieve(subscription_id).to_dict()
+    if stripe_subscription is None:
+        stripe_subscription = stripe.Subscription.retrieve(subscription_id).to_dict()
     sync_from_stripe_subscription(role_subscription, stripe_subscription)
     banking.apply_payment(role_subscription, invoice.get("amount_paid") or 0)
 
