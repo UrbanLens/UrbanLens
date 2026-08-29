@@ -122,13 +122,18 @@ class BackfilledGeometryStalenessTests(TestCase):
     @given(configured_days=st.integers(min_value=1, max_value=365), age_days=st.floats(min_value=0, max_value=400, allow_nan=False))
     @_hyp
     def test_staleness_matches_the_configured_window_at_any_age(self, configured_days: int, age_days: float) -> None:
-        """The whole comparison, generalised - not just the specific ages pinned above."""
+        """The whole comparison, generalised - not just the specific ages pinned above.
+
+        Time must be frozen: geometry_stale() calls timezone.now() again internally, and an
+        unfrozen clock lets real elapsed time between that call and generated_at's construction
+        drift age_days past configured_days for examples that land exactly on the boundary.
+        """
         from urbanlens.dashboard.models.site_settings import SiteSettings
 
         site_settings = SiteSettings.get_current()
         site_settings.boundary_cache_days = configured_days
         site_settings.save()
 
-        place = self._place(generated_at=timezone.now() - timedelta(days=age_days))
-
-        self.assertEqual(geometry_stale(place), age_days > configured_days)
+        with patch("django.utils.timezone.now", return_value=_INSTANT):
+            place = self._place(generated_at=_INSTANT - timedelta(days=age_days))
+            self.assertEqual(geometry_stale(place), age_days > configured_days)
