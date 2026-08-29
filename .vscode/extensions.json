@@ -6,6 +6,7 @@
 		"charliermarsh.ruff",
 		"eamodio.gitlens",
 		"github.vscode-pull-request-github",
+		"github.vscode-codeql",
 		"atlassian.atlascode"
 	],
 	"unwantedRecommendations": [

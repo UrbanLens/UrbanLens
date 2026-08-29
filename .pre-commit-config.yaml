@@ -3,7 +3,7 @@ default_language_version:
     python: python3.12
 
 default_install_hook_types: [pre-commit, pre-push]
-files: '^(.+\.(py|ts|js|tsx|jsx|yaml|toml))$'
+files: '^(.+\.(py|ts|js|tsx|jsx|yaml|toml|html|txt))$'
 exclude: '(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)'
 
 # GITHUB
@@ -77,6 +77,28 @@ repos:
         language: system
         files: '\.py$'
         pass_filenames: false
+      - id: template-comments
+        name: "Django {# comments close on the line they open"
+        entry: python3 bin/check_template_comments.py
+        language: system
+        files: '\.(html|txt)$'
+        pass_filenames: false
+
+# CODEQL
+# Full analysis is minutes, so this is a pre-push hook rather than per-commit.
+# `--gate` matches the suites GitHub runs on a PR; a no-op when the tree has
+# not changed since the last clean scan. Missing CLI is a skip, not a block -
+# CI still runs CodeQL. Install with: python bin/run_codeql.py --install
+-   repo: local
+    hooks:
+      - id: codeql
+        name: CodeQL analysis (pre-push)
+        entry: python3 bin/run_codeql.py --gate
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+        verbose: true
 
 # TYPESCRIPT
 -   repo: local

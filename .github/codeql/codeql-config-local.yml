@@ -1,0 +1,32 @@
+name: "UrbanLens CodeQL config (local, exhaustive)"
+
+# Broader than CI: security-and-quality includes the default code-scanning
+# queries plus lower-severity security and maintainability queries. The
+# Python extractor still reads Django templates, so XSS in .html is in scope.
+queries:
+  - uses: security-and-quality
+
+# Directories only — see codeql-config.yml for why files cannot be listed, and
+# why `src` is not the source root (Postgres data and tool caches live under it).
+paths:
+  - src/urbanlens
+  - src/bin
+  - bin
+  - .github
+  - tests
+
+paths-ignore:
+  - "**/frontend/static/**"
+  - "**/migrations/**"
+  - "**/node_modules/**"
+  - "**/__pycache__/**"
+  - "**/.hypothesis/**"
+  - "**/.mypy_cache/**"
+  - "**/.pytest_cache/**"
+  - "**/media/**"
+  - "**/logs/**"
+  - "**/reports/**"
+  - "**/.venv/**"
+  - "**/.venv_windows/**"
+  - "**/.codeql/**"
+  - "**/docs/**"

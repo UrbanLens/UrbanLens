@@ -137,6 +137,12 @@ jobs:
       - name: A wiki resolved for reading is never saved
         run: python3 bin/check_concealed_writes.py
 
+      # {# #} is Django's single-line comment. An opener that does not meet #}
+      # on the same line is emitted as text, so the visitor sees it. The
+      # supported multi-line form is {% comment %}.
+      - name: Template hash-comments close on the line they open
+        run: python3 bin/check_template_comments.py
+
       # Nothing else checks this: a model change without its migration only
       # surfaces if some test happens to touch the field, and otherwise waits
       # until the column is needed in production.

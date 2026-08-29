@@ -209,7 +209,7 @@ that list, each finding then handed to an adversarial verifier told to refute it
 
 ## Structural checks (CI)
 
-Eight checkers guard properties that are invisible from a working copy, which is
+Nine checkers guard properties that are invisible from a working copy, which is
 exactly why they need checking — the machine that made the mistake is the one
 that cannot see it.
 
@@ -223,6 +223,7 @@ that cannot see it.
 | `bin/check_versioned_writes.py` | A model half-adopting field versioning, so bulk writes go unrecorded |
 | `bin/check_signal_reachable.py` | A `post_save` subscription waiting on a field only a queryset `update()` sets |
 | `bin/check_concealed_writes.py` | A wiki resolved for reading being saved, persisting one viewer's redacted view |
+| `bin/check_template_comments.py` | A Django `{#` comment that is not closed on the same line, so the tokens render as text |
 
 The last two exist because a *defect class* recurred, not because one bug did.
 `check_outage_not_cached.py` came from an outage being stored as "nothing here"
@@ -255,6 +256,10 @@ mutating one is ordinary Django — nothing at the call site says which kind of
 row it holds. They now launder through `concealment.writable_wiki`, and a
 deliberate case is marked `concealed-write-ok: <why>`.
 
+`check_template_comments.py` exists because `{# #}` is single-line, and Django
+does not treat an opener that never meets `#}` on that line as a comment — the
+tokens are emitted as text.
+
 `check_versioned_writes.py` exists for the same reason as those two: provenance
 has to be recorded at write time, and the wiki's *existing* edit history is
 already bypassed by three writers — a bulk `update()`, a bare `save()`, and one
@@ -273,6 +278,43 @@ sentence rather than the number, and a CI job should not be making that call.
 
 Note its one blind spot: it cannot tell a specimen from a claim, so prose that
 *quotes* a broken citation as an example will be flagged.
+
+### `bin/run_codeql.py`
+
+CodeQL is already in CI (`.github/workflows/security.yml`) on every PR. That is
+after the branch exists. This is the same analysis on a working copy, so a
+finding shows up before a PR does.
+
+```bash
+python bin/run_codeql.py --install     # once per machine; ~700MB download
+python bin/run_codeql.py               # exhaustive: security-and-quality + local threat model
+python bin/run_codeql.py --languages python
+python bin/run_codeql.py --quiet       # per-rule counts only
+python bin/run_codeql.py --verbose     # include note-level findings
+python bin/run_codeql.py --all-queries # every query in each language pack, including experimental
+python bin/run_codeql.py --gate        # the suites GitHub runs; reused when the tree is unchanged
+python bin/run_codeql.py --rebuild     # recreate databases even if a previous extract finished
+```
+
+The default manual run is broader than CI on purpose. GitHub uses the
+`code-scanning` suites. A local run uses
+`security-and-quality` and also treats file/env/CLI as source. `--all-queries`
+goes further still: every query in the Python, JavaScript/TypeScript, and GitHub
+Actions packs, including experimental ones that the suites exclude for noise.
+
+Default output is a per-rule count plus each error/warning. Notes (unused
+imports, cyclic imports, and similar) are counted but not printed unless
+`--verbose`. SARIF under `.codeql/results/` still has everything.
+
+A failed JavaScript or Actions extract leaves a database with `finalised:
+false`. The wrapper does not reuse that; it rebuilds. Those extractors need
+**Node.js** on PATH - bun is not a substitute.
+
+Database creation plus analysis is minutes, so pre-commit runs it as a
+**pre-push** hook (`--gate`) rather than on every commit. `UL_SKIP_CODEQL=1` skips it.
+
+Install uses the official CodeQL Action *bundle*.
+The standalone CLI zip does not ship query packs.
 
 ### `noUnusedLocals` (`tsconfig.json`)
 
