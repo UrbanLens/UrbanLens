@@ -154,6 +154,11 @@ class MapChildPinsJsonTests(TestCase):
         self.assertIn("/dashboard/map/pin/", by_name["Boiler House"]["parent_url"])
         self.assertIn("/dashboard/map/pin/", by_name["Boiler House"]["url"])
 
+    def test_child_count_reflects_own_nested_children(self) -> None:
+        by_name = {p["name"]: p for p in self._get().json()["pins"]}
+        self.assertEqual(by_name["Boiler House"]["child_count"], 1)
+        self.assertEqual(by_name["Basement Door"]["child_count"], 0)
+
     def test_applies_filter_criteria(self) -> None:
         response = self._get({"name": "Basement"})
         names = {p["name"] for p in response.json()["pins"]}
@@ -208,6 +213,11 @@ class SearchLocalChildPinTests(TestCase):
         assert match is not None  # nosec B101
         self.assertTrue(match.is_child)
         self.assertIn("Asylum Grounds", match.subtitle)
+        # Child pins get their own marker treatment - a nested-arrow icon and a
+        # closer default zoom - so a jump lands the user at the sub-location,
+        # not zoomed out to the whole root pin's usual level.
+        self.assertEqual(match.icon, "subdirectory_arrow_right")
+        self.assertEqual(match.zoom, 17)
 
     def test_root_pin_is_not_flagged_as_child(self) -> None:
         results = search_local("Asylum", self.profile)
@@ -215,6 +225,8 @@ class SearchLocalChildPinTests(TestCase):
         self.assertIsNotNone(match)
         assert match is not None  # nosec B101
         self.assertFalse(match.is_child)
+        self.assertEqual(match.icon, "push_pin")
+        self.assertEqual(match.zoom, 16)
 
 
 class PinDetachChildViewTests(TestCase):
@@ -327,9 +339,14 @@ class PinPromoteChildrenViewTests(TestCase):
         root = _make_pin(self.profile, name="Root")
         root.slug = root.ensure_slug()
         same_loc_child = _make_pin(self.profile, name="Same Spot", parent_pin=root, location=root.location)
-        self._promote(root)
+        response = self._promote(root)
         same_loc_child.refresh_from_db()
         self.assertEqual(same_loc_child.parent_pin_id, root.pk)
+        # The one candidate child existed (child_count was non-zero, so the
+        # view didn't 400), but it was skipped, not promoted - the reported
+        # count must reflect that, not just "how many children were found".
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["promoted"], 0)
 
     def test_child_sharing_a_non_root_pins_location_is_still_promoted(self) -> None:
         """When the pin being promoted-from itself has a parent, a child sharing
@@ -651,6 +668,23 @@ class PinShareBundleTests(TestCase):
         bundled_pins = set(root_share.bundled_shares.values_list("pin_id", flat=True))
         self.assertEqual(bundled_pins, {self.child.pk, self.grandchild.pk})
 
+    def test_already_pending_child_share_is_not_duplicated(self) -> None:
+        """A child that already has its own pending share to this recipient must be
+        skipped by the bundle, not doubled up into a second PinShare row."""
+        existing = PinShare.objects.create(
+            pin=self.child,
+            location=self.child.location,
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=PinShareStatus.PENDING,
+        )
+        self._share(include_children=True)
+        root_share = PinShare.objects.get(pin=self.root)
+        bundled_pins = set(root_share.bundled_shares.values_list("pin_id", flat=True))
+        self.assertEqual(bundled_pins, {self.grandchild.pk})
+        self.assertEqual(PinShare.objects.filter(pin=self.child).count(), 1)
+        self.assertEqual(PinShare.objects.get(pin=self.child).pk, existing.pk)
+
     def test_without_flag_no_bundle_is_created(self) -> None:
         self._share(include_children=False)
         root_share = PinShare.objects.get(pin=self.root)
@@ -822,4 +856,13 @@ class PinActionsFabVisibilityTests(TestCase):
         self.assertContains(response, "pin-actions-fab")
         self.assertContains(response, "Open parent pin")
         self.assertNotContains(response, "Child pin details")
+
+    def test_both_toggle_and_parent_link_shown_on_a_nested_pin_with_children(self) -> None:
+        parent = _make_pin(self.profile, name="Campus")
+        child = _make_pin(self.profile, name="Boiler", parent_pin=parent)
+        _make_pin(self.profile, name="Valve", parent_pin=child)
+        response = self._page(child)
+        self.assertContains(response, "pin-actions-fab")
+        self.assertContains(response, "Child pin details")
+        self.assertContains(response, "Open parent pin")
 

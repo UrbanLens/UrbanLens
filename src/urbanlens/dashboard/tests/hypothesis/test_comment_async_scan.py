@@ -88,10 +88,14 @@ class ScanCommentImageTaskTests(TestCase):
     def test_infected_result_deletes_the_comment_and_notifies_the_author(self) -> None:
         comment = self._pending_comment(text="my cool photo")
         comment_id = comment.pk
+        image_name = comment.image.name
         with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value="This file was flagged as malicious."):
             result = scan_comment_image(comment_id)
         self.assertFalse(result)
         self.assertFalse(Comment.objects.filter(pk=comment_id).exists())
+        # The stored file, not just the row, must go - see _reject_comment_upload's
+        # docstring on why an orphaned upload can't be left behind in storage.
+        self.assertFalse(comment.image.storage.exists(image_name))
         notification = NotificationLog.objects.get(profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED)
         self.assertIn("my cool photo", notification.message)
         self.assertIn("flagged as malicious", notification.message)
@@ -110,11 +114,35 @@ class ScanCommentImageTaskTests(TestCase):
         self.assertIn("retry me", notification.message)
         self.assertIn("unavailable", notification.message)
 
+    def test_unavailable_scanner_retries_instead_of_rejecting_before_the_limit(self) -> None:
+        comment = self._pending_comment(text="retry me too")
+        comment_id = comment.pk
+        # Called directly (not through a worker), a bound task's self.retry() re-raises
+        # the original exception rather than swallowing it into a queued retry - see
+        # celery.app.task.Task.retry's `called_directly` branch. Reaching this at all
+        # proves the code took the "retry" branch, not the "give up and reject" branch
+        # below max_retries.
+        with (
+            patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", side_effect=MalwareScanUnavailableError("down")),
+            self.assertRaises(MalwareScanUnavailableError),
+        ):
+            scan_comment_image(comment_id)
+        comment.refresh_from_db()
+        self.assertTrue(comment.pending_scan)
+        self.assertTrue(Comment.objects.filter(pk=comment_id).exists())
+        self.assertFalse(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.COMMENT_UPLOAD_FAILED).exists())
+
     def test_missing_comment_is_a_no_op(self) -> None:
         self.assertFalse(scan_comment_image(999_999))
 
     def test_comment_no_longer_pending_is_a_no_op(self) -> None:
         comment = Comment.objects.create(pin=self.pin, profile=self.profile, text="already scanned", image=_fake_image(), pending_scan=False)
+        with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload") as scan:
+            self.assertFalse(scan_comment_image(comment.pk))
+        scan.assert_not_called()
+
+    def test_pending_but_imageless_comment_is_a_no_op(self) -> None:
+        comment = Comment.objects.create(pin=self.pin, profile=self.profile, text="no image somehow", pending_scan=True)
         with patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload") as scan:
             self.assertFalse(scan_comment_image(comment.pk))
         scan.assert_not_called()

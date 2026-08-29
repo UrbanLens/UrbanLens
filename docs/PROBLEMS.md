@@ -4163,3 +4163,42 @@ no draft/official field left on `Wiki` found during this audit. `services/wiki/w
 `services/wiki/concealment.py` reference the same apparently-retired concept. Either a draft/
 official distinction exists somewhere this audit pass didn't locate, or this is stale documentation
 spanning at least three production files describing removed behavior - worth a follow-up look.
+
+**`CalendarImportView` has no test coverage at all.** `dashboard/controllers/calendar_sync.py`'s
+`CalendarImportView` (GET renders the upcoming-events dialog via `list_importable_events`, POST
+parses per-event form fields into `import_events_as_trips` selections and handles
+`GoogleAuthExpiredError`/`GatewayRequestError`/empty-selection 400s) is reached by no test in the
+suite - only its underlying service functions are unit-tested. The view's own request-parsing
+(`create_activity_<id>`, `invite_<id>`, `auto_sync_<id>` field names, digit-filtering of invite
+ids) and error-branch responses are unverified end-to-end, unlike its sibling
+`CalendarImportPreviewView` which does have a `CalendarImportPreviewViewTests` class.
+
+**Map-overlay caption length check is untested even though it's drivable.**
+`test_caption_and_setting_length_limits.py`'s class docstring says the map-overlay caption path
+can't be tested because it "fetches a remote image first, which the test network guard refuses" -
+true for the `media_url`/`image_url` branches of `controllers/map_overlays.py::_image_from_request`,
+but its direct-file-upload branch (`request.FILES.get("image")` +
+`request.POST.get("name")` as caption, routed through `services/photos/photo_upload.py::upload_photo`)
+takes no network call and is a plain multipart POST just like the safety-checkin path this file
+already drives. The length check itself is present and correct, so this is a test-coverage gap and
+a stale docstring claim, not a product bug.
+
+**Missing coverage for the carousel "no imagery available" branch.**
+`test_carousel_single_slide_arrows.py` is the only test file touching
+`street_view.html`/`satellite_view.html`, and neither template's `{% else %}` branch (rendered when
+`slides` is empty, showing `view-unavailable` and the `error` message) has any test coverage
+anywhere in the repo.
+
+**Multi-level pin/wiki nesting prefix is undocumented and untested.** `_slug_parent_prefix()`
+derives a child's prefix only from its *immediate* parent (name/official_name/slug/aliases), so a
+grandchild nested two levels under an aliased root picks up a prefix derived from the immediate
+parent's own name/slug, not the top-level acronym, unless that immediate parent itself has an
+alias. This may be intentional (shallow, not chained, prefixing) but it's unverified either way and
+worth a deliberate look if 3+ level nesting is a real use case.
+
+**`TripCommentDeleteView` has zero test coverage.** `services/trips/trip_comments.delete_comment`
+is the third call site of the shared `_discard_comment_image` cleanup helper (alongside
+`PinCommentDeleteView` and `WikiCommentDeleteView`), and has its own `can_delete_comment`
+permission gate (author or trip creator), but no test file anywhere in the suite exercises
+`TripCommentDeleteView` or `delete_comment` at all - not the basic delete, the permission gate, or
+image cleanup. Would need a full TripComment/Trip fixture setup, not a surgical addition.

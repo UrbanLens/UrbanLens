@@ -43,6 +43,27 @@ class TripCalendarLinkTripLevelLinkTests(TestCase):
     def test_returns_none_when_no_trip_level_link_exists(self) -> None:
         self.assertIsNone(TripCalendarLink.objects.trip_level_link(self.trip, self.profile))
 
+    def test_ignores_a_trip_level_link_belonging_to_a_different_profile(self) -> None:
+        other_user = User.objects.create_user(username="other-trip-level-tester")
+        other_profile, _ = Profile.objects.get_or_create(user=other_user)
+        TripCalendarLink.objects.create(
+            trip=self.trip,
+            profile=other_profile,
+            direction=CalendarSyncDirection.EXPORTED,
+            google_event_id="other-profile-event",
+        )
+        self.assertIsNone(TripCalendarLink.objects.trip_level_link(self.trip, self.profile))
+
+    def test_ignores_a_trip_level_link_on_a_different_trip(self) -> None:
+        other_trip = Trip.objects.create(name="Foothills", creator=self.profile)
+        TripCalendarLink.objects.create(
+            trip=other_trip,
+            profile=self.profile,
+            direction=CalendarSyncDirection.EXPORTED,
+            google_event_id="other-trip-event",
+        )
+        self.assertIsNone(TripCalendarLink.objects.trip_level_link(self.trip, self.profile))
+
 
 class TripCalendarLinkActivityLinksByIdTests(TestCase):
     def test_maps_each_link_to_its_activity_id_and_excludes_the_trip_level_link(self) -> None:
@@ -57,6 +78,24 @@ class TripCalendarLinkActivityLinksByIdTests(TestCase):
 
         result = TripCalendarLink.objects.activity_links_by_activity_id(trip, profile)
         self.assertEqual(result, {activity_a.pk: link_a, activity_b.pk: link_b})
+
+    def test_excludes_activity_links_belonging_to_a_different_profile(self) -> None:
+        user = User.objects.create_user(username="activity-link-scope-tester")
+        profile, _ = Profile.objects.get_or_create(user=user)
+        other_user = User.objects.create_user(username="activity-link-scope-other")
+        other_profile, _ = Profile.objects.get_or_create(user=other_user)
+        trip = Trip.objects.create(name="Ridgecrest", creator=profile)
+        activity = TripActivity.objects.create(trip=trip, title="Overlook")
+        TripCalendarLink.objects.create(
+            trip=trip,
+            profile=other_profile,
+            activity=activity,
+            direction=CalendarSyncDirection.EXPORTED,
+            google_event_id="other-profile-activity",
+        )
+
+        result = TripCalendarLink.objects.activity_links_by_activity_id(trip, profile)
+        self.assertEqual(result, {})
 
 
 class TripCalendarLinkAlreadyLinkedTests(TestCase):
@@ -90,3 +129,16 @@ class TripCalendarLinkSetAutoSyncTests(TestCase):
 
         link.refresh_from_db()
         self.assertTrue(link.auto_sync)
+
+    def test_does_not_affect_a_different_links_auto_sync_flag(self) -> None:
+        user = User.objects.create_user(username="auto-sync-scope-tester")
+        profile, _ = Profile.objects.get_or_create(user=user)
+        trip = Trip.objects.create(name="Overland", creator=profile)
+        activity = TripActivity.objects.create(trip=trip, title="Stop")
+        trip_link = TripCalendarLink.objects.create(trip=trip, profile=profile, direction=CalendarSyncDirection.EXPORTED, google_event_id="ev-trip", auto_sync=False)
+        activity_link = TripCalendarLink.objects.create(trip=trip, profile=profile, activity=activity, direction=CalendarSyncDirection.EXPORTED, google_event_id="ev-activity", auto_sync=False)
+
+        TripCalendarLink.objects.set_auto_sync(trip_link.pk, auto_sync=True)
+
+        activity_link.refresh_from_db()
+        self.assertFalse(activity_link.auto_sync)

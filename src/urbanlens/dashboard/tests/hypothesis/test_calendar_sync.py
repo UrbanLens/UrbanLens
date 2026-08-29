@@ -79,6 +79,13 @@ class TripToEventBodyTests(TestCase):
         self.assertEqual(body["start"]["date"], start.isoformat())
         self.assertEqual(body["end"]["date"], (end + datetime.timedelta(days=1)).isoformat())
 
+    def test_end_before_start_is_clamped_to_start(self):
+        """Explicit dates with the stored end before the start don't invert the event."""
+        trip = Trip(name="X", start_date=datetime.date(2026, 8, 10), end_date=datetime.date(2026, 8, 5))
+        body = trip_to_event_body(trip)
+        self.assertEqual(body["start"]["date"], "2026-08-10")
+        self.assertEqual(body["end"]["date"], "2026-08-11")
+
     def test_marks_event_with_trip_uuid(self):
         trip = Trip(name="X", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 1))
         body = trip_to_event_body(trip)
@@ -426,6 +433,47 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
         )
 
 
+class ListImportableEventsTests(_CalendarSyncDBTestCase):
+    """list_importable_events annotates the raw feed for the import dialog's first page."""
+
+    def test_annotates_already_linked_and_urbanlens_origin_independently(self):
+        from urbanlens.dashboard.services.trips.calendar_sync import list_importable_events
+
+        trip = Trip.objects.create(name="Existing", creator=self.profile)
+        TripCalendarLink.objects.create(
+            trip=trip,
+            profile=self.profile,
+            google_event_id="evt-linked",
+            direction=CalendarSyncDirection.IMPORTED,
+        )
+
+        gateway = self._patch_gateway()
+        gateway.list_events.return_value = [
+            {"id": "evt-plain", "summary": "Plain event", "start": {"date": "2026-09-04"}, "end": {"date": "2026-09-05"}},
+            {"id": "evt-linked", "summary": "Already imported", "start": {"date": "2026-09-04"}, "end": {"date": "2026-09-05"}},
+            {
+                "id": "evt-exported",
+                "summary": "Round trip",
+                "start": {"date": "2026-09-04"},
+                "end": {"date": "2026-09-05"},
+                "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: "some-uuid"}},
+            },
+            {"summary": "No id - dropped entirely"},
+        ]
+
+        results = list_importable_events(self.account)
+
+        by_id = {entry["event"]["id"]: entry for entry in results}
+        self.assertEqual(len(results), 3)
+        self.assertFalse(by_id["evt-plain"]["already_linked"])
+        self.assertFalse(by_id["evt-plain"]["from_urbanlens"])
+        self.assertIsNotNone(by_id["evt-plain"]["trip_kwargs"])
+        self.assertTrue(by_id["evt-linked"]["already_linked"])
+        self.assertFalse(by_id["evt-linked"]["from_urbanlens"])
+        self.assertTrue(by_id["evt-exported"]["from_urbanlens"])
+        self.assertFalse(by_id["evt-exported"]["already_linked"])
+
+
 class MatchEventAttendeesTests(_CalendarSyncDBTestCase):
     """match_event_attendees splits attendees into invitable friends and labels."""
 
@@ -458,6 +506,35 @@ class MatchEventAttendeesTests(_CalendarSyncDBTestCase):
 
         self.assertEqual(friends, [])
         self.assertEqual(others, ["Stranger"])
+
+    def test_meeting_room_resource_is_excluded(self):
+        """Calendar resources (rooms, equipment) are never people, friend or otherwise."""
+        from urbanlens.dashboard.services.trips.calendar_sync import match_event_attendees
+
+        event = {"attendees": [{"email": "room-42@resource.calendar.google.com", "displayName": "Room 42", "resource": True}]}
+        friends, others = match_event_attendees(self.profile, event)
+
+        self.assertEqual(friends, [])
+        self.assertEqual(others, [])
+
+    def test_same_friend_via_alternate_email_case_counted_once(self):
+        """Two attendee rows resolving to the same profile must not double-invite them."""
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+        from urbanlens.dashboard.services.trips.calendar_sync import match_event_attendees
+
+        friend = User.objects.create_user(username="att-friend2", email="att-friend2@example.com").profile
+        Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
+
+        event = {
+            "attendees": [
+                {"email": "att-friend2@example.com", "displayName": "Att Friend"},
+                {"email": "ATT-Friend2@example.com", "displayName": "Att Friend Alias"},
+            ],
+        }
+        friends, others = match_event_attendees(self.profile, event)
+
+        self.assertEqual([p.pk for p in friends], [friend.pk])
+        self.assertEqual(others, [])
 
 
 class CalendarImportPreviewViewTests(_CalendarSyncDBTestCase):
@@ -834,6 +911,12 @@ class ActivityEventBodyTests(SimpleTestCase):
     def test_missing_end_uses_default_duration(self):
         start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
         body = activity_to_event_body(self._activity(scheduled_at=start))
+        self.assertEqual(body["end"]["dateTime"], (start + DEFAULT_ACTIVITY_EVENT_DURATION).isoformat())
+
+    def test_end_equal_to_start_uses_default_duration(self):
+        """Exact boundary of `end <= start`: a zero-length end is not a valid duration either."""
+        start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
+        body = activity_to_event_body(self._activity(scheduled_at=start, scheduled_end=start))
         self.assertEqual(body["end"]["dateTime"], (start + DEFAULT_ACTIVITY_EVENT_DURATION).isoformat())
 
     def test_end_before_start_uses_default_duration(self):
