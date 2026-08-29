@@ -1037,6 +1037,18 @@ REST_FRAMEWORK = {
     # Only consulted by views whose schema is actually generated - the
     # preprocessing hook in external_api.schema limits that to the external API.
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # JSON only. DRF's own default renderer pair also includes
+    # BrowsableAPIRenderer, which content-negotiates in for any request whose
+    # Accept header prefers text/html (a plain browser visiting an API URL,
+    # or a scanner sending browser-like headers) - and "rest_framework" is not
+    # in INSTALLED_APPS, so its template is never discoverable. The result was
+    # a 500 on every such request, and in an environment where DEBUG resolves
+    # true, a full Django debug page (settings values, stack frames) in the
+    # response body. This is a machine-consumed API (see SPECTACULAR_SETTINGS
+    # below); the working interactive explorer is the separate Swagger UI view.
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
 }
 
 # OpenAPI schema for the external API only - the internal HTMX/REST surface has

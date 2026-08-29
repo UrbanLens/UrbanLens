@@ -24,7 +24,7 @@ from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.pins.pin_subresources import create_pin_alias
+from urbanlens.dashboard.services.pins.pin_subresources import AliasExistsError, create_pin_alias
 
 
 class AliasNameValidationTests(TestCase):
@@ -69,3 +69,14 @@ class AliasNameValidationTests(TestCase):
         alias = create_pin_alias(self.pin, name="Site_7")
 
         self.assertEqual(alias.name, "Site_7")
+
+    def test_a_case_insensitive_duplicate_name_is_refused(self) -> None:
+        """The unique constraint this bug hid behind: same name, different case, is still a duplicate."""
+        create_pin_alias(self.pin, name="Old Mill")
+
+        with pytest.raises(AliasExistsError):
+            create_pin_alias(self.pin, name="OLD MILL")
+
+        # The atomic() savepoint must have rolled the failed insert back cleanly,
+        # not left a partial or duplicate row behind.
+        self.assertEqual(PinAlias.objects.filter(pin=self.pin, name__iexact="old mill").count(), 1)

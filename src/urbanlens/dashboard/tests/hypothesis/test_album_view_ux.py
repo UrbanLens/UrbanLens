@@ -332,6 +332,12 @@ class AlbumMapPayloadTests(TestCase):
 
         self.assertFalse(payload[0]["movable"])
 
+    def test_a_map_hidden_photo_is_left_off_even_with_gps(self) -> None:
+        """map_hidden opts a photo out of the map entirely, not just out of the drag."""
+        photo = self._photo(self.pin.profile, latitude="39.5", longitude="-75.5", map_hidden=True)
+
+        self.assertEqual(_photo_map_payload([photo], self.pin.profile), [])
+
 
 class AlbumMapRenderTests(TestCase):
     """The album view ships the map payload to the client."""
@@ -404,6 +410,18 @@ class AlbumItemsPageTests(TestCase):
         self.assertEqual(body["total"], 3)
         self.assertEqual(len(body["items"]), 1)
 
+    def test_limit_and_offset_are_clamped_to_sane_bounds(self) -> None:
+        """A wild limit can't turn the page into a full album dump, nor a negative offset wrap around."""
+        response = self.client.get(self.url, {"offset": -5, "limit": 99999})
+
+        body = response.json()
+        self.assertEqual(body["offset"], 0)
+        self.assertEqual(body["limit"], 100)
+
+        response = self.client.get(self.url, {"limit": 0})
+
+        self.assertEqual(response.json()["limit"], 1)
+
 
 class AlbumMoveTests(TestCase):
     """Adding with move_from removes the photos from the source album."""
@@ -429,6 +447,21 @@ class AlbumMoveTests(TestCase):
         self.assertEqual(response.json()["removed"], 1)
         self.assertTrue(AlbumItem.objects.filter(album=self.target, image=self.photo).exists())
         self.assertFalse(AlbumItem.objects.filter(album=self.source, image=self.photo).exists())
+
+    def test_move_from_matching_the_target_itself_is_ignored(self) -> None:
+        """A same-album ``move_from`` must not undo the very add it accompanies."""
+        photo = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+
+        response = self.client.post(
+            self.url,
+            data={"image_ids": [photo.pk], "move_from": self.target.slug},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        self.assertEqual(response.json()["added"], 1)
+        self.assertNotIn("removed", response.json())
+        self.assertTrue(AlbumItem.objects.filter(album=self.target, image=photo).exists())
 
 
 class AlbumPickerJsonTests(TestCase):

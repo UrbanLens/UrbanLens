@@ -10,8 +10,10 @@ Covers:
 from __future__ import annotations
 
 import datetime
+import smtplib
+from unittest import mock
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
@@ -141,6 +143,29 @@ class RequestDeletionTests(TestCase):
         request_deletion(self.profile)
         self.assertIsNone(self.profile.deletion_reminder_sent_at)
 
+    def test_no_email_sent_when_profile_has_no_email(self):
+        self.profile.user.email = ""
+        self.profile.user.save(update_fields=["email"])
+        # Assert test assumptions
+        self.assertEqual(len(mail.outbox), 0, "Outbox is 0 before test run")
+        self.assertFalse(self.profile.is_pending_deletion, "User started with pending deletion, possible unsanitary test db")
+        self.assertFalse(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED).exists(), "Possible unsanitary test db")
+
+        request_deletion(self.profile)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertTrue(self.profile.is_pending_deletion)
+        self.assertTrue(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED).exists())
+
+    def test_deletion_still_recorded_when_email_send_fails(self):
+        """`_send_email` logs and swallows delivery failures - a raised SMTPException must not abort the request."""
+        self.assertFalse(self.profile.is_pending_deletion, "User started with pending deletion, possible unsanitary test db")
+        self.assertFalse(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED).exists(), "Possible unsanitary test db")
+        
+        with mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPException("nope")):
+            request_deletion(self.profile)
+        self.assertTrue(self.profile.is_pending_deletion)
+        self.assertTrue(NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACCOUNT_DELETION_REQUESTED).exists())
+
 
 class CancelDeletionTests(TestCase):
     """cancel_deletion() clears the pending state entirely."""
@@ -181,6 +206,24 @@ class SendDeletionReminderTests(TestCase):
         send_deletion_reminder(self.profile)
         self.assertNotIn(self.profile, Profile.objects.due_for_deletion_reminder())
 
+    def test_no_email_sent_when_profile_has_no_email(self):
+        self.profile.user.email = ""
+        self.profile.user.save(update_fields=["email"])
+        self.assertEqual(len(mail.outbox), 0, "Test assumptions fail")
+        self.assertIsNone(self.profile.deletion_reminder_sent_at, "Test assumptions fail")
+        
+        send_deletion_reminder(self.profile)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertIsNotNone(self.profile.deletion_reminder_sent_at)
+
+    def test_reminder_still_stamped_when_email_send_fails(self):
+        """A raised SMTPException must not stop the idempotency marker from being set,
+        or the sweep would resend this reminder forever."""
+        self.assertIsNone(self.profile.deletion_reminder_sent_at, "Test assumptions fail")
+        with mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPException("nope")):
+            send_deletion_reminder(self.profile)
+        self.assertIsNotNone(self.profile.deletion_reminder_sent_at)
+
 
 class HardDeleteProfileTests(TestCase):
     """hard_delete_profile() emails, then permanently removes the account and its data."""
@@ -209,6 +252,25 @@ class HardDeleteProfileTests(TestCase):
         pin_pk = self.pin.pk
         hard_delete_profile(self.profile)
         self.assertFalse(Pin.objects.filter(pk=pin_pk).exists())
+
+    def test_no_final_email_when_user_has_no_email(self):
+        self.profile.user.email = ""
+        self.profile.user.save(update_fields=["email"])
+        user_pk = self.user.pk
+        self.assertEqual(len(mail.outbox), 0, "Test assumptions fail")
+        self.assertFalse(User.objects.filter(pk=user_pk).exists(), "Test assumptions fail")
+        hard_delete_profile(self.profile)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(User.objects.filter(pk=user_pk).exists())
+
+    def test_account_still_deleted_when_final_email_fails(self):
+        """A raised SMTPException while sending the "account deleted" email must not
+        abort the hard delete - a broken mail relay must never leave the account undeleted."""
+        user_pk = self.user.pk
+        self.assertFalse(User.objects.filter(pk=user_pk).exists(), "Test assumptions fail")
+        with mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPException("nope")):
+            hard_delete_profile(self.profile)
+        self.assertFalse(User.objects.filter(pk=user_pk).exists())
 
 
 class HardDeleteProfileFileCleanupTests(TestCase):
@@ -316,6 +378,14 @@ class RequestAccountDeletionViewTests(TestCase):
         self.user.profile.refresh_from_db()
         self.assertFalse(self.user.profile.is_pending_deletion)
 
+    def test_view_site_admin_permission_blocks_deletion(self):
+        """The gate is `is_superuser OR has_perm(view_site_admin)` - a staff moderator
+        holding just the permission (not superuser) must be blocked too."""
+        self.user.user_permissions.add(Permission.objects.get(codename="view_site_admin"))
+        self.client.post(reverse("account.delete.request"), {"password": "correct-horse", "confirm_text": "delete alice"})
+        self.user.profile.refresh_from_db()
+        self.assertFalse(self.user.profile.is_pending_deletion)
+
 
 class CancelAccountDeletionViewTests(TestCase):
     """POST /settings/delete-account/cancel/ undoes a pending deletion for the logged-in user."""
@@ -329,6 +399,16 @@ class CancelAccountDeletionViewTests(TestCase):
         self.client.post(reverse("account.delete.cancel"))
         self.profile.refresh_from_db()
         self.assertFalse(self.profile.is_pending_deletion)
+
+    def test_redirect_only_honors_a_same_site_next(self):
+        """`next` is an attacker-controlled POST field, not just the hidden banner
+        input - an off-site value must fall back to the settings page rather than
+        becoming an open redirect."""
+        response = self.client.post(reverse("account.delete.cancel"), {"next": "https://evil.example.com/phish"})
+        self.assertEqual(response.url, reverse("settings.view"))
+
+        response = self.client.post(reverse("account.delete.cancel"), {"next": "/map/"})
+        self.assertEqual(response.url, "/map/")
 
 
 class AccountDeletionBannerTests(TestCase):

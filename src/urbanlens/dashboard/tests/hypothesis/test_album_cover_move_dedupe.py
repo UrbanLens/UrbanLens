@@ -88,6 +88,20 @@ class AlbumMoveAndChildrenTests(TestCase):
         add_images_to_album(self.album, [self.photo], self.parent.profile)
 
     def test_move_reparents_the_album_and_its_photos(self) -> None:
+        # Same pin as it's already on: rejected before any other move can be tried.
+        with self.assertRaises(ValueError):
+            move_album_to_pin(self.album, self.parent)
+        # Same profile, but not in this pin's parent/child tree: rejected too.
+        unrelated = baker.make_recipe("dashboard.pin", profile=self.parent.profile)
+        with self.assertRaises(ValueError):
+            move_album_to_pin(self.album, unrelated)
+        # A pin some other profile owns, even one nobody's tree overlaps with.
+        foreign_pin = baker.make_recipe("dashboard.pin")
+        with self.assertRaises(ValueError):
+            move_album_to_pin(self.album, foreign_pin)
+        self.album.refresh_from_db()
+        self.assertEqual(self.album.parent_pin_id, self.parent.pk)
+
         moved = move_album_to_pin(self.album, self.child)
 
         self.assertEqual(moved.parent_pin_id, self.child.pk)
@@ -96,6 +110,16 @@ class AlbumMoveAndChildrenTests(TestCase):
 
     def test_move_view_posts_the_target_pin(self) -> None:
         url = reverse("pin.albums.move", args=[self.parent.slug, self.album.slug])
+        unrelated = baker.make_recipe("dashboard.pin", profile=self.parent.profile)
+
+        missing_response = self.client.post(url, data=json.dumps({"pin_slug": "does-not-exist"}), content_type="application/json")
+        self.assertEqual(missing_response.status_code, HTTPStatus.NOT_FOUND)
+
+        invalid_response = self.client.post(url, data=json.dumps({"pin_slug": unrelated.slug}), content_type="application/json")
+        self.assertEqual(invalid_response.status_code, HTTPStatus.BAD_REQUEST, invalid_response.content)
+        self.album.refresh_from_db()
+        self.assertEqual(self.album.parent_pin_id, self.parent.pk)
+
         response = self.client.post(url, data=json.dumps({"pin_slug": self.child.slug}), content_type="application/json")
 
         self.assertEqual(response.status_code, HTTPStatus.OK, response.content)

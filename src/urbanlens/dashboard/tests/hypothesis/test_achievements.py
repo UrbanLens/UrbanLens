@@ -249,6 +249,20 @@ class AwardingTests(AchievementTestsBase):
         self.assertEqual(evaluate_profile(self.profile), [])
         self.assertEqual(UserAchievement.objects.filter(profile=self.profile).count(), 1)
 
+    def test_a_concurrent_grant_race_does_not_raise(self) -> None:
+        """Two evaluation passes racing on the same award must not crash - the
+        loser hits the unique constraint and is treated as already-granted."""
+        from django.db import IntegrityError
+
+        self._achievement(metric="pins_created", threshold=1)
+        baker.make(Pin, profile=self.profile)
+
+        with patch.object(UserAchievement.objects, "get_or_create", side_effect=IntegrityError):
+            granted = evaluate_profile(self.profile)
+
+        self.assertEqual(granted, [])
+        self.assertFalse(UserAchievement.objects.filter(profile=self.profile).exists())
+
     def test_award_survives_the_metric_falling_back_below_threshold(self) -> None:
         """Deleting pins lowers the count but must not revoke the award."""
         self._achievement(metric="pins_created", threshold=2)
@@ -294,6 +308,15 @@ class AwardingTests(AchievementTestsBase):
         achievement = Achievement.objects.create(name="Broken", metric="gone_away", threshold=1)
         self.assertEqual(evaluate_achievement_for_all(achievement), 0)
 
+    def test_backfill_skips_an_inactive_achievement(self) -> None:
+        """The manual backfill button (and the signal's queued backfill) must
+        no-op on a retired award rather than granting it retroactively."""
+        achievement = self._achievement(metric="pins_created", threshold=1, is_active=False)
+        baker.make(Pin, profile=self.profile)
+
+        self.assertEqual(evaluate_achievement_for_all(achievement), 0)
+        self.assertFalse(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
+
     def test_notification_raised_on_award(self) -> None:
         from urbanlens.dashboard.models.notifications.meta import NotificationType
         from urbanlens.dashboard.models.notifications.model import NotificationLog
@@ -308,6 +331,23 @@ class AwardingTests(AchievementTestsBase):
         ).first()
         self.assertIsNotNone(notification)
         self.assertIn("First Pin", notification.title)
+
+    def test_no_notification_when_preference_is_none(self) -> None:
+        """Opting out of achievement notifications must actually suppress them,
+        without affecting whether the award itself is granted."""
+        from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
+        from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
+
+        NotificationPreference.objects.create(profile=self.profile, achievement_earned=DeliveryPreference.NONE)
+        self._achievement(metric="pins_created", threshold=1, name="Silent Award")
+        baker.make(Pin, profile=self.profile)
+
+        evaluate_profile(self.profile)
+
+        self.assertTrue(UserAchievement.objects.filter(profile=self.profile).exists())
+        self.assertFalse(
+            NotificationLog.objects.filter(profile=self.profile, notification_type=NotificationType.ACHIEVEMENT_EARNED).exists(),
+        )
 
 
 class SignalIntegrationTests(AchievementTestsBase):
@@ -393,6 +433,24 @@ class SignalIntegrationTests(AchievementTestsBase):
 
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
 
+    def test_defining_an_inactive_achievement_does_not_backfill_until_activated(self) -> None:
+        """An award saved inactive must not backfill - only becoming active
+        should reach the users who already qualify."""
+        from urbanlens.dashboard.tasks import backfill_achievement
+
+        baker.make(Pin, profile=self.profile, _quantity=3)
+
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+            achievement = self._achievement(metric="pins_created", threshold=3, name="Draft Award", is_active=False)
+        self.assertEqual(enqueue.call_args_list, [])
+        self.assertFalse(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
+
+        with tasks_run_inline(backfill_achievement), self.captureOnCommitCallbacks(execute=True):
+            achievement.is_active = True
+            achievement.save(update_fields=["is_active"])
+
+        self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
+
 
 class AchievementModelTests(AchievementTestsBase):
     """Model-level validation and display helpers."""
@@ -458,6 +516,18 @@ class ProgressListingTests(AchievementTestsBase):
         rows = progress_for_profile(self.profile, viewer=self.profile)
         self.assertEqual([row["achievement"].pk for row in rows], [secret.pk])
 
+    def test_secret_award_is_visible_to_a_stranger_once_earned(self) -> None:
+        """Unlocking is decided by whoever holds the award, not by who's looking."""
+        secret = self._achievement(metric="pins_created", threshold=1, is_secret=True, name="Hidden")
+        baker.make(Pin, profile=self.profile)
+        evaluate_profile(self.profile)
+        stranger = Profile.objects.get(user=baker.make("auth.User"))
+
+        rows = progress_for_profile(self.profile, viewer=stranger)
+
+        self.assertEqual([row["achievement"].pk for row in rows], [secret.pk])
+        self.assertTrue(rows[0]["earned"])
+
 
 class AchievementViewTests(AchievementTestsBase):
     """The profile panel and catalogue respect profile visibility."""
@@ -485,6 +555,24 @@ class AchievementViewTests(AchievementTestsBase):
 
         response = self.client.get(reverse("achievement.profile_panel", kwargs={"profile_slug": other.slug}))
         self.assertEqual(response.status_code, 404)
+
+    def test_stranger_can_view_a_public_profiles_achievements(self) -> None:
+        """The positive counterpart to test_hidden_profile_is_not_readable -
+        guards against a check that denies every non-owner, not just a hidden one."""
+        from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+
+        other = Profile.objects.get(user=baker.make("auth.User"))
+        panel_url = reverse("achievement.profile_panel", kwargs={"profile_slug": other.slug})
+
+        # Default visibility ("anything in common") denies a stranger who shares nothing.
+        response = self.client.get(panel_url)
+        self.assertEqual(response.status_code, 404)
+
+        other.profile_visibility = VisibilityChoice.ANYONE
+        other.save(update_fields=["profile_visibility"])
+
+        response = self.client.get(panel_url)
+        self.assertEqual(response.status_code, 200)
 
     def test_anonymous_is_redirected(self) -> None:
         self.client.logout()
