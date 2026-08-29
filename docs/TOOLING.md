@@ -376,8 +376,20 @@ A failed JavaScript or Actions extract leaves a database with `finalised:
 false`. The wrapper does not reuse that; it rebuilds. Those extractors need
 **Node.js** on PATH - bun is not a substitute.
 
-Database creation plus analysis is minutes, so pre-commit runs it as a
-**pre-push** hook (`--gate`) rather than on every commit. `UL_SKIP_CODEQL=1` skips it.
+CodeQL does **not** run from a git hook. It was wired as a pre-push hook and
+had to be removed: the analysis is minutes long, `--gate` exits non-zero on the
+repo's known-and-triaged findings, and a GUI git client shows none of a hook's
+output - so `git push` from VS Code simply failed with no explanation. CI still
+runs CodeQL on every PR (`.github/workflows/security.yml`).
+
+Run it on demand instead - the hook is still defined, at the `manual` stage:
+
+```bash
+bun run codeql:gate                                  # the suites CI runs
+pre-commit run --hook-stage manual --all-files codeql # same thing, via pre-commit
+```
+
+`UL_SKIP_CODEQL=1` short-circuits the wrapper wherever it is invoked.
 
 Install uses the official CodeQL Action *bundle*.
 The standalone CLI zip does not ship query packs.

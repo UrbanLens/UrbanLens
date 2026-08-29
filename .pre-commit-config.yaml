@@ -2,7 +2,7 @@
 default_language_version:
     python: python3.12
 
-default_install_hook_types: [pre-commit, pre-push]
+default_install_hook_types: [pre-commit]
 files: '^(.+\.(py|ts|js|tsx|jsx|yaml|toml|html|txt))$'
 exclude: '(^[._]|/config/|/docs/|/downloads/|/logs/|/pgsql/|/node_modules/)'
 
@@ -85,19 +85,20 @@ repos:
         pass_filenames: false
 
 # CODEQL
-# Full analysis is minutes, so this is a pre-push hook rather than per-commit.
-# `--gate` matches the suites GitHub runs on a PR; a no-op when the tree has
-# not changed since the last clean scan. Missing CLI is a skip, not a block -
-# CI still runs CodeQL. Install with: python bin/run_codeql.py --install
+# Manual-only. It was a pre-push hook, which made `git push` fail: the analysis
+# is minutes long, exits non-zero on the repo's known-and-triaged findings, and
+# a GUI client (VS Code) shows none of that output - the push just fails.
+# CI still runs CodeQL on every PR (.github/workflows/security.yml).
+# Run it with: bun run codeql:gate   (or python bin/run_codeql.py --gate)
 -   repo: local
     hooks:
       - id: codeql
-        name: CodeQL analysis (pre-push)
+        name: CodeQL analysis (manual)
         entry: python3 bin/run_codeql.py --gate
         language: system
         pass_filenames: false
         always_run: true
-        stages: [pre-push]
+        stages: [manual]
         verbose: true
 
 # TYPESCRIPT

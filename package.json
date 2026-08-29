@@ -24,6 +24,7 @@
         "pre-commit": "pre-commit run --all-files &> /dev/null || true && pre-commit run --all-files",
         "test:browser": "bun test --timeout 60000 src/urbanlens/dashboard/frontend/browser",
         "codeql": "python bin/run_codeql.py",
+        "codeql:gate": "python bin/run_codeql.py --gate",
         "codeql:install": "python bin/run_codeql.py --install",
         "check:templates": "python bin/check_template_comments.py"
     },
