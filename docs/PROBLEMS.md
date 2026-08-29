@@ -3994,3 +3994,6 @@ pin-owned photo at that location.~~ **Fixed 2026-08-25** (`8bd766a3`): the looku
 and script that doesn't send its own CORP/CORS header - the Street View iframe, the OSM/ArcGIS/
 OpenTopoMap tile hosts, Gravatar, any operator-pasted map-overlay image: needs a report-only-shape. Revisit once there's a real inventory of which third-party hosts
 do and don't send CORP.
+
+`cross-origin-embedder-policy` is the fourth thing this template flagged and
+is not fixe
