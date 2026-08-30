@@ -5,7 +5,7 @@ import logging
 
 # Django imports
 from django.urls import include, path, re_path
-from django.views.generic import TemplateView
+from django.views.generic import RedirectView, TemplateView
 
 # 3rd Party imports
 from rest_framework import routers
@@ -55,7 +55,6 @@ from urbanlens.dashboard.controllers import (
     notifications,
     onboarding,
     organize,
-    photos,
     pin,
     pin_bulk,
     pin_edit,
@@ -85,6 +84,7 @@ from urbanlens.dashboard.controllers import (
     two_factor,
     undo,
     userprofile,
+    vault_photos,
     visit_suggestions,
     visits,
     webauthn,
@@ -1969,17 +1969,6 @@ urlpatterns = [
                 path("sharing/", memories.MemoriesSharingView.as_view(), name="memories.sharing"),
                 path("journal/", memories.MemoriesJournalView.as_view(), name="memories.journal"),
                 path("unlogged/<slug:pin_slug>/<str:action>/", memories.MemoriesUnloggedActionView.as_view(), name="memories.unlogged.action"),
-                path("photos/", photos.MemoriesPhotosView.as_view(), name="memories.photos"),
-                path("photos/queue/", photos.PhotoQueueView.as_view(), name="memories.photos.queue"),
-                path("photos/page/", photos.PhotoGridPageView.as_view(), name="memories.photos.page"),
-                path("photos/upload/", photos.PhotoUploadView.as_view(), name="memories.photos.upload"),
-                path("photos/failures/", photos.PhotoUploadFailureCreateView.as_view(), name="memories.photos.failures"),
-                path("photos/failures/<int:failure_id>/dismiss/", photos.PhotoUploadFailureDismissView.as_view(), name="memories.photos.failures.dismiss"),
-                path("photos/conflicts/<int:conflict_id>/resolve/", photos.PhotoMetadataConflictResolveView.as_view(), name="memories.photos.conflicts.resolve"),
-                path("photos/conflicts/<int:conflict_id>/dismiss/", photos.PhotoMetadataConflictDismissView.as_view(), name="memories.photos.conflicts.dismiss"),
-                path("photos/pin-search/", photos.PhotoPinSearchView.as_view(), name="memories.photos.pin_search"),
-                path("photos/<int:image_id>/confirm-pin/", photos.PhotoPinConfirmView.as_view(), name="memories.photos.pin_confirm"),
-                path("photos/<int:image_id>/<str:action>/", photos.PhotoActionView.as_view(), name="memories.photos.action"),
                 path("locations/", pin_suggestions.PinSuggestionQueueView.as_view(), name="memories.locations"),
                 path("locations/queue/", pin_suggestions.PinSuggestionQueuePartialView.as_view(), name="memories.locations.queue"),
                 path("locations/map-data/", pin_suggestions.PinSuggestionMapDataView.as_view(), name="memories.locations.map_data"),
@@ -2020,6 +2009,26 @@ urlpatterns = [
             ],
         ),
     ),
+    path(
+        "vault/",
+        include(
+            [
+                path("photos/", vault_photos.VaultPhotosView.as_view(), name="vault.photos"),
+                path("photos/queue/", vault_photos.PhotoQueueView.as_view(), name="vault.photos.queue"),
+                path("photos/page/", vault_photos.PhotoGridPageView.as_view(), name="vault.photos.page"),
+                path("photos/upload/", vault_photos.PhotoUploadView.as_view(), name="vault.photos.upload"),
+                path("photos/failures/", vault_photos.PhotoUploadFailureCreateView.as_view(), name="vault.photos.failures"),
+                path("photos/failures/<int:failure_id>/dismiss/", vault_photos.PhotoUploadFailureDismissView.as_view(), name="vault.photos.failures.dismiss"),
+                path("photos/conflicts/<int:conflict_id>/resolve/", vault_photos.PhotoMetadataConflictResolveView.as_view(), name="vault.photos.conflicts.resolve"),
+                path("photos/conflicts/<int:conflict_id>/dismiss/", vault_photos.PhotoMetadataConflictDismissView.as_view(), name="vault.photos.conflicts.dismiss"),
+                path("photos/pin-search/", vault_photos.PhotoPinSearchView.as_view(), name="vault.photos.pin_search"),
+                path("photos/<int:image_id>/confirm-pin/", vault_photos.PhotoPinConfirmView.as_view(), name="vault.photos.pin_confirm"),
+                path("photos/<int:image_id>/<str:action>/", vault_photos.PhotoActionView.as_view(), name="vault.photos.action"),
+            ],
+        ),
+    ),
+    # Bookmarked-link compatibility: Photos moved from Memories to the Vault.
+    path("memories/photos/", RedirectView.as_view(pattern_name="vault.photos", permanent=True), name="memories.photos.redirect"),
     path("setup/", setup.SetupWizardView.as_view(), name="setup"),
     path("welcome/", onboarding.WelcomeOnboardingView.as_view(), name="onboarding.welcome"),
     path("tasks/<str:task_id>/status/", site_admin.CeleryTaskStatusView.as_view(), name="celery_task_status"),

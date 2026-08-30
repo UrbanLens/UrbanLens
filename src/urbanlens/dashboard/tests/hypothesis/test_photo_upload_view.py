@@ -15,7 +15,7 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.subscriptions import SiteFeature
 
-_UPLOAD_URL = reverse("memories.photos.upload")
+_UPLOAD_URL = reverse("vault.photos.upload")
 
 
 def _grant_feature(*features: str) -> None:

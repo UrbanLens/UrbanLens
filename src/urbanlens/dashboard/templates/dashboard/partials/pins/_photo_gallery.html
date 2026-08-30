@@ -145,7 +145,7 @@ Context:
 <script src="{% static 'js/bulk-toolbar.js' %}"></script>
 {% endif %}
 
-{# -- Lightbox (shared component - same as Memories > Photos and the profile page) -- #}
+{# -- Lightbox (shared component - same as Vault > Photos and the profile page) -- #}
 {% if context_type == "pin" %}
 {% url "pin.cover_photo" pin.slug as cover_photo_url %}
 {% url "pin.media.relevance" pin.slug as pin_media_relevance_url %}

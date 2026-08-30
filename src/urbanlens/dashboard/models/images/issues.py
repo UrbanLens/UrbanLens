@@ -8,12 +8,6 @@ from django.db.models import CASCADE, SET_NULL, CharField, ForeignKey, Index, JS
 
 from urbanlens.dashboard.models import abstract
 
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.album.model import Album
-    from urbanlens.dashboard.models.images.model import Image
-    from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.models.profile.model import Profile
-
 
 class PhotoIssueStatus(abstract.TextChoices):
     """Whether a reviewable photo issue still needs the owner."""
@@ -26,7 +20,7 @@ class PhotoIssueStatus(abstract.TextChoices):
 class PhotoUploadFailure(abstract.DashboardModel):
     """A photo that failed to upload or could not be shown after upload.
 
-    Surfaced on Memories → Photos so the user can see the filename and retry
+    Surfaced on Vault → Photos so the user can see the filename and retry
     without hunting through a toast that has already disappeared.
 
     Attributes:
@@ -84,11 +78,6 @@ class PhotoMetadataConflict(abstract.DashboardModel):
         profile_id: int
         existing_image_id: int
         new_image_id: int
-        existing_image: Image
-        new_image: Image
-        profile: Profile
-        pin: Pin | None
-        album: Album | None
 
     class Meta:
         app_label = "dashboard"

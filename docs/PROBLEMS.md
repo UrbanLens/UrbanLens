@@ -4088,3 +4088,14 @@ ever construct Pin-owned albums - the community/wiki half of the Album model (`p
 `owner_kwargs`, the concealment-aware `_owner_conceal`/`conceal_rows` path) has zero coverage.
 Building that out correctly needs the wiki-access/concealment rules understood well enough to avoid
 a shallow test - flagged for a dedicated pass rather than folded into this audit.
+
+## OPEN 2026-08-30: `PhotoMetadataConflictResolveView.post`'s manual-POST branch mistypes form values as possibly a list
+
+Found by mypy while moving this view from `controllers/photos.py` to `controllers/vault_photos.py`
+(the Memories → Vault Photos move) - pre-existing, unrelated to that move. In the
+`request.POST.items()` fallback branch (used when the request body isn't JSON), `int(value)` is
+called on a POST field value that mypy infers as `str | list[object]`. The surrounding
+`try/except (TypeError, ValueError): continue` already guards the runtime call, so this is a type
+hygiene gap rather than a live bug - but worth a real fix (narrow `body`'s type properly, or read
+`request.POST` through a helper that always returns `str`) rather than a `cast`, per the project's
+mypy policy.

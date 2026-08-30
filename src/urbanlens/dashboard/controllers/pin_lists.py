@@ -45,8 +45,8 @@ _ITEMS_PANEL_TEMPLATE = "dashboard/partials/pin_lists/_items_panel.html"
 _ITEMS_ROWS_TEMPLATE = "dashboard/partials/pin_lists/_items_rows.html"
 
 #: Rows rendered per page of the items list - matches the height-based
-#: "revealed" HTMX pagination the Memories gallery uses (see
-#: controllers.photos.MemoriesPhotosView/_GALLERY_PAGE_SIZE), reused here
+#: "revealed" HTMX pagination the Vault gallery uses (see
+#: controllers.vault_photos.VaultPhotosView/_GALLERY_PAGE_SIZE), reused here
 #: rather than inventing a second pagination scheme for the same page shape.
 _ITEMS_PAGE_SIZE = 50
 

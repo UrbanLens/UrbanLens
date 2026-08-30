@@ -1,8 +1,8 @@
 """Shared template components for the Memories section.
 
-* ``{% memories_tabs active %}`` renders the Timeline | Photos | Maps |
-  Sharing | Visits tab strip (``partials/memories/_photos_tabs.html``). The
-  tag computes the unlogged-visits count itself, so every Memories subpage
+* ``{% memories_tabs active %}`` renders the Timeline | Maps | Sharing |
+  Journal | Visits | Locations tab strip (``partials/memories/_photos_tabs.html``).
+  The tag computes the unlogged-visits count itself, so every Memories subpage
   shows an identical nav without each view having to supply the count.
 """
 
@@ -31,8 +31,8 @@ def memories_tabs(context: template.Context, active: str) -> dict[str, Any]:
     Args:
         context: The calling template's context (used for ``request`` and
             optional prefetched ``unlogged_visits``/``suggestions`` lists).
-        active: Which tab is current - ``"timeline"``, ``"photos"``,
-            ``"maps"``, ``"sharing"``, ``"visits"``, or ``"locations"``.
+        active: Which tab is current - ``"timeline"``, ``"maps"``,
+            ``"sharing"``, ``"journal"``, ``"visits"``, or ``"locations"``.
 
     Returns:
         Context for ``partials/memories/_photos_tabs.html``.

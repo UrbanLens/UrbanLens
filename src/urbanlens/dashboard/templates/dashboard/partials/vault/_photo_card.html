@@ -1,7 +1,7 @@
 {% comment %}
-A single actionable photo card for the Memories "needs attention" queue.
+A single actionable photo card for the Vault "needs attention" queue.
 
-Every organize action posts to memories.photos.action and targets this card by id,
+Every organize action posts to vault.photos.action and targets this card by id,
 swapping outerHTML - a success response is empty (the card vanishes and a toast
 fires), an error response re-renders the card unchanged with an error toast.
 
@@ -33,12 +33,12 @@ Context:
         </p>
         <div class="photo-card-actions">
             <button type="button" class="btn btn--sm btn--primary"
-                    hx-post="{% url 'memories.photos.action' image.pk 'accept' %}"
+                    hx-post="{% url 'vault.photos.action' image.pk 'accept' %}"
                     hx-target="#photo-card-{{ image.pk }}" hx-swap="outerHTML">
                 <i class="material-symbols-outlined">check</i> Confirm
             </button>
             <button type="button" class="btn btn--sm btn--ghost"
-                    hx-post="{% url 'memories.photos.action' image.pk 'reject' %}"
+                    hx-post="{% url 'vault.photos.action' image.pk 'reject' %}"
                     hx-target="#photo-card-{{ image.pk }}" hx-swap="outerHTML">
                 Not this
             </button>
@@ -50,18 +50,18 @@ Context:
         </p>
         <div class="photo-card-actions">
             <button type="button" class="btn btn--sm btn--primary"
-                    onclick="photosLoadPinConfirm('{% url 'memories.photos.pin_confirm' image.pk %}')">
+                    onclick="photosLoadPinConfirm('{% url 'vault.photos.pin_confirm' image.pk %}')">
                 <i class="material-symbols-outlined">add_location_alt</i> Create pin &amp; log visit
             </button>
             <button type="button" class="btn btn--sm btn--ghost"
-                    hx-post="{% url 'memories.photos.action' image.pk 'dismiss' %}"
+                    hx-post="{% url 'vault.photos.action' image.pk 'dismiss' %}"
                     hx-target="#photo-card-{{ image.pk }}" hx-swap="outerHTML">
                 Skip
             </button>
         </div>
         <details class="photo-card-search">
             <summary>Pick an existing pin instead</summary>
-            {% include "dashboard/partials/memories/_photo_card_search.html" %}
+            {% include "dashboard/partials/vault/_photo_card_search.html" %}
         </details>
 
         {% else %}{# needs_location #}
@@ -69,11 +69,11 @@ Context:
             No location on this photo. Search for the pin it belongs to.
         </p>
         <div class="photo-card-search">
-            {% include "dashboard/partials/memories/_photo_card_search.html" %}
+            {% include "dashboard/partials/vault/_photo_card_search.html" %}
         </div>
         <div class="photo-card-actions">
             <button type="button" class="btn btn--sm btn--ghost"
-                    hx-post="{% url 'memories.photos.action' image.pk 'dismiss' %}"
+                    hx-post="{% url 'vault.photos.action' image.pk 'dismiss' %}"
                     hx-target="#photo-card-{{ image.pk }}" hx-swap="outerHTML">
                 Skip for now
             </button>

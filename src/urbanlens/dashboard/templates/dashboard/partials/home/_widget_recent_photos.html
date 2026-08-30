@@ -7,8 +7,8 @@ overview.html) via homeOpenLightbox() (overview.html's script block).
 <section class="home-widget ul-section" data-widget-key="recent_photos">
     <div class="home-widget-heading">
         <span class="home-widget-icon"><i class="material-symbols-outlined">photo_library</i></span>
-        <div><h3>Recent photos</h3><p>Your latest uploads from Memories.</p></div>
-        <a href="{% url 'memories.photos' %}" class="home-widget-link">View all</a>
+        <div><h3>Recent photos</h3><p>Your latest uploads from the Vault.</p></div>
+        <a href="{% url 'vault.photos' %}" class="home-widget-link">View all</a>
     </div>
     <ul class="home-photo-strip photos-grid">
         {% for img in home_recent_photos %}

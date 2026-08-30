@@ -1,12 +1,12 @@
-"""Behavioral lock on the Memories photo-upload path.
+"""Behavioral lock on the Vault photo-upload path.
 
-Written to characterize ``controllers.photos.PhotoUploadView.post`` *before*
+Written to characterize ``controllers.vault_photos.PhotoUploadView.post`` *before*
 its body was extracted into ``services.photos.photo_upload.upload_photo``, and kept
 afterwards so the extraction stays honest: the web uploader and the external
 API's ``POST photos/`` now share one implementation, and this is what catches
 that implementation drifting away from what the page has always done.
 
-Every assertion here is about the HTMX/JSON contract the Memories page's
+Every assertion here is about the HTMX/JSON contract the Vault page's
 uploader JS depends on - the status codes in particular, since the page
 distinguishes a duplicate (409) from a rejected file (400) from a quota
 overrun (413) purely by status.
@@ -37,7 +37,7 @@ class PhotoUploadViewTests(TestCase):
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
         self.client.force_login(self.user)
-        self.url = reverse("memories.photos.upload")
+        self.url = reverse("vault.photos.upload")
 
     def _upload(self, name: str = "shot.png", content: bytes = _PNG_BYTES, content_type: str = "image/png"):
         """POST one file to the upload endpoint."""

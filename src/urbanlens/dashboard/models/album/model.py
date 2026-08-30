@@ -1,10 +1,12 @@
 """Album models - named, optionally-ordered groupings of a place's photos.
 
-An album belongs to exactly one owner: a ``Pin`` (personal, owner-only) or a
-``Wiki`` (community, editable by anyone who can see the wiki), mirroring how
-``CustomLayer`` scopes its own pin/wiki split. Albums never span the two - a
-pin album holds only that pin's photos and a wiki album only that wiki's, so
-an album can't be used to pull a private pin photo onto a shared surface.
+An album belongs to exactly one owner: a ``Pin`` (personal, owner-only), a
+``Wiki`` (community, editable by anyone who can see the wiki), or a
+``Profile`` directly (personal, Vault-level - not tied to any one pin or
+wiki), mirroring how ``CustomLayer`` scopes its own pin/wiki split. Albums
+never span owners - a pin album holds only that pin's photos, a wiki album
+only that wiki's, and a vault album only its owning profile's own uploads -
+so an album can't be used to pull a private pin photo onto a shared surface.
 
 ``kind`` marks albums that carry extra behaviour beyond grouping. Only
 ``TIMELAPSE`` exists so far and nothing acts on it yet; it's declared now so
@@ -18,8 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, SET_NULL, CharField, ForeignKey, IntegerField, TextChoices, TextField
-from django.db.models.constraints import UniqueConstraint
+from django.db.models import CASCADE, SET_NULL, CharField, ForeignKey, IntegerField, Q, TextChoices, TextField
+from django.db.models.constraints import CheckConstraint, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.album.queryset import AlbumItemManager, AlbumManager
@@ -95,7 +97,7 @@ def album_kind_spec(kind: str) -> AlbumKindSpec:
 
 
 class Album(abstract.PublicDashboardModel):
-    """A named grouping of photos belonging to one pin or one wiki.
+    """A named grouping of photos belonging to one pin, one wiki, or one profile's Vault.
 
     Attributes:
         name: User-facing album title.
@@ -107,7 +109,10 @@ class Album(abstract.PublicDashboardModel):
             written when the user drags a photo.
         parent_pin: The Pin this album belongs to, if personal.
         parent_wiki: The Wiki this album belongs to, if community.
-        profile: The profile that created the album.
+        parent_profile: The Profile this album belongs to directly, if it's a
+            Vault album - not tied to any one pin or wiki.
+        profile: The profile that created the album (the owner, for a pin/vault
+            album; whoever curated it, for a community wiki album).
         cover_image: Optional explicit cover; falls back to the first item.
     """
 
@@ -118,6 +123,7 @@ class Album(abstract.PublicDashboardModel):
 
     parent_pin = ForeignKey("dashboard.Pin", on_delete=CASCADE, null=True, blank=True, related_name="albums")
     parent_wiki = ForeignKey("dashboard.Wiki", on_delete=CASCADE, null=True, blank=True, related_name="albums")
+    parent_profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="vault_albums")
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="albums")
 
     # SET_NULL rather than CASCADE - deleting the photo chosen as the cover
@@ -127,6 +133,7 @@ class Album(abstract.PublicDashboardModel):
     if TYPE_CHECKING:
         parent_pin_id: int | None
         parent_wiki_id: int | None
+        parent_profile_id: int | None
         profile_id: int
         cover_image_id: int | None
         items: DjangoManager[AlbumItem]
@@ -160,16 +167,21 @@ class Album(abstract.PublicDashboardModel):
     def _slugify_qs(self):
         """Scope slug uniqueness to this album's own owner.
 
-        Two different pins (or a pin and a wiki) may each have an album named
-        "Interior", so uniqueness is per-owner rather than global.
+        Two different pins (or a pin and a wiki, or a vault) may each have an
+        album named "Interior", so uniqueness is per-owner rather than global.
         """
-        qs = Album.objects.filter(parent_pin_id=self.parent_pin_id, parent_wiki_id=self.parent_wiki_id)
+        qs = Album.objects.filter(parent_pin_id=self.parent_pin_id, parent_wiki_id=self.parent_wiki_id, parent_profile_id=self.parent_profile_id)
         if self.pk:
             qs = qs.exclude(pk=self.pk)
         return qs
 
     def __str__(self) -> str:
-        owner = f"pin={self.parent_pin_id}" if self.parent_pin_id else f"wiki={self.parent_wiki_id}"
+        if self.parent_pin_id:
+            owner = f"pin={self.parent_pin_id}"
+        elif self.parent_wiki_id:
+            owner = f"wiki={self.parent_wiki_id}"
+        else:
+            owner = f"vault={self.parent_profile_id}"
         return f"{self.name} [{owner}]"
 
     class Meta(abstract.PublicDashboardModel.Meta):
@@ -178,6 +190,15 @@ class Album(abstract.PublicDashboardModel):
         constraints = [
             UniqueConstraint(fields=["parent_pin", "slug"], name="uq_album_pin_slug"),
             UniqueConstraint(fields=["parent_wiki", "slug"], name="uq_album_wiki_slug"),
+            UniqueConstraint(fields=["parent_profile", "slug"], name="uq_album_profile_slug"),
+            CheckConstraint(
+                condition=(
+                    Q(parent_pin__isnull=False, parent_wiki__isnull=True, parent_profile__isnull=True)
+                    | Q(parent_pin__isnull=True, parent_wiki__isnull=False, parent_profile__isnull=True)
+                    | Q(parent_pin__isnull=True, parent_wiki__isnull=True, parent_profile__isnull=False)
+                ),
+                name="ck_album_exactly_one_owner",
+            ),
         ]
         indexes = []
 

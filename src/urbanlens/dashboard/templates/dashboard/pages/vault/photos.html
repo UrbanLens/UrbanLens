@@ -1,7 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load vendor_assets %}
 {% load static %}
-{% load memories_components %}
 
 {% block header %}
 {# Leaflet powers the "confirm where this pin goes" dialog's placement map. #}
@@ -15,18 +14,10 @@
 {% include "dashboard/partials/ui/_page_hero.html" with icon="photo_library" title="Photos" subtitle="Every photo you've added, and a quick way to turn them into visits." modifier="top" %}
 {% endblock %}
 
-{% block subnav %}
-<div class="ul-page-subnav">
-    <div class="ul-page-subnav__inner">
-        {% memories_tabs "photos" %}
-    </div>
-</div>
-{% endblock %}
-
 {% block content %}
 <div id="photos-page" class="memories-tab-page"
-     data-upload-url="{% url 'memories.photos.upload' %}"
-     data-action-base="{% url 'memories.photos' %}"
+     data-upload-url="{% url 'vault.photos.upload' %}"
+     data-action-base="{% url 'vault.photos' %}"
      data-storage-used="{{ storage_used_bytes }}"
      data-storage-quota="{{ storage_quota_bytes|default_if_none:'' }}"
      data-max-file-size="{{ max_upload_file_size_bytes }}">
@@ -47,10 +38,10 @@
 
         {# -- Organize queue (re-fetches itself after uploads land) ----------- #}
         <div id="photos-attention-wrap"
-             hx-get="{% url 'memories.photos.queue' %}"
+             hx-get="{% url 'vault.photos.queue' %}"
              hx-trigger="refreshQueue from:body"
              hx-swap="innerHTML">
-            {% include "dashboard/partials/memories/_photo_attention.html" %}
+            {% include "dashboard/partials/vault/_photo_attention.html" %}
         </div>
 
         {# -- Full gallery ---------------------------------------------------- #}
@@ -61,7 +52,7 @@
             </div>
             {% if images %}
             <ul class="photos-grid" id="photo-grid">
-                {% include "dashboard/partials/memories/_photo_grid.html" %}
+                {% include "dashboard/partials/vault/_photo_grid.html" %}
             </ul>
             {% else %}
             <div class="photos-empty">

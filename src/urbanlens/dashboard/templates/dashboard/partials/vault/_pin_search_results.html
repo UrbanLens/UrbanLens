@@ -8,7 +8,7 @@ Context:
 {% endcomment %}
 {% for r in results %}
 <button type="button" class="photo-pin-result"
-        hx-post="{% url 'memories.photos.action' image_id 'log-visit' %}"
+        hx-post="{% url 'vault.photos.action' image_id 'log-visit' %}"
         hx-vals='{"pin_slug": "{{ r.pin_slug }}"}'
         hx-target="#photo-card-{{ image_id }}"
         hx-swap="outerHTML">

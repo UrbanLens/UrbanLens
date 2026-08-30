@@ -6,7 +6,7 @@ Context:
 {% endcomment %}
 <input type="search" class="photo-pin-search-input" placeholder="Search your pins by name…"
        aria-label="Search your pins"
-       hx-get="{% url 'memories.photos.pin_search' %}"
+       hx-get="{% url 'vault.photos.pin_search' %}"
        hx-trigger="keyup changed delay:300ms, search"
        hx-target="#pin-results-{{ image.pk }}"
        hx-swap="innerHTML"

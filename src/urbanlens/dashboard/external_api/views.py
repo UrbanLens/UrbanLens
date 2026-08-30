@@ -1362,7 +1362,7 @@ class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
         # Reached only when there's no wiki copy to protect, or the caller
         # explicitly asked to withdraw it too - either way nothing is left that
         # should keep this row alive, regardless of any pin still attached.
-        # Matches controllers.photos.PhotoActionView.delete_photo: drop the
+        # Matches controllers.vault_photos.PhotoActionView.delete_photo: drop the
         # stored file before the row, so deleting the row can't orphan bytes -
         # delete_stored_file has its own reference-count check for a file
         # shared with another row (e.g. pin-to-pin sharing).

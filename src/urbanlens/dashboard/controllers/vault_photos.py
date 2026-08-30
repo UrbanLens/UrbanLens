@@ -1,4 +1,4 @@
-"""Memories → Photos page: site-wide gallery, uploads, and organizing photos into visits."""
+"""Vault → Photos page: site-wide gallery, uploads, and organizing photos into visits."""
 
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ def _attention_cards(profile: Profile) -> list[dict]:
 
 
 def _photo_issues(profile: Profile) -> dict:
-    """Pending upload failures and metadata conflicts for Memories → Photos."""
+    """Pending upload failures and metadata conflicts for Vault → Photos."""
     failures = list(PhotoUploadFailure.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING).select_related("pin", "album").order_by("-created")[:40])
     conflicts = list(PhotoMetadataConflict.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING).select_related("existing_image", "new_image").order_by("-created")[:40])
     return {"upload_failures": failures, "metadata_conflicts": conflicts}
@@ -127,15 +127,15 @@ def _render_card(request: HttpRequest, image: Image, *, toast: str, level: str =
     """
     suggestion = VisitSuggestion.objects.filter(origin_image=image, status=VisitSuggestionStatus.PENDING).select_related("location").first()
     state = "suggested" if suggestion else classify_photo(image)
-    response = render(request, "dashboard/partials/memories/_photo_card.html", {"image": image, "state": state, "suggestion": suggestion})
+    response = render(request, "dashboard/partials/vault/_photo_card.html", {"image": image, "state": state, "suggestion": suggestion})
     response["HX-Trigger"] = json.dumps({"showToast": {"message": toast, "level": level}})
     return response
 
 
-class MemoriesPhotosView(LoginRequiredMixin, View):
-    """The Photos subpage of Memories - upload zone, organize queue, and full gallery.
+class VaultPhotosView(LoginRequiredMixin, View):
+    """The Vault Photos page - upload zone, organize queue, and full gallery.
 
-    GET /memories/photos/
+    GET /vault/photos/
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -155,9 +155,9 @@ class MemoriesPhotosView(LoginRequiredMixin, View):
         used_bytes, exempt_bytes = get_storage_totals(profile)
         return render(
             request,
-            "dashboard/pages/memories/photos.html",
+            "dashboard/pages/vault/photos.html",
             {
-                "page_name": "memories",
+                "page_name": "vault",
                 "attention_cards": _attention_cards(profile),
                 **_photo_issues(profile),
                 "images": page_obj.object_list,
@@ -176,7 +176,7 @@ class MemoriesPhotosView(LoginRequiredMixin, View):
 class PhotoQueueView(LoginRequiredMixin, View):
     """The "needs attention" queue, re-fetched after uploads as ingestion lands.
 
-    GET /memories/photos/queue/
+    GET /vault/photos/queue/
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -191,7 +191,7 @@ class PhotoQueueView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         return render(
             request,
-            "dashboard/partials/memories/_photo_attention.html",
+            "dashboard/partials/vault/_photo_attention.html",
             {"attention_cards": _attention_cards(profile), "profile": profile, **_photo_issues(profile)},
         )
 
@@ -199,7 +199,7 @@ class PhotoQueueView(LoginRequiredMixin, View):
 class PhotoGridPageView(LoginRequiredMixin, View):
     """One page of the full gallery grid, for infinite scroll.
 
-    GET /memories/photos/page/?page=N
+    GET /vault/photos/page/?page=N
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -216,15 +216,15 @@ class PhotoGridPageView(LoginRequiredMixin, View):
         page_obj = get_page(request, gallery, _GALLERY_PAGE_SIZE)
         return render(
             request,
-            "dashboard/partials/memories/_photo_grid.html",
+            "dashboard/partials/vault/_photo_grid.html",
             {"images": page_obj.object_list, "page_obj": page_obj, "profile": profile},
         )
 
 
 class PhotoUploadView(LoginRequiredMixin, View):
-    """Upload one photo to the Memories gallery (called once per file by the page JS).
+    """Upload one photo to the Vault gallery (called once per file by the page JS).
 
-    POST /memories/photos/upload/
+    POST /vault/photos/upload/
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:
@@ -254,7 +254,7 @@ class PhotoUploadView(LoginRequiredMixin, View):
 class PhotoActionView(LoginRequiredMixin, View):
     """Organize actions on a single photo, each returning an HTMX card-removing response.
 
-    POST /memories/photos/<image_id>/<action>/
+    POST /vault/photos/<image_id>/<action>/
     where action is one of accept, reject, create-pin, log-visit, dismiss, delete.
     """
 
@@ -375,7 +375,7 @@ class PhotoActionView(LoginRequiredMixin, View):
 class PhotoPinSearchView(LoginRequiredMixin, View):
     """Autocomplete over the user's own pins, for manually filing a photo.
 
-    GET /memories/photos/pin-search/?q=&image_id=
+    GET /vault/photos/pin-search/?q=&image_id=
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -395,7 +395,7 @@ class PhotoPinSearchView(LoginRequiredMixin, View):
         results = [r for r in search_local(query, profile) if r.type == "pin" and r.pin_slug] if len(query) >= 2 else []
         return render(
             request,
-            "dashboard/partials/memories/_pin_search_results.html",
+            "dashboard/partials/vault/_pin_search_results.html",
             {"results": results, "image_id": image_id, "query": query},
         )
 
@@ -403,7 +403,7 @@ class PhotoPinSearchView(LoginRequiredMixin, View):
 class PhotoPinConfirmView(LoginRequiredMixin, View):
     """Render the "confirm where this pin goes" dialog body for a geotagged photo.
 
-    GET /memories/photos/<image_id>/confirm-pin/
+    GET /vault/photos/<image_id>/confirm-pin/
 
     Shown before creating a pin from a photo that matches none of the user's
     existing pins, so they can see the location, drag the marker, name it, or
@@ -425,13 +425,13 @@ class PhotoPinConfirmView(LoginRequiredMixin, View):
         image = get_object_or_404(Image.objects.select_related("location"), pk=image_id)
         if image.profile_id != profile.pk or image.effective_latitude is None or image.effective_longitude is None:
             raise Http404
-        return render(request, "dashboard/partials/memories/_photo_pin_confirm.html", {"image": image})
+        return render(request, "dashboard/partials/vault/_photo_pin_confirm.html", {"image": image})
 
 
 class PhotoUploadFailureCreateView(LoginRequiredMixin, View):
     """Record a client-side load/processing failure so it can be retried later.
 
-    POST /memories/photos/failures/
+    POST /vault/photos/failures/
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:
@@ -454,7 +454,7 @@ class PhotoUploadFailureCreateView(LoginRequiredMixin, View):
 
 
 class PhotoUploadFailureDismissView(LoginRequiredMixin, View):
-    """Dismiss a recorded upload failure from Memories."""
+    """Dismiss a recorded upload failure from the Vault."""
 
     def post(self, request: HttpRequest, failure_id: int) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)

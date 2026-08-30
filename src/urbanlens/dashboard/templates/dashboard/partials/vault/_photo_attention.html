@@ -1,5 +1,5 @@
 {% comment %}
-The Memories "needs attention" organize queue - a horizontally scrolling band of
+The Vault "needs attention" organize queue - a horizontally scrolling band of
 actionable photo cards. Re-fetched via the `refreshQueue` event after uploads so
 newly ingested suggestions appear without a full page reload.
 
@@ -14,9 +14,9 @@ Context:
     </div>
     <div class="photos-attention-scroll">
         {% for card in attention_cards %}
-        {% include "dashboard/partials/memories/_photo_card.html" with image=card.image state=card.state suggestion=card.suggestion %}
+        {% include "dashboard/partials/vault/_photo_card.html" with image=card.image state=card.state suggestion=card.suggestion %}
         {% endfor %}
     </div>
 </section>
 {% endif %}
-{% include "dashboard/partials/memories/_photo_issues.html" %}
+{% include "dashboard/partials/vault/_photo_issues.html" %}

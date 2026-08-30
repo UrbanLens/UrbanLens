@@ -275,7 +275,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         have not been dismissed - the pool the Memories "needs attention" queue
         surfaces so they can be confirmed, pinned, or manually logged. Photos
         uploaded directly to a pin/wiki gallery are excluded; only bare
-        Memories-page uploads (no pin, no wiki) qualify. Photos staged as scan
+        Vault-page uploads (no pin, no wiki) qualify. Photos staged as scan
         candidates (``pin_suggestion`` set) are also excluded - those belong to
         the Locations review queue, not this one, until their suggestion is
         accepted or rejected.

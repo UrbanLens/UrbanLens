@@ -1,5 +1,5 @@
 {% comment %}
-Upload failures and metadata conflicts on Memories → Photos.
+Upload failures and metadata conflicts on Vault → Photos.
 Expects upload_failures and metadata_conflicts querysets.
 {% endcomment %}
 {% if upload_failures %}
@@ -19,10 +19,10 @@ Expects upload_failures and metadata_conflicts querysets.
           <i class="material-symbols-outlined">upload</i> Retry
           <input type="file" accept="image/*" hidden data-retry-failure="{{ failure.pk }}"
                  data-retry-url="{% if failure.pin %}{% url 'pin.gallery' failure.pin.slug %}{% endif %}"
-                 data-dismiss-url="{% url 'memories.photos.failures.dismiss' failure.pk %}">
+                 data-dismiss-url="{% url 'vault.photos.failures.dismiss' failure.pk %}">
         </label>
         <button type="button" class="btn btn--ghost btn--sm"
-                hx-post="{% url 'memories.photos.failures.dismiss' failure.pk %}"
+                hx-post="{% url 'vault.photos.failures.dismiss' failure.pk %}"
                 hx-target="#photo-failure-{{ failure.pk }}"
                 hx-swap="outerHTML">
           Dismiss
@@ -43,7 +43,7 @@ Expects upload_failures and metadata_conflicts querysets.
   <p class="settings-help">You uploaded this file again. Pick which caption, date, or location to keep — it applies everywhere this photo appears.</p>
   {% for conflict in metadata_conflicts %}
   <form class="photos-issue-card photos-conflict-card" id="photo-conflict-{{ conflict.pk }}"
-        hx-post="{% url 'memories.photos.conflicts.resolve' conflict.pk %}"
+        hx-post="{% url 'vault.photos.conflicts.resolve' conflict.pk %}"
         hx-target="#photo-conflict-{{ conflict.pk }}"
         hx-swap="outerHTML">
     {% csrf_token %}
@@ -63,7 +63,7 @@ Expects upload_failures and metadata_conflicts querysets.
     <div class="photos-issue-actions">
       <button type="submit" class="btn btn--primary btn--sm">Apply to all copies</button>
       <button type="button" class="btn btn--ghost btn--sm"
-              hx-post="{% url 'memories.photos.conflicts.dismiss' conflict.pk %}"
+              hx-post="{% url 'vault.photos.conflicts.dismiss' conflict.pk %}"
               hx-target="#photo-conflict-{{ conflict.pk }}"
               hx-swap="outerHTML">
         Dismiss

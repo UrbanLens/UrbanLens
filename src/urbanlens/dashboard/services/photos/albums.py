@@ -1,11 +1,11 @@
-"""Album membership and ordering for a pin's or wiki's photos.
+"""Album membership and ordering for a pin's, wiki's, or Vault's photos.
 
-Albums group photos that already belong to a place; they never widen who can
-see a photo. Every listing helper here chains ``ImageQuerySet.visible_to`` so
-an album can't surface a photo the viewer wouldn't otherwise be shown, and
-:func:`eligible_images_for` is the single definition of "which photos may go
-in this album" for both the add-photo picker and the add endpoint's own
-validation.
+Albums group photos that already belong to their owner - a place (pin/wiki)
+or a profile's own Vault; they never widen who can see a photo. Every listing
+helper here chains ``ImageQuerySet.visible_to`` so an album can't surface a
+photo the viewer wouldn't otherwise be shown, and :func:`eligible_images_for`
+is the single definition of "which photos may go in this album" for both the
+add-photo picker and the add endpoint's own validation.
 """
 
 from __future__ import annotations
@@ -19,6 +19,8 @@ from django.db.models import Q
 from urbanlens.dashboard.models.album.model import Album, AlbumItem
 from urbanlens.dashboard.models.album.sort import AlbumSort
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.wiki.model import Wiki
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Sequence
@@ -27,8 +29,6 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.images.model import Image
-    from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.wiki.model import Wiki
 
 
 #: How many photo tiles a grid page carries. Sized so a typical desktop
@@ -53,42 +53,66 @@ class AlbumListEntry:
     date_end: datetime | None
 
 
-def owner_kwargs(owner: Pin | Wiki) -> dict:
-    """Return the Album FK kwargs (``parent_pin``/``parent_wiki``) for *owner*.
+def owner_kwargs(owner: Pin | Wiki | Profile) -> dict:
+    """Return the Album FK kwargs (``parent_pin``/``parent_wiki``/``parent_profile``) for *owner*.
 
     Args:
-        owner: The Pin or Wiki that owns the album.
+        owner: The Pin, Wiki, or Profile (Vault) that owns the album.
 
     Returns:
         A dict suitable for splatting into ``Album.objects.create``/``filter``.
     """
-    return {"parent_pin": owner} if isinstance(owner, Pin) else {"parent_wiki": owner}
+    if isinstance(owner, Pin):
+        return {"parent_pin": owner}
+    if isinstance(owner, Profile):
+        return {"parent_profile": owner}
+    return {"parent_wiki": owner}
 
 
-def album_owner(album: Album) -> Pin | Wiki:
+def owner_kwargs_to_image_scope(owner: Pin | Wiki | Profile) -> dict:
+    """Return the ``Image`` filter kwargs (``pin``/``wiki``/``profile``) scoping *owner*'s photos.
+
+    Distinct from :func:`owner_kwargs` (which names the ``Album`` FK, not the
+    ``Image`` one) - a vault owner's photos are its uploads (``Image.profile``),
+    not photos filed to a place.
+
+    Args:
+        owner: The Pin, Wiki, or Profile (Vault) whose photos to scope to.
+
+    Returns:
+        A dict suitable for splatting into an ``Image`` queryset filter.
+    """
+    if isinstance(owner, Pin):
+        return {"pin": owner}
+    if isinstance(owner, Profile):
+        return {"profile": owner}
+    return {"wiki": owner}
+
+
+def album_owner(album: Album) -> Pin | Wiki | Profile:
     """Return whichever parent owns *album*.
 
     Args:
         album: The album to resolve.
 
     Returns:
-        The owning Pin or Wiki.
+        The owning Pin, Wiki, or Profile.
 
     Raises:
-        ValueError: The album has neither parent set, which the create paths
+        ValueError: The album has no parent set, which the create paths
             never produce.
     """
-    owner = album.parent_pin or album.parent_wiki
+    owner = album.parent_pin or album.parent_wiki or album.parent_profile
     if owner is None:
-        raise ValueError(f"Album {album.pk} has no parent pin or wiki.")
+        raise ValueError(f"Album {album.pk} has no parent pin, wiki, or profile.")
     return owner
 
 
-def albums_for_owner(owner: Pin | Wiki) -> QuerySet[Album]:
+def albums_for_owner(owner: Pin | Wiki | Profile) -> QuerySet[Album]:
     """Every album belonging to *owner*.
 
     Args:
-        owner: The Pin or Wiki whose albums to list.
+        owner: The Pin, Wiki, or Profile whose albums to list.
 
     Returns:
         The owner's albums, in the model's default (name) order.
@@ -96,11 +120,11 @@ def albums_for_owner(owner: Pin | Wiki) -> QuerySet[Album]:
     return albums_for_owners([owner])
 
 
-def albums_for_owners(owners: Sequence[Pin | Wiki]) -> QuerySet[Album]:
+def albums_for_owners(owners: Sequence[Pin | Wiki | Profile]) -> QuerySet[Album]:
     """Every album belonging to any of *owners*.
 
     Args:
-        owners: Pins and/or wikis whose albums to list.
+        owners: Pins, wikis, and/or profiles whose albums to list.
 
     Returns:
         Those albums, with ``parent_pin`` selected for child-pin labels.
@@ -113,19 +137,20 @@ def albums_for_owners(owners: Sequence[Pin | Wiki]) -> QuerySet[Album]:
     return Album.objects.filter(query).select_related("cover_image", "parent_pin")
 
 
-def _owner_conceal(owner: Pin | Wiki, viewer: Profile | None) -> bool:
+def _owner_conceal(owner: Pin | Wiki | Profile, viewer: Profile | None) -> bool:
     """Whether *viewer* sees the concealed form of *owner*'s wiki.
 
-    Always False for a Pin - concealment is a wiki-only concept.
+    Always False for a Pin or a Vault (Profile-owned) album - concealment is a
+    wiki-only concept.
 
     Args:
-        owner: The Pin or Wiki whose albums/photos are being resolved.
+        owner: The Pin, Wiki, or Profile whose albums/photos are being resolved.
         viewer: The browsing profile, or None for anonymous.
 
     Returns:
         Whether album/photo visibility here must also apply concealment.
     """
-    if isinstance(owner, Pin):
+    if isinstance(owner, (Pin, Profile)):
         return False
     from urbanlens.dashboard.services.wiki.concealment import concealment_active
 
@@ -162,7 +187,7 @@ def _visible_image_ids(image_ids: Collection[int], viewer: Profile | None, *, co
     return set(qs.values_list("pk", flat=True))
 
 
-def albums_with_images(owner: Pin | Wiki, viewer: Profile | None) -> list[tuple[Album, list[Image]]]:
+def albums_with_images(owner: Pin | Wiki | Profile, viewer: Profile | None) -> list[tuple[Album, list[Image]]]:
     """Every album of *owner* paired with its viewer-visible photos.
 
     Costs a fixed three queries (albums, memberships, visibility) no matter
@@ -170,7 +195,7 @@ def albums_with_images(owner: Pin | Wiki, viewer: Profile | None) -> list[tuple[
     each one, and resolving those per album is an N+1.
 
     Args:
-        owner: The Pin or Wiki whose albums to list.
+        owner: The Pin, Wiki, or Profile whose albums to list.
         viewer: The browsing profile, for the photo-visibility gate.
 
     Returns:
@@ -206,7 +231,7 @@ def albums_with_images(owner: Pin | Wiki, viewer: Profile | None) -> list[tuple[
     return result
 
 
-def albums_listing(owner: Pin | Wiki | Sequence[Pin | Wiki], viewer: Profile | None) -> list[AlbumListEntry]:
+def albums_listing(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> list[AlbumListEntry]:
     """Every album of *owner* with cover, count, and date range.
 
     Same visibility rules as :func:`albums_with_images`. Membership rows are
@@ -214,7 +239,7 @@ def albums_listing(owner: Pin | Wiki | Sequence[Pin | Wiki], viewer: Profile | N
     Pass a sequence of pins to include child-pin albums on a parent Photos tab.
 
     Args:
-        owner: The Pin or Wiki whose albums to list, or several of them.
+        owner: The Pin, Wiki, or Profile whose albums to list, or several of them.
         viewer: The browsing profile, for the photo-visibility gate.
 
     Returns:
@@ -222,7 +247,7 @@ def albums_listing(owner: Pin | Wiki | Sequence[Pin | Wiki], viewer: Profile | N
     """
     from urbanlens.dashboard.models.images.model import Image
 
-    owners: list[Pin | Wiki] = list(owner) if isinstance(owner, (list, tuple)) else [owner]
+    owners: list[Pin | Wiki | Profile] = [owner] if isinstance(owner, (Pin, Wiki, Profile)) else list(owner)
     conceal = _owner_conceal(owners[0], viewer) if len(owners) == 1 else False
     albums_qs = albums_for_owners(owners)
     if conceal:
@@ -256,16 +281,16 @@ def albums_listing(owner: Pin | Wiki | Sequence[Pin | Wiki], viewer: Profile | N
     return [AlbumListEntry(album=album, photo_count=count, cover=covers.get(cover_id) if cover_id else None, date_start=date_start, date_end=date_end) for album, count, cover_id, date_start, date_end in prepared]
 
 
-def eligible_images_for(owner: Pin | Wiki, viewer: Profile | None) -> QuerySet[Image]:
+def eligible_images_for(owner: Pin | Wiki | Profile, viewer: Profile | None) -> QuerySet[Image]:
     """Photos that may be placed in one of *owner*'s albums.
 
     An album is strictly scoped to its owner: a pin album may only hold that
-    pin's photos, and a wiki album only that wiki's. That keeps a private pin
-    photo from being pulled onto a shared community surface just by adding it
-    to an album there.
+    pin's photos, a wiki album only that wiki's, and a vault album only its
+    owning profile's own uploads. That keeps a private pin photo from being
+    pulled onto a shared community surface just by adding it to an album there.
 
     Args:
-        owner: The Pin or Wiki that owns the album.
+        owner: The Pin, Wiki, or Profile (Vault) that owns the album.
         viewer: The profile browsing, for the standard photo-visibility gate.
 
     Returns:
@@ -273,8 +298,7 @@ def eligible_images_for(owner: Pin | Wiki, viewer: Profile | None) -> QuerySet[I
     """
     from urbanlens.dashboard.models.images.model import Image
 
-    scope = {"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}
-    qs = Image.objects.filter(**scope).visible_to(viewer).order_by("-created")
+    qs = Image.objects.filter(**owner_kwargs_to_image_scope(owner)).visible_to(viewer).order_by("-created")
     if _owner_conceal(owner, viewer):
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 
@@ -282,7 +306,7 @@ def eligible_images_for(owner: Pin | Wiki, viewer: Profile | None) -> QuerySet[I
     return qs
 
 
-def album_images(album: Album, viewer: Profile | None, owner: Pin | Wiki | None = None) -> list[Image]:
+def album_images(album: Album, viewer: Profile | None, owner: Pin | Wiki | Profile | None = None) -> list[Image]:
     """The photos in *album*, in the album's current sort.
 
     Date and name sorts read live photo metadata. Custom order is only
@@ -309,7 +333,7 @@ def album_images(album: Album, viewer: Profile | None, owner: Pin | Wiki | None 
 def visible_album_item_pairs(
     album: Album,
     viewer: Profile | None,
-    owner: Pin | Wiki | None = None,
+    owner: Pin | Wiki | Profile | None = None,
 ) -> list[tuple[int, int]]:
     """``(item_id, image_id)`` pairs the viewer may see, in display order."""
     resolved_owner = owner if owner is not None else album_owner(album)
@@ -345,7 +369,7 @@ def _hydrate_album_items(pairs: Sequence[tuple[int, int]]) -> list[Image]:
 def album_images_page(
     album: Album,
     viewer: Profile | None,
-    owner: Pin | Wiki | None = None,
+    owner: Pin | Wiki | Profile | None = None,
     *,
     offset: int = 0,
     limit: int = ALBUM_GRID_PAGE_SIZE,
@@ -408,25 +432,25 @@ def cover_from_ids(album: Album, visible_ids: Sequence[int]) -> Image | None:
     return Image.objects.filter(pk=wanted).first()
 
 
-def loose_images_for(owner: Pin | Wiki | Sequence[Pin | Wiki], viewer: Profile | None) -> QuerySet[Image]:
+def loose_images_for(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> QuerySet[Image]:
     """*owner*'s photos that aren't in any of its albums yet.
 
     Pass a sequence of pins to include child-pin photos when the parent
     Photos tab is showing descendant details.
 
     Args:
-        owner: The Pin or Wiki whose photos to list, or several of them.
+        owner: The Pin, Wiki, or Profile whose photos to list, or several of them.
         viewer: The profile browsing, for the standard photo-visibility gate.
 
     Returns:
         Matching photos not referenced by any of these owners' albums, newest first.
     """
-    owners: list[Pin | Wiki] = list(owner) if isinstance(owner, (list, tuple)) else [owner]
+    owners: list[Pin | Wiki | Profile] = [owner] if isinstance(owner, (Pin, Wiki, Profile)) else list(owner)
     album_ids = albums_for_owners(owners).values_list("pk", flat=True)
     filed_image_ids = AlbumItem.objects.filter(album_id__in=album_ids).values_list("image_id", flat=True)
     query = Q()
     for item in owners:
-        query |= Q(**({"pin": item} if isinstance(item, Pin) else {"wiki": item}))
+        query |= Q(**owner_kwargs_to_image_scope(item))
     from urbanlens.dashboard.models.images.model import Image
 
     qs = Image.objects.filter(query).visible_to(viewer).order_by("-created").exclude(pk__in=filed_image_ids)

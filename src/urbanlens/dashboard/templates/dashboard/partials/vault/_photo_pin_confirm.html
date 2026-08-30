@@ -23,7 +23,7 @@ Context:
      data-places-url="{% url 'map.autocomplete.places' %}"
      data-resolve-url="{% url 'map.resolve_place' %}"
      data-pins-url="{% url 'map.pins' %}"
-     data-log-visit-url="{% url 'memories.photos.action' image.pk 'log-visit' %}"
+     data-log-visit-url="{% url 'vault.photos.action' image.pk 'log-visit' %}"
      data-profile-uuid="{{ request.user.profile.uuid|default:'' }}">
 
     <p class="photo-pin-confirm-intro">
@@ -41,7 +41,7 @@ Context:
     <p class="form-hint" id="photo-pin-confirm-attribution" aria-live="polite"></p>
 
     <form class="photo-pin-confirm-form"
-          hx-post="{% url 'memories.photos.action' image.pk 'create-pin' %}"
+          hx-post="{% url 'vault.photos.action' image.pk 'create-pin' %}"
           hx-target="#photo-card-{{ image.pk }}"
           hx-swap="outerHTML">
         {% csrf_token %}

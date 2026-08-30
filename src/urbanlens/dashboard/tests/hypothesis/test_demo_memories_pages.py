@@ -55,4 +55,4 @@ class DemoMemoriesPagesRenderTests(TestCase):
         self._assert_ok("memories.journal")
 
     def test_the_photos_page_renders(self) -> None:
-        self._assert_ok("memories.photos")
+        self._assert_ok("vault.photos")

@@ -72,7 +72,7 @@ def _pending_suggestions(profile: Profile) -> QuerySet[PinSuggestion]:
 def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False, view_pin_url: str | None = None) -> HttpResponse:
     """Return an empty HTMX response that removes the swapped card and fires a toast.
 
-    Mirrors ``controllers.photos._toast``. When ``view_pin_url`` is given (a
+    Mirrors ``controllers.vault_photos._toast``. When ``view_pin_url`` is given (a
     brand-new pin was just created), the toast includes a "View pin" link -
     toastr renders the message as HTML, same as the bulk-delete undo toast on
     the main map.

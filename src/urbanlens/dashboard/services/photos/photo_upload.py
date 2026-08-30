@@ -1,6 +1,6 @@
 """Shared photo/video/document upload pipeline.
 
-Extracted from ``controllers.photos.PhotoUploadView.post`` so the Memories
+Extracted from ``controllers.vault_photos.PhotoUploadView.post`` so the Vault
 page's drag-and-drop uploader and the external API's ``POST photos/`` run
 byte-for-byte the same admission checks: media-type sniffing, the per-account
 video/document feature gates, the malware/size/dimension checks in

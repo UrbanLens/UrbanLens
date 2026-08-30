@@ -412,6 +412,11 @@ class Image(abstract.FrontendDashboardModel):
         direct_message_id: int | None
         profile_id: int | None
         pin_suggestion_id: int | None
+        # Not a real column - stamped onto an instance by album-listing helpers
+        # (services.photos.albums) to carry its AlbumItem membership row's pk
+        # alongside the photo, so templates can address removal/reordering
+        # without a second lookup. Absent on an Image loaded any other way.
+        album_item_id: int
 
     objects = ImageManager()
 

@@ -589,7 +589,7 @@ class PhotoSearchProvider(SearchProvider):
             elif image.location is not None and image.location.slug:
                 url = reverse("location.wiki", kwargs={"location_slug": image.location.slug})
             else:
-                url = reverse("memories.photos")
+                url = reverse("vault.photos")
             subtitle_bits = []
             if image.location is not None and image.location.locality:
                 subtitle_bits.append(image.location.locality)

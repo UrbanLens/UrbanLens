@@ -626,13 +626,13 @@ var allSelected = true;
 
 /* -- Photos/videos dropped alongside location-data files --------------- */
 /* These are attached to nothing in particular - they're uploaded through
-   the exact same endpoint/pipeline as the Memories > Photos page, and get
+   the exact same endpoint/pipeline as the Vault > Photos page, and get
    matched to pins (including ones this same import just created) later by
    the existing GPS-based visit-suggestion matching. No pin-specific upload
    code lives here. */
 var acceptsMedia = {% if import_variant != "memories" %}true{% else %}false{% endif %};
 var canUploadVideos = {{ can_upload_videos|yesno:"true,false" }};
-var MEDIA_UPLOAD_URL = '{% url "memories.photos.upload" %}';
+var MEDIA_UPLOAD_URL = '{% url "vault.photos.upload" %}';
 var IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|heic|heif|bmp|tiff?|avif)$/i;
 var VIDEO_EXT_RE = /\.(mp4|mov|m4v|webm|avi|mkv|3gp)$/i;
 

@@ -1,10 +1,13 @@
 """Album views - the Photos subpage on a pin or wiki, and album CRUD.
 
-Two parents can own an Album (see :class:`~urbanlens.dashboard.models.album.model.Album`):
-a Pin (personal, editable only by its owner) or a Wiki (community, editable by
-any signed-in user with wiki access) - the same permission split
-``controllers.custom_layers`` uses, resolved here by the same
-optional-URL-kwarg pattern so one view class serves both routes.
+Three kinds of owner can hold an Album (see
+:class:`~urbanlens.dashboard.models.album.model.Album`): a Pin (personal,
+editable only by its owner), a Wiki (community, editable by any signed-in user
+with wiki access), or a Profile directly (a Vault album - personal, not tied
+to any one place). Pin/wiki resolution follows the same permission split
+``controllers.custom_layers`` uses, by the same optional-URL-kwarg pattern so
+one view class serves both routes; a Vault owner instead resolves from the
+request itself, since there is exactly one vault per profile.
 """
 
 from __future__ import annotations
@@ -63,7 +66,7 @@ logger = logging.getLogger(__name__)
 _MAX_ALBUM_NAME_LENGTH = column_max_length(Album, "name")
 
 
-def _panel_owner(request: HttpRequest, owner: Pin | Wiki) -> Pin | Wiki:
+def _panel_owner(request: HttpRequest, owner: Pin | Wiki | Profile) -> Pin | Wiki | Profile:
     """The pin whose Photos tab we should re-render after a mutation.
 
     Album action URLs use the album's own pin slug. When the user is viewing
@@ -78,7 +81,7 @@ def _panel_owner(request: HttpRequest, owner: Pin | Wiki) -> Pin | Wiki:
     return owner
 
 
-def _include_children(request: HttpRequest, owner: Pin | Wiki) -> bool:
+def _include_children(request: HttpRequest, owner: Pin | Wiki | Profile) -> bool:
     """Whether this request should list descendant pins'/wikis' albums and photos."""
     flag = request.GET.get("children") or request.POST.get("children")
     if flag == "1" and isinstance(owner, (Pin, Wiki)):
@@ -86,8 +89,8 @@ def _include_children(request: HttpRequest, owner: Pin | Wiki) -> bool:
     return bool(request.GET.get("from_pin") or request.POST.get("from_pin")) and isinstance(owner, Pin)
 
 
-def _listing_owners(owner: Pin | Wiki, include_children: bool) -> list[Pin | Wiki]:
-    """The pin/wiki set whose albums appear on this Photos tab."""
+def _listing_owners(owner: Pin | Wiki | Profile, include_children: bool) -> list[Pin | Wiki | Profile]:
+    """The pin/wiki/vault set whose albums appear on this Photos tab."""
     if include_children and isinstance(owner, Pin):
         return list(Pin.objects.filter(pk=owner.pk).with_descendants().select_related("location"))
     if include_children and isinstance(owner, Wiki):
@@ -187,13 +190,29 @@ def _owner_slug(owner: Pin | Wiki) -> str:
     return slug
 
 
-def _url_prefix(owner: Pin | Wiki) -> str:
+def _url_prefix(owner: Pin | Wiki | Profile) -> str:
     """Return the URL-name prefix for *owner*'s album routes."""
-    return "pin.albums" if isinstance(owner, Pin) else "location.wiki.albums"
+    if isinstance(owner, Pin):
+        return "pin.albums"
+    if isinstance(owner, Profile):
+        return "vault.photos.albums"
+    return "location.wiki.albums"
+
+
+def _owner_url_args(owner: Pin | Wiki | Profile) -> list[str]:
+    """Return the positional ``reverse()`` args identifying *owner* in its own URL namespace.
+
+    A vault (Profile-owned) album has no owner-slug segment - there is one
+    implicit album space per user, resolved from the request - so this is
+    empty for a Profile and ``[_owner_slug(owner)]`` for a Pin/Wiki.
+    """
+    if isinstance(owner, Profile):
+        return []
+    return [_owner_slug(owner)]
 
 
 def _album_row(
-    owner: Pin | Wiki,
+    owner: Pin | Wiki | Profile,
     album: Album,
     images: list | None = None,
     *,
@@ -213,7 +232,7 @@ def _album_row(
     *images* when the caller has that list.
 
     Args:
-        owner: The Pin or Wiki the album belongs to.
+        owner: The Pin, Wiki, or Profile the album belongs to.
         album: The album to describe.
         images: The album's viewer-visible photos, in display order, when
             the caller already has them. Omitted on the listing path.
@@ -233,7 +252,7 @@ def _album_row(
         if date_start is None and date_end is None:
             date_start, date_end = album_date_range(images)
     prefix = _url_prefix(owner)
-    slug = _owner_slug(owner)
+    owner_args = _owner_url_args(owner)
     return {
         "album": album,
         "images": images or [],
@@ -243,16 +262,16 @@ def _album_row(
         "date_end": date_end,
         # The card's own href, so an album tile is a real link (middle-click,
         # copy-link, no-JS) even though HTMX normally handles the click.
-        "list_url": reverse(prefix, args=[slug]),
-        "detail_url": reverse(f"{prefix}.detail", args=[slug, album.slug]),
-        "edit_url": reverse(f"{prefix}.edit", args=[slug, album.slug]),
-        "delete_url": reverse(f"{prefix}.delete", args=[slug, album.slug]),
-        "add_url": reverse(f"{prefix}.add", args=[slug, album.slug]),
-        "remove_url": reverse(f"{prefix}.remove", args=[slug, album.slug]),
-        "reorder_url": reverse(f"{prefix}.reorder", args=[slug, album.slug]),
-        "upload_url": reverse(f"{prefix}.upload", args=[slug, album.slug]),
-        "items_url": reverse(f"{prefix}.items", args=[slug, album.slug]),
-        "move_url": reverse(f"{prefix}.move", args=[slug, album.slug]) if isinstance(owner, Pin) else "",
+        "list_url": reverse(prefix, args=owner_args),
+        "detail_url": reverse(f"{prefix}.detail", args=[*owner_args, album.slug]),
+        "edit_url": reverse(f"{prefix}.edit", args=[*owner_args, album.slug]),
+        "delete_url": reverse(f"{prefix}.delete", args=[*owner_args, album.slug]),
+        "add_url": reverse(f"{prefix}.add", args=[*owner_args, album.slug]),
+        "remove_url": reverse(f"{prefix}.remove", args=[*owner_args, album.slug]),
+        "reorder_url": reverse(f"{prefix}.reorder", args=[*owner_args, album.slug]),
+        "upload_url": reverse(f"{prefix}.upload", args=[*owner_args, album.slug]),
+        "items_url": reverse(f"{prefix}.items", args=[*owner_args, album.slug]),
+        "move_url": reverse(f"{prefix}.move", args=[*owner_args, album.slug]) if isinstance(owner, Pin) else "",
         "owner_pin_name": "",
         "detail_query": "",
     }
@@ -292,11 +311,11 @@ def _photo_map_payload(images: list, viewer: Profile | None) -> list[dict]:
     return payload
 
 
-def _album_detail_context(owner: Pin | Wiki, album: Album, viewer: Profile) -> dict:
+def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Profile) -> dict:
     """Assemble the single-album view's context.
 
     Args:
-        owner: The Pin or Wiki the album belongs to.
+        owner: The Pin, Wiki, or Profile the album belongs to.
         album: The album being shown.
         viewer: The browsing profile.
 
@@ -313,36 +332,39 @@ def _album_detail_context(owner: Pin | Wiki, album: Album, viewer: Profile) -> d
     row = _album_row(owner, album, page, cover=cover, photo_count=total, date_start=date_start, date_end=date_end)
     row["grid_images"] = page
     row["available_images"] = list(eligible_images_for(owner, viewer).exclude(pk__in=visible_ids).only("id", "uuid", "image", "thumbnail", "caption", "source_url"))
-    row["back_url"] = reverse(_url_prefix(owner), args=[_owner_slug(owner)])
+    row["back_url"] = reverse(_url_prefix(owner), args=_owner_url_args(owner))
     row["list_url"] = row["back_url"]
     # The gallery's own per-image endpoint owns repositioning; the album map
     # posts to it rather than growing a second writer for Image coordinates.
-    row["reposition_base"] = reverse("pin.gallery" if isinstance(owner, Pin) else "location.wiki.gallery", args=[_owner_slug(owner)])
+    # A vault album has no such gallery endpoint yet, so its map is read-only -
+    # same fallback the lightbox already uses for a page with no reposition wiring.
+    row["reposition_base"] = "" if isinstance(owner, Profile) else reverse("pin.gallery" if isinstance(owner, Pin) else "location.wiki.gallery", args=_owner_url_args(owner))
     map_images = list(Image.objects.filter(pk__in=visible_ids).select_related("location")) if visible_ids else []
     row["map_photos"] = _photo_map_payload(map_images, viewer)
     row["placed_count"] = len(row["map_photos"])
-    row["context_type"] = "pin" if isinstance(owner, Pin) else "wiki"
+    row["context_type"] = "pin" if isinstance(owner, Pin) else "wiki" if isinstance(owner, Wiki) else "vault"
     row["picker_albums"] = _picker_album_payload(owner, viewer, exclude_slug=album.slug)
     _attach_owner_action_urls(row, owner)
     row["album_bulk_actions"] = _album_bulk_actions(inside_album=True)
     row["profile"] = viewer
     row["grid_page_size"] = ALBUM_GRID_PAGE_SIZE
     row["move_targets"] = [{"slug": pin.slug, "name": pin.effective_name} for pin in move_album_targets(album)] if isinstance(owner, Pin) else []
-    row["failure_url"] = reverse("memories.photos.failures")
+    row["failure_url"] = reverse("vault.photos.failures")
     row["pin"] = owner if isinstance(owner, Pin) else None
     # Fallback centre for an album whose photos carry no coordinates at all;
-    # the map fits to the photos themselves whenever there are any.
-    location = owner.location
+    # the map fits to the photos themselves whenever there are any. A vault
+    # album has no single place to fall back to.
+    location = owner.location if isinstance(owner, (Pin, Wiki)) else None
     row["map_center_lat"] = float(location.latitude) if location is not None and location.latitude is not None else None
     row["map_center_lng"] = float(location.longitude) if location is not None and location.longitude is not None else None
     return row
 
 
-def _photos_context(owner: Pin | Wiki, viewer: Profile | None, *, include_children: bool = False) -> dict:
+def _photos_context(owner: Pin | Wiki | Profile, viewer: Profile | None, *, include_children: bool = False) -> dict:
     """Assemble the Photos subpage context: albums first, then loose photos.
 
     Args:
-        owner: The Pin or Wiki whose photos to show.
+        owner: The Pin, Wiki, or Profile (Vault) whose photos to show.
         viewer: The browsing profile, for the photo-visibility gate.
         include_children: When True on a pin, also list descendant albums and
             unfiled photos.
@@ -355,7 +377,7 @@ def _photos_context(owner: Pin | Wiki, viewer: Profile | None, *, include_childr
     is_pin = isinstance(owner, Pin)
     listing = _listing_owners(owner, include_children)
     children_q = _children_query(include_children)
-    list_url = reverse(_url_prefix(owner), args=[_owner_slug(owner)]) + children_q
+    list_url = reverse(_url_prefix(owner), args=_owner_url_args(owner)) + children_q
     rows = []
     for entry in albums_listing(listing, viewer):
         album_owner = entry.album.parent_pin or entry.album.parent_wiki or owner
@@ -367,7 +389,7 @@ def _photos_context(owner: Pin | Wiki, viewer: Profile | None, *, include_childr
             date_start=entry.date_start,
             date_end=entry.date_end,
         )
-        if include_children and isinstance(album_owner, Pin) and album_owner.pk != owner.pk:
+        if include_children and isinstance(album_owner, Pin) and isinstance(owner, Pin) and album_owner.pk != owner.pk:
             row["owner_pin_name"] = album_owner.effective_name
             row["detail_query"] = urlencode({"back": list_url, "from_pin": _owner_slug(owner), "children": "1"})
         elif include_children and isinstance(album_owner, Wiki) and album_owner.pk != owner.pk:
@@ -376,15 +398,16 @@ def _photos_context(owner: Pin | Wiki, viewer: Profile | None, *, include_childr
         rows.append(row)
     loose_qs = loose_images_for(listing, viewer)
     loose_count = loose_qs.count()
+    is_wiki = isinstance(owner, Wiki)
     ctx = {
         "album_rows": rows,
         "loose_images": list(loose_qs[:ALBUM_GRID_PAGE_SIZE]),
         "loose_count": loose_count,
-        "create_url": reverse(_url_prefix(owner), args=[_owner_slug(owner)]),
+        "create_url": reverse(_url_prefix(owner), args=_owner_url_args(owner)),
         "list_url": list_url,
-        "context_type": "pin" if is_pin else "wiki",
+        "context_type": "pin" if is_pin else "wiki" if is_wiki else "vault",
         "pin": owner if is_pin else None,
-        "wiki": None if is_pin else owner,
+        "wiki": owner if is_wiki else None,
         "album_kind_specs": list(ALBUM_KIND_SPECS.values()),
         "picker_albums": [
             {
@@ -400,8 +423,8 @@ def _photos_context(owner: Pin | Wiki, viewer: Profile | None, *, include_childr
         "profile": viewer,
         "grid_page_size": ALBUM_GRID_PAGE_SIZE,
         "include_children": include_children,
-        "failure_url": reverse("memories.photos.failures"),
-        "move_targets": [{"slug": pin.slug, "name": pin.effective_name} for pin in pin_tree(owner)] if is_pin else [],
+        "failure_url": reverse("vault.photos.failures"),
+        "move_targets": [{"slug": pin.slug, "name": pin.effective_name} for pin in pin_tree(owner)] if isinstance(owner, Pin) else [],
     }
     _attach_owner_action_urls(ctx, owner)
     return ctx
@@ -457,11 +480,11 @@ def _photo_tile(image, request: HttpRequest, viewer: Profile) -> dict:
     return payload
 
 
-def _picker_album_payload(owner: Pin | Wiki, viewer: Profile, *, exclude_slug: str | None = None) -> list[dict]:
+def _picker_album_payload(owner: Pin | Wiki | Profile, viewer: Profile, *, exclude_slug: str | None = None) -> list[dict]:
     """Albums the add/move dialog can target, without dumping every photo URL."""
     rows = []
     prefix = _url_prefix(owner)
-    slug = _owner_slug(owner)
+    owner_args = _owner_url_args(owner)
     for entry in albums_listing(owner, viewer):
         if exclude_slug and entry.album.slug == exclude_slug:
             continue
@@ -471,16 +494,16 @@ def _picker_album_payload(owner: Pin | Wiki, viewer: Profile, *, exclude_slug: s
                 "name": entry.album.name,
                 "photo_count": entry.photo_count,
                 "cover_url": entry.cover.thumb_url if entry.cover else "",
-                "add_url": reverse(f"{prefix}.add", args=[slug, entry.album.slug]),
+                "add_url": reverse(f"{prefix}.add", args=[*owner_args, entry.album.slug]),
             }
         )
     return rows
 
 
-def _attach_owner_action_urls(ctx: dict, owner: Pin | Wiki) -> None:
+def _attach_owner_action_urls(ctx: dict, owner: Pin | Wiki | Profile) -> None:
     """URLs the album UI needs for delete / send-to-wiki / share, when they exist."""
-    slug = _owner_slug(owner)
     if isinstance(owner, Pin):
+        slug = _owner_slug(owner)
         ctx["gallery_bulk_url"] = reverse("pin.gallery.bulk", args=[slug])
         ctx["pin_share_dialog_url"] = reverse("pin.share.dialog", args=[slug])
     else:

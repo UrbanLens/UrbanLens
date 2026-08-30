@@ -86,7 +86,7 @@ class QueryScalingTests(QueryScalingMixin, TestCase):
     # data sizes, came out flat, and is pinned here so it stays that way. The seed
     # above grows pins, labels, images and trips, which is what these list - an
     # endpoint whose row type the seed does not grow would render a constant-size
-    # list and pass without measuring anything. (``memories.photos`` was measured flat
+    # list and pass without measuring anything. (``vault.photos`` was measured flat
     # too, but needs images with real files rather than the bare rows seeded here, so
     # pinning it would mean changing the seed under the four tests above.)
     def test_trips_list_does_not_scale_with_trip_count(self) -> None:

@@ -1,4 +1,4 @@
-"""Organize-photos helpers for the Memories Photos page: pin matching, classification, and visit logging.
+"""Organize-photos helpers for the Vault Photos page: pin matching, classification, and visit logging.
 
 These build on the lower-level PinVisit/VisitSuggestion helpers in
 ``services.visits.visits`` and are the operations the Photos page controllers call when a

@@ -278,7 +278,7 @@ class PhotoPinConfirmViewTests(TestCase):
     def test_confirm_dialog_renders_map_seeded_with_photo_coords(self):
         from django.urls import reverse
 
-        response = self.client.get(reverse("memories.photos.pin_confirm", args=[self.photo.pk]))
+        response = self.client.get(reverse("vault.photos.pin_confirm", args=[self.photo.pk]))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "photo-pin-confirm-map")
@@ -288,7 +288,7 @@ class PhotoPinConfirmViewTests(TestCase):
         from django.urls import reverse
 
         no_coords = baker.make("dashboard.Image", profile=self.profile, pin=None, wiki=None, latitude=None, longitude=None)
-        response = self.client.get(reverse("memories.photos.pin_confirm", args=[no_coords.pk]))
+        response = self.client.get(reverse("vault.photos.pin_confirm", args=[no_coords.pk]))
         self.assertEqual(response.status_code, 404)
 
     @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
@@ -297,7 +297,7 @@ class PhotoPinConfirmViewTests(TestCase):
         from django.urls import reverse
 
         response = self.client.post(
-            reverse("memories.photos.action", args=[self.photo.pk, "create-pin"]),
+            reverse("vault.photos.action", args=[self.photo.pk, "create-pin"]),
             {"latitude": "42.250000", "longitude": "-71.750000", "name": "Ridge Overlook"},
         )
 
@@ -317,7 +317,7 @@ class PhotoPinConfirmViewTests(TestCase):
         self.photo.save(update_fields=["pin", "visit"])
 
         response = self.client.post(
-            reverse("memories.photos.action", args=[self.photo.pk, "create-pin"]),
+            reverse("vault.photos.action", args=[self.photo.pk, "create-pin"]),
             {"latitude": "42.250000", "longitude": "-71.750000"},
         )
 
@@ -325,12 +325,12 @@ class PhotoPinConfirmViewTests(TestCase):
         self.assertIn("already been filed", response["HX-Trigger"])
         self.assertEqual(PinVisit.objects.filter(pin=pin).count(), 1)
 
-    @mock.patch("urbanlens.dashboard.controllers.photos.create_pin_and_log_visit", side_effect=RuntimeError("boom"))
+    @mock.patch("urbanlens.dashboard.controllers.vault_photos.create_pin_and_log_visit", side_effect=RuntimeError("boom"))
     def test_create_pin_post_surfaces_unexpected_errors_as_a_toast(self, _mock_create):
         from django.urls import reverse
 
         response = self.client.post(
-            reverse("memories.photos.action", args=[self.photo.pk, "create-pin"]),
+            reverse("vault.photos.action", args=[self.photo.pk, "create-pin"]),
             {"latitude": "42.250000", "longitude": "-71.750000"},
         )
 
