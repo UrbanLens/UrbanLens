@@ -301,6 +301,13 @@ class HandleChargeRefundedTests(TestCase):
         mock_retrieve.return_value.to_dict.return_value = {"id": "in_1", "subscription": subscription}
         return mock_retrieve
 
+    def _mock_refund_list(self, refunds: list[dict]) -> mock.MagicMock:
+        patcher = mock.patch("stripe.Refund.list")
+        mock_list = patcher.start()
+        self.addCleanup(patcher.stop)
+        mock_list.return_value.auto_paging_iter.return_value = refunds
+        return mock_list
+
     def test_decrements_the_banked_balance_by_the_refunded_amount(self) -> None:
         self._mock_invoice()
         webhooks.handle_event(_charge_refunded_event(refunds=[{"id": "re_1", "amount": 500}]))
@@ -339,6 +346,34 @@ class HandleChargeRefundedTests(TestCase):
         self.sub.refresh_from_db()
         self.assertEqual(self.sub.total_paid_cents, 2000 - 500 - 300)
 
+    def test_paginated_refund_list_fetches_and_applies_every_refund(self) -> None:
+        """Embedded charge refunds can be paginated; the webhook is processed once."""
+        self._mock_invoice()
+        mock_refunds = self._mock_refund_list(
+            [
+                {"id": "re_1", "amount": 200},
+                {"id": "re_2", "amount": 300},
+                {"id": "re_3", "amount": 400},
+            ]
+        )
+
+        webhooks.handle_event(_charge_refunded_event(refunds=[{"id": "re_1", "amount": 200}], has_more=True))
+
+        mock_refunds.assert_called_once_with(charge="ch_1", limit=100)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000 - 200 - 300 - 400)
+
+    def test_missing_refund_list_fetches_charge_refunds(self) -> None:
+        self._mock_invoice()
+        mock_refunds = self._mock_refund_list([{"id": "re_1", "amount": 500}])
+
+        event = {"id": "evt_ref_1", "type": "charge.refunded", "data": {"object": {"id": "ch_1", "invoice": "in_1"}}}
+        webhooks.handle_event(event)
+
+        mock_refunds.assert_called_once_with(charge="ch_1", limit=100)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 1500)
+
     def test_charge_without_an_invoice_is_a_no_op(self) -> None:
         mock_retrieve = self._mock_invoice()
         webhooks.handle_event(_charge_refunded_event(invoice=None, refunds=[{"id": "re_1", "amount": 500}]))
@@ -363,6 +398,7 @@ class HandleChargeRefundedTests(TestCase):
 
     def test_missing_refund_list_does_not_raise(self) -> None:
         self._mock_invoice()
+        self._mock_refund_list([])
         event = {"id": "evt_ref_1", "type": "charge.refunded", "data": {"object": {"id": "ch_1", "invoice": "in_1"}}}
         webhooks.handle_event(event)  # must not raise
 

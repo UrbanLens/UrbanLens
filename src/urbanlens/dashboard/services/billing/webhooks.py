@@ -223,13 +223,10 @@ def _handle_charge_refunded(charge: dict) -> None:
         logger.info("charge.refunded for unknown subscription %s", subscription_id)
         return
 
-    refunds_list = charge.get("refunds") or {}
-    refunds = refunds_list.get("data") or []
+    refunds = _refunds_for_charge(charge)
     if not refunds:
-        logger.warning("charge.refunded %s carried no embedded refund objects; nothing applied", charge.get("id"))
+        logger.warning("charge.refunded %s carried no refund objects; nothing applied", charge.get("id"))
         return
-    if refunds_list.get("has_more"):
-        logger.warning("charge.refunded %s: refund list is paginated; refunds beyond the embedded page were not applied", charge.get("id"))
 
     for refund in refunds:
         refund_id = refund.get("id")
@@ -242,6 +239,29 @@ def _handle_charge_refunded(charge: dict) -> None:
         )
         if created:
             banking.apply_refund(role_subscription, amount)
+
+
+def _refunds_for_charge(charge: dict) -> list[dict]:
+    refunds_list = charge.get("refunds") or {}
+    embedded_refunds = [_stripe_object_to_dict(refund) for refund in refunds_list.get("data") or []]
+    if embedded_refunds and not refunds_list.get("has_more"):
+        return embedded_refunds
+
+    charge_id = charge.get("id")
+    if not charge_id:
+        return embedded_refunds
+
+    fetched_refunds = stripe.Refund.list(charge=charge_id, limit=100)
+    return [_stripe_object_to_dict(refund) for refund in fetched_refunds.auto_paging_iter()]
+
+
+def _stripe_object_to_dict(value: object) -> dict:
+    if isinstance(value, dict):
+        return value
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        return to_dict()
+    return dict(value)
 
 
 def _handle_charge_dispute_closed(dispute: dict) -> None:
