@@ -443,11 +443,7 @@ services:
   # permits loopback connections, which the normal service topology can't
   # satisfy - UL_VALKEY_URL/UL_DB_HOST resolve to container-bridge IPs, so
   # running pytest inside `app` trips the guard on legitimate same-stack
-  # traffic (docs/PROBLEMS.md; decision 2026-07-23: dedicated topology, do NOT
-  # widen the guard). These three services form a "pod": test-db and
-  # test-valkey join test-runner's network namespace (network_mode:
-  # service:test-runner), so inside test-runner both really are localhost and
-  # the guard stays exactly as strict as written.
+  # traffic
   #
   # Usage (fresh throwaway DB every time - no volumes are mounted):
   #   docker compose --profile test up -d --build test-runner test-db test-valkey
@@ -461,15 +457,10 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # Always a dev-grade build: the runner needs the `dev` dependency
-        # group (pytest, hypothesis, mypy) regardless of the host's
-        # UL_ENVIRONMENT (a staging/production value would `uv sync --no-dev`
-        # them away - see x-app-build's comment).
+        # Always a dev-grade build
         UL_ENVIRONMENT: development
         UL_CONTAINER_NAME: ${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test
-    # Bypass /docker-entrypoint.sh: init.py runs migrate+collectstatic against
-    # a DB that pytest hasn't created yet. The runner just stays alive for
-    # `docker compose exec ... pytest` calls.
+    # Bypass /docker-entrypoint.sh: init.py runs migrate+collectstatic
     entrypoint: ["sleep", "infinity"]
     env_file: *app-env-file
     environment:
@@ -547,9 +538,6 @@ volumes:
 networks:
   app_network:
     driver: bridge
-    # Docker defaults new bridge networks to dual-stack, handing containers a ULA
-    # IPv6 address alongside IPv4. Gunicorn only binds 0.0.0.0:8000, so nginx's
-    # proxy_pass DNS lookup for urbanlens_app can resolve the unreachable AAAA
-    # record and log "upstream server temporarily disabled" before falling back
-    # to IPv4. Disable IPv6 here so only the working A record is ever returned.
+    # Docker defaults new bridge networks to dual-stack.
+    # Disable IPv6 here so only the working A record is ever returned.
     enable_ipv6: false
