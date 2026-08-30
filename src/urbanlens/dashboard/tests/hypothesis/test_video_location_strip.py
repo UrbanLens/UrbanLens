@@ -1,18 +1,19 @@
-"""A video upload must honour the same location opt-out photos do.
+"""A stored video never carries the container location tag it arrived with.
 
-``_process_video_upload`` used to express "strip the location" by passing
-``max_height=None`` to :func:`process_uploaded_video`. That value means "skip
-downscaling entirely", so the request to scrub produced the exact opposite: the
-original file - location tag and all - was stored untouched and served, while
-only the derived ``Image.latitude``/``longitude`` and ``taken_at`` were dropped.
+The scrub is unconditional, exactly as the photo pipeline's EXIF strip is: the
+stored file is served to everyone who can reach the container it was
+contributed to, so coordinates inside the file are outside the app's visibility
+rules. The coordinates are kept on the ``Image`` row, where those rules apply.
 
-Two things had to change, and both are exercised here against real ffmpeg:
+It was previously a caller's choice, keyed on the uploader's *visit-tracking*
+preference - a setting about whether the app records where they have been -
+which meant the default left every uploaded video serving its own coordinates.
+Before that it was worse still: ``_process_video_upload`` expressed "strip the
+location" by passing ``max_height=None``, which means "skip processing
+entirely", so asking to scrub guaranteed the original file was stored untouched.
 
-- a small video needing no downscale is now scrubbed by a lossless stream copy;
-- ``_reencode`` clears the location tags too, since ffmpeg copies container
-  metadata across a transcode (verified: the tags survived the old flags).
-
-Skipped when ffmpeg isn't on PATH, so this stays runnable outside the container.
+Exercised against real ffmpeg, and skipped when it isn't on PATH so this stays
+runnable outside the container.
 """
 
 from __future__ import annotations
@@ -71,11 +72,11 @@ class VideoLocationStripTests(TestCase):
         )
         return out.read_bytes()
 
-    def _stored_after(self, height: int, *, max_height: int | None, strip: bool) -> Path:
+    def _stored_after(self, height: int, *, max_height: int | None) -> Path:
         image = baker.make(Image, image=None)
         image.image.save("clip.mp4", ContentFile(self._video_with_location(height)), save=True)
 
-        process_uploaded_video(image, max_height, strip_location=strip)
+        process_uploaded_video(image, max_height)
 
         # process_uploaded_video leaves persisting image.image.name to its caller.
         return Path(image.image.path)
@@ -89,13 +90,13 @@ class VideoLocationStripTests(TestCase):
 
     def test_small_video_is_scrubbed_even_though_no_downscale_is_needed(self) -> None:
         """The case the old code could never reach - it skipped processing entirely."""
-        stored = self._stored_after(240, max_height=720, strip=True)
+        stored = self._stored_after(240, max_height=720)
 
         self.assertNotIn("location", _location_tags(stored))
 
     def test_downscaled_video_is_also_scrubbed(self) -> None:
         """ffmpeg copies container metadata across a transcode unless told otherwise."""
-        stored = self._stored_after(480, max_height=240, strip=True)
+        stored = self._stored_after(480, max_height=240)
 
         self.assertNotIn("location", _location_tags(stored))
 
@@ -129,11 +130,23 @@ class VideoLocationStripTests(TestCase):
         image = baker.make(Image, image=None)
         image.image.save("odd.mkv", ContentFile(out.read_bytes()), save=True)
 
-        process_uploaded_video(image, 720, strip_location=True)
+        process_uploaded_video(image, 720)
 
         self.assertNotIn("location", _location_tags(Path(image.image.path)))
 
-    def test_location_is_kept_when_the_user_has_not_opted_out(self) -> None:
-        stored = self._stored_after(240, max_height=720, strip=False)
+    def test_the_uploaders_visit_tracking_setting_does_not_keep_the_tag(self) -> None:
+        """There is no setting that leaves coordinates in a served file.
 
-        self.assertIn("location", _location_tags(stored))
+        This is the case that used to be the *default*: visit tracking on meant
+        no scrub, so an ordinary upload served its own coordinates to everybody
+        who could see the video.
+        """
+        stored = self._stored_after(240, max_height=720)
+
+        self.assertNotIn("location", _location_tags(stored))
+
+    def test_a_video_with_no_downscale_policy_is_still_scrubbed(self) -> None:
+        """max_height=None means "do not resize", never "do not scrub"."""
+        stored = self._stored_after(240, max_height=None)
+
+        self.assertNotIn("location", _location_tags(stored))

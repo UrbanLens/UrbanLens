@@ -10,7 +10,8 @@
 {% endblock %}
 
 {% block content %}
-{% with shared_name=share.shared_name|default:share.place_label %}
+{# safe_place_label, not place_label: a DETECTED share must not read through to the sender's live pin name. #}
+{% with shared_name=share.shared_name|default:share.safe_place_label %}
 <div class="pin-detail-grid">
   <div class="pin-details location-details pin-share-detail-card card">
     <div class="card-header"><i class="material-symbols-outlined">ios_share</i><span>Shared Pin</span></div>
@@ -51,7 +52,7 @@
         {% for child_share in bundled_shares %}
         <li class="pin-share-bundle-item">
           <i class="material-symbols-outlined">subdirectory_arrow_right</i>
-          <span>{{ child_share.pin.display_label }}</span>
+          <span>{{ child_share.safe_place_label }}</span>
         </li>
         {% endfor %}
       </ul>

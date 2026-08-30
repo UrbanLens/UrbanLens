@@ -35,7 +35,7 @@ _EXIF_DATETIME_FORMAT = "%Y:%m:%d %H:%M:%S"
 # exotic formats) is stored untouched - only its size is counted.
 _PROCESSABLE_FORMATS = {"JPEG", "PNG", "WEBP", "TIFF"}
 
-_FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".tif", "AVIF": ".avif", "HEIF": ".heic"}
+_FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".tif", "AVIF": ".avif", "HEIF": ".heic", "MPO": ".jpg"}
 
 # Formats whose stored file we can rewrite carrying modified EXIF. A superset of
 # _PROCESSABLE_FORMATS on purpose: those are the formats the *downscaler* will
@@ -45,19 +45,28 @@ _FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".
 # HEIF covers both .heic and .heif - pillow-heif registers one opener reporting
 # format "HEIF" for both, so the extension a phone happens to use does not
 # change what this pipeline sees.
-_EXIF_REWRITABLE_FORMATS = _PROCESSABLE_FORMATS | {"AVIF", "HEIF"}
+_EXIF_REWRITABLE_FORMATS = _PROCESSABLE_FORMATS | {"AVIF", "HEIF", "MPO"}
 
-# Formats that must be re-encoded whatever the downscale policy says, because no
-# mainstream browser outside Safari renders them and stored photos are served
-# through a plain <img src>. Accepting the upload and keeping the bytes verbatim
-# swaps an explicit "convert it to JPEG first" refusal for a broken image, which
-# is strictly worse. `_MUST_TRANSCODE_TARGET` is the format they land in when the
-# uploader's policy does not already pick one (a subscriber with downscaling off
-# and no WebP conversion, which is the default).
+# Formats never stored as uploaded, whatever the downscale policy says.
+# `_MUST_TRANSCODE_TARGET` is what they land in when the uploader's policy does
+# not already pick one (a subscriber with downscaling off and no WebP
+# conversion, which is the default). Two separate reasons to be in here:
 #
-# AVIF is deliberately not here: browser support for it is broad, so re-encoding
-# one would cost quality for nothing.
-_MUST_TRANSCODE_FORMATS = {"HEIF"}
+# HEIF, because no mainstream browser outside Safari renders it and stored
+# photos are served through a plain <img src>. Keeping the bytes verbatim swaps
+# an explicit "convert it to JPEG first" refusal for a broken image, which is
+# strictly worse. AVIF is deliberately absent: browser support for it is broad,
+# so re-encoding one would cost quality for nothing.
+#
+# MPO, because it is a JPEG container holding *several* images - the depth or
+# second-lens frame phones record alongside the picture - and Pillow only ever
+# loads and rewrites the first. Every later frame carries its own APP1 block, so
+# there is no rewriting an MPO in place with the metadata gone; the EXIF strip
+# either drops the extra frames or does not happen. It used to not happen: MPO
+# was in no list here, so the whole pass returned early and the file was kept
+# byte-for-byte, GPS and all. Browsers show the first frame, so transcoding to
+# JPEG loses nothing a viewer ever saw.
+_MUST_TRANSCODE_FORMATS = {"HEIF", "MPO"}
 _MUST_TRANSCODE_TARGET = "JPEG"
 
 # EXIF tag 34853 - the GPSInfo IFD pointer.
@@ -523,8 +532,10 @@ def extract_exif_data(image_file: IO[bytes]) -> dict[str, Any] | None:
 #: Extensions that reach `_MUST_TRANSCODE_FORMATS`. Used only to decide whether
 #: the downscale pass is worth entering at all - the authoritative check is
 #: Pillow's reported format once the file is open, so a mislabelled file costs
-#: one wasted open and nothing else.
-_MUST_TRANSCODE_EXTENSIONS = {".heic", ".heif"}
+#: one wasted open and nothing else. ``.mpo`` is listed for completeness, but a
+#: phone almost always names a multi-picture file ``.jpg``; those reach the pass
+#: through the ordinary JPEG extension and are identified once open.
+_MUST_TRANSCODE_EXTENSIONS = {".heic", ".heif", ".mpo"}
 
 
 def stored_file_needs_transcode(name: str) -> bool:

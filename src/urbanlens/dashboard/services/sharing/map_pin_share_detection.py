@@ -11,13 +11,21 @@ rows via ``services.sharing.map_sharing``.
 Two detection modes, chosen by the saved viewport's zoom level relative to
 ``settings.UL_MAP_SHARE_ZOOM_THRESHOLD``:
 
-- Zoomed in (a small geographic area is visible): the map is clearly pointing
-  at a specific place, so every one of the sender's pins visible in frame
-  counts as shared, regardless of what markup exists.
+- Zoomed in (a small geographic area is visible): the map is pointing at a
+  specific place, so a pin the view is *aimed at* - inside the central
+  ``AIMED_AT_VIEWPORT_FRACTION`` of the frame - counts as shared even with no
+  markup drawn.
 - Zoomed out (a large geographic area is visible): the sender could be
   sharing the map for many reasons unrelated to any one pin, so only pins
   specifically called out by markup count - a pin/text marker sitting in the
   pin's boundary, an arrow/line pointing toward it, or a shape overlapping it.
+
+Markup matching applies either way; the zoom only decides whether merely being
+aimed at is enough on its own. Being *on screen* never is. A snapshot carries
+the viewport and the drawn shapes and nothing else - the recipient's map does
+not render the sender's pins - so a pin the sender neither centred on nor drew
+anything near is not revealed by sending it, and recording a share for one
+claims an exposure that never happened.
 
 ``PinMarkup.geometry`` is a plain JSONField (not a PostGIS field), so this
 module bridges it to GEOS geometries itself; ``MarkupMap`` only ever persists
@@ -76,6 +84,16 @@ _DEGENERATE_TAIL_SEPARATION_DEGREES = 1e-7
 #: still be considered (an arrow drawn near the edge of the frame may point at
 #: a pin just outside it) - a query-cost prefilter, not a correctness rule.
 CANDIDATE_RADIUS_MULTIPLIER = 5
+
+#: How much of a zoomed-in frame counts as "what this map is aimed at", as a
+#: fraction of its width and height about the centre. Whole-frame containment
+#: was the old rule and it is far too coarse to mean anything: at the default
+#: threshold zoom the frame spans roughly 9 x 7 km, so sending a map of one
+#: building recorded a share for every unrelated pin the sender happened to own
+#: across the surrounding neighbourhood. A quarter of each dimension keeps the
+#: place the sender actually centred on - the one thing the recipient can read
+#: off the snapshot - without sweeping in the rest of the city.
+AIMED_AT_VIEWPORT_FRACTION = 0.25
 
 #: The boundary type used for pin-share detection matching.
 _DETECTION_BOUNDARY_TYPE = "property"
@@ -398,27 +416,31 @@ def detect_shared_pins(markup_map: MarkupMap, sender: Profile) -> list[Pin]:
 
     Returns:
         Distinct list of ``sender``'s Pin instances "shared" by this map, per
-        the zoomed-in/zoomed-out rules described in the module docstring.
-        Empty if the map has no saved viewport.
+        the aimed-at/markup rules described in the module docstring. Empty if
+        the map has no saved viewport.
     """
     if markup_map.center_latitude is None or markup_map.center_longitude is None or markup_map.zoom is None:
         return []
 
     bounds = viewport_bounds(markup_map.center_latitude, markup_map.center_longitude, markup_map.zoom)
+    items = list(markup_map.items.all())
 
     if is_zoomed_in(markup_map.zoom):
-        return [pin for pin in _candidate_pins(sender, bounds) if bounds.contains_point(float(pin.location.latitude), float(pin.location.longitude))]
+        aimed_at = bounds.expanded(AIMED_AT_VIEWPORT_FRACTION)
+        candidates = [pin for pin in _candidate_pins(sender, bounds) if bounds.contains_point(float(pin.location.latitude), float(pin.location.longitude))]
+    else:
+        if not items:
+            return []
+        aimed_at = None
+        candidates = list(_candidate_pins(sender, bounds.expanded(CANDIDATE_RADIUS_MULTIPLIER)))
 
-    items = list(markup_map.items.all())
-    if not items:
-        return []
-
-    wide_bounds = bounds.expanded(CANDIDATE_RADIUS_MULTIPLIER)
-    candidates = list(_candidate_pins(sender, wide_bounds))
     boundaries_by_pin_id = _boundaries_for_pins(candidates, _DETECTION_BOUNDARY_TYPE)
 
     matches: list[Pin] = []
     for pin in candidates:
+        if aimed_at is not None and aimed_at.contains_point(float(pin.location.latitude), float(pin.location.longitude)):
+            matches.append(pin)
+            continue
         boundary = boundaries_by_pin_id.get(pin.pk)
         if boundary is None:
             continue

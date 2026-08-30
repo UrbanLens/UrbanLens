@@ -240,10 +240,17 @@ class PinShareDetailView(LoginRequiredMixin, View):
             pk=share_id,
             to_profile=request.user.profile,
         )
+        # share.safe_pin, not share.pin: a DETECTED share is a provenance
+        # record for a place the recipient learned about indirectly, not an
+        # offer of the sender's pin. Handing the live row to the template put
+        # its current name and address in front of somebody who never accepted
+        # anything - and kept doing so as the sender edited it. The map below
+        # reads share.shared_location, which is the snapshot taken when the
+        # share happened, so it is unaffected either way.
         return render(
             request,
             "dashboard/pages/pin_share/detail.html",
-            {"share": share, "pin": share.pin, "bundled_shares": share.bundled_shares.all(), "show_map_footer": True},
+            {"share": share, "pin": share.safe_pin, "bundled_shares": share.bundled_shares.all(), "show_map_footer": True},
         )
 
 

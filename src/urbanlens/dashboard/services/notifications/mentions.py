@@ -29,7 +29,13 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import TripActivity
 
-_LOC_RE = re.compile(r"@\[([^\]]+)\]\(loc:([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\)")
+#: The literal every location mention contains, exposed so a caller can cheaply
+#: prefilter in SQL for text that *might* carry one - text without it cannot be
+#: dropped by the mention gate, so it need not be fetched and rendered to find
+#: out. The pattern below is built from it, so the two cannot drift apart.
+LOCATION_MENTION_MARKER = "](loc:"
+
+_LOC_RE = re.compile(r"@\[([^\]]+)" + re.escape(LOCATION_MENTION_MARKER) + r"([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\)")
 _ACT_RE = re.compile(r"@act:(\d+)")
 
 

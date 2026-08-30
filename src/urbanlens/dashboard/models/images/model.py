@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import posixpath
+import secrets
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -12,47 +13,77 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.dashboard.models.fields import EncryptedJSONField
 from urbanlens.dashboard.models.images.queryset import ImageManager
+from urbanlens.dashboard.services.media.access import declares_media_family
 
 if TYPE_CHECKING:
     from decimal import Decimal
 
-# Room for "pin_images/" (11 chars) plus the ~8-character suffix
-# Storage.get_available_name appends on a filename collision, comfortably
-# inside the field's max_length below. Uploaded filenames are arbitrary and
-# unbounded - a browser drag-drop, a device-scan import, or a Media-gallery
+# Room for "pin_images/", the random directory below, and the ~8-character
+# suffix Storage.get_available_name appends on a filename collision,
+# comfortably inside the field's max_length. Uploaded filenames are arbitrary
+# and unbounded - a browser drag-drop, a device-scan import, or a Media-gallery
 # URL can each hand over a name well past 100 characters, which overflowed
 # the field's old default max_length (100) outright and raised
 # SuspiciousFileOperation instead of storing the file.
 _UPLOAD_STEM_LIMIT = 80
 _UPLOAD_EXT_LIMIT = 12
 
+# Bytes of randomness in each upload's directory name. 12 bytes is 96 bits,
+# rendered as 16 URL-safe characters - far past any feasible number of guesses
+# against a rate-limited endpoint, and short enough to leave the stem room.
+_UPLOAD_TOKEN_BYTES = 12
 
+# Leading characters of the token used as a fan-out bucket, so MEDIA_ROOT does
+# not end up with one directory per stored file in a single parent.
+_UPLOAD_BUCKET_CHARS = 2
+
+
+def _random_upload_dir() -> str:
+    """Return a fresh ``<bucket>/<token>`` directory for one stored file.
+
+    Returns:
+        Two path segments, e.g. ``"a7/Kd3xq8Lm2Zpq"``.
+    """
+    token = secrets.token_urlsafe(_UPLOAD_TOKEN_BYTES)
+    return f"{token[:_UPLOAD_BUCKET_CHARS]}/{token[_UPLOAD_BUCKET_CHARS:]}"
+
+
+@declares_media_family("pin_images")
 def pin_image_upload_path(instance: Image, filename: str) -> str:
-    """Storage path for an uploaded Image file, trimming an overlong name to fit.
+    """Storage path for an uploaded Image file, under a random directory.
 
     Not underscore-prefixed despite being an internal helper - Django
     migrations serialize a callable ``upload_to`` by importable reference, so
     this needs to read as public to both ruff and any future migration.
 
-    Only the stem is trimmed, not the extension, and the trim always comes
-    from the end - the filename's *prefix* must survive into storage for
+    The random directory makes a stored path unguessable from the filename it
+    was uploaded under, so no amount of fuzzing ``/media/pin_images/IMG_4821.jpg``
+    produces a URL that exists. Authorization is still what decides who may
+    read the file - see ``services.media.access`` - this only removes the
+    ability to *name* a file you were never shown.
+
+    The filename itself is kept as the last segment, and only its stem is
+    trimmed, always from the end: the *prefix* must survive into storage for
     ``services.media.images.is_camera_generated_filename`` to keep recognizing
     camera-named uploads (e.g. ``PXL_20260709_123456.jpg``) for its
-    author-attribution heuristic.
+    author-attribution heuristic, which reads the stored name.
     """
     stem, ext = posixpath.splitext(filename)
-    return f"pin_images/{stem[:_UPLOAD_STEM_LIMIT]}{ext[:_UPLOAD_EXT_LIMIT]}"
+    return f"pin_images/{_random_upload_dir()}/{stem[:_UPLOAD_STEM_LIMIT]}{ext[:_UPLOAD_EXT_LIMIT]}"
 
 
+@declares_media_family("pin_images")
 def pin_image_thumbnail_path(instance: Image, filename: str) -> str:
     """Storage path for an Image's small grid thumbnail.
 
-    Same stem-trimming rules as :func:`pin_image_upload_path`, under a
-    ``thumbs/`` prefix so a thumbnail can never collide with the original file
-    when both are derived from the same upload name.
+    Same rules as :func:`pin_image_upload_path`, under a ``thumbs/`` prefix so
+    a thumbnail can never collide with the original file when both are derived
+    from the same upload name. It gets its own random directory rather than
+    reusing the original's: deriving one path from the other would make the
+    preview guessable from the full-size URL and vice versa.
     """
     stem, ext = posixpath.splitext(filename)
-    return f"pin_images/thumbs/{stem[:_UPLOAD_STEM_LIMIT]}{ext[:_UPLOAD_EXT_LIMIT]}"
+    return f"pin_images/thumbs/{_random_upload_dir()}/{stem[:_UPLOAD_STEM_LIMIT]}{ext[:_UPLOAD_EXT_LIMIT]}"
 
 
 class ImageSource(TextChoices):

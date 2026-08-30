@@ -46,6 +46,24 @@ def _jpeg_bytes(width: int, height: int, with_exif: bool = True, with_gps: bool 
     return buf.getvalue()
 
 
+def _mpo_bytes(width: int = 64, height: int = 48) -> bytes:
+    """Build a real multi-picture JPEG carrying a GPS IFD on its first frame.
+
+    Phones produce these for depth and second-lens captures, usually named
+    ``.jpg``. Pillow reports the format as ``MPO`` and loads only frame 0.
+    """
+    first = PILImage.new("RGB", (width, height), color=(200, 10, 10))
+    second = PILImage.new("RGB", (width, height), color=(10, 10, 200))
+    exif = PILImage.Exif()
+    exif[0x010F] = "UrbanLens"
+    gps_ifd = exif.get_ifd(0x8825)
+    gps_ifd[1] = "N"
+    gps_ifd[2] = (IFDRational(40, 1), IFDRational(0, 1), IFDRational(0, 1))
+    buf = io.BytesIO()
+    first.save(buf, format="MPO", append_images=[second], exif=exif)
+    return buf.getvalue()
+
+
 def _make_image_row(content: bytes, name: str = "photo.jpg") -> Image:
     profile = User.objects.create(username=f"u{Image.objects.count()}").profile
     return Image.objects.create(image=SimpleUploadedFile(name, content, content_type="image/jpeg"), profile=profile)
@@ -246,3 +264,42 @@ class GpsIsStrippedWithoutBeingAskedTests(TestCase):
             exif = stored.getexif()
             self.assertIsNone(exif.get(0x010F))
             self.assertIsNone(exif.get(0x0110))
+
+
+@override_settings(MEDIA_ROOT=_MEDIA_ROOT)
+class MultiPictureJpegTests(TestCase):
+    """A multi-picture JPEG must not skip the strip by being an unlisted format.
+
+    MPO is a JPEG container holding several images; Pillow reports it as its
+    own format, which was in none of this module's format sets, so
+    downscale_stored_image returned before doing anything and the file was kept
+    byte-for-byte - GPS block intact - however the uploader's settings were set.
+    """
+
+    def test_the_source_fixture_really_is_a_multi_picture_jpeg(self):
+        """Guards the test itself: two concatenated JPEGs would read as JPEG."""
+        opened = PILImage.open(io.BytesIO(_mpo_bytes()))
+
+        self.assertEqual(opened.format, "MPO")
+        self.assertEqual(getattr(opened, "n_frames", 1), 2)
+        self.assertTrue(dict(opened.getexif().get_ifd(0x8825)), "fixture should carry GPS to strip")
+
+    def test_gps_is_stripped_from_a_multi_picture_jpeg(self):
+        image = _make_image_row(_mpo_bytes(), name="depth.jpg")
+
+        written = downscale_stored_image(image, max_dimension=None, convert_webp=False)
+
+        self.assertIsNotNone(written, "an MPO must be rewritten, not left alone")
+        image.refresh_from_db()
+        with image.image.open("rb") as stored:
+            result = PILImage.open(stored)
+            result.load()
+            self.assertEqual(result.format, "JPEG")
+            self.assertEqual(getattr(result, "n_frames", 1), 1, "the extra frames carry their own metadata and must not survive")
+            self.assertEqual(dict(result.getexif().get_ifd(0x8825)), {})
+
+    def test_the_uploaders_downscale_settings_do_not_matter(self):
+        """The strip is unconditional - it is not part of the downscale policy."""
+        image = _make_image_row(_mpo_bytes(), name="depth-2.jpg")
+
+        self.assertIsNotNone(downscale_stored_image(image, max_dimension=None, convert_webp=False))

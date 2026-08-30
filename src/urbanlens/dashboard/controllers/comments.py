@@ -16,7 +16,7 @@ from django.views import View
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, CommentValidationError, comment_is_visible, toggle_reaction, top_level_comment_queryset, visible_comment_tree
+from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, CommentValidationError, comment_is_visible, toggle_reaction, top_level_comment_queryset, visible_comment_count, visible_comment_tree
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
 from urbanlens.dashboard.services.map.map_snapshot import (
@@ -242,7 +242,10 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_
     return {
         "rendered_comments": rendered,
         "page_obj": page_obj,
-        "total_comment_count": comments_qs.count(),
+        # The gated count, not comments_qs.count(): a raw total disagrees with
+        # the thread whenever a gate dropped something, which is the existence
+        # oracle services.comments.comments is built to deny.
+        "total_comment_count": visible_comment_count(comments_qs, profile),
         "profile": profile,
         "blurred_profiles": blurred_profiles,
         "allowed_emojis": sorted(_ALLOWED_EMOJIS),

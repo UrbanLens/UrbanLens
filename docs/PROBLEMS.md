@@ -1293,6 +1293,31 @@ is cleanly derivable, but several families intentionally fall back to **authenti
 access (any logged-in user can fetch, no per-object check). Marked with `TODO(media-auth)`
 comments in `src/urbanlens/dashboard/controllers/media.py`:
 
+**Largely closed 2026-08-29.** The gate is now default-deny and the policy lives in
+`dashboard/services/media/access.py` as a registry keyed by `upload_to` prefix. What changed:
+
+- **Thumbnails were readable by any logged-in account.** `_authorize_image` resolved the owning
+  row with `Image.objects.filter(image=rel_path)`, but a thumbnail is stored in the separate
+  `thumbnail` column, so that lookup never matched, `image is None` was always true, and every
+  preview took the permissive orphan branch below. `visible_to`, the DM participant rule and
+  share revocation were unreachable code for every thumbnail, including DM attachments and
+  safety check-in photos. Both columns are matched now.
+- **An unresolvable file is refused, not served.** The orphan and unknown-family fallbacks both
+  returned True; they return False. An orphan is indistinguishable from a live file whose owner
+  the viewer may not learn about, and nobody holds a URL for a real orphan except by guessing.
+- **Forgetting an authorizer is now a startup error.** `dashboard/checks.py`
+  (`check_media_authorizers`, id `dashboard.E002`) fails `manage.py check` when a model field
+  stores files under a directory the registry does not cover, so fail-closed cannot silently
+  break image loading in production instead.
+- **Stored paths are unguessable.** `pin_image_upload_path`/`pin_image_thumbnail_path` file each
+  upload under `<2-char bucket>/<random token>/`, so a URL cannot be derived from the filename it
+  was uploaded under. `pin_image_upload_path` deliberately preserves the camera stem for the
+  attribution heuristic, which had made `IMG_4821` -> `IMG_4822` a working enumeration. Existing
+  rows keep their paths; the gate is what protects those.
+
+The two families below stay deliberately authenticated-only, now as registered decisions rather
+than fallbacks. The rest of this entry records them and the file-stranding work around them.
+
 - **`pin_custom_icons/` (Pin.custom_icon) and `label_icons/` (Label.custom_icon)**:
   authenticated-only. Strict owner-only enforcement risks breaking any surface that renders
   another user's shared/labeled pin (shared pin views, trip member maps, global labels with
@@ -1301,8 +1326,8 @@ comments in `src/urbanlens/dashboard/controllers/media.py`:
   existing share/visibility relationship.
 - **Orphan files** (a file on disk under `pin_images/` or `comment_images/` whose owning
   Image/Comment/TripComment row no longer exists, e.g. row deleted without file cleanup):
-  authenticated-only, since there is no owner left to check. Residual risk: pre-existing orphans
-  from deletions remain fetchable by any logged-in user who knows the filename.
+  now **denied** (2026-08-29). The stranding paths below still matter for disk usage; they are
+  no longer a disclosure route.
 
   **Update (chunk 520, 2026-08-15): the orphan *source* is closed for comments.** Swept every
   delete path: all `Image` paths already removed their file (bulk ones with a shared-file
@@ -1323,10 +1348,9 @@ comments in `src/urbanlens/dashboard/controllers/media.py`:
   code - the right shape, but a signal touching five models deserves an owner's review rather
   than an audit chunk, and the residual is small decorative icons under an already
   authenticated-only branch.
-- **Unknown path families** (anything under MEDIA_ROOT outside the cataloged prefixes
-  `pin_images/`, `comment_images/`, `avatars/`, `pin_custom_icons/`, `label_icons/`):
-  authenticated-only, logged at INFO. Any future `upload_to` prefix must get an explicit branch
-  in `MediaGateView._authorized` or it silently inherits this fallback.
+- **Unknown path families**: now **denied** and logged at WARNING (2026-08-29), and
+  `check_media_authorizers` refuses to start with an unregistered family, so a new `upload_to`
+  prefix cannot inherit a fallback either way.
 - **`avatars/` (Profile.avatar)**: deliberately any-authenticated-user (avatars render site-wide
   next to usernames) - not a gap, but noted for completeness.
 - **Safety check-in photos** (`Image.safety_checkin` set) currently follow the generic
@@ -1336,8 +1360,8 @@ comments in `src/urbanlens/dashboard/controllers/media.py`:
   passing `visible_to` but outside the check-in's audience can fetch them).
 
 **Suggested next step**: product decision on icon visibility (owner-only + share-relationship vs.
-authenticated-only), a cleanup job for orphaned media files, and a review of safety check-in photo
-audience rules.
+authenticated-only), a cleanup job for orphaned media files (a disk-usage question now rather than
+a disclosure one), and a review of safety check-in photo audience rules.
 
 ---
 

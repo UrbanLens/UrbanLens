@@ -18,6 +18,11 @@ class DashboardConfig(AppConfig):
 
         register_heif_opener()
 
+        # Importing the module registers its @register()ed system checks. Media
+        # authorization is default-deny, so a file family nobody authorized
+        # would 404 for everyone; the check turns that into a startup error.
+        import urbanlens.dashboard.checks
+
         # drf-spectacular resolves each extension's target_class lazily by
         # mutating a shared class attribute with no lock - unsafe under this
         # app's gevent concurrency. See schema.patch_extension_thread_safety.

@@ -153,15 +153,13 @@ def _safe_incoming_place_label(pin_shares: list[PinShare]) -> tuple[Pin | None, 
         ``(pin, label)`` - matching ``(share.pin, share.place_label)`` whenever the group has
         at least one non-DETECTED share, otherwise ``(None, <location-derived label>)``.
     """
-    if any(share.status != PinShareStatus.DETECTED for share in pin_shares):
+    if any(share.reveals_live_pin for share in pin_shares):
+        # The group is keyed by pin/location, so every share in it points at
+        # the same place - one non-DETECTED member means the recipient was
+        # offered this pin and may see it.
         share = pin_shares[0]
         return share.pin, share.place_label
-    location = pin_shares[0].shared_location
-    if location is None:
-        return None, "a location"
-    if location.display_name and location.display_name != "Unnamed Location":
-        return None, location.display_name
-    return None, location.address or f"{location.latitude}, {location.longitude}"
+    return None, pin_shares[0].safe_place_label
 
 
 def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]:

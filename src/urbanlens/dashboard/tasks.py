@@ -768,7 +768,10 @@ def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessR
     from urbanlens.dashboard.services.media.videos import process_uploaded_video
 
     max_height = get_video_downscale_policy(image.profile) if image.profile is not None else None
-    metadata, new_size = process_uploaded_video(image, max_height, strip_location=strip_location)
+    # The container's own location tags are always removed from the stored file;
+    # strip_location decides only whether the coordinates are recorded on the
+    # row, where the app's visibility rules govern them.
+    metadata, new_size = process_uploaded_video(image, max_height)
 
     update_fields: dict[str, object] = {}
     coords: tuple[float, float] | None = None

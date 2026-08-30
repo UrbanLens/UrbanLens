@@ -14,6 +14,15 @@ Both create ``PinShare`` rows with ``origin=TRIP_ACTIVITY`` and
 ``status=DETECTED`` (never actionable, never materializes a Pin), then record
 the recipient's ``LocationExposure`` so future pins they drop at the place
 chain back correctly.
+
+Which members a place is actually revealed to is decided per viewer, by
+``trip_visibility.viewer_hidden_activity_ids`` - the same gate the itinerary
+panel, the trip map, the calendar feed and the AI suggestions all apply. A
+member the adder's ``trip_pin_location_visibility`` hides the activity from is
+shown nothing, so recording a share to them would claim an exposure that never
+happened and hand them a share page plotting the coordinates their trip-mate
+chose not to reveal. Consulting only the activity's own ``location_hidden``
+flag, as this used to, sees none of that.
 """
 
 from __future__ import annotations
@@ -42,9 +51,11 @@ logger = logging.getLogger(__name__)
 
 
 def _activity_place(activity: TripActivity) -> tuple[Pin | None, Location | None]:
-    """The (pin, location) pair an activity reveals, or ``(None, None)``.
+    """The (pin, location) pair an activity could reveal, or ``(None, None)``.
 
-    Hidden-location activities ("Secret Location") reveal nothing.
+    Hidden-location activities ("Secret Location") reveal nothing to anyone.
+    Whether a *particular* member sees it is a separate question - see
+    :func:`_reveals_to`.
 
     Args:
         activity: The activity to inspect.
@@ -57,6 +68,21 @@ def _activity_place(activity: TripActivity) -> tuple[Pin | None, Location | None
     pin = activity.pin
     location = activity.location or (pin.location if pin is not None else None)
     return pin, location
+
+
+def _hidden_from(activities: list[TripActivity], viewer: Profile) -> set[int]:
+    """IDs of *activities* whose location ``viewer`` is not shown.
+
+    Args:
+        activities: The activities to test.
+        viewer: The member doing the viewing.
+
+    Returns:
+        The subset of activity IDs this viewer may not see the location of.
+    """
+    from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
+
+    return viewer_hidden_activity_ids(activities, viewer)
 
 
 def _record_detected_trip_share(sharer: Profile, recipient: Profile, pin: Pin | None, location: Location) -> PinShare | None:
@@ -137,6 +163,8 @@ def record_trip_activity_shares(activity: TripActivity) -> list[PinShare]:
         return []
     shares = []
     for member in _joined_member_profiles(activity.trip):
+        if activity.id in _hidden_from([activity], member):
+            continue
         share = _record_detected_trip_share(sharer, member, pin, location)
         if share is not None:
             shares.append(share)
@@ -153,8 +181,12 @@ def record_trip_shares_for_member(trip: Trip, profile: Profile) -> list[PinShare
     Returns:
         The newly created shares (may be empty).
     """
+    activities = list(trip.activities.select_related("pin__location", "location", "added_by", "trip__creator"))
+    hidden = _hidden_from(activities, profile)
     shares = []
-    for activity in trip.activities.select_related("pin__location", "location", "added_by", "trip__creator"):
+    for activity in activities:
+        if activity.id in hidden:
+            continue
         pin, location = _activity_place(activity)
         if location is None:
             continue

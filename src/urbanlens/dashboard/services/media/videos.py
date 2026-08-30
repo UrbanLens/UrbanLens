@@ -188,28 +188,32 @@ def _remux_without_location(src_path: str, out_path: str) -> bool:
     return _run_ffmpeg(["-c", "copy", *_clear_location_args(), "-movflags", "+faststart", out_path], src_path, "location strip")
 
 
-def process_uploaded_video(image: Image, max_height: int | None, *, strip_location: bool = False) -> tuple[dict[str, Any], int | None]:
-    """Extract metadata from an uploaded video, downscale it if oversized, and optionally scrub its location.
+def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[str, Any], int | None]:
+    """Extract metadata from an uploaded video, downscale it if oversized, and scrub its location.
 
     Copies the stored file to a local temp path once (ffmpeg/ffprobe need a
     real file, not a stream) and reuses that copy for both metadata probing
     and, if needed, re-encoding - so the file is only fetched from storage a
     single time regardless of storage backend.
 
-    ``strip_location`` is independent of ``max_height``: a video small enough to
-    need no downscale must still be scrubbed, via a lossless stream copy. The
-    caller controlling this previously expressed it by passing ``max_height=None``,
-    which meant "skip processing entirely" and so guaranteed the opposite - the
-    original file, location tag and all, was what got stored and served.
+    **The location scrub is unconditional**, exactly as the photo pipeline's
+    EXIF strip is (see ``services.media.images.downscale_stored_image``), and
+    for the same reason: the stored file is served to everybody who can reach
+    the container it was contributed to, so coordinates riding along inside it
+    are outside the app's visibility rules entirely. The coordinates are kept on
+    the ``Image`` row, where those rules apply. This used to be a caller's
+    choice keyed on the uploader's *visit-tracking* preference - a setting about
+    whether the app records where they have been, which left the default (visit
+    tracking on) serving everyone the container's own location tag.
+
+    It is independent of ``max_height``: a video small enough to need no
+    downscale is still scrubbed, via a lossless stream copy.
 
     Args:
         image: The Image row whose stored video to process.
         max_height: Vertical resolution cap in pixels, or None to skip
-            downscaling (metadata is still extracted, and a location strip
-            still happens if asked for).
-        strip_location: Remove the container's location tags from the stored
-            file. Independent of the derived ``Image.latitude``/``longitude``
-            fields, which the caller controls separately.
+            downscaling. Metadata extraction and the location scrub happen
+            either way.
 
     Returns:
         (metadata, new_size): metadata is as :func:`extract_video_metadata`;
@@ -230,7 +234,7 @@ def process_uploaded_video(image: Image, max_height: int | None, *, strip_locati
         needs_downscale = max_height is not None and not (current_height is not None and current_height <= max_height)
         # Keyed off the tag's presence, not off parsed coordinates - see
         # extract_video_metadata. Only worth rewriting a file that carries one.
-        needs_strip = strip_location and bool(metadata.get("has_location_tag"))
+        needs_strip = bool(metadata.get("has_location_tag"))
 
         if not needs_downscale and not needs_strip:
             return metadata, None

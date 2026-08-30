@@ -31,7 +31,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, QuerySet
 
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.reactions.model import Reaction
@@ -210,6 +210,54 @@ def _render_if_visible(comment: Comment, profile: Profile, pinned: set[Any], can
         return None
     # Gate 3: any @loc mention the viewer hasn't pinned drops the whole comment.
     return render_comment_text(comment.text, pinned)
+
+
+def visible_comment_count(comments: QuerySet[Comment], profile: Profile) -> int:
+    """How many of *comments* this viewer may actually see.
+
+    The number rendered beside a thread has to agree with the thread, or it
+    reinstates the oracle gate 3 exists to close: a comment mentioning a
+    location the viewer has not pinned vanishes from the list, and a raw
+    ``.count()`` then announces that something was hidden - and, from the
+    position, roughly what. The same goes for a comment whose author's
+    comment-visibility excludes this viewer.
+
+    Counts the whole queryset, not one page, so it can afford neither
+    ``visible_comment_tree``'s prefetching nor rendering every comment. Gates 1
+    and 2 are answered per author and in SQL; gate 3 is answered by rendering,
+    but only for the comments whose text carries a mention marker at all -
+    nothing else can be dropped by it.
+
+    Args:
+        comments: The comments to count (any queryset over ``Comment``).
+        profile: The viewing profile.
+
+    Returns:
+        The number of comments visible to *profile*.
+    """
+    from django.db.models import Q
+
+    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+    from urbanlens.dashboard.services.notifications.mentions import LOCATION_MENTION_MARKER
+
+    author_ids = set(comments.values_list("profile_id", flat=True))
+    if not author_ids:
+        return 0
+
+    # Gate 1, resolved once per distinct author - each call runs several
+    # relationship queries, and a thread is usually a handful of people.
+    allowed_author_ids = [author.pk for author in ProfileModel.objects.filter(pk__in=author_ids) if profile.can_view_comments_from(author)]
+    if not allowed_author_ids:
+        return 0
+
+    # Gate 2.
+    candidates = comments.filter(profile_id__in=allowed_author_ids).exclude(Q(pending_scan=True) & ~Q(profile_id=profile.pk))
+
+    # Gate 3.
+    plain_total = candidates.exclude(text__contains=LOCATION_MENTION_MARKER).count()
+    pinned = viewer_pinned_uuids(profile)
+    mentioning = candidates.filter(text__contains=LOCATION_MENTION_MARKER).values_list("text", flat=True)
+    return plain_total + sum(1 for text in mentioning if render_comment_text(text, pinned) is not None)
 
 
 def comment_is_visible(comment: Comment, profile: Profile) -> bool:

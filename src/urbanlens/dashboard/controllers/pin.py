@@ -174,6 +174,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, Label
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.comments.comments import visible_comment_count
 
         try:
             pin = Pin.objects.select_related("location", "parent_pin", "parent_pin__location").get(slug=kwargs["pin_slug"], profile__user=request.user)
@@ -322,7 +323,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "default_panel_tab_key": default_panel_tab_key,
                 "location_data_tabs": location_data_tabs,
                 "has_ever_used_aliases": has_ever_used_aliases,
-                "pin_comment_count": pin.comments.count(),
+                "pin_comment_count": visible_comment_count(pin.comments.all(), profile),
                 "pin_visit_count": pin.visit_history.count(),
                 "media_bulk_actions": [
                     {"action": "relevant", "icon": "thumb_up", "label": "Mark relevant"},
