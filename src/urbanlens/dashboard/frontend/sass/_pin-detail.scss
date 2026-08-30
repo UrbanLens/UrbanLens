@@ -3563,8 +3563,7 @@ body.page-location-details {
     border-left: 1px solid var(--ul-surface-border);
 }
 
-.pin-loc-change-btn,
-.pin-loc-detach-btn {
+.pin-loc-change-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -3586,16 +3585,6 @@ body.page-location-details {
         box-shadow: none;
         background: var(--ul-hover-bg);
         color: var(--ul-grey-8);
-    }
-}
-
-.pin-loc-detach-btn {
-    color: $color-red-600;
-
-    &:hover,
-    &:focus {
-        background: rgba($color-red-600, .1);
-        color: $color-red-600;
     }
 }
 
@@ -3890,16 +3879,6 @@ body.page-location-details {
         &:hover,
         &:focus {
             color: var(--ul-grey-8);
-        }
-    }
-
-    .pin-loc-detach-btn {
-        color: $color-red-400;
-
-        &:hover,
-        &:focus {
-            background: rgba(220, 38, 38, .15);
-            color: $color-red-400;
         }
     }
 

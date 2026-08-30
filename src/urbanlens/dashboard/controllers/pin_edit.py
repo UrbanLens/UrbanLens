@@ -517,11 +517,13 @@ class PinSwapParentView(LoginRequiredMixin, View):
 
 
 class PinRelinkView(LoginRequiredMixin, View):
-    """Link a pin to a different Location, or detach it to its own bare Location.
+    """Link a pin to a different Location.
 
     GET  /map/pin/<uuid>/link/               → HTML picker listing all overlapping Locations
-    POST /map/pin/<uuid>/link/               → Detach: creates a new Location at the pin's point
     POST /map/pin/<uuid>/link/<loc_uuid>/    → Relink: switches the pin to the given Location
+
+    Each route carries exactly one of those verbs; the other is refused with a
+    405 rather than falling through to a handler written for its sibling.
     """
 
     def get(self, request, pin_slug, location_slug=None):
@@ -565,20 +567,22 @@ class PinRelinkView(LoginRequiredMixin, View):
         )
 
     def post(self, request, pin_slug, location_slug=None):
-        """Relink or detach the pin, or merge it into an existing pin at the target location.
+        """Relink the pin to a named Location, or merge it into an existing pin there.
 
         Args:
             request: The HTTP request.
             pin_slug: Slug (or uuid) of the pin.
-            location_slug: Optional slug (or uuid) of an existing Location to link to.
-                If omitted, detaches the pin (creates a fresh bare Location).
+            location_slug: Slug (or uuid) of the Location to link to. Absent
+                only on ``pin.link``, which is GET-only.
 
         Returns:
             For the raw-fetch caller (map.html's location-conflict dialog,
             identified by ``X-Requested-With``): a JSON verdict. Otherwise
             (the HTMX-driven pin-location picker): the re-rendered pin
-            overview partial.
+            overview partial. 405 when no location is named.
         """
+        if location_slug is None:
+            return HttpResponseNotAllowed(["GET"])
         result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
@@ -587,51 +591,25 @@ class PinRelinkView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
 
-        if location_slug:
-            from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
-
-            location = get_object_or_404(Location.objects.slug_or_uuid(location_slug))
-            # Which Location a pin points at is not a neutral preference - it is what
-            # confers access, since location_visible_to grants on an exact Location
-            # match. Unchecked, relinking is a way to *earn* a community wiki rather
-            # than discover one, and a Location's slug is its official_name, so the slug
-            # of any notable place is guessable.
-            #
-            # A target qualifies two ways, matching the two things the UI actually
-            # offers. Either the profile can already reach it (the picker and the wiki
-            # page's switch button both offer only candidates filtered to accessible
-            # domains), or it covers the pin's own coordinate - the map's
-            # location-conflict dialog offers exactly those, and a place the user's own
-            # pin sits inside is one they discovered by pinning it, so allowing it
-            # discloses nothing they could not already derive. Both are checked against
-            # the pin's own point, never against an arbitrary slug from the URL.
-            if not (location.pk == pin.location_id or location_visible_to(location, pin.profile) or Location.objects.get_all_for_point(pin.effective_latitude, pin.effective_longitude).filter(pk=location.pk).exists()):
-                raise Http404
-        else:
-            # Detach is not expressible, and this is the honest answer rather
-            # than a workaround.
-            #
-            # It used to `Location.objects.create()` at the pin's coordinates,
-            # which is a guaranteed IntegrityError - Location is unique on
-            # (latitude, longitude) and that row necessarily already existed
-            # (docs/PROBLEMS.md, 2026-08-13: a 500 on every attempt).
-            #
-            # There is no coordinate to give a detached pin: `effective_latitude`
-            # *is* `location.latitude`, and a database trigger
-            # (`dashboard_locations_freeze_identity`) makes a Location's
-            # coordinates immutable, so a pin's point is always exactly its
-            # location's point. "Give this pin its own Location at the same
-            # place" therefore cannot be satisfied without moving the pin, and
-            # silently moving somebody's pin to satisfy a constraint is worse
-            # than saying the action does not apply.
-            #
-            # A pin that should not share a place's record wants a *different*
-            # place, which is what the relink branch above already does.
-            message = "A place is shared by everyone who pins it, and a pin sits exactly where its place does - so a pin cannot have a place of its own at the same point. Link this pin to a different place instead, or move it."
-            if is_xhr:
-                return JsonResponse({"error": message}, status=400)
-            return HttpResponse(message, status=400)
+        location = get_object_or_404(Location.objects.slug_or_uuid(location_slug))
+        # Which Location a pin points at is not a neutral preference - it is what
+        # confers access, since location_visible_to grants on an exact Location
+        # match. Unchecked, relinking is a way to *earn* a community wiki rather
+        # than discover one, and a Location's slug is its official_name, so the slug
+        # of any notable place is guessable.
+        #
+        # A target qualifies two ways, matching the two things the UI actually
+        # offers. Either the profile can already reach it (the picker and the wiki
+        # page's switch button both offer only candidates filtered to accessible
+        # domains), or it covers the pin's own coordinate - the map's
+        # location-conflict dialog offers exactly those, and a place the user's own
+        # pin sits inside is one they discovered by pinning it, so allowing it
+        # discloses nothing they could not already derive. Both are checked against
+        # the pin's own point, never against an arbitrary slug from the URL.
+        if not (location.pk == pin.location_id or location_visible_to(location, pin.profile) or Location.objects.get_all_for_point(pin.effective_latitude, pin.effective_longitude).filter(pk=location.pk).exists()):
+            raise Http404
 
         # A profile can only ever have one root pin per location
         # (db_pin_unique_location_per_profile) - if one already exists at the
@@ -639,11 +617,6 @@ class PinRelinkView(LoginRequiredMixin, View):
         # collide with it. Merge into the existing pin instead (same
         # reparent-as-child mechanism as PinBulkMergeView) rather than failing
         # with an IntegrityError.
-        #
-        # Checked after both branches, not inside the relink one: detaching can
-        # also land on an existing Location (another record already occupies the
-        # pin's own point), and that path had no guard at all - the same
-        # constraint-violation-as-500 this handler was just fixed for.
         existing = Pin.objects.filter(profile=pin.profile, location=location, parent_pin__isnull=True).exclude(pk=pin.pk).first()
         if existing is not None:
             if not pin.would_create_cycle(existing):

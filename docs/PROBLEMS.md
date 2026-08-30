@@ -2356,8 +2356,9 @@ the known bug from a standing start and produced no noise alongside it.
 
 `pin.link` *was* exempted by name, with the exemption kept honest by
 `test_the_known_crash_is_still_crashing`: when the product decision was made and the route fixed,
-that test would fail and say so. **That is what happened.** As of 2026-08-18 the route answers 400
-with an explanatory message instead of raising `IntegrityError`, and
+that test would fail and say so. **That is what happened.** As of 2026-08-18 the route answered 400
+with an explanatory message instead of raising `IntegrityError` (and since 2026-08-30 the detach
+action and its button are gone entirely - `pin.link` is GET-only and answers 405 to a POST), and
 `tests/hypothesis/test_write_route_smoke.py` now reads `_KNOWN_CRASHES: set[str] = set()` - the
 allowlist is empty and every write route is held to the no-5xx property with no exceptions. (Read as
 written, the paragraph above sent a reader to an exemption that no longer exists; the mechanism it
@@ -3264,7 +3265,7 @@ than a coincidence worth noting:
 | --- | --- | --- | --- |
 | `saved_filters.new` | `SavedFilterEditView.post` | `filter_uuid` was *required*, only `edit/` supplies it | chunk 552 |
 | `pin.link.to` | `PinRelinkView.get` | `location_slug` absent entirely | chunk 556 |
-| `pin.link` | `PinRelinkView.post` | (the filed detach product decision, not a signature fault) | chunk 551 |
+| `pin.link` | `PinRelinkView.post` | (the filed detach product decision, not a signature fault; the action was removed 2026-08-30 and the route now answers 405) | chunk 551 |
 
 Django resolves handler arguments at **request** time, so the failure is a `TypeError` that only
 appears when somebody requests the mismatched route - and both real instances were on routes no UI

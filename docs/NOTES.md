@@ -35,9 +35,9 @@ coordinates might already exist nearby.
 the one it currently points at.** The two rules compose into a thing worth stating outright,
 because it is not obvious from either alone: since a pin has no coordinates of its own, and a
 location's cannot change, "give this pin its own place at the same point" is not expressible at
-all. That is why detaching a pin from its `Location` refuses with an explanation rather than
-inventing a row (see `controllers/pin_edit.PinRelinkView`, and the 2026-08-13 entry in
-`docs/PROBLEMS.md`).
+all. That is why there is no "detach from this location" action — the only coherent way to stop
+sharing a place's record is to relink to a different place, or move (see
+`controllers/pin_edit.PinRelinkView`, and the 2026-08-13 entry in `docs/PROBLEMS.md`).
 
 ## Wiki visibility — pinned, not public
 
