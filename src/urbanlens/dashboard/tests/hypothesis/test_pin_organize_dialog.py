@@ -101,6 +101,73 @@ class PinOrganizeDialogTests(TestCase):
         self.assertNotIn("Alex Person", [b.name for b in labels])
 
 
+class LabelCreateAndAddTests(TestCase):
+    """Inline "create a new label" from the pin/wiki Add Labels dialog.
+
+    Mirrors LabelImageMembershipView's existing create_and_add support (see
+    test_media_labels.py) - the same action, extended to the pin and location
+    membership routes.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        location = baker.make("dashboard.Location", latitude="40.100000", longitude="-74.100000")
+        self.pin = baker.make("dashboard.Pin", profile=self.profile, location=location, name="Label Create Test Pin")
+
+    def test_dialog_renders_a_create_row_for_the_pin_route(self) -> None:
+        response = self.client.get(reverse("label.pin", kwargs={"label_kind": "tag", "pin_slug": self.pin.slug}))
+        self.assertContains(response, "tad-create-row")
+
+    def test_create_and_add_makes_a_tag_and_applies_it_to_the_pin(self) -> None:
+        from urbanlens.dashboard.models.labels.meta import KIND_TAG
+        from urbanlens.dashboard.models.labels.model import Label
+
+        response = self.client.post(
+            reverse("label.pin", kwargs={"label_kind": "tag", "pin_slug": self.pin.slug}),
+            data={"action": "create_and_add", "name": "Freshly Explored"},
+        )
+        self.assertEqual(response.status_code, 200)
+        created = Label.objects.get(profile=self.profile, kind=KIND_TAG, name="Freshly Explored")
+        self.assertIn(created.id, set(self.pin.labels.values_list("id", flat=True)))
+
+    def test_create_and_add_reuses_an_existing_tag_of_that_name(self) -> None:
+        from urbanlens.dashboard.models.labels.meta import KIND_TAG
+        from urbanlens.dashboard.models.labels.model import Label
+
+        existing = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Overgrown")
+
+        response = self.client.post(
+            reverse("label.pin", kwargs={"label_kind": "tag", "pin_slug": self.pin.slug}),
+            data={"action": "create_and_add", "name": "Overgrown"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Label.objects.filter(profile=self.profile, kind=KIND_TAG, name="Overgrown").count(), 1)
+        self.assertIn(existing.id, set(self.pin.labels.values_list("id", flat=True)))
+
+    def test_create_and_add_requires_a_name(self) -> None:
+        response = self.client.post(
+            reverse("label.pin", kwargs={"label_kind": "tag", "pin_slug": self.pin.slug}),
+            data={"action": "create_and_add", "name": ""},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_location_route_also_supports_create_and_add(self) -> None:
+        from urbanlens.dashboard.models.labels.meta import KIND_TAG
+        from urbanlens.dashboard.models.labels.model import Label
+
+        wiki = baker.make("dashboard.Wiki", location=self.pin.location)
+        response = self.client.post(
+            reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.pin.location.slug}),
+            data={"action": "create_and_add", "name": "Rooftop Access"},
+        )
+        self.assertEqual(response.status_code, 200)
+        created = Label.objects.get(profile=self.profile, kind=KIND_TAG, name="Rooftop Access")
+        self.assertIn(created.id, set(wiki.labels.values_list("id", flat=True)))
+
+
 class CustomFieldsAddFormVisibilityTests(TestCase):
     """The pin detail page's Custom Fields "+" form should start hidden."""
 

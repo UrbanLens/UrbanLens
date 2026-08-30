@@ -55,9 +55,8 @@
             {% endfor %}
         </ul>
 
-        {% if membership_route == "image" %}
         <form class="tad-create-row" hidden
-              hx-post="{% url 'label.image' image_uuid=obj_uuid %}"
+              hx-post="{% if membership_route == 'location' %}{% url 'label.location' label_kind=label_url_kind location_slug=obj_uuid %}{% elif membership_route == 'image' %}{% url 'label.image' image_uuid=obj_uuid %}{% else %}{% url 'label.pin' label_kind=label_url_kind pin_slug=obj_uuid %}{% endif %}"
               hx-target="#{{ panel_id }}" hx-swap="outerHTML">
             {% csrf_token %}
             <input type="hidden" name="action" value="create_and_add">
@@ -67,7 +66,6 @@
                 <span>Create “<span class="tad-create-label"></span>” and apply</span>
             </button>
         </form>
-        {% endif %}
 
         <div class="dialog-footer">
             <a href="{% url 'organize.index' %}?tab=tags" class="dialog-manage-link">

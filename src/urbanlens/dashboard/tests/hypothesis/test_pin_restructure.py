@@ -671,6 +671,122 @@ class BuildingUnderExistingRootPinTests(TestCase):
         self.assertIn(self.stray, pin_restructure.nestable_root_pins(self.pin))
 
 
+class RestructureNestOrMergeChoiceTests(TestCase):
+    """The organize dialog's per-pin "child pin" vs "merge" choice.
+
+    Covers controllers.pin_restructure.PinRestructureApplyView.post's
+    nest_selection/nest_keys/nest_mode__<pk> handling, alongside
+    services.pins.pin_merge.merge_pins - the true consolidating merge, not
+    the "nest" half this view already had.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.location = _make_location()
+        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus", name="Hudson River State Hospital")
+        official_geometry(self.location, _parcel_polygon())
+        # No REData buildings in this fixture - isolates the nest/merge choice
+        # from the building-import half already covered above.
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
+        self.dup1 = baker.make(Pin, profile=self.user.profile, location=baker.make(Location, latitude=41.7330, longitude=-73.9300, google_place=None), name="Hudson River State Hospital")
+        self.dup2 = baker.make(Pin, profile=self.user.profile, location=baker.make(Location, latitude=41.7332, longitude=-73.9302, google_place=None), name="Hudson River State Hospital")
+        self.url = reverse("pin.restructure.apply", kwargs={"pin_slug": self.pin.slug})
+
+    def _post(self, **overrides):
+        data = {
+            "building_selection": "1",
+            "nest_selection": "1",
+            "nest_keys": [str(self.dup1.pk), str(self.dup2.pk)],
+            f"nest_mode__{self.dup1.pk}": "child",
+            f"nest_mode__{self.dup2.pk}": "child",
+        }
+        data.update(overrides)
+        return self.client.post(self.url, data)
+
+    def test_default_mode_nests_as_a_child_pin(self) -> None:
+        self._post()
+        self.dup1.refresh_from_db()
+        self.assertEqual(self.dup1.parent_pin_id, self.pin.pk)
+        self.assertTrue(Pin.objects.filter(pk=self.dup1.pk).exists(), "nesting must not delete the pin")
+
+    def test_merge_mode_deletes_the_loser_and_moves_its_data(self) -> None:
+        baker.make("dashboard.PinVisit", pin=self.dup2)
+        self._post(**{f"nest_mode__{self.dup2.pk}": "merge"})
+
+        self.assertFalse(Pin.objects.filter(pk=self.dup2.pk).exists())
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.visit_history.count(), 1)
+
+    def test_unchecking_a_pin_leaves_it_untouched(self) -> None:
+        self._post(nest_keys=[str(self.dup1.pk)])
+        self.dup2.refresh_from_db()
+        self.assertIsNone(self.dup2.parent_pin_id)
+        self.assertTrue(Pin.objects.filter(pk=self.dup2.pk).exists())
+
+    def test_toast_reports_merges_separately_from_nests(self) -> None:
+        response = self._post(**{f"nest_mode__{self.dup2.pk}": "merge"})
+        trigger = response["HX-Trigger"]
+        self.assertIn("Merged 1 pin", trigger)
+        self.assertIn("Nested 1 existing pin", trigger)
+
+    def test_a_merge_conflict_keeps_the_dialog_open_for_resolution(self) -> None:
+        """Both pins have their own article - merge_pins refuses without a choice."""
+        from urbanlens.dashboard.models.article.model import Article
+
+        baker.make(Article, pin=self.pin)
+        baker.make(Article, pin=self.dup2)
+
+        response = self._post(**{f"nest_mode__{self.dup2.pk}": "merge"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["HX-Keep-Open"], "1")
+        self.assertTrue(Pin.objects.filter(pk=self.dup2.pk).exists(), "an unresolved conflict must not delete anything")
+        self.assertIn("resolution__", response.content.decode())
+        self.assertIn("Resolve the highlighted differences", response["HX-Trigger"])
+
+    def test_resubmitting_with_a_resolution_completes_the_merge(self) -> None:
+        from urbanlens.dashboard.models.article.model import Article
+        from urbanlens.dashboard.services.pins.pin_merge import plan_merge_conflicts
+
+        baker.make(Article, pin=self.pin)
+        baker.make(Article, pin=self.dup2)
+        conflicts = plan_merge_conflicts(self.pin, self.dup2)
+        self.assertEqual([c.key for c in conflicts], ["article"])
+
+        response = self._post(nest_keys=[str(self.dup2.pk)], **{f"nest_mode__{self.dup2.pk}": "merge", f"resolution__{self.dup2.pk}__article": str(self.pin.pk)})
+
+        self.assertNotIn("HX-Keep-Open", response)
+        self.assertFalse(Pin.objects.filter(pk=self.dup2.pk).exists())
+
+    def test_a_response_that_stays_open_still_fires_the_refresh_event(self) -> None:
+        """Buildings/other nests may have already changed the pin's children even
+        though this candidate's conflict is unresolved - the page's own panels
+        (and the suggestion card) must still catch up."""
+        from urbanlens.dashboard.models.article.model import Article
+
+        baker.make(Article, pin=self.pin)
+        baker.make(Article, pin=self.dup2)
+
+        response = self._post(nest_keys=[str(self.dup1.pk), str(self.dup2.pk)], **{f"nest_mode__{self.dup2.pk}": "merge"})
+
+        self.assertIn("pinDetailPinsChanged", response["HX-Trigger"])
+        self.dup1.refresh_from_db()
+        self.assertEqual(self.dup1.parent_pin_id, self.pin.pk, "the other candidate's nest must still go through")
+
+    def test_get_shows_a_mode_toggle_and_the_map_legend_for_pin_candidates(self) -> None:
+        response = self.client.get(self.url)
+        self.assertContains(response, "<strong>Hudson River State Hospital</strong>", count=2)  # the two candidate rows
+        self.assertContains(response, f'name="nest_mode__{self.dup1.pk}"')
+        self.assertContains(response, "building-import-map-legend")
+        self.assertContains(response, 'id="building-import-nestable-map-data"')
+
+    def test_dialog_title_reflects_pins_only_when_there_are_no_buildings(self) -> None:
+        response = self.client.get(self.url)
+        self.assertContains(response, "Choose pins to organize")
+
+
 class EmptyImportIsNotReportedAsSuccessTests(TestCase):
     """An import that created nothing must not claim it did.
 

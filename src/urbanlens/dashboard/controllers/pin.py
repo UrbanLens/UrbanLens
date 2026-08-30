@@ -1813,7 +1813,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from django.urls import reverse
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_rows
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import match_buildings_to_children, parcel_child_rows, unpinned_building_child_rows
         from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
         from urbanlens.dashboard.services.pins.external_data import get_panel_source
         from urbanlens.dashboard.services.pins.pin_restructure import missing_buildings, property_polygon
@@ -1832,16 +1832,19 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return self._pending_panel(request, pin, PARCEL_BUILDINGS_CACHE_SOURCE)
 
         buildings = (cached.data or {}).get("buildings") or []
-        if not buildings:
+        children = list(pin.detail_pins.select_related("location"))
+
+        def url_for(child: Pin) -> str:
+            return reverse("pin.details", kwargs={"pin_slug": child.slug or child.uuid})
+
+        external_rows, unmatched = match_buildings_to_children(buildings, children, url_for=url_for, boundary_polygon=property_polygon(pin))
+        own_building_rows = unpinned_building_child_rows(unmatched, url_for=url_for)
+        parcel_rows = parcel_child_rows(children, url_for=url_for)
+        all_rows = external_rows + own_building_rows
+        if not all_rows and not parcel_rows:
             return HttpResponse(status=204)
 
-        children = list(pin.detail_pins.select_related("location"))
-        rows = building_rows(
-            buildings,
-            children,
-            url_for=lambda child: reverse("pin.details", kwargs={"pin_slug": child.slug or child.uuid}),
-            boundary_polygon=property_polygon(pin),
-        )
+        mine_rows = [row for row in all_rows if row["child_name"]]
         return render(
             request,
             "dashboard/partials/pins/_parcel_buildings_panel.html",
@@ -1850,7 +1853,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "icon": panel.icon,
                 "title": panel.title,
                 "pin": pin,
-                "rows": rows,
+                # Named "rows" (not all_rows) to match the key the wiki page's
+                # own render of this same template already uses - the "All"
+                # tab is this same list, just with two siblings now.
+                "rows": all_rows,
+                "mine_rows": mine_rows,
+                "parcel_rows": parcel_rows,
                 # From the import's own view of the parcel, not from the rows:
                 # the button must promise exactly what pressing it will do.
                 # Counting rows with no child pin answered a different question
@@ -1859,7 +1867,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 # dialog uses) excludes it, so the button offered a count the
                 # dialog then 204'd on, doing nothing at all.
                 "unpinned_count": len(missing_buildings(pin)),
-                "debug": self._debug_entry(request, PARCEL_BUILDINGS_CACHE_SOURCE, cached.query_key, from_cache=True, count=len(rows)),
+                "debug": self._debug_entry(request, PARCEL_BUILDINGS_CACHE_SOURCE, cached.query_key, from_cache=True, count=len(all_rows)),
             },
         )
 

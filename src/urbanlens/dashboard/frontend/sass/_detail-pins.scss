@@ -825,25 +825,135 @@
     font-size: .66rem;
 }
 
-.building-import-nesting-note {
-    display: flex;
-    align-items: center;
-    gap: .45rem;
-    margin: 0 1.25rem .85rem;
-    padding: .65rem .8rem;
-    border-radius: .6rem;
-    background: color-mix(in srgb, var(--ul-primary-color) 9%, transparent);
-    color: var(--ul-grey-8);
-    font-size: .85rem;
-
-    i {
-        color: var(--ul-primary-color);
-    }
-}
-
 .building-import-empty {
     margin: 0;
     color: var(--ul-grey-7);
+}
+
+.building-import-section-title {
+    margin: 0 0 .35rem;
+    font-size: .78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    color: var(--ul-grey-6);
+
+    & + .building-import-section-hint {
+        margin-top: -.2rem;
+    }
+}
+
+.building-import-section-hint {
+    margin: 0 0 .5rem;
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+}
+
+.building-import-choices > .building-import-section-title:not(:first-child) {
+    margin-top: 1rem;
+}
+
+// A pin candidate's row carries more than a checkbox - the mode toggle (and,
+// once "Merge" is picked, its conflict picker) stack underneath it, so unlike
+// a plain building item this can't stay display:grid on .building-import-item alone.
+.building-import-pin-row {
+    padding: .5rem .75rem;
+
+    .building-import-item {
+        padding: .15rem 0;
+
+        &:hover {
+            background: none;
+        }
+    }
+}
+
+.nest-mode-toggle {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: .15rem 0 .3rem 1.75rem;
+}
+
+.nest-mode-option {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .82rem;
+    color: var(--ul-grey-7);
+    cursor: pointer;
+
+    input {
+        accent-color: var(--ul-primary-color);
+    }
+}
+
+.building-import-merge-conflicts {
+    display: flex;
+    flex-direction: column;
+    gap: $space-sm;
+    margin: 0 0 0 1.75rem;
+    padding: $space-sm;
+    border-radius: $radius-sm;
+    background: rgba(255, 152, 0, .08);
+    border: 1px solid rgba(255, 152, 0, .3);
+}
+
+.building-import-merge-warning {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin: 0;
+    font-size: .8rem;
+    color: var(--ul-grey-7);
+
+    .material-symbols-outlined {
+        font-size: 16px;
+        color: #f57c00;
+    }
+}
+
+.building-import-merge-note {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin: 0 0 0 1.75rem;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 15px;
+        color: #f57c00;
+    }
+}
+
+.building-import-map-legend {
+    display: flex;
+    gap: 1rem;
+    padding-top: .4rem;
+    font-size: .76rem;
+    color: var(--ul-grey-6);
+
+    span {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+    }
+}
+
+.building-import-legend-swatch {
+    width: .7rem;
+    height: .7rem;
+    border-radius: 50%;
+    display: inline-block;
+
+    &--building {
+        background: #3b82f6;
+    }
+
+    &--pin {
+        background: #a78bfa;
+    }
 }
 
 // Normalized onto the shared breakpoint token - a raw 720px here disagreed

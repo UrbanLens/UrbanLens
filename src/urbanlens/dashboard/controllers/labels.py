@@ -1299,6 +1299,30 @@ def _membership_label_id(request: HttpRequest) -> str | None:
     return request.POST.get("label_id") or request.POST.get("category_id")
 
 
+def _organize_label_from_create(request: HttpRequest, profile: Profile) -> Label | HttpResponse:
+    """Create a personal tag from POSTed ``name``, or reuse the existing one of that name.
+
+    Mirrors ``LabelImageMembershipView._label_from_create`` for the pin/wiki "Add Labels"
+    dialogs, which offer no kind picker - a quick-created label is always a plain ``KIND_TAG``,
+    matching the model's own default.
+    """
+    name = (request.POST.get("name") or "").strip()
+    if not name:
+        return HttpResponse("Name is required.", status=400)
+    name_error = column_length_error(Label, "name", name, "Label")
+    if name_error:
+        return HttpResponse(name_error, status=400)
+    conflict = find_conflicting_label(profile=profile, name=name, kind=KIND_TAG)
+    if conflict is not None:
+        return conflict
+    return Label.objects.create(
+        kind=KIND_TAG,
+        profile=profile,
+        name=name,
+        color=clean_color(None, default=DEFAULT_LABEL_COLOR),
+    )
+
+
 def _membership_kind_blocked(kwargs: dict[str, Any]) -> bool:
     """Return True when membership panels are not applicable to the URL label kind."""
     url_kind = kwargs.get("label_kind")
@@ -1344,8 +1368,19 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
             return HttpResponse(status=404)
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _request_profile(request)
-        label_id = _membership_label_id(request)
         action = request.POST.get("action")
+
+        if action == "create_and_add":
+            label = _organize_label_from_create(request, profile)
+            if isinstance(label, HttpResponse):
+                return label
+            pin.labels.add(label)
+            from urbanlens.dashboard.services.undo.mutations import stash_label_add
+
+            stash_label_add(profile, target="pin", target_id=pin.pk, label=label)
+            return render(request, _MEMBERSHIP_PANEL, self._ctx(profile, pin, pin_slug))
+
+        label_id = _membership_label_id(request)
         label = get_object_or_404(Label.objects.visible_to(profile), id=label_id, kind__in=_ORGANIZE_KINDS)
         if action == "add":
             pin.labels.add(label)
@@ -1416,8 +1451,33 @@ class LabelLocationMembershipView(LoginRequiredMixin, View):
         if _membership_kind_blocked(kwargs):
             return HttpResponse(status=404)
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        label_id = _membership_label_id(request)
         action = request.POST.get("action")
+
+        if action == "create_and_add":
+            label = _organize_label_from_create(request, profile)
+            if isinstance(label, HttpResponse):
+                return label
+            wiki.labels.add(label)
+            from urbanlens.dashboard.services.undo.mutations import stash_label_add
+
+            stash_label_add(profile, target="wiki", target_id=wiki.pk, label=label)
+            return render(
+                request,
+                _MEMBERSHIP_PANEL,
+                _membership_panel_ctx(
+                    profile,
+                    _wiki_member_ids(wiki),
+                    panel_id="category-location-panel",
+                    dialog_id_prefix="category-loc-dialog-",
+                    dialog_id_suffix=location_slug,
+                    membership_route="location",
+                    obj_uuid=location_slug,
+                    collapse_scope="wiki",
+                    empty_text="No labels. Click + to add one.",
+                ),
+            )
+
+        label_id = _membership_label_id(request)
         label = get_object_or_404(Label.objects.visible_to(profile), id=label_id, kind__in=_ORGANIZE_KINDS)
         if action == "add":
             wiki.labels.add(label)

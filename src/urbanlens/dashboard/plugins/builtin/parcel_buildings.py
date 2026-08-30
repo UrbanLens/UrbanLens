@@ -364,6 +364,29 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None,
         be a lie on one of the two callers. The external API renames them to
         ``child_pin_*`` at its own boundary, where they really are pins.
     """
+    rows, _unmatched = match_buildings_to_children(buildings, children, url_for=url_for, boundary_polygon=boundary_polygon)
+    return rows
+
+
+def match_buildings_to_children(
+    buildings: list[dict[str, Any]],
+    children: list,
+    url_for=None,
+    boundary_polygon: GEOSGeometry | None = None,
+) -> tuple[list[dict[str, Any]], list]:
+    """The matching loop :func:`building_rows` wraps, also returning the leftover children.
+
+    Split out so a caller can tell what to do with a marker that covers no known
+    building - see :func:`unpinned_building_child_rows` and :func:`parcel_child_rows`,
+    which turn those leftovers (a hand-created ``BUILDING`` pin REData/OSM never
+    reported, or a ``PARCEL`` pin, which was never a matching candidate in the
+    first place) into rows of their own instead of silently dropping them.
+
+    Returns:
+        ``(rows, unmatched)`` - ``rows`` exactly as :func:`building_rows` returns
+        them, ``unmatched`` the children left over once every building has
+        claimed at most one.
+    """
     from urbanlens.dashboard.services.pins.pin_restructure import match_marker
 
     rows: list[dict[str, Any]] = []
@@ -395,13 +418,100 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None,
                 "child_refs": list(building.get("child_refs") or []),
                 "depth": 0,
                 "selection_key": building.get("_selection_key") or "",
+                "origin": "external",
                 "child_name": _marker_name(child) if child is not None else "",
                 "child_uuid": str(child.uuid) if child is not None and getattr(child, "uuid", None) else "",
                 "child_url": (url_for(child) if url_for is not None else "") if child is not None else "",
             },
         )
 
-    return _tree_ordered(rows)
+    return _tree_ordered(rows), unmatched
+
+
+def unpinned_building_child_rows(unmatched_children: list, url_for=None) -> list[dict[str, Any]]:
+    """Row-shape a leftover ``BUILDING`` child pin/wiki that no known building record covers.
+
+    ``building_rows``' matching loop only ever *consumes* markers that cover an
+    external building record - a ``BUILDING`` pin the owner created by hand
+    (REData/OSM never reported it, or the parcel has no external data at all)
+    is simply never mentioned. This is the same building panel's "Buildings on
+    this Property" promise on a purely first-party pin, so it gets a row shaped
+    exactly like :func:`building_rows`' own - just with nothing external to
+    report.
+
+    Args:
+        unmatched_children: The ``unmatched`` list :func:`match_buildings_to_children`
+            returned - children with no external building record.
+        url_for: Optional callable turning a child pin into a link target, as
+            in :func:`building_rows`.
+
+    Returns:
+        One row per ``BUILDING``-typed child, tree-ordered the same way
+        :func:`building_rows`' output is (they share the same sort key).
+    """
+    from urbanlens.dashboard.models.pin.model import PinType
+
+    rows: list[dict[str, Any]] = [
+        {
+            # No separate "official" name to fall back from here (unlike an
+            # external row, where `name` and `child_name` can legitimately
+            # differ) - the pin's own name is the only name this row has, and
+            # using it for both is also what makes _row_sort_key (which only
+            # reads `name`) sort these alphabetically instead of by insertion order.
+            "name": _marker_name(child),
+            "building_number": "",
+            "year_built": "",
+            "source": "",
+            "source_label": "",
+            "latitude": getattr(child, "effective_latitude", None),
+            "longitude": getattr(child, "effective_longitude", None),
+            "geometry": None,
+            "has_geometry": False,
+            "ref": "",
+            "parent_ref": "",
+            "child_refs": [],
+            "depth": 0,
+            "selection_key": "",
+            "origin": "pin",
+            "child_name": _marker_name(child),
+            "child_uuid": str(child.uuid) if getattr(child, "uuid", None) else "",
+            "child_url": url_for(child) if url_for is not None else "",
+        }
+        for child in unmatched_children
+        if getattr(child, "pin_type", None) == PinType.BUILDING
+    ]
+    return _tree_ordered(rows, annotate_depth=False)
+
+
+def parcel_child_rows(children: list, url_for=None) -> list[dict[str, Any]]:
+    """Row-shape every ``PARCEL``-typed child pin/wiki, for the panel's Parcels tab.
+
+    Unlike buildings, a parcel child is never matched against external data -
+    it is purely a fact about the owner's own hierarchy - so this skips
+    :func:`match_buildings_to_children` entirely rather than treating parcels
+    as another kind of leftover.
+
+    Args:
+        children: The marker's direct children (child pins or child wikis).
+        url_for: Optional callable turning a child into a link target.
+
+    Returns:
+        One ``{"name", "child_uuid", "child_url"}`` row per ``PARCEL`` child,
+        sorted by name.
+    """
+    from urbanlens.dashboard.models.pin.model import PinType
+
+    rows = [
+        {
+            "name": _marker_name(child),
+            "child_uuid": str(child.uuid) if getattr(child, "uuid", None) else "",
+            "child_url": url_for(child) if url_for is not None else "",
+        }
+        for child in children
+        if getattr(child, "pin_type", None) == PinType.PARCEL
+    ]
+    rows.sort(key=lambda row: row["name"].casefold())
+    return rows
 
 
 def building_within_boundary(building: dict[str, Any], boundary_polygon: GEOSGeometry) -> bool:
