@@ -76,6 +76,32 @@ def representative_locations(places) -> list[Location]:
     return chosen
 
 
+def _shares_lineage(a: Place, b: Place) -> bool:
+    """Whether one of two places is a ``PART_OF`` ancestor of the other.
+
+    Two places already sharing a domain root are filtered out by
+    ``competing_for_point`` itself. This catches the case a data defect can
+    still produce - a parcel and one of its own buildings recorded with
+    mismatched ``domain_root`` - so a broken edge can surface a pin's own
+    parcel as something to "switch" to, rather than merely fail to grant the
+    access the edge should have.
+
+    Args:
+        a: One place.
+        b: The other place.
+
+    Returns:
+        True when they are the same place, or one is an ancestor of the other.
+    """
+    from urbanlens.dashboard.services.places import lineage
+
+    if a.pk == b.pk:
+        return True
+    if any(ancestor.pk == b.pk for ancestor in lineage.ancestors_of(a)):
+        return True
+    return any(ancestor.pk == a.pk for ancestor in lineage.ancestors_of(b))
+
+
 def competing_wiki_locations(pin, profile: Profile) -> list[Location]:
     """Locations a pin could plausibly be relinked to instead, if any.
 
@@ -84,21 +110,28 @@ def competing_wiki_locations(pin, profile: Profile) -> list[Location]:
         profile: The viewer, so nothing they haven't earned is named.
 
     Returns:
-        The Locations holding the competing places' wikis, ready to render as
-        switch targets. Empty in every ordinary case.
+        One Location per competing place, ready to render as switch targets.
+        Empty in every ordinary case - in particular, whenever the pin's own
+        coordinate has no resolved place to compare rivals against, since
+        nothing can be said to compete with an unknown answer.
     """
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.services.wiki.wiki_access import accessible_domain_ids
 
-    if pin is None or pin.location_id is None:
+    if pin is None or pin.location_id is None or not pin.location.place_id:
         return []
+    resolved = pin.location.place
     latitude, longitude = pin.effective_latitude, pin.effective_longitude
-    rivals = competing_places(latitude, longitude, pin.location.place if pin.location.place_id else None)
+    rivals = [place for place in competing_places(latitude, longitude, resolved) if not _shares_lineage(place, resolved)]
     if not rivals:
         return []
 
     visible_domains = accessible_domain_ids(profile)
-    wanted = [place.pk for place in rivals if place.domain_root_id in visible_domains]
+    wanted = [place for place in rivals if place.domain_root_id in visible_domains]
     if not wanted:
         return []
-    return list(Location.objects.filter(wiki__isnull=False, place_id__in=wanted).select_related("wiki").order_by("official_name"))
+    # One Location per place - representative_locations picks a single
+    # representative rather than every Location that resolves onto it, which
+    # is what stops one rival place from exploding into many rows. A
+    # wiki-bearing Location is expected to always carry a routing slug; drop
+    # any that don't rather than link to a "None" wiki URL.
+    return [location for location in representative_locations(wanted) if location.slug]

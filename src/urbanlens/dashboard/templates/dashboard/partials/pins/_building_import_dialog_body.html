@@ -1,0 +1,146 @@
+{% comment %}
+The swappable half of the building-import dialog - everything but the header.
+Re-rendered by itself (never re-including the header) whenever the dialog
+stays open after a submit: an unresolved merge conflict re-renders this same
+partial scoped to just the candidates still needing a choice (see
+controllers.pin_restructure._render_building_dialog_body).
+
+Context: see _building_import_dialog.html plus:
+    nestable_rows: list of {pin, conflicts, default_merge} - see
+        controllers.pin_restructure._nestable_rows. Buildings-only dialogs
+        (restructure=False) never set this.
+{% endcomment %}
+{% load map_components %}
+<div id="building-import-dialog-body">
+<form class="building-import-form"
+      data-restructure="{{ restructure|yesno:'1,0' }}"
+      hx-post="{{ form_action }}"
+      hx-target="#building-import-dialog-body" hx-swap="outerHTML"
+      hx-disabled-elt="find button[type='submit']"
+      hx-indicator="find .building-import-submit-spinner"
+      hx-on::after-request="if(event.detail.successful && !event.detail.xhr.getResponseHeader('HX-Keep-Open')){this.closest('dialog').close()}">
+    {% csrf_token %}
+    <input type="hidden" name="building_selection" value="1">
+    {% if nestable_rows %}
+    {# Independent of building_selection: a legacy/no-body POST (e.g. an #}
+    {# older cached page) must still nest every candidate as before, so #}
+    {# "explicitly chose per pin" needs its own marker rather than reusing #}
+    {# the buildings one - an all-unchecked *pins* selection is a real state #}
+    {# (every candidate is really a duplicate, merge them all), not "absent". #}
+    <input type="hidden" name="nest_selection" value="1">
+    {% endif %}
+
+    <div class="building-import-layout ul-dialog-body">
+        <div class="building-import-choices">
+            {% if rows %}
+            <h4 class="building-import-section-title">Buildings</h4>
+            <div class="building-import-select-tools">
+                <span><strong data-building-selected-count>{{ building_count }}</strong> of {{ building_count }} selected</span>
+                <button type="button" class="btn btn--ghost btn--sm" data-building-select-all>Uncheck all</button>
+            </div>
+            <ul class="building-import-list">
+                {% for row in rows %}
+                <li>
+                    <label class="building-import-item">
+                        <input type="checkbox" name="building_keys" value="{{ row.selection_key }}" checked>
+                        <span class="building-import-number">{{ row.building_number|default:"&mdash;" }}</span>
+                        <span class="building-import-info">
+                            <strong>{{ row.name|default:"Unnamed building" }}</strong>
+                            <small>
+                                {% if row.year_built %}Built {{ row.year_built }}{% endif %}
+                                {% if row.year_built and row.source_label %} &middot; {% endif %}
+                                {{ row.source_label }}
+                            </small>
+                        </span>
+                    </label>
+                </li>
+                {% endfor %}
+            </ul>
+            {% elif not nestable_rows %}
+            <p class="building-import-empty">There are no new buildings to add.</p>
+            {% endif %}
+
+            {% if nestable_rows %}
+            <h4 class="building-import-section-title">Pins on this property</h4>
+            <p class="building-import-section-hint">
+                Each one can become a child pin under this property, or - if it's really the same
+                place - merge into this pin instead.
+            </p>
+            <ul class="building-import-list building-import-pins">
+                {% for entry in nestable_rows %}
+                <li class="building-import-pin-row" data-nest-pk="{{ entry.pin.pk }}">
+                    <label class="building-import-item">
+                        <input type="checkbox" name="nest_keys" value="{{ entry.pin.pk }}" checked>
+                        <span class="building-import-number"><i class="material-symbols-outlined" style="font-size:18px;">location_on</i></span>
+                        <span class="building-import-info">
+                            <strong>{{ entry.pin.effective_name }}</strong>
+                        </span>
+                    </label>
+                    <div class="nest-mode-toggle" role="radiogroup" aria-label="How to include {{ entry.pin.effective_name }}">
+                        <label class="nest-mode-option">
+                            <input type="radio" name="nest_mode__{{ entry.pin.pk }}" value="child" {% if not entry.default_merge %}checked{% endif %}>
+                            Child pin
+                        </label>
+                        <label class="nest-mode-option">
+                            <input type="radio" name="nest_mode__{{ entry.pin.pk }}" value="merge" {% if entry.default_merge %}checked{% endif %}>
+                            Merge into this pin
+                        </label>
+                    </div>
+                    {% if entry.conflicts %}
+                    <div class="building-import-merge-conflicts"{% if not entry.default_merge %} hidden{% endif %}>
+                        <p class="building-import-merge-warning">
+                            <i class="material-symbols-outlined" aria-hidden="true">warning</i>
+                            This pin has its own data that differs from this property's - choose which to keep:
+                        </p>
+                        {% for conflict in entry.conflicts %}
+                        <div class="pin-merge-suggestion-conflict">
+                            <p class="pin-merge-suggestion-conflict-label">{{ conflict.label }} - keep which one?</p>
+                            <label class="pin-merge-suggestion-conflict-option">
+                                <input type="radio" name="resolution__{{ entry.pin.pk }}__{{ conflict.key }}" value="{{ pin.pk }}" required>
+                                This pin's ({{ conflict.pin_a_summary }})
+                            </label>
+                            <label class="pin-merge-suggestion-conflict-option">
+                                <input type="radio" name="resolution__{{ entry.pin.pk }}__{{ conflict.key }}" value="{{ entry.pin.pk }}" required>
+                                {{ entry.pin.effective_name }}'s ({{ conflict.pin_b_summary }})
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="building-import-merge-note"{% if not entry.default_merge %} hidden{% endif %}>
+                        <i class="material-symbols-outlined" aria-hidden="true">warning</i>
+                        Combines this pin's data into this property and deletes it - can't be undone.
+                    </p>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% if rows or nestable_rows %}
+        <div class="building-import-map-wrap">
+            {% map_toolbar "select_building_import" panel_id="building-import-map-buttons" %}
+            <div id="building-import-map" aria-label="Map of buildings and pins to add"></div>
+            {% if nestable_rows %}
+            <div class="building-import-map-legend">
+                <span><i class="building-import-legend-swatch building-import-legend-swatch--building"></i> Building</span>
+                <span><i class="building-import-legend-swatch building-import-legend-swatch--pin"></i> Existing pin</span>
+            </div>
+            {% endif %}
+            <div class="building-import-attribution">Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="dialog-actions">
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="submit" class="btn btn--primary" data-building-import-submit{% if not rows and not nestable_rows %} disabled{% endif %}>
+            <i class="material-symbols-outlined">add_location_alt</i>
+            <span data-building-submit-label>{% if restructure %}Organize property{% else %}Add {{ building_count }} building{{ building_count|pluralize }}{% endif %}</span>
+        </button>
+        <span class="building-import-submit-spinner htmx-indicator"><i class="material-icons spin">autorenew</i> Working...</span>
+    </div>
+</form>
+{{ rows|json_script:"building-import-map-data" }}
+{{ nestable_map_data|json_script:"building-import-nestable-map-data" }}
+</div>

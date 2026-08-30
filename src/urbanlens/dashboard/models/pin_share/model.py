@@ -191,6 +191,52 @@ class PinShare(abstract.DashboardModel):
         return location.address or f"{location.latitude}, {location.longitude}"
 
     @property
+    def reveals_live_pin(self) -> bool:
+        """Whether the recipient ever agreed to see the sender's actual pin.
+
+        ``DETECTED`` shares are auto-recorded when a place was revealed
+        indirectly - a shared map's geometry, a DM's text, a trip activity (see
+        :class:`~urbanlens.dashboard.models.pin_share.meta.PinShareStatus`).
+        Nobody offered the pin and nobody accepted it, so reading through to
+        ``self.pin`` for one shows the recipient a live row they were never
+        given: its current name, and whatever the sender renames it to next.
+
+        Every explicit share is the opposite - previewing the pin is the point,
+        since the recipient is being asked to accept or reject it.
+
+        Returns:
+            True when this share's own pin may be shown to its recipient.
+        """
+        return self.status != PinShareStatus.DETECTED
+
+    @property
+    def safe_pin(self) -> Pin | None:
+        """The sender's pin, but only when :attr:`reveals_live_pin` allows it.
+
+        Returns:
+            The pin, or None when this share must be presented from its
+            snapshotted ``location`` instead.
+        """
+        return self.pin if self.reveals_live_pin else None
+
+    @property
+    def safe_place_label(self) -> str:
+        """:attr:`place_label`, resolved without reading a pin nobody shared.
+
+        Returns:
+            The pin's display label for an explicit share, otherwise a label
+            derived from the snapshotted location.
+        """
+        if self.reveals_live_pin:
+            return self.place_label
+        location = self.shared_location
+        if location is None:
+            return "a location"
+        if location.display_name and location.display_name != "Unnamed Location":
+            return location.display_name
+        return location.address or f"{location.latitude}, {location.longitude}"
+
+    @property
     def resulting_pin(self) -> Pin | None:
         """The recipient-side Pin this share produced, once accepted.
 

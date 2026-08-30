@@ -693,6 +693,16 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
     if strip_location and exif_data:
         exif_data.pop("GPSInfo", None)
 
+    # An upload accepted through services.photos reads its metadata in the
+    # request and stores the file already stripped, so by the time this task
+    # runs there is nothing left in the bytes to find - the row is where the
+    # coordinates are. Falling back to them keeps location resolution and the
+    # visit suggestion below working for those rows, and is a no-op for a file
+    # that still carries its own (an older row, or a format the byte-level
+    # stripper leaves to the re-encode).
+    if coords is None and not strip_location and image.latitude is not None and image.longitude is not None:
+        coords = (float(image.latitude), float(image.longitude))
+
     update_fields: dict[str, object] = {}
     if direction is not None:
         image.direction = Decimal(str(round(direction, 2)))
@@ -768,7 +778,10 @@ def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessR
     from urbanlens.dashboard.services.media.videos import process_uploaded_video
 
     max_height = get_video_downscale_policy(image.profile) if image.profile is not None else None
-    metadata, new_size = process_uploaded_video(image, max_height, strip_location=strip_location)
+    # The container's own location tags are always removed from the stored file;
+    # strip_location decides only whether the coordinates are recorded on the
+    # row, where the app's visibility rules govern them.
+    metadata, new_size = process_uploaded_video(image, max_height)
 
     update_fields: dict[str, object] = {}
     coords: tuple[float, float] | None = None
@@ -804,18 +817,26 @@ def _process_document_upload(image: Image, image_id: int) -> _UploadProcessResul
 
 
 def _sync_deduped_siblings(image: Image) -> None:
-    """Copy processed file metadata onto this user's other rows of the same bytes.
+    """Copy the processed file and its metadata onto this user's other rows of the same bytes.
 
     Deduplicated copies skip ``process_image_upload`` so they don't rewrite the
-    shared file. Once the original has been processed, its thumbnail, GPS, and
-    EXIF need to land on those copies too.
+    shared file. A copy made while the original was still queued points at the
+    raw upload, so ``image`` is synced along with the metadata: without it the
+    sibling keeps serving the un-stripped file, GPS block and all, and nothing
+    else ever revisits it (the thumbnail backfill only looks at rows that have
+    no thumbnail, and this function has just given it one).
+
+    ``checksum`` is deliberately not synced. It identifies the *uploaded* bytes
+    and is what dedup matches on; it is not recomputed after processing.
     """
     from urbanlens.dashboard.models.images.model import Image as ImageModel, QuotaExemption
+    from urbanlens.dashboard.services.media.images import file_still_referenced
 
     if not image.checksum or image.profile_id is None:
         return
     if image.quota_exempt_reason == QuotaExemption.DEDUPLICATED:
         return
+    processed_name = image.image.name if image.image else ""
     payload: dict[str, object] = {
         "author": image.author,
         "copyright": image.copyright,
@@ -827,11 +848,23 @@ def _sync_deduped_siblings(image: Image) -> None:
         "file_size": image.file_size,
         "thumbnail": image.thumbnail.name if image.thumbnail else "",
     }
-    ImageModel.objects.filter(
+    if processed_name:
+        payload["image"] = processed_name
+
+    siblings = ImageModel.objects.filter(
         profile_id=image.profile_id,
         checksum=image.checksum,
         quota_exempt_reason=QuotaExemption.DEDUPLICATED,
-    ).exclude(pk=image.pk).update(**payload)
+    ).exclude(pk=image.pk)
+    stale_names = {name for name in siblings.values_list("image", flat=True) if name and name != processed_name}
+    siblings.update(**payload)
+
+    # Those siblings were the only reason downscale_stored_image kept the raw
+    # upload; once they point at the processed file it is unreferenced.
+    for name in stale_names:
+        if not file_still_referenced("image", name):
+            with contextlib.suppress(OSError):
+                image.image.storage.delete(name)
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

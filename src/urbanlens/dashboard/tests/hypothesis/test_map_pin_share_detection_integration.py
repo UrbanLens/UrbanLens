@@ -80,6 +80,35 @@ class DetectSharedPinsTests(_MapShareTestCase):
         matches = detect_shared_pins(markup_map, self.profiles["a"])
         self.assertEqual(matches, [])
 
+    def test_zoomed_in_excludes_an_in_frame_pin_the_map_is_not_aimed_at(self) -> None:
+        """Being on screen is not being shared.
+
+        A snapshot carries the viewport and the drawn shapes - never the
+        sender's pins - so a recipient cannot learn about a pin the sender
+        neither centred on nor drew anything near. Whole-frame containment
+        recorded a share for every pin across roughly 9 x 7 km at the default
+        threshold zoom, which then surfaced on the recipient's Sharing page.
+        """
+        off_centre = baker.make(Location, latitude=f"{_LAT + 0.004:.6f}", longitude=f"{_LNG:.6f}")
+        bystander = Pin.objects.create(profile=self.profiles["a"], location=off_centre)
+        markup_map = self._map(zoom=16)
+
+        matches = detect_shared_pins(markup_map, self.profiles["a"])
+
+        self.assertIn(self.pin, matches, "the pin the view is centred on is still shared")
+        self.assertNotIn(bystander, matches)
+
+    def test_zoomed_in_still_matches_an_off_centre_pin_the_markup_calls_out(self) -> None:
+        """Drawing on a pin shares it wherever it sits in the frame."""
+        off_centre = baker.make(Location, latitude=f"{_LAT + 0.004:.6f}", longitude=f"{_LNG:.6f}")
+        called_out = Pin.objects.create(profile=self.profiles["a"], location=off_centre)
+        markup_map = self._map(zoom=16)
+        self._markup_item(markup_map, MarkupType.PIN, {"type": "Point", "coordinates": [_LNG, _LAT + 0.004]})
+
+        matches = detect_shared_pins(markup_map, self.profiles["a"])
+
+        self.assertIn(called_out, matches)
+
     def test_zoomed_out_with_no_markup_matches_nothing(self) -> None:
         markup_map = self._map(zoom=4)
         matches = detect_shared_pins(markup_map, self.profiles["a"])

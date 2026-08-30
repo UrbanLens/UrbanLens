@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 import hashlib
@@ -35,7 +36,7 @@ _EXIF_DATETIME_FORMAT = "%Y:%m:%d %H:%M:%S"
 # exotic formats) is stored untouched - only its size is counted.
 _PROCESSABLE_FORMATS = {"JPEG", "PNG", "WEBP", "TIFF"}
 
-_FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".tif", "AVIF": ".avif", "HEIF": ".heic"}
+_FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".tif", "AVIF": ".avif", "HEIF": ".heic", "MPO": ".jpg"}
 
 # Formats whose stored file we can rewrite carrying modified EXIF. A superset of
 # _PROCESSABLE_FORMATS on purpose: those are the formats the *downscaler* will
@@ -45,19 +46,28 @@ _FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".
 # HEIF covers both .heic and .heif - pillow-heif registers one opener reporting
 # format "HEIF" for both, so the extension a phone happens to use does not
 # change what this pipeline sees.
-_EXIF_REWRITABLE_FORMATS = _PROCESSABLE_FORMATS | {"AVIF", "HEIF"}
+_EXIF_REWRITABLE_FORMATS = _PROCESSABLE_FORMATS | {"AVIF", "HEIF", "MPO"}
 
-# Formats that must be re-encoded whatever the downscale policy says, because no
-# mainstream browser outside Safari renders them and stored photos are served
-# through a plain <img src>. Accepting the upload and keeping the bytes verbatim
-# swaps an explicit "convert it to JPEG first" refusal for a broken image, which
-# is strictly worse. `_MUST_TRANSCODE_TARGET` is the format they land in when the
-# uploader's policy does not already pick one (a subscriber with downscaling off
-# and no WebP conversion, which is the default).
+# Formats never stored as uploaded, whatever the downscale policy says.
+# `_MUST_TRANSCODE_TARGET` is what they land in when the uploader's policy does
+# not already pick one (a subscriber with downscaling off and no WebP
+# conversion, which is the default). Two separate reasons to be in here:
 #
-# AVIF is deliberately not here: browser support for it is broad, so re-encoding
-# one would cost quality for nothing.
-_MUST_TRANSCODE_FORMATS = {"HEIF"}
+# HEIF, because no mainstream browser outside Safari renders it and stored
+# photos are served through a plain <img src>. Keeping the bytes verbatim swaps
+# an explicit "convert it to JPEG first" refusal for a broken image, which is
+# strictly worse. AVIF is deliberately absent: browser support for it is broad,
+# so re-encoding one would cost quality for nothing.
+#
+# MPO, because it is a JPEG container holding *several* images - the depth or
+# second-lens frame phones record alongside the picture - and Pillow only ever
+# loads and rewrites the first. Every later frame carries its own APP1 block, so
+# there is no rewriting an MPO in place with the metadata gone; the EXIF strip
+# either drops the extra frames or does not happen. It used to not happen: MPO
+# was in no list here, so the whole pass returned early and the file was kept
+# byte-for-byte, GPS and all. Browsers show the first frame, so transcoding to
+# JPEG loses nothing a viewer ever saw.
+_MUST_TRANSCODE_FORMATS = {"HEIF", "MPO"}
 _MUST_TRANSCODE_TARGET = "JPEG"
 
 # EXIF tag 34853 - the GPSInfo IFD pointer.
@@ -523,8 +533,10 @@ def extract_exif_data(image_file: IO[bytes]) -> dict[str, Any] | None:
 #: Extensions that reach `_MUST_TRANSCODE_FORMATS`. Used only to decide whether
 #: the downscale pass is worth entering at all - the authoritative check is
 #: Pillow's reported format once the file is open, so a mislabelled file costs
-#: one wasted open and nothing else.
-_MUST_TRANSCODE_EXTENSIONS = {".heic", ".heif"}
+#: one wasted open and nothing else. ``.mpo`` is listed for completeness, but a
+#: phone almost always names a multi-picture file ``.jpg``; those reach the pass
+#: through the ordinary JPEG extension and are identified once open.
+_MUST_TRANSCODE_EXTENSIONS = {".heic", ".heif", ".mpo"}
 
 
 def stored_file_needs_transcode(name: str) -> bool:
@@ -541,6 +553,31 @@ def stored_file_needs_transcode(name: str) -> bool:
         True when the file's extension is one that must be transcoded.
     """
     return posixpath.splitext(name or "")[1].lower() in _MUST_TRANSCODE_EXTENSIONS
+
+
+def file_still_referenced(field: str, name: str, *, exclude_pks: Collection[int] = ()) -> bool:
+    """Whether any *other* Image row stores *name* in *field*.
+
+    One stored file can back several rows. Pin sharing copies a pin's photos by
+    reusing the same storage key rather than duplicating bytes
+    (``services.sharing.pin_sharing``), and a deduplicated upload reuses both the
+    file and its thumbnail (``services.photos.uploads.attach_deduped_copy``).
+    Anything that deletes or replaces a stored file therefore has to ask this
+    first - otherwise one row's edit silently empties every row that shared it,
+    with nothing anywhere to explain the broken image.
+
+    Args:
+        field: Model field holding the storage name - ``image`` or ``thumbnail``.
+        name: The storage name about to be deleted.
+        exclude_pks: Rows that do not count as references, because they are the
+            one doing the replacing or are being deleted in the same operation.
+
+    Returns:
+        True when some other row still needs *name*.
+    """
+    from urbanlens.dashboard.models.images.model import Image as ImageModel
+
+    return ImageModel.objects.filter(**{field: name}).exclude(pk__in=list(exclude_pks)).exists()
 
 
 def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool) -> int | None:
@@ -645,7 +682,7 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
 
     stem = posixpath.splitext(posixpath.basename(old_name))[0]
     image.image.save(f"{stem}{_FORMAT_EXTENSIONS[target_format]}", ContentFile(buffer.getvalue()), save=False)
-    if image.image.name != old_name:
+    if image.image.name != old_name and not file_still_referenced("image", old_name, exclude_pks=[image.pk]):
         with contextlib.suppress(OSError):
             image.image.storage.delete(old_name)
     logger.info("Downscaled image %s: %s -> %s bytes (%s)", image.pk, old_size, new_size, target_format)
@@ -732,7 +769,7 @@ def write_image_thumbnail(image: Image, *, max_dimension: int = THUMBNAIL_MAX_DI
     stem = posixpath.splitext(posixpath.basename(old_name))[0]
     previous = image.thumbnail.name if image.thumbnail else ""
     image.thumbnail.save(f"{stem}.webp", ContentFile(buffer.getvalue()), save=False)
-    if previous and previous != image.thumbnail.name:
+    if previous and previous != image.thumbnail.name and not file_still_referenced("thumbnail", previous, exclude_pks=[image.pk]):
         with contextlib.suppress(OSError):
             image.thumbnail.storage.delete(previous)
     return True
@@ -922,20 +959,19 @@ def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bo
         True when the file was deleted, False when another row still needs it (or
         there was no file).
     """
-    from urbanlens.dashboard.models.images.model import Image as ImageModel
-
     name = image.image.name if image.image else ""
     if not name:
         return False
 
-    still_referenced = ImageModel.objects.filter(image=name).exclude(pk__in=[image.pk, *also_deleting]).exists()
-    if still_referenced:
+    if file_still_referenced("image", name, exclude_pks=[image.pk, *also_deleting]):
         logger.debug("Keeping stored file %s: another image row still references it", name)
         return False
 
     image.image.delete(save=False)
     thumbnail = getattr(image, "thumbnail", None)
-    if thumbnail and thumbnail.name:
+    # Checked separately from the original: they are shared together today, but
+    # nothing enforces that, and a thumbnail is just as easy to orphan.
+    if thumbnail and thumbnail.name and not file_still_referenced("thumbnail", thumbnail.name, exclude_pks=[image.pk, *also_deleting]):
         with contextlib.suppress(OSError):
             thumbnail.delete(save=False)
     return True
@@ -975,3 +1011,118 @@ def detach_image_from_wiki(image: Any) -> None:
         return
     delete_stored_file(image)
     image.delete()
+
+
+@dataclass(frozen=True)
+class PreparedUpload:
+    """A photo upload with its metadata read out and removed from the bytes.
+
+    Returned by :func:`prepare_photo_upload`. See that function for why the two
+    halves have to happen together.
+    """
+
+    #: What to store. The uploaded bytes minus their metadata segments, or the
+    #: original file unchanged when the format is not one the stripper rewrites.
+    file: Any
+
+    #: Size of :attr:`file` in bytes - what the row's ``file_size`` should be,
+    #: which is no longer the uploaded file's own size once a strip happened.
+    size: int
+
+    #: ``Image`` field values read from the *original* bytes, ready to splat
+    #: into ``Image.objects.create``. Never includes ``caption``: a caller's own
+    #: caption always wins, so the embedded one is offered separately.
+    metadata: dict[str, Any]
+
+    #: A caption found in the file's own metadata, for a caller that has none.
+    metadata_caption: str | None
+
+    #: Whether the bytes were actually rewritten. False means the format was
+    #: one the stripper leaves alone (HEIC, TIFF, GIF), so the stored file still
+    #: carries its metadata until the Celery re-encode replaces it.
+    stripped: bool
+
+
+def prepare_photo_upload(file_obj: UploadedFile, profile: Profile | None) -> PreparedUpload:
+    """Read a photo upload's metadata, then remove it from the bytes to store.
+
+    Reading and removing are one operation because neither is correct alone.
+    Storing the file first and scrubbing it on Celery leaves an unstripped
+    original in the media tree for as long as the queue is behind - it is
+    served from there, GPS block intact. Stripping first without reading loses
+    the values the app legitimately keeps: ``exif_data``, ``taken_at``,
+    coordinates, and the attribution fields all come off the same block, and
+    the row is where the app's own visibility rules can govern them.
+
+    The strip walks the container's segments rather than decoding the image
+    (see :mod:`urbanlens.dashboard.services.media.metadata_strip`), so it costs
+    a copy rather than a decode and is safe to run inside a request - a decode
+    under the gevent worker would stall every other request on that worker,
+    which is why the downscale stays on Celery.
+
+    Coordinates are read only when the profile's visit tracking allows it; a
+    profile that does not want its movements recorded does not get them written
+    to the row either. They are removed from the file regardless - that is not
+    a setting (see :func:`downscale_stored_image`).
+
+    Args:
+        file_obj: The uploaded file, already validated by
+            :func:`image_upload_error`. Its read position is restored.
+        profile: The uploading profile, or None for a system-created row.
+
+    Returns:
+        A :class:`PreparedUpload`. Callers store ``file``, pass ``size`` as
+        ``file_size``, and splat ``metadata`` into the row.
+    """
+    from urbanlens.dashboard.services.media.metadata_strip import strip_metadata
+    from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
+
+    file_obj.seek(0)
+    data = file_obj.read()
+    file_obj.seek(0)
+
+    include_location = profile is None or visit_logging_allowed(profile)
+    source = io.BytesIO(data)
+
+    metadata: dict[str, Any] = {}
+    coords = extract_gps_coords(source) if include_location else None
+    if coords is not None:
+        metadata["latitude"] = Decimal(str(coords[0]))
+        metadata["longitude"] = Decimal(str(coords[1]))
+    # Same GPS IFD, same opt-out - a compass bearing is only meaningful next to
+    # a position.
+    direction = extract_gps_direction(source) if include_location else None
+    if direction is not None:
+        metadata["direction"] = Decimal(str(round(direction, 2)))
+    if taken_at := extract_taken_at(source):
+        metadata["taken_at"] = taken_at
+    if exif_data := extract_exif_data(source):
+        if not include_location:
+            # Dropping GPSInfo makes "what did the EXIF say" permanently
+            # unanswerable for this photo. That is the point of the opt-out, not
+            # an oversight - coordinate-provenance work must read a
+            # location-stripped photo as having no EXIF position rather than an
+            # unknown one.
+            exif_data.pop("GPSInfo", None)
+        metadata["exif_data"] = exif_data
+    if author := extract_author(source):
+        metadata["author"] = author
+    if copyright_notice := extract_copyright_notice(source):
+        metadata["copyright"] = copyright_notice
+    if source_url := extract_source_url(source):
+        metadata["source_url"] = source_url
+    metadata_caption = extract_caption_from_metadata(source)
+
+    stripped_bytes = strip_metadata(data)
+    if stripped_bytes is None:
+        return PreparedUpload(file=file_obj, size=file_obj.size or len(data), metadata=metadata, metadata_caption=metadata_caption, stripped=False)
+
+    from django.core.files.base import ContentFile
+
+    return PreparedUpload(
+        file=ContentFile(stripped_bytes, name=file_obj.name),
+        size=len(stripped_bytes),
+        metadata=metadata,
+        metadata_caption=metadata_caption,
+        stripped=True,
+    )

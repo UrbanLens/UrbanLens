@@ -65,6 +65,42 @@ class WriteImageThumbnailTests(TestCase):
         self.assertFalse(write_image_thumbnail(image))
         self.assertFalse(image.thumbnail)
 
+    def test_regenerating_keeps_a_thumbnail_another_row_still_uses(self) -> None:
+        """A deduplicated upload shares its thumbnail; force must not blank it.
+
+        ``attach_deduped_copy`` gives the new row the earlier row's stored file
+        *and* thumbnail name rather than copying either, so replacing one row's
+        preview used to delete a file the other row was still pointing at.
+        """
+        shared = baker.make_recipe("dashboard.image")
+        shared.image.save("shot.jpg", ContentFile(_jpeg()), save=True)
+        write_image_thumbnail(shared)
+        shared.save(update_fields=["thumbnail"])
+        shared_thumb = shared.thumbnail.name
+        storage = shared.thumbnail.storage
+
+        # The deduped sibling: same stored file, same thumbnail, its own row.
+        sibling = baker.make_recipe("dashboard.image")
+        sibling.image.name = shared.image.name
+        sibling.thumbnail.name = shared_thumb
+        sibling.save(update_fields=["image", "thumbnail"])
+
+        # Regenerate the first row's preview at a different size, so the new
+        # name differs and the old one becomes a deletion candidate.
+        self.assertTrue(write_image_thumbnail(shared, max_dimension=64, force=True))
+        shared.save(update_fields=["thumbnail"])
+
+        self.assertNotEqual(shared.thumbnail.name, shared_thumb)
+        self.assertTrue(storage.exists(shared_thumb), "sibling row's thumbnail was deleted")
+
+        # With the sibling gone, nothing references it and the next regeneration
+        # is free to clean it up - otherwise this would leak a file per rewrite.
+        sibling.delete()
+        stale = shared.thumbnail.name
+        self.assertTrue(write_image_thumbnail(shared, max_dimension=48, force=True))
+        shared.save(update_fields=["thumbnail"])
+        self.assertFalse(storage.exists(stale), "unshared thumbnail should be cleaned up")
+
 
 class ThumbnailBackfillTests(TestCase):
     """Existing photos get thumbnails from a periodic sweep, not from page views."""

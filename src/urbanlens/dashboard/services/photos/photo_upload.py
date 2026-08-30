@@ -126,7 +126,7 @@ def upload_photo(
         PhotoUploadError: The upload was refused; see the exception's
             ``status`` for how to answer the caller.
     """
-    from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+    from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
     from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
     media_type = _resolve_media_type(file_obj, profile)
@@ -140,9 +140,16 @@ def upload_photo(
     if caption_error:
         raise PhotoUploadError(caption_error, 400)
 
+    # Of the *uploaded* bytes, before the strip below rewrites them: the
+    # checksum identifies what the user sent, and is what dedup matches on.
     checksum = compute_checksum(file_obj)
     if Image.objects.filter(profile=profile, checksum=checksum).exists():
         raise PhotoUploadError("You already uploaded this file.", 409)
+
+    # Read the metadata and remove it from the bytes in one step, so an
+    # unstripped original is never written to the media tree - see
+    # prepare_photo_upload. Videos and documents have their own pipelines.
+    prepared = prepare_photo_upload(file_obj, profile) if media_type == MediaKind.PHOTO else None
 
     # The quota read and the row create must be one critical section: without
     # it, N concurrent uploads can each pass the check before any commits.
@@ -152,15 +159,16 @@ def upload_photo(
             raise PhotoUploadError(quota_error, 413)
 
         image = Image.objects.create(
-            image=file_obj,
+            image=prepared.file if prepared else file_obj,
             profile=profile,
             checksum=checksum,
-            file_size=file_obj.size,
+            file_size=prepared.size if prepared else file_obj.size,
             media_type=media_type,
-            caption=(caption or None),
+            caption=(caption or (prepared.metadata_caption if prepared else None) or None),
             pin=pin,
             visit=visit,
             wiki=wiki,
+            **(prepared.metadata if prepared else {}),
         )
 
     # Deliberately outside the lock: enqueuing is a network call to the broker,

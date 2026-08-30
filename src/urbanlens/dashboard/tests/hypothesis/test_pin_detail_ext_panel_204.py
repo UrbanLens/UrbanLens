@@ -126,6 +126,73 @@ class ExtPanel204MarkerTests(TestCase):
         self.assertNotIn("_extSections", content)
 
 
+class ExtPanel204StartsHiddenTests(TestCase):
+    """Optional cards must not flash a header+spinner before their fetch resolves.
+
+    Every data-ext-panel-204 card used to render visibly (header + .view-loading)
+    from the very first paint, then either fill in or fly away on a 204 - so a
+    section that usually has nothing to show (most of them, most of the time)
+    flashed and vanished. Each such card's initial server-rendered markup must
+    now also carry `hidden`, so it never paints until its HTMX response (a real
+    200, revealing it) arrives; a 204 removes it exactly as before.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+
+    def _content(self) -> str:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
+
+    def test_bespoke_cards_start_hidden(self) -> None:
+        content = self._content()
+        for section_id in (
+            "wikipedia-section",
+            "azure-maps-section",
+            "yelp-section",
+            "nps-section",
+            "loopnet-section",
+            "usgs-topo-section",
+            "satellite-view-section",
+            "street-view-section",
+            "pin-markup-maps-panel",
+            "parcel-buildings-section",
+        ):
+            idx = content.index(f'id="{section_id}"')
+            self.assertIn("hidden", content[max(0, idx - 200) : idx + 200], f"{section_id} does not start hidden")
+
+    def test_generic_loop_panels_start_hidden(self) -> None:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        content = response.content.decode()
+        panel_keys = [panel.key for panel in response.context["simple_info_panels"]]
+        self.assertTrue(panel_keys, "simple_info_panels was empty - can't verify this")
+        for key in panel_keys:
+            marker = f'hx-get="{reverse('pin.panel', args=[self.pin.slug, key])}"'
+            idx = content.index(marker)
+            self.assertIn("hidden", content[max(0, idx - 300) : idx], f"panel {key} does not start hidden")
+
+    def test_the_restructure_offer_slot_is_not_itself_hidden(self) -> None:
+        """The empty #pin-restructure-slot wrapper (not a data-ext-panel-204 card
+        itself) is already invisible by having no content - it must not also gain
+        a `hidden` attribute, which would suppress the real card once it loads."""
+        content = self._content()
+        idx = content.index('id="pin-restructure-slot"')
+        self.assertNotIn("hidden", content[idx : idx + 200])
+
+    def test_core_sections_are_unaffected(self) -> None:
+        """Sections expected on every page (no data-ext-panel-204) keep their
+        original spinner-first behavior - they must not start hidden."""
+        content = self._content()
+        for section_id in ("pin-overview", "pin-aliases-panel", "pin-custom-fields-panel", "pin-ownership-panel"):
+            idx = content.index(f'id="{section_id}"')
+            self.assertNotIn("hidden", content[max(0, idx - 200) : idx + 200], f"{section_id} should not start hidden")
+
+
 class PendingPanelPlaceholderMarkerTests(TestCase):
     """The self-polling "still fetching" placeholder (panel_pending.html) must carry
     the same data-ext-panel-204 marker as the panel it stands in for.

@@ -110,6 +110,8 @@ class LocationWikiView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
+        from urbanlens.dashboard.services.comments.comments import visible_comment_count
+
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         from urbanlens.dashboard.services.wiki.concealment import concealment_active
@@ -218,7 +220,7 @@ class LocationWikiView(LoginRequiredMixin, View):
                 # Counted over what this viewer can see, not over every row - a
                 # badge computed on the raw set announces the comments it is
                 # standing in front of.
-                "wiki_comment_count": (conceal_rows(wiki.comments.all(), profile) if conceal else wiki.comments.all()).count(),
+                "wiki_comment_count": visible_comment_count(conceal_rows(wiki.comments.all(), profile) if conceal else wiki.comments.all(), profile),
                 "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
                 "wiki_stats": [_wiki_stat_context(wiki, field, profile, conceal=conceal) for field in WikiStatField.values],

@@ -388,7 +388,7 @@ class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
         from urbanlens.dashboard.models.images.model import Image, MediaKind
         from urbanlens.dashboard.services.consensus import photos as consensus_photos, points as consensus_points
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
         from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
         from urbanlens.dashboard.tasks import process_image_upload
 
@@ -416,13 +416,16 @@ class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
             quota_error = quota_error_for_upload(profile, image_file.size)
             if quota_error:
                 return JsonResponse({"error": quota_error}, status=413)
+            # Stored already stripped - see services.media.images.prepare_photo_upload.
+            prepared = prepare_photo_upload(image_file, profile)
             image = Image.objects.create(
-                image=image_file,
+                image=prepared.file,
                 profile=profile,
                 wiki=round_.wiki,
                 checksum=checksum,
-                file_size=image_file.size,
+                file_size=prepared.size,
                 media_type=MediaKind.PHOTO,
+                **prepared.metadata,
             )
 
         safely_enqueue_task(process_image_upload, image.pk)

@@ -1,26 +1,20 @@
-"""Detaching a pin from its shared Location must not 500 - and cannot succeed.
+"""Detaching a pin from its shared Location is not an action the app offers.
 
-Filed 2026-08-13 and reproduced: the detach branch called
-``Location.objects.create(latitude=pin.effective_latitude, ...)``, but Location
-is unique on (latitude, longitude) and a pin's coordinates *are* its current
-location's, so the row it tried to create always already existed. Every attempt
-was an IntegrityError.
+Two things are asserted here, and the second is what keeps the first honest.
 
-The filing left the product decision open and offered three answers. Two of
-them turn out not to be available:
+``pin.link`` accepts GET only - it renders the relink picker. A POST to it once
+meant "detach", and detaching cannot be satisfied: ``Pin.effective_latitude``
+*is* ``location.latitude``, and a database trigger
+(``dashboard_locations_freeze_identity``) makes a Location's coordinates
+immutable, so a pin's point is always exactly its location's. Giving a pin its
+own Location at the same point therefore collides with Location's uniqueness on
+(latitude, longitude), and the only way around it is to silently move somebody's
+pin. A pin that should not share a place's record wants a *different* place,
+which is what relinking already does.
 
-- "Give the pin its own Location at its own point" cannot happen, because there
-  is no separate point. ``Pin.effective_latitude`` returns
-  ``self.location.latitude``, and a database trigger
-  (``dashboard_locations_freeze_identity``) makes a Location's coordinates
-  immutable - so a pin's point is always exactly its location's.
-- "Nudge the coordinates" would move somebody's pin to satisfy a database
-  constraint, which is a worse surprise than being told the action does not
-  apply.
-
-So the third stands: detaching was never coherent, and the handler says so.
-A pin that should not share a place's record wants a *different* place, which
-is what relinking already does.
+``LocationIdentityTests`` asserts the two properties that make that true, since
+both are the kind of thing a future change could quietly relax - and relaxing
+either would reopen the question without anyone noticing.
 """
 
 from __future__ import annotations
@@ -46,11 +40,16 @@ class PinDetachLocationTests(TestCase):
     def _detach(self):
         return self.client.post(reverse("pin.link", kwargs={"pin_slug": self.pin.slug}))
 
-    def test_detaching_explains_rather_than_500s(self) -> None:
+    def test_posting_to_the_picker_route_is_not_allowed(self) -> None:
         response = self._detach()
 
-        self.assertEqual(response.status_code, 400, "this used to be an IntegrityError 500 on every attempt")
-        self.assertIn(b"place of its own", response.content)
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(response["Allow"], "GET")
+
+    def test_the_picker_route_still_answers_a_get(self) -> None:
+        response = self.client.get(reverse("pin.link", kwargs={"pin_slug": self.pin.slug}))
+
+        self.assertEqual(response.status_code, 200)
 
     def test_the_pin_keeps_its_location(self) -> None:
         original = self.pin.location_id
@@ -70,15 +69,11 @@ class PinDetachLocationTests(TestCase):
     # Relinking - the action detach was reaching for - has its own coverage
     # (test_pin_relink*.py). Not re-tested here: its target must pass the
     # access check that stops relinking being a way to *earn* a community wiki,
-    # which needs visibility fixtures irrelevant to this defect.
+    # which needs visibility fixtures irrelevant to this route.
 
 
 class LocationIdentityTests(TestCase):
-    """Why detach cannot be satisfied - asserted, not assumed.
-
-    Both of these are load-bearing for the decision above, and both are the
-    kind of thing a future change could quietly relax.
-    """
+    """Why detach cannot be satisfied - asserted, not assumed."""
 
     def test_a_pins_point_is_its_locations_point(self) -> None:
         location = baker.make(Location, latitude=41.73332, longitude=-73.92794)

@@ -51,18 +51,23 @@ def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     ``wiki__isnull=False`` let a permissive upload setting carry a photo to
     somebody whose only pin is somewhere else entirely - and denied a safety
     check-in's photos to the partner watching it, since a check-in has no wiki.
-
-    Each container answers reachability its own way, and each answer is asked of
-    the model that owns it rather than restated here.
+    Reachability is asked of the model that owns the container rather than
+    restated here.
 
     Filing a photo under a pin is not sharing. An explicit pin share hands the
     recipient their own row, which they see as its owner rather than through here.
     Direct messages are handled before this gate: sending is itself the consent,
     so ``MediaGateView`` admits the two participants without consulting settings.
 
-    A trip is the other audience-shaped container: putting a pin on a shared
-    itinerary shows its photos to the trip, so every member reaches them and the
-    uploader's setting then decides which of them actually sees each one.
+    Putting a pin on a shared itinerary is not sharing its photos either. It
+    used to be: every member of every trip the pin appeared on reached that
+    pin's whole gallery, live, so a photo uploaded months later joined the
+    exposure on its own and leaving the trip was the only way out. Adding a
+    place to an itinerary says where the group is going - it is not a decision
+    about each photo, which is what ``docs/GOALS.md`` requires before one
+    person's pin data reaches another. No trip surface ever rendered those
+    photos; the grant only widened ``visible_to`` wherever it was called,
+    including the media gate.
 
     Args:
         viewer_profile: The profile doing the looking.
@@ -70,15 +75,9 @@ def _shared_within_reach_of(viewer_profile: Profile) -> Q:
     Returns:
         A ``Q`` matching photos in containers within this viewer's reach.
     """
-    from urbanlens.dashboard.models.trips.model import TripActivity, TripMembership
     from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids
 
-    # Subquery rather than a join through ``pin__trip_activities``: a pin can be
-    # an activity on several of the viewer's trips, and the join would repeat the
-    # image row once per activity in every gallery that calls this.
-    activity_pin_ids = TripActivity.objects.filter(trip_id__in=TripMembership.objects.trip_ids_for(viewer_profile)).values_list("pin_id", flat=True)
-
-    return Q(wiki__location_id__in=visible_wiki_location_ids(viewer_profile)) | Q(pin_id__in=activity_pin_ids)
+    return Q(wiki__location_id__in=visible_wiki_location_ids(viewer_profile))
 
 
 class ImageQuerySet(abstract.FrontendDashboardQuerySet):

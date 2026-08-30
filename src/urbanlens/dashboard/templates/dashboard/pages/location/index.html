@@ -191,7 +191,7 @@
     {# left behind when a sibling in this row is collapsed (see .pin-media-row -- #}
     {# in _pin-detail.scss and the [data-collapse-scope] handling in base.html). #}
     <div class="pin-media-row">
-        <div id="satellite-view-section" class="satellite-view card card--primary" data-ext-panel-204
+        <div id="satellite-view-section" class="satellite-view card card--primary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.satellite_view' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','satellite')], ul:unhide"
             hx-swap="outerHTML"
@@ -206,7 +206,7 @@
             </div>
         </div>
 
-        <div id="street-view-section" class="street-view card card--primary" data-ext-panel-204
+        <div id="street-view-section" class="street-view card card--primary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.street_view' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','street-view')], ul:unhide"
             hx-swap="outerHTML"
@@ -516,7 +516,7 @@
             hx-trigger="load[!window.ulSectionCollapsed('pin','markup-maps')], ul:unhide, refreshMarkupMaps from:body"
             hx-swap="outerHTML"
             id="pin-markup-maps-panel"
-            data-ext-panel-204
+            data-ext-panel-204 hidden
             class="pin-markup-maps-panel card card--secondary"
             data-collapse-scope="pin" data-collapse-section="markup-maps">
             <div class="card-header">
@@ -533,7 +533,7 @@
     {# htmx:afterOnLoad handler near the bottom of this file). ---------------- #}
     <div class="pin-aux-grid">
         {% if pin.meaningful_name and can_use_web_search %}
-        <div id="web-search-section" class="web-search card card--secondary" data-ext-panel-204
+        <div id="web-search-section" class="web-search card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.web_search' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','web-search')], ul:unhide"
             hx-swap="outerHTML"
@@ -551,7 +551,7 @@
 
         {% include "dashboard/partials/pins/_pin_location_data_tabs.html" with pin=pin location_data_tabs=location_data_tabs %}
 
-        <div id="azure-maps-section" class="card card--secondary" data-ext-panel-204
+        <div id="azure-maps-section" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.azure_maps' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','azure_maps')], ul:unhide"
             hx-swap="outerHTML"
@@ -565,7 +565,7 @@
         </div>
 
         {# Every building on the parcel - see plugins.builtin.parcel_buildings. #}
-        <div id="parcel-buildings-section" class="card card--secondary" data-ext-panel-204
+        <div id="parcel-buildings-section" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.parcel_buildings' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','parcel_buildings')], ul:unhide, pinDetailPinsChanged from:body"
             hx-swap="outerHTML"
@@ -579,7 +579,7 @@
         </div>
 
         {% for panel in simple_info_panels %}
-        <div id="{{ panel.section_id }}" class="card card--secondary" data-ext-panel-204
+        <div id="{{ panel.section_id }}" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.panel' pin.slug panel.key %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','{{ panel.key }}')], ul:unhide"
             hx-swap="outerHTML"
@@ -597,7 +597,7 @@
         {% include "dashboard/partials/pins/_pin_plugin_tabs.html" with tabs=panel_tabs default_tab_key=default_panel_tab_key section_id="pin-plugin-tabs-section" body_id="pin-plugin-tab-body" heading="Regional Data" heading_icon="layers" collapse_section="plugin_tabs" collapse_label="Regional Data" %}
         {% endif %}
 
-        <div id="yelp-section" class="card card--secondary" data-ext-panel-204
+        <div id="yelp-section" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.yelp' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','yelp')], ul:unhide"
             hx-swap="outerHTML"
@@ -609,7 +609,7 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="nps-section" class="card card--secondary" data-ext-panel-204
+        <div id="nps-section" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.nps' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','nps')], ul:unhide"
             hx-swap="outerHTML"
@@ -621,7 +621,7 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="loopnet-section" class="card card--secondary" data-ext-panel-204
+        <div id="loopnet-section" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.loopnet' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','loopnet')], ul:unhide"
             hx-swap="outerHTML"
@@ -633,7 +633,7 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="usgs-topo-section" data-ext-panel-204
+        <div id="usgs-topo-section" data-ext-panel-204 hidden
             hx-get="{% url 'pin.usgs_topo' pin.slug %}"
             hx-trigger="load"
             hx-swap="outerHTML"
@@ -711,7 +711,7 @@
     <div data-article-subtab="wikipedia" hidden>
         {# data-ext-panel-204-hide-tab: no Wikipedia article means nothing to show #}
         {# on this sub-tab at all - hide the tab button itself, not just this card. #}
-        <div id="wikipedia-section" class="card card--secondary" data-ext-panel-204
+        <div id="wikipedia-section" class="card card--secondary" data-ext-panel-204 hidden
             data-ext-panel-204-hide-tab="article-subtab-btn-wikipedia"
             hx-get="{% url 'pin.wikipedia' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','wikipedia')], ul:unhide"

@@ -13,12 +13,14 @@ ARG UL_ENVIRONMENT=production
 RUN mkdir -p /var/log/urbanlens
 
 # Environment variables
-# PYTHONDONTWRITEBYTECODE stops a *container* writing __pycache__ at runtime;
-# the bytecode is baked in at build time instead - UV_COMPILE_BYTECODE for the
-# venv, compileall for the source tree further down. Without that, every
-# gunicorn worker recompiles the whole tree on its first request.
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
+# Bytecode is compiled at build time (UV_COMPILE_BYTECODE for the venv,
+# compileall for the source tree below) and kept. PYTHONDONTWRITEBYTECODE is
+# deliberately NOT set here: staging and production bake the source into the
+# image, so discarding compiled bytecode only makes every worker recompile
+# whatever the build missed, on every import, forever. docker-entrypoint.sh
+# sets it for local/development instead, where the source is bind-mounted
+# from the host and __pycache__ would litter the developer's checkout.
+ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     PYTHONPATH=/app/src
 
@@ -122,7 +124,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 #
 # Not fatal on error: a file that will not compile is worth seeing in the
 # build log, but this is an optimisation, not a correctness requirement.
-RUN python -m compileall -q -j 0 /app/src || echo "compileall reported errors; continuing"
+# Run as appuser, not root: the __pycache__ directories this creates live inside
+# an appuser-owned tree, and a root-owned one would silently reject any .pyc the
+# runtime still needs to add.
+RUN gosu appuser python -m compileall -q -j 0 /app/src || echo "compileall reported errors; continuing"
 
 # Pre-create every directory appuser writes to at runtime, so it never needs
 # write access to root-owned parent dirs (volume mounts are handled separately

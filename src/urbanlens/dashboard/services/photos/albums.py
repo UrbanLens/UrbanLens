@@ -329,7 +329,13 @@ def _hydrate_album_items(pairs: Sequence[tuple[int, int]]) -> list[Image]:
     items_by_pk = {item.pk: item for item in AlbumItem.objects.filter(pk__in=page_item_ids).select_related("image")}
     images = []
     for item_id, _image_id in pairs:
-        item = items_by_pk[item_id]
+        # *pairs* came from an earlier query, so a membership row removed in
+        # between (another tab, the optimistic remove on the grid) is simply
+        # gone now. Skipping it renders the album a photo short; indexing it
+        # would 500 the whole page over a photo the user just deleted anyway.
+        item = items_by_pk.get(item_id)
+        if item is None:
+            continue
         image = item.image
         image.album_item_id = item.pk
         images.append(image)

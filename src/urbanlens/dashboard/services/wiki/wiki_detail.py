@@ -167,6 +167,8 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
     aliases = conceal_rows(wiki.aliases.all(), profile) if conceal else wiki.aliases.all()
     links = wiki.links.order_by("order", "pk")
     links = conceal_rows(links, profile) if conceal else links
+    from urbanlens.dashboard.services.comments.comments import visible_comment_count
+
     comments = conceal_rows(wiki.comments.all(), profile) if conceal else wiki.comments.all()
 
     payload: dict[str, Any] = {
@@ -194,7 +196,9 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
         "links": [{"id": link.pk, "name": link.name, "url": link.url, "wayback_url": link.wayback_url or None, "order": link.order} for link in links],
         "stats": _stats(wiki, profile, conceal=conceal),
         "article": _article_summary(wiki, profile),
-        "comment_count": comments.count(),
+        # Gated, so the number cannot disagree with the thread the viewer is
+        # shown - see services.comments.comments.visible_comment_count.
+        "comment_count": visible_comment_count(comments, profile),
         "created": _isoformat_or_none(wiki.created),
         "updated": _isoformat_or_none(wiki.updated),
     }

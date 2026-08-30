@@ -12,8 +12,9 @@ This audit met the shape three times in three chunks:
   which only the *edit* route supplies. Every POST to ``new/`` was a 500 (chunk 552).
 - ``pin.link.to`` - ``PinRelinkView.get`` omitted ``location_slug`` entirely,
   which its own ``post`` declares. Every GET was a 500 (chunk 556).
-- ``pin.link`` - the same view's POST half, whose remaining failure is the filed
-  detach-location product decision rather than a signature problem.
+- ``pin.link`` - the same view's POST half, which still declares
+  ``location_slug`` so the shared signature holds, and refuses the route that
+  cannot supply one with a 405.
 
 All three were found by requesting routes nobody requests. This checks the
 property directly instead: for every view class wired to two or more routes, each

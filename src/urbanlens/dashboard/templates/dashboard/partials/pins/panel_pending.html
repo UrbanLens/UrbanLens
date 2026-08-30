@@ -15,7 +15,7 @@ hide_tab_id - optional, same reason: a panel reachable via its own tab button
 to survive every poll too, or a 204 arriving after the first "still pending"
 placeholder would go unnoticed and the tab button would stay visible.
 {% endcomment %}
-<div id="{{ section_id }}"{% if outer_class %} class="{{ outer_class }}"{% endif %} data-ext-panel-204
+<div id="{{ section_id }}"{% if outer_class %} class="{{ outer_class }}"{% endif %} data-ext-panel-204 hidden
     {% if hide_tab_id %}data-ext-panel-204-hide-tab="{{ hide_tab_id }}"{% endif %}
     hx-get="{{ poll_url }}?attempt={{ next_attempt }}"
     hx-trigger="load delay:{{ poll_interval }}s"

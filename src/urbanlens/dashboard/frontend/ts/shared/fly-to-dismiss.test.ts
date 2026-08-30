@@ -34,6 +34,15 @@ describe("flyToToolsFab", () => {
         expect(el.classList.contains("ext-panel-dismissing")).toBe(false);
     });
 
+    test("a hidden element is removed immediately without animating", () => {
+        const el = card();
+        el.hidden = true;
+        flyToToolsFab(el);
+
+        expect(el.classList.contains("ext-panel-dismissing")).toBe(false);
+        expect(el.isConnected).toBe(false);
+    });
+
     test("a connected element is taken out of flow and marked as dismissing", () => {
         const el = card();
         flyToToolsFab(el);

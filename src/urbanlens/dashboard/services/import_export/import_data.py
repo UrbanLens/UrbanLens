@@ -399,6 +399,12 @@ def _extract_zip_members_bounded(
                 dst.write(chunk)
 
 
+#: Files the export writes as its own structured data rather than as media -
+#: skipped by the scan below, which rejects anything else it cannot classify.
+#: ``pins.csv`` is the Google Takeout-shaped companion to ``pins.json``.
+_STRUCTURED_DATA_EXTENSIONS = (".json", ".csv")
+
+
 def _scan_extracted_files(extract_root: str) -> None:
     """Malware-scan and content-sniff every non-JSON file extracted from the archive.
 
@@ -408,12 +414,12 @@ def _scan_extracted_files(extract_root: str) -> None:
     permanent ``Image`` rows once a photos importer exists - so scanning has
     to happen here, right after extraction and before any importer (present
     or future) ever opens these files, not deferred to whichever importer
-    eventually persists them. Reuses the exact same two checks every direct
-    upload endpoint already goes through (see ``images.image_upload_error``)
-    rather than a bespoke check: magic-byte content-type sniffing (catching a
-    file whose bytes don't match what its own extension claims) and antivirus
-    scanning. JSON files are the export's own structured data (manifest,
-    labels, pins, ...), not a user media upload, so they're skipped entirely.
+    eventually persists them. Runs the same checks every direct upload endpoint
+    goes through (see ``images.image_upload_error``) rather than a bespoke
+    subset: the extension has to name a media kind we serve, the magic bytes
+    have to agree with it, a file named as a photo has to actually be one, and
+    the whole thing has to pass antivirus. The export's own structured data
+    (``*.json``, ``pins.csv``) is not a media upload and is skipped.
 
     Args:
         extract_root: Root directory the archive was extracted into.
@@ -422,20 +428,38 @@ def _scan_extracted_files(extract_root: str) -> None:
         _ImportValidationError: On the first infected file, a content/
             extension mismatch, or the antivirus scanner being unavailable.
     """
-    from urbanlens.dashboard.services.security.content_sniffing import content_type_mismatch_error, guess_media_kind_from_extension
+    from urbanlens.dashboard.models.images.model import MediaKind
+    from urbanlens.dashboard.services.security.content_sniffing import content_type_mismatch_error, guess_media_kind_from_extension, photo_is_not_an_image_error
     from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
 
     for dirpath, _dirnames, filenames in os.walk(extract_root):
         for filename in filenames:
-            if filename.lower().endswith(".json"):
+            if filename.lower().endswith(_STRUCTURED_DATA_EXTENSIONS):
                 continue
             path = os.path.join(dirpath, filename)
             with open(path, "rb") as file_obj:
                 declared_kind = guess_media_kind_from_extension(filename)
-                if declared_kind is not None:
-                    mismatch_error = content_type_mismatch_error(file_obj, declared_kind)
-                    if mismatch_error:
-                        raise _ImportValidationError(f"'{filename}' in the import archive doesn't match its file type and the import was rejected.")
+                # An extension nothing recognises used to skip the mismatch check
+                # entirely, which is how an ``.svg`` got through: no magic bytes
+                # to sniff, no virus signature in scripted markup, and a stored
+                # file nginx then serves as image/svg+xml from this app's own
+                # origin. Everything here that is not the export's own structured
+                # data is destined for media storage, so an extension we would
+                # not serve as a passive image has no business in the archive.
+                if declared_kind is None:
+                    raise _ImportValidationError(f"'{filename}' in the import archive isn't a supported photo, video, or document and the import was rejected.")
+
+                mismatch_error = content_type_mismatch_error(file_obj, declared_kind)
+                if mismatch_error:
+                    raise _ImportValidationError(f"'{filename}' in the import archive doesn't match its file type and the import was rejected.")
+
+                # Sniffing only fires on a *confirmed* mismatch, so a shell
+                # script named .png is unrecognised rather than mismatched. The
+                # upload path requires a positive answer for photos; so does this.
+                if declared_kind == MediaKind.PHOTO:
+                    not_an_image = photo_is_not_an_image_error(file_obj)
+                    if not_an_image:
+                        raise _ImportValidationError(f"'{filename}' in the import archive is named as an image but its contents are not one, and the import was rejected.")
 
                 try:
                     malware_error = malware_error_for_upload(file_obj)

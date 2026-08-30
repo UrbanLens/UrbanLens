@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from urbanlens.dashboard.models.images.model import Image, MediaKind, QuotaExemption
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.core.text_limits import column_length_error
-from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
 from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
 if TYPE_CHECKING:
@@ -313,6 +313,8 @@ def upload_photo_for_owner(owner: Pin | Wiki, profile: Profile, image_file: Uplo
         message, status = upload_error
         return UploadRejection(message, status)
 
+    # Of the *uploaded* bytes, before the strip below rewrites them: the
+    # checksum identifies what the user sent, and is what dedup matches on.
     checksum = compute_checksum(image_file)
     if existing_photo_for_upload(owner, profile, checksum=checksum) is not None:
         _scope, noun = _duplicate_scope(owner)
@@ -332,11 +334,16 @@ def upload_photo_for_owner(owner: Pin | Wiki, profile: Profile, image_file: Uplo
         caption_error = column_length_error(Image, "caption", caption, "Caption")
         if caption_error:
             return UploadRejection(caption_error, 400)
+        # Read the metadata and remove it from the bytes in one step, so an
+        # unstripped original is never written to the media tree - see
+        # prepare_photo_upload.
+        prepared = prepare_photo_upload(image_file, profile)
         return Image.objects.create(
-            image=image_file,
+            image=prepared.file,
             profile=profile,
-            caption=caption.strip() or None,
+            caption=caption.strip() or prepared.metadata_caption or None,
             checksum=checksum,
-            file_size=image_file.size,
+            file_size=prepared.size,
             **_owner_fields(owner),
+            **prepared.metadata,
         )

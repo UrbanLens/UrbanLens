@@ -35,9 +35,9 @@ coordinates might already exist nearby.
 the one it currently points at.** The two rules compose into a thing worth stating outright,
 because it is not obvious from either alone: since a pin has no coordinates of its own, and a
 location's cannot change, "give this pin its own place at the same point" is not expressible at
-all. That is why detaching a pin from its `Location` refuses with an explanation rather than
-inventing a row (see `controllers/pin_edit.PinRelinkView`, and the 2026-08-13 entry in
-`docs/PROBLEMS.md`).
+all. That is why there is no "detach from this location" action — the only coherent way to stop
+sharing a place's record is to relink to a different place, or move (see
+`controllers/pin_edit.PinRelinkView`, and the 2026-08-13 entry in `docs/PROBLEMS.md`).
 
 ## Wiki visibility — pinned, not public
 
@@ -424,6 +424,28 @@ Related but broader rule that bit this codebase before: **never call `.save()` i
 connections. The project's linter (ruff) has previously stripped "redundant-looking" early-return
 guards out of signal handlers — if a guard is load-bearing, make the code redundant enough that
 the linter can't tell, rather than relying on the guard alone.
+
+## One stored file can back several `Image` rows
+
+Two independent features point more than one row at the same storage key rather than duplicating
+bytes: sharing a pin copies its photos by reusing the name
+(`services/sharing/pin_sharing.py`), and a deduplicated upload reuses both the original *and* its
+thumbnail (`services/photos/uploads.attach_deduped_copy`, which also deliberately does not charge
+quota a second time).
+
+The consequence is easy to miss and expensive to get wrong: **anything that deletes or replaces a
+stored file must first ask whether another row still needs it**, via
+`services.media.images.file_still_referenced`. Deleting unconditionally does not error - it leaves
+some other profile's photo pointing at nothing, with a broken image and no trace of why.
+
+Three places do this today, and they are the three that touch stored bytes: `delete_stored_file`
+(row deletion, which also takes the pks being removed in the same batch, or a bulk delete would
+never remove anything), `downscale_stored_image` (re-encode / EXIF strip), and
+`write_image_thumbnail` (preview regeneration). A new one belongs on that list.
+
+Note this defers rather than skips cleanup: `strip_exif_from_stored_photos` walks every row, so the
+last row referencing an old file is the one that removes it. The file still goes; it just goes when
+nothing needs it.
 
 ## Rate limiting and cost tracking
 

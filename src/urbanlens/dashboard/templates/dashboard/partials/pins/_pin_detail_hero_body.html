@@ -65,8 +65,8 @@ in context, plus the wiki/linking context used by the overview panel.
                         <i class="material-symbols-outlined">open_in_new</i>
                     </a>
                 </div>
+                {% if competing_location_count %}
                 <div class="pin-hero-wiki-box-actions">
-                    {% if competing_location_count %}
                     <button type="button" class="btn pin-loc-change-btn"
                             hx-get="{% url 'pin.link' pin.slug %}"
                             hx-target="#pin-location-picker"
@@ -76,19 +76,8 @@ in context, plus the wiki/linking context used by the overview panel.
                             title="Switch to a different shared location">
                         <i class="material-symbols-outlined">swap_horiz</i>
                     </button>
-                    {% endif %}
-                    <button type="button" class="btn pin-loc-detach-btn"
-                            hx-post="{% url 'pin.link' pin.slug %}"
-                            hx-target="#pin-overview"
-                            hx-swap="outerHTML"
-                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                            hx-confirm="Detach from this location? Your pin will move to its own independent location, with its own community page."
-                            data-tooltip="Unlink this pin from the shared location. It gets its own independent location, with its own page."
-                            data-tooltip-pos="left"
-                            title="Detach from this shared location">
-                        <i class="material-symbols-outlined">link_off</i>
-                    </button>
                 </div>
+                {% endif %}
                 <div id="pin-location-picker"></div>
             </aside>
             {% else %}

@@ -56,8 +56,8 @@ _WRITE_METHODS = ("get", "post", "delete")
 #: Routes known to crash, with the reason. **Empty**, and the way it emptied is
 #: the point: it held exactly one entry, ``pin.link`` (detach a pin from its
 #: shared Location), excused as an open product decision. When that decision was
-#: made (2026-08-18 - detaching is not expressible, so the route now refuses
-#: with a 400), ``test_the_known_crash_is_still_crashing`` failed and said to
+#: made (2026-08-18 - detaching is not expressible, and the action has since been
+#: removed entirely), ``test_the_known_crash_is_still_crashing`` failed and said to
 #: delete the entry, which is what an exemption that nobody re-checks would
 #: never have done. Keep that property if anything is ever added here.
 _KNOWN_CRASHES: set[str] = set()

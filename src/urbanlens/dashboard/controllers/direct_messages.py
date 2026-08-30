@@ -427,7 +427,7 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
             JSON with the new image's ``id`` and ``url``, or a 400/413 error.
         """
         from urbanlens.dashboard.models.images.model import Image, MediaKind
-        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
         from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
         profile = _get_profile(request)
@@ -448,7 +448,9 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
             if quota_error:
                 return JsonResponse({"error": quota_error}, status=413)
 
-            image = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size)
+            # Stored already stripped - see services.media.images.prepare_photo_upload.
+            prepared = prepare_photo_upload(image_file, profile)
+            image = Image.objects.create(image=prepared.file, profile=profile, checksum=checksum, file_size=prepared.size, **prepared.metadata)
 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload

@@ -9,6 +9,7 @@ Both gateways are mocked - no network access occurs.
 from __future__ import annotations
 
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
@@ -49,6 +50,24 @@ def _make_location(**kwargs) -> Location:
     kwargs.setdefault("latitude", 41.733 + _coord_counter * 0.001)
     kwargs.setdefault("longitude", -73.930 - _coord_counter * 0.001)
     return baker.make(Location, google_place=None, **kwargs)
+
+
+class _FakeMarker:
+    """A lightweight stand-in for a child Pin/Wiki - enough of the surface
+    unpinned_building_child_rows/parcel_child_rows read (pin_type, uuid,
+    effective_name/effective_latitude/effective_longitude) without touching
+    the database, matching this module's other SimpleTestCase-friendly helpers."""
+
+    def __init__(self, *, name: str, pin_type: str, latitude: float | None = None, longitude: float | None = None) -> None:
+        self.effective_name = name
+        self.pin_type = pin_type
+        self.effective_latitude = latitude
+        self.effective_longitude = longitude
+        self.uuid = uuid4()
+
+
+def _fake_marker(*, name: str, pin_type: str, latitude: float | None = None, longitude: float | None = None) -> _FakeMarker:
+    return _FakeMarker(name=name, pin_type=pin_type, latitude=latitude, longitude=longitude)
 
 
 def _square_around(latitude: float, longitude: float, size: float = 0.002) -> MultiPolygon:
@@ -372,6 +391,115 @@ class ParcelBuildingsPanelViewTests(TestCase):
         outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [outside], "provider": "redata"})
         self.assertContains(self.client.get(self._url()), "Outside Shed")
+
+
+class UnpinnedBuildingChildRowsTests(SimpleTestCase):
+    """unpinned_building_child_rows: BUILDING-typed children no external record covers."""
+
+    def test_a_building_typed_child_gets_a_row(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import unpinned_building_child_rows
+
+        child = _fake_marker(name="Hand-Pinned Shed", pin_type=PinType.BUILDING)
+        rows = unpinned_building_child_rows([child], url_for=lambda c: f"/pins/{c.uuid}/")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["name"], "Hand-Pinned Shed")
+        self.assertEqual(rows[0]["child_name"], "Hand-Pinned Shed")
+        self.assertEqual(rows[0]["origin"], "pin")
+        self.assertEqual(rows[0]["child_url"], f"/pins/{child.uuid}/")
+
+    def test_a_parcel_typed_child_is_excluded(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import unpinned_building_child_rows
+
+        child = _fake_marker(name="The Grounds", pin_type=PinType.PARCEL)
+        self.assertEqual(unpinned_building_child_rows([child]), [])
+
+    def test_rows_sort_by_name(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import unpinned_building_child_rows
+
+        children = [_fake_marker(name="Zed Hall", pin_type=PinType.BUILDING), _fake_marker(name="Alpha Hall", pin_type=PinType.BUILDING)]
+        rows = unpinned_building_child_rows(children)
+        self.assertEqual([row["name"] for row in rows], ["Alpha Hall", "Zed Hall"])
+
+
+class ParcelChildRowsTests(SimpleTestCase):
+    """parcel_child_rows: PARCEL-typed children, for the panel's Parcels tab."""
+
+    def test_a_parcel_typed_child_gets_a_row(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import parcel_child_rows
+
+        child = _fake_marker(name="The Grounds", pin_type=PinType.PARCEL)
+        rows = parcel_child_rows([child], url_for=lambda c: f"/pins/{c.uuid}/")
+        self.assertEqual(rows, [{"name": "The Grounds", "child_uuid": str(child.uuid), "child_url": f"/pins/{child.uuid}/"}])
+
+    def test_a_building_typed_child_is_excluded(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import parcel_child_rows
+
+        child = _fake_marker(name="Tool Shed", pin_type=PinType.BUILDING)
+        self.assertEqual(parcel_child_rows([child]), [])
+
+
+class ParcelBuildingsTabsTests(TestCase):
+    """The pin detail panel's All/Mine/Parcels tabs (PinController.parcel_buildings)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.location = _make_location()
+        self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
+
+    def _url(self) -> str:
+        return reverse("pin.parcel_buildings", kwargs={"pin_slug": self.pin.slug})
+
+    def test_a_hand_created_building_with_no_external_record_still_shows(self) -> None:
+        """The reported bug: an empty external cache used to 204 the whole panel."""
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
+        baker.make(Pin, profile=self.user.profile, parent_pin=self.pin, pin_type=PinType.BUILDING, name="Hand-Pinned Shed", location=_make_location())
+
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Hand-Pinned Shed")
+
+    def test_mine_tab_is_hidden_with_only_external_unpinned_buildings(self) -> None:
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _REDATA_BUILDINGS, "provider": "redata"})
+        response = self.client.get(self._url())
+        self.assertNotContains(response, 'data-pb-panel="mine"')
+
+    def test_mine_tab_appears_once_something_is_pinned(self) -> None:
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _REDATA_BUILDINGS, "provider": "redata"})
+        baker.make(
+            Pin,
+            profile=self.user.profile,
+            parent_pin=self.pin,
+            pin_type=PinType.BUILDING,
+            slug="tool-shed",
+            location=baker.make(Location, latitude="41.733200", longitude="-73.930400", google_place=None),
+        )
+        response = self.client.get(self._url())
+        self.assertContains(response, 'data-pb-panel="mine"')
+
+    def test_parcels_tab_only_shows_parcel_typed_children(self) -> None:
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
+        baker.make(Pin, profile=self.user.profile, parent_pin=self.pin, pin_type=PinType.PARCEL, name="The Grounds", location=_make_location())
+
+        response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-pb-panel="parcels"')
+        self.assertContains(response, "The Grounds")
+
+    def test_a_parcel_child_never_leaks_into_the_all_or_mine_tabs(self) -> None:
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _REDATA_BUILDINGS, "provider": "redata"})
+        baker.make(Pin, profile=self.user.profile, parent_pin=self.pin, pin_type=PinType.PARCEL, name="The Grounds", location=_make_location())
+
+        response = self.client.get(self._url())
+
+        self.assertNotContains(response, 'data-pb-panel="mine"')
+
+    def test_still_204s_with_nothing_at_all(self) -> None:
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
+        self.assertEqual(self.client.get(self._url()).status_code, 204)
 
 
 class WikiParcelBuildingsPanelViewTests(TestCase):

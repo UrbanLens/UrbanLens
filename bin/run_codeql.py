@@ -690,7 +690,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--install", action="store_true", help="Download the official CodeQL bundle and exit")
     parser.add_argument("--force", action="store_true", help="With --install, replace an existing CodeQL install")
     parser.add_argument("--gate", action="store_true", help="Pre-push mode: CI suites, reuse DB when the tree is unchanged")
-    parser.add_argument("--fast", action="store_true", help="Reuse finalised databases; incomplete extracts are still rebuilt")
+    parser.add_argument("--fast", action="store_true", help="Reuse finalised databases even when the tree has changed (findings may be stale)")
     parser.add_argument("--rebuild", action="store_true", help="Recreate databases even if a previous extract finished")
     parser.add_argument(
         "--verbose",
@@ -754,14 +754,23 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     previous = _load_stamp()
-    if args.gate and previous.get("stamp") == stamp and previous.get("mode") == mode and DB_CLUSTER.is_dir():
+    tree_matches_last_scan = previous.get("stamp") == stamp and previous.get("mode") == mode and DB_CLUSTER.is_dir()
+    if args.gate and tree_matches_last_scan:
         print("CodeQL: analysed tree unchanged since the last successful scan; skipping rebuild.")
         return 0
 
     config = CI_CONFIG if mode == "gate" else LOCAL_CONFIG
-    if args.fast:
-        print("Reusing finalised databases; incomplete extracts are rebuilt.")
-    create_databases(codeql, languages, config, rebuild=args.rebuild)
+    # A database is a snapshot of the tree it was extracted from, so reusing one
+    # after an edit analyses the old code and reports on it as though it were
+    # current - a scan that cannot fail on anything you just wrote. Reaching
+    # this line at all means the stamp did not match, i.e. the tree moved;
+    # `_database_ready` only asks whether an extract *finished*, never what it
+    # finished on, so it cannot make this call itself. --fast is the explicit
+    # opt-in to analysing a stale database.
+    reuse_is_safe = tree_matches_last_scan or args.fast
+    if args.fast and not tree_matches_last_scan:
+        print("Reusing finalised databases (--fast): findings reflect the tree they were extracted from, not the current one.")
+    create_databases(codeql, languages, config, rebuild=args.rebuild or not reuse_is_safe)
 
     threat_local = mode == "local"
     verbose = bool(args.verbose)

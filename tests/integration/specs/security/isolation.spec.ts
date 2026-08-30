@@ -12,6 +12,9 @@
  * broken".
  */
 
+import type { APIRequestContext } from "@playwright/test";
+
+import { requireAccount, SECONDARY_ROLE } from "../../lib/accounts.js";
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
 import { apiUrl, resourceName } from "../../lib/env.js";
 import { appRoutes, mapDataRoutes, pinDetail, shellFragmentRoutes } from "../../lib/routes.js";
@@ -50,7 +53,11 @@ test.describe("search does not return another account's private rows", () => {
         const theirsBody = await theirs.text();
         expect(theirsBody, "another account's search results include this account's pin slug").not.toContain(pin.slug);
         expect(theirsBody, "another account's search results include this account's pin uuid").not.toContain(pin.uuid);
-        expect(containsMarker(theirsBody, marker), "another account's search results include the unique name marker").toBeFalsy();
+        // Only `groups` carries result rows - `query` echoes the search term
+        // itself back verbatim (by design, for the UI's "no results for ..."
+        // copy), so it always contains `marker` and is not a signal of a leak.
+        const theirsGroups = JSON.stringify((JSON.parse(theirsBody) as SearchResponse).groups ?? []);
+        expect(containsMarker(theirsGroups, marker), "another account's search result rows include the unique name marker").toBeFalsy();
     });
 
     test("an unauthenticated search is refused", async ({ anonymousApi }) => {
@@ -129,7 +136,12 @@ test.describe("HTML pages do not leak another account's private names", () => {
             looksMissing,
             `another account loaded this pin's detail page (status ${status}, url ${url})`,
         ).toBeTruthy();
-        expect(containsMarker(html, marker), "another account's 404/login page still contains the private pin marker").toBeFalsy();
+        // The 404 page echoes the *requested slug* back for debugging - that
+        // is not a leak, since the slug came from the URL the stranger typed
+        // themselves. Strip it before checking for the marker so the
+        // assertion is about content the stranger did not already have.
+        const htmlWithoutSlug = html.split(pin.slug).join("[slug]");
+        expect(containsMarker(htmlWithoutSlug, marker), "another account's 404/login page still contains the private pin marker").toBeFalsy();
     });
 });
 
@@ -241,4 +253,130 @@ test.describe("profile contact details stay off a stranger's payload", () => {
             expect(stranger.status()).toBe(404);
         }
     });
+});
+
+// -- Trip membership and photo bytes -----------------------------------------
+//
+// Both blocks below exercise the same underlying rule from two different
+// angles: a pin's contents belong to its owner, and putting the pin somewhere
+// else visible (an itinerary, a share notification) is not itself consent to
+// hand the contents over. Regression coverage for two fixes:
+//
+// - The media gate used to authorize a `pin_images/` file by matching only the
+//   `image` column. `services.media.access.authorize_image` is the
+//   consolidated policy now; this asserts the byte-serving endpoint the app
+//   itself uses (`photo.url`), not just the metadata JSON.
+// - `Image.objects.visible_to` used to admit every photo on any pin that
+//   appeared as an activity on a trip the viewer belonged to - a live grant
+//   that grew on its own as new photos were added to the pin, with no per-item
+//   consent and no trip surface ever rendering the result. Membership now
+//   grants nothing beyond the itinerary entry itself.
+
+/** Uploads a tiny, marker-tagged photo onto `pinSlug` and returns its media-gate url. */
+async function uploadPrivatePhoto(
+    apiRequestContext: APIRequestContext,
+    apiKey: string,
+    pinSlug: string,
+    marker: string,
+): Promise<{ uuid: string; url: string }> {
+    const png = Buffer.concat([
+        Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64"),
+        Buffer.from(`\n${marker}`, "utf-8"),
+    ]);
+    const upload = await apiRequestContext.post(apiUrl("photos/"), {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        multipart: {
+            file: { name: `${marker}.png`, mimeType: "image/png", buffer: png },
+            caption: marker,
+            pin: pinSlug,
+        },
+    });
+    test.skip(upload.status() === 503, `The malware scanner is unavailable: ${(await upload.text()).slice(0, 160)}`);
+    expect(upload.status(), `photo upload answered ${upload.status()}: ${(await upload.text()).slice(0, 200)}`).toBeLessThan(300);
+    const photo = (await upload.json()) as { uuid: string; url?: string };
+    expect(photo.uuid, "upload response carried no uuid").toBeTruthy();
+    expect(photo.url, "upload response carried no media-gate url").toBeTruthy();
+    return { uuid: photo.uuid, url: photo.url as string };
+}
+
+/** Headers for `apiRequestContext` hitting a media-gate url as `client`, or none if it has no key. */
+function bearerFor(client: { apiKey: string | null }): Record<string, string> {
+    return client.apiKey ? { Authorization: `Bearer ${client.apiKey}` } : {};
+}
+
+test.describe("a private photo's actual bytes stay with its uploader", () => {
+    ifSecondaryAccount()("the media-gate url behind a private photo refuses another account", async ({ api, secondaryApi, apiRequestContext, account }) => {
+        test.skip(!account.apiKey, "No API key on the primary account.");
+        const marker = uniqueMarker("mgbytes");
+        const pin = await api.createPin({ name: resourceName("media gate isolation") });
+        const photo = await uploadPrivatePhoto(apiRequestContext, account.apiKey as string, pin.slug, marker);
+        api.track("photo", photo.uuid, () => api.delete(`photos/${photo.uuid}/`));
+
+        // Control: the uploader's own credential reaches the exact same url a
+        // browser or native client would load the image from. Not a marker
+        // match - the metadata strip this session wired in re-encodes the
+        // file on its way out, so a trailing byte marker does not survive.
+        // The url's own per-photo random token is what makes this the right
+        // resource; a non-empty 200 is enough to prove the control fetch
+        // worked.
+        const mine = await apiRequestContext.get(photo.url, { headers: bearerFor(api) });
+        expect(mine.status(), `the owner could not fetch their own photo's bytes (${mine.status()}), so the stranger's refusal below would prove nothing`).toBe(200);
+        expect((await mine.body()).length, "the owner's fetch returned no bytes").toBeGreaterThan(0);
+
+        const theirs = await apiRequestContext.get(photo.url, { headers: bearerFor(secondaryApi) });
+        await expectNotServerError(theirs, "another account fetching a private photo's media-gate url");
+        expect(theirs.status(), `another account fetched a private photo's bytes (${theirs.status()})`).toBe(404);
+    });
+});
+
+test.describe("a pin on a shared trip does not hand the trip its gallery or its live details", () => {
+    ifSecondaryAccount()(
+        "a joined trip member cannot read the pin's photo, and the auto-recorded share does not name it",
+        async ({ api, apiRequestContext, secondaryApi, secondaryPage, account }) => {
+            test.skip(!account.apiKey, "No API key on the primary account.");
+            const marker = uniqueMarker("tripgal");
+            const secondaryAccount = requireAccount(SECONDARY_ROLE);
+
+            const pin = await api.createPin({ name: `${resourceName("trip gallery isolation")} ${marker}` });
+            const photo = await uploadPrivatePhoto(apiRequestContext, account.apiKey as string, pin.slug, marker);
+            api.track("photo", photo.uuid, () => api.delete(`photos/${photo.uuid}/`));
+
+            const trip = await api.json<{ slug: string }>("post", "trips/", { name: resourceName("trip gallery isolation trip") });
+            api.track("trip", trip.slug, () => api.delete(`trips/${trip.slug}/`));
+
+            const activity = await api.post(`trips/${trip.slug}/activities/`, { pin_slug: pin.slug });
+            expect(activity.status(), `adding the pin as a trip activity answered ${activity.status()}: ${(await activity.text()).slice(0, 200)}`).toBe(201);
+
+            const invite = await api.post(`trips/${trip.slug}/members/`, { username: secondaryAccount.username });
+            expect([200, 201], `inviting the secondary account answered ${invite.status()}: ${(await invite.text()).slice(0, 200)}`).toContain(invite.status());
+
+            const join = await secondaryApi.post(`trips/${trip.slug}/join/`);
+            expect(join.status(), `joining the trip answered ${join.status()}: ${(await join.text()).slice(0, 200)}`).toBe(200);
+
+            // Control: secondary really did join - otherwise every refusal
+            // below could just mean "secondary cannot reach the trip at all".
+            const roster = await secondaryApi.get(`trips/${trip.slug}/members/`);
+            expect(roster.status(), "a joined member could not read the trip roster").toBe(200);
+
+            // The regression: membership used to be enough on its own to
+            // reach every photo on the activity's pin, with no further
+            // per-photo consent.
+            const photoRead = await secondaryApi.get(`photos/${photo.uuid}/`);
+            await expectIndistinguishableFromMissing(photoRead, await secondaryApi.get(`photos/${MISSING_UUID}/`), "a trip member reading an itinerary pin's photo");
+
+            const bytes = await apiRequestContext.get(photo.url, { headers: bearerFor(secondaryApi) });
+            await expectNotServerError(bytes, "a trip member fetching an itinerary pin's photo bytes");
+            expect(bytes.status(), `a trip member fetched an itinerary pin's photo bytes (${bytes.status()})`).toBe(404);
+
+            // The second regression from the same fix: joining auto-records a
+            // provenance share of the place (PinShareStatus.DETECTED) that
+            // the recipient never explicitly accepted, and it must not read
+            // through to the sender's live, named pin anywhere secondary can
+            // see it - most directly the Sharing page, which lists every
+            // incoming share.
+            await secondaryPage.goto("/dashboard/memories/sharing/");
+            const sharingHtml = await secondaryPage.content();
+            expect(containsMarker(sharingHtml, marker), "the Sharing page names a pin from an auto-detected trip share the recipient never accepted").toBeFalsy();
+        },
+    );
 });

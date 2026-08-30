@@ -31,9 +31,11 @@ from urbanlens.dashboard.services.photos.attachment import attach_to_wiki
 from urbanlens.dashboard.services.photos.uploads import upload_photo_for_owner
 
 
-def _jpeg_bytes() -> bytes:
+def _jpeg_bytes(colour: tuple[int, int, int] = (10, 20, 30)) -> bytes:
+    """A small JPEG. Vary *colour* when a test needs two distinct uploads - the
+    upload path rejects a byte-identical second file on the same pin."""
     buf = io.BytesIO()
-    PILImage.new("RGB", (60, 40), color=(10, 20, 30)).save(buf, format="JPEG")
+    PILImage.new("RGB", (60, 40), color=colour).save(buf, format="JPEG")
     return buf.getvalue()
 
 
@@ -126,11 +128,13 @@ class AnonymousViewersTests(WikiReachabilityTestCase):
 
 
 class TripActivityPhotosTests(WikiReachabilityTestCase):
-    """A pin on a trip activity shares its photos with that trip's members.
+    """A pin on a trip activity does *not* share its photos with the trip.
 
-    Both gates apply here, unlike a check-in: adding a pin to a shared itinerary
-    puts its photos in front of an audience rather than a named person, so the
-    uploader's setting still decides which members of that audience see them.
+    It used to. Adding a place to an itinerary says where the group is going;
+    it is not a per-photo decision, and ``docs/GOALS.md`` requires one before
+    a pin's contents reach anybody else. The grant was also live - a photo
+    uploaded to that pin months later joined the exposure by itself - which is
+    the shape GOALS rules out outright.
     """
 
     def setUp(self) -> None:
@@ -148,22 +152,36 @@ class TripActivityPhotosTests(WikiReachabilityTestCase):
 
         self.photo = self._pin_photo(self.owner_far_pin, "trip-activity")
 
-    def _pin_photo(self, pin: Pin, name: str) -> Image:
+    def _pin_photo(self, pin: Pin, name: str, colour: tuple[int, int, int] = (10, 20, 30)) -> Image:
         """A photo on the owner's pin, contributed to no wiki."""
-        result = upload_photo_for_owner(pin, self.owner, SimpleUploadedFile(f"{name}.jpg", _jpeg_bytes(), content_type="image/jpeg"), name)
+        result = upload_photo_for_owner(pin, self.owner, SimpleUploadedFile(f"{name}.jpg", _jpeg_bytes(colour), content_type="image/jpeg"), name)
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
         return result
 
-    def test_a_trip_member_can_see_a_photo_on_an_activity_pin(self) -> None:
-        self.assertTrue(self._visible(self.photo, self.member), "a trip member could not see the photos on the trip's own activity")
+    def test_a_trip_member_cannot_see_a_photo_on_an_activity_pin(self) -> None:
+        """Even with both visibility settings wide open.
 
-    def test_somebody_not_on_the_trip_cannot(self) -> None:
+        The member's ``viewer_photo_filter`` is ANYONE and the uploader's
+        ``photo_upload_visibility`` is left at its permissive default, so
+        membership is the only thing that could admit them - and it must not.
+        """
+        self.assertFalse(self._visible(self.photo, self.member), "a trip member reached the whole gallery of a pin on the itinerary")
+
+    def test_somebody_not_on_the_trip_cannot_either(self) -> None:
         """The viewer pins the same near place, so only trip membership differs."""
         self.assertFalse(self._visible(self.photo, self.viewer), "a photo on a trip activity leaked to somebody not on the trip")
 
-    def test_the_uploaders_setting_still_gates_a_trip_member(self) -> None:
-        """Unlike a check-in, a trip is an audience - so the setting still filters it."""
-        Profile.objects.filter(pk=self.owner.pk).update(photo_upload_visibility=VisibilityChoice.FRIENDS)
-        self.owner.refresh_from_db()
+    def test_the_owner_still_sees_their_own_photo(self) -> None:
+        """Tightening the gate must not hide a pin's photos from its uploader."""
+        self.assertTrue(self._visible(self.photo, self.owner))
 
-        self.assertFalse(self._visible(self.photo, self.member), "the uploader's setting stopped gating trip members")
+    def test_a_later_upload_does_not_join_the_trip_either(self) -> None:
+        """The live half of the old grant: photos added after the fact.
+
+        A photo uploaded long after the pin went on the itinerary was swept in
+        by the same query, so the exposure kept growing with no further act by
+        anyone.
+        """
+        later = self._pin_photo(self.owner_far_pin, "uploaded-later", colour=(200, 40, 90))
+
+        self.assertFalse(self._visible(later, self.member))

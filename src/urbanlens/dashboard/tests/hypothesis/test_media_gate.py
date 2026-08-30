@@ -7,7 +7,9 @@ Covers:
 - A friend passing the photo-visibility rules can fetch it.
 - Direct-message attachments are participant-only.
 - Path traversal outside MEDIA_ROOT is a 404, as is a missing file.
-- Avatars and orphan files are authenticated-only.
+- Thumbnails follow the same rules as the photo they preview.
+- Avatars are authenticated-only; files with no owning row, and directories
+  with no registered authorizer, are denied.
 - Production mode (MEDIA_X_ACCEL=True) answers with an X-Accel-Redirect header
   and no body instead of streaming the file.
 """
@@ -25,7 +27,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
 _IMAGE_BYTES = b"fake-image-bytes-for-media-gate"
@@ -196,13 +198,120 @@ class MediaGateTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self._get_bytes(response)
 
-    def test_orphan_file_is_authenticated_only(self):
+    def test_file_with_no_owning_row_is_denied(self):
+        """A file the gate cannot attribute is refused, not served.
+
+        An orphan left behind by a deleted row is indistinguishable from a live
+        file whose owning row this viewer is not allowed to learn about, and
+        assuming the harmless case is what served every thumbnail to every
+        account. Nobody holds a URL for a real orphan anyway.
+        """
         self._write_media("pin_images/orphan.png")
         viewer = _new_user()
         self.client.force_login(viewer)
+
         response = self.client.get("/media/pin_images/orphan.png")
-        self.assertEqual(response.status_code, 200, "a file with no owning row falls back to authenticated-only access")
-        self._get_bytes(response)
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_unregistered_path_family_is_denied(self):
+        """A directory with no registered authorizer is refused by default.
+
+        The point of the registry is that forgetting to add one fails closed.
+        """
+        self._write_media("unregistered_family/leak.png")
+        viewer = _new_user()
+        self.client.force_login(viewer)
+
+        response = self.client.get("/media/unregistered_family/leak.png")
+
+        self.assertEqual(response.status_code, 404)
+
+    # -- Thumbnails -------------------------------------------------------------
+    #
+    # A thumbnail is a second stored file in a second column. Authorizing only
+    # the `image` column meant no thumbnail ever resolved to an owner, so every
+    # one of them took the permissive no-owner branch and was readable by any
+    # logged-in account - visibility settings, share revocation and the DM
+    # participant rule all unreachable for the 400px copy of the photo.
+
+    def test_owner_fetches_own_thumbnail(self):
+        self._write_media("pin_images/thumbs/owned.webp")
+        Image.objects.filter(pk=self.image.pk).update(thumbnail="pin_images/thumbs/owned.webp")
+        self.client.force_login(self.owner_user)
+
+        response = self.client.get("/media/pin_images/thumbs/owned.webp")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._get_bytes(response), _IMAGE_BYTES)
+
+    def test_unrelated_user_is_denied_a_thumbnail(self):
+        self._write_media("pin_images/thumbs/owned.webp")
+        Image.objects.filter(pk=self.image.pk).update(thumbnail="pin_images/thumbs/owned.webp")
+        stranger = _new_user()
+        self.client.force_login(stranger)
+
+        response = self.client.get("/media/pin_images/thumbs/owned.webp")
+
+        self.assertEqual(response.status_code, 404, "a stranger denied the photo must be denied its preview too")
+
+    def test_thumbnail_of_a_dm_attachment_is_participant_only(self):
+        """The DM participant rule has to reach the preview, not just the file."""
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+
+        sender = _new_user()
+        recipient = _new_user()
+        dm = baker.make(DirectMessage, sender=sender.profile, recipient=recipient.profile)
+        self._write_media("pin_images/dm-thumb.webp")
+        baker.make(
+            Image,
+            image="pin_images/dm-orig.png",
+            thumbnail="pin_images/dm-thumb.webp",
+            profile=sender.profile,
+            direct_message=dm,
+        )
+
+        self.client.force_login(recipient)
+        allowed = self.client.get("/media/pin_images/dm-thumb.webp")
+        self.assertEqual(allowed.status_code, 200, "the recipient of the message may see its attachment preview")
+        self._get_bytes(allowed)
+
+        self.client.force_login(_new_user())
+        denied = self.client.get("/media/pin_images/dm-thumb.webp")
+        self.assertEqual(denied.status_code, 404, "a non-participant must not fetch a DM attachment's preview")
+
+    # -- Files backed by more than one row ---------------------------------------
+
+    def test_a_share_recipient_reaches_a_photo_they_were_given(self):
+        """Accepting a share hands over a row, not a second copy of the bytes.
+
+        Several rows therefore point at one storage key, and whichever one the
+        lookup happened to return decided the answer - so a recipient could be
+        refused a photo that was deliberately shared with them.
+        """
+        recipient_user = _new_user()
+        baker.make(
+            Image,
+            image="pin_images/owned.png",
+            profile=recipient_user.profile,
+            quota_exempt_reason=QuotaExemption.SHARED_COPY,
+        )
+        self.client.force_login(recipient_user)
+
+        response = self.client.get("/media/pin_images/owned.png")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._get_bytes(response), _IMAGE_BYTES)
+
+    def test_a_stranger_is_still_denied_a_file_two_other_people_share(self):
+        """The extra row must not widen who the file reaches."""
+        other_user = _new_user()
+        baker.make(Image, image="pin_images/owned.png", profile=other_user.profile, quota_exempt_reason=QuotaExemption.SHARED_COPY)
+        self.client.force_login(_new_user())
+
+        response = self.client.get("/media/pin_images/owned.png")
+
+        self.assertEqual(response.status_code, 404)
 
     # -- Path safety ------------------------------------------------------------
 

@@ -12,41 +12,22 @@ authorizes them against the owning row for the requested file, and then either:
   so nginx streams the bytes efficiently and picks the Content-Type itself.
 - **Local dev / no nginx**: streams the file directly with ``FileResponse``.
 
+Neither half of the decision is implemented here.
+
 *Authentication* - "a logged-in session, or a bearer credential holding
-``media:read``" - is not implemented here: it lives in
+``media:read``" - lives in
 :class:`~urbanlens.dashboard.controllers.media_auth.CredentialOrSessionMediaMixin`,
 because the panel image proxy and the SpotGuessr round image need the identical
-rule and a second copy of it would drift open. This module owns only the
-*authorization* half below, which is specific to files under ``MEDIA_ROOT``.
+rule and a second copy of it would drift open.
 
-Authorization is derived from the first path segment (the ``upload_to`` prefix
-of the owning model's file field):
+*Authorization* lives in :mod:`urbanlens.dashboard.services.media.access`, as a
+default-deny table keyed by the file's ``upload_to`` prefix. Read that module
+for the per-family policy; a family with no registered authorizer is refused
+here and reported by ``manage.py check``.
 
-- ``pin_images/`` - :class:`~urbanlens.dashboard.models.images.model.Image`
-  rows (pin/wiki/memories galleries, safety check-ins, DM attachments). The
-  uploader always qualifies; DM-only attachments are restricted to the two
-  conversation participants; everything else follows the same
-  ``Image.objects.visible_to`` photo-visibility logic the gallery views use.
-- ``comment_images/`` - pin/wiki ``Comment`` and ``TripComment`` images.
-  The author always qualifies; everyone else is additionally gated by the
-  author's ``comment_visibility`` setting (``Profile.can_view_comments_from``)
-  on top of host membership - pin comments visible to the pin's owner (pin
-  comment threads are owner+author scoped, see
-  ``controllers.comments.PinCommentsView``), wiki comments to anyone who can
-  see the wiki (``services.wiki.wiki_access.location_visible_to``), and trip
-  comments to the trip's members. This mirrors the gates
-  ``services.comments.comments.visible_comment_tree``/``services.trips.trip_comments.build_comment_tree``
-  apply to the comment's text, so tightening the privacy setting after a
-  viewer already has the image URL revokes access to the file too.
-- ``avatars/`` - profile avatars render site-wide next to usernames, so any
-  authenticated user may fetch them.
-- ``pin_custom_icons/`` / ``label_icons/`` - map/label icon decorations;
-  authenticated-only (see the TODOs inline, and "Authenticated media gate -
-  residual per-family risk" in docs/PROBLEMS.md).
-
-Unknown prefixes and files with no surviving owner row fall back to
-authenticated-only access rather than 404, since the file may legitimately
-exist without a resolvable owner (e.g. an orphan left by a deleted row).
+This module owns only the path handling in between: resolving the requested
+path against ``MEDIA_ROOT`` without letting it escape, and handing the bytes to
+nginx once someone has said yes.
 """
 
 from __future__ import annotations
@@ -61,6 +42,7 @@ from django.http import FileResponse, Http404, HttpResponse
 from django.views import View
 
 from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError, mark_private_media
+from urbanlens.dashboard.services.media.access import authorize_media
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -157,130 +139,17 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         return resolve_media_path(path)
 
     def _authorized(self, profile: Profile, rel_path: str) -> bool:
-        """Decide whether *profile* may fetch the file at *rel_path*.
-
-        Dispatches on the leading path segment, which is the ``upload_to``
-        prefix of the model field the file belongs to (see the module
-        docstring for the family-by-family policy).
+        """Delegate to :func:`~urbanlens.dashboard.services.media.access.authorize_media`.
 
         Args:
             profile: The authenticated requester's profile.
             rel_path: Normalized path relative to ``MEDIA_ROOT``
-                (e.g. ``"pin_images/abc.webp"``).
+                (e.g. ``"pin_images/a7/Kd3xq.../IMG_4821.jpg"``).
 
         Returns:
             True when the requester may see the file.
         """
-        family = rel_path.split("/", 1)[0]
-        if family == "pin_images":
-            return self._authorize_image(profile, rel_path)
-        if family == "comment_images":
-            return self._authorize_comment_image(profile, rel_path)
-        if family == "avatars":
-            # Avatars render site-wide (comments, friend lists, messages)
-            # beside their owner's username; any authenticated user may fetch.
-            return True
-        if family in {"pin_custom_icons", "label_icons"}:
-            # TODO(media-auth): icon decorations are authenticated-only for now.
-            # Enforcing strict ownership here risks breaking any surface that
-            # renders another user's labeled/shared pin (shared pin views, trip
-            # member maps). See docs/PROBLEMS.md "Authenticated media gate -
-            # residual per-family risk".
-            return True
-        # TODO(media-auth): unknown path family - no owning model identified.
-        # Authenticated-only fallback; see "Authenticated media gate - residual per-family risk" in docs/PROBLEMS.md.
-        logger.info("Media request for unrecognized path family %r served authenticated-only", family)
-        return True
-
-    def _authorize_image(self, profile: Profile, rel_path: str) -> bool:
-        """Authorize a ``pin_images/`` file via its ``Image`` row.
-
-        The uploader always qualifies. Direct-message-only attachments are
-        restricted to the DM's sender and recipient. Anything else (pin/wiki
-        gallery photos, memories uploads, safety check-in photos) follows the
-        same ``Image.objects.visible_to`` filtering the gallery views apply.
-
-        Args:
-            profile: The authenticated requester's profile.
-            rel_path: Path relative to ``MEDIA_ROOT``.
-
-        Returns:
-            True when the requester may see the image.
-        """
-        from urbanlens.dashboard.models.images.model import Image
-
-        image = Image.objects.filter(image=rel_path).select_related("direct_message").first()
-        if image is None:
-            # Orphan file (row deleted, file left behind) - no owner to check.
-            # TODO(media-auth): authenticated-only fallback; see "Authenticated media gate - residual per-family risk" in docs/PROBLEMS.md.
-            return True
-        if image.profile_id == profile.pk:
-            return True
-        if image.direct_message_id:
-            dm = image.direct_message
-            if dm is not None and profile.pk in (dm.sender_id, dm.recipient_id):
-                return True
-            if not image.pin_id and not image.wiki_id:
-                # A pure DM attachment is private to the two participants; an
-                # image that *also* lives in a pin/wiki gallery falls through
-                # to the normal photo-visibility check below.
-                return False
-        # pk filter first: `visible_to` eagerly resolves the uploader set of
-        # whatever queryset it is handed, so calling it on the unfiltered
-        # manager would walk every uploader on the site to answer about one
-        # image - on the path that serves every media file.
-        return Image.objects.filter(pk=image.pk).visible_to(profile).exists()
-
-    def _authorize_comment_image(self, profile: Profile, rel_path: str) -> bool:
-        """Authorize a ``comment_images/`` file via its Comment/TripComment row.
-
-        Args:
-            profile: The authenticated requester's profile.
-            rel_path: Path relative to ``MEDIA_ROOT``.
-
-        Returns:
-            True when the requester may see the comment image.
-        """
-        from urbanlens.dashboard.models.comments.model import Comment
-        from urbanlens.dashboard.models.trips.model import TripComment, TripMembership
-        from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
-
-        comment = Comment.objects.filter(image=rel_path).select_related("pin", "wiki__location", "profile").first()
-        if comment is not None:
-            if comment.profile_id == profile.pk:
-                return True
-            if comment.pending_scan:
-                # Not yet cleared by the malware scan - author-only until then,
-                # mirroring controllers.comments._build_context.
-                return False
-            if not profile.can_view_comments_from(comment.profile):
-                # The author's comment_visibility setting hides the comment
-                # itself from this viewer (see services.comments.comments.visible_comment_tree
-                # gate 1) - the attachment must be hidden right along with it,
-                # not just from the rendered thread.
-                return False
-            if comment.pin is not None:
-                # Pin comment threads are visible only on the owner's own pin
-                # page (see PinCommentsView.get), so owner + comment authors
-                # are the whole audience.
-                return comment.pin.profile_id == profile.pk
-            if comment.wiki is not None:
-                return location_visible_to(comment.wiki.location, profile)
-            return False
-
-        trip_comment = TripComment.objects.filter(image=rel_path).select_related("author").first()
-        if trip_comment is not None:
-            if trip_comment.author_id == profile.pk:
-                return True
-            if trip_comment.pending_scan:
-                return False
-            if trip_comment.author is not None and not profile.can_view_comments_from(trip_comment.author):
-                return False
-            return TripMembership.objects.filter(trip_id=trip_comment.trip_id, profile=profile).exists()
-
-        # Orphan file - no surviving comment row to derive an owner from.
-        # TODO(media-auth): authenticated-only fallback; see "Authenticated media gate - residual per-family risk" in docs/PROBLEMS.md.
-        return True
+        return authorize_media(profile, rel_path)
 
 
 def resolve_media_path(path: str) -> tuple[str, Path]:

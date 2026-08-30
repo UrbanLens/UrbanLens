@@ -32,7 +32,12 @@ function toolsFabTarget(): { x: number; y: number } {
 }
 
 export function flyToToolsFab(el: HTMLElement | null): void {
-    if (!el || !el.isConnected) {
+    // Most data-ext-panel-204 cards now start `hidden` and never paint before
+    // their 204 arrives - nothing on screen to fly, so skip straight to
+    // removal instead of pinning/animating an invisible element and waiting
+    // out the 450ms fallback for a transitionend that display:none prevents
+    // from ever firing.
+    if (!el || !el.isConnected || el.hidden) {
         el?.remove();
         return;
     }

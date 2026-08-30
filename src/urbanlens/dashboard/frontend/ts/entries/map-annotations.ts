@@ -90,6 +90,16 @@ interface BuildingImportRow {
     geometry: object | null;
 }
 
+/** One of the owner's own top-level pins standing inside the property - the
+ * "organize" dialog's other kind of candidate, alongside buildings. See
+ * controllers.pin_restructure._nestable_map_data. */
+interface NestableImportRow {
+    pk: number;
+    name: string;
+    latitude: number | null;
+    longitude: number | null;
+}
+
 function escHtml(s: string): string {
     return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
@@ -307,6 +317,7 @@ function init(): void {
         const dialog = document.getElementById("building-import-dialog") as HTMLDialogElement | null;
         const mapElement = document.getElementById("building-import-map");
         const dataElement = document.getElementById("building-import-map-data");
+        const nestableDataElement = document.getElementById("building-import-nestable-map-data");
         const form = dialog?.querySelector<HTMLFormElement>(".building-import-form");
         if (!dialog || !mapElement || !dataElement || !form) return;
 
@@ -316,13 +327,24 @@ function init(): void {
         } catch {
             buildings = [];
         }
+        let nestablePins: NestableImportRow[];
+        try {
+            nestablePins = JSON.parse(nestableDataElement?.textContent || "[]") as NestableImportRow[];
+        } catch {
+            nestablePins = [];
+        }
 
         buildingImportMap?.remove();
         const previewMap = L.map(mapElement, { scrollWheelZoom: false, attributionControl: false, maxZoom: MAP_MAX_ZOOM, minZoom: MAP_MIN_ZOOM }).setView([mapCenterLat, mapCenterLng], 16);
         buildingImportMap = previewMap;
         tileLayer("street").addTo(previewMap);
 
-        const checkboxes = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="building_keys"]'));
+        // Buildings and existing-pin candidates share one selection key space
+        // (a building's selection_key hash vs. a pin's stringified pk never
+        // collide in practice) so select-all/count/rectangle-select treat both
+        // uniformly; only the per-row "child pin vs merge" mode toggle below is
+        // pin-specific.
+        const checkboxes = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="building_keys"], input[name="nest_keys"]'));
         const checkboxByKey = new Map(checkboxes.map((checkbox) => [checkbox.value, checkbox] as const));
         const rowByKey = new Map<string, HTMLElement>();
         checkboxes.forEach((checkbox) => {
@@ -334,15 +356,37 @@ function init(): void {
         const submit = form.querySelector<HTMLButtonElement>("[data-building-import-submit]");
         const submitLabel = form.querySelector<HTMLElement>("[data-building-submit-label]");
         const isRestructure = form.dataset.restructure === "1";
-        const canSubmitWithoutBuildings = Number.parseInt(form.dataset.nestableCount || "0", 10) > 0;
 
         const pathsByKey = new Map<string, L.Path[]>();
         const boundsByKey = new Map<string, L.LatLngBounds>();
         const previewBounds = L.latLngBounds([]);
         const selectedStyle: L.PathOptions = { color: "#2563eb", weight: 3, fillColor: "#3b82f6", fillOpacity: 0.45, opacity: 1 };
         const unselectedStyle: L.PathOptions = { color: "#64748b", weight: 2, fillColor: "#94a3b8", fillOpacity: 0.12, opacity: 0.5 };
+        const selectedPinStyle: L.PathOptions = { color: "#7c3aed", weight: 3, fillColor: "#a78bfa", fillOpacity: 0.55, opacity: 1 };
+        const unselectedPinStyle: L.PathOptions = { color: "#64748b", weight: 2, fillColor: "#94a3b8", fillOpacity: 0.12, opacity: 0.5 };
         const hoverStyle: L.PathOptions = { color: "#f97316", weight: 4 };
-        const styleForKey = (key: string): L.PathOptions => (checkboxByKey.get(key)?.checked ? selectedStyle : unselectedStyle);
+        const pinKeys = new Set(nestablePins.map((candidate) => String(candidate.pk)));
+        const styleForKey = (key: string): L.PathOptions => {
+            const checked = checkboxByKey.get(key)?.checked ?? false;
+            if (pinKeys.has(key)) return checked ? selectedPinStyle : unselectedPinStyle;
+            return checked ? selectedStyle : unselectedStyle;
+        };
+
+        // Mode toggle ("Child pin" vs "Merge into this pin") shows/hides that
+        // row's conflict picker (or plain merge warning) - both start hidden
+        // server-side unless this candidate was resubmitted with "Merge"
+        // already chosen (see _nestable_rows' default_merge).
+        form.querySelectorAll<HTMLElement>(".building-import-pin-row").forEach((row) => {
+            const modeInputs = Array.from(row.querySelectorAll<HTMLInputElement>('input[type="radio"][name^="nest_mode__"]'));
+            const detail = row.querySelector<HTMLElement>(".building-import-merge-conflicts, .building-import-merge-note");
+            if (!detail) return;
+            const sync = (): void => {
+                const merging = modeInputs.some((input) => input.checked && input.value === "merge");
+                detail.hidden = !merging;
+            };
+            modeInputs.forEach((input) => input.addEventListener("change", sync));
+            sync();
+        });
 
         // Bidirectional hover sync between the row list and the map preview -
         // row/shape pairs share `selection_key` via rowByKey/pathsByKey.
@@ -363,19 +407,28 @@ function init(): void {
             }
         };
 
+        const buildingCheckboxes = checkboxes.filter((checkbox) => !pinKeys.has(checkbox.value));
+
         const syncSelection = (): void => {
-            let checked = 0;
+            let buildingsChecked = 0;
+            let totalChecked = 0;
             checkboxes.forEach((checkbox) => {
-                if (checkbox.checked) checked += 1;
+                if (!checkbox.checked) return;
+                totalChecked += 1;
+                if (!pinKeys.has(checkbox.value)) buildingsChecked += 1;
             });
             pathsByKey.forEach((paths, key) => {
                 if (key === hoveredKey) return;
                 paths.forEach((path) => path.setStyle(styleForKey(key)));
             });
-            if (selectedCount) selectedCount.textContent = String(checked);
-            if (selectAll) selectAll.textContent = checked === checkboxes.length ? "Uncheck all" : "Check all";
-            if (submit) submit.disabled = checked === 0 && !canSubmitWithoutBuildings;
-            if (submitLabel && !isRestructure) submitLabel.textContent = `Add ${checked} building${checked === 1 ? "" : "s"}`;
+            // "N of M selected" / "(Un)check all" only ever describe the
+            // buildings list - the denominator the template renders
+            // (building_count) is buildings-only, and pins get their own
+            // per-row controls instead of a bulk toggle.
+            if (selectedCount) selectedCount.textContent = String(buildingsChecked);
+            if (selectAll) selectAll.textContent = buildingsChecked === buildingCheckboxes.length ? "Uncheck all" : "Check all";
+            if (submit) submit.disabled = totalChecked === 0;
+            if (submitLabel && !isRestructure) submitLabel.textContent = `Add ${buildingsChecked} building${buildingsChecked === 1 ? "" : "s"}`;
         };
 
         const toggleBuildingKey = (key: string): void => {
@@ -417,6 +470,24 @@ function init(): void {
             pathsByKey.set(building.selection_key, paths);
         });
 
+        // Existing-pin candidates get a plain point marker (no footprint data
+        // to draw) in a visually distinct color from buildings - see the
+        // legend in _building_import_dialog_body.html.
+        nestablePins.forEach((candidate) => {
+            if (candidate.latitude == null || candidate.longitude == null) return;
+            const key = String(candidate.pk);
+            const point = L.circleMarker([candidate.latitude, candidate.longitude], { ...selectedPinStyle, radius: 8 }).addTo(previewMap);
+            point.bindTooltip(candidate.name || "Unnamed pin");
+            point.on("mouseover", () => setBuildingHover(key));
+            point.on("mouseout", () => setBuildingHover(null));
+            point.on("click", () => {
+                if (buildingSelectMode) toggleBuildingKey(key);
+            });
+            previewBounds.extend(point.getLatLng());
+            boundsByKey.set(key, L.latLngBounds(point.getLatLng(), point.getLatLng()));
+            pathsByKey.set(key, [point]);
+        });
+
         if (previewBounds.isValid()) previewMap.fitBounds(previewBounds.pad(0.18), { maxZoom: 18 });
 
         rowByKey.forEach((row, key) => {
@@ -426,8 +497,8 @@ function init(): void {
 
         checkboxes.forEach((checkbox) => checkbox.addEventListener("change", syncSelection));
         selectAll?.addEventListener("click", () => {
-            const shouldCheck = checkboxes.some((checkbox) => !checkbox.checked);
-            checkboxes.forEach((checkbox) => {
+            const shouldCheck = buildingCheckboxes.some((checkbox) => !checkbox.checked);
+            buildingCheckboxes.forEach((checkbox) => {
                 checkbox.checked = shouldCheck;
             });
             syncSelection();
@@ -471,6 +542,19 @@ function init(): void {
         dialog.showModal();
         requestAnimationFrame(initBuildingImportDialog);
     };
+
+    // A merge conflict keeps the dialog open and re-renders just its body
+    // (#building-import-dialog-body, outerHTML) with fresh checkboxes/radios
+    // and a fresh #building-import-map placeholder - none of it wired up yet.
+    // Scanning the document on every swap (rather than trying to single out
+    // that one target) mirrors initAdaptivePagination's own afterSwap handler
+    // above; initBuildingImportDialog() already no-ops when its elements
+    // aren't present, so this is a safe, idempotent rebuild either way -
+    // including the redundant call this causes on the dialog's initial open,
+    // which openBuildingImportDialog() above also triggers directly.
+    document.body.addEventListener("htmx:afterSwap", () => {
+        if (document.getElementById("building-import-map")) initBuildingImportDialog();
+    });
 
     // Dedicated panes keep markup shapes clickable even when a boundary
     // polygon visually overlaps them - without this, both layer groups share
@@ -956,6 +1040,16 @@ function init(): void {
         return `${r},${g},${b}`;
     }
 
+    // Mirrors the `is_material_icon` Django filter (dashboard_tags.py): a bare
+    // ligature name renders fine inside a material-icons span, but an
+    // uploaded custom icon's URL rendered the same way shows up as literal
+    // text - far wider than one glyph, which stretched the fixed-size
+    // flex circle into an oval and threw off iconAnchor's centered-square
+    // math. A URL gets an <img> sized to match instead; anything else
+    // (an emoji) is plain text, un-fonted so it isn't mistaken for a glyph.
+    const MATERIAL_ICON_NAME = /^[a-z0-9_]+$/;
+    const ICON_URL = /^(?:https?:)?\//;
+
     function detailIcon(dp: Partial<DetailPinEntry>, highlighted?: boolean): L.DivIcon {
         const pinType = dp.pin_type || "location";
         const color = dp.color || detailPinColors[pinType] || "#2563eb";
@@ -974,9 +1068,15 @@ function init(): void {
         const bdStyle = bdColor ? `border:2px solid rgba(${hexToRgb(bdColor)},${bdOp});` : "";
         const ring = highlighted ? `<span style="position:absolute;inset:-5px;border:2.5px solid ${color};border-radius:50%;opacity:.55;pointer-events:none;"></span>` : "";
 
+        const iconHtml = ICON_URL.test(icon)
+            ? `<img class="detail-map-icon-img" src="${icon}" alt="" style="width:${size}px;height:${size}px;">`
+            : MATERIAL_ICON_NAME.test(icon)
+              ? `<span class="material-icons detail-map-icon" style="color:${color};font-size:${size}px;line-height:1;">${icon}</span>`
+              : `<span class="detail-map-icon" style="font-size:${size}px;line-height:1;">${icon}</span>`;
+
         return L.divIcon({
             className: "",
-            html: `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;${bgStyle}${bdStyle}padding:${pad}px;">${ring}<span class="material-icons detail-map-icon" style="color:${color};font-size:${size}px;line-height:1;">${icon}</span></span>`,
+            html: `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;${bgStyle}${bdStyle}padding:${pad}px;">${ring}${iconHtml}</span>`,
             iconSize: [total, total],
             iconAnchor: [total / 2, total],
             popupAnchor: [0, -total - 2],

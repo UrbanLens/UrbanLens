@@ -1,0 +1,25 @@
+{% comment %}
+One row of the "Buildings on this Property" panel's All/Mine tabs - shared so
+the two tabs (the full list, and the subset with a child pin behind it) render
+identically instead of drifting. See _parcel_buildings_panel.html and
+plugins.builtin.parcel_buildings.building_rows/unpinned_building_child_rows.
+{% endcomment %}
+<li class="parcel-building{% if not row.child_name %} parcel-building--unpinned{% endif %}">
+    <span class="parcel-building-number">{{ row.building_number|default:"&mdash;" }}</span>
+    <div class="parcel-building-info">
+        <span class="parcel-building-name">
+            {% if row.child_url %}
+            <a href="{{ row.child_url }}">{{ row.name|default:row.child_name|default:"Unnamed building" }}</a>
+            {% else %}
+            {{ row.name|default:"Unnamed building" }}
+            {% endif %}
+        </span>
+        <span class="parcel-building-meta">
+            {% if row.year_built %}<span>Built {{ row.year_built }}</span>{% endif %}
+            {% if row.source_label %}<span class="parcel-building-source">{{ row.source_label }}</span>{% endif %}
+        </span>
+    </div>
+    {% if row.child_name %}
+    <i class="material-symbols-outlined parcel-building-status" title="Pinned as {{ row.child_name }}">push_pin</i>
+    {% endif %}
+</li>
