@@ -104,6 +104,13 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
     const currentLoaded = () => grid.querySelectorAll(itemSelector).length;
     if (currentLoaded() >= total) return () => {};
     let fetching = false;
+    // A caller can unbind mid-fetch (changing the sort re-fetches from
+    // scratch, which unbinds and rebinds this same grid element) - without
+    // this, a fetch already in flight resolves after the sentinel it captured
+    // has been removed from the DOM, and `insertBefore(fragment, sentinel)`
+    // throws because the reference node is no longer a child of `grid`.
+    let unbound = false;
+    const abort = new AbortController();
 
     const sentinel = document.createElement("li");
     sentinel.className = "photo-grid-sentinel";
@@ -131,9 +138,10 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
         try {
             const params = new URLSearchParams({ offset: String(loaded), limit: String(pageSize), ...(opts.extraParams ?? {}) });
             const url = `${itemsUrl}${itemsUrl.includes("?") ? "&" : "?"}${params.toString()}`;
-            const response = await fetch(url);
-            if (!response.ok) return;
+            const response = await fetch(url, { signal: abort.signal });
+            if (unbound || !response.ok) return;
             const body = (await response.json()) as { items?: Record<string, unknown>[] };
+            if (unbound) return;
             const fragment = document.createDocumentFragment();
             for (const raw of body.items ?? []) {
                 const el = renderTile(raw);
@@ -142,8 +150,10 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
             clearSkeletons();
             grid.insertBefore(fragment, sentinel);
             if (currentLoaded() >= total) sentinel.remove();
+        } catch (error) {
+            if (!(error instanceof DOMException && error.name === "AbortError")) throw error;
         } finally {
-            clearSkeletons();
+            if (!unbound) clearSkeletons();
             fetching = false;
         }
     };
@@ -161,6 +171,8 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
     grid.addEventListener("scroll", onScroll, { passive: true });
 
     return () => {
+        unbound = true;
+        abort.abort();
         observer.disconnect();
         window.removeEventListener("scroll", onScroll);
         grid.removeEventListener("scroll", onScroll);

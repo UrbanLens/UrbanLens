@@ -37,6 +37,7 @@ export const appRoutes = {
     lists: "/dashboard/lists/",
     trips: "/dashboard/trips/",
     memories: "/dashboard/memories/",
+    vaultPhotos: "/dashboard/vault/photos/",
     messages: "/dashboard/messages/",
     organize: "/dashboard/organize/",
     safety: "/dashboard/safety/",
