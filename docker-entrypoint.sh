@@ -11,19 +11,11 @@ for dir in \
     chown -R appuser:appuser "$dir"
 done
 
-# Bytecode caching is environment-dependent, so it is decided here rather than
-# baked into the image - one image can be run as either.
-#
-# staging/production: leave PYTHONDONTWRITEBYTECODE unset so Python keeps what
-# it compiles. The source is baked into the image and never changes, and
-# discarding bytecode means every gunicorn worker recompiles anything the
-# build-time compileall missed on its first import. That cost is not
-# theoretical: a cold worker spent 5.2s of a 12.3s first request in
-# builtins.compile before the build started precompiling.
-#
-# everything else: set it. Local and development bind-mount the source from the
-# host, where writing __pycache__ into the developer's own checkout is litter
-# that git then has to ignore.
+# Decided here, not in the image, so one image can run as either environment.
+# staging/production bake the source in and should keep the bytecode they
+# compile - discarding it makes every worker recompile whatever the build-time
+# compileall missed. Local and development bind-mount the source from the host,
+# where __pycache__ would litter the developer's checkout.
 case "${UL_ENVIRONMENT:-production}" in
     staging | production)
         unset PYTHONDONTWRITEBYTECODE
