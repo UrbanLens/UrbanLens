@@ -610,7 +610,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         """
         from urbanlens.dashboard.models.images.model import MediaKind
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
         from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
         from urbanlens.dashboard.tasks import process_image_upload
 
@@ -630,7 +630,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             quota_error = quota_error_for_upload(profile, image.size)
             if quota_error:
                 return HttpResponse(quota_error, status=413)
-            img = Image.objects.create(image=image, pin=pin, location=pin.location, profile=profile, checksum=checksum, file_size=image.size)
+            # Stored already stripped - see services.media.images.prepare_photo_upload.
+            prepared = prepare_photo_upload(image, profile)
+            img = Image.objects.create(image=prepared.file, pin=pin, location=pin.location, profile=profile, checksum=checksum, file_size=prepared.size, **prepared.metadata)
         safely_enqueue_task(process_image_upload, img.pk)
         return HttpResponse(status=200)
 

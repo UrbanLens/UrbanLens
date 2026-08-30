@@ -634,7 +634,7 @@ class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
             return JsonResponse({"error": f"You can attach up to {MAX_SUGGESTION_PHOTOS} photos per location."}, status=400)
 
         from urbanlens.dashboard.models.images.model import MediaKind
-        from urbanlens.dashboard.services.media.images import image_upload_error
+        from urbanlens.dashboard.services.media.images import image_upload_error, prepare_photo_upload
 
         upload_error = image_upload_error(image_file, MediaKind.PHOTO)
         if upload_error:
@@ -652,7 +652,9 @@ class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
             if quota_error:
                 return JsonResponse({"error": quota_error}, status=413)
 
-            img = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size, pin_suggestion=suggestion)
+            # Stored already stripped - see services.media.images.prepare_photo_upload.
+            prepared = prepare_photo_upload(image_file, profile)
+            img = Image.objects.create(image=prepared.file, profile=profile, checksum=checksum, file_size=prepared.size, pin_suggestion=suggestion, **prepared.metadata)
 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload

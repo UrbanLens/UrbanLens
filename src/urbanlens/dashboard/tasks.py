@@ -693,6 +693,16 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
     if strip_location and exif_data:
         exif_data.pop("GPSInfo", None)
 
+    # An upload accepted through services.photos reads its metadata in the
+    # request and stores the file already stripped, so by the time this task
+    # runs there is nothing left in the bytes to find - the row is where the
+    # coordinates are. Falling back to them keeps location resolution and the
+    # visit suggestion below working for those rows, and is a no-op for a file
+    # that still carries its own (an older row, or a format the byte-level
+    # stripper leaves to the re-encode).
+    if coords is None and not strip_location and image.latitude is not None and image.longitude is not None:
+        coords = (float(image.latitude), float(image.longitude))
+
     update_fields: dict[str, object] = {}
     if direction is not None:
         image.direction = Decimal(str(round(direction, 2)))

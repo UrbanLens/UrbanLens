@@ -27,7 +27,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
 _IMAGE_BYTES = b"fake-image-bytes-for-media-gate"
@@ -279,6 +279,39 @@ class MediaGateTests(TestCase):
         self.client.force_login(_new_user())
         denied = self.client.get("/media/pin_images/dm-thumb.webp")
         self.assertEqual(denied.status_code, 404, "a non-participant must not fetch a DM attachment's preview")
+
+    # -- Files backed by more than one row ---------------------------------------
+
+    def test_a_share_recipient_reaches_a_photo_they_were_given(self):
+        """Accepting a share hands over a row, not a second copy of the bytes.
+
+        Several rows therefore point at one storage key, and whichever one the
+        lookup happened to return decided the answer - so a recipient could be
+        refused a photo that was deliberately shared with them.
+        """
+        recipient_user = _new_user()
+        baker.make(
+            Image,
+            image="pin_images/owned.png",
+            profile=recipient_user.profile,
+            quota_exempt_reason=QuotaExemption.SHARED_COPY,
+        )
+        self.client.force_login(recipient_user)
+
+        response = self.client.get("/media/pin_images/owned.png")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._get_bytes(response), _IMAGE_BYTES)
+
+    def test_a_stranger_is_still_denied_a_file_two_other_people_share(self):
+        """The extra row must not widen who the file reaches."""
+        other_user = _new_user()
+        baker.make(Image, image="pin_images/owned.png", profile=other_user.profile, quota_exempt_reason=QuotaExemption.SHARED_COPY)
+        self.client.force_login(_new_user())
+
+        response = self.client.get("/media/pin_images/owned.png")
+
+        self.assertEqual(response.status_code, 404)
 
     # -- Path safety ------------------------------------------------------------
 

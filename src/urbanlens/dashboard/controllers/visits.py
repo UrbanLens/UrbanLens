@@ -211,7 +211,7 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
 
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-    from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+    from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
     from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
     from urbanlens.dashboard.tasks import process_image_upload
 
@@ -244,14 +244,17 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
                 # Linking existing photos is still fine - only new files need space.
                 messages.warning(request, quota_error)
                 continue
+            # Stored already stripped - see services.media.images.prepare_photo_upload.
+            prepared = prepare_photo_upload(image_file, pin.profile)
             img = Image.objects.create(
-                image=image_file,
+                image=prepared.file,
                 pin=pin,
                 location=pin.location,
                 profile=pin.profile,
                 visit=visit,
                 checksum=checksum,
-                file_size=image_file.size,
+                file_size=prepared.size,
+                **prepared.metadata,
             )
             safely_enqueue_task(process_image_upload, img.pk)
             uploaded_pks.append(img.pk)

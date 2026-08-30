@@ -31,9 +31,11 @@ from urbanlens.dashboard.services.photos.attachment import attach_to_wiki
 from urbanlens.dashboard.services.photos.uploads import upload_photo_for_owner
 
 
-def _jpeg_bytes() -> bytes:
+def _jpeg_bytes(colour: tuple[int, int, int] = (10, 20, 30)) -> bytes:
+    """A small JPEG. Vary *colour* when a test needs two distinct uploads - the
+    upload path rejects a byte-identical second file on the same pin."""
     buf = io.BytesIO()
-    PILImage.new("RGB", (60, 40), color=(10, 20, 30)).save(buf, format="JPEG")
+    PILImage.new("RGB", (60, 40), color=colour).save(buf, format="JPEG")
     return buf.getvalue()
 
 
@@ -150,9 +152,9 @@ class TripActivityPhotosTests(WikiReachabilityTestCase):
 
         self.photo = self._pin_photo(self.owner_far_pin, "trip-activity")
 
-    def _pin_photo(self, pin: Pin, name: str) -> Image:
+    def _pin_photo(self, pin: Pin, name: str, colour: tuple[int, int, int] = (10, 20, 30)) -> Image:
         """A photo on the owner's pin, contributed to no wiki."""
-        result = upload_photo_for_owner(pin, self.owner, SimpleUploadedFile(f"{name}.jpg", _jpeg_bytes(), content_type="image/jpeg"), name)
+        result = upload_photo_for_owner(pin, self.owner, SimpleUploadedFile(f"{name}.jpg", _jpeg_bytes(colour), content_type="image/jpeg"), name)
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
         return result
 
@@ -180,6 +182,6 @@ class TripActivityPhotosTests(WikiReachabilityTestCase):
         by the same query, so the exposure kept growing with no further act by
         anyone.
         """
-        later = self._pin_photo(self.owner_far_pin, "uploaded-later")
+        later = self._pin_photo(self.owner_far_pin, "uploaded-later", colour=(200, 40, 90))
 
         self.assertFalse(self._visible(later, self.member))

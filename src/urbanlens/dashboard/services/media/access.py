@@ -32,6 +32,14 @@ Guessing a path is separately useless: the upload-path callables in
 :mod:`urbanlens.dashboard.models.images.model` file each upload under a random
 directory, so a photo's URL cannot be derived from its filename. That is
 defence in depth, not the control - this module is the control.
+
+Two subtrees of ``MEDIA_ROOT`` hold no model's files and so appear in no
+registry: ``exports/<job_id>/`` and ``imports/<job_id>/``, where the data
+export and import jobs stage their archives. Both are reached through their own
+owner-checked views (``controllers.tools.ExportDownloadView``), never through
+``/media/``, so refusing them here is correct - and closes a real hole, since
+under the old permissive fallback a guessed job uuid served any user's complete
+data export to any logged-in account.
 """
 
 from __future__ import annotations
@@ -147,6 +155,13 @@ def authorize_image(profile: Profile, rel_path: str) -> bool:
     left every preview unowned - and therefore, under the old permissive
     orphan fallback, readable by anyone with an account.
 
+    Several rows can point at one stored file: accepting a pin share gives the
+    recipient their own row over the sender's bytes rather than a second copy,
+    and so does re-uploading a file already stored (see ``QuotaExemption``). The
+    requester's own row is the one that answers, because any of them would
+    otherwise be picked arbitrarily - which for a share recipient means being
+    refused a photo they were explicitly given.
+
     Args:
         profile: The authenticated requester's profile.
         rel_path: Path relative to ``MEDIA_ROOT``.
@@ -154,11 +169,11 @@ def authorize_image(profile: Profile, rel_path: str) -> bool:
     Returns:
         True when the requester may see the image.
     """
-    from django.db.models import Q
+    from django.db.models import Case, IntegerField, Q, When
 
     from urbanlens.dashboard.models.images.model import Image
 
-    image = Image.objects.filter(Q(image=rel_path) | Q(thumbnail=rel_path)).select_related("direct_message").first()
+    image = Image.objects.filter(Q(image=rel_path) | Q(thumbnail=rel_path)).annotate(requesters_own=Case(When(profile=profile, then=0), default=1, output_field=IntegerField())).select_related("direct_message").order_by("requesters_own").first()
     if image is None:
         return False
     if image.profile_id == profile.pk:

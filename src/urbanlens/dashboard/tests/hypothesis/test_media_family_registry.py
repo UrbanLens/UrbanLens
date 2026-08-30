@@ -107,7 +107,11 @@ class UnguessableUploadPathTests(SimpleTestCase):
         thumbnail_dir = thumbnail.split("/", 4)[2:4]
         self.assertNotEqual(original_dir, thumbnail_dir)
 
-    @given(filename=st.sampled_from(["PXL_20260709_123456.jpg", "IMG_4821.JPG", "DSC00042.jpeg", "20260709_101112.jpg"]))
+    # Every prefix _CAMERA_FILENAME_RE recognises. A bare timestamp
+    # (`20260709_101112.jpg`, Samsung's convention) is deliberately absent - the
+    # heuristic does not claim it, and asserting it here would test the regex
+    # rather than whether the stem survives into storage.
+    @given(filename=st.sampled_from(["PXL_20260709_123456.jpg", "IMG_4821.JPG", "MVIMG_20260709_1.jpg", "DSCN0042.jpeg", "DSC00042.jpeg", "DCIM_1234.jpg"]))
     def test_a_camera_filename_survives_into_storage(self, filename: str):
         """The attribution heuristic reads the stored name, so the stem stays last.
 

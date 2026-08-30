@@ -1432,7 +1432,7 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
         from urbanlens.dashboard.models.images.model import MediaKind
-        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
 
         upload_error = image_upload_error(image_file, MediaKind.PHOTO)
         if upload_error:
@@ -1453,14 +1453,17 @@ class SafetyGalleryView(LoginRequiredMixin, View):
             quota_error = quota_error_for_upload(profile, image_file.size)
             if quota_error:
                 return JsonResponse({"error": quota_error}, status=413)
+            # Stored already stripped - see services.media.images.prepare_photo_upload.
+            prepared = prepare_photo_upload(image_file, profile)
             img = Image.objects.create(
-                image=image_file,
+                image=prepared.file,
                 safety_checkin=checkin,
                 location=checkin.destination_location,
                 profile=profile,
-                caption=caption or None,
+                caption=caption or prepared.metadata_caption or None,
                 checksum=checksum,
-                file_size=image_file.size,
+                file_size=prepared.size,
+                **prepared.metadata,
             )
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload

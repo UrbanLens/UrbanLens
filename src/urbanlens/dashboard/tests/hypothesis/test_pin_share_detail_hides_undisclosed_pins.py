@@ -118,7 +118,8 @@ class SafePinAccessorTests(TestCase):
         super().setUp()
         self.sender = baker.make(User).profile
         self.recipient = baker.make(User).profile
-        self.location = baker.make(Location, latitude=f"{_LAT:.6f}", longitude=f"{_LNG:.6f}", official_name="Unnamed Location", address="12 Mill Road")
+        # Location.address is composed from its components, not a stored field.
+        self.location = baker.make(Location, latitude=f"{_LAT:.6f}", longitude=f"{_LNG:.6f}", official_name="Unnamed Location", street_number="12", route="Mill Road", locality="", administrative_area_level_1="", zipcode="")
         self.pin = Pin.objects.create(profile=self.sender, location=self.location, name=_UNDISCLOSED_NAME)
 
     def _share(self, status: str) -> PinShare:
@@ -143,4 +144,5 @@ class SafePinAccessorTests(TestCase):
     def test_the_withheld_label_falls_back_to_the_snapshot(self):
         share = self._share(PinShareStatus.DETECTED)
 
-        self.assertEqual(share.safe_place_label, "12 Mill Road")
+        self.assertEqual(share.safe_place_label, self.location.address)
+        self.assertIn("Mill Road", share.safe_place_label)

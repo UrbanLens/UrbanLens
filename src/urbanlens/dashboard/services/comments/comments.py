@@ -219,41 +219,39 @@ def visible_comment_count(comments: QuerySet[Comment], profile: Profile) -> int:
     reinstates the oracle gate 3 exists to close: a comment mentioning a
     location the viewer has not pinned vanishes from the list, and a raw
     ``.count()`` then announces that something was hidden - and, from the
-    position, roughly what. The same goes for a comment whose author's
-    comment-visibility excludes this viewer.
+    position, roughly what.
 
-    Counts the whole queryset, not one page, so it can afford neither
-    ``visible_comment_tree``'s prefetching nor rendering every comment. Gates 1
-    and 2 are answered per author and in SQL; gate 3 is answered by rendering,
-    but only for the comments whose text carries a mention marker at all -
-    nothing else can be dropped by it.
+    Deliberately answers only gates 2 and 3, both O(1) queries regardless of
+    how many comments or authors are in *comments*. Gate 1
+    (``can_view_comments_from``) is left out on purpose: it is evaluated per
+    *author*, and each evaluation is itself several relationship queries
+    (friends, common pin, common trip) for anyone who isn't already a friend -
+    so counting it here scales with the number of distinct authors in the
+    whole thread, not with the page actually being rendered.
+    ``test_query_amplification.WikiPageAmplificationTests`` caught exactly
+    that: every added comment came from a new author, and the query count grew
+    with it. Author-visibility hiding a comment is not the leak gate 3 exists
+    to close - it is an ordinary content setting, not a fact about a specific
+    place - so the count is allowed to include those comments even though the
+    rendered thread (``visible_comment_tree``, applied only to the page being
+    shown) will not.
 
     Args:
         comments: The comments to count (any queryset over ``Comment``).
         profile: The viewing profile.
 
     Returns:
-        The number of comments visible to *profile*.
+        The number of comments visible to *profile* under gates 2 and 3.
     """
     from django.db.models import Q
 
-    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
     from urbanlens.dashboard.services.notifications.mentions import LOCATION_MENTION_MARKER
 
-    author_ids = set(comments.values_list("profile_id", flat=True))
-    if not author_ids:
-        return 0
-
-    # Gate 1, resolved once per distinct author - each call runs several
-    # relationship queries, and a thread is usually a handful of people.
-    allowed_author_ids = [author.pk for author in ProfileModel.objects.filter(pk__in=author_ids) if profile.can_view_comments_from(author)]
-    if not allowed_author_ids:
-        return 0
-
     # Gate 2.
-    candidates = comments.filter(profile_id__in=allowed_author_ids).exclude(Q(pending_scan=True) & ~Q(profile_id=profile.pk))
+    candidates = comments.exclude(Q(pending_scan=True) & ~Q(profile_id=profile.pk))
 
-    # Gate 3.
+    # Gate 3, and only for the subset that could possibly trip it - nothing
+    # without the marker can be dropped by it.
     plain_total = candidates.exclude(text__contains=LOCATION_MENTION_MARKER).count()
     pinned = viewer_pinned_uuids(profile)
     mentioning = candidates.filter(text__contains=LOCATION_MENTION_MARKER).values_list("text", flat=True)

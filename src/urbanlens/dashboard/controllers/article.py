@@ -376,7 +376,7 @@ class ArticleImageUploadView(ArticleViewBase):
             return JsonResponse({"error": "No image provided."}, status=400)
 
         from urbanlens.dashboard.models.images.model import Image, MediaKind
-        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
         from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
         upload_error = image_upload_error(image_file, MediaKind.PHOTO)
@@ -391,14 +391,17 @@ class ArticleImageUploadView(ArticleViewBase):
             if quota_error:
                 return JsonResponse({"error": quota_error}, status=413)
 
+            # Stored already stripped - see services.media.images.prepare_photo_upload.
+            prepared = prepare_photo_upload(image_file, scope.profile)
             img = Image.objects.create(
-                image=image_file,
+                image=prepared.file,
                 pin=scope.pin,
                 wiki=scope.wiki,
                 location=location,
                 profile=scope.profile,
                 checksum=checksum,
-                file_size=image_file.size,
+                file_size=prepared.size,
+                **prepared.metadata,
             )
 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task

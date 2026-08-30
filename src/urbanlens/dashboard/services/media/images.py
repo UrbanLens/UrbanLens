@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 import hashlib
@@ -1010,3 +1011,118 @@ def detach_image_from_wiki(image: Any) -> None:
         return
     delete_stored_file(image)
     image.delete()
+
+
+@dataclass(frozen=True)
+class PreparedUpload:
+    """A photo upload with its metadata read out and removed from the bytes.
+
+    Returned by :func:`prepare_photo_upload`. See that function for why the two
+    halves have to happen together.
+    """
+
+    #: What to store. The uploaded bytes minus their metadata segments, or the
+    #: original file unchanged when the format is not one the stripper rewrites.
+    file: Any
+
+    #: Size of :attr:`file` in bytes - what the row's ``file_size`` should be,
+    #: which is no longer the uploaded file's own size once a strip happened.
+    size: int
+
+    #: ``Image`` field values read from the *original* bytes, ready to splat
+    #: into ``Image.objects.create``. Never includes ``caption``: a caller's own
+    #: caption always wins, so the embedded one is offered separately.
+    metadata: dict[str, Any]
+
+    #: A caption found in the file's own metadata, for a caller that has none.
+    metadata_caption: str | None
+
+    #: Whether the bytes were actually rewritten. False means the format was
+    #: one the stripper leaves alone (HEIC, TIFF, GIF), so the stored file still
+    #: carries its metadata until the Celery re-encode replaces it.
+    stripped: bool
+
+
+def prepare_photo_upload(file_obj: UploadedFile, profile: Profile | None) -> PreparedUpload:
+    """Read a photo upload's metadata, then remove it from the bytes to store.
+
+    Reading and removing are one operation because neither is correct alone.
+    Storing the file first and scrubbing it on Celery leaves an unstripped
+    original in the media tree for as long as the queue is behind - it is
+    served from there, GPS block intact. Stripping first without reading loses
+    the values the app legitimately keeps: ``exif_data``, ``taken_at``,
+    coordinates, and the attribution fields all come off the same block, and
+    the row is where the app's own visibility rules can govern them.
+
+    The strip walks the container's segments rather than decoding the image
+    (see :mod:`urbanlens.dashboard.services.media.metadata_strip`), so it costs
+    a copy rather than a decode and is safe to run inside a request - a decode
+    under the gevent worker would stall every other request on that worker,
+    which is why the downscale stays on Celery.
+
+    Coordinates are read only when the profile's visit tracking allows it; a
+    profile that does not want its movements recorded does not get them written
+    to the row either. They are removed from the file regardless - that is not
+    a setting (see :func:`downscale_stored_image`).
+
+    Args:
+        file_obj: The uploaded file, already validated by
+            :func:`image_upload_error`. Its read position is restored.
+        profile: The uploading profile, or None for a system-created row.
+
+    Returns:
+        A :class:`PreparedUpload`. Callers store ``file``, pass ``size`` as
+        ``file_size``, and splat ``metadata`` into the row.
+    """
+    from urbanlens.dashboard.services.media.metadata_strip import strip_metadata
+    from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
+
+    file_obj.seek(0)
+    data = file_obj.read()
+    file_obj.seek(0)
+
+    include_location = profile is None or visit_logging_allowed(profile)
+    source = io.BytesIO(data)
+
+    metadata: dict[str, Any] = {}
+    coords = extract_gps_coords(source) if include_location else None
+    if coords is not None:
+        metadata["latitude"] = Decimal(str(coords[0]))
+        metadata["longitude"] = Decimal(str(coords[1]))
+    # Same GPS IFD, same opt-out - a compass bearing is only meaningful next to
+    # a position.
+    direction = extract_gps_direction(source) if include_location else None
+    if direction is not None:
+        metadata["direction"] = Decimal(str(round(direction, 2)))
+    if taken_at := extract_taken_at(source):
+        metadata["taken_at"] = taken_at
+    if exif_data := extract_exif_data(source):
+        if not include_location:
+            # Dropping GPSInfo makes "what did the EXIF say" permanently
+            # unanswerable for this photo. That is the point of the opt-out, not
+            # an oversight - coordinate-provenance work must read a
+            # location-stripped photo as having no EXIF position rather than an
+            # unknown one.
+            exif_data.pop("GPSInfo", None)
+        metadata["exif_data"] = exif_data
+    if author := extract_author(source):
+        metadata["author"] = author
+    if copyright_notice := extract_copyright_notice(source):
+        metadata["copyright"] = copyright_notice
+    if source_url := extract_source_url(source):
+        metadata["source_url"] = source_url
+    metadata_caption = extract_caption_from_metadata(source)
+
+    stripped_bytes = strip_metadata(data)
+    if stripped_bytes is None:
+        return PreparedUpload(file=file_obj, size=file_obj.size or len(data), metadata=metadata, metadata_caption=metadata_caption, stripped=False)
+
+    from django.core.files.base import ContentFile
+
+    return PreparedUpload(
+        file=ContentFile(stripped_bytes, name=file_obj.name),
+        size=len(stripped_bytes),
+        metadata=metadata,
+        metadata_caption=metadata_caption,
+        stripped=True,
+    )

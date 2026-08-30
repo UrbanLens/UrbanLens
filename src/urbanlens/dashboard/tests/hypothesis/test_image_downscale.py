@@ -290,7 +290,10 @@ class MultiPictureJpegTests(TestCase):
         written = downscale_stored_image(image, max_dimension=None, convert_webp=False)
 
         self.assertIsNotNone(written, "an MPO must be rewritten, not left alone")
-        image.refresh_from_db()
+        # downscale_stored_image mutates image.image in place (save=False) - the
+        # DB row is a separate write the caller makes, so read off this same
+        # in-memory instance rather than refresh_from_db(), which would revert
+        # to the pre-downscale name after its file was already deleted.
         with image.image.open("rb") as stored:
             result = PILImage.open(stored)
             result.load()
