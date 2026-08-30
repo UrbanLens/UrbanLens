@@ -6,6 +6,7 @@
 {# Leaflet powers the "confirm where this pin goes" dialog's placement map. #}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+<script type="module" src="{% static 'dashboard/js/vault-photos.js' %}"></script>
 {% endblock %}
 
 {% block title %}Photos{% endblock %}
@@ -49,9 +50,22 @@
             <div class="photos-gallery-head">
                 <h2><i class="material-symbols-outlined">grid_view</i> All photos</h2>
                 {% if photo_count %}<span class="badge">{{ photo_count }}</span>{% endif %}
+                {% if images %}
+                <label class="photos-sort-label" for="vault-photos-sort">
+                    <i class="material-symbols-outlined">sort</i>
+                    <select id="vault-photos-sort" class="photos-sort-select" aria-label="Sort photos">
+                        {% for spec in gallery_sort_specs %}
+                        <option value="{{ spec.sort }}" {% if spec.sort == sort %}selected{% endif %}>{{ spec.label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                {% endif %}
             </div>
             {% if images %}
-            <ul class="photos-grid" id="photo-grid">
+            <ul class="photos-grid" id="photo-grid"
+                data-items-url="{% url 'vault.photos.items' %}"
+                data-photo-count="{{ photo_count }}"
+                data-grid-page-size="{{ grid_page_size }}">
                 {% include "dashboard/partials/vault/_photo_grid.html" %}
             </ul>
             {% else %}
@@ -358,11 +372,22 @@
             });
     });
 
+    function _activeSort() {
+        var select = document.getElementById('vault-photos-sort');
+        return select ? select.value : 'recent';
+    }
+
     function _finishUpload(ok) {
         var progress = document.getElementById('photos-upload-progress');
         var bar = document.getElementById('photos-upload-bar');
         setTimeout(function () { if (progress) progress.hidden = true; if (bar) bar.style.width = '0'; }, 700);
         if (ok && window.toastr) toastr.success(ok + (ok === 1 ? ' photo uploaded.' : ' photos uploaded.') + ' Sorting by location…');
+        // Under any sort but "recent", a freshly uploaded photo doesn't belong
+        // at the front of the grid - where it belongs depends on the sort
+        // criterion, which only the server can resolve. Re-fetch the grid from
+        // scratch once per batch (not once per file) instead of trying to
+        // splice each upload into the right spot client-side.
+        if (ok && _activeSort() !== 'recent' && window.refreshVaultPhotoGrid) window.refreshVaultPhotoGrid();
         // Ingestion is async: nudge the organize queue a couple of times so freshly
         // detected suggestions surface without a full reload.
         _refreshQueue(1500); _refreshQueue(5000);
@@ -373,9 +398,12 @@
     }
 
     // Upload/delete mutate the grid directly (no htmx refetch, so the "All
-    // photos" count next to the gallery header would otherwise stay at its
-    // value as of last page load).
+    // photos" count next to the gallery header, and the grid's own total used
+    // to compute the next fetch offset, would otherwise stay at their value
+    // as of last page load).
     function _updatePhotoCountLabel(delta) {
+        var grid = document.getElementById('photo-grid');
+        if (grid) grid.dataset.photoCount = String(Math.max(0, (Number.parseInt(grid.dataset.photoCount, 10) || 0) + delta));
         var head = document.querySelector('.photos-gallery-head');
         if (!head) return;
         var badge = head.querySelector('.badge');
@@ -395,27 +423,14 @@
     function _prependTile(img) {
         var grid = document.getElementById('photo-grid');
         if (!grid) { window.location.reload(); return; } // grid was in empty state
-        var li = document.createElement('li');
-        li.className = 'photo-tile';
-        li.id = 'photo-tile-' + img.id;
-        li.dataset.id = img.id;
-        li.dataset.url = img.url;
-        li.dataset.caption = img.caption || '';
-        li.dataset.author = img.author || '';
-        li.dataset.copyright = img.copyright || '';
-        li.dataset.sourceUrl = img.source_url || '';
-        li.dataset.takenAt = img.taken_at || '';
-        var badge = (img.latitude !== null && img.longitude !== null)
-            ? '<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>' : '';
-        li.innerHTML =
-            // aria-label on the button: the thumbnail's alt is lost when the
-            // file 404s and the icon fallback replaces the <img>.
-            '<button type="button" class="photo-tile-btn" aria-label="Open photo: ' + ((img.caption || 'untitled') + '').replace(/"/g, '&quot;') + '" onclick="photosOpenLightbox(' + img.id + ')">' +
-            '<img src="' + img.url + '" alt="" loading="lazy">' + badge + '</button>' +
-            '<button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete(' + img.id + ')">' +
-            '<i class="material-symbols-outlined">delete</i></button>';
-        grid.insertBefore(li, grid.firstChild);
         _updatePhotoCountLabel(1);
+        // Only "recent" (the default) guarantees a fresh upload belongs at the
+        // front - see _finishUpload, which re-fetches for every other sort.
+        if (_activeSort() !== 'recent') return;
+        if (!window.renderVaultPhotoTile) { window.location.reload(); return; } // JS bundle not loaded yet
+        var li = window.renderVaultPhotoTile(img);
+        if (!li) return;
+        grid.insertBefore(li, grid.firstChild);
     }
 
     // -- Delete ----------------------------------------------------------------
@@ -447,7 +462,7 @@
     window.photosOpenLightbox = function (id) {
         var items = Array.prototype.map.call(document.querySelectorAll('.photo-tile'), function (el) {
             return {
-                url: el.dataset.url, caption: el.dataset.caption || '',
+                url: el.dataset.url, thumbUrl: el.dataset.thumbUrl || '', caption: el.dataset.caption || '',
                 author: el.dataset.author || '', copyright: el.dataset.copyright || '',
                 sourceUrl: el.dataset.sourceUrl || '', sourceName: '', takenAt: el.dataset.takenAt || '',
                 imageId: parseInt(el.dataset.id, 10), canRelevance: false, relevant: null,

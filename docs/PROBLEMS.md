@@ -3123,6 +3123,23 @@ So: `migrate` (after snapshotting) **before** `docker compose restart`, not afte
 to fix the wedged `app` container will also break the workers, which are currently healthy and
 processing their hourly tasks normally.
 
+**Update 2026-08-30:** still unresolved and has drifted further. `showmigrations dashboard` in
+`urbanlens_development_main_app` now shows only through `0029_saved_filter_color_opacity` applied
+(0030-0036 unapplied - fewer pending than the "18" above only because migration numbering moved on,
+not because anything was fixed). Ran `manage.py migrate dashboard` here (read-only intent - was
+trying to verify an unrelated feature end-to-end against the running dev app) and it failed
+immediately on `0030_v0_7_0` with `column "show_supporter_badge" of relation "dashboard_profiles"
+already exists` - a column the unapplied migration is supposed to be the one adding. That means the
+actual schema and the `django_migrations` bookkeeping have already diverged in the other direction
+(schema ahead of what's recorded), on top of the "recorded state is behind the code" problem this
+entry already describes. Did not investigate further or attempt anything else - this needs someone
+who can safely reconcile `django_migrations` against the real schema, not another blind `migrate`.
+No damage from this attempt: Postgres wraps each migration in its own transaction, and the failure
+was on the very first statement of the very first pending migration, confirmed via `showmigrations`
+immediately after (still shows 0030 onward as unapplied). Batch 2 of the Vault feature (see
+`docs/prompts/` or ask for context) was verified against the pytest suite's own fresh-built test
+database instead, which is unaffected by this - not against this dev app.
+
 This range matches the container-drift note already in `CLAUDE.local.md` ("30 tracked files behind -
 missing `models/place`, `models/album`, `models/map_overlay` ... and migrations 0026-0038", dated
 2026-08-06), so the drift has been known for over a week in one form and unrecognised as a

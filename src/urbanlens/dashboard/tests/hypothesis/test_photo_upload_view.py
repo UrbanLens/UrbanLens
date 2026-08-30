@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
-
-from urbanlens.core.tests.images import JPEG_BYTES
 from django.test import Client
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.images import JPEG_BYTES
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.site_settings import SiteSettings
@@ -24,7 +23,7 @@ def _grant_feature(*features: str) -> None:
 
 
 class PhotoUploadViewContentTypeTests(TestCase):
-    """POST /memories/photos/upload/ accepts images always, videos/documents only when permitted."""
+    """POST /vault/photos/upload/ accepts images always, videos/documents only when permitted."""
 
     def setUp(self) -> None:
         super().setUp()

@@ -16,10 +16,10 @@ from django.views import View
 
 from urbanlens.dashboard.models.images.issues import PhotoIssueStatus, PhotoMetadataConflict, PhotoUploadFailure
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.sort import GALLERY_SORT_SPECS, GallerySort, gallery_sort_spec
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
-from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json
 from urbanlens.dashboard.services.memories.photos import classify_photo, create_pin_and_log_visit, log_visit_on_pin
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
@@ -32,6 +32,21 @@ logger = logging.getLogger(__name__)
 
 _GALLERY_PAGE_SIZE = 24
 _ATTENTION_LIMIT = 60
+
+
+def _sorted_gallery(profile: Profile, request: HttpRequest):
+    """The profile's uploaded-photo gallery, ordered by the requested ``sort`` param.
+
+    Args:
+        profile: Whose gallery to list.
+        request: The current HttpRequest, read for ``sort``.
+
+    Returns:
+        The gallery queryset, ordered.
+    """
+    gallery = Image.objects.uploaded_by(profile).select_related("pin", "wiki")
+    sort = gallery_sort_spec(request.GET.get("sort") or GallerySort.RECENT)
+    return sort.apply(gallery)
 
 
 def _parse_float(value: str | None) -> float | None:
@@ -150,8 +165,9 @@ class VaultPhotosView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.media.storage import get_quota_bytes, get_storage_totals, max_upload_file_size_bytes
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        gallery = Image.objects.uploaded_by(profile).select_related("pin", "wiki")
-        page_obj = get_page(request, gallery, _GALLERY_PAGE_SIZE)
+        gallery = _sorted_gallery(profile, request)
+        sort = request.GET.get("sort") or GallerySort.RECENT
+        images = list(gallery[:_GALLERY_PAGE_SIZE])
         used_bytes, exempt_bytes = get_storage_totals(profile)
         return render(
             request,
@@ -160,8 +176,7 @@ class VaultPhotosView(LoginRequiredMixin, View):
                 "page_name": "vault",
                 "attention_cards": _attention_cards(profile),
                 **_photo_issues(profile),
-                "images": page_obj.object_list,
-                "page_obj": page_obj,
+                "images": images,
                 "profile": profile,
                 "photo_count": gallery.count(),
                 "unlogged_visits_count": len(unlogged_visited_pins(profile)),
@@ -169,6 +184,9 @@ class VaultPhotosView(LoginRequiredMixin, View):
                 "storage_quota_bytes": get_quota_bytes(profile),
                 "storage_exempt_bytes": exempt_bytes,
                 "max_upload_file_size_bytes": max_upload_file_size_bytes(),
+                "grid_page_size": _GALLERY_PAGE_SIZE,
+                "sort": sort,
+                "gallery_sort_specs": list(GALLERY_SORT_SPECS.values()),
             },
         )
 
@@ -196,28 +214,47 @@ class PhotoQueueView(LoginRequiredMixin, View):
         )
 
 
-class PhotoGridPageView(LoginRequiredMixin, View):
-    """One page of the full gallery grid, for infinite scroll.
+class PhotoItemsView(LoginRequiredMixin, View):
+    """One page of the full gallery grid as JSON, for the windowed grid.
 
-    GET /vault/photos/page/?page=N
+    GET /vault/photos/items/?offset=&limit=&sort=
+
+    Same ``{items, total, offset, limit}`` shape as the album grid's
+    ``AlbumItemsView`` (see controllers.albums), so both grids share one
+    fetch/scroll/prune engine on the client - see
+    frontend/ts/shared/photo-virtual-grid.ts.
     """
 
-    def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the next gallery grid slice.
+    def get(self, request: HttpRequest) -> JsonResponse:
+        """Return one page of the profile's gallery, in the requested sort.
 
         Args:
-            request: The HTTP request.
+            request: The HTTP request, with ``offset``/``limit``/``sort`` query params.
 
         Returns:
-            The rendered grid-slice partial.
+            JSON ``{items, total, offset, limit}``.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        gallery = Image.objects.uploaded_by(profile).select_related("pin", "wiki")
-        page_obj = get_page(request, gallery, _GALLERY_PAGE_SIZE)
-        return render(
-            request,
-            "dashboard/partials/vault/_photo_grid.html",
-            {"images": page_obj.object_list, "page_obj": page_obj, "profile": profile},
+        try:
+            offset = max(0, int(request.GET.get("offset") or 0))
+        except (TypeError, ValueError):
+            offset = 0
+        try:
+            limit = int(request.GET.get("limit") or _GALLERY_PAGE_SIZE)
+        except (TypeError, ValueError):
+            limit = _GALLERY_PAGE_SIZE
+        limit = min(max(1, limit), 100)
+
+        gallery = _sorted_gallery(profile, request)
+        total = gallery.count()
+        images = list(gallery[offset : offset + limit])
+        return JsonResponse(
+            {
+                "items": [image_to_gallery_json(image, request, profile) for image in images],
+                "total": total,
+                "offset": offset,
+                "limit": limit,
+            }
         )
 
 

@@ -829,7 +829,23 @@ $memories-type-colors: (
         height: 100%;
         object-fit: cover;
         display: block;
+        // Fades in once the thumbnail has actually decoded (see the tile's
+        // onload handler) instead of popping in over the tile background -
+        // the same background is what shows through while it's still loading.
+        opacity: 0;
+        transition: opacity .2s ease;
+
+        &.is-loaded {
+            opacity: 1;
+        }
     }
+}
+
+// Placeholder tile shown while a grid page is being fetched, replaced by real
+// tiles once the response lands - see shared/photo-virtual-grid.ts.
+.photo-tile--skeleton {
+    background: var(--ul-grey-2);
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 
 .photo-tile-badge {

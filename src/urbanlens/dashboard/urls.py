@@ -2015,7 +2015,7 @@ urlpatterns = [
             [
                 path("photos/", vault_photos.VaultPhotosView.as_view(), name="vault.photos"),
                 path("photos/queue/", vault_photos.PhotoQueueView.as_view(), name="vault.photos.queue"),
-                path("photos/page/", vault_photos.PhotoGridPageView.as_view(), name="vault.photos.page"),
+                path("photos/items/", vault_photos.PhotoItemsView.as_view(), name="vault.photos.items"),
                 path("photos/upload/", vault_photos.PhotoUploadView.as_view(), name="vault.photos.upload"),
                 path("photos/failures/", vault_photos.PhotoUploadFailureCreateView.as_view(), name="vault.photos.failures"),
                 path("photos/failures/<int:failure_id>/dismiss/", vault_photos.PhotoUploadFailureDismissView.as_view(), name="vault.photos.failures.dismiss"),

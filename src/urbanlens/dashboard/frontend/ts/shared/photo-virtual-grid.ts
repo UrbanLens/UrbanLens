@@ -1,13 +1,19 @@
 /**
- * Windowed album/loose-photo grids: fetch further pages as the user scrolls,
- * and drop decoded image bytes for tiles that have left the viewport plus a
- * buffer so a large album stays usable on a phone.
+ * Windowed photo grids: fetch further pages as the user scrolls, and drop
+ * decoded image bytes for tiles that have left the viewport plus a buffer so
+ * a large album or the Vault's full library stays usable on a phone.
+ *
+ * The album grid (default `itemSelector`/`imageSelector`/`renderTile`) and the
+ * Vault gallery grid (its own markup - see vault-photo-grid.ts) share this one
+ * scroll/fetch/prune engine rather than each growing its own copy.
  */
 
-import { renderPhotoTile, tileFromJson, tileHasImage, type PhotoTile } from "./photo-tile";
+import { renderPhotoTile, tileFromJson, tileHasImage } from "./photo-tile";
 
 export const DEFAULT_PAGE_SIZE = 48;
 export const UNLOAD_BUFFER_PX = 1200;
+const DEFAULT_ITEM_SELECTOR = ".gallery-item[data-id]";
+const DEFAULT_IMAGE_SELECTOR = ".gallery-thumb";
 
 export interface VisibleRange {
     start: number;
@@ -34,9 +40,9 @@ export function shouldFetchNextPage(loadedCount: number, total: number, sentinel
     return sentinelVisible && loadedCount < total;
 }
 
-function recycleGridImages(grid: HTMLElement): void {
+function recycleGridImages(grid: HTMLElement, imageSelector: string): void {
     const viewportHeight = window.innerHeight;
-    grid.querySelectorAll<HTMLImageElement>(".gallery-thumb").forEach((img) => {
+    grid.querySelectorAll<HTMLImageElement>(imageSelector).forEach((img) => {
         const rect = img.getBoundingClientRect();
         const far = isFarFromViewport(rect.top, rect.bottom, viewportHeight, UNLOAD_BUFFER_PX);
         if (far) {
@@ -54,6 +60,27 @@ function recycleGridImages(grid: HTMLElement): void {
 interface BindOptions {
     inAlbum: boolean;
     albumSlug?: string;
+    /** CSS selector for one loaded tile, used to count what's already in the DOM. Default: the album grid's. */
+    itemSelector?: string;
+    /** CSS selector for a tile's `<img>`, used for off-screen pruning. Default: the album grid's. */
+    imageSelector?: string;
+    /** Build one tile's element from its raw JSON. Default: the shared album `PhotoTile` renderer. */
+    renderTile?: (raw: Record<string, unknown>) => HTMLElement | null;
+    /** Extra query params appended to every items-URL fetch (e.g. the active sort). */
+    extraParams?: Record<string, string>;
+    /** Number of skeleton placeholder tiles shown (then replaced) while a page is in flight. 0 disables. */
+    skeletonCount?: number;
+    /** Build one skeleton placeholder tile, shown while a page fetch is in flight. Required when skeletonCount > 0. */
+    renderSkeleton?: () => HTMLElement;
+}
+
+function defaultRenderTile(opts: BindOptions): (raw: Record<string, unknown>) => HTMLElement | null {
+    return (raw) => {
+        const tile = tileFromJson(raw);
+        if (!tile || !tileHasImage(tile)) return null;
+        if (opts.inAlbum && opts.albumSlug && !tile.albumSlug) tile.albumSlug = opts.albumSlug;
+        return renderPhotoTile(tile, { inAlbum: opts.inAlbum, albumSlug: opts.albumSlug });
+    };
 }
 
 /**
@@ -64,10 +91,18 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
     const itemsUrl = grid.dataset.itemsUrl;
     const total = Number.parseInt(grid.dataset.photoCount ?? "0", 10);
     const pageSize = Number.parseInt(grid.dataset.gridPageSize ?? "", 10) || DEFAULT_PAGE_SIZE;
+    const itemSelector = opts.itemSelector ?? DEFAULT_ITEM_SELECTOR;
+    const imageSelector = opts.imageSelector ?? DEFAULT_IMAGE_SELECTOR;
+    const renderTile = opts.renderTile ?? defaultRenderTile(opts);
     if (!itemsUrl || !total) return () => {};
 
-    let loaded = grid.querySelectorAll(".gallery-item[data-id]").length;
-    if (loaded >= total) return () => {};
+    // Recomputed from the DOM on every fetch, not tracked as running state:
+    // a caller can insert/remove tiles of its own between fetches (the Vault
+    // gallery's own upload/delete flows do), and a stale counter would then
+    // request the wrong offset - skipping some photos or re-fetching ones
+    // already on the page as visible duplicates.
+    const currentLoaded = () => grid.querySelectorAll(itemSelector).length;
+    if (currentLoaded() >= total) return () => {};
     let fetching = false;
 
     const sentinel = document.createElement("li");
@@ -75,28 +110,40 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
     sentinel.setAttribute("aria-hidden", "true");
     grid.appendChild(sentinel);
 
+    const skeletons: HTMLElement[] = [];
+    const showSkeletons = () => {
+        if (!opts.skeletonCount || !opts.renderSkeleton) return;
+        for (let i = 0; i < opts.skeletonCount; i++) {
+            const el = opts.renderSkeleton();
+            skeletons.push(el);
+            grid.insertBefore(el, sentinel);
+        }
+    };
+    const clearSkeletons = () => {
+        skeletons.splice(0).forEach((el) => el.remove());
+    };
+
     const fetchNext = async () => {
+        const loaded = currentLoaded();
         if (fetching || loaded >= total) return;
         fetching = true;
+        showSkeletons();
         try {
-            const url = `${itemsUrl}${itemsUrl.includes("?") ? "&" : "?"}offset=${loaded}&limit=${pageSize}`;
+            const params = new URLSearchParams({ offset: String(loaded), limit: String(pageSize), ...(opts.extraParams ?? {}) });
+            const url = `${itemsUrl}${itemsUrl.includes("?") ? "&" : "?"}${params.toString()}`;
             const response = await fetch(url);
             if (!response.ok) return;
             const body = (await response.json()) as { items?: Record<string, unknown>[] };
-            const tiles: PhotoTile[] = [];
-            for (const raw of body.items ?? []) {
-                const tile = tileFromJson(raw);
-                if (tile && tileHasImage(tile)) tiles.push(tile);
-            }
             const fragment = document.createDocumentFragment();
-            for (const tile of tiles) {
-                if (opts.inAlbum && opts.albumSlug && !tile.albumSlug) tile.albumSlug = opts.albumSlug;
-                fragment.appendChild(renderPhotoTile(tile, { inAlbum: opts.inAlbum, albumSlug: opts.albumSlug }));
+            for (const raw of body.items ?? []) {
+                const el = renderTile(raw);
+                if (el) fragment.appendChild(el);
             }
+            clearSkeletons();
             grid.insertBefore(fragment, sentinel);
-            loaded += tiles.length;
-            if (loaded >= total) sentinel.remove();
+            if (currentLoaded() >= total) sentinel.remove();
         } finally {
+            clearSkeletons();
             fetching = false;
         }
     };
@@ -109,7 +156,7 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
     );
     observer.observe(sentinel);
 
-    const onScroll = () => recycleGridImages(grid);
+    const onScroll = () => recycleGridImages(grid, imageSelector);
     window.addEventListener("scroll", onScroll, { passive: true });
     grid.addEventListener("scroll", onScroll, { passive: true });
 
@@ -117,6 +164,7 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
         observer.disconnect();
         window.removeEventListener("scroll", onScroll);
         grid.removeEventListener("scroll", onScroll);
+        clearSkeletons();
         sentinel.remove();
     };
 }

@@ -1,14 +1,16 @@
 {% comment %}
-One page of the full photo gallery grid. The trailing sentinel <li> lazy-loads the
-next page via HTMX when scrolled into view, replacing itself with the next slice.
+The first page of the full photo gallery grid, server-rendered for a fast
+first paint. Further pages are fetched as JSON by shared/vault-photo-grid.ts
+(see the grid container's data-items-url/data-photo-count/data-grid-page-size
+attributes in pages/vault/photos.html), which also prunes off-screen bitmaps -
+there is no HTMX sentinel here; that module creates and manages its own.
 
 Context:
-  images   - Image queryset slice for this page
-  page_obj - the Django Page (for has_next / next_page_number)
-  profile  - current viewer
+  images - Image queryset slice for the first page
 {% endcomment %}
 {% for img in images %}
-<li class="photo-tile" id="photo-tile-{{ img.pk }}" data-id="{{ img.pk }}" data-url="{{ img.image.url }}"
+<li class="photo-tile" id="photo-tile-{{ img.pk }}" data-id="{{ img.pk }}" data-url="{{ img.display_url }}"
+    data-thumb-url="{{ img.thumb_url }}"
     data-caption="{{ img.caption|default:'' }}"
     data-author="{{ img.author|default:'' }}"
     data-copyright="{{ img.copyright|default:'' }}"
@@ -19,7 +21,8 @@ Context:
     thumbnail falls back to an icon, so the name lives on the button.
     {% endcomment %}
     <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.caption|default:'untitled' }}" onclick="photosOpenLightbox({{ img.pk }})">
-        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy"
+        <img src="{{ img.thumb_url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy"
+             onload="this.classList.add('is-loaded')"
              onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
         {% if img.latitude and img.longitude %}
         <span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>
@@ -30,9 +33,3 @@ Context:
     </button>
 </li>
 {% endfor %}
-{% if page_obj.has_next %}
-<li class="photo-grid-sentinel"
-    hx-get="{% url 'vault.photos.page' %}?page={{ page_obj.next_page_number }}"
-    hx-trigger="revealed"
-    hx-swap="outerHTML"></li>
-{% endif %}

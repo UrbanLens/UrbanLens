@@ -74,6 +74,19 @@ declare global {
         // tiles, which that module doesn't own.
         albumAddExternalMedia?: (addUrl: string, media: { source: string; url: string; page_url?: string; caption?: string }) => Promise<void>;
         galleryOpenLightboxItem?: (list: unknown[], idx: number) => void;
+        // Defined by pages/vault/photos.html's own inline script (upload/delete/
+        // lightbox are plain page JS, not a module); called from
+        // shared/vault-photo-grid.ts's fetched tiles.
+        photosOpenLightbox?: (imageId: number) => void;
+        photosDelete?: (imageId: number) => void;
+        // Defined by shared/vault-photo-grid.ts; called from pages/vault/photos.html's
+        // own upload handler so a freshly-uploaded tile is built the same way as
+        // every fetched one, rather than a second hand-written copy.
+        renderVaultPhotoTile?: (raw: Record<string, unknown>) => HTMLElement | null;
+        // Re-fetches the Vault Photos grid from scratch under the current sort.
+        // Called after an upload batch under any sort but "recent", where a new
+        // photo's position can't be spliced in client-side.
+        refreshVaultPhotoGrid?: () => void;
         gallerySetPhotoMapHidden?: (imgId: number, hidden: boolean, onRejected?: () => void) => void;
         _galleryRemoveMarker?: (imgId: number) => void;
         _albumSyncMapHidden?: (imgId: number, hidden: boolean) => void;
