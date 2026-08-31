@@ -72,7 +72,17 @@ class WikiReachabilityTestCase(TestCase):
         result = upload_photo_for_owner(pin, self.owner, SimpleUploadedFile(f"{name}.jpg", _jpeg_bytes(), content_type="image/jpeg"), name)
         assert isinstance(result, Image), f"fixture upload was rejected: {result}"
         attach_to_wiki(result, wiki, added_by=self.owner)
-        Image.objects.filter(pk=result.pk).update(wiki=wiki)
+        # pending_scan=False alongside the wiki link: a fresh upload is now
+        # stored raw and gated to its uploader until tasks.process_image_upload
+        # runs (see Image.pending_scan), and this file is about the *wiki
+        # reachability* gate, not the processing one. Leaving it True would make
+        # every negative assertion below pass for the wrong reason - a photo
+        # invisible because it is unprocessed, not because the wiki is out of
+        # reach - which is exactly the vacuous-test shape these fixtures exist
+        # to avoid. Set directly rather than by running the task: this helper
+        # already stamps `wiki` with update() rather than going through the real
+        # send-to-wiki flow, and a real Pillow decode per test buys nothing here.
+        Image.objects.filter(pk=result.pk).update(wiki=wiki, pending_scan=False)
         result.refresh_from_db()
         return result
 
