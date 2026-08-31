@@ -621,7 +621,6 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
         target_point=round_.target_point,
     )
     points = scoring.points_for_distance(distance)
-    photo_coordinates.record_guess(round_, guess_point, distance)
 
     session = round_.session
     config = config_from_session(session)
@@ -657,6 +656,16 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
             )
         except IntegrityError:
             raise SpotGuessrError("This profile has already guessed this round.") from None
+
+        # Recorded only once the guess is confirmed genuinely new - moved
+        # below the duplicate-guess guard above. It used to fire before that
+        # guard, so a resubmitted/retried guess for a round already answered
+        # still wrote coordinate evidence (and, for a correct guess, re-ran
+        # recompute_estimated_coordinates()) even though the guess itself was
+        # then rejected - reachable via any client retry, no special
+        # privilege required, silently polluting the confidence-ranked
+        # evidence a real fact-sourcing pipeline reads.
+        photo_coordinates.record_guess(locked_round, guess_point, distance)
 
         GameSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=F("total_points") + points + date_points + bonus.total)
 
