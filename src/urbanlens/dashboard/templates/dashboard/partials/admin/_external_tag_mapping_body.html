@@ -1,0 +1,83 @@
+{% load dashboard_tags %}
+{% comment %}
+Site-admin tag mapping page body. Re-rendered wholesale (hx-swap="outerHTML")
+by the search box, the group/preferred/move actions, and the "Group
+selected" bulk action - see external-tag-mapping.ts, which re-inits its
+Sortable instances and click delegation every time this swaps.
+
+Context:
+  groups - ExternalTagGroup queryset, members prefetched, non-empty only
+  clusters - list[SuggestedCluster]: currently-ungrouped entries clustered by
+             default (same display text) matching, 2+ members each
+  singleton_pool - ExternalTagVocabularyEntry list: ungrouped, not part of
+                    any suggested cluster
+  search - the current search query, "" if none
+{% endcomment %}
+<div id="external-tag-mapping-body" class="exttag-mapping-body"
+     data-search="{{ search }}"
+     data-group-url="{% url 'site_admin_external_tags_group' %}"
+     data-move-url="{% url 'site_admin_external_tags_move' %}">
+
+    <div class="exttag-search-row">
+        <input type="search" class="exttag-search-input" name="q" placeholder="Search tags..." value="{{ search }}"
+               hx-get="{% url 'site_admin_external_tags_search' %}"
+               hx-trigger="keyup changed delay:300ms, search"
+               hx-target="#external-tag-mapping-body" hx-swap="outerHTML" hx-include="this">
+    </div>
+
+    <div class="exttag-bulk-bar" id="exttag-bulk-bar" hidden>
+        <span class="exttag-bulk-count">0 selected</span>
+        <button type="button" class="btn btn--primary btn--sm" id="exttag-group-selected-btn">Group selected</button>
+        <button type="button" class="btn btn--ghost btn--sm" id="exttag-clear-selection-btn">Clear</button>
+    </div>
+
+    {% if clusters %}
+    <section class="exttag-section">
+        <h3>Suggested matches</h3>
+        <p class="exttag-section-hint">These look like the same thing based on their display text. Confirm to lock it in and pick which one is shown - or leave it, the match still applies automatically either way.</p>
+        <div class="exttag-clusters">
+            {% for cluster in clusters %}
+            <form class="card exttag-cluster-card" hx-post="{% url 'site_admin_external_tags_group' %}" hx-target="#external-tag-mapping-body" hx-swap="outerHTML">
+                {% csrf_token %}
+                <div class="exttag-chip-row">
+                    {% for entry in cluster.entries %}
+                    <span class="tag-chip exttag-vocab-chip" title="{{ entry.key }}">
+                        <span class="tag-chip-name">{{ entry.value|humanize_tag_value }}</span>
+                        <span class="exttag-source-badge">{{ entry.get_source_display }}</span>
+                        <input type="hidden" name="entry_id" value="{{ entry.pk }}">
+                    </span>
+                    {% endfor %}
+                </div>
+                <input type="hidden" name="search" value="{{ search }}">
+                <button type="submit" class="btn btn--ghost btn--sm">Confirm as group</button>
+            </form>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="exttag-section">
+        <h3>Groups</h3>
+        <div class="exttag-groups-grid">
+            {% for group in groups %}
+            {% include "dashboard/partials/admin/_external_tag_group_card.html" with group=group search=search %}
+            {% empty %}
+            <p class="exttag-empty">No groups yet. Select two or more tags below and click "Group selected", or confirm a suggested match above.</p>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="exttag-section">
+        <h3>Ungrouped tags</h3>
+        <div class="exttag-group-list" data-group-id="" id="exttag-ungrouped-pool">
+            {% for entry in singleton_pool %}
+            <span class="tag-chip exttag-vocab-chip" data-entry-id="{{ entry.pk }}" title="{{ entry.key }}">
+                <span class="tag-chip-name">{{ entry.value|humanize_tag_value }}</span>
+                <span class="exttag-source-badge">{{ entry.get_source_display }}</span>
+            </span>
+            {% empty %}
+            <p class="exttag-empty">Nothing ungrouped{% if search %} matching "{{ search }}"{% endif %}.</p>
+            {% endfor %}
+        </div>
+    </section>
+</div>

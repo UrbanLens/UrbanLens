@@ -102,17 +102,26 @@ repos:
         verbose: true
 
 # TYPESCRIPT
+# Manual-only, same reasoning as CodeQL above: a full project typecheck and
+# the whole TS unit-test suite are the slow tail of the hook chain (minutes,
+# not seconds), which made every commit wait on them regardless of how small
+# the change was. Run with: bun run typecheck / bun run test:ts
+# (or `pre-commit run --hook-stage manual --all-files tsc`/`bun-test`).
 -   repo: local
     hooks:
       - id: tsc
-        name: tsc (typescript typecheck)
+        name: tsc (typescript typecheck, manual)
         entry: bun run typecheck
         language: system
         files: '\.tsx?$'
         pass_filenames: false
+        always_run: true
+        stages: [manual]
       - id: bun-test
-        name: bun test (typescript unit tests)
+        name: bun test (typescript unit tests, manual)
         entry: bun run test:ts
         language: system
         files: '\.tsx?$'
         pass_filenames: false
+        always_run: true
+        stages: [manual]

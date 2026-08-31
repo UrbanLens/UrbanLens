@@ -42,6 +42,19 @@ def humanize_tag_value(value: str) -> str:
 
 
 @register.filter
+def visible_external_tags(place) -> list:
+    """The PlaceExternalTag rows to display for a place, one per equivalence group.
+
+    Usage: {% include "..." with tags=wiki.place|visible_external_tags %}
+    """
+    from urbanlens.dashboard.services.locations.external_tag_groups import visible_tags_for_place
+
+    if place is None:
+        return []
+    return visible_tags_for_place(place)
+
+
+@register.filter
 def label_map_url(label_id: int) -> str:
     """Return the main map URL, pre-filtered to pins carrying this one label.
 

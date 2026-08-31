@@ -51,6 +51,9 @@ those files by hand or by pointing ruff at them explicitly if it matters.
 The purpose of mypy is to find bugs and improve code quality, not to silence warnings. This sometimes requires going to the origin of the call to adjust types, rather than papering over it at the point of failure. Never use "cast" or similar fixes. Fix bad assumptions and types, implement generics. If you're unsure, mark it as a TODO instead of silencing the warning.
 
 **pre-commit**: runs twice (first silent), so fixes are applied before real failures are output.
+TypeScript typecheck/tests and CodeQL are manual-only (`stages: [manual]`) - too slow to run on
+every commit. Run them yourself before a PR: `bun run typecheck`, `bun run test:ts`,
+`bun run codeql:gate`.
 
 Common development commands should be added to `pyproject.toml` scripts, `package.json`, and/or VSCode tasks.
 

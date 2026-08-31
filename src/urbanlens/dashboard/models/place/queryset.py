@@ -252,3 +252,35 @@ class PlaceExternalTagQuerySet(abstract.DashboardQuerySet):
 
 class PlaceExternalTagManager(abstract.DashboardManager.from_queryset(PlaceExternalTagQuerySet)):
     """Manager for PlaceExternalTag rows."""
+
+
+class ExternalTagGroupQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for ExternalTagGroup."""
+
+    def non_empty(self) -> Self:
+        """Groups that still have at least one member."""
+        return self.filter(members__isnull=False).distinct()
+
+
+class ExternalTagGroupManager(abstract.DashboardManager.from_queryset(ExternalTagGroupQuerySet)):
+    """Manager for ExternalTagGroup."""
+
+
+class ExternalTagVocabularyEntryQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for ExternalTagVocabularyEntry."""
+
+    def ungrouped(self) -> Self:
+        """Entries with no explicit group - eligible for default same-text matching."""
+        return self.filter(group__isnull=True)
+
+    def in_group(self, group) -> Self:
+        """Entries belonging to one explicit group."""
+        return self.filter(group=group)
+
+    def for_tag(self, source: str, key: str, value: str) -> Self:
+        """The (at most one) entry for one exact tag tuple."""
+        return self.filter(source=source, key=key, value=value)
+
+
+class ExternalTagVocabularyEntryManager(abstract.DashboardManager.from_queryset(ExternalTagVocabularyEntryQuerySet)):
+    """Manager for ExternalTagVocabularyEntry."""
