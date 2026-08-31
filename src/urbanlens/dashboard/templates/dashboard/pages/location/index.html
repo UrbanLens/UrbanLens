@@ -656,7 +656,7 @@
 <section class="page-tab-panel" data-tab-panel="visits" hidden>
     <div id="visit-history-panel"
         hx-get="{% url 'pin.visits' pin.slug %}{% if include_children %}?children=1{% endif %}"
-        hx-trigger="load"
+        hx-trigger="revealed"
         hx-swap="outerHTML"
         class="visit-history card">
         <div class="card-header">
@@ -673,7 +673,7 @@
     {# that album directly instead of the list. See controllers.albums.       #}
     <div id="albums-panel"
         hx-get="{% url 'pin.albums' pin.slug %}?{% if include_children %}children=1{% endif %}{% if include_children and request.GET.album %}&{% endif %}{% if request.GET.album %}album={{ request.GET.album|urlencode }}{% endif %}{% if request.GET.album_pin %}&album_pin={{ request.GET.album_pin|urlencode }}{% endif %}"
-        hx-trigger="load"
+        hx-trigger="revealed"
         hx-swap="outerHTML"
         class="albums-panel card">
         <div class="card-header">
@@ -702,7 +702,7 @@
         <div class="card article-card">
             <div id="article-panel"
                     hx-get="{% url 'pin.article' pin.slug %}"
-                    hx-trigger="load"
+                    hx-trigger="revealed"
                     hx-swap="outerHTML">
                 <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading article...</div>
             </div>
@@ -748,7 +748,7 @@
 <section class="page-tab-panel" data-tab-panel="comments" hidden>
     <div id="comment-panel" class="card"
          hx-get="{% url 'pin.comments' pin.slug %}{% if include_children %}?children=1{% endif %}"
-         hx-trigger="load"
+         hx-trigger="revealed"
          hx-swap="outerHTML">
         <div class="card-header">
             <i class="material-symbols-outlined">sticky_note_2</i>
@@ -768,7 +768,7 @@
         <div class="card__body">
             <div id="article-history-panel"
                  hx-get="{% url 'pin.article.history' pin.slug %}"
-                 hx-trigger="load"
+                 hx-trigger="revealed"
                  hx-swap="outerHTML">
                 <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
