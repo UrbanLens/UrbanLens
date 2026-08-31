@@ -14,12 +14,16 @@ Covers:
 from __future__ import annotations
 
 import datetime
+from decimal import Decimal
 from unittest import mock
 
+from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.place.model import PlaceKind
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.locations.google.my_activity import (
@@ -28,6 +32,8 @@ from urbanlens.dashboard.services.apis.locations.google.my_activity import (
     looks_like_my_activity,
     parse_my_activity_entries,
 )
+from urbanlens.dashboard.services.places import resolution
+from urbanlens.dashboard.tests.hypothesis.place_helpers import make_place
 
 # Exact sample block from the real-world MyActivity.html this importer targets.
 _DIRECTIONS_ENTRY = (
@@ -72,6 +78,17 @@ _NON_MAPS_ENTRY = (
 def _wrap_html(*entries: str) -> bytes:
     body = "".join(entries)
     return f"<!DOCTYPE html><html><head><title>My Activity</title></head><body>{body}</body></html>".encode()
+
+
+def _square(lng: float, lat: float, delta: float) -> MultiPolygon:
+    ring = (
+        (lng - delta, lat - delta),
+        (lng + delta, lat - delta),
+        (lng + delta, lat + delta),
+        (lng - delta, lat + delta),
+        (lng - delta, lat - delta),
+    )
+    return MultiPolygon(Polygon(ring, srid=4326), srid=4326)
 
 
 class LooksLikeMyActivityTests(SimpleTestCase):
@@ -272,6 +289,24 @@ class ImportMyActivityStreamingTests(TestCase):
         self._run(_DIRECTIONS_ENTRY)
 
         self.assertEqual(VisitSuggestion.objects.filter(suggested_to=self.profile, from_my_activity=True).count(), 1)
+
+    def test_accepting_unmatched_suggestion_keeps_coordinate_inside_existing_place_domain(self):
+        from urbanlens.dashboard.services.visits.visits import accept_visit_suggestion
+
+        parcel = make_place(PlaceKind.PARCEL, _square(-84.569366, 39.204312, 0.01), name="Campus")
+        existing_location = Location.objects.create(latitude=Decimal("39.204312"), longitude=Decimal("-84.575000"))
+        resolution.attach_location(existing_location, parcel)
+
+        self._run(_DIRECTIONS_ENTRY)
+        suggestion = VisitSuggestion.objects.get(suggested_to=self.profile)
+        self.assertIsNone(suggestion.location_id)
+
+        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+            visit = accept_visit_suggestion(suggestion, self.profile)
+
+        self.assertNotEqual(visit.pin.location_id, existing_location.pk)
+        self.assertEqual(visit.pin.location.latitude, Decimal("39.204312"))
+        self.assertEqual(visit.pin.location.longitude, Decimal("-84.569366"))
 
     @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
     def test_accepting_suggestion_uses_history_visit_source(self, _mock_resolve_name):

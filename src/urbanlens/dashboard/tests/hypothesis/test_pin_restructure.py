@@ -16,6 +16,7 @@ external service is contacted.
 
 from __future__ import annotations
 
+from itertools import count
 from unittest import mock
 from unittest.mock import patch
 
@@ -29,6 +30,7 @@ from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE, is_site_scope
@@ -36,7 +38,7 @@ from urbanlens.dashboard.services.pins import pin_restructure
 
 from .place_helpers import official_geometry
 
-_coord_counter = 0
+_coord_counter = count(1)
 
 #: A square footprint around (41.7332, -73.9304), ~110 m a side. Deliberately
 #: much larger than BUILDING_MATCH_METERS so containment and proximity give
@@ -54,10 +56,9 @@ _BUILDINGS = [
 
 
 def _make_location(**kwargs) -> Location:
-    global _coord_counter
-    _coord_counter += 1
-    kwargs.setdefault("latitude", 41.75 + _coord_counter * 0.0005)
-    kwargs.setdefault("longitude", -73.95 - _coord_counter * 0.0005)
+    sequence = next(_coord_counter)
+    kwargs.setdefault("latitude", 41.75 + sequence * 0.0005)
+    kwargs.setdefault("longitude", -73.95 - sequence * 0.0005)
     return baker.make(Location, google_place=None, **kwargs)
 
 
@@ -594,6 +595,20 @@ class MissingBuildingsParcelBoundaryTests(TestCase):
         never offer to add more than the dialog it opens actually will."""
         response = self.client.get(reverse("pin.parcel_buildings", kwargs={"pin_slug": self.pin.slug}))
         self.assertEqual(response.context["unpinned_count"], 2)
+
+    def test_import_does_not_provision_places_for_boundary_excluded_buildings(self) -> None:
+        """The POST path must not undo the dialog's boundary filter.
+
+        Building places join the parcel's wiki/access domain, so an off-property
+        survey-zone record is not harmless just because no child pin was created
+        for it.
+        """
+        pin_restructure.create_building_pins(self.pin, pin_restructure.missing_buildings(self.pin))
+
+        self.assertFalse(
+            Place.objects.filter(kind=PlaceKind.BUILDING, provider="redata", provider_key="22").exists(),
+            "the boundary-excluded building was still materialized as a Place",
+        )
 
     def test_a_building_already_pinned_outside_the_boundary_still_shows_on_the_property_panel(self) -> None:
         """The boundary gate is for *suggestions* only - a building the owner
