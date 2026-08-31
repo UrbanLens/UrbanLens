@@ -74,7 +74,11 @@ class NominatimPanelSourceIngestionTests(TestCase):
         pin_a = baker.make(Pin, location=location_a, profile=Profile.objects.get(user=user_a))
         pin_b = baker.make(Pin, location=location_b, profile=Profile.objects.get(user=user_b))
 
-        with mock.patch.object(NominatimGateway, "reverse_geocode", return_value=dict(_NOMINATIM_RESULT)), mock.patch("urbanlens.dashboard.models.place.external_tag.PlaceExternalTag.sync_for_source") as sync:
+        # wraps=, not a bare Mock: is_fresh_for's freshness check reads the
+        # rows sync_for_source itself writes, so replacing it outright would
+        # make every fetch look "not fresh" (nothing was ever really synced)
+        # and defeat the very behavior this test is checking.
+        with mock.patch.object(NominatimGateway, "reverse_geocode", return_value=dict(_NOMINATIM_RESULT)), mock.patch.object(PlaceExternalTag, "sync_for_source", wraps=PlaceExternalTag.sync_for_source) as sync:
             NominatimPanelSource().fetch(pin_a)
             NominatimPanelSource().fetch(pin_b)
 
