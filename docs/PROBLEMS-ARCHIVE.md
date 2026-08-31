@@ -51,6 +51,34 @@ were restarted, reclaiming ~19GB back to the host (500MB free -> 20GB free, swap
 dropping) within seconds - confirming the fix rather than the restart was what mattered, since the
 same containers stayed flat afterward instead of re-climbing.
 
+**Follow-up, same day:** `docker-compose.yml`'s `mem_limit`/`cpus` had just been added for every
+service (per-service `${MEM_LIMIT__X:-${MEM_LIMIT:-...}}` override pattern already in place) but were
+all left at one unexamined blanket default - `4g`/`4 cpus` for every service regardless of workload,
+except `clamav` (already `1g`/`2 cpus`) and `valkey` (`24g`, an unused placeholder - `valkey` is itself
+invoked with `--maxmemory 512mb`, so the container ceiling could never matter). Audited via ten
+parallel per-service research passes grounded in this incident's live measurements (idle RSS for every
+service on this exact stack) plus technology-specific reasoning (gunicorn worker count, Daphne's
+no-fan-out blast radius, nginx's hardcoded `worker_processes 2`, Postgres's `CONN_MAX_AGE=0` meaning
+connection count - not idle RSS - drives its real ceiling, `celery-worker`'s prefork-vs-thread-pool
+distinction from `celery-worker-panels`, clamd's signature-reload spike, pytest-xdist's real-subprocess
+memory multiplication). Result: `app` 4g->1536m, `app-ws` 4g->768m, `nginx` 4g->128m, `db` 4g->2g,
+`celery-worker` 4g->3g (sized with this incident specifically in mind - see above), `celery-worker-panels`
+4g->1g, `celery-beat` 4g->512m, `clamav` 1g->2g (the *old* 1g was actually undersized - measured
+steady-state was already 93-100% of it, before daily signature-reload's transient spike), `valkey`
+24g->1g, `test-runner` 4g->6g, `test-db` 4g->2g, `test-valkey` 4g->512m - all still overridable via the
+same `MEM_LIMIT__<SERVICE>`/`MEM_LIMIT` env vars. Worst-case simultaneous total (every service at its
+new ceiling at once) is ~20.4GB across all 12 services including the test profile, down from ~65GB
+under the old blanket defaults.
+
+Noted but *not* changed here (out of scope for a limits audit): none of the 9 always-on services carry
+a `profiles:` key, so `docker compose --profile test up` (without naming services) starts them
+alongside `test-runner`/`test-db`/`test-valkey`, not instead of them - a redundant `db`+`test-db` and
+`valkey`+`test-valkey` pair, and the real worst-case total for one stack instance running its own test
+profile is the full ~20.4GB, not two separate smaller scenarios. The file's own documented usage
+(`docker compose --profile test up -d --build test-runner test-db test-valkey`, naming services
+explicitly) avoids this in practice, since Compose only starts named services plus their `depends_on`
+- but running the bare `--profile test up` flag without following that convention hits it.
+
 ## RESOLVED 2026-08-29: the external API leaks a full Django debug page on any `Accept: text/html` request
 
 Found calibrating the new sqlmap integration (`bin/run_sqlmap_scan.sh`) against a real dev container -
