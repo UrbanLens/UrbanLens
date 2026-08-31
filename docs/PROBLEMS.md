@@ -4425,3 +4425,157 @@ shared - load averages of 100-290 with no single hot process (heavy `kworker/kbl
 routine during this session, turning 3-second tests into 8-minute ones. Check `/proc/loadavg` before
 concluding a browser failure is a code regression; a direct `curl` of the same page returning in ~1s
 while Playwright times out at 30s is the tell.
+
+## OPEN 2026-08-31: perf test tooling has no wall-clock/render-time check - only query count
+
+Root cause behind every finding below, and worth fixing once rather than per-finding. The Organize
+Labels page was reported "still slow" despite `Label.prime_total_pin_counts` already having cut its
+query count from ~146 to 3 (`models/labels/model.py`, shipped in `release/v0.7.0`). Profiling it at
+500 labels found the real cost: ~12s of wall time against ~0.2s of database time. The page's six tabs
+(Tags/Categories/Statuses/People/Media/Display Order) switch purely client-side (a JS click handler
+toggling a `hidden` attribute), but the Django view rendered **all six** tabs' full card lists on
+every load regardless of which was visible - fixed in `controllers/organize.py`
+(`_rows_if_active`)/`templates/dashboard/pages/organize/index.html`, see the "perf: defer Organize
+page's hidden label tabs to first reveal" commit.
+
+That bug was invisible to this codebase's entire existing performance-test suite -
+`QueryScalingMixin` (`core/tests/query_scaling.py`) and `django_perf_rec` query-fingerprint records
+both measure database query count/shape, never Python or template CPU time - so a page can pass every
+existing scaling test at 500 rows while still taking 12 seconds to render. A site-wide static survey
+(10 parallel agents, one per feature area, read-only) done immediately after found the same defect
+class repeated across the app; seven confirmed instances are recorded in the entries below this one.
+Two are already fixed alongside the Organize page (wiki.html/location/index.html's subnav tabs, using
+`hx-trigger="load"` unconditionally instead of `"revealed"` - see `test_pin_detail_fanout_budget.py`,
+which had already ratcheted this exact defect on the pin page as a known, undecided issue).
+
+Worth building a `RenderTimeScalingMixin` sibling to `QueryScalingMixin` - same shape (seed N vs 4N
+rows, assert wall time doesn't grow past a tolerance), but timing `time.perf_counter()` around the
+request instead of counting queries - so this class of bug fails a test instead of shipping. None of
+the entries below have one; each was found by hand.
+
+## OPEN 2026-08-31: Organize's *active* label tab still renders its full card list unpaginated
+
+The tab-deferral fix (see the entry above) stopped the other five tabs from rendering, but did
+nothing to cap the *active* tab's own row count - `controllers/labels.py:370-406`
+(`_rows_ctx`/`_render_rows`, `list(_queryset_for_kind(kind, profile))` with no slicing) feeding
+`templates/dashboard/partials/labels/_organize_label_card.html` is the same per-row template
+profiled at ~2s of pure render time for 500 rows (`label.rows`, the `hx-trigger="revealed"` endpoint
+every tab - including the active one - now defers to). A profile whose *single* busiest tab (tags
+carries every global category/status too, via `Label.visible_to`) reaches that scale is still going
+to feel this page as slow, just for one tab instead of six.
+
+Not fixed here because it isn't a quick swap: `organize-filter-engine.ts`'s client-side search/filter
+assumes every row for a kind is already in the DOM, so naively paginating the server response would
+break "type to filter" without a matching client-side redesign (fetch-as-you-type, or a windowed grid
+like Vault's `photo-virtual-grid.ts`/`bindPhotoGrid` - see the tooling entry above for why the latter
+wasn't reused as-is: it's built for JSON tile grids, not server-rendered card rows wired into the
+existing bulk-select/merge/convert machinery in `organize-tab-manager.ts`).
+
+## OPEN 2026-08-31: "Organize this property" dialog fans out ~6-7 queries per candidate pin, uncapped to 500
+
+`controllers/pin_restructure.py:83-111` (`_nestable_rows`) calls
+`services/pins/pin_merge.py:158-207`'s `plan_merge_conflicts()` once per nestable candidate with no
+batching - each call does an article lookup, two `Boundary.objects.filter`, and two
+`CustomFieldValue.objects.filter`, none prefetched, so N candidates cost roughly 6N-7N queries in one
+request (`PinRestructureApplyView.get`/`.post`, url name `pin.restructure.apply`).
+`services/pins/pin_restructure.py:222-247`'s `nestable_root_pins()` caps the list at 500, so this
+isn't hypothetical: the feature's own use case is consolidating many individually-pinned buildings on
+one property (a hospital/asylum/campus complex pinned building-by-building before child-pin nesting
+existed) into one, which is exactly a large-candidate-count scenario. This is also brand-new code -
+`_nestable_rows` shipped in the same 2026-08-30 commit (`e795f35f`) that added the "Organize this
+property" dialog - so it never got the query-scaling scrutiny an older path would have picked up.
+`test_pin_restructure.py` covers correctness only; no `QueryScalingMixin`/`assertNumQueries` test
+covers this path.
+
+## OPEN 2026-08-31: N+1s elsewhere with no perf-test coverage
+
+Found by the same survey as the entries above, each independently confirmed against its source:
+
+- **`SiteAdminUsersView`** (`controllers/site_admin.py:1214-1265`) calls `get_quota_bytes()`,
+  `get_storage_used_bytes()`, and `active_subscription_roles()` *twice* per row (the second is a
+  redundant call for the `roles` context key) - up to 5 uncached queries per user, ~125 extra round
+  trips at the page's own `PAGE_SIZE=25`, on a whole-site user directory that only grows.
+- **Achievement admin editor** (`controllers/achievements.py:134-239`,
+  `templates/dashboard/partials/admin/_achievement_rows.html:74-83,185-189`) nests a full
+  `_icon_picker.html` (two `{% for %}` loops over all ~1,288 `ICON_CATEGORIES` entries,
+  `models/labels/meta.py:37`) inside a `hidden` div *per achievement row*, re-rendered in full on
+  every create/edit/delete/backfill via `hx-swap="outerHTML"`. ~30-60 achievements (a realistic
+  near-term catalogue size) means tens of thousands of rendered icon buttons per admin page load -
+  the same "hidden UI fully rendered anyway" shape as the tab-deferral entries above, just one row
+  wide instead of one tab wide.
+- **SpotGuessr and Trivia home pages** (`services/spotguessr/social.py:38-46`,
+  `services/trivia/social.py:27-35`, both called from their respective `HomeView.get`) do 2 unbatched
+  queries per friend (`friend.spotguessr_preference`/`.trivia_preference`, then a
+  `PlayerModeRating`/`PlayerTriviaRating` lookup) with no `select_related`/`prefetch_related` - 2N+1
+  queries for N friends on every visit to either game's home page.
+- **Memories > Maps** (`controllers/memories.py:903-945`) prefetches `shared_by__user` and `items`
+  but not `safety_checkins`/`comments`/`visits`/`direct_messages`; `MarkupMap.attachment`/
+  `.attachments` (`models/markup/model.py:164-225`) then cost up to ~11 queries per map card, on an
+  unsliced queryset - a profile that draws a route on every check-in/comment/visit (the page's own
+  advertised workflow) could plausibly reach several hundred queries here.
+
+None of the four appear in any `QueryScalingMixin` subclass or `django_perf_rec` record.
+
+## OPEN 2026-08-31: unbounded lists with no pagination, found across most of the site
+
+Same survey, same shape each time: a collection that grows with account age/usage, rendered via a
+plain `{% for %}` with no `.filter()[:N]`, `Paginator`, or HTMX-deferred/windowed loading. Grouped
+here rather than one entry each since the fix is identical in kind (cap it, paginate it, or defer it)
+even though the code paths are unrelated. Roughly ranked by how large the realistic ceiling is and how
+heavy the per-row template is - top few are worth prioritizing, the rest are real but currently minor
+at this app's beta scale (~2 users):
+
+- **Album detail's "add existing photo" picker** (`controllers/albums.py:342`,
+  `eligible_images_for()`) lists *every photo the profile has ever uploaded* across every pin/wiki/
+  vault upload, in a `<dialog>` that stays closed until a client click - same "hidden-but-fully-
+  rendered" shape as the tab entries above. A photographer with months/years of uploads could reach
+  thousands of `<img>` tags rendered into one hidden dialog on every album page view.
+- **Immich "nearby" photo import** (`controllers/immich.py:186-241`,
+  `services/apis/immich/gateway.py:170-184`) fetches *every geolocated asset in the user's entire
+  Immich library* (no radius param sent to Immich at all) and filters to "nearby" in Python after the
+  full fetch - a self-hosted library built over years could hold 10k-100k+ assets fetched over the
+  network on every picker open. Immich's own `/search/metadata` endpoint accepts lat/lng+radius and
+  isn't used here, unlike this file's other two modes (`VISITS`, `ALL`), which are bounded.
+- **Wiki edit history & article revision history** (`controllers/location_wiki.py:387-421`,
+  `controllers/article.py:149-177`) - no slice anywhere in either chain; a long-lived, actively-edited
+  community wiki or personal article could reach hundreds to low-thousands of rows. Now deferred to
+  tab-reveal (see the fix above) but still unbounded once that tab is actually opened.
+- **Pin-to-wiki share dialog's photo picker** (`services/wiki/wiki_share.py:199-201`,
+  `seedable_photos()`) lists every photo on the pin with no cap - contrast with the wiki's own Media
+  gallery (`_WIKI_PHOTOS_PREVIEW_LIMIT = 60`) and the visit dialog's photo picker (capped `[:60]` in
+  `controllers/visits.py:77`), both of which already learned this lesson.
+- **Vault "pin albums" panel** (`controllers/vault_photos.py:206-249`,
+  `services/photos/albums.py:242-289`) loads every album and every album item across *all* of a
+  profile's pins with no limit, once the (correctly lazy, `<details hx-trigger="toggle once">`)
+  section is opened.
+- **Settings page's Security and API-Keys tabs** (`controllers/settings.py:128-374`,
+  `services/auth/api_keys.py:148-178`) are the two tabs on this page that were never converted to the
+  lazy-HTMX-subsection pattern its own Connections/Billing/Undo/Notifications/Custom-Fields tabs
+  already use - `security_settings_context()`/`api_keys_settings_context()` run unconditionally on
+  every settings page load regardless of which of the 8 tabs is open. The API-key list itself also has
+  no cap and revoked keys are never excluded, so it only grows.
+- **Memories > Sharing** (`controllers/memories.py:798-890`) queries and renders both the full "sent"
+  and full "received" share histories on every load, though only one is visible at a time via a
+  client-side (non-HTMX) toggle.
+- **Memories > Journal** (`services/memories/journal.py:57-203`) merges four unsliced sources (visits,
+  reviews, comments, article edits) with no date-range or windowing at all - no "load more" of any
+  kind, unlike this file's sibling paginated views.
+- **Pin import-failure queue** (`controllers/pin_import_failures.py:39-134`) has no pagination, and
+  directly contradicts itself: the queue view's docstring says failures are "rare," while
+  `PinImportFailureGuessView`'s docstring in the *same file* says "a single import can leave hundreds
+  of failures." The sibling `PinSuggestionQueueView`/`PinMergeSuggestionQueuePartialView` are both
+  paginated at 12; this one apparently was not, on the wrong assumption.
+- **Undo history, Safety check-ins overview, "view all friends" page, DM conversation list,
+  achievement catalogue, Organize's Lists/Filters tabs, and the pin-list overview map** all follow the
+  identical pattern with lower realistic ceilings or lighter per-row templates today:
+  `controllers/undo.py:58-112`; `controllers/safety.py:314-431` (no auto-delete by default -
+  `SafetyPreference.auto_delete_after_days` is nullable and defaults to "never"); 
+  `controllers/friendship.py:451-477` (`SiteSettings.max_friends_per_user` defaults to 0/unlimited);
+  `controllers/direct_messages.py:710-734` (query count already proven flat by
+  `ConversationListQueryScalingTests`, but that test can't see render-time cost, and the list is
+  re-fetched on nearly every DM sent anywhere in the app); `controllers/achievements.py:98-113`;
+  `controllers/pin_lists.py:214-246` (also structurally invisible to `test_route_query_scaling.py`'s
+  generic sweep, which hits `lists.list` without an `HX-Request` header and only ever exercises its
+  redirect branch); and `controllers/pin_lists.py:155-176` (`_items_map_data` plots every matching pin
+  on the overview map with no cap, unlike the near-identical `SavedFilterPreviewView`'s explicit
+  `_PREVIEW_MAP_PIN_LIMIT = 500`).
