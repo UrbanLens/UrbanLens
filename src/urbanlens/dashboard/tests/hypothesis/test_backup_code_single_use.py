@@ -58,6 +58,26 @@ class BackupCodeSingleUseTests(TestCase):
         self.backup_code.refresh_from_db()
         self.assertIsNone(self.backup_code.used_at)
 
+    def test_a_code_is_not_matched_against_another_users_backup_codes(self) -> None:
+        """``for_user`` must scope the match - a mutated filter would leak across accounts."""
+        other_user = baker.make(User)
+
+        self.assertFalse(verify_and_consume_backup_code(other_user, _CODE))
+
+        self.backup_code.refresh_from_db()
+        self.assertIsNone(self.backup_code.used_at, "another user's login attempt must not consume this code")
+
+    def test_a_later_candidate_in_the_unused_set_is_still_matched(self) -> None:
+        """A loop that only inspects the first candidate would miss this."""
+        second_code = BackupCode.objects.create(user=self.user, code_hash=make_password("EFGH5678"))
+
+        self.assertTrue(verify_and_consume_backup_code(self.user, "efgh-5678"))
+
+        second_code.refresh_from_db()
+        self.backup_code.refresh_from_db()
+        self.assertIsNotNone(second_code.used_at)
+        self.assertIsNone(self.backup_code.used_at, "matching the second code must not also consume the first")
+
     def test_a_code_consumed_concurrently_is_not_accepted_twice(self) -> None:
         """The losing side of the race must not also report success."""
         def consume_then_match(_raw: str, _encoded: str) -> bool:

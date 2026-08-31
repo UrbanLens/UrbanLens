@@ -72,12 +72,14 @@ class ChildPinExactOverlapViewTests(TestCase):
         self.assertEqual(self._create("First", 42.00010, -73.00010).status_code, 200)
         response = self._create("Second", 42.00010, -73.00010)
         self.assertEqual(response.status_code, 400)
+        self.assertIn("exact coordinates", response.json()["error"])
         self.assertEqual(Pin.objects.filter(profile=self.profile, parent_pin=self.root).count(), 1)
 
     def test_child_pin_at_the_parents_exact_coordinates_is_rejected(self) -> None:
         """The parent occupies its own point; a child stacked on it is unclickable."""
         response = self._create("Stacked on parent", 42.0, -73.0)
         self.assertEqual(response.status_code, 400)
+        self.assertIn("exact coordinates", response.json()["error"])
         self.assertFalse(Pin.objects.filter(profile=self.profile, parent_pin=self.root).exists())
 
     def test_nearby_child_pins_are_still_allowed(self) -> None:
@@ -109,16 +111,20 @@ class ChildPinExactOverlapViewTests(TestCase):
         response = self._move(second, 42.00010, -73.00010)
 
         self.assertEqual(response.status_code, 400)
+        self.assertIn("exact coordinates", response.json()["error"])
         second.refresh_from_db()
         self.assertEqual(second.location_id, location_before)
 
     def test_moving_a_child_pin_to_its_own_current_point_is_allowed(self) -> None:
         """A no-op move (e.g. a drag that snaps back) must not trip the rule."""
         child = Pin.objects.get(uuid=self._create("Door", 42.00010, -73.00010).json()["uuid"])
+        location_before = child.location_id
 
         response = self._move(child, 42.00010, -73.00010)
 
         self.assertEqual(response.status_code, 200)
+        child.refresh_from_db()
+        self.assertEqual(child.location_id, location_before)
 
     def test_moving_a_child_pin_to_a_free_point_still_works(self) -> None:
         child = Pin.objects.get(uuid=self._create("Door", 42.00010, -73.00010).json()["uuid"])
@@ -142,6 +148,7 @@ class ChildPinExactOverlapServiceTests(TestCase):
     def test_child_stacked_on_its_parent_is_rejected(self) -> None:
         with self.assertRaises(PinCreationError):
             create_pin_for_profile(self.profile, name="Stacked", latitude=41.0, longitude=-75.0, parent_id=self.root.uuid)
+        self.assertFalse(Pin.objects.filter(profile=self.profile, parent_pin=self.root).exists())
 
     def test_child_near_its_parent_is_accepted(self) -> None:
         result = create_pin_for_profile(self.profile, name="Entrance", latitude=41.00010, longitude=-75.00010, parent_id=self.root.uuid)
@@ -151,8 +158,9 @@ class ChildPinExactOverlapServiceTests(TestCase):
         self.assertNotEqual(result.pin.location_id, self.root.location_id)
 
     def test_resolver_rejects_a_point_the_profile_already_pinned(self) -> None:
-        with self.assertRaises(PinCreationError):
+        with self.assertRaises(PinCreationError) as ctx:
             resolve_child_pin_location(self.profile, 41.0, -75.0)
+        self.assertIn("exact coordinates", ctx.exception.safe_message)
 
     def test_resolver_ignores_the_pin_being_moved(self) -> None:
         """Re-resolving a pin's own current point is what a no-op move does."""

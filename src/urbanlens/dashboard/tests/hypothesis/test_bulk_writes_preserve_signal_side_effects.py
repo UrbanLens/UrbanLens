@@ -70,8 +70,25 @@ class LabelBulkUpdateRefreshesMapPinCacheTests(TestCase):
     def test_reordering_labels_refreshes_the_cache_for_affected_pins(self):
         refresh = self._reorder_via_organize()
 
+        # Both args matter: _refresh_cached_pin(pin_id, profile_id) reading the
+        # wrong profile would look up the wrong cache entry and silently no-op.
+        calls = {(call.args[0], call.args[1]) for call in refresh.call_args_list}
+        self.assertIn((self.pin.pk, self.profile.pk), calls)
+
+    def test_a_pin_carrying_only_one_of_the_reordered_labels_is_still_refreshed(self):
+        # self.pin carries both labels, which would also pass a buggy AND-style
+        # filter (require every reordered label) instead of the intended
+        # "carries any of them" match - this pin only carries one, so it
+        # distinguishes the two.
+        only_beta = Pin.objects.create(
+            profile=self.profile, location=Location.objects.create(latitude=43.0, longitude=-70.0), name="Beta only",
+        )
+        only_beta.labels.add(self.label_b)
+
+        refresh = self._reorder_via_organize()
+
         refreshed = {call.args[0] for call in refresh.call_args_list}
-        self.assertIn(self.pin.pk, refreshed)
+        self.assertIn(only_beta.pk, refreshed)
 
     def test_a_pin_without_the_reordered_labels_is_not_refreshed(self):
         # A profile may hold only one pin per location, so this needs its own.
@@ -132,7 +149,24 @@ class TripActivityBulkCreateQueuesCalendarPushTests(TestCase):
     def test_the_activities_are_created(self):
         created, _ = self._copy()
         self.assertEqual(created, 3)
-        self.assertEqual(TripActivity.objects.filter(trip=self.trip).count(), 3)
+        activities = list(TripActivity.objects.filter(trip=self.trip).order_by("order"))
+        self.assertEqual([activity.pin.name for activity in activities], ["Pin 0", "Pin 1", "Pin 2"])
+        self.assertEqual([activity.order for activity in activities], [0, 1, 2])
+        self.assertTrue(all(activity.location_id == activity.pin.location_id for activity in activities))
+        self.assertTrue(all(activity.added_by_id == self.profile.pk for activity in activities))
+
+    def test_activities_are_appended_after_the_trips_existing_ones(self):
+        existing = TripActivity.objects.create(
+            trip=self.trip, location=Location.objects.create(latitude=50.0, longitude=-80.0), added_by=self.profile, order=0,
+        )
+
+        created, _ = self._copy()
+
+        self.assertEqual(created, 3)
+        new_orders = list(
+            TripActivity.objects.filter(trip=self.trip).exclude(pk=existing.pk).order_by("order").values_list("order", flat=True),
+        )
+        self.assertEqual(new_orders, [1, 2, 3])
 
     def test_an_auto_synced_trip_gets_a_calendar_push(self):
         TripCalendarLink.objects.create(

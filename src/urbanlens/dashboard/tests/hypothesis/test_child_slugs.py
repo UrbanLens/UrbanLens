@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.slugs import (
     PREFERRED_CHILD_SLUG_LENGTH,
     generate_short_prefix,
+    is_uuid_slug,
     parent_slug_prefix,
     unique_slug,
 )
@@ -35,11 +36,22 @@ class ParentSlugPrefixTests(SimpleTestCase):
     def test_shortest_compact_alias_is_preferred(self) -> None:
         self.assertEqual(parent_slug_prefix(["Hudson River State Hospital", "HRSH"]), "hrsh")
 
+    def test_the_shortest_of_several_compact_candidates_wins(self) -> None:
+        # Both "HRSH" and "HRS" slugify short enough to lead a child slug;
+        # only the actual shortest one should be picked, not just any of them.
+        self.assertEqual(parent_slug_prefix(["Hudson River State Hospital", "HRSH", "HRS"]), "hrs")
+        # Equal-length candidates break the tie toward fewer hyphens.
+        self.assertEqual(parent_slug_prefix(["AB-CD", "ABCDE"]), "abcde")
+
     def test_long_name_without_alias_becomes_an_acronym(self) -> None:
         self.assertEqual(parent_slug_prefix(["Hudson River State Hospital"]), "hrsh")
 
     def test_initials_that_are_too_short_use_the_first_word(self) -> None:
         self.assertEqual(generate_short_prefix("Ford Motors"), "ford")
+
+    def test_a_first_word_at_the_length_limit_is_kept_whole(self) -> None:
+        # Exactly MAX_FIRST_WORD_LENGTH (10) chars - only one more and it truncates.
+        self.assertEqual(generate_short_prefix("Powerhouse"), "powerhouse")
 
     def test_a_too_long_single_word_is_truncated(self) -> None:
         self.assertEqual(generate_short_prefix("Switzerland"), "switz")
@@ -49,6 +61,10 @@ class ParentSlugPrefixTests(SimpleTestCase):
         # so the first significant word is used instead.
         self.assertEqual(generate_short_prefix("Hospital of the Hudson"), "hospital")
         self.assertEqual(parent_slug_prefix(["Hospital of the Hudson"]), "hospital")
+
+    def test_a_name_with_no_usable_words_returns_empty(self) -> None:
+        self.assertEqual(generate_short_prefix("..."), "")
+        self.assertEqual(parent_slug_prefix(["", "   "]), "")
 
 
 class WordBoundarySlugTests(SimpleTestCase):
@@ -85,6 +101,19 @@ class WordBoundarySlugTests(SimpleTestCase):
             preferred_length=PREFERRED_CHILD_SLUG_LENGTH,
         )
         self.assertEqual(slug, "hrsh-stafftenant-house-1900-non-contributing")
+
+    def test_short_ideal_grows_a_partial_word_when_taken(self) -> None:
+        # "elm" alone is under MIN_SLUG_LENGTH and the next whole word doesn't
+        # fit in the preferred budget, so a collision should grow it by taking
+        # part of that next word rather than jumping straight to a numeric
+        # suffix or a bare, still-too-short "elm".
+        slug = unique_slug(
+            "Elm Fieldhouse",
+            is_taken=lambda candidate: candidate == "elm",
+            max_length=40,
+            preferred_length=10,
+        )
+        self.assertEqual(slug, "elm-fieldh")
 
 
 class UniqueSlugPropertyTests(SimpleTestCase):
@@ -203,6 +232,10 @@ class ChildWikiSlugTests(TestCase):
         self._seq += 1
         return Location.objects.create(latitude=42.6 + self._seq / 1000, longitude=-73.7 - self._seq / 1000, **kwargs)
 
+    def test_root_wiki_is_not_prefixed(self) -> None:
+        wiki = Wiki.objects.create(location=self._location(), name="Hudson River State Hospital")
+        self.assertEqual(wiki.slug, "hudson-river-state-hospital")
+
     def test_child_wiki_uses_the_parent_alias_as_a_prefix(self) -> None:
         parent = Wiki.objects.create(location=self._location(), name="Hudson River State Hospital")
         WikiAlias.objects.create(wiki=parent, name="HRSH")
@@ -217,11 +250,23 @@ class ChildWikiSlugTests(TestCase):
         parent = Wiki.objects.create(location=self._location(official_name="Hudson River State Hospital"), name="Hudson River State Hospital")
         WikiAlias.objects.create(wiki=parent, name="HRSH")
         child_location = self._location()  # no official_name → UUID slug
-        self.assertTrue(child_location.slug)
+        self.assertTrue(is_uuid_slug(child_location.slug))
         child = Wiki.objects.create(location=child_location, name="Powerhouse", parent_wiki=parent)
         child_location.refresh_from_db()
         self.assertEqual(child.slug, "hrsh-powerhouse")
         self.assertEqual(child_location.slug, "hrsh-powerhouse")
+
+    def test_a_colliding_location_slug_is_left_alone(self) -> None:
+        """The location copy is skipped when the wiki's own slug already belongs to another Location."""
+        parent = Wiki.objects.create(location=self._location(), name="Hudson River State Hospital")
+        WikiAlias.objects.create(wiki=parent, name="HRSH")
+        Location.objects.create(latitude=10.0, longitude=10.0, slug="hrsh-powerhouse")
+        child_location = self._location()  # no official_name → UUID slug
+        original_slug = child_location.slug
+        child = Wiki.objects.create(location=child_location, name="Powerhouse", parent_wiki=parent)
+        child_location.refresh_from_db()
+        self.assertEqual(child.slug, "hrsh-powerhouse")
+        self.assertEqual(child_location.slug, original_slug)
 
     def test_a_named_location_slug_is_left_alone(self) -> None:
         parent = Wiki.objects.create(location=self._location(), name="Hudson River State Hospital")

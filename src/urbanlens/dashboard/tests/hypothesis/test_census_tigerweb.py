@@ -10,7 +10,7 @@ import pytest
 import requests
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.apis.locations.census_tigerweb import CensusTigerwebGateway
+from urbanlens.dashboard.services.apis.locations.census_tigerweb import _LAYER_STATE, CensusTigerwebGateway
 
 
 def _json_response(payload: dict) -> MagicMock:
@@ -51,16 +51,31 @@ class GetStateBoundaryTests(SimpleTestCase):
 
         gw.get_state_boundary("ny")
 
-        _args, kwargs = gw.session.get.call_args
+        args, kwargs = gw.session.get.call_args
+        self.assertEqual(args[0], f"{gw.base_url}/{_LAYER_STATE}/query")
         params = kwargs["params"]
         self.assertEqual(params["where"], "STUSPS='NY'")
+        self.assertEqual(params["outFields"], "STUSPS")
         self.assertEqual(params["returnGeometry"], "true")
         self.assertEqual(params["outSR"], 4326)
+        self.assertEqual(params["f"], "json")
 
     def test_rejects_non_two_letter_abbreviations(self) -> None:
         gw = _gateway()
         with pytest.raises(ValueError, match="two-letter"):
             gw.get_state_boundary("New York")
+        gw.session.get.assert_not_called()
+
+    def test_rejects_a_single_letter_abbreviation(self) -> None:
+        gw = _gateway()
+        with pytest.raises(ValueError, match="two-letter"):
+            gw.get_state_boundary("N")
+        gw.session.get.assert_not_called()
+
+    def test_rejects_a_three_letter_abbreviation(self) -> None:
+        gw = _gateway()
+        with pytest.raises(ValueError, match="two-letter"):
+            gw.get_state_boundary("NYS")
         gw.session.get.assert_not_called()
 
     def test_rejects_abbreviations_with_non_letters(self) -> None:

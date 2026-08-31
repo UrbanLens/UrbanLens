@@ -61,6 +61,39 @@ class StreetViewInteractiveEmbedTests(SimpleTestCase):
         self.assertIn('class="sv-img sv-img--fallback"', html)
         self.assertRegex(html, r'class="sv-img sv-img--fallback"\s+hidden\s+alt="Google Street View')
 
+    def test_embed_not_shown_when_google_slide_exists_but_is_not_first(self) -> None:
+        """The bug this class guards against: only `forloop.first` used to be
+        missing from the check, so a Google slide anywhere in the list (not
+        just first) would still trigger the embed."""
+        first_slide = dict(_STREET_VIEW_SLIDE, source="mapillary")
+        google_slide = dict(_STREET_VIEW_SLIDE, source="Google Street View")
+        html = render_to_string(
+            "dashboard/pages/location/street_view.html",
+            {"slides": [first_slide, google_slide], "debug_entries": [], "google_maps_api_key": "test-key", "pin": _FAKE_PIN},
+        )
+        self.assertNotIn('class="sv-embed"', html)
+        self.assertNotIn("sv-embed-fallback-btn", html)
+
+    def test_embed_not_shown_without_any_resolvable_coordinates(self) -> None:
+        slide = dict(_STREET_VIEW_SLIDE, source="Google Street View", latitude=None, longitude=None)
+        html = render_to_string(
+            "dashboard/pages/location/street_view.html",
+            {"slides": [slide], "debug_entries": [], "google_maps_api_key": "test-key", "pin": _FAKE_PIN},
+        )
+        self.assertNotIn('class="sv-embed"', html)
+        self.assertNotIn("sv-embed-fallback-btn", html)
+        self.assertIn('class="sv-img"', html)
+
+    def test_embed_uses_pin_coordinates_when_slide_lacks_its_own(self) -> None:
+        slide = dict(_STREET_VIEW_SLIDE, source="Google Street View", latitude=None, longitude=None)
+        pin = types.SimpleNamespace(effective_latitude=40.5, effective_longitude=-74.5)
+        html = render_to_string(
+            "dashboard/pages/location/street_view.html",
+            {"slides": [slide], "debug_entries": [], "google_maps_api_key": "test-key", "pin": pin},
+        )
+        self.assertIn('class="sv-embed"', html)
+        self.assertIn("location=40.5,-74.5", html)
+
 
 class SatelliteViewCarouselArrowTests(SimpleTestCase):
     def test_arrows_hidden_with_a_single_slide(self) -> None:
