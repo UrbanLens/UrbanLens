@@ -338,9 +338,13 @@ direct-only because REData's contract can't reproduce what they show:
   `?preview=1`, passing already-displayable files straight through
 - **Web Images** — broad web-image search across many engines (Flickr, imgur, Pinterest,
   DeviantArt, Openverse, Unsplash, …) via REData's web-search image mode, using an aggressive
-  three-clause relevance query (all non-nickname aliases · state/country + municipality · the site's
+  relevance query (all non-nickname aliases · state/country + municipality · the site's
   urbex/abandoned subject vocabulary) so a same-named place or operating business elsewhere is
-  excluded (`plugins.builtin.searxng_images`)
+  excluded; a child pin (a building nested under a parent parcel/site pin) adds a required clause
+  of the parent's own names too, since a generic building label ("Staff House") carries no
+  identifying power alone (`plugins.builtin.searxng_images`). The public Flickr search and the
+  general web-search panel apply the same parent-name qualifier for child pins
+  (`services.apis.flickr.search`, `Pin.get_unique_search_name`)
 - **National Park Service** (USA) — nearest park info, via REData
 - **Yelp** — nearby business details, via REData
 - **LoopNet** (USA) — commercial real-estate listings

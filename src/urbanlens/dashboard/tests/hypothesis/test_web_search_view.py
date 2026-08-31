@@ -204,6 +204,51 @@ class UniqueSearchNameQuoteLocalityTests(TestCase):
         self.assertIn('"118 W 9th St"', result)
 
 
+class UniqueSearchNameAncestorTests(TestCase):
+    """Pin.get_unique_search_name includes the nearest ancestor's name for a
+    child pin - a building's own name ("Superintendent's Cottage", "Staff
+    House") is often a generic label shared by unrelated properties
+    nationwide, with no identifying power on its own."""
+
+    def _make_pin(self, *, name: str, parent_name: str | None = None) -> Pin:
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        user: User = baker.make("auth.User")
+        profile = Profile.objects.get(user=user)
+        parent = None
+        if parent_name is not None:
+            parent_loc = baker.make(Location, official_name=parent_name, latitude=39.1, longitude=-84.5)
+            parent = baker.make(Pin, location=parent_loc, profile=profile, name=parent_name)
+        loc = baker.make(Location, official_name=name, latitude=39.2, longitude=-84.6)
+        return baker.make(Pin, location=loc, profile=profile, name=name, parent_pin=parent)
+
+    def test_child_pin_includes_parent_name(self) -> None:
+        pin = self._make_pin(name="Superintendent's Cottage", parent_name="Hudson River State Hospital")
+        result = pin.get_unique_search_name(include_address=False)
+        assert result is not None
+        self.assertIn("Superintendent's Cottage", result)
+        self.assertIn("Hudson River State Hospital", result)
+
+    def test_top_level_pin_has_no_ancestor_term(self) -> None:
+        pin = self._make_pin(name="Hudson River State Hospital")
+        result = pin.get_unique_search_name(include_address=False)
+        self.assertEqual(result, "Hudson River State Hospital")
+
+    def test_ancestor_name_is_quoted_when_quote_name_is_set(self) -> None:
+        pin = self._make_pin(name="Staff House", parent_name="Hudson River State Hospital")
+        result = pin.get_unique_search_name(include_address=False, quote_name=True)
+        assert result is not None
+        self.assertIn('"Staff House"', result)
+        self.assertIn('"Hudson River State Hospital"', result)
+
+    def test_redundant_ancestor_name_is_not_duplicated(self) -> None:
+        pin = self._make_pin(name="Hudson River State Hospital - Boiler House", parent_name="Hudson River State Hospital")
+        result = pin.get_unique_search_name(include_address=False)
+        assert result is not None
+        self.assertEqual(result.count("Hudson River State Hospital"), 1)
+
+
 class SearchSubscriptionFeatureTests(TestCase):
     """Search subscription feature defaults."""
 

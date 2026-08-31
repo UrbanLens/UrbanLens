@@ -149,6 +149,27 @@ class BuildSearchQueryTests(TestCase):
         query = build_search_query(self.pin)
         self.assertIsNotNone(query)
 
+    def test_child_pin_includes_parent_name_as_required_clause(self) -> None:
+        """A generic child-pin name gets the parent's name ANDed in too."""
+        child_location = baker.make(
+            "dashboard.Location",
+            latitude=Decimal("41.701000"),
+            longitude=Decimal("-73.931000"),
+            administrative_area_level_1="New York",
+        )
+        child = baker.make_recipe("dashboard.detail_pin", location=child_location, parent_pin=self.pin, name="Superintendent's Cottage")
+        query = build_search_query(child)
+        assert query is not None
+        self.assertIn('"Superintendent\'s Cottage"', query)
+        self.assertIn('"Hudson River State Hospital"', query)
+
+    def test_top_level_pin_has_no_ancestor_clause(self) -> None:
+        query = build_search_query(self.pin)
+        assert query is not None
+        # Only two parenthesised OR-groups (names, urbex terms) - state
+        # renders as a bare quoted term, and there's no ancestor group.
+        self.assertEqual(query.count("("), 2)
+
 
 # -- FlickrSearchGateway --------------------------------------------------------------
 
@@ -247,6 +268,23 @@ class BuildFeedTagQueriesTests(TestCase):
         queries = build_feed_tag_queries(self.pin)
         distinct_names = {q.split(",")[0] for q in queries}
         self.assertLessEqual(len(distinct_names), flickr_search._FEED_MAX_NAMES)
+
+    def test_child_pin_adds_ancestor_tag_without_multiplying_queries(self) -> None:
+        child_location = baker.make(
+            "dashboard.Location",
+            latitude=Decimal("41.701000"),
+            longitude=Decimal("-73.931000"),
+            administrative_area_level_1="New York",
+        )
+        child = baker.make_recipe("dashboard.detail_pin", location=child_location, parent_pin=self.pin, name="Superintendent's Cottage")
+        queries = build_feed_tag_queries(child)
+        # One name x 3 urbex terms - same fan-out as a parentless pin; the
+        # ancestor tag is folded into each query, not crossed separately.
+        self.assertEqual(len(queries), 3)
+        for query in queries:
+            tags = query.split(",")
+            self.assertEqual(tags[0], "superintendentscottage")
+            self.assertIn("hudsonriverstatehospital", tags)
 
 
 # -- FlickrFeedSearchGateway -----------------------------------------------------------

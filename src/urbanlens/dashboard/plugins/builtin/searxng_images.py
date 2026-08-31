@@ -10,12 +10,17 @@ own image-capable provider today, Google Programmable Search).
 
 The whole value here is *precision*: a bare "Hudson River State Hospital"
 image search returns unrelated stock photos and same-named places elsewhere.
-So the query is built as three ``OR``-groups that a general image engine
-treats as required, disambiguating clauses (see :func:`build_image_query`):
+So the query is built as required, disambiguating ``OR``-groups that a
+general image engine treats as required clauses (see :func:`build_image_query`):
 
 * **Aliases** - every non-nickname name the place is known by, quoted. A
   nickname is a private label ("the spooky hospital") that no external source
   indexes, so it's excluded.
+* **Ancestor names** (child pins only) - the parent site's own non-nickname
+  names. A child pin's name ("Staff House", "Boiler House") is often a
+  generic building label shared verbatim by unrelated properties nationwide,
+  so this keeps results tied to this specific site rather than matching
+  whichever same-named building elsewhere a provider prefers.
 * **Area** - the state (US) or country (elsewhere) *and* the municipality,
   quoted. Requiring a geographic clause rejects the same-named place two
   states over.
@@ -79,7 +84,7 @@ def _dedup_preserving_order(terms: list[str]) -> list[str]:
     return out
 
 
-def assemble_image_query(aliases: list[str], area_terms: list[str]) -> str | None:
+def assemble_image_query(aliases: list[str], area_terms: list[str], ancestor_terms: list[str] | None = None) -> str | None:
     """Assemble the grouped SearXNG relevance query from its component terms.
 
     Kept separate from :func:`build_image_query` (which pulls the terms off a
@@ -90,6 +95,9 @@ def assemble_image_query(aliases: list[str], area_terms: list[str]) -> str | Non
             empty list yields ``None``, since there is nothing to search for.
         area_terms: Geographic disambiguators (state/country + municipality).
             Optional; an empty list simply omits the area group.
+        ancestor_terms: Names of a child pin's parent site (see
+            ``Pin.ancestor_search_names``). Optional; an empty list omits the
+            group, which is the normal case for a pin with no parent.
 
     Returns:
         A query string of ``OR``-grouped, quoted clauses (e.g.
@@ -101,6 +109,9 @@ def assemble_image_query(aliases: list[str], area_terms: list[str]) -> str | Non
         return None
 
     groups = [_or_group(alias_terms)]
+    ancestors = _dedup_preserving_order(ancestor_terms or [])
+    if ancestors:
+        groups.append(_or_group(ancestors))
     area = _dedup_preserving_order(area_terms)
     if area:
         groups.append(_or_group(area))
@@ -119,7 +130,9 @@ def build_image_query(pin: Pin) -> str | None:
     Aliases are gathered from the pin's own canonical names, its non-nickname
     :class:`PinAlias` rows, and - when the location has a community wiki - the
     wiki's non-nickname aliases, so the query benefits from names other users
-    have contributed for the same place.
+    have contributed for the same place. A child pin also gets its ancestor
+    chain's names as a separate required group (see
+    ``Pin.ancestor_search_names``).
 
     Args:
         pin: The pin whose place is being searched.
@@ -143,7 +156,7 @@ def build_image_query(pin: Pin) -> str | None:
                 aliases.append(wiki.name)
             aliases.extend(wiki.aliases.exclude(kind=AliasType.NICKNAME).values_list("name", flat=True))
 
-    return assemble_image_query(aliases, _area_terms(pin))
+    return assemble_image_query(aliases, _area_terms(pin), pin.ancestor_search_names())
 
 
 def _area_terms(pin: Pin) -> list[str]:

@@ -22,6 +22,23 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-08-31: `Wiki.get_unique_search_name` is dead code
+
+Found while adding ancestor-name qualification to `Pin.get_unique_search_name` (child pins like
+"Superintendent's Cottage" now pull in the parent parcel's name/aliases so external media/web
+searches stay tied to the right site - see `Pin.ancestor_search_names`).
+
+`Wiki.get_unique_search_name` (`models/wiki/model.py`) has no callers anywhere in the codebase,
+including tests - not `controllers/wiki_media.py`, not any Media-gallery provider. Every live
+caller of the `get_unique_search_name` family (`services/pins/external_data.py`,
+`services/apis/flickr/search.py`, `plugins/builtin/searxng_images.py`,
+`plugins/builtin/gdelt.py`, `controllers/pin.py`, `tasks.py`, `controllers/spotguessr.py`,
+`external_api/views_games.py`) goes through `Pin.get_unique_search_name` - the wiki media gallery
+apparently resolves a viewing user's own pin at the place rather than searching from the Wiki
+directly. Left unfixed here since it isn't reachable by anything, so it can't be the site of the
+reported behavior; worth either wiring it up (and giving it the same ancestor-chain treatment via
+`parent_wiki`/`child_wikis`) or deleting it.
+
 ## OPEN 2026-08-25: forms submit and save every field, not the ones that changed
 
 Surfaced by the concealment work, where it caused real data loss, but the concealment case is one

@@ -633,12 +633,51 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             candidates.append(("Address", self.effective_address))
         return collapse_identity_fields(candidates)
 
+    def ancestor_search_names(self) -> list[str]:
+        """Meaningful names and aliases from this pin's ancestor chain, nearest first.
+
+        A child pin's own name is frequently a generic building label
+        ("Superintendent's Cottage", "Staff House") shared verbatim by
+        unrelated properties nationwide, with no identifying power by itself.
+        External search/media queries need the parent site's identity too, or
+        a query for the child's name alone matches whichever same-named
+        building a provider's relevance ranking prefers, rather than this
+        specific site (see ``get_unique_search_name``, and the SearXNG/Flickr
+        media providers, which fold this into their own required-clause query
+        shapes directly).
+
+        Returns:
+            Deduplicated (case-insensitive) ancestor names, nearest parent
+            first; empty for a pin with no parent.
+        """
+        from urbanlens.dashboard.models.aliases.model import AliasType
+        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+        seen: set[str] = set()
+        names: list[str] = []
+        for ancestor in self.ancestor_chain():
+            candidates = [ancestor.meaningful_official_name, ancestor.meaningful_name]
+            if ancestor.pk:
+                candidates.extend(ancestor.aliases.exclude(kind=AliasType.NICKNAME).values_list("name", flat=True))
+            for candidate in candidates:
+                if not candidate or not is_meaningful_name(candidate):
+                    continue
+                key = candidate.casefold()
+                if key in seen:
+                    continue
+                seen.add(key)
+                names.append(candidate)
+        return names
+
     def get_unique_search_name(self, *, include_country: bool = True, quote_name: bool = False, include_address: bool = True, quote_locality: bool = False) -> str | None:
         """Name to use when searching for this location in external APIs.
 
         Address components fall back to the linked Location's geocoded address
         when the pin has none of its own, since a Location-linked pin's own
-        address fields are typically blank (see ``effective_latitude``).
+        address fields are typically blank (see ``effective_latitude``). For a
+        child pin, the nearest ancestor's name is included too (see
+        ``ancestor_search_names``) - a child's own name is often a generic
+        building label with no identifying power on its own.
 
         Args:
             include_country: Whether to append the country to the query.
@@ -668,6 +707,11 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         country = self.effective_country
 
         parts = [f'"{name}"' if quote_name else name]
+        if ancestor_names := self.ancestor_search_names():
+            ancestor_name = ancestor_names[0]
+            if ancestor_name.casefold() not in name.casefold():
+                parts.append(f'"{ancestor_name}"' if quote_name else ancestor_name)
+
         if include_address and address_basic and address_basic != name:
             parts.append(f'"{address_basic}"' if quote_name else address_basic)
 

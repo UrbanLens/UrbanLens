@@ -8,7 +8,11 @@ Both are required because a plain landmark-name query against Flickr's global
 pool returns a lot of photos that merely share a common word with the name -
 the state qualifier keeps a name that also belongs to a same-named place
 elsewhere from matching, and the urbex terms keep results on-topic for this
-site's subject matter.
+site's subject matter. A child pin (a building nested under a parent
+parcel/site pin) adds a third required qualifier: the parent's own name,
+since a child's name alone ("Staff House", "Boiler House") is typically a
+generic building label shared verbatim by unrelated sites nationwide (see
+``Pin.ancestor_search_names``).
 
 Two gateways implement this, chosen automatically by :class:`FlickrPlugin`
 based on whether a Flickr API key is configured:
@@ -102,18 +106,20 @@ class _QueryComponents:
     """The raw ingredients of a pin's required-operator Flickr query, before rendering."""
 
     names: list[str]
+    ancestor_names: list[str]
     state: str
 
 
 def _search_components(pin: Pin) -> _QueryComponents | None:
-    """Gather the pin's known names and state, shared by both query renderers.
+    """Gather the pin's known names, ancestor names, and state, shared by both query renderers.
 
     Args:
         pin: The pin to gather query components for.
 
     Returns:
-        The raw (undeduped, unquoted) names and state, or None when the pin
-        has no known state at all - both renderers require one.
+        The raw (undeduped, unquoted) names, ancestor names, and state, or
+        None when the pin has no known state at all - both renderers require
+        one.
     """
     from django.core.exceptions import ObjectDoesNotExist
 
@@ -149,19 +155,21 @@ def _search_components(pin: Pin) -> _QueryComponents | None:
         # noise to the query.
         names = [name for name in names if not is_address_derived_name(name, location)]
 
-    return _QueryComponents(names=names, state=state)
+    return _QueryComponents(names=names, ancestor_names=pin.ancestor_search_names(), state=state)
 
 
 def build_search_query(pin: Pin) -> str | None:
     """Build the required-operator Flickr full-text search query for a pin.
 
     Used by :class:`FlickrSearchGateway` (the API-backed provider). The query
-    has the shape ``(names) "state" (urbex terms)``: an OR-group of every
-    meaningful, non-nickname name known for the place, ANDed with the pin's
-    state in quotes and the fixed :data:`URBEX_TERMS` OR-group. Both the name
-    group and the state are required - a pin with neither is skipped rather
-    than searched with a weaker query, since a Flickr full-text search
-    without them returns mostly off-topic noise.
+    has the shape ``(names) [(ancestor names)] "state" (urbex terms)``: an
+    OR-group of every meaningful, non-nickname name known for the place,
+    ANDed with the pin's state in quotes and the fixed :data:`URBEX_TERMS`
+    OR-group. The name group and the state are both required - a pin with
+    neither is skipped rather than searched with a weaker query, since a
+    Flickr full-text search without them returns mostly off-topic noise. A
+    child pin also gets an ancestor-names OR-group (see
+    ``Pin.ancestor_search_names``), omitted entirely for a pin with no parent.
 
     Args:
         pin: The pin to build a search query for.
@@ -178,8 +186,12 @@ def build_search_query(pin: Pin) -> str | None:
     if not names_clause:
         return None
 
-    urbex_clause = _quoted_or_group(list(URBEX_TERMS))
-    return f'{names_clause} "{components.state}" {urbex_clause}'
+    clauses = [names_clause]
+    if ancestor_clause := _quoted_or_group(components.ancestor_names):
+        clauses.append(ancestor_clause)
+    clauses.append(f'"{components.state}"')
+    clauses.append(_quoted_or_group(list(URBEX_TERMS)))
+    return " ".join(clauses)
 
 
 def build_feed_tag_queries(pin: Pin) -> list[str]:
@@ -196,14 +208,20 @@ def build_feed_tag_queries(pin: Pin) -> list[str]:
     actually run. Recall is still much lower than the API-backed provider,
     since matching is exact-normalized-tag rather than full-text relevance.
 
+    For a child pin, the nearest ancestor name (see
+    ``Pin.ancestor_search_names``) is ANDed onto every query as a fourth tag
+    rather than crossed like the name/urbex-term product, so it doesn't
+    multiply the number of feed requests one fetch issues.
+
     Args:
         pin: The pin to build tag queries for.
 
     Returns:
-        Comma-joined 3-tag strings (name, state, urbex term; each normalized
-        the same way Flickr normalizes tags for matching), or ``[]`` when the
-        pin has no usable name or state. Capped at :data:`_FEED_MAX_NAMES`
-        distinct names to bound how many feed requests one fetch issues.
+        Comma-joined tag strings (name, [ancestor,] state, urbex term; each
+        normalized the same way Flickr normalizes tags for matching), or
+        ``[]`` when the pin has no usable name or state. Capped at
+        :data:`_FEED_MAX_NAMES` distinct names to bound how many feed
+        requests one fetch issues.
     """
     from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
 
@@ -214,6 +232,12 @@ def build_feed_tag_queries(pin: Pin) -> list[str]:
     state_tag = normalize_name_for_comparison(components.state)
     if not state_tag:
         return []
+
+    ancestor_tag = ""
+    for candidate in components.ancestor_names:
+        if tag := normalize_name_for_comparison(candidate):
+            ancestor_tag = tag
+            break
 
     name_tags: list[str] = []
     seen: set[str] = set()
@@ -229,6 +253,8 @@ def build_feed_tag_queries(pin: Pin) -> list[str]:
         return []
 
     urbex_tags = [normalize_name_for_comparison(term) for term in URBEX_TERMS]
+    if ancestor_tag:
+        return [f"{name_tag},{ancestor_tag},{state_tag},{urbex_tag}" for name_tag in name_tags for urbex_tag in urbex_tags]
     return [f"{name_tag},{state_tag},{urbex_tag}" for name_tag in name_tags for urbex_tag in urbex_tags]
 
 
