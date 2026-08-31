@@ -91,7 +91,7 @@ class PinWikiShareView(LoginRequiredMixin, View):
         # (this view's own hx-target), and shows what the pin has contributed -
         # without this OOB swap it stays stale until a full reload. Same fix
         # PinOverviewView already needed for the slug-backfill case.
-        hero_html = _pin_hero_oob(request, pin, competing_location_count=overview_context["competing_location_count"])
+        hero_html = _pin_hero_oob(request, pin, linked_wiki_locations=overview_context["linked_wiki_locations"])
         response = HttpResponse(overview_html + hero_html)
         response["HX-Trigger"] = f'{{"wikiShared": {{"shared": {shared_flag}}}}}'
         return response

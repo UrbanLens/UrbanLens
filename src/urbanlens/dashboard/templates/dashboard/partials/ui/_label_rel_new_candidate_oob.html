@@ -1,0 +1,9 @@
+{% load dashboard_tags %}
+{# Out-of-band append: adds a freshly-created label as a parent/child suggestion in the still-open "new-{ns}" create dialog's picker, so it's selectable without a page refresh. #}
+{% if ns != 'people' %}
+{% include 'dashboard/partials/ui/_label_rel_suggestion_button.html' with label=label instance_id=instance_id rel_type='parent' show_kind=True oob_target=instance_id|add:'-suggestions-parent' %}
+{% include 'dashboard/partials/ui/_label_rel_suggestion_button.html' with label=label instance_id=instance_id rel_type='child' show_kind=True oob_target=instance_id|add:'-suggestions-child' %}
+{% else %}
+{% include 'dashboard/partials/ui/_label_rel_suggestion_button.html' with label=label instance_id=instance_id rel_type='parent' show_kind=False oob_target=instance_id|add:'-suggestions-parent' %}
+{% include 'dashboard/partials/ui/_label_rel_suggestion_button.html' with label=label instance_id=instance_id rel_type='child' show_kind=False oob_target=instance_id|add:'-suggestions-child' %}
+{% endif %}

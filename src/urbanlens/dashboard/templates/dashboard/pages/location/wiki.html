@@ -25,22 +25,22 @@
     <div class="ul-page-subnav__inner">
         {# -- Page tabs: Overview / Article / Comments / Edit History -- #}
         <nav class="ul-subnav-tabs" data-page-tabs aria-label="Wiki sections">
-            <button type="button" class="ul-subnav-tab is-active" data-tab="overview">
+            <a href="#tab-overview" class="ul-subnav-tab is-active" data-tab="overview">
                 <i class="material-symbols-outlined">dashboard</i><span>Overview</span>
-            </button>
-            <button type="button" class="ul-subnav-tab" data-tab="photos">
+            </a>
+            <a href="#tab-photos" class="ul-subnav-tab" data-tab="photos">
                 <i class="material-symbols-outlined">photo_library</i><span>Photos</span>
-            </button>
-            <button type="button" class="ul-subnav-tab" data-tab="article">
+            </a>
+            <a href="#tab-article" class="ul-subnav-tab" data-tab="article">
                 <i class="material-symbols-outlined">article</i><span>Article</span>
-            </button>
-            <button type="button" class="ul-subnav-tab" data-tab="comments">
+            </a>
+            <a href="#tab-comments" class="ul-subnav-tab" data-tab="comments">
                 <i class="material-symbols-outlined">chat</i><span>Comments</span>
                 {% if wiki_comment_count %}<span class="page-tab-badge">{{ wiki_comment_count }}</span>{% endif %}
-            </button>
-            <button type="button" class="ul-subnav-tab" data-tab="history">
+            </a>
+            <a href="#tab-history" class="ul-subnav-tab" data-tab="history">
                 <i class="material-symbols-outlined">history</i><span>Changes</span>
-            </button>
+            </a>
         </nav>
     </div>
 </div>

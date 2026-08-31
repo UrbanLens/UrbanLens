@@ -17,6 +17,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.html import escape
 from django.views import View
@@ -406,6 +407,18 @@ def _render_rows(request: HttpRequest, kind: str, profile: Profile, extra: dict 
     )
 
 
+def _new_candidate_oob_html(request: HttpRequest, label: Label, ns: str) -> str:
+    """Render OOB suggestion buttons adding ``label`` to the "new-<ns>" create
+    dialog's parent/child picker, so a just-created label is immediately
+    selectable for the next one without a page refresh.
+    """
+    return render_to_string(
+        "dashboard/partials/ui/_label_rel_new_candidate_oob.html",
+        {"label": label, "instance_id": f"new-{ns}", "ns": ns},
+        request=request,
+    )
+
+
 def _merge_form_ctx(cfg: _KindConfig, label: Label, candidates: QuerySet[Label]) -> dict:
     """Build template context for organize_label_merge_form.html."""
     return {
@@ -703,7 +716,9 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
                     "color": label.color or "",
                 }
             )
-        return _render_rows(request, self.kind, profile, extra)
+        rows_response = _render_rows(request, self.kind, profile, extra)
+        rows_response.write(_new_candidate_oob_html(request, label, cfg.select_data_name))
+        return rows_response
 
 
 class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):

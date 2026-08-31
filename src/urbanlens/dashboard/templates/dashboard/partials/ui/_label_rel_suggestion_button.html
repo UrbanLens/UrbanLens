@@ -1,0 +1,9 @@
+{% load dashboard_tags %}
+{# One candidate button for a parent/child picker's suggestion list. Shared by _label_rel_popup.html's initial render and _label_rel_new_candidate_oob.html's post-create append, so both stay in sync. #}
+<button type="button" class="tag-chip label-rel-suggestion{% if selected_ids and label.id in selected_ids %} label-rel-suggestion--hidden{% endif %}"
+        data-id="{{ label.id }}" data-kind="{{ label.kind }}" data-name="{{ label.name|lower }}"
+        {% if label.color %}style="--tag-color:{{ label.color }}"{% endif %}
+        {% if oob_target %}hx-swap-oob="beforeend:#{{ oob_target }}"{% endif %}
+        onclick="LabelRelPicker.select('{{ instance_id }}', '{{ rel_type }}', this)">
+    {% include 'dashboard/partials/ui/_label_rel_chip_body.html' with label=label show_kind=show_kind %}
+</button>

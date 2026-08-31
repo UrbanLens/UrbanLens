@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
@@ -22,6 +23,9 @@ from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.pins.pin_edit import SECURITY_EDIT_FIELDS, apply_pin_edits
 from urbanlens.dashboard.services.pins.pin_subresources import create_pin_note, delete_pin_note
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
 
@@ -109,12 +113,14 @@ def _overview_context(pin: Pin) -> dict:
         ("emergency", "Emergency"),
     ]
 
-    # Only genuinely competing properties count as a reason to offer a switch.
-    # This used to be "every Location covering this point", which on a campus
-    # meant every building on it - all the same place, none of them a choice.
-    from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
+    # Every wiki this pin is genuinely associated with - the pin's own, any
+    # genuinely competing same-coordinate property, and any earned ancestor
+    # in a split-derived family. This used to be "every Location covering
+    # this point", which on a campus meant every building on it - all the
+    # same place, none of them a choice.
+    from urbanlens.dashboard.services.places.ambiguity import linked_wiki_locations
 
-    competing_location_count = len(competing_wiki_locations(pin, pin.profile))
+    linked_locations = linked_wiki_locations(pin, pin.profile)
 
     from urbanlens.dashboard.services.ai.link_extraction import ai_extract_button_context
 
@@ -126,7 +132,7 @@ def _overview_context(pin: Pin) -> dict:
         "detail_pin_icon_choices": detail_pin_icon_choices,
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,
-        "competing_location_count": competing_location_count,
+        "linked_wiki_locations": linked_locations,
         **ai_extract_button_context(pin.profile.user, pin.profile, pin),
         "pin_security_values": [
             ("fences", "Fences", pin.fences),
@@ -141,7 +147,7 @@ def _overview_context(pin: Pin) -> dict:
     }
 
 
-def _pin_hero_oob(request, pin: Pin, *, competing_location_count: int) -> str:
+def _pin_hero_oob(request, pin: Pin, *, linked_wiki_locations: list[Location]) -> str:
     """Render the pin detail page hero as an out-of-band HTMX swap.
 
     The hero (with its Community Wiki box) lives in base.html's
@@ -167,7 +173,7 @@ def _pin_hero_oob(request, pin: Pin, *, competing_location_count: int) -> str:
             "modifier": "top",
             "hero_image_url": cover_image.url if cover_image else None,
             "hero_cover_key": "pin",
-            "competing_location_count": competing_location_count,
+            "linked_wiki_locations": linked_wiki_locations,
             # The hero carries the parcel/building badge, so an out-of-band
             # swap has to rebuild it too or organising a property would blank
             # the badge until the next full page load.
@@ -206,7 +212,7 @@ class PinOverviewView(LoginRequiredMixin, View):
                 safely_enqueue_task(resolve_location_place_name, pin.location_id)
         overview_context = _overview_context(pin)
         overview_html = render_to_string(request=request, template_name="dashboard/partials/pins/pin_overview_partial.html", context=overview_context)
-        hero_html = _pin_hero_oob(request, pin, competing_location_count=overview_context["competing_location_count"])
+        hero_html = _pin_hero_oob(request, pin, linked_wiki_locations=overview_context["linked_wiki_locations"])
         return HttpResponse(overview_html + hero_html)
 
 

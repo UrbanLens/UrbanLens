@@ -352,6 +352,7 @@ export class OrgTabManager {
             f.querySelector("form")?.reset();
             resetIconPicker(this.cfg.newForm.iconPickerId);
             resetColorPicker(this.cfg.newForm.colorPickerId, this.cfg.newForm.colorValueId);
+            LabelRelPicker.reset(`new-${this.cfg.ns}`);
             if (this.cfg.newForm.customPreviewId) {
                 const preview = document.getElementById(this.cfg.newForm.customPreviewId) as HTMLImageElement | null;
                 if (preview) {

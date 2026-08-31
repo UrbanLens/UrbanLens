@@ -114,6 +114,16 @@ class WikiShareService:
             # that aren't linked yet) to the community wiki.
             Pin.objects.filter(pk=pin.pk).update(wiki=wiki)
 
+            if shared and location.place_id is not None:
+                # Grandfathers the sharer permanently - see wiki_access's module
+                # docstring, "Engaging with a wiki". Gated on `shared`, not on
+                # merely reaching this method: opening the dialog and
+                # contributing nothing is not the "shared content...in any
+                # capacity" this is meant to catch.
+                from urbanlens.dashboard.models.place.model import PlaceAccessGrant
+
+                PlaceAccessGrant.objects.record_engagement(pin.profile, location.place)
+
         return wiki, shared
 
     def _name_from_pin(self, pin: Pin, wiki: Wiki, alias_ids: set[int]) -> None:

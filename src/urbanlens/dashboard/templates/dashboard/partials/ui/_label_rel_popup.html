@@ -15,16 +15,11 @@
 
     <div class="tag-parent-select label-rel-suggestions" id="{{ instance_id }}-suggestions-{{ rel_type }}" data-active-tab="">
         {% for b in candidates %}
-        <button type="button" class="tag-chip label-rel-suggestion{% if selected_ids and b.id in selected_ids %} label-rel-suggestion--hidden{% endif %}"
-                data-id="{{ b.id }}" data-kind="{{ b.kind }}" data-name="{{ b.name|lower }}"
-                {% if b.color %}style="--tag-color:{{ b.color }}"{% endif %}
-                onclick="LabelRelPicker.select('{{ instance_id }}', '{{ rel_type }}', this)">
-            {% if ns != 'people' %}
-            {% include 'dashboard/partials/ui/_label_rel_chip_body.html' with label=b show_kind=True %}
-            {% else %}
-            {% include 'dashboard/partials/ui/_label_rel_chip_body.html' with label=b show_kind=False %}
-            {% endif %}
-        </button>
+        {% if ns != 'people' %}
+        {% include 'dashboard/partials/ui/_label_rel_suggestion_button.html' with label=b instance_id=instance_id rel_type=rel_type selected_ids=selected_ids show_kind=True %}
+        {% else %}
+        {% include 'dashboard/partials/ui/_label_rel_suggestion_button.html' with label=b instance_id=instance_id rel_type=rel_type selected_ids=selected_ids show_kind=False %}
+        {% endif %}
         {% endfor %}
     </div>
 </div>

@@ -89,7 +89,8 @@ class GrantReason(TextChoices):
     """Why a profile holds access that containment can no longer prove."""
 
     GRANDFATHERED_BACKFILL = "backfill", "Held before places existed"
-    GRANDFATHERED_SPLIT = "split", "Held before the parcel was split"
+    GRANDFATHERED_SPLIT = "split", "Held the split family - originally, or by earning every current member"
+    GRANDFATHERED_ENGAGEMENT = "engagement", "Viewed the wiki or shared content to it while access was held"
 
 
 class Place(abstract.DashboardModel):
@@ -245,14 +246,30 @@ class Place(abstract.DashboardModel):
 class PlaceAccessGrant(abstract.DashboardModel):
     """Materialised access that containment can no longer prove.
 
-    Written by exactly two callers - the Place backfill migration and split
-    processing - and by no API surface at all. Both are cases where the
-    *structure* changed under users who had done nothing wrong: a campus wiki
-    that turns out to span several tax parcels becomes an aggregate, and an
-    aggregate is earned rather than contained. Snapshotting a grant is what
-    guarantees nobody loses access they already had, which in turn is what
-    makes automatic split and site detection safe - a false positive is
-    annoying, never harmful.
+    Written by four callers, all through ``PlaceAccessGrantManager`` rather
+    than a public "grant access" API surface:
+
+    - The Place backfill migration, for access held before places existed.
+    - :func:`services.places.splits.process_split`, for every profile who
+      held the *undivided* parcel at the moment it was split - snapshotted
+      for the parcel and every one of its new successors together
+      (:meth:`PlaceAccessGrantManager.snapshot_family`), so a structural
+      reorganisation a profile had no part in never costs them anything.
+    - :func:`services.wiki.wiki_access._snapshot_earned_split_families`, the
+      symmetric case for a profile who was never a prior holder but later
+      earns a split-derived aggregate the ordinary way (holding every current
+      successor at once) - the moment that happens, it is snapshotted exactly
+      like a prior holder's, because proving full knowledge of a
+      split-derived family is proving full knowledge of it regardless of when.
+      An *organic* multi-parcel site (never split, ``PlaceStatus.CURRENT``) is
+      deliberately excluded - see :class:`PlaceStatus` - and stays governed by
+      the strict recompute-every-time rule in ``services.wiki.wiki_access``.
+    - :meth:`PlaceAccessGrantManager.record_engagement`, called from
+      :func:`services.wiki.wiki_access.resolve_visible_wiki` and
+      :meth:`services.wiki.wiki_share.WikiShareService.share_from_pin` -
+      a profile who actually viewed a wiki or shared content to it while they
+      held access keeps that access even after every qualifying pin is gone;
+      one who never engaged with it does not.
 
     Grants are permanent and are never revoked by pin churn, unlike computed
     access.

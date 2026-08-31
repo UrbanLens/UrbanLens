@@ -22,6 +22,21 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-08-31: the pin-detail "switch wiki" GET picker is now UI-orphaned
+
+Replacing the pin-detail hero's single-wiki-plus-switch-button with a list of every linked wiki
+(`_pin_detail_hero_body.html`, `services.places.ambiguity.linked_wiki_locations`) removed the
+hero's only trigger for `PinRelinkView.get()` (the `hx-get="{% url 'pin.link' %}"` button that
+swapped `pin_location_picker.html` into `#pin-location-picker`). The route, view, and partial are
+untouched and still reachable directly (and `PinRelinkView.post` / `pin.link.to` is still wired
+from `location/wiki.html`'s "other properties this location falls inside" list), but nothing in
+the UI links to the GET picker anymore.
+
+Left as-is rather than removed: a separate, not-yet-actioned note already flags this whole
+"switch"/"detach" pair as likely deprecated and worth a dedicated look (including that "switch"
+was surfacing inappropriate suggestions, e.g. a building's own parent parcel) - resolving that
+should also decide this route's fate rather than deleting it unilaterally here.
+
 ## OPEN 2026-08-31: `urbanlens_development_main_test_runner`'s baked image is missing `django-perf-rec`
 
 Found while running the full suite before merging PR #143 (`bin/run_tests.sh`, no `--fast`, per

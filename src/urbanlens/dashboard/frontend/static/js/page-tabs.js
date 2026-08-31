@@ -4,12 +4,16 @@
  * Markup contract (attribute-driven - the classnames are cosmetic; pin
  * details and wiki both use the shared .ul-subnav-tabs/.ul-subnav-tab look):
  *   <nav data-page-tabs>
- *     <button type="button" data-tab="overview">...</button>
+ *     <a href="#tab-overview" data-tab="overview">...</a>
  *     ...
  *   </nav>
  *   <section data-tab-panel="overview">...</section>
  *
  * Behavior:
+ *   - Real <a href="#tab-..."> elements, so middle-click/ctrl-click open the
+ *     tab in a new tab and right-click gets the browser's normal link
+ *     context menu; only a plain left-click is intercepted for the in-page
+ *     swap below.
  *   - Clicking a tab shows its panel and hides the rest.
  *   - The active tab is deep-linkable via the URL hash (#tab-article,
  *     #tab-comments, #tab-history); "overview" is the default and keeps the
@@ -71,7 +75,15 @@
         nav.setAttribute('role', 'tablist');
         nav.querySelectorAll('[data-tab]').forEach(function (btn) {
             btn.setAttribute('role', 'tab');
-            btn.addEventListener('click', function () { activate(btn.dataset.tab); });
+            btn.addEventListener('click', function (event) {
+                // Modifier-clicks (ctrl/cmd/shift) are the browser's own
+                // "open in new tab/window" gestures - leave those (and
+                // middle-click/right-click, which never reach a 'click'
+                // handler at all) to the native <a href> behavior.
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                activate(btn.dataset.tab);
+            });
         });
         // Arrow-key navigation between tabs, per the WAI-ARIA tabs pattern.
         nav.addEventListener('keydown', function (event) {

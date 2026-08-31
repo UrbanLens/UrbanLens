@@ -164,9 +164,10 @@ class PlaceAccessGrantQuerySet(abstract.DashboardQuerySet):
 class PlaceAccessGrantManager(abstract.DashboardManager.from_queryset(PlaceAccessGrantQuerySet)):
     """Manager for PlaceAccessGrant.
 
-    Deliberately offers no public "grant access" helper. Grants are written
-    only by the Place backfill migration and by split processing; every other
-    caller must go through the computed predicate.
+    Deliberately offers no general-purpose "grant access" helper - the two
+    methods below are narrow and named for the one structural event each
+    covers. Every other caller must go through the computed predicate in
+    ``services.wiki.wiki_access``.
     """
 
     def granted_domain_ids(self, profile) -> set[int]:
@@ -181,3 +182,52 @@ class PlaceAccessGrantManager(abstract.DashboardManager.from_queryset(PlaceAcces
         if profile is None or profile.pk is None:
             return set()
         return set(self.for_profile(profile).values_list("place__domain_root_id", flat=True))
+
+    def snapshot_family(self, profile_ids: Iterable[int], aggregate: Place, *, reason: str | None = None) -> None:
+        """Permanently grant a split-derived aggregate and all its current members.
+
+        Used both at the moment a parcel is split (for everyone who held the
+        undivided parcel) and, later, for anyone who independently earns the
+        same aggregate by pinning every one of its current successors - both
+        are "proved full knowledge of this split family", just at different
+        times, and both deserve the identical permanent record.
+
+        Args:
+            profile_ids: Profiles to grant. A no-op for an empty iterable.
+            aggregate: The split-derived aggregate place. Its own row and
+                every current ``MEMBER_OF`` child are granted together.
+            reason: Defaults to :attr:`GrantReason.GRANDFATHERED_SPLIT`.
+        """
+        from urbanlens.dashboard.models.place.model import GrantReason, PlaceRelation
+
+        resolved_reason = reason if reason is not None else GrantReason.GRANDFATHERED_SPLIT
+        ids = list(profile_ids)
+        if not ids:
+            return
+        family = [aggregate, *aggregate.children.filter(parent_relation=PlaceRelation.MEMBER_OF)]
+        grants = [self.model(profile_id=profile_id, place=place, reason=resolved_reason) for profile_id in ids for place in family]
+        # ignore_conflicts: a repeat call (a profile who already holds part of
+        # the family, or two overlapping snapshot triggers) must stay a no-op,
+        # not an IntegrityError on the (profile, place) unique constraint.
+        self.bulk_create(grants, ignore_conflicts=True)
+
+    def record_engagement(self, profile, place: Place | None) -> None:
+        """Permanently grant *profile* the domain *place* sits in, for engaging with it.
+
+        A profile who views a wiki or shares content to it while they hold
+        access keeps that access even after every qualifying pin is later
+        moved or deleted - see :class:`GrantReason.GRANDFATHERED_ENGAGEMENT`.
+        Idempotent: a repeat view is a cheap no-op once the grant exists.
+
+        Args:
+            profile: The profile engaging with the wiki. A no-op for None or
+                an unsaved profile.
+            place: The place tied to the wiki's Location. A no-op for None or
+                an unsaved place - a placeless location has no domain to
+                grant, and its exact-pin-match access needs no grandfathering.
+        """
+        from urbanlens.dashboard.models.place.model import GrantReason
+
+        if profile is None or profile.pk is None or place is None or place.pk is None:
+            return
+        self.get_or_create(profile=profile, place=place, defaults={"reason": GrantReason.GRANDFATHERED_ENGAGEMENT})

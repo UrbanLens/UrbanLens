@@ -63,7 +63,7 @@ def geometry_stale(place: Place) -> bool:
     return timezone.now() - place.geometry_generated_at > timedelta(days=SiteSettings.get_current().boundary_cache_days)
 
 
-def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "", provider_key: str = "") -> Place | None:
+def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "", provider_key: str = "", exclude_pk: int | None = None) -> Place | None:
     """Find the existing place a freshly-fetched polygon describes, if any.
 
     Args:
@@ -71,12 +71,18 @@ def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "",
         polygon: The candidate geometry.
         provider: Provider key namespace (e.g. ``"redata"``).
         provider_key: The provider's stable id for this record, when it has one.
+        exclude_pk: A place to never match, however well its geometry fits -
+            for a parcel being split, its own (still-``CURRENT`` until the
+            split transaction commits) centroid very often lands inside one
+            of its own successors, and without this a successor's upsert
+            would alias straight back onto the parcel it is splitting *from*
+            instead of becoming a distinct child.
 
     Returns:
         The matching place, or None when this is genuinely new.
     """
     if provider and provider_key:
-        if existing := Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).first():
+        if existing := Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).exclude(pk=exclude_pk).first():
             return existing
 
     # No stable id match: treat two polygons as the same thing when each
@@ -85,7 +91,7 @@ def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "",
     # mutual centroid containment needs none and cannot match two side-by-side
     # parcels.
     centroid = polygon.centroid
-    centroid_holders = Place.objects.current().of_kind(kind).filter(geometry__isnull=False, geometry__contains=centroid)
+    centroid_holders = Place.objects.current().of_kind(kind).filter(geometry__isnull=False, geometry__contains=centroid).exclude(pk=exclude_pk)
     for candidate in centroid_holders:
         # A place already claimed by a *different* id from this same provider is
         # not this record, whatever the geometry says - the provider has just
@@ -112,6 +118,7 @@ def upsert_place(
     name: str = "",
     parent: Place | None = None,
     relation: str = PlaceRelation.PART_OF,
+    exclude_pk: int | None = None,
 ) -> Place | None:
     """Create or update the place a provider record describes.
 
@@ -126,6 +133,11 @@ def upsert_place(
         name: Admin-facing label.
         parent: The containing or aggregating place.
         relation: How it attaches to ``parent``.
+        exclude_pk: Passed through to :func:`find_matching_place` - a place
+            that must never be matched, however well its geometry fits. See
+            its docstring; ``services.places.splits.process_split`` is the
+            one caller that needs this, to stop a successor from aliasing
+            back onto the still-``CURRENT`` parcel it is splitting from.
 
     Returns:
         The place, or None when there is neither geometry nor a provider key
@@ -134,9 +146,9 @@ def upsert_place(
     if polygon is None and not provider_key:
         return None
 
-    place = find_matching_place(kind, polygon, provider=provider, provider_key=provider_key) if polygon is not None else None
+    place = find_matching_place(kind, polygon, provider=provider, provider_key=provider_key, exclude_pk=exclude_pk) if polygon is not None else None
     if place is None and provider and provider_key:
-        place = Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).first()
+        place = Place.objects.filter(provider=provider, provider_key=provider_key, kind=kind).exclude(pk=exclude_pk).first()
 
     now = timezone.now()
     if place is None:

@@ -540,6 +540,24 @@
     gap: .35rem;
 }
 
+// Several linked wikis at once (see partials/pins/_pin_detail_hero_body.html) -
+// the box grows to fit a wrapped sentence instead of the fixed single-line
+// row the one-wiki case uses.
+.pin-hero-wiki-box--multi {
+    align-items: flex-start;
+}
+
+.pin-hero-wiki-box-multi-line {
+    color: rgba(255, 255, 255, .92);
+    font-size: .85rem;
+    line-height: 1.45;
+    margin: 0;
+
+    .pin-hero-wiki-box-link {
+        display: inline;
+    }
+}
+
 .pin-hero-wiki-box #pin-location-picker {
     position: absolute;
     top: calc(100% + .5rem);

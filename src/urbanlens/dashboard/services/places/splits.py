@@ -12,6 +12,12 @@ access to a wiki they already hold, so a false positive costs a redundant row
 and an unnecessary aggregate, never someone's access. That in turn is why the
 detection threshold below can be generous.
 
+The snapshot covers the whole family, not just the superseded parcel: a
+holder of the undivided parcel knew everything that ground now contains, so
+they are granted the parcel *and* every one of its new successors together
+(:meth:`PlaceAccessGrantManager.snapshot_family`) - permanently, regardless of
+which successor their own pin happens to re-resolve onto.
+
 Deliberately *not* done here: creating child wikis. A split creates child
 *places* automatically; their wikis appear only when somebody with a pin there
 creates one, and nest under the superseded parent's wiki through ordinary
@@ -84,7 +90,12 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
 
     children: list[Place] = []
     for geometry in successors:
-        child = upsert_place(PlaceKind.PARCEL, geometry, name=place.name)
+        # exclude_pk=place.pk: place is still CURRENT here (status flips below,
+        # only once we know this is really a split) - without it, a successor
+        # whose centroid falls near the original parcel's own centroid (common:
+        # the original center often lands inside one of its own pieces) would
+        # silently alias back onto place itself instead of becoming a new child.
+        child = upsert_place(PlaceKind.PARCEL, geometry, name=place.name, exclude_pk=place.pk)
         if child is not None and child.pk != place.pk:
             lineage.set_parent(child, place, PlaceRelation.MEMBER_OF)
             children.append(child)
@@ -107,9 +118,9 @@ def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
             lineage.set_parent(building, new_home, PlaceRelation.PART_OF)
 
     # Snapshot before re-resolution moves anyone: after this, containment can
-    # no longer prove what these profiles already had.
-    for profile_id in holders:
-        PlaceAccessGrant.objects.get_or_create(profile_id=profile_id, place=place, defaults={"reason": GrantReason.GRANDFATHERED_SPLIT})
+    # no longer prove what these profiles already had. Covers the whole
+    # family (place + every successor), not just place - see module docstring.
+    PlaceAccessGrant.objects.snapshot_family(holders, place)
 
     for child in children:
         if child.geometry is not None:

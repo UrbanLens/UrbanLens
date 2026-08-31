@@ -54,31 +54,29 @@ in context, plus the wiki/linking context used by the overview panel.
 
     {% if user.profile.community_enabled %}
         {% if pin.location and pin.location.slug %}
-            {% if pin.community_wiki %}
+            {% if linked_wiki_locations|length == 1 %}
             <aside class="pin-hero-wiki-box" id="pin-location-section">
                 <i class="material-symbols-outlined">public</i>
                 <div class="pin-hero-wiki-box-info">
                     <span class="pin-hero-wiki-box-label">Community Wiki</span>
-                    <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-hero-wiki-box-link"
+                    <a href="{% url 'location.wiki' location_slug=linked_wiki_locations.0.slug %}" class="pin-hero-wiki-box-link"
                        data-tooltip="Shared with everyone who has this location pinned - details and photos added here are visible to the whole community.">
-                        {{ pin.location.display_name }}
+                        {{ linked_wiki_locations.0.display_name }}
                         <i class="material-symbols-outlined">open_in_new</i>
                     </a>
                 </div>
-                {% if competing_location_count %}
-                <div class="pin-hero-wiki-box-actions">
-                    <button type="button" class="btn pin-loc-change-btn"
-                            hx-get="{% url 'pin.link' pin.slug %}"
-                            hx-target="#pin-location-picker"
-                            hx-swap="innerHTML"
-                            data-tooltip="Switch this pin to a different shared location. Other users' pins at this place will not be affected."
-                            data-tooltip-pos="left"
-                            title="Switch to a different shared location">
-                        <i class="material-symbols-outlined">swap_horiz</i>
-                    </button>
+            </aside>
+            {% elif linked_wiki_locations %}
+            <aside class="pin-hero-wiki-box pin-hero-wiki-box--multi" id="pin-location-section">
+                <i class="material-symbols-outlined">public</i>
+                <div class="pin-hero-wiki-box-info">
+                    <span class="pin-hero-wiki-box-label">Community Wikis</span>
+                    <p class="pin-hero-wiki-box-multi-line">
+                        This pin is linked to {{ linked_wiki_locations|length }} wikis:
+                        {% for location in linked_wiki_locations %}<a href="{% url 'location.wiki' location_slug=location.slug %}" class="pin-hero-wiki-box-link"
+                           data-tooltip="Shared with everyone who has this location pinned - details and photos added here are visible to the whole community.">{{ location.display_name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+                    </p>
                 </div>
-                {% endif %}
-                <div id="pin-location-picker"></div>
             </aside>
             {% else %}
             <button type="button" class="pin-hero-wiki-box pin-hero-wiki-box--share"

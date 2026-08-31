@@ -35,6 +35,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Ceiling on how far up a wiki's parent chain linked_wiki_locations walks.
+#: Real lineage is two or three deep; this exists so a corrupted parent_wiki
+#: chain degrades into a truncated list rather than a spinning request.
+MAX_PARENT_WIKI_HOPS = 16
+
 
 def competing_places(latitude, longitude, resolved: Place | None) -> list[Place]:
     """Places that genuinely compete for a coordinate.
@@ -135,3 +140,58 @@ def competing_wiki_locations(pin, profile: Profile) -> list[Location]:
     # wiki-bearing Location is expected to always carry a routing slug; drop
     # any that don't rather than link to a "None" wiki URL.
     return [location for location in representative_locations(wanted) if location.slug]
+
+
+def linked_wiki_locations(pin, profile: Profile) -> list[Location]:
+    """Every wiki this pin is genuinely associated with, earned only.
+
+    Replaces the old "one wiki, with a switch button" framing: a pin can
+    legitimately relate to more than one wiki at once, and every one of them
+    is listed rather than picked between. Three sources, each already
+    access-checked, most-specific first:
+
+    - The pin's own linked wiki (:attr:`Pin.community_wiki`), if any.
+    - Genuinely competing same-coordinate properties - see
+      :func:`competing_wiki_locations`.
+    - The earned ancestor chain of the pin's own wiki, walked to the top
+      rather than one hop - see
+      :func:`~urbanlens.dashboard.services.wiki.wiki_access.visible_parent_wiki`,
+      which is what stops this from ever naming a place the viewer has not
+      earned, including one that's only reachable this turn because a real
+      estate split grandfathered them into it.
+
+    Args:
+        pin: The viewer's own pin.
+        profile: The viewer, so nothing they haven't earned is named.
+
+    Returns:
+        Locations, deduplicated, most-specific (the pin's own) first.
+    """
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_parent_wiki
+
+    if pin is None or pin.location_id is None:
+        return []
+
+    seen: set[int] = set()
+    result: list[Location] = []
+
+    def _add(location: Location | None) -> None:
+        if location is not None and location.pk not in seen:
+            seen.add(location.pk)
+            result.append(location)
+
+    wiki = pin.community_wiki
+    _add(pin.location if wiki is not None else None)
+    for candidate in competing_wiki_locations(pin, profile):
+        _add(candidate)
+
+    hops = 0
+    while wiki is not None and hops < MAX_PARENT_WIKI_HOPS:
+        parent = visible_parent_wiki(wiki, profile)
+        if parent is None or parent.location_id is None:
+            break
+        _add(parent.location)
+        wiki = parent
+        hops += 1
+
+    return result

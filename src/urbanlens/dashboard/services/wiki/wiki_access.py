@@ -33,6 +33,28 @@ Two properties worth stating outright:
 - **Placeless locations still work.** A coordinate no provider knows has no
   place and therefore no domain; its wiki stays reachable by an exact-Location
   pin, exactly as before places existed.
+
+**Grandfathering is permanent, not a recomputed fallback.** Two more cases
+snapshot a :class:`~urbanlens.dashboard.models.place.model.PlaceAccessGrant`
+at the moment they happen, rather than every request recomputing whether they
+still hold:
+
+- **Earning a split-derived family.** ``services.places.splits.process_split``
+  snapshots every prior holder of an undivided parcel across the whole family
+  it splits into. A profile who was never a prior holder but later earns the
+  same aggregate the ordinary way - by independently pinning every one of its
+  current successors - gets the identical snapshot at the moment that
+  happens (:func:`_snapshot_earned_split_families`, called from
+  :func:`_domains_given_pins`). Either way, from that moment the whole family
+  stays visible even if every qualifying pin is later moved or deleted - an
+  *organic* multi-parcel site (never split) gets no such snapshot and stays
+  governed by the strict hold-every-member-every-time rule.
+- **Engaging with a wiki.** A profile who actually viewed a wiki, or shared
+  content to it, while they held access keeps that access permanently -
+  see :func:`resolve_visible_wiki` and
+  :meth:`~urbanlens.dashboard.services.wiki.wiki_share.WikiShareService.share_from_pin`.
+  One who never engaged with it loses access the moment their last qualifying
+  pin is gone, exactly as before this existed.
 """
 
 from __future__ import annotations
@@ -117,6 +139,47 @@ def _earn_aggregates(domains: set[int]) -> set[int]:
     return earned
 
 
+def _snapshot_earned_split_families(profile: Profile, domain_ids: set[int]) -> None:
+    """Permanently grant a profile any split-derived family they've just earned.
+
+    ``_earn_aggregates`` adds a domain to the earned set, on every call,
+    whenever a profile currently holds every one of its ``MEMBER_OF``
+    children - that computation is cheap and correct, but purely transient:
+    lose one child and the aggregate drops right back out. For a
+    *split-derived* aggregate (``PlaceStatus.SUPERSEDED``) that transience is
+    wrong: a profile who has proved full knowledge of a family that used to
+    be one parcel deserves the same permanent grant a prior holder got at
+    split time (see ``services.places.splits.process_split``), not a status
+    that evaporates the moment they drop one pin.
+
+    An *organic* multi-parcel site (``PlaceStatus.CURRENT``, never split) is
+    deliberately excluded - it was never one thing, so there is nothing to be
+    grandfathered back into, and it keeps the ordinary hold-every-member rule.
+
+    Idempotent and cheap on the common case: the aggregate lookup is the only
+    query when a profile's earned domains contain no split-derived aggregate,
+    and a profile who already holds the family's grant is skipped before any
+    write is attempted.
+
+    Args:
+        profile: The profile whose earned domains were just computed.
+        domain_ids: The full earned closure from :func:`_earn_aggregates`.
+    """
+    from urbanlens.dashboard.models.place.model import Place, PlaceAccessGrant, PlaceStatus
+
+    if not domain_ids:
+        return
+    aggregate_ids = set(Place.objects.filter(pk__in=domain_ids, is_aggregate=True, status=PlaceStatus.SUPERSEDED).values_list("pk", flat=True))
+    if not aggregate_ids:
+        return
+    already_granted = set(PlaceAccessGrant.objects.filter(profile=profile, place_id__in=aggregate_ids).values_list("place_id", flat=True))
+    newly_earned = aggregate_ids - already_granted
+    if not newly_earned:
+        return
+    for aggregate in Place.objects.filter(pk__in=newly_earned):
+        PlaceAccessGrant.objects.snapshot_family([profile.pk], aggregate)
+
+
 def _domains_given_pins(pins, profile: Profile | None, *, extra_point=None) -> set[int]:
     """Every access domain the given pins (plus any grants) reach.
 
@@ -146,7 +209,15 @@ def _domains_given_pins(pins, profile: Profile | None, *, extra_point=None) -> s
     if profile is not None:
         domains |= PlaceAccessGrant.objects.granted_domain_ids(profile)
 
-    return _earn_aggregates(domains)
+    earned = _earn_aggregates(domains)
+
+    # Only for a real (non-preview) computation of a real profile's own
+    # access: a hypothetical pin-move preview must never snapshot a
+    # permanent grant off of a move that hasn't happened.
+    if profile is not None and extra_point is None:
+        _snapshot_earned_split_families(profile, earned)
+
+    return earned
 
 
 def accessible_domain_ids(profile: Profile) -> set[int]:
@@ -402,6 +473,17 @@ def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Loca
     profile, _ = Profile.objects.get_or_create(user=request.user)
     if not location_visible_to(location, profile):
         raise Http404
+
+    # Grandfathers a profile who actually viewed this wiki while they held
+    # access - see the module docstring's "Engaging with a wiki". Every
+    # wiki-scoped controller resolves through here, so this one call covers
+    # viewing and (since editing/commenting/sharing surfaces resolve the same
+    # way before they write) most content-sharing paths too; the one that
+    # doesn't - WikiShareService.share_from_pin - records it separately.
+    if location.place_id is not None:
+        from urbanlens.dashboard.models.place.model import PlaceAccessGrant
+
+        PlaceAccessGrant.objects.record_engagement(profile, location.place)
 
     # Concealment is applied *here*, at the one place every wiki-scoped surface
     # already funnels through - 56 controller call sites plus the external API's
