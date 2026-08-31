@@ -298,7 +298,10 @@ export function initOrganizePriority(): void {
         });
     }
 
-    document.getElementById("priority-list")?.addEventListener("click", (e) => {
+    // Delegated from #panel-priority, not #priority-list, for the same reason
+    // as the htmx:afterSwap binding below: #priority-list may not exist yet
+    // when a deferred Priority tab first attaches its listeners.
+    document.getElementById("panel-priority")?.addEventListener("click", (e) => {
         const target = e.target as HTMLElement;
         const badge = target.closest<HTMLElement>(".priority-order-chip");
         if (badge) {
@@ -343,12 +346,17 @@ export function initOrganizePriority(): void {
 
     window._initPrioritySortable = initPrioritySortable;
 
-    // The list re-fetches its own contents (see _priority_list.html's
-    // hx-trigger="refreshPriority from:body") after a label mutation elsewhere
-    // on the page. That's an innerHTML swap - #priority-list itself survives,
-    // but its children (and Sortable's references to them) don't, so it needs
-    // rebinding same as the tab-switch case in organize-header.ts.
-    document.getElementById("priority-list")?.addEventListener("htmx:afterSwap", () => {
+    // Bound to #panel-priority (always present), not #priority-list itself:
+    // the Priority tab's own content loads lazily via `hx-trigger="revealed"`
+    // when it isn't the tab shown on page load (see build_organize_page_context's
+    // deferral of the other label tabs, applied here too), so #priority-list
+    // may not exist yet when this listener is attached. htmx:afterSwap bubbles,
+    // so this still fires for that first load, and for the list's own
+    // subsequent self-refresh (`_priority_list.html`'s
+    // hx-trigger="refreshPriority from:body") - either way #priority-list's
+    // children (and Sortable's references to them) don't survive an innerHTML
+    // swap, so it needs rebinding same as the tab-switch case in organize-header.ts.
+    document.getElementById("panel-priority")?.addEventListener("htmx:afterSwap", () => {
         clearPrioritySelection();
         initPrioritySortable();
     });

@@ -21,6 +21,8 @@ from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_lab
 _NON_PRIORITY_KINDS = (KIND_USER, KIND_MEDIA)
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -54,23 +56,58 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
     if not isinstance(request.user, AuthUser):
         raise TypeError("Expected an authenticated user")
     profile: Profile = request.user.profile
+    active_section = active_tab if active_tab in _SECTION_TABS else "labels"
+    label_tab = active_tab if active_tab in _LABEL_TABS else "tags"
+    on_labels_section = active_section == "labels"
+
+    def _rows_if_active(tab_key: str, queryset: QuerySet[Label]) -> list[Label]:
+        """Materialize a label tab's card list only when it's the one on screen.
+
+        Every other tab is toggled purely client-side (``installOrgTabSwitching``
+        just flips ``hidden``), so rendering all of them server-side on every
+        load means paying their full card-template cost - `{% include %}` per
+        label, run for every kind - even for tabs nobody has looked at yet.
+        `.with_hierarchy()` already dropped the pin-count *query* cost (see
+        ``LabelQuerySet.with_hierarchy``); this drops the remaining Python/
+        template cost, which query-count fixes never touch and which scales the
+        same way: profiled at 500 tags, the initial page paint alone (six tabs'
+        worth of cards, all but one invisible) cost ~12s of wall time against
+        ~0.2s of actual database time. A tab rendered as empty here still gets
+        real content the moment it's shown, via the same HTMX `hx-trigger=
+        "revealed"` fetch that already backfills pin-count stats on the active
+        tab (see ``organize_label_panel.html``) - only the *first* paint is
+        skipped, not the tab.
+        """
+        if not on_labels_section or label_tab != tab_key:
+            return []
+        return list(queryset)
+
     # `.with_hierarchy()`, not `.with_pin_counts()` - the pin/location/total-pins
     # stats are the slow part of this page (a correlated subquery per label plus,
     # for any label with children, a full descendant BFS in `tag_total_pins`).
     # Render the cards without them so the page paints immediately; each tab's
     # rows re-fetch themselves with real counts via HTMX once shown (see
     # organize_label_panel.html's `hx-trigger="revealed"`).
-    tags = Label.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_hierarchy()
-    categories = Label.objects.categories().for_profile(profile).ordered().with_customizations_for(profile).with_hierarchy()
-    statuses = Label.objects.statuses().for_profile(profile).ordered().with_customizations_for(profile).with_hierarchy()
-    user_labels = Label.objects.user_labels().visible_to(profile).ordered().with_customizations_for(profile).with_hierarchy()
-    media_labels = Label.objects.media().visible_to(profile).ordered().with_hierarchy()
-    # The Display Order tab never renders pin counts at all, so it just skips
-    # the expensive annotation outright rather than deferring it via HTMX.
+    tags = _rows_if_active("tags", Label.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_hierarchy())
+    categories = _rows_if_active("categories", Label.objects.categories().for_profile(profile).ordered().with_customizations_for(profile).with_hierarchy())
+    statuses = _rows_if_active("status", Label.objects.statuses().for_profile(profile).ordered().with_customizations_for(profile).with_hierarchy())
+    user_labels = _rows_if_active("people", Label.objects.user_labels().visible_to(profile).ordered().with_customizations_for(profile).with_hierarchy())
+    media_labels = _rows_if_active("media", Label.objects.media().visible_to(profile).ordered().with_hierarchy())
+    # Always materialized, unlike the lists above: every tab's "create" dialog
+    # needs it as the parent-picker's candidate list, not only the Display
+    # Order tab that renders it directly. Already skips both the pin-count
+    # annotation and the hierarchy prefetch, so evaluating it unconditionally
+    # here was never the expensive part.
     priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).ordered()
-
-    active_section = active_tab if active_tab in _SECTION_TABS else "labels"
-    label_tab = active_tab if active_tab in _LABEL_TABS else "tags"
+    # People/media have no `priority_items` equivalent (that queryset excludes
+    # both kinds), and their own create dialog's parent-picker can't be fed
+    # from `user_labels`/`media_labels` above once those are deferred - a
+    # dialog rendered while its tab is inactive would otherwise get an empty
+    # candidate list and never see the real one, since the HTMX reveal fetch
+    # only replaces the rows, not the dialog. Plain and unprefetched, like
+    # `priority_items`, so evaluating them unconditionally costs nothing.
+    people_parent_items = Label.objects.user_labels().visible_to(profile).ordered()
+    media_parent_items = Label.objects.media().visible_to(profile).ordered()
 
     return {
         **_BASE_CTX,
@@ -80,6 +117,14 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
         "user_labels": user_labels,
         "media_labels": media_labels,
         "priority_items": priority_items,
+        "people_parent_items": people_parent_items,
+        "media_parent_items": media_parent_items,
+        "tags_deferred": not (on_labels_section and label_tab == "tags"),
+        "categories_deferred": not (on_labels_section and label_tab == "categories"),
+        "statuses_deferred": not (on_labels_section and label_tab == "status"),
+        "people_deferred": not (on_labels_section and label_tab == "people"),
+        "media_deferred": not (on_labels_section and label_tab == "media"),
+        "priority_deferred": not (on_labels_section and label_tab == "priority"),
         "active_tab": label_tab,
         "active_section": active_section,
         "can_edit_global": request.user.has_perm(_PERM),
