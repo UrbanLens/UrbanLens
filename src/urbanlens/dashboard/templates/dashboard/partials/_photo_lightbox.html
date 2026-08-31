@@ -86,6 +86,10 @@ Context:
                     onclick="window._lightboxShowOnMap()">
               <i class="material-symbols-outlined">map</i> Show this photo on the map
             </button>
+            <button type="button" id="lightbox-share-action" class="lightbox-actions-item" hidden
+                    onclick="window._lightboxOpenSharePicker()">
+              <i class="material-symbols-outlined">person_add</i> Share with a friend
+            </button>
             {% if show_floorplan_overlay_action %}
             <button type="button" id="lightbox-floorplan-overlay-btn" class="lightbox-actions-item"
                     onclick="window._lightboxUseAsFloorplanOverlay()">
@@ -104,6 +108,10 @@ Context:
           <i class="material-symbols-outlined">open_in_new</i><span>View source</span>
         </a>
       </div>
+      {# Pin/wiki filing + album membership for the viewer's own photos - loads #}
+      {# empty for anything else (see PhotoAssociationsView). Unconditional -   #}
+      {# cheap and relevant on every page this lightbox appears on.            #}
+      <div id="lightbox-associations" class="lightbox-associations-wrap"></div>
       <div id="lightbox-location" class="lightbox-location" hidden>
         <div id="lightbox-location-map" class="lightbox-location-map"></div>
         <p id="lightbox-location-hint" class="lightbox-location-hint" hidden>
@@ -145,6 +153,21 @@ Context:
   </div>
 </dialog>
 
+{# Shared small picker dialog for "File to a pin" / "Send to a wiki" /       #}
+{# "Share with a friend" - one instance reused for all three, reconfigured   #}
+{# per open (title, placeholder, search endpoint, pick handler). See         #}
+{# window._lightboxOpenPinPicker/_lightboxOpenWikiPicker/_lightboxOpenSharePicker. #}
+<dialog id="lightbox-picker-dialog" class="lightbox-picker-dialog ul-dialog" aria-label="Photo picker">
+  <div class="lightbox-picker-header">
+    <h3 id="lightbox-picker-title"></h3>
+    <button type="button" class="lightbox-picker-close" onclick="document.getElementById('lightbox-picker-dialog').close()" aria-label="Close">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+  </div>
+  <input type="search" id="lightbox-picker-search" class="lightbox-picker-search" placeholder="">
+  <div id="lightbox-picker-results" class="lightbox-picker-results"></div>
+</dialog>
+
 <script>
 (function () {
   var LIGHTBOX_ID = '{{ lightbox_id }}';
@@ -156,6 +179,13 @@ Context:
   var LABEL_IMAGE_URL_TEMPLATE = '{% url "label.image" image_uuid="00000000-0000-0000-0000-000000000000" %}';
   var SHOW_ATTACHMENT_POINTS = {% if show_attachment_points %}true{% else %}false{% endif %};
   var ATTACHMENT_POINTS_URL_TEMPLATE = SHOW_ATTACHMENT_POINTS ? '{% url "profile.photo.attachments" 0 %}' : '';
+  var ASSOCIATIONS_URL_TEMPLATE = '{% url "vault.photos.associations" 0 %}';
+  var PIN_ACTION_URL_TEMPLATE = '{% url "vault.photos.action" 0 "log-visit" %}';
+  var WIKI_ACTION_URL_TEMPLATE = '{% url "vault.photos.action" 0 "send-to-wiki" %}';
+  var SHARE_ACTION_URL_TEMPLATE = '{% url "vault.photos.action" 0 "share" %}';
+  var PIN_SEARCH_URL = '{% url "vault.photos.pin_search" %}';
+  var WIKI_SEARCH_URL = '{% url "vault.photos.wiki_search" %}';
+  var SHARE_FRIENDS_URL = '{% url "vault.photos.share_friends" %}';
   // Mutated in place as the cover photo is changed live (see _setCoverPhoto).
   var CURRENT_COVER_ID = {{ current_cover_image_id|default:"null" }};
   var COVER_HERO_KEY = '{{ cover_hero_key|default:"" }}';
@@ -228,6 +258,7 @@ Context:
     _loadLightboxCustomFields(item.imageId);
     _loadLightboxMediaLabels(item);
     _loadLightboxAttachmentPoints(item.imageId);
+    _loadLightboxAssociations(item.imageId);
 
     // Nav arrows are pointless (and misleading - they'd just reopen the same
     // photo) when there's nothing else to scroll to.
@@ -293,6 +324,20 @@ Context:
     htmx.ajax('GET', ATTACHMENT_POINTS_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#lightbox-attachment-points', swap: 'innerHTML' });
   }
 
+  // Loads the pin/wiki filing + album membership strip (and its "File to a
+  // pin"/"Send to a wiki" triggers) for the current photo. Empty for
+  // anything but the viewer's own photo - same 204 contract as the other
+  // lazy-loaded strips. Re-run after a successful pick (see
+  // _lightboxPickPin/_lightboxPickWiki) so the panel reflects the new state
+  // without a full lightbox refresh.
+  function _loadLightboxAssociations(imgId) {
+    var el = document.getElementById('lightbox-associations');
+    if (!el) return;
+    el.innerHTML = '';
+    if (!imgId || !window.htmx) return;
+    htmx.ajax('GET', ASSOCIATIONS_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#lightbox-associations', swap: 'innerHTML' });
+  }
+
   function _setLightboxMeta(item) {
     var sourceNameEl = document.getElementById('lightbox-source-name');
     var authorEl = document.getElementById('lightbox-author');
@@ -345,8 +390,14 @@ Context:
     if (mapShowAction) mapShowAction.hidden = !canShowOnMap;
     var floorplanBtn = document.getElementById('lightbox-floorplan-overlay-btn');
     var canFloorplan = !!(item.imageId && FLOORPLAN_OVERLAY_URL && floorplanBtn);
+    // Own, real photo only - the same "isMine !== false" convention
+    // _loadLightboxMediaLabels already uses, since not every page's item
+    // shape sets isMine explicitly (absent is treated as "assume mine").
+    var canShare = !!(item.imageId && item.isMine !== false);
+    var shareAction = document.getElementById('lightbox-share-action');
+    if (shareAction) shareAction.hidden = !canShare;
     if (actionsMenu) {
-      actionsMenu.hidden = !(canAlbumCover || canShowOnMap || canFloorplan);
+      actionsMenu.hidden = !(canAlbumCover || canShowOnMap || canFloorplan || canShare);
       window._lightboxCloseActions();
     }
   }
@@ -515,6 +566,177 @@ Context:
       if (window.toastr) toastr.error(err.message || 'Could not add this photo as an overlay.');
     }).finally(function () {
       if (btn) btn.disabled = false;
+    });
+  };
+
+  // Shared small dialog behind "File to a pin" / "Send to a wiki" / "Share
+  // with a friend" - reconfigured per open rather than three near-identical
+  // dialogs. `onInput` drives the single search box; omit it (Share) for a
+  // picker that filters a once-loaded list client-side instead.
+  //
+  // _pickerImageId is captured once, at open time, and is what every pick
+  // handler acts on - not _lightboxList[_lightboxIdx], which can change out
+  // from under an open picker (the lightbox's own prev/next arrows and
+  // ArrowLeft/ArrowRight keydown handler stay live while this dialog is
+  // open, since the two <dialog>s aren't coupled).
+  var _pickerDebounce = null;
+  var _pickerImageId = null;
+
+  function _lightboxOpenPicker(title, placeholder, onInput) {
+    var dlg = document.getElementById('lightbox-picker-dialog');
+    var titleEl = document.getElementById('lightbox-picker-title');
+    var searchEl = document.getElementById('lightbox-picker-search');
+    var resultsEl = document.getElementById('lightbox-picker-results');
+    if (!dlg || !searchEl || !resultsEl) return;
+    // A debounced search from whichever picker was open before this one, or
+    // a picker reopened for a different photo, must never land here.
+    clearTimeout(_pickerDebounce);
+    if (titleEl) titleEl.textContent = title;
+    searchEl.hidden = !onInput;
+    searchEl.placeholder = placeholder || '';
+    searchEl.value = '';
+    searchEl.oninput = onInput || null;
+    resultsEl.innerHTML = '';
+    window._lightboxCloseActions();
+    dlg.showModal();
+    if (onInput) searchEl.focus();
+  }
+
+  var _pickerDlg = document.getElementById('lightbox-picker-dialog');
+  if (_pickerDlg) _pickerDlg.addEventListener('close', function () {
+    clearTimeout(_pickerDebounce);
+    _pickerImageId = null;
+  });
+
+  // Reads the server's HX-Trigger showToast payload (the same contract every
+  // PhotoActionView handler already uses for a real HTMX swap) and surfaces
+  // it verbatim, since a 200 response here can still mean "refused" (e.g.
+  // "Already on that wiki.", "That pin could not be found.") - checking only
+  // r.ok would misreport every one of those as a success.
+  function _pickerShowServerToast(response, fallback) {
+    var level = 'success', message = '';
+    var header = response.headers && response.headers.get && response.headers.get('HX-Trigger');
+    if (header) {
+      try {
+        var triggers = JSON.parse(header);
+        if (triggers.showToast) { message = triggers.showToast.message || ''; level = triggers.showToast.level || 'success'; }
+      } catch (e) { /* malformed/absent header - fall through to the fallback message */ }
+    }
+    if (window.toastr) {
+      var fn = (level === 'error' || level === 'warning' || level === 'info') ? level : 'success';
+      toastr[fn](message || fallback);
+    }
+    return level;
+  }
+
+  window._lightboxOpenPinPicker = function () {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item || !item.imageId) return;
+    _pickerImageId = item.imageId;
+    _lightboxOpenPicker('File to a pin', 'Search your pins by name…', function () {
+      var q = this.value;
+      var imgId = _pickerImageId;
+      clearTimeout(_pickerDebounce);
+      _pickerDebounce = setTimeout(function () {
+        if (!window.htmx || imgId !== _pickerImageId) return;
+        htmx.ajax('GET', PIN_SEARCH_URL + '?q=' + encodeURIComponent(q) + '&image_id=' + imgId + '&lightbox=1', { target: '#lightbox-picker-results', swap: 'innerHTML' });
+      }, 300);
+    });
+  };
+
+  // Called from the picker's rendered results (_pin_search_results.html,
+  // lightbox=1 branch) - reads data-pin-slug off the clicked button.
+  window._lightboxPickPin = function (btn) {
+    var imgId = _pickerImageId;
+    var pinSlug = btn && btn.dataset.pinSlug;
+    if (!imgId || !pinSlug) return;
+    fetch(PIN_ACTION_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), {
+      method: 'POST',
+      headers: { 'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'pin_slug=' + encodeURIComponent(pinSlug),
+    }).then(function (r) {
+      if (!r.ok) { if (window.toastr) toastr.error('Could not file this photo.'); return; }
+      var level = _pickerShowServerToast(r, 'Filed to pin.');
+      _loadLightboxAssociations(imgId);
+      if (level !== 'error') { var dlg = document.getElementById('lightbox-picker-dialog'); if (dlg) dlg.close(); }
+    }).catch(function () {
+      if (window.toastr) toastr.error('Could not file this photo.');
+    });
+  };
+
+  window._lightboxOpenWikiPicker = function () {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item || !item.imageId) return;
+    _pickerImageId = item.imageId;
+    _lightboxOpenPicker('Send to a wiki', 'Search wikis you have access to…', function () {
+      var q = this.value;
+      var imgId = _pickerImageId;
+      clearTimeout(_pickerDebounce);
+      _pickerDebounce = setTimeout(function () {
+        if (!window.htmx || imgId !== _pickerImageId) return;
+        htmx.ajax('GET', WIKI_SEARCH_URL + '?q=' + encodeURIComponent(q) + '&image_id=' + imgId, { target: '#lightbox-picker-results', swap: 'innerHTML' });
+      }, 300);
+    });
+  };
+
+  window._lightboxPickWiki = function (btn) {
+    var imgId = _pickerImageId;
+    var locationSlug = btn && btn.dataset.locationSlug;
+    if (!imgId || !locationSlug) return;
+    fetch(WIKI_ACTION_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), {
+      method: 'POST',
+      headers: { 'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'location_slug=' + encodeURIComponent(locationSlug),
+    }).then(function (r) {
+      if (!r.ok) { if (window.toastr) toastr.error('Could not send this photo to that wiki.'); return; }
+      var level = _pickerShowServerToast(r, 'Sent to wiki.');
+      _loadLightboxAssociations(imgId);
+      if (level !== 'error') { var dlg = document.getElementById('lightbox-picker-dialog'); if (dlg) dlg.close(); }
+    }).catch(function () {
+      if (window.toastr) toastr.error('Could not send this photo to that wiki.');
+    });
+  };
+
+  // Friends are loaded once per open and filtered client-side (see
+  // _lightboxFilterFriends) rather than searched per-keystroke - a
+  // connections list is small, unlike the pin/wiki autocompletes.
+  window._lightboxOpenSharePicker = function () {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item || !item.imageId) return;
+    _pickerImageId = item.imageId;
+    var imgId = _pickerImageId;
+    _lightboxOpenPicker('Share with a friend', '', null);
+    var searchEl = document.getElementById('lightbox-picker-search');
+    if (searchEl) { searchEl.hidden = false; searchEl.placeholder = 'Search your friends…'; searchEl.oninput = function () { window._lightboxFilterFriends(this); }; }
+    if (window.htmx) {
+      htmx.ajax('GET', SHARE_FRIENDS_URL + '?image_id=' + imgId, { target: '#lightbox-picker-results', swap: 'innerHTML' });
+    }
+  };
+
+  window._lightboxFilterFriends = function (input) {
+    var q = (input.value || '').trim().toLowerCase();
+    document.querySelectorAll('#lightbox-picker-results .photo-share-friend-item').forEach(function (li) {
+      li.hidden = q.length > 0 && li.dataset.search.indexOf(q) === -1;
+    });
+  };
+
+  window._lightboxPickFriend = function (btn) {
+    var imgId = _pickerImageId;
+    var friendSlug = btn && btn.dataset.friendSlug;
+    if (!imgId || !friendSlug) return;
+    btn.disabled = true;
+    fetch(SHARE_ACTION_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), {
+      method: 'POST',
+      headers: { 'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'friend_slug=' + encodeURIComponent(friendSlug),
+    }).then(function (r) {
+      if (!r.ok) { if (window.toastr) toastr.error('Could not share this photo.'); return; }
+      var level = _pickerShowServerToast(r, 'Shared with ' + (btn.dataset.username || 'your friend') + '.');
+      if (level !== 'error') { var dlg = document.getElementById('lightbox-picker-dialog'); if (dlg) dlg.close(); }
+    }).catch(function () {
+      if (window.toastr) toastr.error('Could not share this photo.');
+    }).finally(function () {
+      btn.disabled = false;
     });
   };
 

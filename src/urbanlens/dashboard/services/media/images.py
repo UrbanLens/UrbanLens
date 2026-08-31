@@ -937,6 +937,75 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
     }
 
 
+def image_associations(image: Image, viewer: Profile) -> dict[str, Any]:
+    """Describe where *image* is filed and which albums it belongs to, for the lightbox.
+
+    Owner-only info (see ``PhotoAssociationsView``) - not a general visibility
+    check. A pin is always private to its owner; a wiki-owned album's
+    identity is still concealment-checked against *viewer*, the same rule the
+    Photos tab's own album listing applies, since an image being visible
+    doesn't guarantee every album it happens to sit in is safe to name back
+    to this particular viewer.
+
+    Args:
+        image: The photo to describe.
+        viewer: The requesting profile - only used for wiki-album concealment.
+
+    Returns:
+        ``{"pin": {"name", "url"} | None, "wiki": {"name", "url"} | None,
+        "albums": [{"name", "url", "owner_label", "owner_name"}, ...]}``.
+    """
+    from django.urls import reverse
+
+    from urbanlens.dashboard.services.photos.albums import _owner_conceal
+
+    pin_info = None
+    pin = image.pin
+    if pin is not None:
+        pin_info = {"name": pin.effective_name, "url": reverse("pin.details", args=[pin.slug])}
+
+    wiki_info = None
+    wiki = image.wiki
+    if wiki is not None and wiki.location_id and not _owner_conceal(wiki, viewer):
+        wiki_info = {"name": wiki.name or "Untitled wiki", "url": reverse("location.wiki", args=[wiki.location.slug])}
+
+    albums: list[dict[str, str]] = []
+    memberships = image.album_memberships.select_related("album__parent_pin", "album__parent_wiki__location", "album__parent_profile")
+    for item in memberships:
+        album = item.album
+        if album.parent_pin is not None:
+            albums.append(
+                {
+                    "name": album.name,
+                    "owner_label": "Pin album",
+                    "owner_name": album.parent_pin.effective_name,
+                    "url": reverse("pin.albums.detail", args=[album.parent_pin.slug, album.slug]),
+                },
+            )
+        elif album.parent_wiki is not None:
+            if not album.parent_wiki.location_id or _owner_conceal(album.parent_wiki, viewer):
+                continue
+            albums.append(
+                {
+                    "name": album.name,
+                    "owner_label": "Wiki album",
+                    "owner_name": album.parent_wiki.name or "Untitled wiki",
+                    "url": reverse("location.wiki.albums.detail", args=[album.parent_wiki.location.slug, album.slug]),
+                },
+            )
+        elif album.parent_profile is not None:
+            albums.append(
+                {
+                    "name": album.name,
+                    "owner_label": "Vault album",
+                    "owner_name": "",
+                    "url": reverse("vault.photos.albums.detail", args=[album.slug]),
+                },
+            )
+
+    return {"pin": pin_info, "wiki": wiki_info, "albums": albums}
+
+
 def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bool:
     """Remove an image's stored file, unless another row still points at it.
 

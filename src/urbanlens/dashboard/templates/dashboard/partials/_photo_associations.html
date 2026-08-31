@@ -1,0 +1,54 @@
+{% comment %}
+Lightbox side-panel strip: where one of the owner's own photos is filed
+(pin/wiki) and which albums it belongs to - see PhotoAssociationsView, same
+"load into an empty div, 204 when there's nothing" pattern as the
+custom-fields/attachment-points strips. Also hosts the inline "File to a
+pin"/"Send to a wiki" triggers, since they need to react to this same data
+(an already-filed pin shows a link instead of a button) - see
+window._lightboxOpenPinPicker/_lightboxOpenWikiPicker in _photo_lightbox.html.
+
+Context (see services.media.images.image_associations):
+  pin    - {"name", "url"} or None
+  wiki   - {"name", "url"} or None
+  albums - [{"name", "url", "owner_label", "owner_name"}, ...]
+{% endcomment %}
+<div class="lightbox-associations">
+    <div class="lightbox-association-row">
+        {% if pin %}
+        <a href="{{ pin.url }}" class="lightbox-association-line">
+            <i class="material-symbols-outlined">location_on</i>
+            <span>Pin: {{ pin.name }}</span>
+        </a>
+        {% else %}
+        <button type="button" class="lightbox-association-action" onclick="window._lightboxOpenPinPicker()">
+            <i class="material-symbols-outlined">push_pin</i> File to a pin
+        </button>
+        {% endif %}
+    </div>
+    <div class="lightbox-association-row">
+        {% if wiki %}
+        <a href="{{ wiki.url }}" class="lightbox-association-line">
+            <i class="material-symbols-outlined">public</i>
+            <span>Wiki: {{ wiki.name }}</span>
+        </a>
+        {% endif %}
+        <button type="button" class="lightbox-association-action" onclick="window._lightboxOpenWikiPicker()">
+            <i class="material-symbols-outlined">public</i> {% if wiki %}Change wiki{% else %}Send to a wiki{% endif %}
+        </button>
+    </div>
+    {% if albums %}
+    <div class="lightbox-associations-title">
+        <i class="material-symbols-outlined">photo_album</i> In albums
+    </div>
+    <ul class="lightbox-associations-list">
+        {% for album in albums %}
+        <li>
+            <a href="{{ album.url }}">
+                <span class="lightbox-association-album-name">{{ album.name }}</span>
+                <small class="lightbox-association-album-owner">{{ album.owner_label }}{% if album.owner_name %} · {{ album.owner_name }}{% endif %}</small>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>

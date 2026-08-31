@@ -2023,7 +2023,10 @@ urlpatterns = [
                 path("photos/conflicts/<int:conflict_id>/resolve/", vault_photos.PhotoMetadataConflictResolveView.as_view(), name="vault.photos.conflicts.resolve"),
                 path("photos/conflicts/<int:conflict_id>/dismiss/", vault_photos.PhotoMetadataConflictDismissView.as_view(), name="vault.photos.conflicts.dismiss"),
                 path("photos/pin-search/", vault_photos.PhotoPinSearchView.as_view(), name="vault.photos.pin_search"),
+                path("photos/wiki-search/", vault_photos.PhotoWikiSearchView.as_view(), name="vault.photos.wiki_search"),
+                path("photos/share-friends/", vault_photos.PhotoShareFriendsView.as_view(), name="vault.photos.share_friends"),
                 path("photos/<int:image_id>/confirm-pin/", vault_photos.PhotoPinConfirmView.as_view(), name="vault.photos.pin_confirm"),
+                path("photos/<int:image_id>/associations/", vault_photos.PhotoAssociationsView.as_view(), name="vault.photos.associations"),
                 path("photos/<int:image_id>/<str:action>/", vault_photos.PhotoActionView.as_view(), name="vault.photos.action"),
                 # Vault (Profile-owned) albums: same view classes as pin/wiki
                 # albums (controllers.albums), with no owner-slug segment -

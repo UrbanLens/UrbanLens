@@ -419,6 +419,68 @@ class PhotoActionView(LoginRequiredMixin, View):
         image.delete()
         return _toast("Photo deleted.", "info", refresh_queue=True)
 
+    def send_to_wiki(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
+        """File this photo onto a wiki the user has access to, from the lightbox's wiki picker.
+
+        Unlike ``log-visit`` (pin filing, one-shot for an unfiled photo), a
+        photo may be re-sent to a different wiki at any time - mirrors
+        ``PinGalleryBulkView``'s ``send_to_wiki`` bulk action, minus the
+        pin-derived-location lookup (a Vault photo may have no pin at all).
+        """
+        from urbanlens.dashboard.models.wiki import Wiki
+        from urbanlens.dashboard.services.photos.attachment import attach_to_wiki
+        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_location_ids_cached
+
+        location_slug = (request.POST.get("location_slug") or "").strip()
+        wiki = Wiki.objects.filter(location__slug=location_slug, location_id__in=visible_wiki_location_ids_cached(profile)).select_related("location").first()
+        if wiki is None:
+            return _toast("That wiki could not be found.", "error")
+        if image.wiki_id == wiki.pk:
+            return _toast("Already on that wiki.", "info")
+        attach_to_wiki(image, wiki, added_by=profile)
+        Image.objects.filter(pk=image.pk).update(wiki=wiki)
+        return _toast(f"Sent to {wiki.name or 'the wiki'}.")
+
+    def share(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
+        """Share this photo with a friend via direct message, from the lightbox's friend picker.
+
+        A DM attachment is one-shot (``create_direct_message`` only accepts an
+        image not already attached to a message) - a photo already shared, or
+        being shared a second time, gets a lightweight deduped copy of the
+        same stored file attached instead, so the original attachment (and
+        whichever conversation it's already in) is left untouched.
+
+        The already-attached check and the send are done under a row lock on
+        *image* (``select_for_update``) so two near-simultaneous shares of the
+        same never-yet-attached photo can't both see it as unattached and
+        both attach the original to two different messages - the second
+        request blocks until the first commits, then correctly sees
+        ``direct_message_id`` set and makes its own deduped copy instead.
+        """
+        from django.db import transaction
+
+        from urbanlens.dashboard.services.messaging.direct_messages import (
+            DirectMessagePermissionError,
+            DirectMessageValidationError,
+            create_direct_message,
+        )
+        from urbanlens.dashboard.services.photos.uploads import attach_deduped_copy
+
+        friend_slug = (request.POST.get("friend_slug") or "").strip()
+        friend = Profile.objects.filter(slug=friend_slug).first()
+        if friend is None:
+            return _toast("That friend could not be found.", "error")
+        with transaction.atomic():
+            locked_image = Image.objects.select_for_update().get(pk=image.pk)
+            to_send = locked_image
+            if locked_image.direct_message_id is not None:
+                to_send = attach_deduped_copy(locked_image, profile, profile, locked_image.caption or "")
+            try:
+                create_direct_message(profile, friend, "", image_ids=[to_send.pk])
+            except (DirectMessageValidationError, DirectMessagePermissionError) as exc:
+                return _toast(exc.safe_message, "error")
+        return _toast(f"Shared with {friend.username}.")
+
     _ACTIONS = {
         "accept": accept,
         "reject": reject,
@@ -426,6 +488,8 @@ class PhotoActionView(LoginRequiredMixin, View):
         "log-visit": log_visit,
         "dismiss": dismiss,
         "delete": delete_photo,
+        "send-to-wiki": send_to_wiki,
+        "share": share,
     }
 
     def post(self, request: HttpRequest, image_id: int, action: str) -> HttpResponse:
@@ -477,7 +541,78 @@ class PhotoPinSearchView(LoginRequiredMixin, View):
         return render(
             request,
             "dashboard/partials/vault/_pin_search_results.html",
+            {"results": results, "image_id": image_id, "query": query, "lightbox": bool(request.GET.get("lightbox"))},
+        )
+
+
+class PhotoAssociationsView(LoginRequiredMixin, View):
+    """GET: where one of the requesting user's own photos is filed and which albums hold it.
+
+    Owner-only - 204 for a photo that isn't the viewer's own (nothing to
+    show, and no "file this" actions make sense on someone else's photo).
+    Otherwise always renders the partial, even for a completely unfiled
+    photo: it also hosts the "File to a pin"/"Send to a wiki" trigger
+    buttons (see partials/_photo_associations.html), which must render
+    regardless of whether there's anything to display yet.
+
+    Shown in the shared lightbox's side panel (see partials/_photo_lightbox.html)
+    on every page that includes it, so the photo's owner can see - and act on -
+    its pin/wiki filing and album memberships without leaving whichever
+    gallery they're browsing.
+
+    GET /vault/photos/<image_id>/associations/
+    """
+
+    def get(self, request: HttpRequest, image_id: int) -> HttpResponse:
+        from urbanlens.dashboard.services.media.images import image_associations
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        image = Image.objects.filter(pk=image_id, profile=profile).select_related("pin__location", "wiki__location").first()
+        if image is None:
+            return HttpResponse(status=204)
+        return render(request, "dashboard/partials/_photo_associations.html", image_associations(image, profile))
+
+
+class PhotoWikiSearchView(LoginRequiredMixin, View):
+    """Autocomplete over the wikis the user has access to, for the lightbox's "Send to a wiki" picker.
+
+    GET /vault/photos/wiki-search/?q=&image_id=
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        from urbanlens.dashboard.services.global_search.parser import parse_query
+        from urbanlens.dashboard.services.global_search.providers import WikiSearchProvider
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        query = (request.GET.get("q") or "").strip()
+        image_id = request.GET.get("image_id")
+        results = WikiSearchProvider().search(profile, parse_query(query), limit=8) if len(query) >= 2 else []
+        return render(
+            request,
+            "dashboard/partials/_photo_wiki_search_results.html",
             {"results": results, "image_id": image_id, "query": query},
+        )
+
+
+class PhotoShareFriendsView(LoginRequiredMixin, View):
+    """The friend-picker list for the lightbox's "Share with a friend" dialog.
+
+    GET /vault/photos/share-friends/?image_id=
+
+    Trimmed down from pin_share_dialog.html's connections-picker markup - a
+    single-photo DM share needs no place/review-step context, just "which
+    friend."
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        from urbanlens.dashboard.services.social.connections import get_connections
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        image_id = request.GET.get("image_id")
+        return render(
+            request,
+            "dashboard/partials/_photo_share_friends.html",
+            {"friends": get_connections(profile), "image_id": image_id},
         )
 
 

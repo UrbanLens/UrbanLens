@@ -861,6 +861,12 @@ function panToggleEdit(noteId) {
 // -- Photo strip lightbox --------------------------------------------------
 // Reads the strip's own data-* tiles rather than a server-built JSON blob -
 // same convention as pin_media_items.html's mediaOpenLightbox.
+// This strip can show another profile's photos too (strip_photos_visible_to,
+// when profile.user != request.user) - isMine must reflect that, not just
+// "does a photo exist," or lightbox actions meant for your own photos (e.g.
+// "Share with a friend") would be offered on someone else's.
+var PROFILE_STRIP_IS_OWN_PROFILE = {% if profile.user == request.user %}true{% else %}false{% endif %};
+
 window.profilePhotoStripOpen = function (tileBtn) {
     var tiles = Array.prototype.slice.call(document.querySelectorAll('.profile-photo-strip-item'));
     var list = tiles.map(function (el) {
@@ -869,6 +875,7 @@ window.profilePhotoStripOpen = function (tileBtn) {
             caption: el.dataset.photoCaption || '',
             takenAt: el.dataset.photoTakenAt || '',
             imageId: el.dataset.photoId ? parseInt(el.dataset.photoId, 10) : null,
+            isMine: PROFILE_STRIP_IS_OWN_PROFILE,
         };
     });
     var idx = tiles.indexOf(tileBtn);

@@ -598,6 +598,181 @@
   }
 }
 
+// Pin/wiki filing + album membership - every lightbox use (see
+// #lightbox-associations in _photo_lightbox.html). Empty (204) for anything
+// but the viewer's own photo.
+#lightbox-associations:empty { display: none; }
+
+.lightbox-associations-wrap {
+  padding-top: .5rem;
+  border-top: 1px solid rgba(255, 255, 255, .1);
+}
+
+.lightbox-association-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+  margin-bottom: .3rem;
+}
+
+.lightbox-association-line {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  color: rgba(255, 255, 255, .85);
+  font-size: .82rem;
+  text-decoration: none;
+
+  &:hover { text-decoration: underline; }
+
+  .material-symbols-outlined { font-size: 1rem; color: rgba(255, 255, 255, .55); }
+}
+
+.lightbox-association-action {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: #60a5fa;
+  font-size: .8rem;
+  cursor: pointer;
+
+  &:hover { text-decoration: underline; }
+
+  .material-symbols-outlined { font-size: 1rem; }
+}
+
+.lightbox-associations-title {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  margin: .35rem 0 .35rem;
+  color: rgba(255, 255, 255, .55);
+  font-size: .78rem;
+  font-weight: 600;
+
+  .material-symbols-outlined { font-size: 1rem; }
+}
+
+.lightbox-associations-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+
+  a {
+    display: flex;
+    flex-direction: column;
+    color: rgba(255, 255, 255, .85);
+    font-size: .82rem;
+    text-decoration: none;
+
+    &:hover .lightbox-association-album-name { text-decoration: underline; }
+  }
+}
+
+.lightbox-association-album-owner {
+  color: rgba(255, 255, 255, .5);
+  font-size: .72rem;
+}
+
+// Shared "File to a pin" / "Send to a wiki" / "Share with a friend" dialog -
+// one instance, reconfigured per open (see window._lightboxOpenPicker).
+.lightbox-picker-dialog {
+  width: min(360px, 90vw);
+  padding: 1rem;
+  border-radius: .75rem;
+}
+
+.lightbox-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .6rem;
+
+  h3 { margin: 0; font-size: 1rem; }
+}
+
+.lightbox-picker-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--ul-grey-6);
+}
+
+.lightbox-picker-search {
+  width: 100%;
+  padding: .45rem .6rem;
+  border: 1px solid var(--ul-surface-raised-border);
+  border-radius: .5rem;
+  font-size: .85rem;
+  background: var(--ul-surface-raised);
+  color: var(--ul-grey-8);
+  margin-bottom: .5rem;
+
+  &[hidden] { display: none; }
+}
+
+.lightbox-picker-results {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.photo-wiki-result,
+.photo-share-friend-btn {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  width: 100%;
+  text-align: left;
+  padding: .45rem .55rem;
+  border: 1px solid var(--ul-surface-raised-border);
+  border-radius: .5rem;
+  background: transparent;
+  cursor: pointer;
+  font-size: .85rem;
+  color: var(--ul-grey-8);
+
+  &:hover {
+    background: rgba(156, 39, 176, .06);
+    border-color: $color-deep-purple-500;
+  }
+
+  .material-symbols-outlined { font-size: 1.1rem; color: $color-deep-purple-500; }
+}
+
+.photo-wiki-result-sub {
+  color: var(--ul-grey-6);
+  font-size: .75rem;
+  margin-left: auto;
+}
+
+.photo-wiki-empty,
+.photo-share-friend-empty {
+  font-size: .8rem;
+  color: var(--ul-grey-6);
+  margin: .3rem 0 0;
+}
+
+.photo-share-friend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+}
+
+.photo-share-friend-name { margin-left: .1rem; }
+
 .lightbox-location {
   display: flex;
   flex-direction: column;

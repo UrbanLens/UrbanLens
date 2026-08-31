@@ -4117,6 +4117,19 @@ hygiene gap rather than a live bug - but worth a real fix (narrow `body`'s type 
 `request.POST` through a helper that always returns `str`) rather than a `cast`, per the project's
 mypy policy.
 
+## OPEN 2026-08-31: `apply_image_map_update`'s `stash_photo_fields` call mistypes a nullable Profile as required
+
+Found by mypy while adding `image_associations` to `services/media/images.py` (Batch 4 of the
+Vault feature - lightbox pin/wiki/album association display) - pre-existing, unrelated to that
+addition (confirmed via `git stash`). `services/media/images.py:191`, inside
+`apply_image_map_update`: `stash_photo_fields(image.profile, image, before=before, after=...)`
+passes `image.profile`, typed `Profile | None`, into a parameter mypy has typed as requiring a
+non-optional `Profile`. Same class of issue as the already-logged
+`PhotoMetadataConflictResolveView` finding - a type hygiene gap, not a currently-reachable crash
+(worth checking whether `image.profile` can actually be null in the codepaths that call this, and
+either narrowing the type at the call site or the parameter, rather than a `cast`, per the
+project's mypy policy).
+
 ## OPEN 2026-08-31: `vault-photos.spec.ts`'s "changing sort re-fetches the grid in the new order" test flakes on a persistent dev DB
 
 Found running the Vault Photos/albums Playwright specs against the `ae97b86` ephemeral dev

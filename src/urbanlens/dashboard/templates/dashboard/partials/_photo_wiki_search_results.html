@@ -1,0 +1,22 @@
+{% comment %}
+Wiki-search results for the lightbox's "Send to a wiki" picker (see
+PhotoWikiSearchView and window._lightboxPickWiki in _photo_lightbox.html).
+
+Context:
+  results  - list[SearchResult] (services.global_search.providers.WikiSearchProvider)
+  image_id - PK of the photo being filed (unused here - the picker already
+             knows which photo it's acting on; kept for parity with the pin
+             search results partial)
+  query    - the raw search string
+{% endcomment %}
+{% for r in results %}
+<button type="button" class="photo-wiki-result" data-location-slug="{{ r.object_slug }}" onclick="window._lightboxPickWiki(this)">
+    <i class="material-symbols-outlined">public</i>
+    <span class="photo-wiki-result-title">{{ r.title }}</span>
+    {% if r.subtitle %}<small class="photo-wiki-result-sub">{{ r.subtitle }}</small>{% endif %}
+</button>
+{% empty %}
+{% if query|length >= 2 %}
+<p class="photo-wiki-empty">No matching wikis. Try a different name.</p>
+{% endif %}
+{% endfor %}
