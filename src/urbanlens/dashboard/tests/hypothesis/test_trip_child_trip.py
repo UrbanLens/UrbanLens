@@ -169,3 +169,30 @@ class ChildTripGhostMarkerVisibilityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         labels = [p["label"] for p in response.json()["points"]]
         self.assertFalse(any("Privacy-Restricted Stop" in label for label in labels))
+
+    def test_child_trip_activities_are_excluded_when_viewer_is_not_a_child_trip_member(self) -> None:
+        """A parent-trip viewer with no membership in the linked child trip must
+        not see any of its ghost markers, regardless of the adder's own
+        trip_pin_location_visibility setting.
+
+        Regression: build_trip_map_points only ever checked
+        viewer_hidden_activity_ids (the *adder's* privacy setting) for child
+        activities - never whether this viewer belongs to the child trip at
+        all. So linking a private child trip into a broadly-joined parent trip
+        exposed every one of its real coordinates/titles to every parent-trip
+        member, none of whom the child trip's own members ever agreed to share
+        with.
+        """
+        outsider_user = baker.make("auth.User")
+        outsider = outsider_user.profile
+        TripMembership.objects.create(trip=self.trip, profile=outsider)
+        # Deliberately NOT a member of self.child_trip.
+        self._child_activity(location_hidden=False, name="Private Child Stop")
+
+        self.client.force_login(outsider_user)
+        response = self.client.get(reverse("trips.map_data", args=[self.trip.slug]))
+
+        # Still 200 - the outsider IS a legitimate viewer of the *parent* trip.
+        self.assertEqual(response.status_code, 200)
+        labels = [p["label"] for p in response.json()["points"]]
+        self.assertFalse(any("Private Child Stop" in label for label in labels))

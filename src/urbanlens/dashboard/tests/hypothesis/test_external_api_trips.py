@@ -511,6 +511,34 @@ class TripActivityTests(_TripApiTestCase):
         self.assertNotIn("My Secret Cabin", row["effective_title"])
         self.assertEqual(row["effective_title"], "Secret Location")
 
+    def test_hidden_location_masks_child_trip_uuid(self) -> None:
+        """child_trip_uuid must go through the same masking as latitude/longitude.
+
+        Regression: TripActivitySerializer.get_child_trip_uuid read
+        row["activity"].child_trip directly - the raw relation, with no
+        location_hidden/viewer-privacy awareness - the same class of leak
+        effective_title (above) exists to avoid. A location-hidden activity
+        linking a child trip leaked that trip's real uuid through this field
+        even though latitude/longitude were correctly nulled.
+        """
+        child = Trip.objects.create(creator=self.profile, name="Secret Getaway")
+        activity = TripActivity.objects.create(trip=self.trip, location=self.location, added_by=self.profile, title="Secret stop", location_hidden=True, child_trip=child)
+
+        response = self._get("external_api:trips.activities", self.trip.slug)
+
+        row = next(r for r in response.json()["results"] if r["id"] == activity.id)
+        self.assertIsNone(row["child_trip_uuid"])
+
+    def test_visible_activity_still_shows_its_child_trip_uuid(self) -> None:
+        """The masking fix must not hide child_trip_uuid for visible activities."""
+        child = Trip.objects.create(creator=self.profile, name="Side Trip")
+        activity = TripActivity.objects.create(trip=self.trip, location=self.location, added_by=self.profile, title="Open stop", child_trip=child)
+
+        response = self._get("external_api:trips.activities", self.trip.slug)
+
+        row = next(r for r in response.json()["results"] if r["id"] == activity.id)
+        self.assertEqual(row["child_trip_uuid"], str(child.uuid))
+
     def test_visible_activity_still_shows_its_pin_derived_title(self) -> None:
         """The masking fix must not hide the title for activities that ARE visible."""
         pin = Pin.objects.create(profile=self.profile, location=self.location, name="Visible Spot")

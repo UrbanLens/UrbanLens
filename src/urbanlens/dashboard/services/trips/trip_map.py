@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.trips.model import TripActivity
+from urbanlens.dashboard.services.trips.trip_access import has_joined
 from urbanlens.dashboard.services.trips.trip_activities import activity_queryset
 from urbanlens.dashboard.services.trips.trip_legs import activity_coords
 from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
@@ -82,9 +83,16 @@ def build_trip_map_points(trip: Trip, viewer: Profile, *, include_past: bool = F
             )
             index += 1
 
-        # Include child trip's activities as ghost markers
+        # Include child trip's activities as ghost markers - only for a viewer
+        # who actually belongs to the child trip. Without this, linking a
+        # private child trip into a broadly-joined parent trip exposed every
+        # one of its real coordinates/titles to every parent-trip member,
+        # none of whom the child trip's own members ever agreed to share
+        # with - the per-adder privacy check below is not a substitute for
+        # this, since it only withholds an activity from viewers *its own
+        # adder* excluded, not from viewers outside the child trip entirely.
         child_trip = act.child_trip
-        if child_trip is not None and child_trip.id not in seen_child_acts:
+        if child_trip is not None and child_trip.id not in seen_child_acts and has_joined(viewer, child_trip):
             seen_child_acts.add(child_trip.id)
             child_acts = list(activity_queryset(child_trip))
             # Same viewer-aware gate the parent trip's own activities get above (line
