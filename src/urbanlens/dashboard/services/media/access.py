@@ -186,6 +186,11 @@ def authorize_image(profile: Profile, rel_path: str) -> bool:
         return False
     if image.profile_id == profile.pk:
         return True
+    if image.pending_scan:
+        # Not yet cleared by the malware scan - the stored file is still the
+        # uploader's raw bytes (EXIF/GPS intact), so nobody but the uploader may
+        # read it. Mirrors authorize_comment_image's identical gate.
+        return False
     if image.direct_message_id:
         dm = image.direct_message
         if dm is not None and profile.pk in (dm.sender_id, dm.recipient_id):

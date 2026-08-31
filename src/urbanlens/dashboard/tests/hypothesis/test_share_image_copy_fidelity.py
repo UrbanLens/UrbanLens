@@ -243,3 +243,34 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         new_pin = self._accept()
 
         self.assertEqual(list(new_pin.labels.all()), [], "the sender's labels were attached to the recipient's pin")
+
+
+class PendingScanImagesAreNotSharedTests(TestCase):
+    """A still-pending photo must not be copied into an accepted share.
+
+    ``create_pin_from_share`` points the copy at the *same stored file* the
+    sender's row uses and never runs ``process_image_upload`` on it - so a
+    copy of a still-``pending_scan`` original would be immediately visible in
+    the recipient's own pin, pointing at the sender's raw, unstripped-GPS
+    bytes, with nothing ever going to clear it (unlike a same-profile dedup
+    sibling, there is no ``_sync_deduped_siblings`` for a cross-profile share
+    copy). ``share.images.exclude(pending_scan=True)`` is what prevents that.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = User.objects.create_user(username="pending-share-sender").profile
+        self.recipient = User.objects.create_user(username="pending-share-recipient").profile
+        self.location = Location.objects.create(latitude=42.0, longitude=-71.0)
+        self.pin = Pin.objects.create(profile=self.sender, location=self.location, name="Shared place")
+
+    def test_a_pending_photo_is_not_copied_into_the_accepted_share(self) -> None:
+        pending = Image.objects.create(pin=self.pin, location=self.location, profile=self.sender, image="photos/raw.jpg", pending_scan=True)
+        ready = Image.objects.create(pin=self.pin, location=self.location, profile=self.sender, image="photos/processed.jpg", pending_scan=False)
+        share = PinShare.objects.create(pin=self.pin, location=self.location, from_profile=self.sender, to_profile=self.recipient, status=PinShareStatus.PENDING)
+        share.images.set([pending, ready])
+
+        new_pin = create_pin_from_share(share)
+        copied_sources = set(Image.objects.filter(pin=new_pin, profile=self.recipient).values_list("image", flat=True))
+
+        self.assertEqual(copied_sources, {"photos/processed.jpg"}, "a pending photo's raw bytes reached the recipient's pin")

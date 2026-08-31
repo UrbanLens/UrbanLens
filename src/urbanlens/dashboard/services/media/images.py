@@ -5,10 +5,10 @@ Everything here that opens a file with Pillow is marked
 in the sandbox worker. That includes the ``extract_*`` helpers, which look
 cheap but are not safe: ``Image.open`` runs the format's own header parser, and
 a header parser is as capable of a memory-corruption bug as the pixel decoder
-behind it. The byte-level metadata stripper in
-:mod:`~urbanlens.dashboard.services.media.metadata_strip` is the deliberate
-exception - it walks container segments in pure Python and never decodes, which
-is exactly why it is the half that may run inside a request.
+behind it. :func:`prepare_photo_upload` is the request-facing entry point -
+it no longer decodes anything itself; see its docstring for what replaced the
+byte-level in-request strip this module used to run
+(:mod:`~urbanlens.dashboard.services.media.metadata_strip`).
 """
 
 from __future__ import annotations
@@ -1270,114 +1270,80 @@ def detach_image_from_wiki(image: Any) -> None:
 
 @dataclass(frozen=True)
 class PreparedUpload:
-    """A photo upload with its metadata read out and removed from the bytes.
+    """A photo upload staged for the sandboxed task that reads and strips it.
 
-    Returned by :func:`prepare_photo_upload`. See that function for why the two
-    halves have to happen together.
+    Returned by :func:`prepare_photo_upload`.
     """
 
-    #: What to store. The uploaded bytes minus their metadata segments, or the
-    #: original file unchanged when the format is not one the stripper rewrites.
+    #: What to store: the uploaded bytes, unexamined. The request never decodes
+    #: an upload - see :func:`prepare_photo_upload`.
     file: Any
 
-    #: Size of :attr:`file` in bytes - what the row's ``file_size`` should be,
-    #: which is no longer the uploaded file's own size once a strip happened.
+    #: Size of :attr:`file` in bytes - what the row's ``file_size`` should be.
     size: int
 
-    #: ``Image`` field values read from the *original* bytes, ready to splat
-    #: into ``Image.objects.create``. Never includes ``caption``: a caller's own
-    #: caption always wins, so the embedded one is offered separately.
+    #: ``Image`` field values ready to splat into ``Image.objects.create``.
+    #: Always just ``{"pending_scan": True}`` - kept as a dict (rather than the
+    #: caller setting the field itself) so every one of this function's callers
+    #: picks it up automatically via ``**prepared.metadata``, the same way they
+    #: already receive EXIF-derived fields when this function used to read them.
+    #: Never includes ``caption``: a caller's own caption always wins, so the
+    #: embedded one (once read, in the task) is offered separately.
     metadata: dict[str, Any]
 
-    #: A caption found in the file's own metadata, for a caller that has none.
+    #: Always None. Kept on the dataclass so callers built around "an optional
+    #: caption from the file's own metadata" need no change - a caption embedded
+    #: in EXIF is now read in the task, too late to offer here.
     metadata_caption: str | None
-
-    #: Whether the bytes were actually rewritten. False means the format was
-    #: one the stripper leaves alone (HEIC, TIFF, GIF), so the stored file still
-    #: carries its metadata until the Celery re-encode replaces it.
-    stripped: bool
 
 
 def prepare_photo_upload(file_obj: UploadedFile, profile: Profile | None) -> PreparedUpload:
-    """Read a photo upload's metadata, then remove it from the bytes to store.
+    """Stage a photo upload for asynchronous metadata reading and stripping.
 
-    Reading and removing are one operation because neither is correct alone.
-    Storing the file first and scrubbing it on Celery leaves an unstripped
-    original in the media tree for as long as the queue is behind - it is
-    served from there, GPS block intact. Stripping first without reading loses
-    the values the app legitimately keeps: ``exif_data``, ``taken_at``,
-    coordinates, and the attribution fields all come off the same block, and
-    the row is where the app's own visibility rules can govern them.
+    Storing the raw upload and marking it ``pending_scan`` (rather than reading
+    EXIF and stripping it right here) is what keeps every Pillow decode -
+    ``Image.open`` runs the format's own header parser, which is exactly the
+    class of code a crafted file can exploit (CVE-2023-4863 is the reference
+    case) - out of the request process. See
+    :mod:`urbanlens.dashboard.services.sandbox.guard`.
 
-    The strip walks the container's segments rather than decoding the image
-    (see :mod:`urbanlens.dashboard.services.media.metadata_strip`), so it costs
-    a copy rather than a decode and is safe to run inside a request - a decode
-    under the gevent worker would stall every other request on that worker,
-    which is why the downscale stays on Celery.
+    This used to read metadata and strip it from the bytes in one step, with a
+    long-since-superseded reason for both halves happening together: stripping
+    first without reading loses the values the app legitimately keeps
+    (``exif_data``, ``taken_at``, coordinates, attribution), and the strip
+    itself - a byte-walk, no decode, see
+    :mod:`urbanlens.dashboard.services.media.metadata_strip` - existed only to
+    keep an unstripped original from ever being *servable* while the Celery
+    queue was behind. ``pending_scan`` now closes that same window through
+    access control (``services.media.access.authorize_image``,
+    ``ImageQuerySet.visible_to``): nobody but the uploader can read or list a
+    pending row, so the file can sit there raw, exactly as long as it takes
+    ``tasks.process_image_upload`` to read it - itself now always decoding on
+    the sandbox worker, never in this function.
 
-    Coordinates are read only when the profile's visit tracking allows it; a
-    profile that does not want its movements recorded does not get them written
-    to the row either. They are removed from the file regardless - that is not
-    a setting (see :func:`downscale_stored_image`).
+    ``profile`` is accepted and otherwise unused - kept so every call site
+    (there are several) needs no change; the visit-tracking opt-out it used to
+    gate GPS extraction on is now applied in the task, where the extraction
+    actually happens (``tasks._process_photo_upload``'s ``strip_location``).
 
     Args:
         file_obj: The uploaded file, already validated by
             :func:`image_upload_error`. Its read position is restored.
         profile: The uploading profile, or None for a system-created row.
+            Unused; see above.
 
     Returns:
-        A :class:`PreparedUpload`. Callers store ``file``, pass ``size`` as
-        ``file_size``, and splat ``metadata`` into the row.
+        A :class:`PreparedUpload` whose ``file``/``size`` are the untouched
+        upload and whose ``metadata`` is ``{"pending_scan": True}``.
     """
-    from urbanlens.dashboard.services.media.metadata_strip import strip_metadata
-    from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
-
+    # UploadedFile.size is typed Optional - some underlying file-like objects
+    # never report one - so a caller that actually needs a real int (the
+    # PreparedUpload.size contract) can't trust it blindly; measure directly
+    # when it's missing.
     file_obj.seek(0)
-    data = file_obj.read()
+    size = file_obj.size
+    if size is None:
+        file_obj.seek(0, io.SEEK_END)
+        size = file_obj.tell()
     file_obj.seek(0)
-
-    include_location = profile is None or visit_logging_allowed(profile)
-    source = io.BytesIO(data)
-
-    metadata: dict[str, Any] = {}
-    coords = extract_gps_coords(source) if include_location else None
-    if coords is not None:
-        metadata["latitude"] = Decimal(str(coords[0]))
-        metadata["longitude"] = Decimal(str(coords[1]))
-    # Same GPS IFD, same opt-out - a compass bearing is only meaningful next to
-    # a position.
-    direction = extract_gps_direction(source) if include_location else None
-    if direction is not None:
-        metadata["direction"] = Decimal(str(round(direction, 2)))
-    if taken_at := extract_taken_at(source):
-        metadata["taken_at"] = taken_at
-    if exif_data := extract_exif_data(source):
-        if not include_location:
-            # Dropping GPSInfo makes "what did the EXIF say" permanently
-            # unanswerable for this photo. That is the point of the opt-out, not
-            # an oversight - coordinate-provenance work must read a
-            # location-stripped photo as having no EXIF position rather than an
-            # unknown one.
-            exif_data.pop("GPSInfo", None)
-        metadata["exif_data"] = exif_data
-    if author := extract_author(source):
-        metadata["author"] = author
-    if copyright_notice := extract_copyright_notice(source):
-        metadata["copyright"] = copyright_notice
-    if source_url := extract_source_url(source):
-        metadata["source_url"] = source_url
-    metadata_caption = extract_caption_from_metadata(source)
-
-    stripped_bytes = strip_metadata(data)
-    if stripped_bytes is None:
-        return PreparedUpload(file=file_obj, size=file_obj.size or len(data), metadata=metadata, metadata_caption=metadata_caption, stripped=False)
-
-    from django.core.files.base import ContentFile
-
-    return PreparedUpload(
-        file=ContentFile(stripped_bytes, name=file_obj.name),
-        size=len(stripped_bytes),
-        metadata=metadata,
-        metadata_caption=metadata_caption,
-        stripped=True,
-    )
+    return PreparedUpload(file=file_obj, size=size, metadata={"pending_scan": True}, metadata_caption=None)

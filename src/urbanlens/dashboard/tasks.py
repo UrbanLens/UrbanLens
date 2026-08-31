@@ -843,11 +843,17 @@ def _sync_deduped_siblings(image: Image) -> None:
     """Copy the processed file and its metadata onto this user's other rows of the same bytes.
 
     Deduplicated copies skip ``process_image_upload`` so they don't rewrite the
-    shared file. A copy made while the original was still queued points at the
+    shared file. A copy made while the original was still pending points at the
     raw upload, so ``image`` is synced along with the metadata: without it the
     sibling keeps serving the un-stripped file, GPS block and all, and nothing
     else ever revisits it (the thumbnail backfill only looks at rows that have
     no thumbnail, and this function has just given it one).
+
+    Also clears ``pending_scan`` on every sibling. ``attach_deduped_copy`` gives
+    a fresh sibling the same ``pending_scan`` its original had at that moment
+    (so it isn't immediately visible in its own, different pin/wiki while the
+    shared file is still raw) - but a dedup sibling never runs this task itself,
+    so this is the only place anything ever clears it again.
 
     ``checksum`` is deliberately not synced. It identifies the *uploaded* bytes
     and is what dedup matches on; it is not recomputed after processing.
@@ -871,6 +877,7 @@ def _sync_deduped_siblings(image: Image) -> None:
         "file_size": image.file_size,
         "thumbnail": image.thumbnail.name if image.thumbnail else "",
         "marker_thumbnail": image.marker_thumbnail.name if image.marker_thumbnail else "",
+        "pending_scan": image.pending_scan,
     }
     if processed_name:
         payload["image"] = processed_name
@@ -889,6 +896,74 @@ def _sync_deduped_siblings(image: Image) -> None:
         if not file_still_referenced("image", name):
             with contextlib.suppress(OSError):
                 image.image.storage.delete(name)
+
+
+def _reject_image_upload(image: Image, reason: str) -> None:
+    """Notify a photo's uploader their upload was rejected, and remove it.
+
+    Only ever called for a row that is still ``pending_scan`` - see the one
+    call site in :func:`process_image_upload` - so nobody but the uploader has
+    ever been able to see it; removing it and notifying them is simpler than
+    leaving a permanently-broken "processing failed" row behind.
+
+    Also rejects every dedup sibling pointing at the same stored file
+    (``attach_deduped_copy`` copies ``pending_scan`` from its original at
+    creation, but nothing besides *this* function ever runs on a sibling
+    row - unlike :func:`_sync_deduped_siblings`, which only fires on success -
+    so leaving them would strand each one hidden forever with no path to
+    either clearing or removal). ``delete_stored_file`` still only removes the
+    file once nothing references it, so siblings deleted first do not orphan
+    the last row still pointing at it.
+
+    Args:
+        image: The still-pending ``Image`` whose processing failed permanently.
+        reason: The user-facing reason, e.g. "We couldn't process this photo...".
+    """
+    from django.urls import NoReverseMatch, reverse
+
+    from urbanlens.dashboard.models.images.model import Image as ImageModel, QuotaExemption
+    from urbanlens.dashboard.models.notifications.meta import NotificationType
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.media.images import delete_stored_file
+    from urbanlens.dashboard.services.photos.uploads import record_photo_upload_failure
+
+    siblings = list(
+        ImageModel.objects.filter(
+            profile_id=image.profile_id,
+            checksum=image.checksum,
+            quota_exempt_reason=QuotaExemption.DEDUPLICATED,
+        ).exclude(pk=image.pk)
+        if image.checksum and image.profile_id is not None
+        else []
+    )
+    sibling_pks = [sibling.pk for sibling in siblings]
+
+    url = ""
+    try:
+        if image.pin is not None:
+            url = reverse("pin.details", kwargs={"pin_slug": image.pin.slug or str(image.pin.uuid)})
+        elif image.wiki is not None and image.wiki.location_id:
+            url = reverse("location.wiki", kwargs={"location_slug": image.wiki.location.slug or str(image.wiki.location.uuid)})
+        else:
+            url = reverse("vault.photos")
+    except NoReverseMatch:
+        logger.warning("Could not build a photo URL while notifying about a rejected upload (image %s)", image.pk)
+
+    if image.profile is not None:
+        NotificationLog.objects.notify(
+            profile=image.profile,
+            notification_type=NotificationType.PHOTO_UPLOAD_FAILED,
+            title="A photo upload could not be processed",
+            message=reason,
+            url=url,
+        )
+        record_photo_upload_failure(image.profile, image.original_filename or "photo", reason, pin=image.pin)
+
+    for sibling in siblings:
+        delete_stored_file(sibling, also_deleting=[image.pk, *sibling_pks])
+        sibling.delete()
+    delete_stored_file(image, also_deleting=sibling_pks)
+    image.delete()
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
@@ -941,10 +1016,54 @@ def process_image_upload(self, image_id: int) -> bool:
     else:
         photo_result = _process_photo_upload(image, image_id, strip_location)
         if photo_result is None:
+            if not image.pending_scan:
+                # Reprocessing an already-cleared row (a backfill sweep, a
+                # manual re-enqueue) failed to open a file that was previously
+                # fine - unrelated to the raw-upload window pending_scan
+                # guards, and there is nothing new to protect here. Same
+                # degrade as before pending_scan existed: log (already done
+                # inside _process_photo_upload) and leave the row as-is.
+                return False
+            # A fresh upload's stored file could not be opened at all -
+            # _process_photo_upload's own try/except swallows the OSError/
+            # ValueError rather than raising, specifically so this task's
+            # autoretry_for=(OSError,) never sees it and never retries on its
+            # own; explicit retry here scopes that decision to this one
+            # failure. Worth retrying: a storage backend hiccup, or the
+            # upload not yet fully visible to this worker, both resolve on
+            # their own within a few seconds.
+            if self.request.retries < self.max_retries:
+                raise self.retry(countdown=min(60 * (2**self.request.retries), 900))
+            # Retries exhausted. Unlike a legacy row, there is no "already
+            # safe, just missing some metadata" fallback available for a
+            # pending row - nothing has ever opened this file successfully,
+            # so it is either ordinary corruption or exactly the class of
+            # deliberately-malformed file (CVE-2023-4863 is the reference
+            # case) pending_scan exists to keep unpublished. Clearing
+            # pending_scan and serving it anyway would be precisely that
+            # leak; the only safe outcome is removal, mirroring a
+            # confirmed-infected comment upload (_reject_comment_upload).
+            _reject_image_upload(image, "We couldn't process this photo, so it was removed. You can try uploading it again.")
             return False
         result = photo_result
 
     update_fields, coords = result.update_fields, result.coords
+
+    if image.pending_scan:
+        # Set by prepare_photo_upload for a fresh photo upload - see
+        # Image.pending_scan. This point, not the malware scan (still
+        # synchronous, before the row exists - see docs/PROBLEMS.md), is what
+        # currently clears it: the metadata this task just read and the file it
+        # is about to downscale are what the raw upload was hidden from other
+        # viewers for.
+        #
+        # Set on the Python object too, not just update_fields: _sync_deduped_siblings
+        # below reads image.pending_scan (via this same object) to decide whether a
+        # dedup sibling created while this row was still pending needs clearing too -
+        # matching how image.latitude/longitude are kept in sync just above for the
+        # same reason.
+        image.pending_scan = False
+        update_fields["pending_scan"] = False
 
     # Unconditional, unlike the exif_data write in _process_photo_upload, which
     # only fills a row that has none. A re-enqueued or retried run therefore

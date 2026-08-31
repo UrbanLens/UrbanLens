@@ -1,22 +1,26 @@
-"""An accepted upload is stored already stripped, never raw-then-scrubbed.
+"""An accepted upload is stored raw, then stripped by the task that reads it.
 
-The scrub used to belong entirely to ``tasks.process_image_upload``, which
-means the file written to ``MEDIA_ROOT`` during the request was the uploader's
-original - GPS block intact - and stayed that way until a Celery worker got to
-it. It is served from there in the meantime.
-
-``services.media.images.prepare_photo_upload`` closes that window by reading the
-metadata and removing it from the bytes in the same step, before storage sees
-them. Reading has to happen there too: ``exif_data``, ``taken_at``, the
-attribution fields and the coordinates all come off the block being removed, and
-the row is where the app's visibility rules can govern them.
+Storing the raw upload and reading/stripping it in ``tasks.process_image_upload``
+(rather than in the request, as this used to work) is what keeps the request
+from ever running a Pillow decode over attacker-supplied bytes - see
+``services.sandbox.guard`` for why that decode has to happen somewhere else
+entirely. The window this reopens - the stored file is the uploader's raw
+bytes, GPS block intact, until the task gets to it - is closed by
+``Image.pending_scan`` instead of by scrubbing the bytes before anyone can look:
+a pending row is invisible to everyone but its uploader
+(``services.media.access.authorize_image``, ``ImageQuerySet.visible_to``), so
+nobody is ever served the raw file. ``test_photo_pending_scan.py`` covers that
+half; this file covers what the task itself produces once it runs.
 
 What each half must hold:
 
-- the stored file carries no coordinates, from the first instant it exists;
-- the row carries them, so nothing downstream loses the position;
-- the uploader's visit-tracking opt-out suppresses the *row* copy only - the
-  file is scrubbed either way, which is not a setting.
+- immediately after upload: the stored file is exactly the uploaded bytes
+  (metadata and all), the row carries none of it yet, and ``pending_scan`` is
+  True;
+- after ``process_image_upload`` runs: the stored file carries no metadata, the
+  row carries what was in it, and ``pending_scan`` is False;
+- the uploader's visit-tracking opt-out suppresses the *row* copy of
+  coordinates only - the file is scrubbed either way, which is not a setting.
 """
 
 from __future__ import annotations
@@ -77,6 +81,20 @@ def _stored_exif(image: Image) -> dict:
     return tags
 
 
+def _process(image: Image) -> Image:
+    """Run the sandboxed task that reads and strips *image*, then refresh it.
+
+    Neither ``upload_photo`` nor ``upload_photo_for_owner`` runs this
+    synchronously any more - see the module docstring - so every test below
+    that wants the *processed* result calls this after uploading.
+    """
+    from urbanlens.dashboard.tasks import process_image_upload
+
+    process_image_upload(image.pk)
+    image.refresh_from_db()
+    return image
+
+
 class UploadStripTestCase(TestCase):
     def setUp(self):
         super().setUp()
@@ -99,13 +117,24 @@ class StoredFileIsStrippedTests(UploadStripTestCase):
         self.assertTrue(dict(opened.getexif().get_ifd(_GPS_IFD)))
         self.assertEqual(opened.getexif().get(_ARTIST_TAG), "A Photographer")
 
-    def test_upload_photo_stores_a_file_with_no_metadata(self):
+    def test_upload_photo_stores_the_upload_raw_then_strips_it_once_processed(self):
         image = upload_photo(self.profile, _upload("shot.jpg", _jpeg_with_gps()), pin=self.pin)
 
+        self.assertTrue(image.pending_scan)
+        self.assertNotEqual(_stored_exif(image), {}, "the raw upload should still be exactly what was sent")
+
+        image = _process(image)
+
+        self.assertFalse(image.pending_scan)
         self.assertEqual(_stored_exif(image), {}, "the stored file still carries the metadata the uploader sent")
 
     def test_upload_photo_keeps_the_coordinates_on_the_row(self):
         image = upload_photo(self.profile, _upload("shot.jpg", _jpeg_with_gps()), pin=self.pin)
+
+        self.assertIsNone(image.latitude, "coordinates are read by the task, not the request")
+        self.assertIsNone(image.longitude)
+
+        image = _process(image)
 
         self.assertIsNotNone(image.latitude)
         self.assertIsNotNone(image.longitude)
@@ -116,20 +145,34 @@ class StoredFileIsStrippedTests(UploadStripTestCase):
         """The block is removed from the file, not lost."""
         image = upload_photo(self.profile, _upload("shot.jpg", _jpeg_with_gps()), pin=self.pin)
 
+        self.assertIsNone(image.exif_data)
+        self.assertIsNone(image.author)
+
+        image = _process(image)
+
         self.assertIsNotNone(image.exif_data)
         self.assertEqual(image.author, "A Photographer")
 
-    def test_upload_photo_for_owner_stores_a_file_with_no_metadata(self):
+    def test_upload_photo_for_owner_stores_a_file_that_ends_with_no_metadata(self):
         result = upload_photo_for_owner(self.pin, self.profile, _upload("owned.jpg", _jpeg_with_gps((90, 20, 30))))
 
         self.assertIsInstance(result, Image, f"fixture upload was rejected: {result}")
+        self.assertTrue(result.pending_scan)
+        self.assertIsNone(result.latitude)
+
+        result = _process(result)
+
         self.assertEqual(_stored_exif(result), {})
         self.assertIsNotNone(result.latitude)
 
-    def test_the_recorded_size_is_the_stored_size(self):
+    def test_the_recorded_size_tracks_the_stored_size_at_every_stage(self):
         """file_size drives the quota, so it has to describe what is on disk."""
         raw = _jpeg_with_gps()
         image = upload_photo(self.profile, _upload("shot.jpg", raw), pin=self.pin)
+
+        self.assertEqual(image.file_size, len(raw), "before processing, the recorded size is the raw upload's own")
+
+        image = _process(image)
 
         self.assertEqual(image.file_size, image.image.size)
         self.assertLess(image.file_size, len(raw), "the strip should have made the file smaller")
@@ -144,18 +187,21 @@ class VisitTrackingOptOutTests(UploadStripTestCase):
         self.profile.refresh_from_db()
 
     def test_the_row_records_no_coordinates(self):
-        image = upload_photo(self.profile, _upload("shot.jpg", _jpeg_with_gps()), pin=self.pin)
+        # Not yet meaningful before processing - nothing has been read off the
+        # file at all at this point, opt-out or not - so this asserts the
+        # opt-out is honoured, not merely that reading hasn't happened yet.
+        image = _process(upload_photo(self.profile, _upload("shot.jpg", _jpeg_with_gps()), pin=self.pin))
 
         self.assertIsNone(image.latitude)
         self.assertIsNone(image.longitude)
 
     def test_the_exif_snapshot_omits_the_gps_block(self):
-        image = upload_photo(self.profile, _upload("shot.jpg", _jpeg_with_gps()), pin=self.pin)
+        image = _process(upload_photo(self.profile, _upload("shot.jpg", _jpeg_with_gps()), pin=self.pin))
 
         self.assertNotIn("GPSInfo", image.exif_data or {})
 
     def test_the_stored_file_is_still_scrubbed(self):
-        image = upload_photo(self.profile, _upload("shot.jpg", _jpeg_with_gps()), pin=self.pin)
+        image = _process(upload_photo(self.profile, _upload("shot.jpg", _jpeg_with_gps()), pin=self.pin))
 
         self.assertEqual(_stored_exif(image), {})
 
@@ -180,11 +226,10 @@ class DedupStillMatchesTheUploadedBytesTests(UploadStripTestCase):
 
 
 class UnstrippableFormatsTests(UploadStripTestCase):
-    """A format the byte-level stripper leaves alone is still accepted.
+    """A format ``downscale_stored_image`` cannot rewrite is still accepted.
 
-    It is stored as uploaded and scrubbed by the Celery re-encode, exactly as
-    before - the sync strip narrows the window for the formats it handles, it
-    does not gate acceptance.
+    Stored exactly as uploaded until (or unless) the task's re-encode produces a
+    format it can rewrite - acceptance never depends on that.
     """
 
     def test_a_tiff_is_stored_unchanged(self):

@@ -42,21 +42,43 @@ Fast, local, and *never* a decode. In order:
 2. Extension allowlist for photos - SVG is refused here, because it has no
    magic bytes and sniffing would pass it (`security/content_sniffing.py`).
 3. Magic-byte sniff against the declared kind.
-4. Metadata strip (`media/metadata_strip.py`). This walks JPEG/PNG/WebP
-   container segments in pure Python and drops the EXIF/XMP/IPTC ones. It is
-   the one thing in the pipeline that touches upload bytes in the request, and
-   it is safe there precisely because it never decodes - no pixel data is
-   parsed, the cost is a copy. That is what keeps an unstripped original, GPS
-   intact, from existing in the media tree at all.
+4. ClamAV, still synchronous here (see the ClamAV entry in `docs/PROBLEMS.md` -
+   the one piece of this tier not yet moved off the request).
+5. For a photo: store the raw upload untouched and mark the row
+   `pending_scan` (`services/media/images.prepare_photo_upload`). Nothing here
+   decodes it - a decode is exactly the class of code the sandbox tier exists
+   to keep out of this process.
 
 Anything that opens the file with a real parser is marked
 `@untrusted_parse` (`services/sandbox/guard.py`) and cannot run here.
 
+`media/metadata_strip.py`'s byte-walk JPEG/PNG/WebP segment stripper used to
+run at this step instead of `pending_scan` - see its module docstring. Still
+present, still decode-free, but currently unused: `pending_scan` closes the
+same "raw file briefly servable" window through access control, which also
+covers every format the byte-walker didn't (HEIC, TIFF, GIF, ...).
+
 ### 2. The sandbox worker
 
 `media-worker` in `docker-compose.yml` drains the `sandbox` queue and does all
-the decoding: re-encode, downscale, thumbnails, transcode, document conversion,
-OCR, archive extraction.
+the decoding: EXIF read, re-encode, downscale, thumbnails, transcode, document
+conversion, OCR, archive extraction.
+
+For a photo, this is also where `Image.pending_scan` gets cleared -
+`tasks.process_image_upload`, after it has read the file's EXIF and produced a
+stripped/downscaled copy. Until then, `services/media/access.py::authorize_image`
+and `ImageQuerySet.visible_to` restrict the row to its uploader; everyone else
+gets the same "not found" a deleted file would produce. See `Image.pending_scan`
+and the resolved entry in `docs/PROBLEMS.md` for the full reasoning.
+
+A stored file that cannot be opened at all is not treated as "safe to publish
+unprocessed" - nothing has ever validated it, so a still-pending row that fails
+this way retries a few times, then is deleted outright
+(`tasks._reject_image_upload`) rather than served raw. Clearing `pending_scan`
+on that path instead - "give up and fall back to visible" - was the actual
+first implementation, and was wrong: it degraded straight through the leak
+this whole mechanism exists to prevent. Kept as a cautionary example in
+`docs/PROBLEMS.md`'s resolved entry.
 
 What makes it a sandbox, in the order that matters:
 

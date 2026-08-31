@@ -273,7 +273,15 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
     #
     # An unattributed photo gets the sharer's name, so the recipient can see where
     # it came from; one that already credits somebody keeps that credit.
-    shared_images = list(share.images.all())
+    # Excludes pending_scan=True: this copy points at the sender's own stored
+    # file (below), never re-runs process_image_upload, and belongs to a
+    # different profile than the original - none of the machinery that clears
+    # a dedup sibling's pending_scan (tasks._sync_deduped_siblings, scoped to
+    # one profile's own checksum) would ever reach a copy made this way. A
+    # photo shared before its own processing finishes - a narrow window,
+    # since this runs at acceptance, not at share time - is simply not copied
+    # rather than copied permanently stuck hidden.
+    shared_images = list(share.images.exclude(pending_scan=True))
     copied_images = Image.objects.bulk_create(
         [
             Image(

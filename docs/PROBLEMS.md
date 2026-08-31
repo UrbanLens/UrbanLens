@@ -22,39 +22,98 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
-## OPEN 2026-08-31: two parsers still run in the request, so the sandbox policy cannot go to `deny`
+## OPEN 2026-08-31: `PlaceAccessGrant.reason` has an unmigrated field alteration
 
-The sandbox tier (`services/sandbox/`, `media-worker` in docker-compose.yml) routes every
-decoding task to a container with no internet egress and no API keys, and
-`@untrusted_parse` marks the functions that may only run there. Two callers still violate it,
-which is why `UL_UNTRUSTED_PARSE_POLICY` defaults to `warn` rather than `deny`:
+`manage.py makemigrations dashboard --check --dry-run` on a clean `main` (verified before any
+of this session's own changes) reports one pending migration: `Alter field reason on
+placeaccessgrant`. Not investigated - noticed only because it also appears in the dry-run
+output while checking this session's own `pending_scan` migration, and confirmed independent
+by stashing this session's changes and re-running against bare `HEAD`.
 
-1. **`services/media/images.prepare_photo_upload`** calls the `extract_*` helpers inside the
-   upload request, so Pillow opens attacker bytes in a gunicorn worker. It reads EXIF and strips
-   it in one step deliberately - splitting them would put an unstripped original, GPS intact, in
-   the media tree until a worker got to it - so the fix is not "move the call", it is to move the
-   whole accept-then-process boundary: store to a quarantine location, return `202`, and have the
-   sandbox worker do the read/strip/scan. That is the same change as the async-scan work below.
-2. **`controllers/pin.parse_for_preview`** runs `extract_archive` (zipfile/tarfile) and
-   `extract_pins_from_document` (python-docx) in the request path. It has real limits already
-   (`archive_extractor.ExtractionBudget`), but limits bound resource use, not a parser bug.
+## OPEN 2026-08-31: several Image-creating paths bypass `pending_scan` and/or never process at all
 
-Until both move, `deny` would break uploads and the import preview. `warn` logs each violation
-with a stack, so the log is the worklist.
+Found while auditing every `Image.objects.create`/`Image(...)` call site for this session's
+`pending_scan` work (see the resolved entry below) - none of these are caused by that work,
+and none are fixed by it either:
+
+- **`tasks.import_immich_photos`/`import_flickr_photos`/`import_flickr_album_photos`/
+  `import_google_photos`** each create the row directly with raw bytes fetched from a
+  third-party API, unconditionally `pending_scan=False` (the field's default - these predate
+  it and were never updated), then enqueue `process_image_upload` same as an ordinary upload.
+  The row is visible (per ordinary `photo_upload_visibility`) with its raw, unstripped bytes
+  for however long that enqueue takes to run - the exact window `pending_scan` exists to close
+  for a direct upload, just not applied here. Fix shape: set `pending_scan=True` on create, same
+  as `prepare_photo_upload`'s metadata dict does.
+- **`services/media/media_materialize.materialize_media_item`** (the Media-gallery "send to
+  wiki"/cache path, `QuotaExemption.EXTERNAL_MEDIA`) never enqueues `process_image_upload` at
+  all - grep confirms no reference to it in that file. A materialized photo's EXIF is never read,
+  the file is never downscaled or thumbnailed, and it is served exactly as fetched from the
+  provider, indefinitely. Separate from the `pending_scan` question entirely (nothing to gate:
+  it just never processes).
+
+## RESOLVED 2026-08-31: `prepare_photo_upload` no longer decodes in the request
+
+Was: `prepare_photo_upload` called the `extract_*` helpers (Pillow decode) inside the upload
+request for every one of its ~9 call sites, so a crafted upload's header parser ran in gunicorn
+before the sandbox tier existed to catch it.
+
+Fix: `prepare_photo_upload` now stores the raw upload untouched and returns
+`{"pending_scan": True}` as its `metadata` - every caller already splats that dict into
+`Image.objects.create(...)`, so all ~9 call sites picked it up with no change of their own.
+`Image.pending_scan` (migration 0038) gates `services/media/access.py::authorize_image` and
+`ImageQuerySet.visible_to` the same way `Comment.pending_scan` already gated comment images: the
+uploader always sees their own row; nobody else can read or list it until
+`tasks.process_image_upload` has read its EXIF and downscaled it, which is also what now clears
+the flag. A stored file that cannot even be opened retries a few times (a genuine storage hiccup
+is worth that), and only once retries are exhausted is the row deleted outright
+(`tasks._reject_image_upload`) rather than cleared-and-served - an adversarial review of this
+batch caught an earlier version of this fallback clearing `pending_scan` on the very first
+attempt (a comment mis-stated that Celery's own retries had already run; they hadn't, since
+`_process_photo_upload` swallows the exception internally instead of letting `autoretry_for`
+see it), which would have served the raw, never-validated file to the uploader's whole sharing
+audience on a single transient failure - precisely the leak this mechanism exists to prevent.
+
+`services/media/metadata_strip.py`'s byte-walk stripper is now unused in the live pipeline (its
+one caller was inside `prepare_photo_upload`) - `pending_scan` closes the same "raw file is
+briefly servable" window through access control instead. Left in place: it has its own tests, is
+decode-free so it stays outside the sandbox boundary if some future in-request use wants it, and
+removing a working, harmless module is a separate decision from this one.
+
+Still open, from the original two: **`controllers/pin.parse_for_preview`** runs `extract_archive`
+(zipfile/tarfile) and `extract_pins_from_document` (python-docx) in the request path. It has real
+limits already (`archive_extractor.ExtractionBudget`), but limits bound resource use, not a
+parser bug. This is the remaining reason `UL_UNTRUSTED_PARSE_POLICY` cannot go to `deny` yet -
+`warn` logs it with a stack, so the log is the worklist.
 
 ## OPEN 2026-08-31: ClamAV still scans synchronously in the upload request
 
 `image_upload_error` blocks on a clamd round-trip before `Image.objects.create`, with a 15s
-socket timeout, and fails closed. That is correct but it is also the upload latency users notice,
-and it is the half of the pipeline that has not moved to the sandbox tier. The comment path
-already shows the shape of the fix - `Comment.pending_scan`, `tasks.scan_comment_image`, and a
-`pending_scan` refusal in `services/media/access.py` - and `image_upload_error` already takes
-`skip_malware_scan=True` for exactly that. What is missing on the `Image` side is the
-`pending_scan` field, the gate in the `pin_images` authorizer, and a "processing" state in the
-gallery so a photo that has not cleared yet reads as pending rather than broken.
+socket timeout, and fails closed. That is correct but it is also the upload latency users notice.
 
-Note the interaction with the entry above: both want the same accept-then-process boundary, so
-they should be done as one change rather than two.
+The `pending_scan` plumbing this now needs already exists (see the resolved entry above -
+`Image.pending_scan`, the `pin_images` authorizer gate, `ImageQuerySet.visible_to`), built for the
+EXIF-read window and equally usable for a scan window. What is still missing:
+
+- Every one of `prepare_photo_upload`'s ~9 call sites calls `image_upload_error(file_obj,
+  MediaKind.PHOTO)` **without** `skip_malware_scan=True` - the scan still blocks the request.
+  Passing it through is mechanical but touches all 9 (`controllers/tools.py`, `article.py`,
+  `consensus.py`, `maps.py`, `direct_messages.py`, `visits.py`, `safety.py`,
+  `services/photos/uploads.py`, `services/photos/photo_upload.py`).
+- `tasks.process_image_upload` needs to run the scan itself, first, mirroring
+  `_run_comment_image_scan`: on `MalwareScanUnavailableError`, retry with backoff (the task is
+  already `bind=True`, just needs the retry call added); on infected, reject rather than continue
+  into metadata/downscale.
+- A rejection needs an `Image`-specific version of `_reject_comment_upload`: delete the row and
+  file, call `record_photo_upload_failure` (already exists, already used for every *synchronous*
+  rejection - `services/photos/uploads.py`) so it surfaces in the Vault's Memories retry list, and
+  add a `NotificationType.PHOTO_UPLOAD_FAILED` (mirroring `COMMENT_UPLOAD_FAILED`) so it also
+  reaches the user as a live toast/notification - a synchronous rejection gets one for free from
+  the request response; an async one needs it pushed.
+
+No gallery/template change needed for the "processing" state: `ImageQuerySet.visible_to` already
+hides a `pending_scan` row from everyone but its uploader, and the uploader's own gallery already
+falls back through `thumb_url`/`display_url` to the raw stored file while thumbnails are pending -
+the same fallback this reuses, not a new one.
 
 ## OPEN 2026-08-31: `test_upload_strips_metadata_before_storing` was asserting against the wrong EXIF tag
 

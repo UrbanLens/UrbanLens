@@ -164,6 +164,26 @@ def attach_deduped_copy(existing: Image, owner: Pin | Wiki | Profile, profile: P
     is copied from *existing*; an incoming caption that disagrees is kept on
     the new row and queued for the owner to pick.
 
+    Also copies ``pending_scan``. Skipping the task means nothing else will
+    ever clear it on this row directly - a still-pending *existing* means the
+    shared stored file is still the uploader's raw bytes, and this new row
+    would otherwise be immediately visible in its own (different) pin/wiki
+    with ``pending_scan`` defaulting False, serving exactly the file the
+    original's own pending state exists to hide. ``tasks._sync_deduped_siblings``
+    clears it here once *existing*'s own processing completes, the same way it
+    already re-points this row at the processed file - and only clears it,
+    never reads it, so it does not matter that ``existing`` itself may be a
+    request-scoped object read before this call.
+
+    ``pending_scan`` is re-read fresh from the database (not taken off
+    *existing* as every other copied field is) to close - not eliminate, but
+    narrow to essentially this one query - the gap between ``existing`` being
+    looked up earlier in the request and this row actually being inserted: if
+    the original's own processing finished and synced its siblings in between,
+    trusting a stale in-memory ``existing.pending_scan`` would create a new
+    sibling nothing will ever revisit (``_sync_deduped_siblings`` only runs
+    once, right when the original's task completes).
+
     Args:
         existing: The earlier row with the same checksum.
         owner: The Pin, Wiki, or Profile (Vault) this upload is aimed at.
@@ -174,6 +194,12 @@ def attach_deduped_copy(existing: Image, owner: Pin | Wiki | Profile, profile: P
         The new :class:`Image` row.
     """
     incoming = caption.strip()
+    pending_scan = Image.objects.filter(pk=existing.pk).values_list("pending_scan", flat=True).first()
+    if pending_scan is None:
+        # existing was deleted between being looked up and here (e.g. its own
+        # processing rejected it as unrecoverable) - nothing left to dedupe
+        # against safely; treat it as not-pending rather than guessing.
+        pending_scan = False
     row = Image(
         image=existing.image.name,
         thumbnail=existing.thumbnail.name if existing.thumbnail and existing.thumbnail.name else None,
@@ -196,6 +222,7 @@ def attach_deduped_copy(existing: Image, owner: Pin | Wiki | Profile, profile: P
         source=existing.source,
         media_type=existing.media_type,
         map_hidden=existing.map_hidden,
+        pending_scan=existing.pending_scan,
         **_owner_fields(owner),
     )
     row.save()

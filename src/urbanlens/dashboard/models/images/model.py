@@ -440,6 +440,36 @@ class Image(abstract.FrontendDashboardModel):
     # does not want plotted. Dragging it onto a map, or "show on map" in the
     # lightbox, clears this without inventing a new position.
     map_hidden = BooleanField(default=False)
+    # True from the moment a fresh photo upload is stored until
+    # tasks.process_image_upload has read its EXIF and replaced it with a
+    # stripped, downscaled copy. Set by services.media.images.prepare_photo_upload,
+    # which - unlike the request-time byte-walk strip it replaced - no longer
+    # decodes the file at all (Pillow's format/EXIF parsers are exactly the kind
+    # of decoder services.sandbox.guard exists to keep out of the request path),
+    # so the stored file is the uploader's raw bytes, GPS and all, for the whole
+    # window. authorize_image (services.media.access) and ImageQuerySet.visible_to
+    # both restrict a pending row to its uploader - nobody else may read or list
+    # it until this clears - which is what makes the raw-bytes window safe rather
+    # than a regression of the leak metadata_strip.py was written to close.
+    #
+    # Named to match Comment.pending_scan/TripComment.pending_scan rather than
+    # something like `processing`: those two clear it on an async malware scan,
+    # and folding the same scan in here (see docs/PROBLEMS.md) will make this
+    # field mean exactly what its name says for photos too. Until then, clearing
+    # happens at the end of process_image_upload's successful run - there is no
+    # separate scan step yet, only the metadata read this field exists to gate.
+    #
+    # A row that never successfully processes is never left both pending and
+    # visible: if the stored file cannot even be opened, process_image_upload
+    # retries a few times (a transient storage hiccup is the case that's worth
+    # it) and, only once retries are exhausted, deletes the row entirely
+    # (tasks._reject_image_upload) rather than clearing this flag and serving
+    # bytes nothing has ever validated - clearing it here would be exactly the
+    # leak this field exists to prevent, not a safe fallback. Dedup siblings
+    # (services.photos.uploads.attach_deduped_copy) inherit this value from
+    # their original at creation and are cleared or removed alongside it,
+    # since nothing else ever revisits a sibling row directly.
+    pending_scan = BooleanField(default=False)
     # Media (kind='media') labels help the user find this photo/video/document
     # via the main site search; unlike Pin/Wiki labels, media labels have no
     # effect on map icons or filtering.

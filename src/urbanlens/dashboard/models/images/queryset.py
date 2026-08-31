@@ -94,7 +94,14 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         itself the consent the settings exist to express - see
         :func:`_named_this_viewer`.
 
-        Images uploaded by the viewer are always included regardless of settings.
+        Images uploaded by the viewer are always included regardless of settings
+        (even while ``pending_scan`` - the owner can watch their own upload go
+        from "processing" to visible). Everyone else's ``pending_scan`` photos
+        are excluded outright: the malware scan has not cleared it, and the
+        stored file may still carry the uploader's raw, unstripped bytes - see
+        ``Image.pending_scan``. ``authorize_image`` enforces the same rule for a
+        direct media-URL fetch; this is what keeps it out of a gallery listing
+        in the first place, rather than appearing as a broken image.
         If ``viewer_profile`` is None (anonymous), nothing is returned.
 
         Unlike an ordinary queryset method this one is **eager**: the
@@ -134,9 +141,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         # enough either, which is the half that was missing: a photo filed under a
         # pin was reachable by anyone the setting happened to admit, and the
         # default admits whoever pinned the same place.
-        return self.filter(
-            Q(profile=viewer_profile) | _named_this_viewer(viewer_profile) | (Q(profile_id__in=allowed_uploader_ids) & _shared_within_reach_of(viewer_profile)),
-        )
+        others_visible = Q(pending_scan=False) & (_named_this_viewer(viewer_profile) | (Q(profile_id__in=allowed_uploader_ids) & _shared_within_reach_of(viewer_profile)))
+        return self.filter(Q(profile=viewer_profile) | others_visible)
 
     def _allowed_uploader_ids(self, viewer_profile: Profile, viewer_filter: str) -> set[int]:
         """Return the set of profile IDs whose photos this viewer may see.

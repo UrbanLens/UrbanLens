@@ -1,23 +1,32 @@
 """Remove metadata segments from an upload's bytes without decoding the image.
 
+Currently unused by the live pipeline - see below - but kept as a working,
+tested utility rather than deleted, since a future in-request use has nowhere
+else to reach for a decode-free strip.
+
 ``downscale_stored_image`` also drops metadata, but it does so by decoding and
 re-encoding the whole image, which is far too expensive to run in a request:
 under gunicorn's gevent worker a decode does not yield, so it stalls every other
-request on that worker. That is why it runs on Celery - and why the raw upload,
-EXIF and all, used to be written to ``MEDIA_ROOT`` first and cleaned up later.
+request on that worker. That is why it runs on Celery. This module offered a
+different way to close that window: container formats keep their metadata in
+discrete, length-prefixed segments, so the segments can be dropped by walking
+the byte stream - no pixel data touched, the cost a copy rather than a decode -
+which used to make it safe to run inside the request, before storage ever saw
+the bytes.
 
-This module closes that window from the other side. Container formats keep their
-metadata in discrete, length-prefixed segments, so the segments can be dropped by
-walking the byte stream: no pixel data is touched, and the cost is a copy rather
-than a decode. Callers strip before the bytes are ever handed to storage, so an
-unstripped file never exists in the media tree.
+It no longer runs there. Reading metadata *before* stripping it was one
+operation for a reason - stripping first loses ``exif_data``/GPS/``taken_at``
+the app otherwise keeps - and the read half (the ``extract_*`` functions in
+``services.media.images``) is a Pillow decode, which is exactly the class of
+code the sandbox tier (``services.sandbox.guard``) exists to keep out of a
+request process. ``Image.pending_scan`` (see ``prepare_photo_upload``) now
+closes the same "raw file briefly servable" window through access control
+instead: the file sits there unstripped for as long as the sandboxed task
+needs, but nobody besides the uploader may read or list it until then - which
+this module's byte-walk approach could never offer for the formats it
+doesn't handle (HEIC, TIFF, GIF, ...) anyway.
 
-Read the metadata *before* calling this - the extractors in
-``services.media.images`` take the same file object and are what populate
-``Image.exif_data``, GPS, and ``taken_at``. This only removes; it never reports.
-
-Formats it cannot handle return ``None`` rather than a guess, and the caller
-leaves those to the re-encode on Celery.
+Formats it cannot handle return ``None`` rather than a guess.
 """
 
 from __future__ import annotations
