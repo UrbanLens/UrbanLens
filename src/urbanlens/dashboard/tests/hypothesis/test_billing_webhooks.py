@@ -27,12 +27,14 @@ def _subscription_payload(
     current_period_end: int = 1_700_000_000,
     cancel_at_period_end: bool = False,
     canceled_at: int | None = None,
+    metadata: dict | None = None,
 ) -> dict:
     return {
         "id": sub_id,
         "status": status,
         "cancel_at_period_end": cancel_at_period_end,
         "canceled_at": canceled_at,
+        "metadata": metadata or {},
         "items": {
             "data": [
                 {
@@ -355,9 +357,55 @@ class HandleInvoicePaymentSucceededTests(TestCase):
     def test_no_subscription_on_invoice_is_a_no_op(self) -> None:
         webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {}}})  # must not raise
 
-    def test_unknown_subscription_is_a_no_op(self) -> None:
-        webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_unknown"}}})  # must not raise
+    def test_out_of_order_delivery_still_banks_the_payment(self) -> None:
+        """Regression: Stripe guarantees neither webhook ordering nor delivery order,
+        so invoice.payment_succeeded can arrive before checkout.session.completed has
+        created the RoleSubscription row. The old code just logged and returned in
+        that case - the payment was never banked, and nothing ever retries a webhook
+        Stripe already recorded as delivered, so the loss was permanent for a
+        pay-what-you-want role. The Subscription's own metadata (duplicated there at
+        checkout time specifically for this - see stripe_client.create_checkout_session)
+        must be used to create the row on the spot instead of giving up.
+        """
+        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        user = baker.make(User)
+        self.assertFalse(RoleSubscription.objects.filter(stripe_subscription_id="sub_new").exists())
 
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(sub_id="sub_new", unit_amount=1000, metadata={"user_id": str(user.pk), "role_id": str(role.pk)})
+            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_new", "amount_paid": 1000}}})
+
+        subscription = RoleSubscription.objects.get(stripe_subscription_id="sub_new")
+        self.assertEqual(subscription.user, user)
+        self.assertEqual(subscription.role, role)
+        self.assertEqual(subscription.total_paid_cents, 1000)
+
+    def test_out_of_order_delivery_carries_forward_a_prior_pwyw_ledger(self) -> None:
+        """The recovery path must not bypass the same usage-ledger carry-forward a
+        normal checkout.session.completed creation gets - otherwise resubscribing
+        under this exact race would silently lose the prior banked balance."""
+        from django.utils import timezone
+
+        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        user = baker.make(User)
+        covered_until = timezone.now() + timezone.timedelta(days=45)
+        baker.make(RoleSubscription, user=user, role=role, status=BillingSubscriptionStatus.CANCELED, total_paid_cents=3000, amount_used_cents=1500, usage_covered_until=covered_until)
+
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(sub_id="sub_new", unit_amount=1000, metadata={"user_id": str(user.pk), "role_id": str(role.pk)})
+            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_new", "amount_paid": 1000}}})
+
+        subscription = RoleSubscription.objects.get(stripe_subscription_id="sub_new")
+        self.assertEqual(subscription.total_paid_cents, 3000 + 1000)
+        self.assertEqual(subscription.amount_used_cents, 1500)
+        self.assertEqual(subscription.usage_covered_until, covered_until)
+
+    def test_out_of_order_delivery_with_unresolvable_metadata_is_a_no_op(self) -> None:
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(sub_id="sub_new", metadata={})
+            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_new", "amount_paid": 1000}}})  # must not raise
+
+        self.assertFalse(RoleSubscription.objects.filter(stripe_subscription_id="sub_new").exists())
 
 class HandleInvoicePaymentFailedTests(TestCase):
     def test_marks_the_subscription_past_due(self) -> None:
@@ -369,6 +417,19 @@ class HandleInvoicePaymentFailedTests(TestCase):
 
     def test_unknown_subscription_is_a_no_op(self) -> None:
         webhooks.handle_event({"type": "invoice.payment_failed", "data": {"object": {"subscription": "sub_unknown"}}})  # must not raise
+
+
+def _refund_object(refund_id: str, amount: int) -> mock.MagicMock:
+    """A stand-in for a live ``stripe.Refund`` instance from ``stripe.Refund.list(...)``.
+
+    Unlike the embedded ``charge.refunds.data`` entries (plain dicts straight
+    off the webhook JSON), a real Stripe SDK object only supports ``.to_dict()``/
+    attribute/``[]`` access - not ``.get()`` - so the handler must normalize each
+    one before treating it like the embedded dicts.
+    """
+    obj = mock.MagicMock()
+    obj.to_dict.return_value = {"id": refund_id, "amount": amount}
+    return obj
 
 
 def _charge_refunded_event(
@@ -465,12 +526,31 @@ class HandleChargeRefundedTests(TestCase):
         self.sub.refresh_from_db()
         self.assertEqual(self.sub.total_paid_cents, 2000)
 
-    def test_paginated_refund_list_still_applies_the_embedded_refunds(self) -> None:
-        """``has_more`` only logs a warning about refunds beyond the page - it must not
-        skip applying the refunds that *are* embedded on this delivery.
+    def test_paginated_refund_list_fetches_and_applies_every_refund(self) -> None:
+        """Regression: ``has_more`` used to only log a warning and truncate to the
+        embedded page - Stripe caps ``charge.refunds.data`` at 10, so a charge with
+        more refunds than that silently never had the rest debited from the banked
+        balance. Since idempotency is keyed per refund id, a later redelivery of
+        this same (still-truncated) embedded page never caught them up either -
+        the loss was permanent. The full list must be fetched directly instead.
         """
         self._mock_invoice()
-        webhooks.handle_event(_charge_refunded_event(refunds=[{"id": "re_1", "amount": 500}], has_more=True))
+        with mock.patch("stripe.Refund.list") as mock_list:
+            mock_list.return_value.auto_paging_iter.return_value = [_refund_object("re_1", 500), _refund_object("re_2", 300)]
+            webhooks.handle_event(_charge_refunded_event(refunds=[{"id": "re_1", "amount": 500}], has_more=True))
+            mock_list.assert_called_once_with(charge="ch_1", limit=100)
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000 - 500 - 300)
+
+    def test_non_paginated_refund_list_never_calls_the_list_api(self) -> None:
+        """The extra API round-trip is only worth paying when Stripe says there's
+        more to fetch - the common case (a charge with a handful of refunds) must
+        stay a single API call (the Invoice retrieve already mocked in setUp)."""
+        self._mock_invoice()
+        with mock.patch("stripe.Refund.list") as mock_list:
+            webhooks.handle_event(_charge_refunded_event(refunds=[{"id": "re_1", "amount": 500}], has_more=False))
+            mock_list.assert_not_called()
 
         self.sub.refresh_from_db()
         self.assertEqual(self.sub.total_paid_cents, 1500)
