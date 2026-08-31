@@ -38,6 +38,7 @@ from urbanlens.dashboard.models.pin_share.model import PinShare
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for
 from urbanlens.dashboard.services.messaging.group_chats import (
+    GroupChatValidationError,
     add_group_members,
     create_group_chat,
     create_group_message,
@@ -334,6 +335,66 @@ class GroupPinShareTests(TestCase):
         self.assertIsNotNone(own)
         self.assertEqual(own.recipient_id, self.friend_a.pk)
         self.assertIsNone(message.share_for(self.stranger.pk))
+
+
+class GroupMessageReplayScopingTests(TestCase):
+    """create_group_message's idempotency guard must never cross groups.
+
+    Regression: GroupMessage.client_uuid is uniquely constrained per *sender*
+    only (db_gmsg_unique_client_uuid_per_sender - by design, since scoping to
+    the group too would let two different senders' uuids collide inside the
+    same conversation), but the replay check that reads it back only compared
+    (sender, client_uuid) - never checking whether the match it found actually
+    belongs to the group the caller asked about. So a sender who belongs to
+    two groups and reused a client_uuid across them got group A's message
+    silently handed back while calling share_pin_in_group_message for group
+    B. share_pin_in_group_message still fanned real PinShares out to group
+    B's real membership, then wired their GroupMessageShare rows to group A's
+    message object - cross-wiring two groups' data through one reused key,
+    exploitable by any ordinary member of two groups with no special
+    privilege required. The DB constraint means the correct fix cannot be
+    "create a new message in group B" (that insert would violate it) -
+    reusing a client_uuid across groups must be rejected outright.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.member_a = _profile()
+        self.member_b = _profile()
+        _befriend(self.sender, self.member_a)
+        _befriend(self.sender, self.member_b)
+        self.group_a = create_group_chat(self.sender, "Group A", [self.member_a])
+        self.group_b = create_group_chat(self.sender, "Group B", [self.member_b])
+        self.pin_a = baker.make("dashboard.Pin", profile=self.sender)
+        self.pin_b = baker.make("dashboard.Pin", profile=self.sender)
+
+    def test_replaying_a_client_uuid_into_a_different_group_is_rejected(self) -> None:
+        shared_uuid = uuid_module.uuid4()
+        share_pin_in_group_message(self.sender, self.group_a, self.pin_a, "for group A", client_uuid=shared_uuid)
+
+        with self.assertRaises(GroupChatValidationError):
+            share_pin_in_group_message(self.sender, self.group_b, self.pin_b, "for group B", client_uuid=shared_uuid)
+
+        # The rejected call must not have fanned out any real access to group
+        # B's member - the actual damage the silent cross-wire caused.
+        self.assertFalse(GroupMessageShare.objects.filter(recipient=self.member_b).exists())
+        self.assertFalse(PinShare.objects.filter(pin=self.pin_b).exists())
+        self.assertFalse(GroupMessage.objects.filter(group=self.group_b).exists())
+
+        # Group A's own message is untouched.
+        self.assertEqual(GroupMessage.objects.filter(group=self.group_a).count(), 1)
+
+    def test_replaying_the_same_group_and_uuid_is_still_a_true_replay(self) -> None:
+        """The fix must not break the legitimate same-group retry this guards."""
+        shared_uuid = uuid_module.uuid4()
+        first = share_pin_in_group_message(self.sender, self.group_a, self.pin_a, "for group A", client_uuid=shared_uuid)
+
+        second = share_pin_in_group_message(self.sender, self.group_a, self.pin_a, "for group A", client_uuid=shared_uuid)
+
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(GroupMessage.objects.filter(group=self.group_a).count(), 1)
+        self.assertEqual(GroupMessageShare.objects.filter(recipient=self.member_a).count(), 1)
 
 
 class ConversationMergeTests(TestCase):
