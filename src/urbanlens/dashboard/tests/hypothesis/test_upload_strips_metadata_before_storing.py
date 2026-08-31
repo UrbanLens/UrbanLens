@@ -43,7 +43,9 @@ from urbanlens.dashboard.services.photos.photo_upload import upload_photo
 from urbanlens.dashboard.services.photos.uploads import upload_photo_for_owner
 
 _GPS_IFD = 0x8825
-_ARTIST_TAG = 0x010F
+#: EXIF Artist. Not 0x010F, which is Make - this test asserts the value comes
+#: back as `Image.author`, and extract_author reads Artist.
+_ARTIST_TAG = 0x013B
 
 
 def _jpeg_with_gps(colour: tuple[int, int, int] = (10, 20, 30)) -> bytes:

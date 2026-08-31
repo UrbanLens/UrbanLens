@@ -188,7 +188,7 @@ class CredentialOrSessionMediaMixin:
             if user is not None and user.is_authenticated:
                 profile, _created = Profile.objects.get_or_create(user=user)
                 return profile
-            return None
+            return self.profile_from_media_cookie(request)
         credential_user, credential = resolved
 
         # Metered only on this branch: a session request is already bounded by
@@ -197,6 +197,45 @@ class CredentialOrSessionMediaMixin:
         self.enforce_media_throttle(request, credential)
 
         profile, _created = Profile.objects.get_or_create(user=credential_user)
+        return profile
+
+    def profile_from_media_cookie(self, request: HttpRequest) -> Profile | None:
+        """Identify the requester from the media-origin cookie.
+
+        The last resort, reached only by a request with no ``Authorization``
+        header and no session - which on the media origin is every request, since
+        the session cookie is host-only for the app's hostname and never sent
+        there. See :mod:`urbanlens.dashboard.services.media.origin`.
+
+        It is checked *after* the session rather than before so that a request on
+        the app's own origin is still served as its session's account. Both
+        cookies travel together there (the media cookie carries an explicit
+        ``Domain``), and the media cookie is refreshed lazily, so a stale one left
+        over from a previous login would otherwise outrank the current session.
+
+        Args:
+            request: The current request.
+
+        Returns:
+            The profile the cookie authenticates, or None when it is absent,
+            expired, tampered with, or names a user that no longer exists.
+        """
+        from django.contrib.auth import get_user_model
+
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.media.origin import MEDIA_COOKIE_NAME, media_origin, user_id_from_token
+
+        if not media_origin():
+            return None
+        user_id = user_id_from_token(request.COOKIES.get(MEDIA_COOKIE_NAME, ""))
+        if user_id is None:
+            return None
+        # is_active, so deactivating an account stops serving its media without
+        # waiting for the cookie to expire.
+        user = get_user_model().objects.filter(pk=user_id, is_active=True).first()
+        if user is None:
+            return None
+        profile, _created = Profile.objects.get_or_create(user=user)
         return profile
 
     def profile_from_credential(self, request: HttpRequest) -> tuple[object, object] | None:
@@ -274,13 +313,23 @@ class CredentialOrSessionMediaMixin:
 
         Raises:
             Http404: The request carried an ``Authorization`` header that did
-                not resolve to a credential holding :attr:`media_scope`. Raised
-                rather than returned so it flows through the view's normal
-                404 handling alongside every other media denial - a distinct
-                response object here would be a distinguishable failure mode,
-                which is precisely the oracle this gate avoids.
+                not resolve to a credential holding :attr:`media_scope`, or it
+                arrived on the media origin. Raised rather than returned so it
+                flows through the view's normal 404 handling alongside every
+                other media denial - a distinct response object here would be a
+                distinguishable failure mode, which is precisely the oracle this
+                gate avoids.
         """
-        if request.META.get("HTTP_AUTHORIZATION"):
+        from urbanlens.dashboard.services.media.origin import is_media_origin_request
+
+        # The media origin never serves a page, so there is nothing for a login
+        # redirect to accomplish there: the request is an <img>/<video>/<iframe>
+        # subresource, and following the redirect would fetch the login page's
+        # HTML and render it as a broken image. Worse, the login page would be
+        # framed from a foreign origin. A 404 fails the subresource cleanly and
+        # leaves the app origin - where the user actually is - to handle the
+        # logged-out state.
+        if request.META.get("HTTP_AUTHORIZATION") or is_media_origin_request(request):
             raise Http404
         return redirect_to_login(request.get_full_path(), str(settings.LOGIN_URL))
 

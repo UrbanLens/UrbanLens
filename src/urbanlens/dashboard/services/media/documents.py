@@ -17,6 +17,8 @@ import subprocess
 import tempfile
 from typing import TYPE_CHECKING
 
+from urbanlens.dashboard.services.sandbox import untrusted_parse
+
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
 
@@ -59,6 +61,7 @@ def soffice_available() -> bool:
     return shutil.which("soffice") is not None
 
 
+@untrusted_parse("document.convert")
 def convert_to_pdf(image: Image) -> int | None:
     """Convert a non-PDF document upload to PDF in place, via LibreOffice headless.
 
@@ -120,6 +123,7 @@ def convert_to_pdf(image: Image) -> int | None:
     return len(new_bytes)
 
 
+@untrusted_parse("document.ocr")
 def extract_pdf_text(image: Image) -> str | None:
     """Extract searchable text from a stored PDF: its native text layer plus OCR.
 

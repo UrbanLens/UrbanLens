@@ -1,4 +1,15 @@
-"""Image processing utilities - EXIF extraction, downscaling, and metadata helpers."""
+"""Image processing utilities - EXIF extraction, downscaling, and metadata helpers.
+
+Everything here that opens a file with Pillow is marked
+:func:`~urbanlens.dashboard.services.sandbox.guard.untrusted_parse` and runs only
+in the sandbox worker. That includes the ``extract_*`` helpers, which look
+cheap but are not safe: ``Image.open`` runs the format's own header parser, and
+a header parser is as capable of a memory-corruption bug as the pixel decoder
+behind it. The byte-level metadata stripper in
+:mod:`~urbanlens.dashboard.services.media.metadata_strip` is the deliberate
+exception - it walks container segments in pure Python and never decodes, which
+is exactly why it is the half that may run inside a request.
+"""
 
 from __future__ import annotations
 
@@ -20,6 +31,8 @@ if TYPE_CHECKING:
 from django.utils import timezone
 from PIL import Image as PILImage, ImageOps
 from PIL.ExifTags import GPSTAGS, TAGS
+
+from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -225,6 +238,7 @@ def _dms_to_decimal(dms: tuple[float, ...], ref: str) -> float:
     return decimal
 
 
+@untrusted_parse("image.exif")
 def extract_gps_coords(image_file: IO[bytes]) -> tuple[float, float] | None:
     """Return (latitude, longitude) from EXIF GPS tags, or None if not present."""
     try:
@@ -250,6 +264,7 @@ def extract_gps_coords(image_file: IO[bytes]) -> tuple[float, float] | None:
     return lat, lng
 
 
+@untrusted_parse("image.exif")
 def extract_gps_direction(image_file: IO[bytes]) -> float | None:
     """Return the compass bearing the camera was pointing, or None if absent.
 
@@ -294,6 +309,7 @@ def extract_gps_direction(image_file: IO[bytes]) -> float | None:
     return direction
 
 
+@untrusted_parse("image.exif")
 def extract_taken_at(image_file: IO[bytes]) -> datetime | None:
     """Return the EXIF DateTimeOriginal capture time, or None if absent/unparseable.
 
@@ -357,6 +373,7 @@ def _decode_xp_string(value: Any) -> str | None:
     return text or None
 
 
+@untrusted_parse("image.exif")
 def extract_author(image_file: IO[bytes]) -> str | None:
     """Return the photo's author/credit from EXIF, or None if absent.
 
@@ -379,6 +396,7 @@ def extract_author(image_file: IO[bytes]) -> str | None:
     return _decode_xp_string(exif.get(_XP_AUTHOR_TAG))
 
 
+@untrusted_parse("image.exif")
 def extract_copyright_notice(image_file: IO[bytes]) -> str | None:
     """Return the photo's EXIF copyright notice, or None if absent."""
     try:
@@ -397,6 +415,7 @@ def extract_copyright_notice(image_file: IO[bytes]) -> str | None:
     return None
 
 
+@untrusted_parse("image.exif")
 def extract_caption_from_metadata(image_file: IO[bytes]) -> str | None:
     """Return a caption sourced from EXIF ``ImageDescription``/``XPTitle``/``XPComment``."""
     try:
@@ -419,6 +438,7 @@ def extract_caption_from_metadata(image_file: IO[bytes]) -> str | None:
     return None
 
 
+@untrusted_parse("image.exif")
 def extract_source_url(image_file: IO[bytes]) -> str | None:
     """Return a source URL embedded in the file's text metadata, if any.
 
@@ -546,6 +566,7 @@ def _json_safe(value: Any) -> Any:
         return str(value)
 
 
+@untrusted_parse("image.exif")
 def extract_exif_data(image_file: IO[bytes]) -> dict[str, Any] | None:
     """Snapshot all EXIF metadata from an image file as a JSON-safe dict.
 
@@ -634,6 +655,7 @@ def file_still_referenced(field: str, name: str, *, exclude_pks: Collection[int]
     return ImageModel.objects.filter(**{field: name}).exclude(pk__in=list(exclude_pks)).exists()
 
 
+@untrusted_parse("image.decode")
 def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool) -> int | None:
     """Downscale, re-encode, and strip EXIF from an Image's stored file in place.
 
@@ -778,6 +800,7 @@ def photos_missing_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKF
     return list(qs.values_list("pk", flat=True)[:limit])
 
 
+@untrusted_parse("image.decode")
 def write_image_thumbnail(image: Image, *, max_dimension: int = THUMBNAIL_MAX_DIMENSION, force: bool = False) -> bool:
     """Write a small WebP preview into ``image.thumbnail`` for grid display.
 
@@ -871,6 +894,7 @@ def photos_missing_marker_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAI
     return list(qs.values_list("pk", flat=True)[:limit])
 
 
+@untrusted_parse("image.decode")
 def write_image_marker_thumbnail(image: Image, *, max_dimension: int = MARKER_THUMBNAIL_MAX_DIMENSION, force: bool = False) -> bool:
     """Write a tiny WebP preview into ``image.marker_thumbnail`` for map markers.
 

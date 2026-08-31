@@ -47,6 +47,49 @@ x-app-env: &app-env
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
   UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
   UL_PG_DUMP_BIN: /usr/lib/postgresql/17/bin/pg_dump
+  # Sandbox tier. UL_SANDBOX_ENABLED must agree across every container: the
+  # process that *enqueues* a task is the one that stamps its queue, so a
+  # disagreement here sends uploads to a queue nothing drains.
+  UL_SANDBOX_ENABLED: ${UL_SANDBOX_ENABLED:-true}
+  UL_UNTRUSTED_PARSE_POLICY: ${UL_UNTRUSTED_PARSE_POLICY:-warn}
+  UL_MEDIA_BASE_URL: ${UL_MEDIA_BASE_URL:-}
+  UL_MEDIA_COOKIE_DOMAIN: ${UL_MEDIA_COOKIE_DOMAIN:-}
+  UL_MEDIA_CSP: ${UL_MEDIA_CSP:-}
+
+# Environment for the sandbox worker (media-worker), which parses untrusted
+# uploads: images through Pillow, video through ffmpeg, documents through
+# LibreOffice, archives through zipfile, GIS files through GDAL. Every one of
+# those is a C parser being pointed at bytes a stranger chose, and the mitigation
+# for a decoder memory-corruption bug is not detection - it is making a
+# successful exploit worthless. So this block is defined by what it OMITS:
+#
+#   - No third-party API keys. Nothing to steal, nothing to bill.
+#   - No email credentials.
+#
+# and the service itself joins only `sandbox_network` (internal: true), so a
+# process that does get code execution has no route off the host.
+#
+# DB and field-encryption credentials remain, because the processing tasks write
+# their results back to the row they were given. That is the residual risk this
+# tier does not remove; see docs/MEDIA_PIPELINE.md.
+x-sandbox-env: &sandbox-env
+  UL_DB_USER: ${UL_DB_USER:-postgres}
+  UL_DB_NAME: ${UL_DB_NAME:-postgres}
+  UL_DB_PASS: ${UL_DB_PASS:-postgres}
+  UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
+  UL_DB_PORT: ${UL_DB_PORT:-5432}
+  UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
+  UL_SITE_URL: ${UL_SITE_URL:-http://localhost:21080}
+  UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+  UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
+  UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
+  UL_CLAMAV_ENABLED: ${UL_CLAMAV_ENABLED:-true}
+  UL_CLAMAV_HOST: ${UL_CLAMAV_HOST:-urbanlens_clamav}
+  UL_SANDBOX_ENABLED: ${UL_SANDBOX_ENABLED:-true}
+  # This is the only container permitted to run a parser over an upload; the
+  # guard in services/sandbox/guard.py reads this to decide.
+  UL_PROCESS_ROLE: sandbox
 
 # Minimal environment for celery-beat - only needs DB + broker to schedule tasks.
 x-beat-env: &beat-env
@@ -62,6 +105,14 @@ x-beat-env: &beat-env
   # encrypted field would decrypt under the wrong key.
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
   UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
+  # Sandbox tier. UL_SANDBOX_ENABLED must agree across every container: the
+  # process that *enqueues* a task is the one that stamps its queue, so a
+  # disagreement here sends uploads to a queue nothing drains.
+  UL_SANDBOX_ENABLED: ${UL_SANDBOX_ENABLED:-true}
+  UL_UNTRUSTED_PARSE_POLICY: ${UL_UNTRUSTED_PARSE_POLICY:-warn}
+  UL_MEDIA_BASE_URL: ${UL_MEDIA_BASE_URL:-}
+  UL_MEDIA_COOKIE_DOMAIN: ${UL_MEDIA_COOKIE_DOMAIN:-}
+  UL_MEDIA_CSP: ${UL_MEDIA_CSP:-}
 
 # Project name is derived from the environment so each of prod/dev/test/staging
 # gets its own Compose namespace
@@ -95,6 +146,7 @@ services:
     env_file: *app-env-file
     environment:
       <<: *app-env
+      UL_PROCESS_ROLE: web
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
@@ -165,6 +217,7 @@ services:
     env_file: *app-env-file
     environment:
       <<: *app-env
+      UL_PROCESS_ROLE: websocket
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health/"]
@@ -235,6 +288,53 @@ services:
     cpus: ${CPU_LIMIT__NGINX:-${CPU_LIMIT:-2}}
     mem_limit: ${MEM_LIMIT__NGINX:-${MEM_LIMIT:-128m}}
 
+  # The media origin (media.urbanlens.org). Point NGINX Proxy Manager at
+  # ${UL_MEDIA_PORT} on this host, and set UL_MEDIA_BASE_URL to the resulting
+  # https:// URL so Django builds its media URLs against it.
+  #
+  # Its own container rather than a second server block on `nginx` so the two
+  # vhosts cannot share a location by accident: media.conf contains no route to
+  # an application page, so nothing a client can put in a Host header turns this
+  # hostname into a way into the app. It also gets its own resource envelope -
+  # media traffic is long-lived byte streaming, page traffic is not.
+  media-nginx:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_media_nginx
+    image: nginxinc/nginx-unprivileged:alpine
+    restart: unless-stopped
+    volumes:
+      # Read-only: this container serves uploads and must never be a way to
+      # write one.
+      - media_volume:/app/src/urbanlens/media:ro
+      - ./src/urbanlens/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./src/urbanlens/config/nginx/media.conf:/etc/nginx/conf.d/media.conf:ro
+      # django.conf is deliberately NOT mounted here.
+      - /dev/null:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${UL_MEDIA_PORT:-21801}:8080"
+    depends_on:
+      - app
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_media_nginx
+    healthcheck:
+      # 127.0.0.1, not localhost - see the nginx service for why.
+      test:
+        ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/nginx-health"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    # Same profile as `nginx`: worker_processes is 2 in the shared nginx.conf,
+    # and this vhost does strictly less than that one.
+    cpus: ${CPU_LIMIT__MEDIA_NGINX:-${CPU_LIMIT:-2}}
+    mem_limit: ${MEM_LIMIT__MEDIA_NGINX:-${MEM_LIMIT:-128m}}
+
   db:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_db
     # Pin to the same major version as postgresql-client-17 in the Dockerfile so
@@ -245,6 +345,11 @@ services:
       - postgres-data:/var/lib/postgresql/data
     networks:
       app_network:
+        aliases:
+          - urbanlens_db
+      # Also on the sandbox network so media-worker can reach it without
+      # joining app_network (which would give it a route to the internet).
+      sandbox_network:
         aliases:
           - urbanlens_db
 
@@ -310,6 +415,7 @@ services:
     env_file: *app-env-file
     environment:
       <<: *app-env
+      UL_PROCESS_ROLE: worker
     logging:
       driver: "json-file"
       options:
@@ -361,6 +467,7 @@ services:
     env_file: *app-env-file
     environment:
       <<: *app-env
+      UL_PROCESS_ROLE: panels
     logging:
       driver: "json-file"
       options:
@@ -371,6 +478,87 @@ services:
     # GDAL/GeoPandas/Pillow already resident. 
     cpus: ${CPU_LIMIT__CELERY_PANELS:-${CPU_LIMIT:-1}}
     mem_limit: ${MEM_LIMIT__CELERY_PANELS:-${MEM_LIMIT:-1g}}
+
+  # The sandbox tier: every task that points a parser at bytes a user uploaded
+  # runs here and nowhere else. Pillow, ffmpeg, LibreOffice, GDAL and zipfile are
+  # all C code with a long history of memory-corruption bugs reachable from a
+  # well-formed file, and no signature scanner can see one coming. This container
+  # exists so that when one of them is exploited, the attacker lands somewhere
+  # with no route to the internet and no credentials worth having.
+  #
+  # What makes it a sandbox, in the order that matters:
+  #   1. `networks: [sandbox_network]` and nothing else. That network is
+  #      `internal: true`, so there is no gateway and no NAT - no exfiltration,
+  #      no second-stage download. This is the load-bearing line.
+  #   2. `*sandbox-env` instead of `*app-env`: no third-party API keys.
+  #   3. `cap_drop: ALL` + `no-new-privileges`: the image already runs as
+  #      appuser (uid 1001); this removes the rest of the escalation surface.
+  #   4. Tight cpu/mem/pids ceilings, so a decompression bomb or a fork bomb
+  #      inside a decoder starves this container rather than the host.
+  #
+  # It deliberately does NOT get the static volume or the backups volume - it has
+  # no business reading either - and it is the only worker besides celery-worker
+  # that mounts media_volume, because writing the processed file back is the job.
+  media-worker:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_media_worker
+    build:
+      <<: *app-build
+    entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
+    # -Q sandbox: drains only that queue, so an unrouted task can never
+    # accidentally execute here with the reduced environment and fail obscurely.
+    #
+    # --concurrency=2 (prefork): decoding is CPU-bound and does not yield, so
+    # slots beyond the cpu ceiling only add memory. Two lets a slow LibreOffice
+    # conversion run without blocking every photo behind it.
+    command:
+      [
+        "-A",
+        "urbanlens.UrbanLens",
+        "worker",
+        "--loglevel=warning",
+        "--concurrency=2",
+        "-Q",
+        "sandbox",
+      ]
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    volumes:
+      - logs:/var/log/urbanlens
+      - media_volume:/app/src/urbanlens/media
+    networks:
+      - sandbox_network
+    # No env_file: the host .env carries every API key, and pulling it in here
+    # would undo the point of *sandbox-env below. Anything this worker genuinely
+    # needs belongs in that anchor, explicitly.
+    environment:
+      <<: *sandbox-env
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # LibreOffice and ffmpeg both spawn helpers; this is well above their normal
+    # use and far below what a fork bomb needs.
+    pids_limit: 512
+    tmpfs:
+      # Decoders stage temp files here (ffmpeg's transcode scratch, soffice's
+      # profile dir). Sized for the largest upload the site accepts plus a
+      # re-encode of it, and noexec/nosuid so a dropped payload cannot be run
+      # from the one directory this container writes freely.
+      - /tmp:size=2g,mode=1777,noexec,nosuid,nodev
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    # Two prefork children each decoding a full-resolution photo, plus the
+    # resident GDAL/Pillow/Django imports. Deliberately below celery-worker's
+    # ceiling: this container should be the first thing the OOM killer takes.
+    cpus: ${CPU_LIMIT__MEDIA_WORKER:-${CPU_LIMIT:-2}}
+    mem_limit: ${MEM_LIMIT__MEDIA_WORKER:-${MEM_LIMIT:-2g}}
 
   celery-beat:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_beat
@@ -402,6 +590,7 @@ services:
       - app_network
     environment:
       <<: *beat-env
+      UL_PROCESS_ROLE: beat
     logging:
       driver: "json-file"
       options:
@@ -430,6 +619,11 @@ services:
       - clamav-db:/var/lib/clamav
     networks:
       app_network:
+        aliases:
+          - urbanlens_clamav
+      # See the db service - same reason. clamd is the one outbound connection
+      # the sandbox worker legitimately makes.
+      sandbox_network:
         aliases:
           - urbanlens_clamav
     logging:
@@ -467,6 +661,10 @@ services:
       ]
     networks:
       app_network:
+        aliases:
+          - urbanlens_valkey
+      # See the db service - same reason.
+      sandbox_network:
         aliases:
           - urbanlens_valkey
     healthcheck:
@@ -511,6 +709,7 @@ services:
     env_file: *app-env-file
     environment:
       <<: *app-env
+      UL_PROCESS_ROLE: worker
       UL_DB_HOST: localhost
       UL_DB_PORT: "5432"
       UL_VALKEY_URL: redis://localhost:6379/0
@@ -598,6 +797,16 @@ volumes:
 networks:
   app_network:
     driver: bridge
+
+  # `internal: true` is the isolation. Docker creates no gateway for an internal
+  # network, so a container attached only to this one cannot reach the internet,
+  # the host, or any other Docker network - it can reach exactly the services
+  # that also joined here (db, valkey, clamav). That is what turns a decoder RCE
+  # in media-worker from a foothold into a dead end: no egress to exfiltrate to,
+  # and no second-stage payload to fetch.
+  sandbox_network:
+    driver: bridge
+    internal: true
     # Docker defaults new bridge networks to dual-stack.
     # Disable IPv6 here so only the working A record is ever returned.
     enable_ipv6: false

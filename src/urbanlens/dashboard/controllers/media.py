@@ -39,12 +39,11 @@ from urllib.parse import quote
 
 from django.conf import settings
 from django.http import FileResponse, Http404, HttpResponse
-from django.utils.decorators import method_decorator
 from django.views import View
-from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError, mark_private_media
 from urbanlens.dashboard.services.media.access import authorize_media
+from urbanlens.dashboard.services.media.origin import apply_media_response_headers
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -86,17 +85,16 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
     that a particular file exists but belongs to someone else.
     """
 
-    @method_decorator(xframe_options_sameorigin)
     def get(self, request: HttpRequest, path: str) -> HttpResponseBase:
         """Serve (or hand off to nginx) one media file the requester may see.
 
-        Overrides the site-wide ``X-Frame-Options: DENY`` default with
-        ``SAMEORIGIN`` - the Vault document lightbox (:mod:`partials._photo_lightbox`)
-        previews a document in an ``<iframe>`` on this same site, and DENY blocks
-        even that same-origin case. ``CONTENT_SECURITY_POLICY``'s
-        ``frame-ancestors 'self'`` (settings/base.py) would cover this once
-        ``UL_CSP_ENFORCE`` is on, but XFO is enforced unconditionally, so a
-        deployment running CSP report-only still needs this to work.
+        Framing and the other response headers are
+        :func:`~urbanlens.dashboard.services.media.origin.apply_media_response_headers`'s
+        job, including the ``X-Frame-Options: SAMEORIGIN`` that the Vault document
+        lightbox needs and the site-wide ``DENY`` would block. It is called here
+        rather than applied as a ``xframe_options_sameorigin`` decorator because
+        the two origins need different framing rules and a decorator runs after
+        this body - it would overwrite whatever the media-origin branch set.
 
         Args:
             request: The current request, carrying either a session or an
@@ -133,7 +131,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
             logger.info("Denied media request for %s by profile %s", rel_path, profile.pk)
             raise Http404
 
-        return serve_media_file(rel_path, full_path)
+        return apply_media_response_headers(request, serve_media_file(rel_path, full_path))
 
     def _resolve_media_path(self, path: str) -> tuple[str, Path]:
         """Delegate to :func:`resolve_media_path`.

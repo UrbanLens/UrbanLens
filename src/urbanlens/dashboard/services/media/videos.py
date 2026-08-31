@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
+from urbanlens.dashboard.services.sandbox import untrusted_parse
+
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
 
@@ -36,6 +38,7 @@ def ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 
 
+@untrusted_parse("video.probe")
 def probe_video(path: str) -> dict[str, Any] | None:
     """Run ffprobe on a local file and return its parsed JSON output.
 
@@ -155,6 +158,7 @@ def _run_ffmpeg(args: list[str], src_path: str, what: str) -> bool:
     return True
 
 
+@untrusted_parse("video.transcode")
 def _reencode(src_path: str, out_path: str, max_height: int, *, strip_location: bool = False) -> bool:
     """Downscale to ``max_height``, optionally dropping the location tags; True on success."""
     args = [
@@ -178,6 +182,7 @@ def _reencode(src_path: str, out_path: str, max_height: int, *, strip_location: 
     return _run_ffmpeg([*args, out_path], src_path, "re-encode")
 
 
+@untrusted_parse("video.transcode")
 def _remux_without_location(src_path: str, out_path: str) -> bool:
     """Drop the location tags without touching the streams; True on success.
 

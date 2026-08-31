@@ -20,6 +20,10 @@ Files in `docs/`
 
 `TOOLING.md` - the diagnostic and CI tooling
 
+`MEDIA_PIPELINE.md` - what happens to an upload, the sandbox tier that decodes it,
+and the separate origin it is served from. Read before touching anything that
+parses user-supplied bytes.
+
 `TEST_COVERAGE_GAPS.md` - every defect the integration/contract suites found
 that the pytest suite did not
 
@@ -138,3 +142,7 @@ When a user reports a bug, reproduce it with a failing test (TDD), then fix - th
 - Any new pin/location share path must call `resolve_origin_share` + `record_share_exposure` to
   keep the `LocationExposure` provenance chain intact.
 - `EncryptedTextField` writes under the active key and reads under any retired key still listed in `UL_FIELD_ENCRYPTION_KEY_FALLBACKS`; rotate keys only via the procedure in `docs/DATA_ENCRYPTION.md` (which also tracks what is/isn't encrypted, and why)
+- Anything that hands user-uploaded bytes to a parser (Pillow, ffmpeg, LibreOffice,
+  GDAL, `zipfile`, lxml) must be decorated `@untrusted_parse` and reached only from a
+  task declaring `queue=SANDBOX_QUEUE`. Declare the queue on the task, never at the
+  `apply_async` call site. See `docs/MEDIA_PIPELINE.md`.

@@ -139,6 +139,10 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Directly below AuthenticationMiddleware, which is the first point
+    # request.user exists. Mints/refreshes the media-origin cookie; a no-op
+    # unless UL_MEDIA_BASE_URL is set.
+    "urbanlens.dashboard.middleware.MediaOriginCookieMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # Innermost: swaps in the simulated viewer for "view profile as" previews.
@@ -330,6 +334,15 @@ CELERY_TASK_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_TIME_LIMIT", "3600"))
 # in docs/PROBLEMS.md) isn't the last one this worker ever hits.
 CELERY_WORKER_MAX_TASKS_PER_CHILD = int(os.getenv("UL_CELERY_WORKER_MAX_TASKS_PER_CHILD", "200"))
 CELERY_WORKER_MAX_MEMORY_PER_CHILD = int(os.getenv("UL_CELERY_WORKER_MAX_MEMORY_PER_CHILD", str(512 * 1024)))  # KiB
+
+# Sandbox tier - which container is allowed to point a parser at bytes a
+# stranger uploaded. See services/sandbox/guard.py for what this defends
+# against (decoder memory-corruption bugs, not malware) and docs/MEDIA_PIPELINE.md
+# for the deployment topology. Surfaced as Django settings rather than read off
+# _app_settings at each call site so tests can flip them with override_settings.
+UL_PROCESS_ROLE = _app_settings.process_role
+UL_SANDBOX_ENABLED = _app_settings.sandbox_enabled
+UL_UNTRUSTED_PARSE_POLICY = _app_settings.untrusted_parse_policy
 # Backup defaults. Site admins can override these values in the database-backed settings UI.
 UL_BACKUP_ENABLED = os.getenv("UL_BACKUP_ENABLED", "True").lower() in {"true", "1", "yes"}
 UL_BACKUP_FREQUENCY_HOURS = int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24"))
@@ -552,7 +565,24 @@ STORAGES = {
     },
 }
 
-MEDIA_URL = "/media/"
+# User uploads are served from their own origin when one is configured, so that
+# anything which slips past validation executes somewhere with no session cookie
+# and no app data to reach. Because MEDIA_URL is what FileField.url is built
+# from, setting it absolute moves every existing `.url` call site - templates,
+# serializers, the external API - onto that origin with no per-call-site change.
+# Authentication there is a separate, media-only signed cookie; see
+# dashboard/services/media/origin.py for why, and docs/MEDIA_PIPELINE.md for the
+# deployment shape. Unset (the default, and local development) keeps the
+# same-origin /media/ behaviour exactly as it was.
+UL_MEDIA_BASE_URL = _app_settings.media_base_url.rstrip("/")
+UL_MEDIA_COOKIE_DOMAIN = _app_settings.media_cookie_domain
+# Content-Security-Policy for responses served on the media origin, minus its
+# frame-ancestors (appended at runtime from UL_SITE_URL). Empty uses the default
+# in services/media/origin.py; override to add `sandbox` on a deployment that
+# does not need in-browser document preview.
+UL_MEDIA_CSP = os.getenv("UL_MEDIA_CSP", "")
+
+MEDIA_URL = f"{UL_MEDIA_BASE_URL}/media/" if UL_MEDIA_BASE_URL else "/media/"
 MEDIA_ROOT = os.path.join(PROJECT_ROOT, "media")
 
 # Authenticated media serving (dashboard.controllers.media.MediaGateView).
@@ -735,7 +765,37 @@ def allow_vendor_mirror(directives: dict[str, object], base_url: object) -> str 
     return origin
 
 
+def allow_media_origin(directives: dict[str, object], base_url: str) -> str | None:
+    """Admit the media origin to every directive that fetches an upload.
+
+    ``img-src`` already allows ``https:`` wholesale, but the others do not, and
+    each of them loads a user upload: ``media-src`` for the video player,
+    ``frame-src`` for the Vault document lightbox's ``<iframe>``, ``connect-src``
+    for the JS that fetches photo bytes directly (E2EE attachments, the photo
+    editor). Without this, turning on both ``UL_MEDIA_BASE_URL`` and
+    ``UL_CSP_ENFORCE`` would silently break all three while images kept working -
+    the worst possible failure shape to debug.
+
+    Args:
+        directives: The CSP directive lists, modified in place.
+        base_url: The configured media origin, or an empty string for none.
+
+    Returns:
+        The origin admitted, or None when uploads are served same-origin.
+    """
+    if not base_url:
+        return None
+    parsed = urlparse(base_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    for name in ("img-src", "media-src", "frame-src", "connect-src"):
+        hosts = directives.get(name)
+        if isinstance(hosts, list) and origin not in hosts:
+            hosts.append(origin)
+    return origin
+
+
 allow_vendor_mirror(_CSP_DIRECTIVES, _app_settings.vendor_asset_base_url)
+allow_media_origin(_CSP_DIRECTIVES, UL_MEDIA_BASE_URL)
 
 # Report-only by default: the header is emitted and violations are reported, but
 # nothing is blocked, so a policy mistake shows up in reports instead of as a

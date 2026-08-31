@@ -1,4 +1,12 @@
-"""Celery tasks for the dashboard application."""
+"""Celery tasks for the dashboard application.
+
+Tasks that hand untrusted uploaded bytes to a parser declare
+``queue=SANDBOX_QUEUE``, which routes them to the isolated ``media-worker``
+container rather than the general-purpose worker. The queue is declared on the
+task instead of at each ``apply_async`` site on purpose - see
+:mod:`urbanlens.dashboard.services.sandbox.queues` for why, and
+:mod:`urbanlens.dashboard.services.sandbox.guard` for what the isolation buys.
+"""
 
 from __future__ import annotations
 
@@ -15,12 +23,19 @@ from django.utils import timezone
 
 from urbanlens.dashboard.services.core.celery import update_task_progress
 from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+from urbanlens.dashboard.services.sandbox import sandbox_queue
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
+
+#: Resolved once, at import, so it lands in each decorated task's own exec
+#: options. Falls back to the default queue where no sandbox worker is deployed
+#: (``UL_SANDBOX_ENABLED=false``), so those installs keep processing uploads
+#: rather than filling a queue nothing drains.
+SANDBOX_QUEUE = sandbox_queue()
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -346,7 +361,7 @@ def cleanup_export_artifacts_task(export_dir: str, job_id: str | None = None) ->
     logger.info("Cleaned up export artifacts for job %s", job_id or export_dir)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
 def run_user_data_import(self, user_id: int, zip_path: str, job_id: str) -> bool:
     """Parse a UrbanLens export ZIP and import data for the user."""
     from urbanlens.dashboard.services.import_export.import_data import run_import
@@ -876,7 +891,7 @@ def _sync_deduped_siblings(image: Image) -> None:
                 image.image.storage.delete(name)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
 def process_image_upload(self, image_id: int) -> bool:
     """Extract metadata after an upload and update the Image row.
 
@@ -985,7 +1000,7 @@ def process_image_upload(self, image_id: int) -> bool:
     return True
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
 def generate_image_thumbnails(image_ids: list[int]) -> int:
     """Fill in missing grid thumbnails for already-stored photos.
 
@@ -1062,7 +1077,7 @@ def backfill_image_thumbnails(limit: int | None = None) -> int:
     return len(ids)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
 def generate_image_marker_thumbnails(image_ids: list[int]) -> int:
     """Fill in missing map-marker thumbnails for already-stored photos.
 
@@ -1267,7 +1282,7 @@ def sync_redata_pin_assignment(pin_id: int) -> bool:
     return True
 
 
-@shared_task(bind=True, max_retries=5)
+@shared_task(bind=True, max_retries=5, queue=SANDBOX_QUEUE)
 def scan_comment_image(self, comment_id: int) -> bool:
     """Background malware-scan a newly-uploaded pin/wiki comment image.
 
@@ -1295,7 +1310,7 @@ def scan_comment_image(self, comment_id: int) -> bool:
     return _run_comment_image_scan(self, comment, Comment)
 
 
-@shared_task(bind=True, max_retries=5)
+@shared_task(bind=True, max_retries=5, queue=SANDBOX_QUEUE)
 def scan_trip_comment_image(self, comment_id: int) -> bool:
     """Background malware-scan a newly-uploaded trip comment image. Mirrors ``scan_comment_image``.
 

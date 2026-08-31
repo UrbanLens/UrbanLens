@@ -65,6 +65,15 @@ CELERY_RESULT_BACKEND = "cache+memory://"
 # behavior).
 _app_settings.clamav_enabled = False
 
+# The suite calls the parsers directly - that is how they are unit tested - so
+# the sandbox boundary is not enforced here. The tests that verify the boundary
+# itself (services/sandbox) raise it back to "deny" with override_settings.
+UL_UNTRUSTED_PARSE_POLICY = "allow"
+# No media-worker container drains a queue under pytest; with this off, the
+# untrusted-parse tasks keep their default routing and CELERY_TASK_ALWAYS_EAGER
+# still runs them in-process where a test asks for it.
+UL_SANDBOX_ENABLED = False
+
 # model_bakery's default related-object generation collides with the
 # create_user_profile post_save signal (see urbanlens.core.tests.baker).
 BAKER_CUSTOM_CLASS = "urbanlens.core.tests.baker.SignalSafeBaker"

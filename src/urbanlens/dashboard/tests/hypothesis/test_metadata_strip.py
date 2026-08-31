@@ -28,14 +28,14 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.media.metadata_strip import strip_metadata
 
 _GPS_IFD = 0x8825
-_ARTIST_TAG = 0x010F
+_MAKE_TAG = 0x010F
 _DESCRIPTION_TAG = 0x010E
 
 
 def _exif() -> PILImage.Exif:
     """An EXIF block carrying a GPS position and identifying text."""
     exif = PILImage.Exif()
-    exif[_ARTIST_TAG] = "A Photographer"
+    exif[_MAKE_TAG] = "A Photographer"
     exif[_DESCRIPTION_TAG] = "Taken at the old sanatorium"
     gps = exif.get_ifd(_GPS_IFD)
     gps[1] = "N"
@@ -76,7 +76,7 @@ class JpegStripTests(SimpleTestCase):
     def test_the_fixture_carries_what_we_claim_to_remove(self):
         tags, _info = _metadata_of(self.original)
 
-        self.assertIn(_ARTIST_TAG, tags)
+        self.assertIn(_MAKE_TAG, tags)
         self.assertIn("gps2", tags)
 
     def test_gps_and_identifying_text_are_gone(self):

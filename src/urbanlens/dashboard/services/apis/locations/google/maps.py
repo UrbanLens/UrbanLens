@@ -10,7 +10,7 @@ import re
 from typing import TYPE_CHECKING, Any, ClassVar
 
 # Only used to catch exceptions
-from defusedxml.ElementTree import ParseError as XMLParseError
+from defusedxml.ElementTree import ParseError as XMLParseError, fromstring as parse_xml_defused
 from django.core.cache import cache
 from django.db import DatabaseError
 from fastkml import kml
@@ -1329,6 +1329,31 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             # declaration (which every Google Takeout KML/KMZ has), so the raw
             # bytes must be passed through undecoded and let lxml sniff the encoding.
             file_contents = self._KML_NAMESPACE_RE.sub(rb"http://\1", file_contents)
+            # fastkml parses with lxml and applies no hardening of its own, so a
+            # KML upload is otherwise an XXE and entity-expansion surface: a
+            # SYSTEM entity reads a local file into a placemark name, and nested
+            # entities expand a few hundred bytes into gigabytes inside whichever
+            # process is parsing. Same treatment the GPX importers already give
+            # gpxpy (import_formats/gpx.py) - pre-parse with defusedxml purely to
+            # reject a hostile document, discard the tree, and let fastkml do the
+            # real KML-aware parse on bytes that have been vetted.
+            #
+            # Must stay above from_string: a check afterwards would run only once
+            # lxml had already resolved whatever it was meant to prevent.
+            #
+            # forbid_dtd=True, which the GPX helpers do not pass. defusedxml's
+            # defaults (forbid_entities/forbid_external) already stop both real
+            # attacks - a SYSTEM entity and nested entity expansion are each an
+            # <!ENTITY> declaration - so this is about what the guarantee is worth
+            # stating as. KML is XSD-schema'd and never legitimately carries a
+            # DTD, so "no doctype at all" is a property that can be asserted and
+            # tested directly, rather than "no entities, and trust that neither
+            # expat nor lxml decides to fetch the external subset someday".
+            #
+            # defusedxml's DTDForbidden/EntitiesForbidden/ExternalReferenceForbidden
+            # all descend from ValueError, which IMPORT_PARSE_ERRORS already
+            # covers, so a rejected file is reported exactly like a malformed one.
+            parse_xml_defused(file_contents, forbid_dtd=True)
             k = kml.KML.from_string(file_contents)  # type: ignore[arg-type]
 
             pins: list[dict[str, Any]] = []

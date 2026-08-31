@@ -38,6 +38,8 @@ from urllib.parse import urlencode, urlsplit
 
 from django.core.signing import Signer
 
+from urbanlens.dashboard.services.sandbox import untrusted_parse
+
 logger = logging.getLogger(__name__)
 
 #: Salt for the generic preview endpoint's URL signature. Binds a preview
@@ -252,6 +254,7 @@ def gallery_thumb_url(item_url: str, thumb_url: str, content_type: str = "") -> 
     return preview_thumb_url(item_url, content_type)
 
 
+@untrusted_parse("document.render")
 def _pdf_first_page(raw: bytes):
     """Render a PDF's first page to a PIL image, or None when poppler can't.
 
@@ -271,6 +274,7 @@ def _pdf_first_page(raw: bytes):
     return pages[0] if pages else None
 
 
+@untrusted_parse("image.decode")
 def render_preview(raw: bytes, content_type: str = "", *, max_dimension: int = PREVIEW_MAX_DIMENSION) -> tuple[bytes, str] | None:
     """Convert one file's bytes into a browser-renderable image.
 

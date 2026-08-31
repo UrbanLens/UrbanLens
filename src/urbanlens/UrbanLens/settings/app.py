@@ -173,6 +173,49 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     clamav_host: str = Field(default="urbanlens_clamav", description="Hostname of the clamd daemon (see the clamav service in docker-compose.yml)")
     clamav_port: int = Field(default=3310, description="Port of the clamd daemon")
     clamav_timeout_seconds: float = Field(default=15.0, description="Socket timeout for a single clamd scan request")
+    media_base_url: str = Field(
+        default="",
+        description=(
+            "Origin that serves user uploads, e.g. https://media.urbanlens.org. Point it at the media-nginx "
+            "container's published port (UL_MEDIA_PORT). Serving uploads from their own origin means anything "
+            "that slips past validation executes where there is no session cookie and no app data; authentication "
+            "there uses a separate media-only signed cookie. Leave empty to serve /media/ from the app's own "
+            "hostname, which is what local development does. The host must also appear in UL_ALLOWED_HOSTS."
+        ),
+    )
+    media_cookie_domain: str = Field(
+        default="",
+        description=(
+            "Domain attribute for the media cookie. Empty (the default) derives the deepest domain the site host "
+            "and media host share, which is right whenever the media origin is a sibling subdomain. Set this only "
+            "when the two hosts are not related that way, and never to a public suffix."
+        ),
+    )
+    process_role: str = Field(
+        default="unspecified",
+        description=(
+            "What this process is: web, websocket, worker, panels, beat, or sandbox. Set per service in "
+            "docker-compose.yml. Only 'sandbox' may hand untrusted uploaded bytes to a parser (Pillow, ffmpeg, "
+            "LibreOffice, GDAL, zipfile); see UL_UNTRUSTED_PARSE_POLICY."
+        ),
+    )
+    sandbox_enabled: bool = Field(
+        default=True,
+        description=(
+            "Whether a media-worker container is deployed to drain the 'sandbox' Celery queue. When false, "
+            "untrusted-parse tasks fall back to the default queue so an install without that container still "
+            "processes uploads - without the isolation. Set UL_SANDBOX_ENABLED=false only where no media-worker runs."
+        ),
+    )
+    untrusted_parse_policy: str = Field(
+        default="warn",
+        description=(
+            "How a process reacts when it is about to parse untrusted uploaded bytes outside the sandbox worker: "
+            "'deny' raises, 'warn' logs and proceeds, 'allow' disables the check. Production should be 'deny'; "
+            "'warn' exists to collect violations during a rollout, and the test settings force 'allow' because the "
+            "suite calls the parsers directly."
+        ),
+    )
     allow_dev_toolbar_for_non_admins: bool = Field(
         default=False,
         description=(

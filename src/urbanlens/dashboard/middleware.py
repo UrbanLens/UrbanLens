@@ -22,6 +22,65 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class MediaOriginCookieMiddleware:
+    """Keep the browser holding a current credential for the media origin.
+
+    Uploads are served from their own hostname (``UL_MEDIA_BASE_URL``), which
+    the session cookie deliberately does not reach - see
+    :mod:`urbanlens.dashboard.services.media.origin`. This mints the separate,
+    media-only cookie that does, and refreshes it before it expires, so a page
+    rendered on the app origin can display images from the media origin without
+    the user noticing there are two hostnames involved.
+
+    Placed below ``AuthenticationMiddleware`` because it needs ``request.user``.
+
+    The common path costs nothing: a browser holding a cookie that is valid,
+    unexpired and minted for the current user hits
+    :func:`~urbanlens.dashboard.services.media.origin.needs_refresh`, which is a
+    signature check against ``request.user.pk`` and no query at all. A cookie is
+    written at most twice per lifetime.
+
+    Logout needs no signal handler: the next response after the session ends has
+    an anonymous ``request.user``, and a request still carrying the cookie has it
+    deleted right there. Anything relying on a signal would have to fire on
+    session expiry too, which no signal does.
+    """
+
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        """Store the next handler in the chain.
+
+        Args:
+            get_response: The downstream handler.
+        """
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        """Run the request, then add, refresh, or clear the media cookie.
+
+        Args:
+            request: The current request.
+
+        Returns:
+            The downstream response, with the cookie adjusted where needed.
+        """
+        from urbanlens.dashboard.services.media.origin import MEDIA_COOKIE_NAME, clear_media_cookie, is_media_origin_request, media_origin, needs_refresh, set_media_cookie
+
+        response = self.get_response(request)
+        if not media_origin() or is_media_origin_request(request):
+            # Nothing to mint from on the media origin: it has no session, and
+            # its responses are file bytes rather than pages a browser will
+            # follow up on.
+            return response
+
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated:
+            if needs_refresh(request, user.pk):
+                set_media_cookie(response, user.pk)
+        elif MEDIA_COOKIE_NAME in request.COOKIES:
+            clear_media_cookie(response)
+        return response
+
+
 class SecurityHeadersMiddleware:
     """Attach the response headers ``SecurityMiddleware`` has no setting for.
 

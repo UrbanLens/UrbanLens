@@ -22,6 +22,52 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-08-31: two parsers still run in the request, so the sandbox policy cannot go to `deny`
+
+The sandbox tier (`services/sandbox/`, `media-worker` in docker-compose.yml) routes every
+decoding task to a container with no internet egress and no API keys, and
+`@untrusted_parse` marks the functions that may only run there. Two callers still violate it,
+which is why `UL_UNTRUSTED_PARSE_POLICY` defaults to `warn` rather than `deny`:
+
+1. **`services/media/images.prepare_photo_upload`** calls the `extract_*` helpers inside the
+   upload request, so Pillow opens attacker bytes in a gunicorn worker. It reads EXIF and strips
+   it in one step deliberately - splitting them would put an unstripped original, GPS intact, in
+   the media tree until a worker got to it - so the fix is not "move the call", it is to move the
+   whole accept-then-process boundary: store to a quarantine location, return `202`, and have the
+   sandbox worker do the read/strip/scan. That is the same change as the async-scan work below.
+2. **`controllers/pin.parse_for_preview`** runs `extract_archive` (zipfile/tarfile) and
+   `extract_pins_from_document` (python-docx) in the request path. It has real limits already
+   (`archive_extractor.ExtractionBudget`), but limits bound resource use, not a parser bug.
+
+Until both move, `deny` would break uploads and the import preview. `warn` logs each violation
+with a stack, so the log is the worklist.
+
+## OPEN 2026-08-31: ClamAV still scans synchronously in the upload request
+
+`image_upload_error` blocks on a clamd round-trip before `Image.objects.create`, with a 15s
+socket timeout, and fails closed. That is correct but it is also the upload latency users notice,
+and it is the half of the pipeline that has not moved to the sandbox tier. The comment path
+already shows the shape of the fix - `Comment.pending_scan`, `tasks.scan_comment_image`, and a
+`pending_scan` refusal in `services/media/access.py` - and `image_upload_error` already takes
+`skip_malware_scan=True` for exactly that. What is missing on the `Image` side is the
+`pending_scan` field, the gate in the `pin_images` authorizer, and a "processing" state in the
+gallery so a photo that has not cleared yet reads as pending rather than broken.
+
+Note the interaction with the entry above: both want the same accept-then-process boundary, so
+they should be done as one change rather than two.
+
+## OPEN 2026-08-31: `test_upload_strips_metadata_before_storing` was asserting against the wrong EXIF tag
+
+Fixed in passing, recorded because the class of mistake will recur. The fixture defined
+`_ARTIST_TAG = 0x010F` and wrote `"A Photographer"` there, then asserted it came back as
+`Image.author`. `0x010F` is **Make**; **Artist** is `0x013B`, which is what `extract_author`
+reads - correctly. So the test had been failing on `main` against correct implementation code.
+`test_metadata_strip.py` had the same misnamed constant but only asserts the tag is *stripped*,
+so its assertions held regardless; it is renamed to `_MAKE_TAG` rather than repointed.
+
+Three other test modules define `_MAKE_TAG = 0x010F` and use it correctly. When adding an EXIF
+fixture, take the tag number from `PIL.ExifTags.TAGS` rather than from a neighbouring test.
+
 ## OPEN 2026-08-31: the pin-detail "switch wiki" GET picker is now UI-orphaned
 
 Replacing the pin-detail hero's single-wiki-plus-switch-button with a list of every linked wiki
