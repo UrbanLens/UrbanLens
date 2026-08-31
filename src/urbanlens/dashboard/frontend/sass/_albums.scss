@@ -825,9 +825,15 @@ $album-gutter: 1rem;
 .album-target-dialog {
     width: min(28rem, calc(100vw - 2rem));
     max-height: min(32rem, calc(100vh - 2rem));
-    display: flex;
-    flex-direction: column;
     padding: 0;
+
+    // Scoped to [open] rather than set bare: a plain `display` on a <dialog>
+    // beats the UA stylesheet's `dialog:not([open]) { display: none }`, which
+    // left this dialog laid out in the page even while closed.
+    &[open] {
+        display: flex;
+        flex-direction: column;
+    }
 }
 
 .album-target-head {

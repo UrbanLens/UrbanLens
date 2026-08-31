@@ -11,8 +11,11 @@ Context (see services.media.images.image_associations):
   pin    - {"name", "url"} or None
   wiki   - {"name", "url"} or None
   albums - [{"name", "url", "owner_label", "owner_name"}, ...]
+  can_file - whether this media can be filed to a pin / sent to a wiki at all
+             (false for a document, which PhotoActionView refuses)
 {% endcomment %}
 <div class="lightbox-associations">
+    {% if pin or can_file %}
     <div class="lightbox-association-row">
         {% if pin %}
         <a href="{{ pin.url }}" class="lightbox-association-line">
@@ -25,6 +28,8 @@ Context (see services.media.images.image_associations):
         </button>
         {% endif %}
     </div>
+    {% endif %}
+    {% if wiki or can_file %}
     <div class="lightbox-association-row">
         {% if wiki %}
         <a href="{{ wiki.url }}" class="lightbox-association-line">
@@ -32,10 +37,13 @@ Context (see services.media.images.image_associations):
             <span>Wiki: {{ wiki.name }}</span>
         </a>
         {% endif %}
+        {% if can_file %}
         <button type="button" class="lightbox-association-action" onclick="window._lightboxOpenWikiPicker()">
             <i class="material-symbols-outlined">public</i> {% if wiki %}Change wiki{% else %}Send to a wiki{% endif %}
         </button>
+        {% endif %}
     </div>
+    {% endif %}
     {% if albums %}
     <div class="lightbox-associations-title">
         <i class="material-symbols-outlined">photo_album</i> In albums

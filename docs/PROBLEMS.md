@@ -4252,3 +4252,127 @@ regression, but not investigated further (out of scope for this PR):
 
 Worth a dedicated mypy-hygiene pass; the `type: ignore` cleanups in particular are likely quick once
 someone confirms what the now-passing code path actually is.
+## OPEN 2026-08-31: album detail resolves photo visibility four times per request
+
+Found in a fresh-eyes performance review of the Vault feature; **pre-existing in the shared album
+code** (`controllers/albums.py`), not introduced by the Vault, but the Vault made it reachable with a
+much wider scope (a vault album's owner is a `Profile`, so its candidate set is the user's entire
+library rather than one pin's photos). Measured with `CaptureQueriesContext` against the dev DB: a
+30-photo vault album costs **60 queries**.
+
+`_album_detail_context` (`controllers/albums.py:335-354`) resolves the same visibility set four
+separate times - `visible_album_item_pairs` at :335, then again inside `album_images_page` at :337,
+then `eligible_images_for` at :342, then `_picker_album_payload` -> `albums_listing` ->
+`_visible_image_ids` at :354. `ImageQuerySet.visible_to` is documented as eager
+(`models/images/queryset.py:100-106`) and costs ~9 queries a time (two friendship queries, pinned
+locations, trip ids, the uploader/visibility scan, and `visible_wiki_location_ids`' three
+place-domain queries). Roughly 36 of the 60 are the same work repeated. `album_images_page` should
+take the already-computed pairs, and `_picker_album_payload` should reuse the listing.
+
+Two related unbounded reads in the same function:
+
+- `:342` `row["available_images"] = list(eligible_images_for(owner, viewer).exclude(...).only(...))`
+  has no limit. `.only()` trims columns, not rows. `_album_detail.html:174` renders one `<li>`+`<img>`
+  per row into the add-to-album dialog, so a user with 5000 photos ships ~5000 tiles of HTML every
+  time they open any vault album. Needs the offset/limit treatment the album grid itself already has.
+- `:350` `map_images` loads **every** visible photo in the album (not the current page) with a
+  `Location` join and serializes them all via `json_script`, immediately after `album_images_page`
+  deliberately avoided hydrating them.
+
+And in `services/photos/albums.py:266`, `albums_listing` materializes every `AlbumItem` plus every
+joined `Image` only to derive a count, a cover id, and a min/max timestamp (lines 276-283) - all
+expressible as one `values("album_id").annotate(...)`. Line 285 then re-fetches covers that
+`select_related("image")` had already loaded.
+
+Left alone deliberately: these are all in long-standing shared album code that pin and wiki albums
+depend on, and the safe fix is a focused refactor with its own test pass rather than a drive-by edit
+during a Vault review.
+
+## OPEN 2026-08-31: `dashboard_images` has no index supporting the Vault's hot query
+
+Found in the same review, verified against the live dev database (`pg_indexes` on `dashboard_images`,
+18 rows): **no index contains `created`**, and none pairs `profile_id` with `media_type`. The only
+declared indexes (`models/images/model.py:552-560`) are `(location, media_source_key, media_item_key)`
+and `(profile, quota_exempt_reason)`.
+
+Every Vault gallery page runs `WHERE profile_id = X AND media_type = 'photo' ORDER BY created DESC,
+id DESC LIMIT 24 OFFSET n` (`models/images/queryset.py:269/275`, ordering from `models/images/sort.py:61-64`).
+With only `dashboard_images_profile_id_c6ff6357` usable, Postgres reads every row the profile owns,
+filters `media_type` on the heap, and sorts the whole set to return 24. That repeats per scroll page,
+and again for the `.count()` each page fetch issues (`controllers/vault_photos.py:292-294`,
+`controllers/vault_documents.py:110-112` - `total` is only needed once, on the first page).
+
+The attention queue has the same gap: `needs_attention` (`queryset.py:301-308`) filters
+`profile + visit IS NULL + organize_dismissed + pin IS NULL + wiki IS NULL + pin_suggestion IS NULL`
+ordered by `-created`, on every Vault Photos load and every `refreshQueue`.
+
+Suggested: `Index(fields=["profile", "media_type", "-created", "-id"])` plus a partial index for the
+attention queue. Not added here because index creation must go last in any migration chain (see the
+migration conventions in CLAUDE.md) and this deserves its own migration reviewed on real data
+volumes, not a tail-end addition to a feature branch.
+
+## OPEN 2026-08-31: Vault album bulk actions (delete, send-to-wiki, share) are silently unavailable
+
+`controllers/albums.py:513-519` sets `gallery_bulk_url`/`pin_share_dialog_url` only when the album
+owner is a `Pin`; a `Profile` (vault) owner falls into the `else` and gets empty strings. Downstream,
+`album-items.ts:378-379` only wires the bulk wiki/delete callbacks `if (bulkUrl)`, and
+`_bulk_toolbar.html` hides any button without one - so the Delete and Send-to-wiki buttons declared
+in `_album_bulk_actions` (`albums.py:543-545`) render `hidden` forever inside a vault album, as do
+the equivalent right-click entries (`photo-context-menu.ts:144,146,159`).
+
+Net effect: inside a vault album you can multi-select and add/move/remove/set-cover, but there is no
+delete of any kind - you have to leave the album and use the per-tile trash button one photo at a
+time. Single-photo share still works from the lightbox, so only *bulk* share is lost.
+
+Unlike the other vault-album omissions (`move_url`, `reposition_base`, external media), which each
+carry an explicit "a vault album has none" rationale in the source, this one has no comment marking
+it deliberate - it reads as an oversight from widening `Pin | Wiki` to `Pin | Wiki | Profile`. Needs a
+decision (wire up a profile-scoped bulk endpoint, or document the refusal) rather than a silent gap.
+
+## OPEN 2026-08-31: video uploads are charged to quota but appear nowhere in the Vault
+
+`MediaKind.VIDEO` exists (`models/images/model.py:136`), `_resolve_media_type` classifies and
+feature-gates videos (`services/photos/photo_upload.py:83-86`), and `tasks.py:913` processes them -
+but `ImageQuerySet` has `photos()`/`documents()` and no `videos()` (`queryset.py:271-281`), and the
+Vault has no video surface. A video uploaded through the external API
+(`external_api/views.py:1303`) counts against `get_storage_totals` and the user's quota, yet
+`VaultHomeView` counts only photos and documents and its recent-uploads strip chains only those two.
+The user is billed for storage they cannot see, browse, or delete from the Vault.
+
+Either add a Videos page (the third instance of the same copy-paste - see the note below) or, at
+minimum, surface videos in the Vault home counts and storage explanation so the number reconciles.
+
+## OPEN 2026-08-31: adding a third Vault media type means copying ~600 lines for ~90 lines of difference
+
+`controllers/vault_documents.py` is largely a rename of `controllers/vault_photos.py`'s gallery
+half (`:32-36 / :80-120 / :123-156` vs `:38-50 / :261-302 / :305-332`), `pages/vault/documents.html`
+duplicates `photos.html`'s inline upload/delete/lightbox script (110 lines byte-for-byte identical),
+and `vault-document-grid.ts` shares ~68 near-identical lines with `vault-photo-grid.ts` differing in
+four string literals. A `MEDIA_KIND_SPECS` registry - the same frozen-dataclass + dict + lookup shape
+this codebase already uses three times (`ALBUM_KIND_SPECS`, `ALBUM_SORT_SPECS`, `GALLERY_SORT_SPECS`)
+- plus `ImageQuerySet.of_kind(kind)` and a `kind` URL kwarg (the pattern `urls.py:2042-2050` already
+uses to serve pin/wiki/vault albums from one view class) would reduce that to one spec entry, one
+tile renderer, and the SCSS.
+
+Related: `pages/vault/photos.html` carries 371 lines of inline `<script>` and `documents.html` 168 -
+539 lines total that `bun run typecheck` and `bun test` cannot see, against 40+ `*.test.ts` files
+covering `shared/`. The 135-line confirm-pin block (`photos.html:140-274`) is the worst of it: it
+owns Leaflet lifecycle across dialog opens, does its own bbox fetch, builds popup HTML by string
+concatenation, and defines an `_esc()` helper found nowhere else under `templates/`. Extracting it to
+`shared/photo-pin-confirm.ts` and the uploader to a shared `initVaultUploader` would bring the whole
+Vault client surface under typecheck and test.
+
+## OPEN 2026-08-31: `ulSectionCollapsed` is not a function - hx-trigger races the core bundle on pin detail
+
+Seen as 28 identical console errors during a Playwright run against the dev environment:
+`TypeError: (intermediate value)(intermediate value)(intermediate value).ulSectionCollapsed is not a function`.
+`window.ulSectionCollapsed` is assigned by `shared/collapsible-sections.ts:231` (bundled into
+`core.js`), and is read from `hx-trigger="load[!window.ulSectionCollapsed('pin','...')]"` attributes
+in `partials/pins/_pin_location_data_tabs.html:35`, `_pin_plugin_tabs.html:40`,
+`pages/location/index.html` (×8) and `pages/location/wiki.html` (×4). When htmx evaluates those
+`load` triggers before `core.js` has executed, every one of them throws and the section silently
+never loads its content.
+
+Unrelated to the Vault (the string appears in no Vault or album template) - surfaced only because a
+Vault album spec navigates to a pin detail page. Worth guarding the trigger expression
+(`window.ulSectionCollapsed && !window.ulSectionCollapsed(...)`) or asserting load order.

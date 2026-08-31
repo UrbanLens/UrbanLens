@@ -174,7 +174,9 @@ def quota_error_for_upload(profile: Profile, upload_size: int | None) -> str | N
     used = get_storage_used_bytes(profile)
     if used + max(upload_size or 0, 0) <= quota:
         return None
-    return f"This upload would exceed your storage quota ({filesizeformat(used)} of {filesizeformat(quota)} used). Delete some photos or lower your image size in Settings → Storage."
+    # "files", not "photos": documents share this quota and reach this same
+    # message through the Vault's Documents dropzone.
+    return f"This upload would exceed your storage quota ({filesizeformat(used)} of {filesizeformat(quota)} used). Delete some files, or lower your image size in Settings → Storage."
 
 
 @contextmanager

@@ -46,4 +46,22 @@ test.describe("vault home page", () => {
         await expect(storage).toBeVisible();
         await expect(storage.locator(".storage-usage__text")).toContainText("used");
     });
+
+    // The secondary account is the suite's "no content of its own" account, so
+    // it exercises the brand-new-user path the primary account can no longer
+    // reach. Three zeroed stat tiles and an empty storage bar tell a new user
+    // nothing, so the page swaps them for a welcome + the two ways in.
+    test("a vault with nothing in it shows a welcome and a way in, not zeroed tiles", async ({ secondaryPage }) => {
+        await secondaryPage.goto(appRoutes.vaultHome);
+
+        const empty = secondaryPage.locator(".memories-empty-state");
+        await expect(empty).toBeVisible();
+        await expect(empty.locator("h2")).toHaveText("Your Vault is empty");
+        await expect(empty.locator(`a[href="${appRoutes.vaultPhotos}"]`)).toBeVisible();
+        await expect(empty.locator(`a[href="${appRoutes.vaultDocuments}"]`)).toBeVisible();
+
+        // The stat tiles and storage bar are replaced by it, not shown alongside.
+        await expect(secondaryPage.locator(".vault-home-stats")).toHaveCount(0);
+        await expect(secondaryPage.locator(".vault-home-storage")).toHaveCount(0);
+    });
 });

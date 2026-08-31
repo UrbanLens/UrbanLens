@@ -62,8 +62,12 @@ interface BindOptions {
     albumSlug?: string;
     /** CSS selector for one loaded tile, used to count what's already in the DOM. Default: the album grid's. */
     itemSelector?: string;
-    /** CSS selector for a tile's `<img>`, used for off-screen pruning. Default: the album grid's. */
-    imageSelector?: string;
+    /**
+     * CSS selector for a tile's `<img>`, used for off-screen pruning. Default:
+     * the album grid's. Pass `null` for a grid whose tiles hold no image, which
+     * skips the scroll listeners rather than scanning for nothing.
+     */
+    imageSelector?: string | null;
     /** Build one tile's element from its raw JSON. Default: the shared album `PhotoTile` renderer. */
     renderTile?: (raw: Record<string, unknown>) => HTMLElement | null;
     /** Extra query params appended to every items-URL fetch (e.g. the active sort). */
@@ -92,7 +96,7 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
     const total = Number.parseInt(grid.dataset.photoCount ?? "0", 10);
     const pageSize = Number.parseInt(grid.dataset.gridPageSize ?? "", 10) || DEFAULT_PAGE_SIZE;
     const itemSelector = opts.itemSelector ?? DEFAULT_ITEM_SELECTOR;
-    const imageSelector = opts.imageSelector ?? DEFAULT_IMAGE_SELECTOR;
+    const imageSelector = opts.imageSelector ?? DEFAULT_IMAGE_SELECTOR;  // only read when `recycles`
     const renderTile = opts.renderTile ?? defaultRenderTile(opts);
     if (!itemsUrl || !total) return () => {};
 
@@ -166,16 +170,38 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
     );
     observer.observe(sentinel);
 
-    const onScroll = () => recycleGridImages(grid, imageSelector);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    grid.addEventListener("scroll", onScroll, { passive: true });
+    // Coalesced into one frame: recycleGridImages reads a bounding rect per
+    // loaded tile - a forced synchronous layout each - and scroll fires far
+    // more often than the page paints. Once a few thousand tiles are in the
+    // DOM the uncoalesced version measured every one of them per event.
+    let recycleQueued = false;
+    const onScroll = () => {
+        if (recycleQueued) return;
+        recycleQueued = true;
+        requestAnimationFrame(() => {
+            recycleQueued = false;
+            if (!unbound) recycleGridImages(grid, imageSelector);
+        });
+    };
+    // A grid whose tiles have no <img> (Vault Documents: an icon and a
+    // filename) opts out with an explicit `imageSelector: null` and skips the
+    // listeners entirely, rather than scanning for a selector that can never
+    // match. Omitting the option keeps the default selector - album grids rely
+    // on that - so the opt-out has to be the explicit null, not a falsy check.
+    const recycles = opts.imageSelector !== null;
+    if (recycles) {
+        window.addEventListener("scroll", onScroll, { passive: true });
+        grid.addEventListener("scroll", onScroll, { passive: true });
+    }
 
     return () => {
         unbound = true;
         abort.abort();
         observer.disconnect();
-        window.removeEventListener("scroll", onScroll);
-        grid.removeEventListener("scroll", onScroll);
+        if (recycles) {
+            window.removeEventListener("scroll", onScroll);
+            grid.removeEventListener("scroll", onScroll);
+        }
         clearSkeletons();
         sentinel.remove();
     };

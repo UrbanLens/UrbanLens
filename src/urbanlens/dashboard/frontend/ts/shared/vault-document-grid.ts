@@ -12,33 +12,11 @@ interface VaultDocumentJson {
     id?: unknown;
     url?: unknown;
     caption?: unknown;
+    document_icon?: unknown;
 }
 
-const ICONS_BY_EXTENSION: Record<string, string> = {
-    pdf: "picture_as_pdf",
-    doc: "description",
-    docx: "description",
-    odt: "description",
-    rtf: "article",
-    txt: "article",
-    xls: "table_chart",
-    xlsx: "table_chart",
-    ods: "table_chart",
-    csv: "table_chart",
-    ppt: "slideshow",
-    pptx: "slideshow",
-    odp: "slideshow",
-};
-
-/** The extension a document's own filename ends in, lowercased and without the dot. */
-export function documentExtension(filename: string): string {
-    const dot = filename.lastIndexOf(".");
-    return dot === -1 ? "" : filename.slice(dot + 1).toLowerCase();
-}
-
-export function documentIcon(filename: string): string {
-    return ICONS_BY_EXTENSION[documentExtension(filename)] ?? "insert_drive_file";
-}
+/** Fallback only - the icon normally arrives with the item (see image_to_gallery_json). */
+const DEFAULT_DOCUMENT_ICON = "insert_drive_file";
 
 const TILE_SHELL =
     '<button type="button" class="document-tile-btn">' +
@@ -64,7 +42,7 @@ export function renderVaultDocumentTile(raw: Record<string, unknown>): HTMLEleme
     li.innerHTML = TILE_SHELL;
 
     const icon = li.querySelector(".document-tile-icon");
-    if (icon) icon.textContent = documentIcon(caption);
+    if (icon) icon.textContent = String(item.document_icon || "") || DEFAULT_DOCUMENT_ICON;
     const name = li.querySelector(".document-tile-name");
     if (name) name.textContent = caption;
 
@@ -101,9 +79,12 @@ function bindGrid(grid: HTMLElement, sort: string): void {
     unbindGrid = bindPhotoGrid(grid, {
         inAlbum: false,
         itemSelector: ".document-tile[data-id]",
-        // No imageSelector: a document tile has no <img> to prune (see
-        // TILE_SHELL - an icon + filename, not a decoded bitmap), so
-        // off-screen recycling has nothing to do here.
+        // A document tile has no <img> to prune (see TILE_SHELL - an icon and
+        // a filename, not a decoded bitmap). The explicit null opts out of the
+        // scroll listeners entirely; omitting it would fall back to the album
+        // grid's selector and scan on every scroll for something that can
+        // never match.
+        imageSelector: null,
         renderTile: renderVaultDocumentTile,
         extraParams: { sort },
         skeletonCount: SKELETON_COUNT,

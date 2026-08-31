@@ -6,11 +6,12 @@ from itertools import chain
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Count, Q
 from django.shortcuts import render
 from django.views import View
 
 from urbanlens.dashboard.models.album.model import Album
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.media.storage import get_quota_bytes, get_storage_totals
 
@@ -37,8 +38,15 @@ class VaultHomeView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         gallery = Image.objects.uploaded_by(profile)
-        photo_count = gallery.photos().count()
-        document_count = gallery.documents().count()
+        # One pass over the profile's rows for both counts rather than a
+        # full scan each - these are unindexed-suffix counts over a library
+        # that grows without bound.
+        counts = gallery.aggregate(
+            photos=Count("pk", filter=Q(media_type=MediaKind.PHOTO)),
+            documents=Count("pk", filter=Q(media_type=MediaKind.DOCUMENT)),
+        )
+        photo_count = counts["photos"] or 0
+        document_count = counts["documents"] or 0
         album_count = Album.objects.for_profile(profile).count()
 
         used_bytes, exempt_bytes = get_storage_totals(profile)
@@ -63,6 +71,9 @@ class VaultHomeView(LoginRequiredMixin, View):
                 "photo_count": photo_count,
                 "document_count": document_count,
                 "album_count": album_count,
+                # Drives the welcome/empty state - counts of zero across the board
+                # make the stat tiles and storage bar pure noise for a new user.
+                "is_empty": not (photo_count or document_count or album_count),
                 "recent_uploads": recent,
                 "storage_used_bytes": used_bytes,
                 "storage_quota_bytes": quota_bytes,

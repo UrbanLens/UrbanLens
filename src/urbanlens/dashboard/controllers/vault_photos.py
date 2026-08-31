@@ -45,7 +45,10 @@ def _sorted_gallery(profile: Profile, request: HttpRequest):
     Returns:
         The gallery queryset, ordered.
     """
-    gallery = Image.objects.uploaded_by(profile).photos().select_related("pin", "wiki")
+    # profile__user: image_to_gallery_json names the uploader via
+    # _visible_uploader_name -> Profile.username -> self.user.username, which is
+    # two queries per row without this - 2x the page size on every scroll fetch.
+    gallery = Image.objects.uploaded_by(profile).photos().select_related("pin", "wiki", "profile__user")
     sort = gallery_sort_spec(request.GET.get("sort") or GallerySort.RECENT)
     return sort.apply(gallery)
 
@@ -120,6 +123,14 @@ def _toast(message: str, level: str = "success", *, status: int = 200, refresh_q
     Returns:
         An empty-body response carrying an ``HX-Trigger`` header; swapping it with
         ``outerHTML`` removes the card from the queue while the toast fires.
+
+    Note:
+        The empty body is the point, so this is only correct where the card
+        *should* go. A refusal reached from a card-swapping button wants
+        :func:`_render_card` instead, which re-renders the card alongside the
+        toast - returning this with ``level="error"`` would report the failure
+        and drop the photo out of the queue anyway. The ``error`` calls below
+        are all reached from the lightbox, which swaps nothing.
     """
     triggers: dict[str, Any] = {"showToast": {"message": message, "level": level}}
     if refresh_queue:
@@ -218,7 +229,10 @@ class VaultPinAlbumsView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.photos.albums import albums_listing
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        pins = list(Pin.objects.filter(profile=profile).select_related("location"))
+        # No select_related: the loop below reads each album's own parent_pin,
+        # which albums_for_owners already selects with its location/wiki chain -
+        # these instances are only used to build the owner filter.
+        pins = list(Pin.objects.filter(profile=profile).only("pk"))
         rows = []
         for entry in albums_listing(pins, profile):
             pin = entry.album.parent_pin
@@ -318,6 +332,7 @@ class PhotoUploadView(LoginRequiredMixin, View):
             The new image serialized for the gallery grid, or a 400 error.
         """
         from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
+        from urbanlens.dashboard.services.photos.uploads import record_photo_upload_failure
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
@@ -327,6 +342,11 @@ class PhotoUploadView(LoginRequiredMixin, View):
         try:
             img = upload_photo(profile, image_file)
         except PhotoUploadError as exc:
+            # Recorded, not just returned: this page renders a "Couldn't upload"
+            # panel (_photo_issues.html) that the pin/wiki upload path already
+            # feeds. Without this its own dropzone's failures show a toast that
+            # is gone in seconds and never reach the panel that exists for them.
+            record_photo_upload_failure(profile, image_file.name or "photo", exc.message)
             return JsonResponse({"error": exc.message}, status=exc.status)
 
         return JsonResponse(image_to_gallery_json(img, request, profile), status=201)

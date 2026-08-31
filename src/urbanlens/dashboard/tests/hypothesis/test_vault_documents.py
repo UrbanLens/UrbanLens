@@ -122,6 +122,56 @@ class DocumentItemsViewTests(TestCase):
         captions = [item["caption"] for item in response.json()["items"]]
         self.assertEqual(captions, ["Apple.pdf", "Zebra.pdf"])
 
+    def test_items_carry_the_server_resolved_document_icon(self) -> None:
+        """The grid renders the icon from the payload rather than re-deriving it.
+
+        The client only ever sees the caption, while the server falls back to
+        the stored filename when a document has no caption - a client-side copy
+        of the extension map therefore disagrees with the server-rendered first
+        page for exactly those rows.
+        """
+        baker.make(Image, profile=self.profile, media_type=MediaKind.DOCUMENT, caption="deed.pdf")
+        item = self.client.get(reverse("vault.documents.items")).json()["items"][0]
+        self.assertEqual(item["media_type"], MediaKind.DOCUMENT)
+        self.assertEqual(item["document_icon"], "picture_as_pdf")
+
+    def test_photo_items_carry_an_empty_document_icon(self) -> None:
+        baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO, caption="not-a-doc.jpg")
+        item = self.client.get(reverse("vault.photos.items")).json()["items"][0]
+        self.assertEqual(item["media_type"], MediaKind.PHOTO)
+        self.assertEqual(item["document_icon"], "")
+
+    def test_query_count_does_not_grow_with_the_number_of_documents(self) -> None:
+        """The gallery selects ``profile__user``, so listing is flat, not per-row.
+
+        ``image_to_gallery_json`` names the uploader through
+        ``Profile.username`` -> ``self.user.username``. Without that select
+        each row costs a ``dashboard_profiles`` and an ``auth_user`` query, so
+        a page of results scales with the page size - 2x the page size in extra
+        round-trips on every infinite-scroll fetch.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        def page_queries() -> int:
+            with CaptureQueriesContext(connection) as ctx:
+                self.client.get(reverse("vault.documents.items"))
+            return len(ctx)
+
+        for i in range(2):
+            baker.make(Image, profile=self.profile, media_type=MediaKind.DOCUMENT, caption=f"a{i}.pdf")
+        with_two = page_queries()
+
+        for i in range(6):
+            baker.make(Image, profile=self.profile, media_type=MediaKind.DOCUMENT, caption=f"b{i}.pdf")
+        with_eight = page_queries()
+
+        self.assertEqual(
+            with_two,
+            with_eight,
+            f"listing 8 documents took {with_eight} queries vs {with_two} for 2 - the per-row uploader lookup is back",
+        )
+
 
 class DocumentUploadViewTests(TestCase):
     def setUp(self) -> None:
@@ -366,3 +416,65 @@ class MemoriesHeroStatsExcludeDocumentsTests(TestCase):
         baker.make(Image, profile=self.profile, media_type=MediaKind.DOCUMENT)
         hero_stats, _has_data = _compute_hero_stats(self.profile)
         self.assertEqual(hero_stats["photo_count"], 0)
+
+
+class DocumentLightboxActionsTests(TestCase):
+    """The lightbox must not offer the actions PhotoActionView refuses.
+
+    File-to-a-pin and send-to-a-wiki are both refused server-side for a
+    document (see PhotoActionViewRefusesDocumentsTests); rendering the buttons
+    anyway leaves a user searching their pins, picking one, and getting an
+    error toast for their trouble.
+    """
+
+    def setUp(self) -> None:
+        self.user: User = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def test_associations_mark_a_document_as_unfileable(self) -> None:
+        from urbanlens.dashboard.services.media.images import image_associations
+
+        document = baker.make(Image, profile=self.profile, media_type=MediaKind.DOCUMENT, caption="deed.pdf")
+        self.assertFalse(image_associations(document, self.profile)["can_file"])
+
+    def test_associations_mark_a_photo_as_fileable(self) -> None:
+        from urbanlens.dashboard.services.media.images import image_associations
+
+        photo = baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO)
+        self.assertTrue(image_associations(photo, self.profile)["can_file"])
+
+    def test_document_associations_panel_offers_neither_action(self) -> None:
+        document = baker.make(Image, profile=self.profile, media_type=MediaKind.DOCUMENT, caption="deed.pdf")
+        response = self.client.get(reverse("vault.photos.associations", args=[document.pk]))
+        body = response.content.decode()
+        self.assertNotIn("_lightboxOpenPinPicker", body)
+        self.assertNotIn("_lightboxOpenWikiPicker", body)
+
+    def test_photo_associations_panel_still_offers_both(self) -> None:
+        photo = baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO)
+        response = self.client.get(reverse("vault.photos.associations", args=[photo.pk]))
+        body = response.content.decode()
+        self.assertIn("_lightboxOpenPinPicker", body)
+        self.assertIn("_lightboxOpenWikiPicker", body)
+
+
+class AlbumPickerExcludesDocumentsTests(TestCase):
+    """Album tiles are <img> elements throughout, so a document in an album
+    renders as a broken image and can even be chosen as the album cover.
+    eligible_images_for is the chokepoint for both the picker listing and
+    AlbumAddPhotosView, which re-scopes submitted ids through it.
+    """
+
+    def setUp(self) -> None:
+        self.user: User = baker.make(User)
+        self.profile = self.user.profile
+
+    def test_vault_album_candidates_exclude_documents(self) -> None:
+        from urbanlens.dashboard.services.photos.albums import eligible_images_for
+
+        photo = baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO)
+        document = baker.make(Image, profile=self.profile, media_type=MediaKind.DOCUMENT, caption="deed.pdf")
+        eligible = list(eligible_images_for(self.profile, self.profile))
+        self.assertIn(photo, eligible)
+        self.assertNotIn(document, eligible)

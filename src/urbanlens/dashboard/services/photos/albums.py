@@ -139,7 +139,10 @@ def albums_for_owners(owners: Sequence[Pin | Wiki | Profile]) -> QuerySet[Album]
     query = Q()
     for owner in owners:
         query |= Q(**owner_kwargs(owner))
-    return Album.objects.filter(query).select_related("cover_image", "parent_pin")
+    # The location/wiki chain is part of the same select because every caller
+    # that labels a pin album reads Pin.effective_name, which walks
+    # pin -> location -> wiki: two more queries per album without it.
+    return Album.objects.filter(query).select_related("cover_image", "parent_pin__location__wiki")
 
 
 def _owner_conceal(owner: Pin | Wiki | Profile, viewer: Profile | None) -> bool:
@@ -294,6 +297,11 @@ def eligible_images_for(owner: Pin | Wiki | Profile, viewer: Profile | None) -> 
     owning profile's own uploads. That keeps a private pin photo from being
     pulled onto a shared community surface just by adding it to an album there.
 
+    Photos only. Album tiles are ``<img>`` elements throughout, so a document
+    added here renders as a broken image (and can be picked as the album
+    cover). This is the chokepoint for both the picker listing and
+    ``AlbumAddPhotosView``, which re-scopes submitted ids through it.
+
     Args:
         owner: The Pin, Wiki, or Profile (Vault) that owns the album.
         viewer: The profile browsing, for the standard photo-visibility gate.
@@ -303,7 +311,7 @@ def eligible_images_for(owner: Pin | Wiki | Profile, viewer: Profile | None) -> 
     """
     from urbanlens.dashboard.models.images.model import Image
 
-    qs = Image.objects.filter(**owner_kwargs_to_image_scope(owner)).visible_to(viewer).order_by("-created")
+    qs = Image.objects.filter(**owner_kwargs_to_image_scope(owner)).photos().visible_to(viewer).order_by("-created")
     if _owner_conceal(owner, viewer):
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 

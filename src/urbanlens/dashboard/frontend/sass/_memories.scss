@@ -1100,6 +1100,13 @@ $memories-type-colors: (
     margin-top: .75rem;
 }
 
+.vault-home-empty-actions {
+    display: flex;
+    gap: .75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
 .vault-recent-strip {
     display: flex;
     gap: .6rem;

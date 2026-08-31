@@ -112,7 +112,7 @@
             return 'That file is too large (' + _formatBytes(file.size) + '). The maximum upload size is ' + _formatBytes(MAX_FILE_SIZE) + '.';
         }
         if (STORAGE_QUOTA !== null && STORAGE_USED + committed + file.size > STORAGE_QUOTA) {
-            return 'This upload would exceed your storage quota (' + _formatBytes(STORAGE_USED + committed) + ' of ' + _formatBytes(STORAGE_QUOTA) + ' used). Delete some files or lower your image size in Settings → Storage.';
+            return 'This upload would exceed your storage quota (' + _formatBytes(STORAGE_USED + committed) + ' of ' + _formatBytes(STORAGE_QUOTA) + ' used). Delete some files, or lower your image size in Settings → Storage.';
         }
         return null;
     }
@@ -138,6 +138,21 @@
     // -- Upload (one request per file) ------------------------------------------
     window.documentsHandleFiles = function (files) {
         files = Array.from(files || []);
+        if (!files.length) return;
+
+        // The `accept` attribute only constrains the file picker, not a drag-drop.
+        // Without this an image dropped here uploads happily - the server types it
+        // as a PHOTO - and the page renders it as a bogus document tile that
+        // disappears on the next refresh, having quietly landed in Photos instead.
+        var images = files.filter(function (f) { return f.type.indexOf('image/') === 0; });
+        files = files.filter(function (f) { return f.type.indexOf('image/') !== 0; });
+        if (images.length && window.toastr) {
+            toastr.warning(
+                images.length === 1
+                    ? images[0].name + ' is an image. Upload it on the Photos page instead.'
+                    : images.length + ' images were skipped. Upload those on the Photos page instead.',
+            );
+        }
         if (!files.length) return;
 
         var committed = 0;
@@ -245,7 +260,7 @@
 
     // -- Lightbox (document mode - see partials/_photo_lightbox.html) ----------
     window.documentsOpenLightbox = function (id) {
-        var items = Array.prototype.map.call(document.querySelectorAll('.document-tile'), function (el) {
+        var items = Array.prototype.map.call(document.querySelectorAll('.document-tile[data-id]'), function (el) {
             return {
                 url: el.dataset.url, caption: el.dataset.caption || '',
                 imageId: parseInt(el.dataset.id, 10), mediaType: 'document',

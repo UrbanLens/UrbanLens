@@ -24,14 +24,25 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.media.images import image_to_gallery_json
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from django.http import HttpRequest, HttpResponse
 
 _GALLERY_PAGE_SIZE = 24
 
 
-def _sorted_documents(profile: Profile, request: HttpRequest):
-    """The profile's uploaded documents, ordered by the requested ``sort`` param."""
-    gallery = Image.objects.uploaded_by(profile).documents()
+def _sorted_documents(profile: Profile, request: HttpRequest) -> QuerySet[Image]:
+    """The profile's uploaded documents, ordered by the requested ``sort`` param.
+
+    Args:
+        profile: Whose documents to list.
+        request: The current HttpRequest, read for ``sort``.
+
+    Returns:
+        The document queryset, ordered.
+    """
+    # profile__user: see the same note on vault_photos._sorted_gallery - the
+    # uploader name behind image_to_gallery_json is two queries per row otherwise.
+    gallery = Image.objects.uploaded_by(profile).documents().select_related("profile__user")
     sort = gallery_sort_spec(request.GET.get("sort") or GallerySort.RECENT)
     return sort.apply(gallery)
 
@@ -142,6 +153,7 @@ class DocumentUploadView(LoginRequiredMixin, View):
             The new document serialized for the gallery grid, or an error.
         """
         from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
+        from urbanlens.dashboard.services.photos.uploads import record_photo_upload_failure
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         doc_file = request.FILES.get("document")
@@ -151,6 +163,9 @@ class DocumentUploadView(LoginRequiredMixin, View):
         try:
             doc = upload_photo(profile, doc_file, caption=doc_file.name or "")
         except PhotoUploadError as exc:
+            # See the same call in vault_photos.PhotoUploadView: a failure here
+            # belongs in the retry panel on Vault > Photos, not only in a toast.
+            record_photo_upload_failure(profile, doc_file.name or "document", exc.message)
             return JsonResponse({"error": exc.message}, status=exc.status)
 
         return JsonResponse(image_to_gallery_json(doc, request, profile), status=201)

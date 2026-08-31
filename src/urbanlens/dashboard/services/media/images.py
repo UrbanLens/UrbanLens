@@ -911,7 +911,7 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         attribution fields (author/source_url/copyright/taken_at) shown in the
         lightbox, and the two flags the pin gallery's delete prompt reads.
     """
-    from urbanlens.dashboard.models.images.model import ImageSource
+    from urbanlens.dashboard.models.images.model import ImageSource, MediaKind
 
     thumb = img.thumb_url
     return {
@@ -934,6 +934,11 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         "on_wiki": img.wiki_id is not None,
         "uploaded": img.source == ImageSource.UPLOAD,
         "map_hidden": bool(getattr(img, "map_hidden", False)),
+        "media_type": img.media_type,
+        # Served rather than re-derived client-side: the icon depends on the
+        # stored filename when a document has no caption, which the client
+        # never sees.
+        "document_icon": img.document_icon if img.media_type == MediaKind.DOCUMENT else "",
     }
 
 
@@ -957,6 +962,7 @@ def image_associations(image: Image, viewer: Profile) -> dict[str, Any]:
     """
     from django.urls import reverse
 
+    from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.photos.albums import _owner_conceal
 
     pin_info = None
@@ -1003,7 +1009,11 @@ def image_associations(image: Image, viewer: Profile) -> dict[str, Any]:
                 },
             )
 
-    return {"pin": pin_info, "wiki": wiki_info, "albums": albums}
+    # PhotoActionView refuses create-pin/log-visit/send-to-wiki for a document
+    # (a place's gallery has no way to render one), so the lightbox must not
+    # offer those actions either - the buttons would only ever toast an error.
+    can_file = image.media_type != MediaKind.DOCUMENT
+    return {"pin": pin_info, "wiki": wiki_info, "albums": albums, "can_file": can_file}
 
 
 def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bool:

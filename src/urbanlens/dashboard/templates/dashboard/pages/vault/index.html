@@ -11,6 +11,29 @@
 {% include "dashboard/partials/vault/_vault_subnav.html" with active_tab="home" %}
 <div class="page-inner">
 
+    {% if is_empty %}
+    {# A brand-new Vault: three zeroes and an empty storage bar say nothing     #}
+    {# useful, so offer the two ways in instead. Reuses the shared empty-state  #}
+    {# treatment from the Memories timeline.                                    #}
+    <div class="memories-empty-state">
+        <div class="memories-empty-state-icon"><i class="material-symbols-outlined">home_storage</i></div>
+        <h2>Your Vault is empty</h2>
+        <p>
+            The Vault holds your own photos and documents - the ones that aren't tied to a place yet.
+            Add photos and we'll help you match them to your pins and turn them into visits; add deeds,
+            permits, or reports to keep them with the locations they belong to.
+        </p>
+        <div class="vault-home-empty-actions">
+            <a href="{% url 'vault.photos' %}" class="btn btn--primary">
+                <i class="material-symbols-outlined">add_photo_alternate</i> Add photos
+            </a>
+            <a href="{% url 'vault.documents' %}" class="btn btn--secondary">
+                <i class="material-symbols-outlined">upload_file</i> Add documents
+            </a>
+        </div>
+    </div>
+    {% else %}
+
     {# -- Counts / quick links ------------------------------------------------ #}
     <div class="vault-home-stats">
         <a class="vault-stat-tile" href="{% url 'vault.photos' %}">
@@ -27,7 +50,9 @@
                 <div class="vault-stat-label">Document{{ document_count|pluralize }}</div>
             </div>
         </a>
-        <a class="vault-stat-tile" href="{% url 'vault.photos.albums' %}">
+        {# Albums live in a panel on the Photos page - `vault.photos.albums` is #}
+        {# the AJAX-only partial behind it and has no page chrome of its own.   #}
+        <a class="vault-stat-tile" href="{% url 'vault.photos' %}#albums">
             <div class="vault-stat-icon"><i class="material-symbols-outlined">photo_album</i></div>
             <div>
                 <div class="vault-stat-value">{{ album_count }}</div>
@@ -80,6 +105,7 @@
             {% endfor %}
         </div>
     </section>
+    {% endif %}
     {% endif %}
 
 </div>

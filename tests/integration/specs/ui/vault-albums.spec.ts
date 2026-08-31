@@ -127,4 +127,27 @@ test.describe("vault albums", () => {
         await expect(detail).toHaveAttribute("data-upload-url", /.+/);
         await expect(detail.locator("[data-album-back]")).toBeVisible();
     });
+
+    // Regression: `.album-target-dialog` carried a bare `display: flex`, which
+    // outranks the UA stylesheet's `dialog:not([open]) { display: none }` - the
+    // closed picker stayed laid out mid-page on every surface that includes it
+    // (Vault Photos, album detail, and the pin/wiki Photos tabs). Asserted on
+    // the computed style rather than Playwright visibility, because the stray
+    // box rendered behind other content and could still read as "hidden".
+    test("the add-to-album picker stays collapsed until it is opened", async ({ page }) => {
+        await page.goto(appRoutes.vaultPhotos);
+
+        // Injected with the lazily-loaded albums panel, so wait for it to exist.
+        const dialog = page.locator("#album-target-dialog");
+        await expect(dialog).toHaveCount(1, { timeout: 10000 });
+
+        const closed = await dialog.evaluate((el) => ({
+            open: (el as HTMLDialogElement).open,
+            display: getComputedStyle(el).display,
+            height: el.getBoundingClientRect().height,
+        }));
+        expect(closed.open, "the picker should start closed").toBe(false);
+        expect(closed.display, "a closed <dialog> must not be laid out").toBe("none");
+        expect(closed.height).toBe(0);
+    });
 });

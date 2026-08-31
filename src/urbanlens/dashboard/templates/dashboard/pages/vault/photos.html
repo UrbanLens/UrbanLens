@@ -51,7 +51,7 @@
         {# -- Albums (this Vault's own, plus a toggle for albums across your pins) -- #}
         {# ?album= is carried through so a deep link (or a Back navigation) loads #}
         {# that album directly instead of the list. See controllers.albums.       #}
-        <section class="photos-albums-section" aria-label="Albums">
+        <section id="albums" class="photos-albums-section" aria-label="Albums">
             <div id="vault-albums-panel"
                  hx-get="{% url 'vault.photos.albums' %}{% if request.GET.album %}?album={{ request.GET.album|urlencode }}{% endif %}"
                  hx-trigger="load"
@@ -306,7 +306,7 @@
             return 'That file is too large (' + _formatBytes(file.size) + '). The maximum upload size is ' + _formatBytes(MAX_FILE_SIZE) + '.';
         }
         if (STORAGE_QUOTA !== null && STORAGE_USED + committed + file.size > STORAGE_QUOTA) {
-            return 'This upload would exceed your storage quota (' + _formatBytes(STORAGE_USED + committed) + ' of ' + _formatBytes(STORAGE_QUOTA) + ' used). Delete some photos or lower your image size in Settings → Storage.';
+            return 'This upload would exceed your storage quota (' + _formatBytes(STORAGE_USED + committed) + ' of ' + _formatBytes(STORAGE_QUOTA) + ' used). Delete some files, or lower your image size in Settings → Storage.';
         }
         return null;
     }
@@ -329,7 +329,20 @@
 
     // -- Upload (one request per file, matching the other galleries) -----------
     window.photosHandleFiles = function (files) {
-        files = Array.from(files || []).filter(function (f) { return f.type.indexOf('image/') === 0; });
+        files = Array.from(files || []);
+        if (!files.length) return;
+
+        // Say so rather than dropping them on the floor: a dragged PDF used to
+        // vanish with no feedback at all, while every other rejection here toasts.
+        var wrongKind = files.filter(function (f) { return f.type.indexOf('image/') !== 0; });
+        files = files.filter(function (f) { return f.type.indexOf('image/') === 0; });
+        if (wrongKind.length && window.toastr) {
+            toastr.warning(
+                wrongKind.length === 1
+                    ? wrongKind[0].name + " isn't an image. Try the Documents page for files like this."
+                    : wrongKind.length + " files aren\'t images and were skipped. Try the Documents page for those.",
+            );
+        }
         if (!files.length) return;
 
         // Reject what we can up-front, and only count the rest against quota -
@@ -496,7 +509,7 @@
     // Opens the shared lightbox (dashboard/partials/_photo_lightbox.html,
     // included above) with every photo currently in the grid.
     window.photosOpenLightbox = function (id) {
-        var items = Array.prototype.map.call(document.querySelectorAll('.photo-tile'), function (el) {
+        var items = Array.prototype.map.call(document.querySelectorAll('.photo-tile[data-id]'), function (el) {
             return {
                 url: el.dataset.url, thumbUrl: el.dataset.thumbUrl || '', caption: el.dataset.caption || '',
                 author: el.dataset.author || '', copyright: el.dataset.copyright || '',
