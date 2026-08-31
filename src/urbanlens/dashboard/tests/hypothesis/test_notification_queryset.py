@@ -159,4 +159,3 @@ class NotificationQuerySetMarkDismissedTests(TestCase):
         self.assertEqual(count, 1)
         self.n1.refresh_from_db()
         self.assertEqual(self.n1.status, Status.DISMISSED)
-

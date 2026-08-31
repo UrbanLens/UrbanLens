@@ -94,4 +94,3 @@ class WikiAboutCardIdentityFieldsTests(TestCase):
         self.assertIn("Coordinates", html)
         self.assertIn("41.73610", html)
         self.assertIn("-73.75790", html)
-

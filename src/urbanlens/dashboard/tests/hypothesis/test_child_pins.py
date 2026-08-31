@@ -865,4 +865,3 @@ class PinActionsFabVisibilityTests(TestCase):
         self.assertContains(response, "pin-actions-fab")
         self.assertContains(response, "Child pin details")
         self.assertContains(response, "Open parent pin")
-

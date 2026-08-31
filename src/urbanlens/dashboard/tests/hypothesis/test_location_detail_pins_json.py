@@ -90,4 +90,3 @@ class LocationDetailPinJsonChildWikiTests(TestCase):
         self.assertNotIn("owner_name", by_name["North Entrance"])
         self.assertEqual(by_name["Attic Hatch"]["owner_name"], "North Entrance")
         self.assertEqual(by_name["Attic Hatch"]["uuid"], str(grandchild.uuid))
-
