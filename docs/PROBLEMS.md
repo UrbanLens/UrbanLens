@@ -4208,3 +4208,19 @@ runs would fix it; a sturdier version of the test would also pick two captions g
 tie (e.g. by explicitly seeding one photo with a caption that sorts alphabetically first and a
 different, more recent one) rather than relying on randomness against an unbounded, growing dataset.
 mypy policy.
+
+## OPEN 2026-08-31: 12 non-Vault page templates declare `{% block title %}`, a block name `themes/base.html` never defines
+
+Found reviewing Batch 6 (Vault home page) - adversarial review flagged the identical mistake newly
+copy-pasted into `pages/vault/index.html`, which led to checking the rest of the codebase. `themes/
+base.html`'s `<title>` tag is `{% block page_title %}{{ site_title|default:"UrbanLens" }}{% endblock %}`
+(line 10) - there is no `{% block title %}` anywhere in the inheritance chain. Django silently drops a
+child block whose name matches nothing in its ancestor (not an error), so every page below always
+shows the site default title, never its own. Fixed the 3 Vault pages this batch touches (`vault/
+index.html`, `vault/photos.html`, `vault/documents.html` - all three renamed to `page_title`), but the
+same dead `{% block title %}` also sits, unfixed, in: `memories/sharing.html`, `memories/journal.html`,
+`memories/maps.html`, `memories/visits.html`, `memories/locations.html`, `memories/index.html`,
+`floorplans/editor.html`, `notifications/index.html`, `pin_share/detail.html`, `map/index.html`,
+`map_share/detail.html`, `messages/index.html`. Fixing those is a one-line rename each
+(`s/{% block title %}/{% block page_title %}/`) but touches unrelated pages/features, out of scope
+for this PR - worth a dedicated small pass.

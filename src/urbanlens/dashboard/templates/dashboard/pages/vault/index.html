@@ -1,0 +1,86 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block page_title %}Vault{% endblock %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="home_storage" title="Vault" subtitle="Your photos, documents, and albums, all in one place." modifier="top" %}
+{% endblock %}
+
+{% block content %}
+{% include "dashboard/partials/vault/_vault_subnav.html" with active_tab="home" %}
+<div class="page-inner">
+
+    {# -- Counts / quick links ------------------------------------------------ #}
+    <div class="vault-home-stats">
+        <a class="vault-stat-tile" href="{% url 'vault.photos' %}">
+            <div class="vault-stat-icon"><i class="material-symbols-outlined">photo_library</i></div>
+            <div>
+                <div class="vault-stat-value">{{ photo_count }}</div>
+                <div class="vault-stat-label">Photo{{ photo_count|pluralize }}</div>
+            </div>
+        </a>
+        <a class="vault-stat-tile" href="{% url 'vault.documents' %}">
+            <div class="vault-stat-icon"><i class="material-symbols-outlined">folder_copy</i></div>
+            <div>
+                <div class="vault-stat-value">{{ document_count }}</div>
+                <div class="vault-stat-label">Document{{ document_count|pluralize }}</div>
+            </div>
+        </a>
+        <a class="vault-stat-tile" href="{% url 'vault.photos.albums' %}">
+            <div class="vault-stat-icon"><i class="material-symbols-outlined">photo_album</i></div>
+            <div>
+                <div class="vault-stat-value">{{ album_count }}</div>
+                <div class="vault-stat-label">Album{{ album_count|pluralize }}</div>
+            </div>
+        </a>
+    </div>
+
+    {# -- Storage usage --------------------------------------------------------- #}
+    <section class="ul-section vault-home-storage">
+        <h2 class="vault-home-section-title"><i class="material-symbols-outlined">database</i> Storage</h2>
+        <div class="storage-usage">
+            {% if storage_quota_bytes %}
+            <div class="storage-usage__bar" role="progressbar" aria-valuenow="{{ storage_percent_used }}" aria-valuemin="0" aria-valuemax="100">
+                <div class="storage-usage__fill{% if storage_percent_used >= 90 %} storage-usage__fill--warn{% endif %}" style="width: {{ storage_percent_used }}%;"></div>
+            </div>
+            <p class="storage-usage__text">
+                <strong>{{ storage_used_bytes|filesizeformat }}</strong> of {{ storage_quota_bytes|filesizeformat }} used
+                &middot; {{ storage_remaining_bytes|filesizeformat }} left
+            </p>
+            {% else %}
+            <p class="storage-usage__text"><strong>{{ storage_used_bytes|filesizeformat }}</strong> used &middot; your storage is unlimited</p>
+            {% endif %}
+            {% if storage_exempt_bytes %}
+            <p class="storage-usage__exempt settings-help">
+                <i class="material-symbols-outlined">volunteer_activism</i>
+                A further {{ storage_exempt_bytes|filesizeformat }} is stored free: photos the community found useful, and cached copies of other people's photos.
+            </p>
+            {% endif %}
+        </div>
+        <a href="{% url 'settings.view' %}#storage-settings-section" class="btn btn--sm btn--secondary vault-home-storage-link">Manage storage</a>
+    </section>
+
+    {# -- Recent uploads --------------------------------------------------------- #}
+    {% if recent_uploads %}
+    <section class="ul-section vault-home-recent">
+        <h2 class="vault-home-section-title"><i class="material-symbols-outlined">schedule</i> Recent uploads</h2>
+        <div class="vault-recent-strip">
+            {% for item in recent_uploads %}
+            {% if item.media_type == 'document' %}
+            <a class="vault-recent-item vault-recent-item--document" href="{% url 'vault.documents' %}" title="{{ item.caption|default:'Untitled document' }}">
+                <i class="material-symbols-outlined">{{ item.document_icon }}</i>
+                <span class="vault-recent-item-name">{{ item.caption|default:"Untitled document" }}</span>
+            </a>
+            {% else %}
+            <a class="vault-recent-item" href="{% url 'vault.photos' %}" title="{{ item.caption|default:'' }}">
+                <img src="{{ item.thumb_url }}" alt="{{ item.caption|default:'' }}" loading="lazy">
+            </a>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+</div>
+{% endblock %}

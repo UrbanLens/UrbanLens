@@ -84,6 +84,7 @@ from urbanlens.dashboard.controllers import (
     two_factor,
     undo,
     userprofile,
+    vault,
     vault_documents,
     vault_photos,
     visit_suggestions,
@@ -2014,6 +2015,7 @@ urlpatterns = [
         "vault/",
         include(
             [
+                path("", vault.VaultHomeView.as_view(), name="vault.home"),
                 path("photos/", vault_photos.VaultPhotosView.as_view(), name="vault.photos"),
                 path("photos/queue/", vault_photos.PhotoQueueView.as_view(), name="vault.photos.queue"),
                 path("photos/pin-albums/", vault_photos.VaultPinAlbumsView.as_view(), name="vault.photos.pin_albums"),
