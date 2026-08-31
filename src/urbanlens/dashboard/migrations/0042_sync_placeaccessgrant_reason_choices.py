@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
     """
 
     dependencies = [
-        ("dashboard", "0038_image_pending_scan"),
+        ("dashboard", "0041_alter_notificationlog_notification_type"),
     ]
 
     operations = [
