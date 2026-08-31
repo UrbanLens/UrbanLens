@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("dashboard", "0038_sync_placeaccessgrant_reason_choices"),
+        ("dashboard", "0039_sync_placeaccessgrant_reason_choices"),
     ]
 
     operations = [

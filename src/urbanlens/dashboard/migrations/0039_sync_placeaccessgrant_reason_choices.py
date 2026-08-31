@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     """Sync PlaceAccessGrant.reason's migration state with its current choices text.
 
-    Pre-existing drift found while adding 0039_place_external_tag: the model's
+    Pre-existing drift found while adding PlaceExternalTag: the model's
     ``GrantReason`` display strings had diverged from what the last migration
     touching this field recorded, unrelated to that change. Django stores no
     data for ``choices`` (validation/display metadata only), so this is a
@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
     """
 
     dependencies = [
-        ("dashboard", "0037_image_privacy_fields"),
+        ("dashboard", "0038_image_pending_scan"),
     ]
 
     operations = [
