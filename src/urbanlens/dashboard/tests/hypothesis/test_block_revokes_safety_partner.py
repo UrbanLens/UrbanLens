@@ -22,6 +22,7 @@ of exactly the access being revoked.
 from __future__ import annotations
 
 import datetime
+from unittest import mock
 
 from django.utils import timezone
 from model_bakery import baker
@@ -55,29 +56,38 @@ class BlockRevokesSafetyPartnerTests(TestCase):
         self.blocked = _profile()
 
     def test_blocking_removes_the_blocked_profile_from_your_checkin(self) -> None:
+        checkin = _checkin(self.blocker)
         partner = SafetyCheckinPartner.objects.create(
-            checkin=_checkin(self.blocker),
+            checkin=checkin,
             profile=self.blocked,
             invited_by=self.blocker,
             status=SafetyCheckinPartnerStatus.ACCEPTED,
         )
 
-        block_profile(self.blocker, self.blocked)
+        with mock.patch("urbanlens.dashboard.services.visits.safety._broadcast_partner_access_revoked") as revoke:
+            block_profile(self.blocker, self.blocked)
 
         self.assertFalse(SafetyCheckinPartner.objects.filter(pk=partner.pk).exists(), "a blocked profile still has partner access to the blocker's check-in")
+        # A bare `.delete()` would satisfy the assertion above too - this proves the
+        # row went through `remove_checkin_partner`, which also closes any live
+        # WebSocket, rather than a delete that silently skips that revocation.
+        revoke.assert_called_once_with(checkin, self.blocked.pk)
 
     def test_blocking_also_ends_your_own_access_to_theirs(self) -> None:
         """The other direction - blocking is mutual disengagement."""
+        checkin = _checkin(self.blocked)
         partner = SafetyCheckinPartner.objects.create(
-            checkin=_checkin(self.blocked),
+            checkin=checkin,
             profile=self.blocker,
             invited_by=self.blocked,
             status=SafetyCheckinPartnerStatus.ACCEPTED,
         )
 
-        block_profile(self.blocker, self.blocked)
+        with mock.patch("urbanlens.dashboard.services.visits.safety._broadcast_partner_access_revoked") as revoke:
+            block_profile(self.blocker, self.blocked)
 
         self.assertFalse(SafetyCheckinPartner.objects.filter(pk=partner.pk).exists(), "the blocker kept watching a profile they blocked")
+        revoke.assert_called_once_with(checkin, self.blocker.pk)
 
     def test_an_outstanding_invitation_is_revoked_too(self) -> None:
         partner = SafetyCheckinPartner.objects.create(
@@ -104,6 +114,33 @@ class BlockRevokesSafetyPartnerTests(TestCase):
         block_profile(self.blocker, self.blocked)
 
         self.assertTrue(SafetyCheckinPartner.objects.filter(pk=partner.pk).exists(), "blocking one profile removed an unrelated partner")
+
+    def test_a_partnership_on_someone_elses_checkin_is_untouched(self) -> None:
+        """The scoping is by *pair*, not by "either profile appears somewhere".
+
+        Both rows below involve one of the two blocking profiles, but paired
+        with a third party rather than each other - a filter that matched on
+        either profile alone (instead of the specific actor/target pair) would
+        wrongly sweep these up too.
+        """
+        third_party = _profile()
+        blocked_elsewhere = SafetyCheckinPartner.objects.create(
+            checkin=_checkin(third_party),
+            profile=self.blocked,
+            invited_by=third_party,
+            status=SafetyCheckinPartnerStatus.ACCEPTED,
+        )
+        blocker_elsewhere = SafetyCheckinPartner.objects.create(
+            checkin=_checkin(third_party),
+            profile=self.blocker,
+            invited_by=third_party,
+            status=SafetyCheckinPartnerStatus.ACCEPTED,
+        )
+
+        block_profile(self.blocker, self.blocked)
+
+        self.assertTrue(SafetyCheckinPartner.objects.filter(pk=blocked_elsewhere.pk).exists(), "blocking removed the blocked profile's partnership on an unrelated check-in")
+        self.assertTrue(SafetyCheckinPartner.objects.filter(pk=blocker_elsewhere.pk).exists(), "blocking removed the blocker's own partnership on an unrelated check-in")
 
 
 class BlockWithdrawsPendingPinShareTests(TestCase):
@@ -158,6 +195,21 @@ class BlockWithdrawsPendingPinShareTests(TestCase):
     def test_an_unrelated_pending_share_is_untouched(self) -> None:
         bystander = _profile()
         share = self._share(self.blocker, bystander, PinShareStatus.PENDING)
+
+        block_profile(self.blocker, self.blocked)
+
+        share.refresh_from_db()
+        self.assertEqual(share.status, PinShareStatus.PENDING)
+
+    def test_a_pending_share_between_the_blocked_profile_and_a_bystander_is_untouched(self) -> None:
+        """Same scoping concern from the other profile's side of the pair.
+
+        A filter matching on either party alone (rather than the specific
+        actor/target pair) would wrongly withdraw this - it never involves
+        the blocker at all.
+        """
+        bystander = _profile()
+        share = self._share(self.blocked, bystander, PinShareStatus.PENDING)
 
         block_profile(self.blocker, self.blocked)
 

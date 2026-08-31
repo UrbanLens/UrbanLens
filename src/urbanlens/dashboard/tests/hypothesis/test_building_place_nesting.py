@@ -20,6 +20,7 @@ from django.contrib.gis.geos import MultiPolygon, Polygon
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.place.model import PlaceKind
 from urbanlens.dashboard.services.places.provisioning import ensure_building_places
 
@@ -59,6 +60,23 @@ class BuildingPlaceNestingTests(TestCase):
 
         self.assertEqual(places["cris:1"].parent_id, places["osm:way/1"].pk)
         self.assertEqual(places["osm:way/1"].parent_id, self.parcel.pk)
+
+    def test_a_pin_already_resolved_to_the_parcel_moves_onto_the_new_building(self) -> None:
+        """The bug this whole module exists to fix.
+
+        Before REData had described this footprint, the coordinate could only
+        resolve to the parcel - that is how 124 pins on one campus each ended
+        up claiming the whole property. Creating the building place is not
+        enough; `ensure_building_places` must re-run resolution for what it
+        just created, not just leave it for the next unrelated refresh.
+        """
+        location = baker.make(Location, latitude=0.19, longitude=0.19)
+        self.assertEqual(location.place_id, self.parcel.pk, "only the parcel exists yet, so that is the only possible answer")
+
+        places = self._places([{"ref": "osm:way/1", "name": "Kirkbride", "geometry": _square(0.1, 0.1, 0.5)}])
+
+        location.refresh_from_db()
+        self.assertEqual(location.place_id, places["osm:way/1"].pk)
 
     def test_nesting_deeper_than_one_level_is_followed(self) -> None:
         """A campus block parenting a wing parenting an annex."""

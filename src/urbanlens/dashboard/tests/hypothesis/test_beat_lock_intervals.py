@@ -25,6 +25,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from celery.schedules import crontab
 from django.conf import settings
 
 from urbanlens.core.tests.testcase import SimpleTestCase
@@ -91,13 +92,40 @@ def _effective_period_seconds(schedule) -> int:
     return int(schedule)
 
 
+def _too_long_locks(locked_tasks: dict[str, int], beat_schedule: dict) -> dict[str, str]:
+    """Every entry whose TTL does not expire before its next scheduled tick.
+
+    Split out of the test body so the boundary itself (``ttl >= interval``) can be
+    pinned directly with synthetic data, rather than only ever being exercised by
+    production values that all sit comfortably clear of the line.
+    """
+    too_long = {}
+    for entry, ttl in locked_tasks.items():
+        interval = _effective_period_seconds(beat_schedule[entry]["schedule"])
+        if ttl >= interval:
+            too_long[entry] = f"lock {ttl}s >= interval {interval}s - ticks will be silently skipped"
+    return too_long
+
+
 class BeatLockIntervalTests(SimpleTestCase):
     def test_every_lock_expires_before_the_next_tick(self) -> None:
-        too_long = {}
-        for entry, ttl in _LOCKED_BEAT_TASKS.items():
-            interval = _effective_period_seconds(settings.CELERY_BEAT_SCHEDULE[entry]["schedule"])
-            if ttl >= interval:
-                too_long[entry] = f"lock {ttl}s >= interval {interval}s - ticks will be silently skipped"
+        too_long = _too_long_locks(_LOCKED_BEAT_TASKS, settings.CELERY_BEAT_SCHEDULE)
+
+        self.assertEqual(too_long, {})
+
+    def test_ttl_equal_to_the_interval_is_flagged(self) -> None:
+        """The exact boundary: a lock held for the whole interval is still unsafe -
+        the next tick lands the instant it expires, not after. A ``>`` in place of
+        ``>=`` would let this slip through and still pass every other test here,
+        since no real task's TTL happens to land exactly on its interval.
+        """
+        too_long = _too_long_locks({"fake-task": 300}, {"fake-task": {"schedule": 300}})
+
+        self.assertEqual(set(too_long), {"fake-task"})
+
+    def test_ttl_one_second_under_the_interval_is_not_flagged(self) -> None:
+        """One tick below the boundary above must pass cleanly."""
+        too_long = _too_long_locks({"fake-task": 299}, {"fake-task": {"schedule": 300}})
 
         self.assertEqual(too_long, {})
 
@@ -138,3 +166,46 @@ class BeatLockIntervalTests(SimpleTestCase):
         )
 
         self.assertGreaterEqual(guarded, len(_LOCKED_BEAT_TASKS))
+
+    def test_takes_a_lock_matches_the_raw_cache_add_idiom(self) -> None:
+        """Every current task has migrated to ``acquire_lock``/``beat_lock``, so this
+        idiom has zero real matches in ``tasks.py`` today - nothing else in this
+        file would notice if this arm silently broke.
+        """
+        node = ast.parse("def f():\n    cache.add('k', 'v', 30)\n").body[0]
+
+        self.assertTrue(_takes_a_lock(node))
+
+    def test_takes_a_lock_matches_acquire_lock(self) -> None:
+        node = ast.parse("def f():\n    acquire_lock('k', 30)\n").body[0]
+
+        self.assertTrue(_takes_a_lock(node))
+
+    def test_takes_a_lock_matches_beat_lock(self) -> None:
+        node = ast.parse("def f():\n    with beat_lock('k', 30) as got:\n        pass\n").body[0]
+
+        self.assertTrue(_takes_a_lock(node))
+
+    def test_takes_a_lock_is_false_for_an_unrelated_function(self) -> None:
+        """The negative case: nothing here currently proves the matcher can say no.
+        A ``_takes_a_lock`` that always returns ``True`` would still pass every
+        other test in this file that only checks names already known to lock.
+        """
+        node = ast.parse("def f():\n    do_something_else()\n").body[0]
+
+        self.assertFalse(_takes_a_lock(node))
+
+    def test_effective_period_seconds_plain_interval_passes_through(self) -> None:
+        self.assertEqual(_effective_period_seconds(300), 300)
+
+    def test_effective_period_seconds_all_hours_crontab_is_hourly(self) -> None:
+        self.assertEqual(_effective_period_seconds(crontab(minute=12)), 60 * 60)
+
+    def test_effective_period_seconds_single_hour_crontab_is_daily(self) -> None:
+        """No entry in ``_LOCKED_BEAT_TASKS`` uses a limited-hour crontab, so this
+        branch of the helper is otherwise never exercised by production data.
+        """
+        self.assertEqual(_effective_period_seconds(crontab(hour=3, minute=10)), 24 * 60 * 60)
+
+    def test_effective_period_seconds_multi_hour_crontab_divides_the_day(self) -> None:
+        self.assertEqual(_effective_period_seconds(crontab(minute=32, hour="*/6")), 6 * 60 * 60)

@@ -110,9 +110,26 @@ class VoteWeightTests(SimpleTestCase):
         self.assertLess(older, newer)
 
     def test_same_age_votes_tie_exactly(self) -> None:
+        """Weight is a function of *age*, not absolute calendar time.
+
+        Calling the function twice with identical arguments is tautological
+        and proves nothing; the real claim is that shifting both timestamps
+        by the same amount leaves the weight unchanged.
+        """
+        age = timedelta(days=33)
+        recent_now = timezone.now()
+        shifted_now = recent_now - timedelta(days=500)
+        self.assertAlmostEqual(vote_weight(recent_now - age, recent_now), vote_weight(shifted_now - age, shifted_now))
+
+    def test_weight_quarters_at_two_half_lives(self) -> None:
+        """Pins the exponential curve itself, not just its one named point.
+
+        A linear decay reaching 0.5 at HALF_LIFE_DAYS would also pass
+        ``test_weight_halves_at_half_life`` (0.5 is 0.5 either way) but would
+        hit 0.0, not 0.25, here.
+        """
         now = timezone.now()
-        stamp = now - timedelta(days=33)
-        self.assertEqual(vote_weight(stamp, now), vote_weight(stamp, now))
+        self.assertAlmostEqual(vote_weight(now - timedelta(days=2 * HALF_LIFE_DAYS), now), 0.25)
 
     def test_future_timestamp_clamps_to_unit_weight(self) -> None:
         now = timezone.now()
@@ -153,6 +170,12 @@ class BoundaryOptionsTests(TestCase):
         baker.make(Boundary, wiki=wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_square(-73.761, 42.65))
         self.assertEqual(boundary_options(self.place), [])
 
+    def test_none_place_has_no_options(self) -> None:
+        """A coordinate no provider has resolved to a place - real candidates
+        exist (for a different place), but there's nothing to vote on here."""
+        _make_candidate(self.place, BoundarySource.REDATA, _square(-73.76, 42.65))
+        self.assertEqual(boundary_options(None), [])
+
 
 class WinningBoundaryTests(TestCase):
     """The spec's weighting scenarios, verbatim."""
@@ -190,6 +213,13 @@ class WinningBoundaryTests(TestCase):
         empty_place = _make_place()
         self.assertIsNone(winning_boundary(empty_place))
 
+    def test_none_place_has_no_winner_or_consensus(self) -> None:
+        """``location.place`` is nullable - callers (e.g. the vote endpoint)
+        pass it straight through, so None must resolve gracefully rather
+        than raising or falling through to some other place's candidates."""
+        self.assertIsNone(winning_boundary(None))
+        self.assertFalse(has_consensus(None))
+
     def test_consensus_rules(self) -> None:
         # No votes: nothing to be settled on.
         self.assertFalse(has_consensus(self.place))
@@ -204,6 +234,22 @@ class WinningBoundaryTests(TestCase):
         # 2v1 at the same age crosses the 1.5x ratio: settled.
         third = baker.make(BoundaryVote, place=self.place, boundary=self.redata, profile=self.voters[2])
         BoundaryVote.objects.filter(pk=third.pk).update(updated=stamp)
+        self.assertTrue(has_consensus(self.place))
+
+    def test_consensus_boundary_is_inclusive_at_exact_ratio(self) -> None:
+        """A leader-to-runner-up ratio of exactly CONSENSUS_RATIO (1.5) must
+        already count as consensus - the check is ``>=``, not ``>``.
+
+        Three same-age votes vs. two same-age votes gives a ratio of exactly
+        3/2 regardless of how much real time has elapsed by the time this
+        assertion runs, since every vote's individual weight cancels out.
+        """
+        stamp = timezone.now()
+        for profile in _make_profiles(3):
+            baker.make(BoundaryVote, place=self.place, boundary=self.overpass, profile=profile)
+        for profile in _make_profiles(2):
+            baker.make(BoundaryVote, place=self.place, boundary=self.redata, profile=profile)
+        BoundaryVote.objects.filter(place=self.place).update(updated=stamp)
         self.assertTrue(has_consensus(self.place))
 
     def test_consensus_false_with_fewer_than_two_candidates(self) -> None:
@@ -248,6 +294,23 @@ class WinnerMatchingIntegrationTests(TestCase):
         self.assertEqual(Place.objects.resolve_for_point(42.8005, -73.8995), self.place)
         # The losing candidate's area is no longer the official outline.
         self.assertIsNone(Place.objects.resolve_for_point(42.6505, -73.7595))
+
+    def test_reaffirming_the_same_choice_refreshes_recency(self) -> None:
+        """Recasting an unchanged vote still counts as a fresh vote.
+
+        ``update_or_create`` saves unconditionally on a match, but a plausible
+        "skip the write if the choice didn't change" refactor would silently
+        stop refreshing recency - which is the entire point of letting
+        someone re-affirm a stale vote per the function's own docstring.
+        """
+        vote = cast_boundary_vote(self.place, self.voter, self.overpass.pk)
+        stale = timezone.now() - timedelta(days=200)
+        BoundaryVote.objects.filter(pk=vote.pk).update(updated=stale)
+
+        cast_boundary_vote(self.place, self.voter, self.overpass.pk)
+
+        refreshed = BoundaryVote.objects.get(pk=vote.pk)
+        self.assertGreater(refreshed.updated, stale + timedelta(days=1))
 
     def test_apply_without_votes_leaves_the_outline_alone(self) -> None:
         self.assertIsNone(apply_winning_boundary(self.place))
@@ -373,12 +436,29 @@ class BoundaryVoteContextTests(TestCase):
         marked = {option["id"]: option["is_my_choice"] for option in context["options"]}
         self.assertTrue(marked[self.overpass.pk])
         self.assertFalse(marked[self.redata.pk])
+        # Your own vote must not count as an "other" - the dialog gating is
+        # keyed on other people's votes only (see the module docstring), so a
+        # viewer who has only ever voted for themselves still gets auto_open.
+        self.assertTrue(context["auto_open"])
+        self.assertFalse(context["has_votes"])
 
     def test_single_candidate_renders_nothing(self) -> None:
         lone_place = _make_place()
         _make_candidate(lone_place, BoundarySource.REDATA, _square(-73.70, 42.60))
         self.assertIsNone(boundary_vote_context(lone_place, self.viewer))
 
+    def test_none_place_yields_no_context(self) -> None:
+        self.assertIsNone(boundary_vote_context(None, self.viewer))
+
     def test_invalid_choice_raises(self) -> None:
         with pytest.raises(BoundaryVoteError):
             cast_boundary_vote(self.place, self.viewer, 999_999)
+
+    def test_a_non_candidate_boundary_at_the_same_place_is_rejected(self) -> None:
+        """A real row at this exact place that just isn't a votable candidate
+        (wrong type here) must be rejected too - the check has to be
+        membership in ``boundary_options``, not merely "this pk exists"."""
+        self.overpass.boundary_type = BoundaryType.BUILDING
+        self.overpass.save(update_fields=["boundary_type"])
+        with pytest.raises(BoundaryVoteError):
+            cast_boundary_vote(self.place, self.viewer, self.overpass.pk)

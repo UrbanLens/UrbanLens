@@ -34,13 +34,24 @@ class UpdateTaskProgressTests(SimpleTestCase):
         task.update_state.assert_called_once()
         _, kwargs = task.update_state.call_args
         meta = kwargs["meta"]
+        expected_total = max(total or 1, 1)
+        expected_current = max(0, min(current or 0, expected_total))
+        expected_percent = int((expected_current / expected_total) * 100)
         self.assertEqual(kwargs["state"], PROGRESS_STATE)
-        self.assertGreaterEqual(meta["current"], 0)
-        self.assertGreaterEqual(meta["total"], 1)
-        self.assertLessEqual(meta["current"], meta["total"])
-        self.assertGreaterEqual(meta["percent"], 0)
-        self.assertLessEqual(meta["percent"], 100)
+        self.assertEqual(meta["current"], expected_current)
+        self.assertEqual(meta["total"], expected_total)
+        self.assertEqual(meta["percent"], expected_percent)
         self.assertEqual(meta["message"], "Working")
+
+    def test_swallows_update_state_exception(self) -> None:
+        task = mock.Mock()
+        task.update_state.side_effect = RuntimeError("backend unreachable")
+
+        with mock.patch("urbanlens.dashboard.services.core.celery.logger") as mock_logger:
+            update_task_progress(task, current=1, total=2, message="Working")
+
+        task.update_state.assert_called_once()
+        self.assertTrue(mock_logger.warning.called)
 
 
 class GetTaskProgressTests(SimpleTestCase):
@@ -69,6 +80,29 @@ class GetTaskProgressTests(SimpleTestCase):
         self.assertEqual(progress.percent, 50)
         self.assertEqual(progress.message, "Halfway")
 
+    def test_revoked_uses_error_payload(self) -> None:
+        result = mock.Mock(state="REVOKED", result=None, info="cancelled by user")
+        with mock.patch("urbanlens.dashboard.services.core.celery.AsyncResult", return_value=result):
+            progress = get_task_progress("task-1")
+        self.assertEqual(progress.state, "REVOKED")
+        self.assertEqual(progress.error, "cancelled by user")
+
+    def test_failure_falls_back_to_default_message(self) -> None:
+        result = mock.Mock(state="FAILURE", result=None, info=None)
+        with mock.patch("urbanlens.dashboard.services.core.celery.AsyncResult", return_value=result):
+            progress = get_task_progress("task-1")
+        self.assertEqual(progress.error, "Task failed")
+
+    def test_non_dict_info_defaults_progress_fields(self) -> None:
+        """Celery reports ``info=None`` for a task still PENDING; the non-dict guard must catch it."""
+        result = mock.Mock(state="PENDING", info=None)
+        with mock.patch("urbanlens.dashboard.services.core.celery.AsyncResult", return_value=result):
+            progress = get_task_progress("task-1")
+        self.assertEqual(progress.current, 0)
+        self.assertEqual(progress.total, 1)
+        self.assertEqual(progress.percent, 0)
+        self.assertEqual(progress.message, "")
+
 
 class SafelyEnqueueTaskTests(SimpleTestCase):
     """safely_enqueue_task delegates to Celery and handles broker errors."""
@@ -95,3 +129,16 @@ class SafelyEnqueueTaskTests(SimpleTestCase):
         task = mock.Mock(name="broken_task")
         task.apply_async.side_effect = KombuError("broker down")
         self.assertIsNone(safely_enqueue_task(task))
+
+    @given(exception=st.sampled_from([ConnectionError("down"), OSError("down"), RuntimeError("down")]))
+    @hyp_settings(max_examples=3)
+    def test_returns_none_on_other_caught_exceptions(self, exception: Exception) -> None:
+        task = mock.Mock(name="broken_task")
+        task.apply_async.side_effect = exception
+        self.assertIsNone(safely_enqueue_task(task))
+
+    def test_reraises_exceptions_outside_broker_scope(self) -> None:
+        task = mock.Mock(name="broken_task")
+        task.apply_async.side_effect = ValueError("not a broker error")
+        with self.assertRaises(ValueError):
+            safely_enqueue_task(task)

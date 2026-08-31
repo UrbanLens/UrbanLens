@@ -28,7 +28,7 @@ for the reasons given in ``test_billing_ledger_concurrency``.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -40,12 +40,13 @@ from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 from urbanlens.dashboard.services.billing import banking, webhooks
 
 
-def _payload(status: str = "active", unit_amount: int = 1000) -> dict:
+def _payload(status: str = "active", unit_amount: int = 1000, canceled_at: int | None = None) -> dict:
     """The shape ``sync_from_stripe_subscription`` reads."""
     return {
         "id": "sub_test",
         "status": status,
         "cancel_at_period_end": False,
+        "canceled_at": canceled_at,
         "items": {"data": [{"price": {"id": "price_test", "unit_amount": unit_amount}, "current_period_end": 1_800_000_000}]},
     }
 
@@ -81,7 +82,7 @@ class SyncFieldScopeTests(TestCase):
         """The complement: narrowing what it writes must not stop it writing."""
         subscription = self._snapshot()
 
-        webhooks.sync_from_stripe_subscription(subscription, _payload(status="past_due", unit_amount=2500))
+        webhooks.sync_from_stripe_subscription(subscription, _payload(status="past_due", unit_amount=2500, canceled_at=1_700_000_000))
 
         self.sub.refresh_from_db()
         self.assertEqual(self.sub.status, "past_due")
@@ -90,6 +91,9 @@ class SyncFieldScopeTests(TestCase):
         self.assertFalse(self.sub.cancel_at_period_end)
         self.assertIsNotNone(self.sub.current_period_end)
         self.assertTrue(self.sub.threshold_met)
+        # canceled_at is in the same update_fields list as the ledger columns this file
+        # exists to keep untouched - a narrowing mistake could drop it unnoticed.
+        self.assertEqual(self.sub.canceled_at, datetime.fromtimestamp(1_700_000_000, tz=UTC))
 
     def test_a_pledge_under_the_threshold_still_clears_threshold_met(self) -> None:
         """threshold_met is recomputed, not merely set - it has to fall as well as rise."""

@@ -9,13 +9,19 @@ from hypothesis import assume, given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, SecurityLevel, TextChoices
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
-from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.pin.model import PIN_TYPE_ICONS, Pin, PinType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.tests.hypothesis.strategies import (
     friendship_status,
     invalid_security_level,
     security_level,
+    short_text,
 )
+
+# Non-member strings for the choice classes that don't yet have a dedicated
+# "invalid" strategy in strategies.py.
+_invalid_pin_type = short_text.filter(lambda s: s.lower() not in PinType.values)
+_invalid_indoor_outdoor = short_text.filter(lambda s: s.lower() not in IndoorOutdoor.values)
 
 
 class SecurityLevelValidTests(SimpleTestCase):
@@ -114,10 +120,27 @@ class PinTypeTests(SimpleTestCase):
     def test_all_values_are_valid(self, value: str) -> None:
         self.assertTrue(PinType.valid(value))
 
+    @given(_invalid_pin_type)
+    @settings(max_examples=200)
+    def test_valid_returns_false_for_non_member_strings(self, value: str) -> None:
+        """The mirror of test_all_values_are_valid: strings outside the enum must fail."""
+        self.assertFalse(PinType.valid(value))
+
     @given(st.sampled_from(list(PinType)))
     @settings(max_examples=200)
     def test_every_member_has_a_label(self, member: PinType) -> None:
         self.assertTrue(member.label)
+
+    @given(st.sampled_from(list(PinType)))
+    @settings(max_examples=200)
+    def test_icon_matches_the_declared_mapping(self, member: PinType) -> None:
+        """icon must return the glyph declared in PIN_TYPE_ICONS, not the push_pin fallback.
+
+        Guards the shared mapping used by the pin/wiki lists, the type badge, and the
+        ``pin_type_icon`` template filter - a member missing its entry would silently
+        fall back to "push_pin" instead of failing loudly.
+        """
+        self.assertEqual(member.icon, PIN_TYPE_ICONS[member.value])
 
     def test_location_marker_is_default_value(self) -> None:
         """The LOCATION_MARKER variant should correspond to the 'location' value."""
@@ -132,6 +155,12 @@ class IndoorOutdoorTests(SimpleTestCase):
     def test_all_values_are_valid(self, value: str) -> None:
         """Every member value must be recognised as valid."""
         self.assertTrue(IndoorOutdoor.valid(value))
+
+    @given(_invalid_indoor_outdoor)
+    @settings(max_examples=200)
+    def test_valid_returns_false_for_non_member_strings(self, value: str) -> None:
+        """The mirror of test_all_values_are_valid: strings outside the enum must fail."""
+        self.assertFalse(IndoorOutdoor.valid(value))
 
     @given(st.sampled_from(list(IndoorOutdoor)))
     @settings(max_examples=200)

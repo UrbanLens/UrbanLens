@@ -22,6 +22,26 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-08-31: `urbanlens_development_main_test_runner`'s baked image is missing `django-perf-rec`
+
+Found while running the full suite before merging PR #143 (`bin/run_tests.sh`, no `--fast`, per
+repo convention for a PR merge). Collection aborts the entire run with `ModuleNotFoundError: No
+module named 'django_perf_rec'` importing `test_query_records.py:31` - not a code regression: the
+package is correctly declared in `pyproject.toml` (`django-perf-rec~=4.31.0`) and `uv.lock`, and
+`uv run python -c "import django_perf_rec"` succeeds on this host's own `.venv`. The test-runner
+container's image (`/app/.venv`) simply predates that dependency being added and hasn't been
+rebuilt since - the same class of drift as [[app-container-not-live-synced]] but for the
+*container's own venv*, not `/app/src`. `bin/run_tests.sh`'s tree-hash sync only covers `src/`, not
+`.venv`, so it can't catch this.
+
+Worked around for this merge by running with `--ignore=src/urbanlens/dashboard/tests/hypothesis/
+test_query_records.py` rather than rebuilding the shared container mid-session (another agent was
+concurrently using the same branch/host - see [[verify-attribution-before-reverting-shared-diffs]] -
+so an image rebuild felt too disruptive to force unilaterally). Whoever next has a quiet window
+should rebuild `urbanlens_development_main_test_runner` (`docker compose build test_runner` or
+equivalent) so `test_query_records.py` runs again; until then that one file's coverage is silently
+absent from every `bin/run_tests.sh` run, not just this one.
+
 ## OPEN 2026-08-31: `Wiki.get_unique_search_name` is dead code
 
 Found while adding ancestor-name qualification to `Pin.get_unique_search_name` (child pins like
@@ -4122,6 +4142,145 @@ ever construct Pin-owned albums - the community/wiki half of the Album model (`p
 `owner_kwargs`, the concealment-aware `_owner_conceal`/`conceal_rows` path) has zero coverage.
 Building that out correctly needs the wiki-access/concealment rules understood well enough to avoid
 a shallow test - flagged for a dedicated pass rather than folded into this audit.
+
+**`purge_old_backups`'s count-based retention (deleting the oldest backups beyond
+`backup_retention`) has no dedicated test anywhere in the suite.** `test_backup_temp_purge.py` only
+exercises the `.tmp`-reaping side effect of `purge_old_backups()` with zero real `.sql` backups on
+disk, so the count-deletion loop (`backup_files[self.backup_retention:]`, sorted by mtime
+descending) never actually runs in any test - nor does `DatabaseBackup.run()`'s success path
+(pg_dump succeeding, `os.replace` to the final name, then `purge_old_backups()` firing). The
+existing "Database backups have no restore path" entry above describes retention as "implemented
+and tested", which overstates it for this specific branch. Worth a dedicated pass verifying that
+with N backups on disk and a lower retention, exactly the oldest excess files are removed (by
+identity, not just resulting count) and the newest `retention` survive.
+
+**`RedataBasemapTilesGateway.list_sources()` envelope parsing is untested at the unit level.**
+`test_basemap_tile_proxy.py` only ever mocks `RedataBasemapTilesGateway.list_sources`/
+`download_tile` at the controller boundary, so the gateway's own body-shape handling (bare list vs
+`{"sources": [...]}` vs `{"results": [...]}` dict envelopes, and the
+`if isinstance(row, dict) and row.get("id")` row filter) has no direct test anywhere in the
+codebase - a regression there (e.g. swapping the `sources`/`results` fallback order, or dropping
+the id-filter) would only be caught if it happened to also break one of the controller-level
+fixtures, which all use the `sources` key and well-formed rows. Worth a dedicated pass that
+instantiates the gateway directly (with `base_url`/`api_key` kwargs and a mocked `session`) rather
+than mocking the gateway's own methods.
+
+**Sweep-path locking on `advance_usage_ledger` has no real-concurrency coverage.**
+`test_billing_ledger_lock.py` proves `_locked`'s `select_for_update` under real threads only via
+`banking.apply_payment`, whose internal `advance_usage_ledger` call is nested inside the already-
+held outer lock (so removing just that nested lock changes nothing observable). The one call site
+where `advance_usage_ledger`'s own lock is load-bearing - the daily sweep
+(`advance_pwyw_usage_ledgers`) calling it directly and unnested - is untested under real threads;
+the only test of a sweep racing a payment
+(`test_billing_ledger_concurrency.py::test_a_payment_is_not_rolled_back_by_the_daily_sweep`)
+deterministically sequences two in-memory snapshots and explicitly disclaims exercising the
+database's actual lock. A real-thread version is possible (worked through by inspection: under
+correct locking both thread orderings converge to the same final ledger state, so it wouldn't be
+flaky-when-correct) but needs an actual run to confirm it reliably catches a lock-removal mutant.
+
+**`SubscriptionRole.clean()` doesn't validate `pwyw_minimum_cents` requires `pay_what_you_want`.**
+`clean()` (`src/urbanlens/dashboard/models/subscriptions/model.py`) only ties
+`pwyw_dynamic_threshold` back to `pay_what_you_want`; it never checks that a nonzero
+`pwyw_minimum_cents` is meaningless when `pay_what_you_want=False`. An admin can save a role with a
+static minimum pledge set but pay-what-you-want turned off, and `clean()` raises nothing - the
+field is simply inert.
+
+**Webhook-event row lock has no real-concurrency proof.** `StripeWebhookView.post` takes
+`StripeWebhookEvent.objects.select_for_update()` specifically so two truly concurrent deliveries of
+the same event id serialize instead of both reading `processed_at` as null and both crediting the
+payment - but every existing test for this view (`test_billing_webhook_idempotency.py`,
+`test_billing_webhook_view.py`) drives it sequentially through Django's test client on one
+connection, where `select_for_update()` is a no-op. This is the same class of gap
+`test_billing_ledger_lock.py` was written to close for the ledger's row lock, after a mutation-
+testing run showed a dropped `select_for_update()` survived every non-threaded test. Closing it
+needs a `TransactionTestCase` + real-thread test (as `test_billing_ledger_lock.py` does via
+`core.tests.concurrency.run_concurrently`).
+
+**`WikiBoundaryView` has no test coverage at all.** `dashboard/controllers/boundary.py`'s
+`WikiBoundaryView` (GET/POST `/location/<slug>/wiki/boundary/`) - the community boundary-editor
+endpoint with its area-limit check against `SiteSettings.max_bbox_area_km2`, its `WikiEdit`
+audit-trail write, and the `just_drawn` concealment-bypass logic documented in
+`_wiki_boundary_payload` - is exercised by no test anywhere in the suite (only its sibling
+`BoundaryController`, the pin-scoped endpoint, is tested in `test_boundary.py`). Worth a dedicated
+test file/class.
+
+**Refuted: a fruitless boundary refresh does NOT leave staleness stuck.** An audit agent
+(2026-08-29) reasoned from reading `generate_location_boundaries` → `ensure_place_for_location` →
+`provision_places_for_coordinate` (`services/places/provisioning.py`) alone that a refresh whose
+provider chain comes back with no polygon might leave `Place.geometry_generated_at` /
+`Location.place_resolved_at` both unstamped, so `boundary_generation_stale()` would keep returning
+`True` forever for that Location - and flagged `test_a_fruitless_refresh_leaves_existing_geometry_alone`
+in `test_boundary_generation_staleness.py` as likely to fail on a real run. It doesn't: the
+consolidated verification pass for this batch ran the real suite against Postgres and the test
+passed cleanly (`2 failed, 277 passed` that run, neither failure this one - see the batch's commit).
+Recorded here so nobody re-derives the same false alarm from a source read alone: this is NOT a
+real problem, a plausible-sounding defect inferred from code reading turned out wrong once actually
+run.
+
+**Stale `update_or_create`/`auto_now` rationale in boundary voting docs.** Both
+`services/geo/boundary_voting.py`'s module docstring and `test_boundary_vote_recency.py`'s header
+explain the re-affirm-refreshes-`updated` behavior as depending on `cast_boundary_vote`'s
+`defaults={"boundary": choice}` explicitly including the field whose `auto_now` timestamp needs
+bumping ("Django only refreshes an `auto_now` field when that field is included [in
+update_fields]"). That's no longer how `update_or_create()` behaves: Django 6.0.6 (pinned in
+`.venv`) unconditionally folds every field with a custom `pre_save` - i.e. every
+`auto_now`/`auto_now_add` field - into `update_fields` for backward compatibility, regardless of
+what's in `defaults` (see `update_or_create` in `django/db/models/query.py`). The test's protective
+value is unaffected (it still catches a regression away from `update_or_create`, e.g. a raw
+`.filter().update()`), but the prose misdescribes the current mechanism and could mislead a future
+contributor into thinking they must hand-add `updated` to `defaults`.
+
+**Stale "draft wiki" language around the building-mirror path.**
+`pin_restructure.mirror_buildings_to_wiki`'s docstring/comments and `test_building_wiki_mirror.py`'s
+own module docstring describe the wiki a building import mirrors into as an "invisible draft...
+until claimed," citing `tasks.ensure_draft_wiki_for_location` and a
+`WikiManager.get_or_create_draft_for_location` - neither exists on disk (the real names are
+`ensure_wiki_for_location` and `get_or_create_for_location`), and `WikiManager`'s own docstring
+states plainly: "Wikis are published on creation now, and there is one question again" - there is
+no draft/official field left on `Wiki` found during this audit. `services/wiki/wiki_share.py`
+("Ignored when the wiki is already official... a still-unofficial draft is fair game") and
+`services/wiki/concealment.py` reference the same apparently-retired concept. Either a draft/
+official distinction exists somewhere this audit pass didn't locate, or this is stale documentation
+spanning at least three production files describing removed behavior - worth a follow-up look.
+
+**`CalendarImportView` has no test coverage at all.** `dashboard/controllers/calendar_sync.py`'s
+`CalendarImportView` (GET renders the upcoming-events dialog via `list_importable_events`, POST
+parses per-event form fields into `import_events_as_trips` selections and handles
+`GoogleAuthExpiredError`/`GatewayRequestError`/empty-selection 400s) is reached by no test in the
+suite - only its underlying service functions are unit-tested. The view's own request-parsing
+(`create_activity_<id>`, `invite_<id>`, `auto_sync_<id>` field names, digit-filtering of invite
+ids) and error-branch responses are unverified end-to-end, unlike its sibling
+`CalendarImportPreviewView` which does have a `CalendarImportPreviewViewTests` class.
+
+**Map-overlay caption length check is untested even though it's drivable.**
+`test_caption_and_setting_length_limits.py`'s class docstring says the map-overlay caption path
+can't be tested because it "fetches a remote image first, which the test network guard refuses" -
+true for the `media_url`/`image_url` branches of `controllers/map_overlays.py::_image_from_request`,
+but its direct-file-upload branch (`request.FILES.get("image")` +
+`request.POST.get("name")` as caption, routed through `services/photos/photo_upload.py::upload_photo`)
+takes no network call and is a plain multipart POST just like the safety-checkin path this file
+already drives. The length check itself is present and correct, so this is a test-coverage gap and
+a stale docstring claim, not a product bug.
+
+**Missing coverage for the carousel "no imagery available" branch.**
+`test_carousel_single_slide_arrows.py` is the only test file touching
+`street_view.html`/`satellite_view.html`, and neither template's `{% else %}` branch (rendered when
+`slides` is empty, showing `view-unavailable` and the `error` message) has any test coverage
+anywhere in the repo.
+
+**Multi-level pin/wiki nesting prefix is undocumented and untested.** `_slug_parent_prefix()`
+derives a child's prefix only from its *immediate* parent (name/official_name/slug/aliases), so a
+grandchild nested two levels under an aliased root picks up a prefix derived from the immediate
+parent's own name/slug, not the top-level acronym, unless that immediate parent itself has an
+alias. This may be intentional (shallow, not chained, prefixing) but it's unverified either way and
+worth a deliberate look if 3+ level nesting is a real use case.
+
+**`TripCommentDeleteView` has zero test coverage.** `services/trips/trip_comments.delete_comment`
+is the third call site of the shared `_discard_comment_image` cleanup helper (alongside
+`PinCommentDeleteView` and `WikiCommentDeleteView`), and has its own `can_delete_comment`
+permission gate (author or trip creator), but no test file anywhere in the suite exercises
+`TripCommentDeleteView` or `delete_comment` at all - not the basic delete, the permission gate, or
+image cleanup. Would need a full TripComment/Trip fixture setup, not a surgical addition.
 
 ## OPEN 2026-08-30: `PhotoMetadataConflictResolveView.post`'s manual-POST branch mistypes form values as possibly a list
 

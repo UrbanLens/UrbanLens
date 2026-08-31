@@ -100,3 +100,33 @@ class LedgerStaleSnapshotTests(TestCase):
 
         self.assertEqual(subscription.total_paid_cents, 1000)
         self.assertEqual(RoleSubscription.objects.get(pk=self.sub.pk).total_paid_cents, 1000)
+
+    def test_advance_usage_ledger_syncs_the_caller_s_instance(self) -> None:
+        """The same trap as above, for the two fields ``advance_usage_ledger`` itself
+        writes - the prior test only ever checks ``total_paid_cents`` on the caller's
+        object, which ``apply_payment`` writes directly. ``amount_used_cents`` and
+        ``usage_covered_until`` are only ever set on ``locked``, so a sync-back that
+        silently dropped them from the post-lock copy loop would pass every other
+        test in this file while leaving direct callers holding stale coverage.
+        """
+        subscription = self._snapshot()
+        RoleSubscription.objects.filter(pk=self.sub.pk).update(total_paid_cents=100_000)
+
+        banking.advance_usage_ledger(subscription, as_of=self.start + timedelta(days=30))
+
+        self.assertEqual(subscription.amount_used_cents, 1000)
+        self.assertEqual(subscription.usage_covered_until, self.start + timedelta(days=60))
+
+    def test_a_payment_and_a_refund_do_not_erase_each_other(self) -> None:
+        """The mixed interleaving ``_locked``'s own docstring names as motivation -
+        "a payment landing beside a refund" - and that no test here (or in the
+        payment-only / refund-only stale-snapshot tests elsewhere) actually drives.
+        """
+        RoleSubscription.objects.filter(pk=self.sub.pk).update(total_paid_cents=2000)
+        payer, refunder = self._snapshot(), self._snapshot()
+
+        banking.apply_payment(payer, 1000, as_of=self.start)
+        banking.apply_refund(refunder, 500)
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2500, "a concurrent payment and refund erased each other instead of both applying")
