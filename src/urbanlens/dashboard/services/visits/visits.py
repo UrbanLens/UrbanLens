@@ -189,7 +189,7 @@ def find_existing_visit_on_date(profile: Profile, *, location: Location | None, 
 
 
 def resolve_location_for_point(latitude: float | Decimal, longitude: float | Decimal, *, fetch_if_missing: bool = True) -> Location:
-    """Return the shared Location for a point, creating one with a canonical name if none exists yet.
+    """Return the exact shared Location for a point, creating one when none exists yet.
 
     Args:
         latitude: Point latitude.
@@ -204,11 +204,24 @@ def resolve_location_for_point(latitude: float | Decimal, longitude: float | Dec
     """
     from urbanlens.dashboard.models.location.model import Location
 
-    location = Location.objects.get_for_point(float(latitude), float(longitude))
-    if location is None:
-        from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
+    lat = float(latitude)
+    lon = float(longitude)
+    location, created = Location.objects.get_exact_or_create(lat, lon)
+    if location.place_resolved_at is None:
+        from urbanlens.dashboard.services.places.resolution import resolve_location_place
 
-        location = _create_location_with_canonical_name(float(latitude), float(longitude), fetch_if_missing=fetch_if_missing)
+        resolve_location_place(location)
+    if created and fetch_if_missing:
+        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
+        google_place = GooglePlaceService().get_or_create_for_coordinates(lat, lon)
+        update_fields = ["updated"]
+        location.google_place = google_place
+        update_fields.append("google_place")
+        if is_meaningful_name(google_place.cached_place_name):
+            location.official_name = google_place.cached_place_name.strip()
+            update_fields.append("official_name")
+        location.save(update_fields=update_fields)
     return location
 
 

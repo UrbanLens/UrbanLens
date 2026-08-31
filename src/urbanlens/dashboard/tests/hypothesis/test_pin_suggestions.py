@@ -24,6 +24,7 @@ import json
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models import F
 from django.urls import reverse
@@ -37,13 +38,28 @@ from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.links.model import PinLink
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
+from urbanlens.dashboard.models.place.model import PlaceKind
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, accept_pin_suggestion, attach_suggestion_photos, ingest_location_hits, reject_pin_suggestion
+from urbanlens.dashboard.services.places import resolution
+from urbanlens.dashboard.tests.hypothesis.place_helpers import make_place
 
 _PIN_LAT = Decimal("40.000000")
 _PIN_LON = Decimal("-74.000000")
+
+
+def _square(lng: float, lat: float, delta: float) -> MultiPolygon:
+    ring = (
+        (lng - delta, lat - delta),
+        (lng + delta, lat - delta),
+        (lng + delta, lat + delta),
+        (lng - delta, lat + delta),
+        (lng - delta, lat - delta),
+    )
+    return MultiPolygon(Polygon(ring, srid=4326), srid=4326)
 
 
 def _hit(
@@ -409,6 +425,29 @@ class AcceptPinSuggestionTests(TestCase):
         self.assertEqual(result.pin.profile_id, self.profile.pk)
         self.assertEqual(result.pin.name, "Test Place")
         self.assertEqual(len(result.visits), 1)
+
+    def test_accept_new_pin_suggestion_keeps_coordinate_inside_existing_place_domain(self) -> None:
+        parcel = make_place(PlaceKind.PARCEL, _square(-74.0, 40.0, 0.01), name="Campus")
+        existing_location = Location.objects.create(latitude=Decimal("40.000000"), longitude=Decimal("-74.005000"))
+        resolution.attach_location(existing_location, parcel)
+        existing_pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=existing_location)
+        suggestion = PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=None,
+            latitude=Decimal("40.000000"),
+            longitude=Decimal("-73.995000"),
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+            visit_dates=["2024-02-01"],
+            hit_count=1,
+            suggested_name="Other Building",
+        )
+
+        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+            result = accept_pin_suggestion(suggestion, self.profile)
+
+        self.assertNotEqual(result.pin.pk, existing_pin.pk)
+        self.assertEqual(result.pin.location.latitude, Decimal("40.000000"))
+        self.assertEqual(result.pin.location.longitude, Decimal("-73.995000"))
 
     def test_accept_new_pin_suggestion_does_not_rename_an_already_named_pin(self) -> None:
         self.pin.name = "Existing Name"
