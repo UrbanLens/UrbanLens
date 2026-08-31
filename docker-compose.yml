@@ -111,10 +111,9 @@ services:
 
     # gunicorn (WEB_CONCURRENCY=3 by default): ~140MB/worker idle, but Pillow/
     # GDAL/GeoPandas/Shapely and per-worker DB/valkey pools all run in the
-    # request path and push real traffic well above that - see docs/PROBLEMS-ARCHIVE.md,
-    # 2026-08-31, for why these per-service defaults replaced one blanket 4g/4cpu value.
+    # request path and push real traffic well above that
     cpus: ${CPU_LIMIT__APP:-${CPU_LIMIT:-2}}
-    mem_limit: ${MEM_LIMIT__APP:-${MEM_LIMIT:-1536m}}
+    mem_limit: ${MEM_LIMIT__APP:-${MEM_LIMIT:-2g}}
 
   # Dedicated ASGI (Daphne) process for WebSocket traffic only (safety check-in
   # chat, etc).
@@ -185,18 +184,13 @@ services:
         max-file: "10"
     # Single Daphne process, no fan-out - idle is ~227MB (full Django/Channels
     # registry import, unamortized). An OOM-kill here drops every open
-    # WebSocket at once, so this gets generous headroom relative to its idle
-    # baseline rather than a tight leak trap - see docs/PROBLEMS-ARCHIVE.md, 2026-08-31.
+    # WebSocket at once, so this gets generous headroom
     cpus: ${CPU_LIMIT__APP_WS:-${CPU_LIMIT:-1}}
-    mem_limit: ${MEM_LIMIT__APP_WS:-${MEM_LIMIT:-768m}}
+    mem_limit: ${MEM_LIMIT__APP_WS:-${MEM_LIMIT:-1g}}
 
   nginx:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_nginx
     image: nginxinc/nginx-unprivileged:alpine
-    # Every other front-line/stateless service here (app, app-ws, clamav, valkey)
-    # restarts unless-stopped; this one didn't, so when a bad config once made it
-    # exit on startup (see django.conf's location regex fix) it just stayed down
-    # silently instead of at least crash-looping visibly.
     restart: unless-stopped
     volumes:
       - static_volume:/app/src/urbanlens/frontend/static
@@ -237,7 +231,7 @@ services:
     # worker_processes is hardcoded to 2 in nginx.conf, and its temp paths are
     # disk-backed (not tmpfs) so uploads/sendfile don't inflate RAM - idle is
     # ~3MB. cpus matches the hardcoded worker count exactly; a third core
-    # would go unused - see docs/PROBLEMS-ARCHIVE.md, 2026-08-31.
+    # would go unused
     cpus: ${CPU_LIMIT__NGINX:-${CPU_LIMIT:-2}}
     mem_limit: ${MEM_LIMIT__NGINX:-${MEM_LIMIT:-128m}}
 
@@ -274,8 +268,7 @@ services:
     # Idle RSS (~98MB) is a poor proxy: CONN_MAX_AGE=0 means every request/task
     # opens its own short-lived connection, and concurrent backends scale with
     # gunicorn+daphne+both celery workers - a plausible ~25-30 simultaneous
-    # backends against default shared_buffers/work_mem. See docs/PROBLEMS-ARCHIVE.md,
-    # 2026-08-31.
+    # backends against default shared_buffers/work_mem.
     cpus: ${CPU_LIMIT__DB:-${CPU_LIMIT:-2}}
     mem_limit: ${MEM_LIMIT__DB:-${MEM_LIMIT:-2g}}
 
@@ -326,10 +319,7 @@ services:
     # CELERY_WORKER_MAX_MEMORY_PER_CHILD (512MB, settings/base.py) - checked
     # only *after* a task finishes, so one task can still overshoot before
     # recycling. This container-level ceiling is the fast circuit breaker for
-    # exactly that case (see the OvertureMapsGateway incident,
-    # docs/PROBLEMS-ARCHIVE.md 2026-08-31, that drove one worker to 5+GB and
-    # got the host's kernel OOM killer involved) - deliberately not sized to
-    # "never think about it again."
+    # exactly that case. Should re-assess with time and code changes.
     cpus: ${CPU_LIMIT__CELERY_WORKER:-${CPU_LIMIT:-2}}
     mem_limit: ${MEM_LIMIT__CELERY_WORKER:-${MEM_LIMIT:-3g}}
 
@@ -378,7 +368,7 @@ services:
         max-file: "10"
     # --pool=threads: one process, so memory isn't multiplied per concurrent
     # task the way celery-worker's prefork pool is - idle is ~242MB with
-    # GDAL/GeoPandas/Pillow already resident. See docs/PROBLEMS-ARCHIVE.md, 2026-08-31.
+    # GDAL/GeoPandas/Pillow already resident. 
     cpus: ${CPU_LIMIT__CELERY_PANELS:-${CPU_LIMIT:-1}}
     mem_limit: ${MEM_LIMIT__CELERY_PANELS:-${MEM_LIMIT:-1g}}
 
@@ -419,7 +409,7 @@ services:
         max-file: "10"
     # Scheduler only - never executes a task body, so none of the heavy
     # per-task-type lazy imports (GeoPandas/Shapely/Pillow/...) that inflate
-    # the actual workers ever trigger here. See docs/PROBLEMS-ARCHIVE.md, 2026-08-31.
+    # the actual workers ever trigger here. 
     cpus: ${CPU_LIMIT__CELERY_BEAT:-${CPU_LIMIT:-0.5}}
     mem_limit: ${MEM_LIMIT__CELERY_BEAT:-${MEM_LIMIT:-512m}}
 
@@ -448,10 +438,9 @@ services:
         max-size: "200k"
         max-file: "10"
     # Measured steady-state (clamd loads its full signature DB into RAM at
-    # startup) is already 950MB-1020MB - essentially all of the previous 1g
-    # limit, with zero headroom for the ~2x transient spike SelfCheck's daily
-    # signature reload can cause while the old DB is still resident. See
-    # docs/PROBLEMS-ARCHIVE.md, 2026-08-31.
+    # startup) is already 950MB-1020MB
+    # with zero headroom for the ~2x transient spike SelfCheck's daily
+    # signature reload can cause while the old DB is still resident. 
     cpus: ${CPU_LIMIT__CLAMAV:-${CPU_LIMIT:-2}}
     mem_limit: ${MEM_LIMIT__CLAMAV:-${MEM_LIMIT:-2g}}
 
@@ -490,11 +479,9 @@ services:
       options:
         max-size: "200k"
         max-file: "10"
-    # --maxmemory 512mb (above) already hard-caps the dataset - this was
-    # previously 24g, an unexamined placeholder. 1g covers allocator
+    # --maxmemory 512mb (above) already hard-caps the dataset
+    # 1g covers allocator
     # fragmentation and fork()-based COW headroom above the internal cap
-    # without reserving 48x what this service can ever actually use. See
-    # docs/PROBLEMS-ARCHIVE.md, 2026-08-31.
     cpus: ${CPU_LIMIT__VALKEY:-${CPU_LIMIT:-1}}
     mem_limit: ${MEM_LIMIT__VALKEY:-${MEM_LIMIT:-1g}}
 
@@ -533,8 +520,7 @@ services:
     # pytest-xdist spawns real subprocesses (execnet), not fork+COW - each
     # worker independently pays the full Django+GDAL+GeoPandas+Shapely+Pillow
     # import cost. Only started on-demand (--profile test), so more
-    # generosity than the always-on services is acceptable. See
-    # docs/PROBLEMS-ARCHIVE.md, 2026-08-31.
+    # generosity than the always-on services is acceptable. 
     cpus: ${CPU_LIMIT__TEST_RUNNER:-${CPU_LIMIT:-6}}
     mem_limit: ${MEM_LIMIT__TEST_RUNNER:-${MEM_LIMIT:-6g}}
 
@@ -562,8 +548,7 @@ services:
         max-size: "200k"
         max-file: "10"
     # Fixture-scale data, no persistent volume - covers several xdist
-    # per-worker databases running DDL/DML concurrently. See
-    # docs/PROBLEMS-ARCHIVE.md, 2026-08-31.
+    # per-worker databases running DDL/DML concurrently. 
     cpus: ${CPU_LIMIT__TEST_DB:-${CPU_LIMIT:-2}}
     mem_limit: ${MEM_LIMIT__TEST_DB:-${MEM_LIMIT:-2g}}
 
@@ -598,7 +583,7 @@ services:
         max-size: "200k"
         max-file: "10"
     # --maxmemory 256mb (above) already hard-caps this one, same reasoning as
-    # the production valkey service. See docs/PROBLEMS-ARCHIVE.md, 2026-08-31.
+    # the production valkey service. 
     cpus: ${CPU_LIMIT__TEST_VALKEY:-${CPU_LIMIT:-1}}
     mem_limit: ${MEM_LIMIT__TEST_VALKEY:-${MEM_LIMIT:-512m}}
 
