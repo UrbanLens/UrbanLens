@@ -437,7 +437,9 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
         if not (image_file.content_type or "").startswith("image/"):
             return JsonResponse({"error": "That file is not an image."}, status=400)
 
-        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        # Scanned asynchronously instead: prepare_photo_upload below marks the row
+        # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
         if upload_error:
             message, status = upload_error
             return JsonResponse({"error": message}, status=status)

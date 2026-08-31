@@ -31,16 +31,46 @@ were both generated against `0037`, leaving the graph with two leaf nodes and br
 models in the same window: `makemigrations` numbers from what is on disk, so a second 0038 is
 silently produced rather than refused, and nothing complains until something runs `migrate`.
 
-## OPEN 2026-08-31: media-nginx adds a second unrotated access log
+## RESOLVED 2026-08-31: media-worker never started - `cap_drop: ALL` killed the entrypoint
 
-`media-nginx` inherits `access_log /tmp/nginx-requests.log` from the shared `nginx.conf`, so
-the media origin now writes its own copy in its own container - and media requests are the
-highest-volume request class on the site. Same unrotated-file problem the main nginx's log
-already has (flagged in docker-compose.yml's nginx service), now in two places rather than one,
-and `media-nginx` declares no tmpfs so it grows on the overlay filesystem. Turning it off is
-not the fix - after the split these requests are logged nowhere else - rotation is.
+The whole sandbox tier was inert. `docker-entrypoint.sh` chowns three volume-mounted directories
+under `set -e` and then `exec gosu appuser`; `cap_drop: ALL` removes `CAP_CHOWN` *and*
+`CAP_SETUID`, so the first `chown` returned "Operation not permitted", `set -e` aborted the
+script, and the container restart-looped without ever reaching celery. Found by reading
+`docker ps` in a sibling agent's environment running this same branch - `Restarting (1)`, exit
+code 1, restart count 18.
 
-## OPEN 2026-08-31: a long data import can stall all media processing on the sandbox queue
+Worth dwelling on how invisible this was. Every earlier verification of this tier had been done
+by `docker run`-ing the image with an overridden command, which skips the entrypoint's chown
+loop entirely, so all of it passed against a container configuration that could not actually
+boot. [[verify-behavior-not-code]] again, one level up: the *code* was fine and the *service*
+was dead.
+
+Fix: chowns are best-effort (`2>/dev/null || true`) and `gosu` is skipped when already
+unprivileged; the sandbox services declare `user: "1001:1001"` and `depends_on: app`, so the one
+container that *can* chown the shared volumes has done so first. Verified by actually running it
+- hardened container (`--cap-drop ALL`, `--user 1001:1001`, `no-new-privileges`, noexec tmpfs)
+against a real broker: `celery@... ready`, `[queues] .> sandbox`, and a socket to 1.1.1.1 still
+refused.
+
+## RESOLVED 2026-08-31: media-nginx added a second unrotated access log
+
+Was: `media-nginx` inherits `access_log /tmp/nginx-requests.log` from the shared `nginx.conf`,
+so the media origin wrote its own unrotated copy - and media requests are the highest-volume
+request class on the site. Same problem the main nginx's log already had, now in two places.
+
+Fix: log to `/var/log/nginx/access.log` instead, which the nginx image symlinks to `/dev/stdout`
+- so request logs go through Docker's json-file driver, whose `max-size`/`max-file` is the only
+rotator either container has. Both nginx services get a `20m x 5` budget (up from `200k x 10`,
+which was sized for error output only). Nothing had ever read the `/tmp` file.
+
+The original comment in `nginx.conf` argued *against* the stdout symlink on the grounds that
+anything written there "always lands in `docker logs`" - which was the objection, and is now the
+point. Verified with a probe (nginx container, real config): the access line appears in
+`docker logs`, `/tmp/nginx-requests.log` is gone, and `if=$loggable` still filters the healthcheck
+out.
+
+## RESOLVED 2026-08-31: a long data import could stall all media processing on the sandbox queue
 
 `run_user_data_import` was routed to the `sandbox` queue alongside photo/video/document
 processing, and `media-worker` runs `--concurrency=2`. That task accepts ZIPs up to 500MB, has
@@ -59,7 +89,15 @@ Worth knowing while sizing that: ETA-delayed retries do *not* hold a slot despit
 `CELERY_WORKER_PREFETCH_MULTIPLIER = 1` (Celery calls `qos.increment_eventually()` when it
 defers an ETA message), so `process_image_upload`'s retry backoff is not itself a contributor.
 
-## OPEN 2026-08-31: `pending_scan` is photo-only, and one serving surface bypasses it
+Fix: `Queue.SANDBOX_BATCH` plus a `media-worker-batch` service draining it at `--concurrency=1`,
+and `run_user_data_import` routed there via `sandbox_queue(batch=True)`. Both workers merge the
+new `x-sandbox-worker` compose anchor, so the isolation is written once and cannot drift between
+them - the anchor is what keeps the two services' `environment`/`cap_drop`/`networks` identical,
+not a test. What the tests pin is which task declares which queue, read from the AST because
+under test settings both constants resolve to the same string and the routing is
+indistinguishable at runtime.
+
+## RESOLVED 2026-08-31: `pending_scan` was photo-only, and one serving surface bypassed it
 
 Found reviewing the `pending_scan` work itself. Neither is a regression - both are places the
 new gate simply does not reach - but both are one-line-ish to close with machinery that now
@@ -87,10 +125,14 @@ exists, and the second becomes a real hole the moment the ClamAV entry above is 
    would hand an unscanned upload to an emergency contact. Treat it as a blocker on that work,
    not a follow-up to it.
 
-Note the docstrings on `Image.pending_scan` and in `docs/MEDIA_PIPELINE.md` say a pending row is
-restricted to its uploader; that is true of every path except this one, and they say so now.
+Fix for (1): `upload_photo` now sets `pending_scan=True` for every media type, not only where
+`prepare_photo_upload` supplied it. Fix for (2): `SafetyContactPhotoView` and the two check-in
+photo listings filter `pending_scan=False`. The tradeoff is now the other way round - a contact
+sees a broken image for the seconds until the scan clears - which is the correct side to err on
+once the scan is asynchronous, and it is the reason (2) was a blocker on that work rather than a
+follow-up to it.
 
-## OPEN 2026-08-31: several Image-creating paths bypass `pending_scan` and/or never process at all
+## RESOLVED 2026-08-31: several Image-creating paths bypassed `pending_scan` and/or never processed at all
 
 Found while auditing every `Image.objects.create`/`Image(...)` call site for this session's
 `pending_scan` work (see the resolved entry below) - none of these are caused by that work,
@@ -110,6 +152,12 @@ and none are fixed by it either:
   the file is never downscaled or thumbnailed, and it is served exactly as fetched from the
   provider, indefinitely. Separate from the `pending_scan` question entirely (nothing to gate:
   it just never processes).
+
+Fix: all five create with `pending_scan=True`, and `materialize_media_item` enqueues
+`process_image_upload` like every other path. Provider bytes are not more trustworthy than a
+user's - the URL was still chosen by a user. The four import tasks are pinned structurally (an
+AST walk over every `Image.objects.create` in `tasks.py`) rather than by four near-identical
+runtime tests, because the failure mode is a *fifth* importer added later without the flag.
 
 ## RESOLVED 2026-08-31: `prepare_photo_upload` no longer decodes in the request
 
@@ -165,10 +213,10 @@ an earlier version of this entry claimed (it named only the first):
 the worklist - but note (2) means the log will be noisy on a normal request path, not just on
 rare ones.
 
-## OPEN 2026-08-31: ClamAV still scans synchronously in the upload request
+## RESOLVED 2026-08-31: ClamAV scanned synchronously in the upload request
 
-`image_upload_error` blocks on a clamd round-trip before `Image.objects.create`, with a 15s
-socket timeout, and fails closed. That is correct but it is also the upload latency users notice.
+Was: `image_upload_error` blocked on a clamd round-trip before `Image.objects.create`, with a 15s
+socket timeout. Correct, but also the upload latency users notice.
 
 The `pending_scan` plumbing this now needs already exists (see the resolved entry above -
 `Image.pending_scan`, the `pin_images` authorizer gate, `ImageQuerySet.visible_to`), built for the
@@ -195,7 +243,24 @@ hides a `pending_scan` row from everyone but its uploader, and the uploader's ow
 falls back through `thumb_url`/`display_url` to the raw stored file while thumbnails are pending -
 the same fallback this reuses, not a new one.
 
-## OPEN 2026-08-31: `test_upload_strips_metadata_before_storing` was asserting against the wrong EXIF tag
+Fix: all of the above, as `tasks._scan_pending_upload`, called first thing in
+`process_image_upload`.
+
+Two decisions in it worth keeping:
+
+- **Gated on `pending_scan`, not run unconditionally.** So a call site missed when the synchronous
+  scan was removed scans *twice* (wasteful) rather than not at all (a hole). The nine sites that
+  now pass `skip_malware_scan=True` all create an `Image`; the four that still scan synchronously
+  (avatars, marker icons, achievement art) store a file on something that is not an `Image` row,
+  so nothing will ever run `process_image_upload` over it and there is no `pending_scan` to gate
+  it with. `test_async_malware_scan.py` pins that split from both directions by walking the AST
+  for every `image_upload_error` call - asserting only that the set of non-skipping sites is
+  exactly the four, so a new upload path shows up as a failure either way.
+- **A clamd outage retries; only exhausted retries reject.** Rejecting on the first hiccup would
+  cost users their uploads during a clamd restart. But an upload that could never be scanned is
+  still not published - the fail-closed half survives the move.
+
+## RESOLVED 2026-08-31: `test_upload_strips_metadata_before_storing` was asserting against the wrong EXIF tag
 
 Fixed in passing, recorded because the class of mistake will recur. The fixture defined
 `_ARTIST_TAG = 0x010F` and wrote `"A Photographer"` there, then asserted it came back as

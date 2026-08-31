@@ -351,7 +351,9 @@ def upload_photo_for_owner(owner: Pin | Wiki | Profile, profile: Profile, image_
     rather than by this function because the task dispatch belongs to the
     request cycle; see ``test_photo_upload_dispatches_processing.py``.
     """
-    if (upload_error := image_upload_error(image_file, MediaKind.PHOTO)) is not None:
+    # Scanned asynchronously instead: prepare_photo_upload below marks the row
+    # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
+    if (upload_error := image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)) is not None:
         message, status = upload_error
         return UploadRejection(message, status)
 

@@ -288,9 +288,18 @@ def materialize_media_item(
         checksum=checksum,
         file_size=len(content),
         quota_exempt_reason=QuotaExemption.EXTERNAL_MEDIA,
+        # Provider bytes are no more trusted than a user's: quarantined on
+        # create, cleared by process_image_upload once scanned and normalised.
+        pending_scan=True,
     )
 
+    # Same post-storage pipeline an ordinary upload gets. Without it a
+    # materialized item kept its provider EXIF (location included), was never
+    # downscaled or thumbnailed, and was served exactly as fetched, forever.
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.photos.redata_relevance import queue_photo_submission
+    from urbanlens.dashboard.tasks import process_image_upload
 
+    safely_enqueue_task(process_image_upload, image.pk)
     queue_photo_submission(image)
     return image

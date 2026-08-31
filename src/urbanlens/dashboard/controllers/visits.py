@@ -224,7 +224,9 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
     # concurrent upload elsewhere (another tab, the gallery page) racing this same profile.
     with per_profile_upload_lock(pin.profile):
         for image_file in request.FILES.getlist("photos"):
-            upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+            # Scanned asynchronously instead: prepare_photo_upload below marks the row
+            # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
+            upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
             if upload_error:
                 # Same "skip this file, keep processing the rest" treatment as the
                 # quota-exceeded case below - one bad file in a multi-file visit

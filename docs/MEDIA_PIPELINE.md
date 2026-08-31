@@ -55,12 +55,18 @@ Fast, local, and *never* a decode. In order:
 2. Extension allowlist for photos - SVG is refused here, because it has no
    magic bytes and sniffing would pass it (`security/content_sniffing.py`).
 3. Magic-byte sniff against the declared kind.
-4. ClamAV, still synchronous here (see the ClamAV entry in `docs/PROBLEMS.md` -
-   the one piece of this tier not yet moved off the request).
-5. For a photo: store the raw upload untouched and mark the row
-   `pending_scan` (`services/media/images.prepare_photo_upload`). Nothing here
-   decodes it - a decode is exactly the class of code the sandbox tier exists
-   to keep out of this process.
+4. Store the raw upload untouched and mark the row `pending_scan`. Nothing
+   here decodes it - a decode is exactly the class of code the sandbox tier
+   exists to keep out of this process.
+
+ClamAV is *not* in that list any more. It runs in the sandbox worker
+(`tasks._scan_pending_upload`), gated on `pending_scan` - the request no longer
+blocks on a clamd round-trip, and the row is invisible to everyone but its
+uploader until the scan clears it. The four paths that still scan
+synchronously (avatars, marker icons, achievement art) store their file on
+something that is not an `Image` row, so no task will ever run over it and
+there is no `pending_scan` to gate it with; a test pins that split
+(`tests/hypothesis/test_async_malware_scan.py`).
 
 Anything that opens the file with a real parser is marked
 `@untrusted_parse` (`services/sandbox/guard.py`) and cannot run here.
@@ -74,22 +80,31 @@ covers every format the byte-walker didn't (HEIC, TIFF, GIF, ...).
 ### 2. The sandbox worker
 
 `media-worker` in `docker-compose.yml` drains the `sandbox` queue and does all
-the decoding: EXIF read, re-encode, downscale, thumbnails, transcode, document
-conversion, OCR, archive extraction.
+the decoding: malware scan, EXIF read, re-encode, downscale, thumbnails,
+transcode, document conversion, OCR.
 
-For a photo, this is also where `Image.pending_scan` gets cleared -
-`tasks.process_image_upload`, after it has read the file's EXIF and produced a
-stripped/downscaled copy. Until then, `services/media/access.py::authorize_image`
-and `ImageQuerySet.visible_to` restrict the row to its uploader; everyone else
-gets the same "not found" a deleted file would produce. See `Image.pending_scan`
-and the resolved entry in `docs/PROBLEMS.md` for the full reasoning.
+`media-worker-batch` is the same container with the same isolation (both merge
+the `x-sandbox-worker` anchor, so the hardening cannot drift between them),
+draining `sandbox_batch` instead. The split is about duration, not trust: a
+data import walks a 500MB archive for up to `CELERY_TASK_TIME_LIMIT`, and
+sharing `media-worker`'s two slots with it meant two concurrent imports could
+stall every upload on the site for an hour.
 
-Two limits on that sentence, both tracked in `docs/PROBLEMS.md`: it covers
-**photos only** (a video or document never goes through `prepare_photo_upload`,
-so it stays visible while it transcodes — a longer window than the one this
-closed), and `SafetyContactPhotoView` deliberately serves a pending check-in
-photo to a token-bearing emergency contact. The second is safe only while the
-malware scan is synchronous, and is a blocker on making it async.
+This is also where `Image.pending_scan` gets cleared -
+`tasks.process_image_upload`, once it has scanned the file, read its EXIF and
+produced a stripped/downscaled (or transcoded, or converted) copy. Until then,
+`services/media/access.py::authorize_image` and `ImageQuerySet.visible_to`
+restrict the row to its uploader; everyone else gets the same "not found" a
+deleted file would produce. `SafetyContactPhotoView`, the one serving surface
+that does not go through `authorize_image`, filters `pending_scan=False`
+itself. See `Image.pending_scan` and the resolved entries in
+`docs/PROBLEMS.md`.
+
+Every media type gets that gate, not just photos: a video or document is stored
+raw too, and its window is the *longer* one (an ffmpeg transcode runs for
+minutes where a photo downscale runs for seconds). So do rows created from
+provider bytes rather than from a request - the four import tasks and
+`media_materialize.materialize_media_item`.
 
 A stored file that cannot be opened at all is not treated as "safe to publish
 unprocessed" - nothing has ever validated it, so a still-pending row that fails
@@ -110,8 +125,15 @@ What makes it a sandbox, in the order that matters:
    second stage to fetch.
 2. **`x-sandbox-env` instead of `x-app-env`** - no third-party API keys, no
    OAuth secrets, no mail credentials. Nothing to steal, nothing to bill.
-3. **`cap_drop: ALL` + `no-new-privileges`**, on top of the image's non-root
-   `appuser`.
+3. **`cap_drop: ALL` + `no-new-privileges`**, plus an explicit
+   `user: "1001:1001"`. The explicit uid is not decoration: `cap_drop: ALL`
+   removes `CAP_SETUID`, so the image's entrypoint cannot `gosu appuser`, and
+   it removes `CAP_CHOWN`, so the entrypoint's volume-ownership fixup cannot
+   run either. Both are handled - the chowns are best-effort and the `gosu` is
+   skipped when already unprivileged - but before that the container simply
+   crash-looped on `Operation not permitted` and never started celery at all.
+   `depends_on: app` orders these workers after the one container that *can*
+   chown the shared volumes.
 4. **`pids_limit` and tight cpu/mem**, set below `celery-worker`'s, so a
    decompression bomb or a runaway helper starves this container first.
 5. **`/tmp` on `noexec,nosuid` tmpfs** - the one directory it writes freely is
@@ -189,16 +211,19 @@ about to parse an upload:
 - `allow` disables the check. What the test settings use, because the suite
   calls the parsers directly.
 
-Not yet at `deny`: `prepare_photo_upload` still reads EXIF in the request, and
-`parse_for_preview` still extracts archives and documents there. Both are
-tracked in `docs/PROBLEMS.md`.
+Not yet at `deny`. `prepare_photo_upload` no longer decodes anything, but
+`controllers/pin.parse_for_preview` still reaches `zipfile`/`tarfile`/
+`python-docx` from a web request, and `render_preview` has two request-path
+callers that would 500 under `deny`. Tracked in `docs/PROBLEMS.md`.
 
 ## Adding a parser
 
 The whole extension point is two lines:
 
 1. Decorate the entry point with `@untrusted_parse("family.operation")`.
-2. Route whatever task calls it with `queue=SANDBOX_QUEUE`, and add its name to
+2. Route whatever task calls it with `queue=SANDBOX_QUEUE` - or
+   `SANDBOX_BATCH_QUEUE` if the parse runs for minutes rather than for a
+   moment - and add its name to
    `EXPECTED_SANDBOX_TASKS` in `tests/hypothesis/test_sandbox_isolation.py` so
    the change of blast radius is a line in a diff.
 

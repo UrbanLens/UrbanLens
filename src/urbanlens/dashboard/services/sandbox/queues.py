@@ -11,8 +11,16 @@ Queue                Container                  Reaches
 ``panel_fetch``      ``celery-worker-panels``   everything - it *is* the API caller
 ``sandbox``          ``media-worker``           DB, broker, media volumes. No internet,
                                                 no third-party API keys, no capabilities
+``sandbox_batch``    ``media-worker-batch``     identical isolation to ``sandbox``
 ``ai_inference``     (not yet deployed)         reserved; see docs/MEDIA_PIPELINE.md
 ===================  =========================  ==================================
+
+``sandbox`` and ``sandbox_batch`` differ in *scheduling*, not in trust: both are
+drained inside the same isolated network with the same reduced environment. The
+split exists because the two workloads have incompatible latency profiles - an
+upload is interactive and sub-second, a data import walks a 500MB archive for up
+to ``CELERY_TASK_TIME_LIMIT``. Sharing one small pool let the second starve the
+first. Route by *duration*, not by risk.
 
 The queue a task runs on is declared on the task itself
 (``@shared_task(queue=...)``), not passed at each ``apply_async`` call site.
@@ -39,9 +47,12 @@ class Queue(StrEnum):
         DEFAULT: Celery's own default queue name. Anything without an explicit
             queue lands here, drained by ``celery-worker``.
         PANEL_FETCH: External-data panel fetches for the pin detail page.
-        SANDBOX: Parsing of untrusted user-supplied bytes - image decode,
-            video transcode, document conversion, archive extraction. Drained
-            by ``media-worker``, which has no route to the internet.
+        SANDBOX: Interactive parsing of untrusted user-supplied bytes - image
+            decode, video transcode, document conversion. Drained by
+            ``media-worker``, which has no route to the internet.
+        SANDBOX_BATCH: Long-running untrusted-parse batch jobs - archive walks,
+            data imports. Same isolation as :attr:`SANDBOX`, its own worker, so
+            an hour-long import never queues in front of a photo upload.
         AI_INFERENCE: Reserved for model inference once it moves to its own
             container. Nothing routes here yet; the name exists so the split
             is a compose change rather than a code change.
@@ -50,21 +61,29 @@ class Queue(StrEnum):
     DEFAULT = "celery"
     PANEL_FETCH = "panel_fetch"
     SANDBOX = "sandbox"
+    SANDBOX_BATCH = "sandbox_batch"
     AI_INFERENCE = "ai_inference"
 
 
-def sandbox_queue() -> str:
+def sandbox_queue(*, batch: bool = False) -> str:
     """The queue untrusted-parse tasks should be routed to.
 
     Read once per task definition, at import time, so it appears in the task's
     own exec options rather than at each call site.
 
+    Args:
+        batch: True for a task that runs for minutes rather than for a moment -
+            it goes to :attr:`Queue.SANDBOX_BATCH` so it cannot occupy the
+            interactive pool. Same isolation either way.
+
     Returns:
-        :attr:`Queue.SANDBOX` when a sandbox worker is deployed, else
+        The matching sandbox queue when a sandbox worker is deployed, else
         :attr:`Queue.DEFAULT` - an install with no ``media-worker`` container
         keeps processing uploads on the ordinary worker instead of enqueuing
         into a queue that nothing drains.
     """
     from django.conf import settings
 
-    return Queue.SANDBOX if getattr(settings, "UL_SANDBOX_ENABLED", False) else Queue.DEFAULT
+    if not getattr(settings, "UL_SANDBOX_ENABLED", False):
+        return Queue.DEFAULT
+    return Queue.SANDBOX_BATCH if batch else Queue.SANDBOX

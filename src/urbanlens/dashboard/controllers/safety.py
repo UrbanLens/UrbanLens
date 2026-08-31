@@ -1443,7 +1443,9 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.images.model import MediaKind
         from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
 
-        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        # Scanned asynchronously instead: prepare_photo_upload below marks the row
+        # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
         if upload_error:
             message, status = upload_error
             return JsonResponse({"error": message}, status=status)

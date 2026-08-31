@@ -131,7 +131,10 @@ def upload_photo(
 
     media_type = _resolve_media_type(file_obj, profile)
 
-    upload_error = image_upload_error(file_obj, media_type)
+    # skip_malware_scan: the scan runs in the sandboxed worker instead
+    # (tasks._scan_pending_upload), gated on the pending_scan set below. Keeping
+    # it here would put a clamd round-trip back in the request path for nothing.
+    upload_error = image_upload_error(file_obj, media_type, skip_malware_scan=True)
     if upload_error:
         message, status = upload_error
         raise PhotoUploadError(message, status)
@@ -151,6 +154,14 @@ def upload_photo(
     # prepare_photo_upload. Videos and documents have their own pipelines.
     prepared = prepare_photo_upload(file_obj, profile) if media_type == MediaKind.PHOTO else None
 
+    # Every media type is quarantined, not just photos: a video or document is
+    # stored as uploaded too, and its processing window is the *longer* one - an
+    # ffmpeg transcode runs for minutes where a photo's downscale runs for
+    # seconds. The malware scan that gate now covers (tasks._scan_pending_upload)
+    # is media-type-agnostic.
+    row_metadata = dict(prepared.metadata) if prepared else {}
+    row_metadata.setdefault("pending_scan", True)
+
     # The quota read and the row create must be one critical section: without
     # it, N concurrent uploads can each pass the check before any commits.
     with per_profile_upload_lock(profile):
@@ -168,7 +179,7 @@ def upload_photo(
             pin=pin,
             visit=visit,
             wiki=wiki,
-            **(prepared.metadata if prepared else {}),
+            **row_metadata,
         )
 
     # Deliberately outside the lock: enqueuing is a network call to the broker,

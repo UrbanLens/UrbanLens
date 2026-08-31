@@ -14,6 +14,7 @@ Three separable claims, tested separately because each fails differently:
 
 from __future__ import annotations
 
+import pathlib
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
@@ -31,17 +32,56 @@ from urbanlens.dashboard.services.sandbox import (
     untrusted_parse,
 )
 
-#: Every task routed to the sandbox queue, as a set so adding or removing one is
-#: a deliberate line in a diff rather than a silent change of blast radius. A
-#: task belongs here when it reaches a parser over bytes a user supplied.
-EXPECTED_SANDBOX_TASKS = {
-    "urbanlens.dashboard.tasks.process_image_upload",
-    "urbanlens.dashboard.tasks.generate_image_thumbnails",
-    "urbanlens.dashboard.tasks.generate_image_marker_thumbnails",
-    "urbanlens.dashboard.tasks.run_user_data_import",
-    "urbanlens.dashboard.tasks.scan_comment_image",
-    "urbanlens.dashboard.tasks.scan_trip_comment_image",
+#: Every task routed to a sandbox queue, keyed by the module constant it must
+#: name - a set so adding or removing one is a deliberate line in a diff rather
+#: than a silent change of blast radius. A task belongs here when it reaches a
+#: parser over bytes a user supplied; it belongs under SANDBOX_BATCH_QUEUE when
+#: that parse runs for minutes rather than for a moment, so it cannot occupy the
+#: pool the interactive upload path shares.
+EXPECTED_SANDBOX_TASKS_BY_CONSTANT = {
+    "SANDBOX_QUEUE": {
+        "process_image_upload",
+        "generate_image_thumbnails",
+        "generate_image_marker_thumbnails",
+        "scan_comment_image",
+        "scan_trip_comment_image",
+    },
+    "SANDBOX_BATCH_QUEUE": {
+        "run_user_data_import",
+    },
 }
+
+EXPECTED_SANDBOX_TASKS = {f"urbanlens.dashboard.tasks.{name}" for names in EXPECTED_SANDBOX_TASKS_BY_CONSTANT.values() for name in names}
+
+
+def _declared_queue_constants() -> dict[str, set[str]]:
+    """Which module constant each ``@shared_task(queue=...)`` in tasks.py names.
+
+    Read from the source rather than from the task objects because under test
+    settings ``UL_SANDBOX_ENABLED`` is False, so both constants resolve to the
+    same string - the *routing* is indistinguishable at runtime here, while the
+    declaration is exactly what has to be right.
+
+    Returns:
+        Constant name -> the set of task function names declaring it.
+    """
+    import ast
+    import inspect
+
+    from urbanlens.dashboard import tasks
+
+    tree = ast.parse(pathlib.Path(inspect.getfile(tasks)).read_text(encoding="utf-8"))
+    declared: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for decorator in node.decorator_list:
+            if not isinstance(decorator, ast.Call) or "shared_task" not in ast.unparse(decorator.func):
+                continue
+            for keyword in decorator.keywords:
+                if keyword.arg == "queue" and isinstance(keyword.value, ast.Name):
+                    declared.setdefault(keyword.value.id, set()).add(node.name)
+    return declared
 
 
 @override_settings(UL_UNTRUSTED_PARSE_POLICY="deny", UL_PROCESS_ROLE="web")
@@ -198,6 +238,22 @@ class SandboxQueueRoutingTests(SimpleTestCase):
 
         routed = {task.name for task in (getattr(tasks, name) for name in dir(tasks)) if getattr(task, "queue", None) == tasks.SANDBOX_QUEUE and hasattr(task, "name")}
         self.assertEqual(routed, EXPECTED_SANDBOX_TASKS)
+
+    def test_batch_and_interactive_sandbox_queues_are_distinct(self) -> None:
+        # Same isolation, separate pools. If these ever collapse to one name, an
+        # hour-long import can again occupy both media-worker slots and stall
+        # every upload on the site behind it.
+        with override_settings(UL_SANDBOX_ENABLED=True):
+            self.assertEqual(sandbox_queue(batch=True), Queue.SANDBOX_BATCH)
+            self.assertNotEqual(sandbox_queue(batch=True), sandbox_queue())
+
+    def test_batch_queue_also_falls_back_without_a_sandbox_worker(self) -> None:
+        with override_settings(UL_SANDBOX_ENABLED=False):
+            self.assertEqual(sandbox_queue(batch=True), Queue.DEFAULT)
+
+    def test_each_task_declares_the_right_one_of_the_two_sandbox_queues(self) -> None:
+        declared = _declared_queue_constants()
+        self.assertEqual({name: tasks for name, tasks in declared.items() if name.startswith("SANDBOX")}, EXPECTED_SANDBOX_TASKS_BY_CONSTANT)
 
     def test_sandbox_queue_constant_is_resolved_once_at_import(self) -> None:
         # Under test settings UL_SANDBOX_ENABLED is False, so the constant is the

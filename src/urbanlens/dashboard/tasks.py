@@ -1,7 +1,8 @@
 """Celery tasks for the dashboard application.
 
 Tasks that hand untrusted uploaded bytes to a parser declare
-``queue=SANDBOX_QUEUE``, which routes them to the isolated ``media-worker``
+``queue=SANDBOX_QUEUE`` (or ``SANDBOX_BATCH_QUEUE`` when the parse is a
+minutes-long batch job), which routes them to an isolated ``media-worker``
 container rather than the general-purpose worker. The queue is declared on the
 task instead of at each ``apply_async`` site on purpose - see
 :mod:`urbanlens.dashboard.services.sandbox.queues` for why, and
@@ -36,6 +37,9 @@ logger = logging.getLogger(__name__)
 #: (``UL_SANDBOX_ENABLED=false``), so those installs keep processing uploads
 #: rather than filling a queue nothing drains.
 SANDBOX_QUEUE = sandbox_queue()
+#: For untrusted parses that run for minutes, not milliseconds - same isolation,
+#: separate worker, so they cannot occupy the interactive pool.
+SANDBOX_BATCH_QUEUE = sandbox_queue(batch=True)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -361,7 +365,7 @@ def cleanup_export_artifacts_task(export_dir: str, job_id: str | None = None) ->
     logger.info("Cleaned up export artifacts for job %s", job_id or export_dir)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_BATCH_QUEUE)
 def run_user_data_import(self, user_id: int, zip_path: str, job_id: str) -> bool:
     """Parse a UrbanLens export ZIP and import data for the user."""
     from urbanlens.dashboard.services.import_export.import_data import run_import
@@ -898,8 +902,60 @@ def _sync_deduped_siblings(image: Image) -> None:
                 image.image.storage.delete(name)
 
 
+def _scan_pending_upload(task, image: Image) -> bool:
+    """Run the malware scan a pending upload has not had yet.
+
+    The scan used to block the upload request - a clamd round-trip, 15s socket
+    timeout, in the request path, for every photo. It runs here instead, which
+    is what makes an upload return immediately; ``Image.pending_scan`` is what
+    makes that safe, since nobody but the uploader can see the row until this
+    clears it.
+
+    Gated on ``pending_scan`` rather than run unconditionally, so this is a
+    no-op for anything already scanned: a legacy row being reprocessed by a
+    backfill, a dedup sibling, or an upload from a surface that still scans
+    synchronously. That gate is also why a call site missed when the sync scan
+    was removed fails *safe* - it scans twice rather than not at all.
+
+    Args:
+        task: The bound Celery task, for ``retry``.
+        image: The pending row whose stored file to scan.
+
+    Returns:
+        True when the file is clean and processing should continue. False when
+        the row has been rejected and removed - the caller must stop.
+
+    Raises:
+        celery.exceptions.Retry: clamd was unreachable and retries remain.
+    """
+    from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
+
+    try:
+        with image.image.open("rb") as stored:
+            malware_error = malware_error_for_upload(stored)
+    except MalwareScanUnavailableError as exc:
+        if task.request.retries < task.max_retries:
+            # A clamd hiccup must not reject somebody's photo. Same backoff the
+            # comment scan uses; the upload stays pending (invisible to anyone
+            # else) for as long as this takes.
+            raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
+        logger.exception("Malware scan permanently unavailable for image %s after %s retries", image.pk, task.request.retries)
+        _reject_image_upload(image, "Our antivirus scanner was unavailable, so this upload could not be checked and was removed. Please try again.")
+        return False
+    except OSError:
+        # The stored file could not be read at all. Left to the media-type
+        # branch below, which owns the retry-then-reject policy for that.
+        logger.warning("Could not open image %s to scan it; leaving it to the processing step", image.pk, exc_info=True)
+        return True
+
+    if malware_error:
+        _reject_image_upload(image, malware_error)
+        return False
+    return True
+
+
 def _reject_image_upload(image: Image, reason: str) -> None:
-    """Notify a photo's uploader their upload was rejected, and remove it.
+    """Notify an uploader their upload was rejected, and remove it.
 
     Only ever called for a row that is still ``pending_scan`` - see the one
     call site in :func:`process_image_upload` - so nobody but the uploader has
@@ -916,8 +972,9 @@ def _reject_image_upload(image: Image, reason: str) -> None:
     the last row still pointing at it.
 
     Args:
-        image: The still-pending ``Image`` whose processing failed permanently.
-        reason: The user-facing reason, e.g. "We couldn't process this photo...".
+        image: The still-pending ``Image`` - photo, video or document - that was
+            condemned by the scan or whose processing failed permanently.
+        reason: The user-facing reason, e.g. the scanner's own message.
     """
     from django.urls import NoReverseMatch, reverse
 
@@ -953,7 +1010,7 @@ def _reject_image_upload(image: Image, reason: str) -> None:
         NotificationLog.objects.notify(
             profile=image.profile,
             notification_type=NotificationType.PHOTO_UPLOAD_FAILED,
-            title="A photo upload could not be processed",
+            title="An upload could not be processed",
             message=reason,
             url=url,
         )
@@ -997,6 +1054,11 @@ def process_image_upload(self, image_id: int) -> bool:
     update_task_progress(self, current=0, total=1, message="Processing upload metadata...")
     image = Image.objects.filter(pk=image_id).select_related("pin__location", "wiki__location", "profile").first()
     if image is None or not image.image:
+        return False
+
+    if image.pending_scan and not _scan_pending_upload(self, image):
+        # Infected, or unscannable after every retry. The row and its file are
+        # already gone (_reject_image_upload); nothing left to process.
         return False
 
     # A profile with visit-history tracking off doesn't want its location
@@ -1050,12 +1112,9 @@ def process_image_upload(self, image_id: int) -> bool:
     update_fields, coords = result.update_fields, result.coords
 
     if image.pending_scan:
-        # Set by prepare_photo_upload for a fresh photo upload - see
-        # Image.pending_scan. This point, not the malware scan (still
-        # synchronous, before the row exists - see docs/PROBLEMS.md), is what
-        # currently clears it: the metadata this task just read and the file it
-        # is about to downscale are what the raw upload was hidden from other
-        # viewers for.
+        # Set at upload time - see Image.pending_scan. Everything it was hidden
+        # for has now happened: the malware scan at the top of this task, plus
+        # the metadata read and downscale/transcode below.
         #
         # Set on the Python object too, not just update_fields: _sync_deduped_siblings
         # below reads image.pending_scan (via this same object) to decide whether a
@@ -1634,6 +1693,10 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
                 file_size=len(content),
                 source_url=account.asset_web_url(asset_id),
                 visit=target_visit,
+                # Same quarantine an ordinary upload gets: these are raw bytes from a
+                # third-party API, stored unread, and visible the moment the row exists.
+                # process_image_upload (enqueued below) scans, strips and clears it.
+                pending_scan=True,
             )
         if target_visit is None:
             log_visit_on_pin(profile, image, pin)
@@ -2210,6 +2273,10 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
                 checksum=checksum,
                 file_size=len(content),
                 source_url=account.photo_web_url(photo_id),
+                # Same quarantine an ordinary upload gets: these are raw bytes from a
+                # third-party API, stored unread, and visible the moment the row exists.
+                # process_image_upload (enqueued below) scans, strips and clears it.
+                pending_scan=True,
             )
         log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
@@ -2314,6 +2381,10 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
                 source_url=photo_web_url(album.owner_nsid, photo.id),
                 checksum=checksum,
                 file_size=len(content),
+                # Same quarantine an ordinary upload gets: these are raw bytes from a
+                # third-party API, stored unread, and visible the moment the row exists.
+                # process_image_upload (enqueued below) scans, strips and clears it.
+                pending_scan=True,
             )
         safely_enqueue_task(process_image_upload, image.pk)
         existing_checksums.add(checksum)
@@ -2415,6 +2486,10 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
                 checksum=checksum,
                 file_size=len(content),
                 source_url=media_item_web_url(item_id),
+                # Same quarantine an ordinary upload gets: these are raw bytes from a
+                # third-party API, stored unread, and visible the moment the row exists.
+                # process_image_upload (enqueued below) scans, strips and clears it.
+                pending_scan=True,
             )
         log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)

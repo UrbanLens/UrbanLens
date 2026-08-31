@@ -619,7 +619,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("No image provided.", status=400)
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        upload_error = image_upload_error(image, MediaKind.PHOTO)
+        # Scanned asynchronously instead: prepare_photo_upload below marks the row
+        # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
+        upload_error = image_upload_error(image, MediaKind.PHOTO, skip_malware_scan=True)
         if upload_error:
             message, status = upload_error
             return HttpResponse(message, status=status)

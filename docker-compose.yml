@@ -91,6 +91,52 @@ x-sandbox-env: &sandbox-env
   # guard in services/sandbox/guard.py reads this to decide.
   UL_PROCESS_ROLE: sandbox
 
+# Everything two sandbox workers share. They differ only in which queue they
+# drain and how they are sized; the isolation must not drift between them, so
+# it is written once here rather than copied per service.
+x-sandbox-worker: &sandbox-worker
+  build:
+    <<: *app-build
+  entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
+  restart: on-failure
+  # Explicitly unprivileged, because `cap_drop: ALL` below removes CAP_SETUID -
+  # so the entrypoint's `gosu appuser` cannot work here and must be skipped
+  # (it is; see docker-entrypoint.sh). Same uid the image creates.
+  user: "1001:1001"
+  depends_on:
+    db:
+      condition: service_healthy
+    valkey:
+      condition: service_healthy
+    # Not for a network route (these workers are not on app_network) but for
+    # ordering: `app` runs as root and is what chowns the shared logs and media
+    # volumes to appuser on a fresh deploy. Without CAP_CHOWN these workers
+    # cannot do it themselves, so they must not be the first to mount them.
+    app:
+      condition: service_healthy
+  volumes:
+    - logs:/var/log/urbanlens
+    - media_volume:/app/src/urbanlens/media
+  networks:
+    - sandbox_network
+  # No env_file: the host .env carries every API key, and pulling it in here
+  # would undo the point of *sandbox-env below. Anything these workers genuinely
+  # need belongs in that anchor, explicitly.
+  environment:
+    <<: *sandbox-env
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  # LibreOffice and ffmpeg both spawn helpers; this is well above their normal
+  # use and far below what a fork bomb needs.
+  pids_limit: 512
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "200k"
+      max-file: "10"
+
 # Minimal environment for celery-beat - only needs DB + broker to schedule tasks.
 x-beat-env: &beat-env
   UL_DB_USER: ${UL_DB_USER:-postgres}
@@ -273,14 +319,14 @@ services:
       retries: 3
       start_period: 20s
 
-    # nginx's own access_log is deliberately routed to /tmp (see nginx.conf) rather
-    # than stdout, so this bounds its error log/startup output, not request logs -
-    # the /tmp file still needs its own rotation, tracked separately.
+    # Request logs come through here too (nginx.conf logs to the stdout symlink),
+    # so this driver is what rotates them - hence a much larger budget than the
+    # error-output-only services get. 20MB x 5 caps the container at 100MB.
     logging:
       driver: "json-file"
       options:
-        max-size: "200k"
-        max-file: "10"
+        max-size: "20m"
+        max-file: "5"
     # worker_processes is hardcoded to 2 in nginx.conf, and its temp paths are
     # disk-backed (not tmpfs) so uploads/sendfile don't inflate RAM - idle is
     # ~3MB. cpus matches the hardcoded worker count exactly; a third core
@@ -335,11 +381,14 @@ services:
       timeout: 15s
       retries: 3
       start_period: 20s
+    # Media is the highest-volume request class on the site, and after the origin
+    # split these requests are logged nowhere else - so the same rotated budget
+    # as `nginx`, not the 200k one the error-output-only services use.
     logging:
       driver: "json-file"
       options:
-        max-size: "200k"
-        max-file: "10"
+        max-size: "20m"
+        max-file: "5"
     # Same profile as `nginx`: worker_processes is 2 in the shared nginx.conf,
     # and this vhost does strictly less than that one.
     cpus: ${CPU_LIMIT__MEDIA_NGINX:-${CPU_LIMIT:-2}}
@@ -510,12 +559,12 @@ services:
   # no business reading either - and it is the only worker besides celery-worker
   # that mounts media_volume, because writing the processed file back is the job.
   media-worker:
+    <<: *sandbox-worker
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_media_worker
-    build:
-      <<: *app-build
-    entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
     # -Q sandbox: drains only that queue, so an unrouted task can never
     # accidentally execute here with the reduced environment and fail obscurely.
+    # Notably it does NOT drain sandbox_batch - that is the whole point of the
+    # split: an interactive upload must never queue behind a 500MB archive walk.
     #
     # --concurrency=2 (prefork): decoding is CPU-bound and does not yield, so
     # slots beyond the cpu ceiling only add memory. Two lets a slow LibreOffice
@@ -530,29 +579,6 @@ services:
         "-Q",
         "sandbox",
       ]
-    restart: on-failure
-    depends_on:
-      db:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
-    volumes:
-      - logs:/var/log/urbanlens
-      - media_volume:/app/src/urbanlens/media
-    networks:
-      - sandbox_network
-    # No env_file: the host .env carries every API key, and pulling it in here
-    # would undo the point of *sandbox-env below. Anything this worker genuinely
-    # needs belongs in that anchor, explicitly.
-    environment:
-      <<: *sandbox-env
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    # LibreOffice and ffmpeg both spawn helpers; this is well above their normal
-    # use and far below what a fork bomb needs.
-    pids_limit: 512
     tmpfs:
       # Decoders stage temp files here (ffmpeg's transcode scratch, soffice's
       # profile dir), and noexec/nosuid means a payload dropped in the one
@@ -571,17 +597,44 @@ services:
       # simultaneous maximal videos will not fit - that is deliberate: failing
       # one transcode is better than the OOM killer taking the container.
       - /tmp:size=1g,mode=1777,noexec,nosuid,nodev
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "200k"
-        max-file: "10"
     # Two prefork children each decoding a full-resolution photo, plus the
     # resident GDAL/Pillow/Django imports, plus the tmpfs above - which is RAM
     # and comes out of this same number, so this is ~2g of processes and 1g of
     # scratch rather than 3g of processes.
     cpus: ${CPU_LIMIT__MEDIA_WORKER:-${CPU_LIMIT:-2}}
     mem_limit: ${MEM_LIMIT__MEDIA_WORKER:-3g}
+
+  # Same sandbox, different pool. Batch imports (`run_user_data_import`, and any
+  # future long archive walk) are the same untrusted-parse workload and belong
+  # on the same isolated network - but they run for minutes to an hour against a
+  # 500MB ZIP, while a photo upload runs for a second or two. Sharing one
+  # two-slot pool meant two concurrent imports could stall every upload on the
+  # site for the length of CELERY_TASK_TIME_LIMIT.
+  media-worker-batch:
+    <<: *sandbox-worker
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_media_worker_batch
+    # --concurrency=1: an import is one long serial walk over an archive, so a
+    # second slot doubles peak memory and disk churn without shortening the
+    # queue much. Scale this pool by adding slots only if imports actually
+    # backlog - the interactive path is no longer affected either way.
+    command:
+      [
+        "-A",
+        "urbanlens.UrbanLens",
+        "worker",
+        "--loglevel=warning",
+        "--concurrency=1",
+        "-Q",
+        "sandbox_batch",
+      ]
+    tmpfs:
+      # Larger than media-worker's: an import extracts a 500MB archive here.
+      # Same RAM-not-disk budget rule - 2g of scratch inside a 3g limit leaves
+      # ~1g for the single child, which is ample since an import streams rather
+      # than holding the archive in memory.
+      - /tmp:size=2g,mode=1777,noexec,nosuid,nodev
+    cpus: ${CPU_LIMIT__MEDIA_WORKER_BATCH:-${CPU_LIMIT:-1}}
+    mem_limit: ${MEM_LIMIT__MEDIA_WORKER_BATCH:-3g}
 
   celery-beat:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_beat

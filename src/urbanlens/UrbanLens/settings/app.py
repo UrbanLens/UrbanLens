@@ -202,7 +202,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     sandbox_enabled: bool = Field(
         default=True,
         description=(
-            "Whether a media-worker container is deployed to drain the 'sandbox' Celery queue. When false, "
+            "Whether the media-worker containers are deployed to drain the 'sandbox' and 'sandbox_batch' Celery queues. When false, "
             "untrusted-parse tasks fall back to the default queue so an install without that container still "
             "processes uploads - without the isolation. Set UL_SANDBOX_ENABLED=false only where no media-worker runs."
         ),
